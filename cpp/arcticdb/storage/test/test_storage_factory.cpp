@@ -66,7 +66,7 @@ TEST(TestStorageFactory, LibraryIndex) {
     std::vector<ac::storage::LibraryPath> expected{l};
     ASSERT_EQ(expected, library_index.list_libraries("a"));
     as::UserAuth au{"abc"};
-    auto lib = library_index.get_library(l, as::OpenMode::WRITE, au);
+    auto lib = library_index.get_library(l, as::OpenMode::WRITE, au, as::NativeVariantStorageMap());
     ASSERT_EQ(l, lib->library_path());
     ASSERT_EQ(as::OpenMode::WRITE, lib->open_mode());
 }

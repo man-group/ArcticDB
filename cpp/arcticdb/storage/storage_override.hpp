@@ -5,7 +5,6 @@
 
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/pb_util.hpp>
-#include <arcticdb/storage/s3/s3_storage.hpp>
 
 namespace arcticdb::storage {
 

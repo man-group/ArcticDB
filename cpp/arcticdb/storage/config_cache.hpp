@@ -82,7 +82,6 @@ class ConfigCache {
             if(storage_conf_pos != storage_configs_.end())
                 storage_conf = storage_conf_pos->second;
 
-            //it assume that the storage always exists
             if (auto it = native_storage_map.find(storage_name.value); 
                 storage_conf.config().Is<arcticdb::proto::s3_storage::Config>() && it != native_storage_map.end()) {
                 arcticdb::proto::s3_storage::Config s3_storage;

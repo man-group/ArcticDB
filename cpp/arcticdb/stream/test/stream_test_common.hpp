@@ -313,13 +313,13 @@ inline std::pair<storage::LibraryPath, arcticdb::proto::storage::LibraryConfig> 
 }
 
 inline std::shared_ptr<storage::Library> test_library_from_config(const storage::LibraryPath& lib_path,  const arcticdb::proto::storage::LibraryConfig& lib_cfg) {
-    auto storage_cfg = lib_cfg.storage_by_id().at(lib_cfg.lib_desc().storage_ids(0));
+    auto storage_cfg = lib_cfg.storage_by_id();
     auto vs_cfg = lib_cfg.lib_desc().has_version()
             ? storage::LibraryDescriptor::VariantStoreConfig{lib_cfg.lib_desc().version()}
             : std::monostate{};
     return std::make_shared<storage::Library>(
             lib_path,
-            storage::create_storages(lib_path, storage::OpenMode::DELETE, storage_cfg),
+            storage::create_storages(lib_path, storage::OpenMode::DELETE, storage_cfg, storage::NativeVariantStorageMap()),
             std::move(vs_cfg)
             );
 

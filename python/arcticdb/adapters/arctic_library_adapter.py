@@ -14,7 +14,7 @@ from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions, EnterpriseLibraryOptions
 from arcticc.pb2.storage_pb2 import LibraryConfig
-from arcticdb_ext.storage import Library, StorageOverride, CONFIG_LIBRARY_NAME, NativeVariantStorageMap
+from arcticdb_ext.storage import Library, StorageOverride, CONFIG_LIBRARY_NAME
 from arcticdb.encoding_version import EncodingVersion
 
 
@@ -49,7 +49,7 @@ def set_library_options(lib_desc: "LibraryConfig", options: LibraryOptions,
 class ArcticLibraryAdapter(ABC):
     @abstractmethod
     def __init__(self, uri: str, encoding_version: EncodingVersion):
-        self._native_cfg = NativeVariantStorageMap()
+        self._native_cfg = dict()
 
     @abstractmethod
     def __repr__(self):

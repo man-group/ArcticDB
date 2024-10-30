@@ -269,10 +269,10 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
                 res.emplace_back(lp.to_delim_path());
             }
             return res;
-        } )
-        .def("get_library", [](LibraryIndex &library_index, const std::string &library_path, OpenMode open_mode = OpenMode::DELETE, const NativeVariantStorageMap& native_storage_map) {
+        })
+        .def("get_library", [](LibraryIndex &library_index, const std::string &library_path, OpenMode open_mode = OpenMode::DELETE, const std::optional<NativeVariantStorageMap>& native_storage_map = NativeVariantStorageMap()) {
             LibraryPath path = LibraryPath::from_delim_path(library_path);
-            return library_index.get_library(path, open_mode, UserAuth{}, native_storage_map);
+            return library_index.get_library(path, open_mode, UserAuth{}, native_storage_map.value_or(NativeVariantStorageMap()));
         })
         ;
 }

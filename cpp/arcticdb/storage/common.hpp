@@ -98,6 +98,3 @@ inline constexpr bool is_key_type_v = is_key_type<T>::value;
 using NativeVariantStorage = s3::S3Settings;
 using NativeVariantStorageMap = std::map<std::string, NativeVariantStorage>; //key: storage_id
 }  //namespace arcticdb::storage
-// to avoid pybind11 built-in cast as it will copy the containers
-// Below needs to be not within any namespace and before any usage of those
-PYBIND11_MAKE_OPAQUE(arcticdb::storage::NativeVariantStorageMap)

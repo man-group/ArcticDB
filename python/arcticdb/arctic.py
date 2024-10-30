@@ -96,7 +96,7 @@ class Arctic:
 
         storage_override = self._library_adapter.get_storage_override()
         lib = NativeVersionStore(
-            self._library_manager.get_library(lib_mgr_name, storage_override, native_storage_map=self._library_manager._native_cfg),
+            self._library_manager.get_library(lib_mgr_name, storage_override, native_storage_map=self._library_adapter._native_cfg),
             repr(self._library_adapter),
             lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
         )
