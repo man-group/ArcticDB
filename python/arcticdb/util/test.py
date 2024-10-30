@@ -135,29 +135,17 @@ def dataframe_arctic_update(target: pd.DataFrame, data:  pd.DataFrame) ->  pd.Da
         Useful for prediction of result content of arctic database after update operation
         NOTE: you have to pass indexed dataframe
     """
-
-    def overlap(start1, end1, start2, end2):
-        return max(start1, start2) <= min(end1, end2)
-    
-    start1 = target.first_valid_index()
-    end1 = target.last_valid_index()
     start2 = data.first_valid_index()
     end2 = data.last_valid_index()
 
-    if (overlap(start1, end1, start2, end2)):
-        chunks = []
-        if (start1 < start2):
-            first_part = target[target.index.to_series().between(start1, start2, inclusive='left')]
-            chunks.append(first_part)
-        chunks.append(data)
-        if (end1 > end2):
-            last_part = target[target.index.to_series().between(end2, end1, inclusive='right')]
-            chunks.append(last_part)
-        result_df = pd.concat(chunks)
-        return result_df
-    else:
-        return pd.DataFrame([])
-
+    chunks = []
+    df1 = target[target.index < start2]
+    chunks.append(df1)
+    chunks.append(data)
+    df2 = target[target.index > end2]
+    chunks.append(df2)
+    result_df = pd.concat(chunks)
+    return result_df
 
 def maybe_not_check_freq(f):
     """Ignore frequency when pandas is newer as starts to check frequency which it did not previously do."""
