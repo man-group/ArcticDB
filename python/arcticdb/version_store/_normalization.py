@@ -691,7 +691,6 @@ class DataFrameNormalizer(_PandasNormalizer):
         def df_from_arrays(arrays, cols, ind, n_ind):
             def gen_blocks():
                 _len = len(index)
-                column_placement_in_block = 0
                 for idx, a in enumerate(arrays):
                     if idx < n_ind:
                         continue
@@ -701,14 +700,36 @@ class DataFrameNormalizer(_PandasNormalizer):
                     # Note: empty datetime cannot be cast to float64
                     # TODO: Remove the casting after empty types become the only option
                     # Issue: https://github.com/man-group/ArcticDB/issues/1562
-                    block = make_block(values=a.reshape((1, _len)), placement=(column_placement_in_block,))
+                    block = a
                     yield block.astype(np.float64) if _len == 0 and block.dtype == np.dtype('object') and not IS_PANDAS_TWO else block
-                    column_placement_in_block += 1
 
             if cols is None or len(cols) == 0:
                 return pd.DataFrame(data, index=ind, columns=cols)
 
-            blocks = tuple(gen_blocks())
+            arrays = list(gen_blocks())
+            blocks = []
+
+            # Group arrays by dtype while preserving order
+            type_groups = []
+            previous_dtype = None
+            for arr in arrays:
+                dtype = arr.dtype
+                if previous_dtype and dtype == previous_dtype:
+                    type_groups[-1].append(arr)
+                else:
+                    type_groups.append([arr])
+                    previous_dtype = dtype
+                
+            # Create a block for each group of the same type
+            current_start = 0
+            for group in type_groups:
+                group_array = np.array(group)
+                # Set the placement to cover the current range of columns
+                placement = slice(current_start, current_start + group_array.shape[0])
+                block = make_block(values=group_array, placement=placement)
+                blocks.append(block)
+                current_start += group_array.shape[0]
+
             if not isinstance(cols, Index):
                 cols = Index(cols)
 
@@ -737,6 +758,7 @@ class DataFrameNormalizer(_PandasNormalizer):
         else:
             df = self.df_without_consolidation(columns, item.data[0], item, n_indexes, data)
 
+        print(df)
         if denormed_columns is not None:
             df.columns = denormed_columns
         if norm_meta.common.columns.fake_name is False and len(norm_meta.common.columns.name) > 0:
