@@ -105,49 +105,58 @@ def create_df_index_datetime(num_columns: int, start_hour: int, end_hour : int) 
     cols = ['COL_%d' % i for i in range(num_columns)]
     df = pd.DataFrame(np.random.randint(start_hour, 
                                         end_hour, 
-                                        size=(rows, num_columns)), 
+                                        size=(rows, num_columns),
+                                        dtype=np.int64), 
                                         columns=cols)
     start_date = time_start + dt.timedelta(hours=start_hour)
     dr = pd.date_range(start_date, periods=rows, freq='h').astype("datetime64[ns]")
     df.index = dr
     return df
 
-def dataframe_update(update_to : pd.DataFrame, update_from: pd.DataFrame) -> pd.DataFrame:
+def dataframe_dump_to_log(label_for_df, df: pd.DataFrame):
     """
-        Creates a new dataframe where you have a result of update and append (head/tail) operations
-        applied over the content of 'update_to' dataframe with content from 'update_from' dataframe
+        Useful for printing in log content and data types of columns of
+        a dataframe. This way in the full log of a test we will have actual dataframe, that later
+        we could use to reproduce something or further analyze failures caused by
+        a problems in test code or arctic
     """
-    df_updated = update_to.copy(deep=True)
-    df_updated.update(update_from)
-    return df_updated
+    print("-" * 80)
+    print('dataframe : , ', label_for_df)
+    print(df.to_csv())
+    print("column definitions : ")
+    print(df.dtypes)
+    print("-" * 80)
 
-def dataframe_update_full(update_to : pd.DataFrame, update_from: pd.DataFrame) -> pd.DataFrame:
-    '''
-        Updates the existing rows of an indexed DataFrame and then adds missing rows
-        to it. The result is a new Dataframe that contains the result of operation, leaving
-        the imput dataframes untouched
-    '''
-    update_to = dataframe_update(update_to, update_from)
+def dataframe_arctic_update(target: pd.DataFrame, data:  pd.DataFrame) ->  pd.DataFrame:
+    """
+        Does implement arctic logic of update() method functionality over pandas dataframes.
+        In other words the result, new data frame will have the content of 'target' dataframe
+        updated with the content of "data" dataframe the same way that arctic is supposed to work.
+        Useful for prediction of result content of arctic database after update operation
+        NOTE: you have to pass indexed dataframe
+    """
 
-    df1 = update_to.copy(deep=True)
-    df2 = update_from.copy(deep=True)
+    def overlap(start1, end1, start2, end2):
+        return max(start1, start2) <= min(end1, end2)
+    
+    start1 = target.first_valid_index()
+    end1 = target.last_valid_index()
+    start2 = data.first_valid_index()
+    end2 = data.last_valid_index()
 
-    # Reset index to merge on datetime
-    df1_reset = df1.reset_index()
-    df2_reset = df2.reset_index()
-    columns = list(df1_reset.columns)
-    # Merge DataFrames with indicator
-    merged_df = df1_reset.merge(df2_reset, on=columns, how='right', indicator=True)
-    # Filter rows that are only in df2
-    missing_rows = merged_df[merged_df['_merge'] == 'right_only'].drop(columns=['_merge'])
-    # Set the index back to datetime
-    missing_rows = missing_rows.set_index('index')
-    # Append missing rows to df1
-    df1 = pd.concat([df1, missing_rows], ignore_index=False)
-
-    df1.sort_index(inplace=True) # We need to sort it at the end
-
-    return df1
+    if (overlap(start1, end1, start2, end2)):
+        chunks = []
+        if (start1 < start2):
+            first_part = target[target.index.to_series().between(start1, start2, inclusive='left')]
+            chunks.append(first_part)
+        chunks.append(data)
+        if (end1 > end2):
+            last_part = target[target.index.to_series().between(end2, end1, inclusive='right')]
+            chunks.append(last_part)
+        result_df = pd.concat(chunks)
+        return result_df
+    else:
+        return pd.DataFrame([])
 
 
 def maybe_not_check_freq(f):
