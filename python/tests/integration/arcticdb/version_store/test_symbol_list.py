@@ -29,16 +29,6 @@ import random
 import string
 from tests.util.mark import MACOS_CONDA_BUILD
 
-
-@pytest.fixture(autouse=True)
-def make_lock_wait_less():
-    set_config_int("StorageLock.WaitMs", 1)
-    try:
-        yield
-    finally:
-        unset_config_int("StorageLock.WaitMs")
-
-
 @pytest.fixture
 def small_max_delta():
     set_config_int("SymbolList.MaxDelta", 2)
@@ -130,11 +120,11 @@ def test_symbol_list_regex(basic_store):
 @pytest.mark.parametrize("compact_first", [True, False])
 # Using S3 because LMDB does not allow OpenMode to be changed
 def test_symbol_list_read_only_compaction_needed(
-    small_max_delta, object_version_store, compact_first, environment_native_variant_storage_map
+    small_max_delta, object_version_store, compact_first, native_variant_storage_map
 ):
     lib_write = object_version_store
 
-    lib_read = make_read_only(lib_write, environment_native_variant_storage_map)
+    lib_read = make_read_only(lib_write, native_variant_storage_map)
 
     lt = lib_write.library_tool()
     old_compaction = []
@@ -232,7 +222,7 @@ def test_only_latest_compaction_key_is_used(basic_store):
 
 @pytest.mark.parametrize("write_another", [False, True])
 def test_turning_on_symbol_list_after_a_symbol_written(
-    object_store_factory, write_another, environment_native_variant_storage_map
+    object_store_factory, write_another, native_variant_storage_map
 ):
     # The if(!maybe_last_compaction) case
     lib: NativeVersionStore = object_store_factory(symbol_list=False)
@@ -251,7 +241,7 @@ def test_turning_on_symbol_list_after_a_symbol_written(
             k.id == CompactionId for k in sl_keys
         ), "Should not have any compaction yet"
 
-    ro = make_read_only(lib, environment_native_variant_storage_map)
+    ro = make_read_only(lib, native_variant_storage_map)
     # For some reason, symbol_list=True is not always picked up on the first call, so forcing it:
     symbols = ro.list_symbols(use_symbol_list=True)
     assert set(symbols) == ({"a", "b"} if write_another else {"a"})
@@ -430,9 +420,9 @@ def test_force_compact_symbol_list(lmdb_version_store_v1):
 
 
 # Using S3 because LMDB does not allow OpenMode to be changed
-def test_force_compact_symbol_list_read_only(s3_version_store_v1, environment_native_variant_storage_map):
+def test_force_compact_symbol_list_read_only(s3_version_store_v1, native_variant_storage_map):
     lib_write = s3_version_store_v1
-    lib_read_only = make_read_only(lib_write, environment_native_variant_storage_map)
+    lib_read_only = make_read_only(lib_write, native_variant_storage_map)
     # No symbol list keys
     with pytest.raises(PermissionException):
         lib_read_only.compact_symbol_list()
@@ -457,10 +447,18 @@ def test_force_compact_symbol_list_lock_held(lmdb_version_store_v1):
     assert lib.compact_symbol_list() == 0
 
 
-@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="Failing for unclear reasons")
-def test_force_compact_symbol_list_lock_held_past_ttl(lmdb_version_store_v1):
-    # Set TTL to 5 seconds. Compact symbol list will retry for 10 seconds, so should always work
+@pytest.fixture()
+def make_lock_ttl_less():
     set_config_int("StorageLock.TTL", 5_000_000_000)
+    try:
+        yield
+    finally:
+        unset_config_int("StorageLock.TTL")
+
+
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="Failing for unclear reasons")
+def test_force_compact_symbol_list_lock_held_past_ttl(lmdb_version_store_v1, make_lock_ttl_less):
+    # Set TTL to 5 seconds. Compact symbol list will retry for 10 seconds, so should always work
     lib = lmdb_version_store_v1
     lock = lib.version_store.get_storage_lock(CompactionLockName)
     lock.lock()

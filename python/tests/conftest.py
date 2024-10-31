@@ -36,7 +36,6 @@ from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
-from arcticdb_ext.storage import NativeVariantStorageMap
 from .util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -105,7 +104,7 @@ def pytest_generate_tests(metafunc):
 
 @pytest.fixture(scope="session")
 def native_variant_storage_map():
-    return NativeVariantStorageMap()
+    return dict()
 
 
 # endregion

@@ -32,14 +32,14 @@ from arcticdb.config import _expand_path
 from arcticdb.exceptions import ArcticNativeException, LibraryNotFound, UserInputException
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.authorization.permissions import OpenMode
-from arcticdb_ext.storage import S3Settings as NativeS3Settings, AWSAuthMethod, NativeVariantStorageMap
+from arcticdb_ext.storage import S3Settings as NativeS3Settings, AWSAuthMethod
 
 
 def create_lib_from_config(cfg, env=Defaults.ENV, lib_name=Defaults.LIB):
     return NativeVersionStore.create_lib_from_config(cfg, env, lib_name)
 
 
-def create_lib_from_lib_config(lib_config, env=Defaults.ENV, open_mode=OpenMode.DELETE, native_cfg=NativeVariantStorageMap()):
+def create_lib_from_lib_config(lib_config, env=Defaults.ENV, open_mode=OpenMode.DELETE, native_cfg=None):
     return NativeVersionStore.create_lib_from_lib_config(lib_config, env, open_mode, native_cfg)
 
 
@@ -138,8 +138,10 @@ def add_library_config_to_env(cfg, lib_cfg, env_name):
 
     env.lib_by_path[lib_cfg.lib_desc.name].CopyFrom(lib_cfg.lib_desc)
 
+
 def get_sid(lib_name):
     return "{}_store".format(lib_name)
+
 
 def get_storage_for_lib_name(lib_name, env):
     # type: (LibName, EnvironmentConfigsMap)->(StorageId, VariantStorage)
