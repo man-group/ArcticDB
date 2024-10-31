@@ -488,6 +488,7 @@ set(arcticdb_srcs
         stream/protobuf_mappings.cpp
         toolbox/library_tool.cpp
         util/allocator.cpp
+        util/buffer_holder.cpp
         util/buffer_pool.cpp
         util/configs_map.cpp
         util/decimal.cpp
@@ -501,6 +502,8 @@ set(arcticdb_srcs
         util/timer.cpp
         util/trace.cpp
         util/type_handler.cpp
+        version/block_key.hpp
+        version/block_key.cpp
         version/local_versioned_engine.cpp
         version/op_log.cpp
         version/snapshot.cpp
@@ -508,10 +511,8 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        storage/s3/ec2_utils.cpp
-        util/buffer_holder.cpp)
+        )
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -947,17 +948,19 @@ if(${TEST})
             util/test/test_string_utils.cpp
             util/test/test_tracing_allocator.cpp
             version/test/test_append.cpp
+            version/test/test_block_key.cpp
+            version/test/test_sort_index.cpp
+            version/test/test_sorting_info_state_machine.cpp
             version/test/test_sparse.cpp
             version/test/test_stream_version_data.cpp
             version/test/test_symbol_list.cpp
             version/test/test_version_map.cpp
             version/test/test_version_map_batch.cpp
             version/test/test_version_store.cpp
-            version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
             python/python_handlers.cpp
             storage/test/common.hpp
-            version/test/test_sort_index.cpp)
+    )
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
