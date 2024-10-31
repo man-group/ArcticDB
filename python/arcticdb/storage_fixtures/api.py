@@ -90,16 +90,12 @@ class StorageFixture(_SaferContextManager):
             name = name + str(len(libs_from_factory))
         assert (name not in libs_from_factory) or reuse_name, f"{name} is already in use"
         cfgs = create_cfg(name)
-        if isinstance(cfgs, tuple):
-            cfg, native_cfg = cfgs
-        else:
-            cfg = cfgs
-            native_cfg = None
-        lib = cfg.env_by_id[Defaults.ENV].lib_by_path[name]
+        protobuf_cfg, native_cfg = NativeVersionStore.get_environment_cfg_and_native_cfg_from_tuple(cfgs)
+        lib = protobuf_cfg.env_by_id[Defaults.ENV].lib_by_path[name]
         # Use symbol list by default (can still be overridden by kwargs)
         lib.version.symbol_list = True
         apply_lib_cfg(lib, kwargs)
-        out = ArcticMemoryConfig(cfg, Defaults.ENV, native_cfg)[name]
+        out = ArcticMemoryConfig(protobuf_cfg, Defaults.ENV, native_cfg)[name]
         suffix = 0
         while f"{name}{suffix or ''}" in libs_from_factory:
             suffix += 1

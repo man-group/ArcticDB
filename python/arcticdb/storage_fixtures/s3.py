@@ -40,7 +40,7 @@ S3_BACKUP_CONFIG_PATH = os.path.expanduser(os.path.join("~", ".aws", "bk_config"
 
 
 class Key:
-    def __init__(self, id: str, secret: str, user_name: str):
+    def __init__(self, *, id: str, secret: str, user_name: str):
         self.id = id
         self.secret = secret
         self.user_name = user_name
@@ -243,7 +243,7 @@ def real_s3_from_environment_variables(shared_path: bool, native_config: Optiona
     out.default_bucket = os.getenv("ARCTICDB_REAL_S3_BUCKET")
     access_key = os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY")
     secret_key = os.getenv("ARCTICDB_REAL_S3_SECRET_KEY")
-    out.default_key = Key(access_key, secret_key, "unknown user")
+    out.default_key = Key(id=access_key, secret=secret_key, user_name="unknown user")
     out.clean_bucket_on_fixture_exit = os.getenv("ARCTICDB_REAL_S3_CLEAR").lower() in ["true", "1"]
     out.ssl = out.endpoint.startswith("https://")
     if shared_path:
@@ -259,7 +259,7 @@ def real_s3_sts_from_environment_variables(user_name: str, role_name: str, polic
     # Create IAM user
     try:
         iam_client.create_user(UserName=user_name)
-        out.sts_test_key = Key(None, None, user_name)
+        out.sts_test_key = Key(id=None, secret=None, user_name=user_name)
         logger.info("User created successfully.")
     except iam_client.exceptions.EntityAlreadyExistsException:
         logger.warn("User already exists.")
@@ -497,14 +497,14 @@ def mock_s3_with_error_simulation():
     out = BaseS3StorageFixtureFactory()
     out.use_mock_storage_for_testing = True
     # We set some values which don't matter since we're using the mock storage
-    out.default_key = Key("access key", "secret key", "unknown user")
+    out.default_key = Key(id="access key", secret="secret key", user_name="unknown user")
     out.endpoint = "http://test"
     out.region = "us-east-1"
     return out
 
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
-    default_key = Key("awd", "awd", "dummy")
+    default_key = Key(id="awd", secret="awd", user_name="dummy")
     _RO_POLICY: str
     _RW_POLICY: str
     host = "localhost"
@@ -643,7 +643,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         iam = iam or self._iam_admin
         user_id = iam.create_user(UserName=user)["User"]["UserId"]
         response = iam.create_access_key(UserName=user)["AccessKey"]
-        return Key(response["AccessKeyId"], response["SecretAccessKey"], user)
+        return Key(id=response["AccessKeyId"], secret=response["SecretAccessKey"], username=user)
 
     @property
     def enforcing_permissions(self):

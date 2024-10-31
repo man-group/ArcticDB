@@ -115,7 +115,7 @@ class ArcticMemoryConfig(ArcticConfig):
     def __getitem__(self, lib_path):
         # type: (LibName)->NativeVersionStore
         lib_cfg = extract_lib_config(self._cfg.env_by_id[self._env], lib_path)
-        return NativeVersionStore.create_store_from_config(self._cfg, self._env, lib_cfg.lib_desc.name, OpenMode.DELETE, lib_cfg.lib_desc.version.encoding_version, self._native_cfg)
+        return NativeVersionStore.create_store_from_config((self._cfg, self._native_cfg), self._env, lib_cfg.lib_desc.name, OpenMode.DELETE, lib_cfg.lib_desc.version.encoding_version)
 
     @property
     def cfg(self):

@@ -239,7 +239,7 @@ class NativeVersionStore:
         else:
             raise ArcticDbNotYetImplemented("No other normalization failure handler")
 
-    def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode, native_cfg=dict()):
+    def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode, native_cfg=None):
         self._library = library
         self._cfg = library.config
         self.version_store = _PythonVersionStore(self._library)
@@ -274,10 +274,11 @@ class NativeVersionStore:
 
     @classmethod
     def create_store_from_config(
-        cls, cfg, env, lib_name, open_mode=OpenMode.DELETE, encoding_version=EncodingVersion.V1, native_cfg=None
+        cls, cfg, env, lib_name, open_mode=OpenMode.DELETE, encoding_version=EncodingVersion.V1
     ):
-        lib_cfg = NativeVersionStore.create_library_config(cfg, env, lib_name, encoding_version=encoding_version)
-        lib = cls.create_lib_from_config(cfg, env, lib_cfg.lib_desc.name, open_mode, native_cfg)
+        protobuf_cfg, native_cfg = NativeVersionStore.get_environment_cfg_and_native_cfg_from_tuple(cfg)
+        lib_cfg = NativeVersionStore.create_library_config(protobuf_cfg, env, lib_name, encoding_version=encoding_version)
+        lib = cls.create_lib_from_config((protobuf_cfg, native_cfg), env, lib_cfg.lib_desc.name, open_mode)
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode, native_cfg=native_cfg)
 
     @staticmethod
@@ -288,10 +289,20 @@ class NativeVersionStore:
         return lib_idx.get_library(lib_cfg.lib_desc.name, _OpenMode(open_mode), native_cfg)
 
     @staticmethod
-    def create_lib_from_config(cfg, env, lib_name, open_mode=OpenMode.DELETE, native_cfg=None):
-        cfg_resolver = _create_mem_config_resolver(cfg)
+    def create_lib_from_config(cfg, env, lib_name, open_mode=OpenMode.DELETE):
+        protobuf_cfg, native_cfg = NativeVersionStore.get_environment_cfg_and_native_cfg_from_tuple(cfg)
+        cfg_resolver = _create_mem_config_resolver(protobuf_cfg)
         lib_idx = _LibraryIndex.create_from_resolver(env, cfg_resolver)
         return lib_idx.get_library(lib_name, _OpenMode(open_mode), native_cfg)
+
+
+    @staticmethod
+    def get_environment_cfg_and_native_cfg_from_tuple(cfgs):
+        if isinstance(cfgs, tuple):
+            return cfgs
+        else:
+            return cfgs, None
+        
 
     def __setstate__(self, state):
         lib_cfg = LibraryConfig()
