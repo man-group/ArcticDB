@@ -145,7 +145,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         )
 
         lib = NativeVersionStore.create_store_from_config(
-            env_cfg, _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version, native_cfg=self._native_cfg
+            (env_cfg, self._native_cfg), _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
         )
 
         return lib._library
