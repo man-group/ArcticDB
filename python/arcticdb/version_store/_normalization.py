@@ -689,46 +689,36 @@ class DataFrameNormalizer(_PandasNormalizer):
         """
 
         def df_from_arrays(arrays, cols, ind, n_ind):
+            def to_block(a):
+                # In Pandas 1 the dtype param of make_block is ignored for empty blocks and the dtype is always object
+                # Pre-empty type Arctic has a default dtype of float64 for empty columns. Thus a casting to float64
+                # is needed.
+                # Note: empty datetime cannot be cast to float64
+                # TODO: Remove the casting after empty types become the only option
+                # Issue: https://github.com/man-group/ArcticDB/issues/1562
+                return a.astype(np.float64) if len(index) == 0 and a.dtype == np.dtype('object') and not IS_PANDAS_TWO else a
+
             def gen_blocks():
-                _len = len(index)
-                for idx, a in enumerate(arrays):
-                    if idx < n_ind:
-                        continue
-                    # In Pandas 1 the dtype param of make_block is ignored for empty blocks and the dtype is always object
-                    # Pre-empty type Arctic has a default dtype of float64 for empty columns. Thus a casting to float64
-                    # is needed.
-                    # Note: empty datetime cannot be cast to float64
-                    # TODO: Remove the casting after empty types become the only option
-                    # Issue: https://github.com/man-group/ArcticDB/issues/1562
-                    block = a
-                    yield block.astype(np.float64) if _len == 0 and block.dtype == np.dtype('object') and not IS_PANDAS_TWO else block
+                blocks, column_placement = [], 0
+                current_dtype = arrays[0].dtype
+
+                for a in arrays[n_ind:]:
+                    if current_dtype == a.dtype:
+                        blocks.append(to_block(a))
+                    else:
+                        if blocks:
+                            yield make_block(values=np.array(blocks), placement=slice(column_placement, column_placement + len(blocks)))
+                        column_placement += len(blocks)
+                        blocks, current_dtype = [to_block(a)], a.dtype
+
+                if blocks:
+                    yield make_block(values=np.array(blocks), placement=slice(column_placement, column_placement + len(blocks)))
+
 
             if cols is None or len(cols) == 0:
                 return pd.DataFrame(data, index=ind, columns=cols)
 
-            arrays = list(gen_blocks())
-            blocks = []
-
-            # Group arrays by dtype while preserving order
-            type_groups = []
-            previous_dtype = None
-            for arr in arrays:
-                dtype = arr.dtype
-                if previous_dtype and dtype == previous_dtype:
-                    type_groups[-1].append(arr)
-                else:
-                    type_groups.append([arr])
-                    previous_dtype = dtype
-                
-            # Create a block for each group of the same type
-            current_start = 0
-            for group in type_groups:
-                group_array = np.array(group)
-                # Set the placement to cover the current range of columns
-                placement = slice(current_start, current_start + group_array.shape[0])
-                block = make_block(values=group_array, placement=placement)
-                blocks.append(block)
-                current_start += group_array.shape[0]
+            blocks = tuple(gen_blocks())
 
             if not isinstance(cols, Index):
                 cols = Index(cols)
