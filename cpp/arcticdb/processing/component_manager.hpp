@@ -24,8 +24,6 @@ using bucket_id = uint8_t;
 
 using namespace entt::literals;
 
-constexpr auto remaining_entity_fetch_count_id = "remaining_entity_fetch_count"_hs;
-
 class ComponentManager {
 public:
     ComponentManager() = default;
