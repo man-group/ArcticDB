@@ -699,21 +699,28 @@ class DataFrameNormalizer(_PandasNormalizer):
                 return a.astype(np.float64) if len(index) == 0 and a.dtype == np.dtype('object') and not IS_PANDAS_TWO else a
 
             def gen_blocks():
-                blocks, column_placement = [], 0
-                current_dtype = arrays[0].dtype
+                start_index = n_ind  # Start index of the current block
+                current_dtype = arrays[start_index].dtype
+                column_placement = 0
 
-                for a in arrays[n_ind:]:
-                    a  = to_block(a)
-                    if current_dtype == a.dtype:
-                        blocks.append(a)
-                    else:
-                        if blocks:
-                            yield make_block(values=np.array(blocks), placement=slice(column_placement, column_placement + len(blocks)))
-                        column_placement += len(blocks)
-                        blocks, current_dtype = [a], a.dtype
+                for i, a in enumerate(arrays[n_ind:], start=n_ind):
+                    a = to_block(a)
+                    if a.dtype != current_dtype:
+                        # Yield the current block if dtype changes
+                        yield make_block(
+                            values=np.array(arrays[start_index:i], dtype=current_dtype),  # Slice from start to current index
+                            placement=slice(column_placement, column_placement + (i - start_index))
+                        )
+                        # Update for the new block
+                        column_placement += i - start_index
+                        start_index, current_dtype = i, a.dtype
 
-                if blocks:
-                    yield make_block(values=np.array(blocks), placement=slice(column_placement, column_placement + len(blocks)))
+                # Yield the last block if any remain
+                if start_index < len(arrays):
+                    yield make_block(
+                        values=np.array(arrays[start_index:], dtype=current_dtype),
+                        placement=slice(column_placement, column_placement + (len(arrays) - start_index))
+                    )
 
 
             if cols is None or len(cols) == 0:
