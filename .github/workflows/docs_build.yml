@@ -56,6 +56,8 @@ jobs:
           set -x
           cd docs/mkdocs
           sed -i "s/VERSION_PLACEHOLDER/v${{inputs.version}}/g" overrides/main.html
+          git config --global user.name "${GITHUB_ACTOR}"
+          git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
           git add overrides/main.html
           git commit -m "Update version placeholder to v${{inputs.version}}"
 
