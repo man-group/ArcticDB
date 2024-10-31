@@ -703,13 +703,14 @@ class DataFrameNormalizer(_PandasNormalizer):
                 current_dtype = arrays[0].dtype
 
                 for a in arrays[n_ind:]:
+                    a  = to_block(a)
                     if current_dtype == a.dtype:
-                        blocks.append(to_block(a))
+                        blocks.append(a)
                     else:
                         if blocks:
                             yield make_block(values=np.array(blocks), placement=slice(column_placement, column_placement + len(blocks)))
                         column_placement += len(blocks)
-                        blocks, current_dtype = [to_block(a)], a.dtype
+                        blocks, current_dtype = [a], a.dtype
 
                 if blocks:
                     yield make_block(values=np.array(blocks), placement=slice(column_placement, column_placement + len(blocks)))
