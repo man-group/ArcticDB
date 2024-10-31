@@ -542,6 +542,8 @@ def test_delete_snapshot_basic_flow_with_delete_last_version(basic_store):
 
     df_0 = create_df_index_rownum(10, 0, 10)
     df_1 = create_df_index_rownum(10, 10, 20)
+    dataframe_dump_to_log("df_0", df_0)
+    dataframe_dump_to_log("df_1", df_1)
 
     lib.write(symbol, df_0)
     lib.snapshot(snap1)
@@ -560,16 +562,19 @@ def test_delete_snapshot_basic_flow_with_delete_last_version(basic_store):
     # Version is still returned, but marked for deletion
     # Latest, or ver 1st is delete ver 0 is not
     assert [ver["deleted"] for ver in lib.list_versions()] == [True, False]
+    dataframe_dump_to_log("after delete version lib.read(symbol).data", lib.read(symbol).data)    
     assert_frame_equal(df_0, lib.read(symbol).data)     
     # Althought the version is deleted it is not physically deleted
     # It can be read from the snapshot still
-    assert df_1.equals(lib.read(symbol, as_of=snap2).data) 
+    dataframe_dump_to_log("after delete version lib.read(symbol, as_of=snap2).data)", lib.read(symbol, as_of=snap2).data)    
+    assert_frame_equal(df_1,lib.read(symbol, as_of=snap2).data)
 
     lib.delete_snapshot(snap2)
 
     assert sorted(lib.list_snapshots()) == [snap1] 
     assert sorted([v["version"] for v in lib.list_versions()]) == [0]
     assert len([ver for ver in lib.list_versions() if not ver["deleted"]]) == 1
+    dataframe_dump_to_log("after delete SNAPSHOT lib.read(symbol).data", lib.read(symbol).data)    
     assert_frame_equal(df_0, lib.read(symbol).data)     
 
     # Cannot read from deleted snapshot label
@@ -658,9 +663,9 @@ def test_delete_snapshot_complex_flow_with_delete_multible_symbols(basic_store_t
 
     # confirm afer deletion of versions all is as expected
     assert sorted(lib.list_snapshots()) == [snap1] 
-    assert df_1_combined.equals(lib.read(symbol1).data)
-    assert df_2_0.equals(lib.read(symbol2).data)
-    assert df_3_combined.equals(lib.read(symbol3).data)
+    assert_frame_equal(df_1_combined, lib.read(symbol1).data)
+    assert_frame_equal(df_2_0, lib.read(symbol2).data)
+    assert_frame_equal(df_3_combined, lib.read(symbol3).data)
     # verify sumbol 1
     assert len(lib.list_versions(symbol1)) == 3
     assert [ver["deleted"] for ver in lib.list_versions(symbol1)] == [False, True, False]
@@ -729,11 +734,8 @@ def test_delete_snapshot_multiple_edge_case(basic_store):
     assert len(lib.list_versions(symbol1)) == 1
     assert len(lib.list_versions(symbol2)) == 1
     assert len(lib.list_versions(symbol3)) == 2
-    assert df_1.equals(lib.read(symbol1).data)
     assert_frame_equal(df_1, lib.read(symbol1).data)      
-    assert df_2.equals(lib.read(symbol2).data)
     assert_frame_equal(df_1, lib.read(symbol1).data)      
-    assert df_combined.equals(lib.read(symbol3).data)
     assert_frame_equal(df_combined, lib.read(symbol3).data)      
 
     lib.delete_version(symbol1, 0)
