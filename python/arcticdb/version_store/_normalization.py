@@ -699,29 +699,28 @@ class DataFrameNormalizer(_PandasNormalizer):
                 return a.astype(np.float64) if len(index) == 0 and a.dtype == np.dtype('object') and not IS_PANDAS_TWO else a
 
             def gen_blocks():
-                start_index = n_ind  # Start index of the current block
-                current_dtype = arrays[start_index].dtype
-                column_placement = 0
+                col_placement_in_block = n_ind 
+                current_dtype = None
 
-                for i, a in enumerate(arrays[n_ind:], start=n_ind):
-                    a = to_block(a)
+                for i in range(n_ind, len(arrays)):
+                    a = to_block(arrays[i])
+                    
+                    if current_dtype is None:
+                        current_dtype = a.dtype
+
                     if a.dtype != current_dtype:
-                        # Yield the current block if dtype changes
                         yield make_block(
-                            values=np.array(arrays[start_index:i], dtype=current_dtype),  # Slice from start to current index
-                            placement=slice(column_placement, column_placement + (i - start_index))
+                            values=np.array(arrays[col_placement_in_block:i], dtype=current_dtype),
+                            placement=slice(col_placement_in_block - n_ind, i - n_ind)
                         )
-                        # Update for the new block
-                        column_placement += i - start_index
-                        start_index, current_dtype = i, a.dtype
+                        col_placement_in_block, current_dtype = i, a.dtype
 
                 # Yield the last block if any remain
-                if start_index < len(arrays):
+                if col_placement_in_block < len(arrays):
                     yield make_block(
-                        values=np.array(arrays[start_index:], dtype=current_dtype),
-                        placement=slice(column_placement, column_placement + (len(arrays) - start_index))
+                        values=np.array(arrays[col_placement_in_block:], dtype=current_dtype),
+                        placement=slice(col_placement_in_block - n_ind, len(arrays) - n_ind)
                     )
-
 
             if cols is None or len(cols) == 0:
                 return pd.DataFrame(data, index=ind, columns=cols)
