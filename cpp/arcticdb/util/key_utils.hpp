@@ -10,7 +10,6 @@
 #include <memory>
 #include <arcticdb/column_store/key_segment.hpp>
 #include <arcticdb/storage/store.hpp>
-#include <arcticdb/util/variant.hpp>
 #include <arcticdb/stream/stream_reader.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
 
@@ -161,8 +160,23 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
         const std::shared_ptr<stream::StreamSource>& store,
         const KeyContainer& keys,
         storage::ReadKeyOpts opts) {
+    if (keys.empty()) {
+        return {};
+    }
+    // Having one set for AtomKeys and one for AtomKeyPacked is intentional. This handles the case of pruning data for symbol.
+    // In that case all keys will be for the same symbol and we can use the less expensive to hash AtomKeyPacked struct as
+    // rehashing when the set grows is expensive for AtomKeys. In case the keys are for different symbols (e.g. when
+    // deleting a snapshot) AtomKey must be used as we need the symbol_id per key.
     ankerl::unordered_dense::set<AtomKey> res;
+    ankerl::unordered_dense::set<AtomKeyPacked> res_packed;
+    const StreamId* first_stream_id = nullptr;
+    bool same_stream_id = true;
     for (const auto& index_key: keys) {
+        if (first_stream_id) {
+            same_stream_id = *first_stream_id == index_key.id();
+        } else {
+            first_stream_id = &index_key.id();
+        }
         try {
             if (index_key.type() == KeyType::MULTI_KEY) {
                 // recurse_index_key includes the input key in the returned set, remove this here
@@ -181,7 +195,11 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
                             if constexpr (std::is_same_v<KeyType, AtomKey>) {
                                 res.emplace(std::move(key));
                             } else if constexpr (std::is_same_v<KeyType, AtomKeyPacked>) {
-                                res.emplace(key.to_atom_key(index_key.id()));
+                                if (same_stream_id) {
+                                    res_packed.emplace(std::move(key));
+                                } else {
+                                    res.emplace(key.to_atom_key(index_key.id()));
+                                }
                             }
                         }
                     }
@@ -198,6 +216,12 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
             } else {
                 throw;
             }
+        }
+    }
+    if (!res_packed.empty()) {
+        res.reserve(res_packed.size() + res.size());
+        for (const auto& key : res_packed) {
+            res.emplace(key.to_atom_key(*first_stream_id));
         }
     }
     return res;
