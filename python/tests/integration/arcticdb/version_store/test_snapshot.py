@@ -709,6 +709,10 @@ def test_delete_snapshot_multiple_edge_case(basic_store):
     df_1 = create_df_index_rownum(10, 0, 10)
     df_2 = create_df_index_rownum(10, 20, 30)
     df_combined = pd.concat([df_1, df_2])
+    dataframe_dump_to_log("df_1", df_1)
+    dataframe_dump_to_log("df_2", df_2)
+    dataframe_dump_to_log("df_combined", df_combined)
+
     lib.write(symbol1, df_1)
 
     symbol2 = "sym2"
@@ -734,8 +738,11 @@ def test_delete_snapshot_multiple_edge_case(basic_store):
     assert len(lib.list_versions(symbol1)) == 1
     assert len(lib.list_versions(symbol2)) == 1
     assert len(lib.list_versions(symbol3)) == 2
+    dataframe_dump_to_log("initial state lib.read(symbol1).data", lib.read(symbol1).data)
+    dataframe_dump_to_log("initial state lib.read(symbol2).data", lib.read(symbol2).data)
+    dataframe_dump_to_log("initial state lib.read(symbol3).data", lib.read(symbol3).data)
     assert_frame_equal(df_1, lib.read(symbol1).data)      
-    assert_frame_equal(df_1, lib.read(symbol1).data)      
+    assert_frame_equal(df_2, lib.read(symbol2).data)      
     assert_frame_equal(df_combined, lib.read(symbol3).data)      
 
     lib.delete_version(symbol1, 0)
@@ -746,6 +753,9 @@ def test_delete_snapshot_multiple_edge_case(basic_store):
     assert [ver["deleted"] for ver in lib.list_versions(symbol1)] == [True]
     assert [ver["deleted"] for ver in lib.list_versions(symbol2)] == [True]
     assert [ver["deleted"] for ver in lib.list_versions(symbol3)] == [False, True]
+    dataframe_dump_to_log("After deleting version 0 lib.read(symbol1, as_of=snap1).data", lib.read(symbol1, as_of=snap1).data)
+    dataframe_dump_to_log("After deleting version 0 lib.read(symbol2, as_of=snap1).data", lib.read(symbol2, as_of=snap2).data)
+    dataframe_dump_to_log("After deleting version 0 lib.read(symbol3).data", lib.read(symbol3).data)
     assert_frame_equal(df_1, lib.read(symbol1, as_of=snap1).data)      
     assert_frame_equal(df_2, lib.read(symbol2, as_of=snap2).data)      
     assert_frame_equal(df_combined, lib.read(symbol3).data)      
@@ -762,6 +772,7 @@ def test_delete_snapshot_multiple_edge_case(basic_store):
     assert [ver["deleted"] for ver in lib.list_versions(symbol1)] == [True]
     assert [ver["deleted"] for ver in lib.list_versions(symbol2)] == [True]
     assert len(lib.list_versions(symbol3)) == 1
+    dataframe_dump_to_log("After deleting SNAPSHOT 1 lib.read(symbol3).data", lib.read(symbol3).data)
     assert_frame_equal(df_combined, lib.read(symbol3).data)      
     with pytest.raises(NoSuchVersionException):
         lib.read(symbol1).data
@@ -793,6 +804,9 @@ def test_delete_snapshot_multiple_edge_case(basic_store):
     lib.snapshot(snap1)
     lib.delete_snapshot(snap1)
 
+    dataframe_dump_to_log("Final state lib.read(symbol1).data", lib.read(symbol1).data)
+    dataframe_dump_to_log("Final state lib.read(symbol2).data", lib.read(symbol2).data)
+    dataframe_dump_to_log("Final state lib.read(symbol3).data", lib.read(symbol3).data)
     assert_frame_equal(df_1, lib.read(symbol2).data)      
     assert_frame_equal(df_1, lib.read(symbol3).data)      
     assert_frame_equal(df_1, lib.read(symbol1).data)      
