@@ -169,14 +169,10 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
     // deleting a snapshot) AtomKey must be used as we need the symbol_id per key.
     ankerl::unordered_dense::set<AtomKey> res;
     ankerl::unordered_dense::set<AtomKeyPacked> res_packed;
-    const StreamId* first_stream_id = nullptr;
+    const StreamId& first_stream_id = keys.begin()->id();
     bool same_stream_id = true;
     for (const auto& index_key: keys) {
-        if (first_stream_id) {
-            same_stream_id = *first_stream_id == index_key.id();
-        } else {
-            first_stream_id = &index_key.id();
-        }
+        same_stream_id = first_stream_id == index_key.id();
         try {
             if (index_key.type() == KeyType::MULTI_KEY) {
                 // recurse_index_key includes the input key in the returned set, remove this here
@@ -221,7 +217,7 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
     if (!res_packed.empty()) {
         res.reserve(res_packed.size() + res.size());
         for (const auto& key : res_packed) {
-            res.emplace(key.to_atom_key(*first_stream_id));
+            res.emplace(key.to_atom_key(first_stream_id));
         }
     }
     return res;
