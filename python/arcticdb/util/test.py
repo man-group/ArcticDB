@@ -53,9 +53,9 @@ def create_df_index_rownum(num_columns: int, start_index: int, end_index : int) 
 
         Why this is useful? Consider this example:
 
-          df1 = create_df_index_rownum(2, 0, 2)
-          df2 = create_df_index_rownum(2, 2, 4)
-          df_full = dataframe_update_full(df1, df2)
+          df1 = create_df_index_rownum(num_columns=2, start_index=0, end_index=2)
+          df2 = create_df_index_rownum(num_columns=2, start_index=2, end_index=4)
+          df_full = pd.concat([df1, df2])
         
         This will produce 3 dataframes and the result of the update full operation would be 
         visibly correct, even without other methods of comparison:
@@ -79,18 +79,19 @@ def create_df_index_rownum(num_columns: int, start_index: int, end_index : int) 
 
     """
     rows = end_index - start_index
-    cols = ['COL_%d' % i for i in range(num_columns)]
-    df = pd.DataFrame(np.random.randint(start_index, 
+    cols = [f'COL_{i}' for i in range(num_columns)]
+    rng = np.random.default_rng()
+    df = pd.DataFrame(rng.integers(start_index, 
                                         end_index, 
                                         size=(rows, num_columns),
                                         dtype=np.int64), 
                                         columns=cols)
-    df.index = np.arange(start_index, end_index, 1).tolist()
+    df.index = np.arange(start_index, end_index, 1)
     return df
 
 def create_df_index_datetime(num_columns: int, start_hour: int, end_hour : int) -> pd.DataFrame:
     """
-        Creates data frame with specified number of solumns 
+        Creates data frame with specified number of columns 
         with datetime index sorted, starting from start_hour till
         end hour (you can use thousands of hours if needed). 
         The data is random integer data again with min 'start_hour' and
@@ -102,8 +103,9 @@ def create_df_index_datetime(num_columns: int, start_hour: int, end_hour : int) 
 
     time_start = dt.datetime(2000, 1, 1, 0)
     rows = end_hour - start_hour
-    cols = ['COL_%d' % i for i in range(num_columns)]
-    df = pd.DataFrame(np.random.randint(start_hour, 
+    cols = [f'COL_{i}' for i in range(num_columns)]
+    rng = np.random.default_rng()
+    df = pd.DataFrame(rng.integers(start_hour, 
                                         end_hour, 
                                         size=(rows, num_columns),
                                         dtype=np.int64), 
@@ -135,6 +137,9 @@ def dataframe_arctic_update(target: pd.DataFrame, data:  pd.DataFrame) ->  pd.Da
         Useful for prediction of result content of arctic database after update operation
         NOTE: you have to pass indexed dataframe
     """
+
+    assert target.dtypes.to_dict() == data.dtypes.to_dict() , "Dataframe must have identical columns"
+
     start2 = data.first_valid_index()
     end2 = data.last_valid_index()
 
