@@ -17,4 +17,9 @@ void my_function_with_errors() {
 		// Use after free
 		std::cout << *b;
 	}
+
+	{
+		int* ptr = nullptr;
+		std::cout << *ptr;
+	}
 }
