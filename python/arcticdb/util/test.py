@@ -138,7 +138,8 @@ def dataframe_arctic_update(target: pd.DataFrame, data:  pd.DataFrame) ->  pd.Da
         NOTE: you have to pass indexed dataframe
     """
 
-    assert target.dtypes.to_dict() == data.dtypes.to_dict() , "Dataframe must have identical columns"
+    assert target.dtypes.to_list() == data.dtypes.to_list() , "Dataframe must have identical columns types in same order"
+    assert target.columns.to_list() == data.columns.to_list() , "Columns names also need to be in same order"
 
     start2 = data.first_valid_index()
     end2 = data.last_valid_index()
