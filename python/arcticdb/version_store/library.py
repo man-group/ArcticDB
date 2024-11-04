@@ -1071,6 +1071,11 @@ class Library:
 
         Note that `update` is not designed for multiple concurrent writers over a single symbol.
 
+        If static schema is used the all column names and column order of ``data`` must match the ones in storage.
+
+        If dynamic schema is used data will override everything in storage for the entire index of ``data``. Update
+        will not keep columns from storage which are not in ``data``.
+
         Parameters
         ----------
         symbol
