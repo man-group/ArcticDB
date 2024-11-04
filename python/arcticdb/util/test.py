@@ -159,14 +159,27 @@ def maybe_not_check_freq(f):
     def wrapper(*args, **kwargs):
         if PANDAS_VERSION >= CHECK_FREQ_VERSION and "check_freq" not in kwargs:
             kwargs["check_freq"] = False
-        return f(*args, **kwargs)
+        try:
+            return f(*args, **kwargs)
+        except AssertionError as ae:
+            df = []
+            if "left" in kwargs:
+                df = kwargs["left"]
+            else:
+                df = args[0]
+            dataframe_dump_to_log("LEFT dataframe (expected)", df)
+            if "right" in kwargs:
+                df = kwargs["right"]
+            else:
+                df = args[1]
+            dataframe_dump_to_log("RIGHT dataframe (actual)", df)
+            raise ae
 
     return wrapper
 
 
 assert_frame_equal = maybe_not_check_freq(pd.testing.assert_frame_equal)
 assert_series_equal = maybe_not_check_freq(pd.testing.assert_series_equal)
-
 
 def random_string(length: int):
     return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
