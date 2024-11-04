@@ -1307,3 +1307,15 @@ def test_filter_with_column_slicing_defragmented(lmdb_version_store_tiny_segment
             received = lib.read(symbol, query_builder=q).data
             expected = df.query(pandas_query)
             assert np.array_equal(expected, received) and (not expected.empty and not received.empty)
+
+
+def test_filter_unsupported_boolean_operators():
+    with pytest.raises(UserInputException):
+        q = QueryBuilder()
+        q = q[q["a"] and q["b"]]
+    with pytest.raises(UserInputException):
+        q = QueryBuilder()
+        q = q[q["a"] or q["b"]]
+    with pytest.raises(UserInputException):
+        q = QueryBuilder()
+        q = q[not q["a"]]
