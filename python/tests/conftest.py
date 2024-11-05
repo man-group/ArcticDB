@@ -38,7 +38,7 @@ from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
-from python.arcticdb.arctic import Arctic
+from arcticdb.arctic import Arctic
 from .util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
