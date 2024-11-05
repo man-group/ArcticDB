@@ -45,16 +45,19 @@
         - name: Polaris PR Scan
           uses: synopsys-sig/synopsys-action@v1.13.0
           with:
-            polaris.serverurl: ${{ vars.POLARIS_SERVER_URL }}
-            polaris.accesstoken: ${{ secrets.POLARIS_ACCESS_TOKEN }}
-            polaris.application.name: "ArcticDB"
-            polaris.project.name: "ArcticDB-core"
-            polaris.assessment.types: "SAST"
-            polaris.prcomment.severities: "[high,critical,medium,low]"
-            polaris.prcomment.enabled: true
-            polaris.waitforscan: true
-            coverity.build.command: make -j ${{ steps.cpu-cores.outputs.count }}
-            coverity.clean.command: make clean
+            polaris_server_url: ${{ vars.POLARIS_SERVER_URL }}
+            polaris_access_token: ${{ secrets.POLARIS_ACCESS_TOKEN }}
+            polaris_application_name: "ArcticDB"
+            polaris_project_name: "ArcticDB-core"
+            polaris_assessment_types: "SAST"
+            polaris_prComment_enabled: true
+            polaris_waitForScan: true
+            coverity_build_command: make -j ${{ steps.cpu-cores.outputs.count }}
+            coverity_clean_command: make clean
             github_token: ${{ secrets.POLARIS_GITHUB_TOKEN }}
             project_directory: ${{github.workspace}}/cpp/out/linux-debug-build
             include_diagnostics: true
+            polaris_reports_sarif_create: true
+            polaris_reports_sarif_groupSCAIssues: true
+            polaris_upload_sarif_report: true
+            polaris_prComment_severities: "[high,critical,medium,low]"
