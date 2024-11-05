@@ -1,0 +1,3 @@
+arcticdb==4.5.1
+numpy<2
+pyarrow
