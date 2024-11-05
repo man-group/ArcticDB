@@ -59,6 +59,12 @@ namespace arcticdb::version_store {
     return tm_to_nanoseconds(tm) + 1'000'000'000;
 }
 
+template<typename T>
+requires std::integral<T>
+[[nodiscard]] static T python_mod(T a, T b) {
+    return (a % b + b) % b;
+}
+
 [[nodiscard]] static std::pair<timestamp, timestamp> compute_first_last_dates(
     timestamp start,
     timestamp end,
@@ -93,8 +99,8 @@ namespace arcticdb::version_store {
     );
     origin_ns += offset;
 
-    const timestamp ns_to_prev_offset_start = (origin_adjusted_start - origin_ns) % rule;
-    const timestamp ns_to_prev_offset_end = (end - origin_ns) % rule;
+    const timestamp ns_to_prev_offset_start = python_mod(origin_adjusted_start - origin_ns, rule);
+    const timestamp ns_to_prev_offset_end = python_mod(end - origin_ns, rule);
 
     if (closed_boundary_arg == ResampleBoundary::RIGHT) {
         return {
