@@ -235,6 +235,7 @@ def test_iterate_version_chain_with_lib_tool(in_memory_version_store):
 
 def test_overwrite_append_data(object_and_mem_and_lmdb_version_store):
     lib = object_and_mem_and_lmdb_version_store
+    lib_tool = lib.library_tool()
     if lib._lib_cfg.lib_desc.version.encoding_version == 1:
         # TODO: Fix the timeseries descriptor packing. Currently the [incomplete_segment_from_frame] function in cpp is
         # not encoding aware so all incomplete writes are broken with v2 encoding.
@@ -252,9 +253,9 @@ def test_overwrite_append_data(object_and_mem_and_lmdb_version_store):
 
     # Deliberately write mismatching incomplete types
     lib.write(sym, get_df(3, 0, np.int64))
-    lib.write(sym, get_df(1, 3, np.int64), incomplete=True)
-    lib.write(sym, get_df(1, 4, str), incomplete=True)
-    lib.write(sym, get_df(1, 5, np.int64), incomplete=True)
+    lib_tool.append_incomplete(sym, get_df(1, 3, np.int64))
+    lib_tool.append_incomplete(sym, get_df(1, 4, str))
+    lib_tool.append_incomplete(sym, get_df(1, 5, np.int64))
 
     def read_append_data_keys_from_ref(symbol):
         append_ref = lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, symbol)[0]
@@ -321,9 +322,9 @@ def test_overwrite_append_data(object_and_mem_and_lmdb_version_store):
     assert_frame_equal(lib.read(sym).data, get_df(15, 0, np.int64))
 
     # Also try adding new incompletes all with wrong type and see that we again can't read or compact
-    lib.write(sym, get_df(1, 15, str), incomplete=True)
-    lib.write(sym, get_df(1, 16, str), incomplete=True)
-    lib.write(sym, get_df(1, 17, str), incomplete=True)
+    lib_tool.append_incomplete(sym, get_df(1, 15, str))
+    lib_tool.append_incomplete(sym, get_df(1, 16, str))
+    lib_tool.append_incomplete(sym, get_df(1, 17, str))
     append_keys = read_append_data_keys_from_ref(sym)
     assert len(append_keys) == 3
     assert [read_type(key, "col") for key in append_keys] == [str_dtype, str_dtype, str_dtype]

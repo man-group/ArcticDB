@@ -633,10 +633,11 @@ def test_append_docs_example(lmdb_version_store):
 def test_read_incomplete_no_warning(s3_store_factory, sym, get_stderr):
     pytest.skip("This test is flaky due to trying to retrieve the log messages")
     lib = s3_store_factory(dynamic_strings=True, incomplete=True)
+    lib_tool = lib.library_tool()
     symbol = sym
 
     write_df = pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([1, 2, 3]))
-    lib.append(symbol, write_df, incomplete=True)
+    lib_tool.append_incomplete(symbol, write_df)
     # Need to compact so that the APPEND_REF points to a non-existent APPEND_DATA (intentionally)
     lib.compact_incomplete(symbol, True, False, False, True)
     set_log_level("DEBUG")
