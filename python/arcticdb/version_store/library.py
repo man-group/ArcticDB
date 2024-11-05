@@ -1370,7 +1370,7 @@ class Library:
         """
         vit = self._nvs.version_store.sort_merge(
             symbol,
-            normalize_metadata(metadata) if metadata is not None else None,
+            normalize_metadata(metadata),
             mode == StagedDataFinalizeMethod.APPEND,
             prune_previous_versions=prune_previous_versions,
             delete_staged_data_on_failure=delete_staged_data_on_failure

@@ -33,6 +33,7 @@ from arcticdb import QueryBuilder, ReadRequest
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
+import arcticdb.version_store._normalization
 from arcticdb.version_store._store import VersionedItem
 from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException, StorageException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
@@ -1380,6 +1381,17 @@ def test_really_large_symbol_for_recursive_data(basic_store):
     metastruct, to_write = fl.create_meta_structure(data, "s" * 100)
     assert len(list(to_write.keys())[0]) < fl.MAX_KEY_LENGTH
     equals(basic_store.read("s" * 100).data, data)
+
+
+def test_too_much_recursive_metastruct_data(monkeypatch, lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_too_much_recursive_metastruct_data"
+    data = [pd.DataFrame({"col": [0]}), pd.DataFrame({"col": [1]})]
+    with pytest.raises(ArcticDbNotYetImplemented) as e:
+        with monkeypatch.context() as m:
+            m.setattr(arcticdb.version_store._normalization, "_MAX_RECURSIVE_METASTRUCT", 1)
+            lib.write(sym, data, recursive_normalizers=True)
+    assert "recursive" in str(e.value).lower()
 
 
 def test_nested_custom_types(basic_store):

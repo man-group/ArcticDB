@@ -29,7 +29,7 @@ from arcticdb_ext.version_store import SortedValue as _SortedValue
 from pandas.core.internals import make_block
 
 from pandas import DataFrame, MultiIndex, Series, DatetimeIndex, Index, RangeIndex
-from typing import NamedTuple, List, Union, Mapping, Any, TypeVar, Tuple
+from typing import Dict, NamedTuple, List, Union, Mapping, Any, TypeVar, Tuple
 
 from arcticdb._msgpack_compat import packb, padded_packb, unpackb, ExtType
 from arcticdb.log import version as log
@@ -1184,6 +1184,9 @@ denormalize = _NORMALIZER.denormalize
 _MAX_USER_DEFINED_META = 16 << 20 # 16MB
 _WARN_USER_DEFINED_META = 8 << 20 # 8MB
 
+_MAX_RECURSIVE_METASTRUCT = 16 << 20 # 16MB
+_WARN_RECURSIVE_METASTRUCT = 8 << 20 # 8MB
+
 
 def _init_msgpack_metadata():
     cfg = VersionStoreConfig.MsgPack()
@@ -1194,9 +1197,9 @@ def _init_msgpack_metadata():
 _msgpack_metadata = _init_msgpack_metadata()
 
 
-def normalize_metadata(d):
-    # type: (Mapping[string, Any])->NormalizationMetadata.UserDefinedMetadata
-
+def normalize_metadata(metadata: Any) -> UserDefinedMetadata:
+    if metadata is None:
+        return None
     # Prevent arbitrary large object serialization
     # as it will slow down the indexing read side
     # which is not a good idea.
@@ -1205,12 +1208,26 @@ def normalize_metadata(d):
     # However, this is also a probable sign of poor data modelling
     # and understanding the need should be a priority before
     # removing this protection.
-    packed = _msgpack_metadata._msgpack_packb(d)
+    packed = _msgpack_metadata._msgpack_packb(metadata)
     size = len(packed)
     if size > _MAX_USER_DEFINED_META:
         raise ArcticDbNotYetImplemented(f'User defined metadata cannot exceed {_MAX_USER_DEFINED_META}B')
     if size > _WARN_USER_DEFINED_META:
         log.warn(f'User defined metadata is above warning size ({_WARN_USER_DEFINED_META}B), metadata cannot exceed {_MAX_USER_DEFINED_META}B.  Current size: {size}B.')
+
+    udm = UserDefinedMetadata()
+    udm.inline_payload = packed
+    return udm
+
+
+def normalize_recursive_metastruct(metastruct: Dict[Any, Any]) -> UserDefinedMetadata:
+    # Prevent arbitrary large object serialization, as it is indicative of a poor data layout
+    packed = _msgpack_metadata._msgpack_packb(metastruct)
+    size = len(packed)
+    if size > _MAX_RECURSIVE_METASTRUCT:
+        raise ArcticDbNotYetImplemented(f'Recursively normalized data normalization metadata cannot exceed {_MAX_RECURSIVE_METASTRUCT}B')
+    if size > _WARN_RECURSIVE_METASTRUCT:
+        log.warn(f'Recursively normalized data normalization metadata is above warning size ({_WARN_RECURSIVE_METASTRUCT}B), cannot exceed {_MAX_RECURSIVE_METASTRUCT}B. Current size: {size}B.')
 
     udm = UserDefinedMetadata()
     udm.inline_payload = packed
