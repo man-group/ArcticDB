@@ -202,6 +202,12 @@ class ExpressionNode:
         else:
             return self._rapply(left, _OperationType.XOR)
 
+    def __bool__(self):
+        raise UserInputException(
+            "'and', 'or', and 'not' operators not supported in ArcticDB querying operations,"
+            " please use the bitwise equivalents '&', '|', and '~' respectively"
+        )
+
     def isin(self, *args):
         value_list = value_list_from_args(*args)
         return self._apply(value_list, _OperationType.ISIN)
