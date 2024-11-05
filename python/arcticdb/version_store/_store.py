@@ -58,6 +58,7 @@ from arcticdb.version_store._custom_normalizers import get_custom_normalizer, Co
 from arcticdb.version_store._normalization import (
     NPDDataFrame,
     normalize_metadata,
+    normalize_recursive_metastruct,
     denormalize_user_metadata,
     denormalize_dataframe,
     MsgPackNormalizer,
@@ -340,7 +341,7 @@ class NativeVersionStore:
         )
         empty_types = self.resolve_defaults("empty_types", self._lib_cfg.lib_desc.version.write_options, False)
         try:
-            udm = normalize_metadata(metadata) if metadata is not None else None
+            udm = normalize_metadata(metadata)
             opt_custom = self._custom_normalizer.normalize(dataframe)
             if opt_custom is not None:
                 item, custom_norm_meta = opt_custom
@@ -394,8 +395,8 @@ class NativeVersionStore:
                     _, item, norm_meta = self._try_normalize(k, v, None, pickle_on_failure, dynamic_strings, None)
                     items.append(item)
                     norm_metas.append(norm_meta)
-                normalized_udm = normalize_metadata(metadata) if metadata is not None else None
-                normalized_metastruct = normalize_metadata(metastruct)
+                normalized_udm = normalize_metadata(metadata)
+                normalized_metastruct = normalize_recursive_metastruct(metastruct)
                 vit_composite = self.version_store.write_versioned_composite_data(
                     symbol,
                     normalized_metastruct,
@@ -2027,7 +2028,7 @@ class NativeVersionStore:
         prune_previous_version = self.resolve_defaults(
             "prune_previous_version", self._write_options(), global_default=False, existing_value=prune_previous_version
         )
-        udm = normalize_metadata(metadata) if metadata is not None else None
+        udm = normalize_metadata(metadata)
         vit = self.version_store.compact_incomplete(
             symbol, append, convert_int_to_float, via_iteration, sparsify, udm, prune_previous_version, validate_index, delete_staged_data_on_failure
         )
@@ -2256,7 +2257,7 @@ class NativeVersionStore:
             skip_symbols = []
         if not versions:
             versions = {}
-        metadata = normalize_metadata(metadata) if metadata else None
+        metadata = normalize_metadata(metadata)
 
         self.version_store.snapshot(snap_name, metadata, skip_symbols, versions, allow_partial_snapshot)
 
@@ -2893,7 +2894,7 @@ class NativeVersionStore:
         prune_previous_version = self.resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
-        udm = normalize_metadata(metadata) if metadata is not None else None
+        udm = normalize_metadata(metadata)
         v = self.version_store.write_metadata(symbol, udm, prune_previous_version)
         return self._convert_thin_cxx_item_to_python(v, metadata)
 
