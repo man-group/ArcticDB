@@ -19,7 +19,10 @@ from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.util.test import distinct_timestamps
 from arcticdb.version_store._store import NativeVersionStore
-from arcticdb.util.test import assert_frame_equal, create_df_index_rownum, create_df_index_datetime, dataframe_arctic_update
+from arcticdb.util.test import (assert_frame_equal, 
+                                create_df_index_rownum, 
+                                create_df_index_datetime, 
+                                dataframe_simulate_arcticdb_update_static)
 from tests.util.storage_test import get_s3_storage_config
 
 
@@ -799,7 +802,7 @@ def test_delete_snapshot_on_updated_and_appended_dataframe(basic_store_tiny_segm
     # this dataframe has both values before the date and within the dates of df_1
     df_2 = create_df_index_datetime(10, 1, 5) 
     df_3 = create_df_index_datetime(10, 20, 30) 
-    df_updated = dataframe_arctic_update(df_1, df_2)
+    df_updated = dataframe_simulate_arcticdb_update_static(df_1, df_2)
     df_final = pd.concat([df_updated, df_3])
 
     symbol1 = "sym1"

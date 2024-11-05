@@ -129,26 +129,26 @@ def dataframe_dump_to_log(label_for_df, df: pd.DataFrame):
     print(df.dtypes)
     print("-" * 80)
 
-def dataframe_arctic_update(target: pd.DataFrame, data:  pd.DataFrame) ->  pd.DataFrame:
+def dataframe_simulate_arcticdb_update_static(existing_df: pd.DataFrame, update_df:  pd.DataFrame) ->  pd.DataFrame:
     """
         Does implement arctic logic of update() method functionality over pandas dataframes.
-        In other words the result, new data frame will have the content of 'target' dataframe
-        updated with the content of "data" dataframe the same way that arctic is supposed to work.
+        In other words the result, new data frame will have the content of 'existing_df' dataframe
+        updated with the content of "update_df" dataframe the same way that arctic is supposed to work.
         Useful for prediction of result content of arctic database after update operation
         NOTE: you have to pass indexed dataframe
     """
 
-    assert target.dtypes.to_list() == data.dtypes.to_list() , "Dataframe must have identical columns types in same order"
-    assert target.columns.to_list() == data.columns.to_list() , "Columns names also need to be in same order"
+    assert existing_df.dtypes.to_list() == update_df.dtypes.to_list() , "Dataframe must have identical columns types in same order"
+    assert existing_df.columns.to_list() == update_df.columns.to_list() , "Columns names also need to be in same order"
 
-    start2 = data.first_valid_index()
-    end2 = data.last_valid_index()
+    start2 = update_df.first_valid_index()
+    end2 = update_df.last_valid_index()
 
     chunks = []
-    df1 = target[target.index < start2]
+    df1 = existing_df[existing_df.index < start2]
     chunks.append(df1)
-    chunks.append(data)
-    df2 = target[target.index > end2]
+    chunks.append(update_df)
+    df2 = existing_df[existing_df.index > end2]
     chunks.append(df2)
     result_df = pd.concat(chunks)
     return result_df
