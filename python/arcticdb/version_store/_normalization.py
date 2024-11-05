@@ -622,19 +622,13 @@ class SeriesNormalizer(_PandasNormalizer):
 
         series = pd.Series() if df.columns.empty else df.iloc[:, 0]
 
-        if hasattr(norm_meta.common, "has_name"):
-            # Series was written by newer client that understands the has_name field
-            if norm_meta.common.has_name:
-                series.name = norm_meta.common.name
-            else:
-                series.name = None
+        if len(norm_meta.common.name) or norm_meta.common.has_name:
+            series.name = norm_meta.common.name
         else:
-            # Series was written by an older client. We can't distinguish between None and empty strings as names, so
-            # maintain the old behaviour which converted empty string names to None
-            if norm_meta.common.name:
-                series.name = norm_meta.common.name
-            else:
-                series.name = None
+            # Either the Series was written with a new client that understands the has_name field, and it was None, or
+            # the Series was written by an older client as either an empty string or None, we cannot tell, so maintain
+            # behaviour as it was before the has_name field was added
+            series.name = None
 
         return series
 
