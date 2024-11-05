@@ -24,6 +24,7 @@ from arcticdb.util.test import (assert_frame_equal,
                                 create_df_index_datetime, 
                                 dataframe_simulate_arcticdb_update_static)
 from tests.util.storage_test import get_s3_storage_config
+from arcticdb_ext.storage import KeyType
 
 
 def test_basic_snapshot_flow(basic_store):
@@ -831,3 +832,26 @@ def test_delete_snapshot_on_updated_and_appended_dataframe(basic_store_tiny_segm
         lib.read(symbol1, as_of=snap1).data
     with pytest.raises(NoDataFoundException):
         lib.read(symbol1, as_of=snap2).data
+
+def test_snapshot_deletion_multiple_symbols(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    for symbol_idx in range(2):
+        lib.write(f"sym_{symbol_idx}", pd.DataFrame({"col": [1, 2]}))
+        lib.append(f"sym_{symbol_idx}", pd.DataFrame({"col": [3, 4]}))
+
+    lib.snapshot("snap")
+    lib.delete_version("sym_0", 1)
+    lib.delete_version("sym_1", 1)
+
+    lib_tool = lib.library_tool()
+
+    for symbol_idx in range(2):
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, f"sym_{symbol_idx}")) == 2
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, f"sym_{symbol_idx}")) == 2
+
+
+    lib.delete_snapshot("snap")
+    for symbol_idx in range(2):
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, f"sym_{symbol_idx}")) == 1
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, f"sym_{symbol_idx}")) == 1
+

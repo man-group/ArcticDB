@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import string
 from arcticdb.util.test import assert_frame_equal, sample_dataframe, get_wide_dataframe, get_pickle, random_integers
 
 import pandas as pd
@@ -197,10 +198,11 @@ def run_scenario(func, lib, with_snapshots, verbose):
         if verbose:
             log.storage.info("Function {} symbol {} returned {}".format(func.__name__, symbol, res))
         if with_snapshots and lib.list_symbols():
-            lib.snapshot("snapshot" + datetime.utcnow().isoformat())
+            rand_id = "".join(random.choices(string.ascii_letters, k=5))
+            lib.snapshot(rand_id + "snapshot" + datetime.utcnow().isoformat())
             # clean up old snapshots - more than 3 hours old
             for s in lib.list_snapshots():
-                t = datetime.strptime(s, "snapshot%Y-%m-%dT%H:%M:%S.%f")
+                t = datetime.strptime(s[len(rand_id):], "snapshot%Y-%m-%dT%H:%M:%S.%f")
                 if (datetime.utcnow() - t).seconds > 60 * 60 * 3:
                     lib.delete_snapshot(s)
     except Exception as e:

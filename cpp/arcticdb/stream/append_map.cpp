@@ -206,36 +206,79 @@ SegmentInMemory incomplete_segment_from_frame(
     return output;
 }
 
+void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_columns) {
+    if(sort_columns.size() == 1)
+        mutable_seg.sort(sort_columns.at(0));
+    else
+        mutable_seg.sort(sort_columns);
+}
+
 folly::Future<arcticdb::entity::VariantKey> write_incomplete_frame(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
     bool validate_index,
-    std::optional<AtomKey>&& next_key)  {
+    bool sort_on_index,
+    std::optional<AtomKey>&& next_key,
+    const std::optional<std::vector<std::string>>& sort_columns)  {
     using namespace arcticdb::pipelines;
 
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
-            !validate_index || index_is_not_timeseries_or_is_sorted_ascending(*frame),
-            "When writing/appending staged data in parallel, input data must be sorted.");
+            !validate_index || sort_columns || sort_on_index || index_is_not_timeseries_or_is_sorted_ascending(*frame),
+            "When writing/appending staged data in parallel, with no sort columns supplied, input data must be sorted.");
 
     auto index_range = frame->index_range;
     auto segment = incomplete_segment_from_frame(frame, 0, std::move(next_key), false);
-    return store->write(
-        KeyType::APPEND_DATA,
-        VersionId(0),
-        stream_id,
-        index_range.start_,
-        index_range.end_,
-        std::move(segment));
+
+
+    if(sort_on_index || (sort_columns && !sort_columns->empty())) {
+        auto mutable_seg = segment.clone();
+        if(sort_on_index) {
+            util::check(frame->has_index(), "Sort requested on index but no index supplied");
+            std::vector<std::string> cols;
+            for(auto i = 0UL; i < frame->desc.index().field_count(); ++i) {
+                cols.emplace_back(frame->desc.fields(i).name());
+            }
+            if(sort_columns) {
+                for(auto& extra_sort_col : *sort_columns) {
+                    if(std::find(std::begin(cols), std::end(cols), extra_sort_col) == std::end(cols))
+                        cols.emplace_back(extra_sort_col);
+                }
+            }
+            do_sort(mutable_seg, cols);
+        } else {
+            do_sort(mutable_seg, *sort_columns);
+        }
+
+        if(sort_on_index || (sort_columns && sort_columns->at(0) == mutable_seg.descriptor().field(0).name()))
+            mutable_seg.descriptor().set_sorted(SortedValue::ASCENDING);
+
+        return store->write(
+            KeyType::APPEND_DATA,
+            VersionId(0),
+            stream_id,
+            index_range.start_,
+            index_range.end_,
+            std::move(mutable_seg));
+    } else {
+        return store->write(
+            KeyType::APPEND_DATA,
+            VersionId(0),
+            stream_id,
+            index_range.start_,
+            index_range.end_,
+            std::move(segment));
+    }
 }
 
-void write_parallel(
+void write_parallel_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
-    bool validate_index) {
-    // TODO: dynamic bucketize doesn't work with incompletes
-    (void)write_incomplete_frame(store, stream_id, frame, validate_index, std::nullopt).get();
+    bool validate_index,
+    bool sort_on_index,
+    const std::optional<std::vector<std::string>>& sort_columns) {
+    (void)write_incomplete_frame(store, stream_id, frame, validate_index, sort_on_index, std::nullopt, sort_columns).get();
 }
 
 std::vector<SliceAndKey> get_incomplete(
@@ -375,7 +418,8 @@ void append_incomplete(
         const std::shared_ptr<Store>& store,
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame,
-        bool validate_index) {
+        bool validate_index,
+        bool sort_on_index) {
     using namespace arcticdb::proto::descriptors;
     using namespace arcticdb::stream;
     ARCTICDB_SAMPLE_DEFAULT(AppendIncomplete)
@@ -385,7 +429,7 @@ void append_incomplete(
     const auto num_rows = frame->num_rows;
     total_rows += num_rows;
     auto desc = frame->desc.clone();
-    auto new_key = write_incomplete_frame(store, stream_id, frame, validate_index, std::move(next_key)).get();
+    auto new_key = write_incomplete_frame(store, stream_id, frame, validate_index, sort_on_index, std::move(next_key), std::nullopt).get();
 
 
     ARCTICDB_DEBUG(log::version(), "Wrote incomplete frame for stream {}, {} rows, total rows {}", stream_id, num_rows, total_rows);

@@ -5,6 +5,7 @@ on:
       run_all_benchmarks: {required: true, type: boolean, description: Run all benchmarks or just the one for the given commit}
       commit:             {required: true, type: string, description: commit hash that will be benchmarked}
       cibw_image_tag:     {required: true, type: string, description: Linux only. As built by cibw_docker_image.yml workflow}
+      run_on_pr_head:     {required: false, default: false, type: boolean, description: Specifies if the benchmark should run on PR head branch}
 jobs:
   start_ec2_runner:
     uses: ./.github/workflows/ec2_runner_jobs.yml
@@ -36,7 +37,8 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           token: ${{ secrets.ARCTICDB_TEST_PAT }}
-
+          ref: ${{ inputs.run_on_pr_head && github.event.pull_request.head.sha || '' }}  # Note: This is dangerous if we run automatic CI on external PRs
+        
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.3
         with:
@@ -67,14 +69,14 @@ jobs:
           python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
 
       - name: Benchmark given commit
-        if: github.event_name != 'pull_request' || inputs.run_all_benchmarks == true
+        if: github.event_name != 'pull_request_target' || inputs.run_all_benchmarks == true
         shell: bash -el {0}
         run: | 
           git config --global --add safe.directory .
           python -m asv run -v --show-stderr ${{ inputs.commit }}^!
         
       - name: Benchmark against master
-        if: github.event_name == 'pull_request' && inputs.run_all_benchmarks == false
+        if: github.event_name == 'pull_request_target' && inputs.run_all_benchmarks == false
         shell: bash -el {0}
         run: |
           python -m asv continuous -v --show-stderr origin/master HEAD -f 1.15

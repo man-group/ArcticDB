@@ -576,6 +576,42 @@ class Library:
             background_deletion=write_options.delayed_deletes
         )
 
+    def stage(
+        self,
+        symbol: str,
+        data: NormalizableType,
+        validate_index=True,
+        sort_on_index=False,
+        sort_columns: List[str] = None
+    ):
+        """
+        Write a staged data chunk to storage, that will not be visible until finalize_staged_data is called on
+        the symbol. Equivalent to write() with staged=True.
+
+        Parameters
+        ----------
+        symbol : str
+            Symbol name. Limited to 255 characters. The following characters are not supported in symbols:
+            ``"*", "&", "<", ">"``
+        data : NormalizableType
+            Data to be written. Staged data must be normalizable.
+        validate_index:
+            Check that the index is sorted prior to writing. In the case of unsorted data, throw an UnsortedDataException
+        sort_on_index:
+            If an appropriate index is present, sort the data on it. In combination with sort_columns the
+            index will be used as the primary sort column, and the others as secondaries.
+        sort_columns:
+            Sort the data by specific columns prior to writing.
+        """
+        self._nvs.stage(
+            symbol,
+            data,
+            validate_index=validate_index,
+            sort_on_index=sort_on_index,
+            sort_columns=sort_columns,
+            norm_failure_options_msg="Failed to normalize data. It is inadvisable to pickle staged data"
+                                     "as it will not be possible to finalize it.")
+
     def write(
         self,
         symbol: str,
@@ -1034,6 +1070,11 @@ class Library:
         for exactly this purpose and to make it very clear when deletion is intended.
 
         Note that `update` is not designed for multiple concurrent writers over a single symbol.
+
+        If using static schema then all the column names of ``data``, their order, and their type must match the columns already in storage.
+
+        If dynamic schema is used then data will override everything in storage for the entire index of ``data``. Update
+        will not keep columns from storage which are not in ``data``.
 
         Parameters
         ----------
