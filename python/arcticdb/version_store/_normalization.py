@@ -608,8 +608,10 @@ class SeriesNormalizer(_PandasNormalizer):
             empty_types=empty_types
         )
         norm.series.CopyFrom(norm.df)
-        if item.name:
+        if item.name is not None:
             norm.series.common.name = _column_name_to_strings(item.name)
+            norm.series.common.has_name = True
+        # else protobuf bools default to False
 
         return NormalizedInput(item=df, metadata=norm)
 
@@ -620,9 +622,12 @@ class SeriesNormalizer(_PandasNormalizer):
 
         series = pd.Series() if df.columns.empty else df.iloc[:, 0]
 
-        if norm_meta.common.name:
+        if len(norm_meta.common.name) or norm_meta.common.has_name:
             series.name = norm_meta.common.name
         else:
+            # Either the Series was written with a new client that understands the has_name field, and it was None, or
+            # the Series was written by an older client as either an empty string or None, we cannot tell, so maintain
+            # behaviour as it was before the has_name field was added
             series.name = None
 
         return series
