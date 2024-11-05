@@ -153,6 +153,42 @@ def dataframe_simulate_arcticdb_update_static(existing_df: pd.DataFrame, update_
     result_df = pd.concat(chunks)
     return result_df
 
+def dataframe_combine_all_dfs_into_one(*dfs : pd.DataFrame) -> pd.DataFrame:
+    """
+        Use this function to append all columns from one dataframe
+        to other. This way you can create larger dataframe with desired
+        column data structure.
+
+        NOTE: all dfs must be with same size and index
+    """
+
+    result = pd.concat(dfs[0:2], axis=1, copy=True)
+    for idx in range(2,len(dfs),1):
+        result = pd.concat([result, dfs[idx]], axis=1, copy=True)
+    return result
+
+def dataframe_single_column_string(length=1000, column_label='string_short', seed=0, string_len=1):
+    """
+        creates a dataframe with one column, which label can be changed, containing string
+        with specified length. Useful for combining this dataframe with another dataframe
+    """
+    np.random.seed(seed)
+    df = pd.DataFrame({ column_label : [random_string(string_len) for _ in range(length)] })
+    return df
+
+def dataframe_filter_with_datetime_index(df: pd.DataFrame, start_timestamp, end_timestamp, inclusive='both') -> pd.DataFrame:
+    """
+        Filters dataframe which has datetime index, and selects dates from start till end,
+        where inclusive can be one of (both,left,righ,neither)
+        start and end can be pandas.Timeframe, datetime or string datetime
+    """
+
+    df_result = df[
+        df.index.to_series()
+        .between(start_timestamp, end_timestamp, inclusive='both')
+        ]
+    return df_result
+
 def maybe_not_check_freq(f):
     """Ignore frequency when pandas is newer as starts to check frequency which it did not previously do."""
 
@@ -178,9 +214,17 @@ def maybe_not_check_freq(f):
 
     return wrapper
 
-
 assert_frame_equal = maybe_not_check_freq(pd.testing.assert_frame_equal)
 assert_series_equal = maybe_not_check_freq(pd.testing.assert_series_equal)
+
+def assert_frame_equal_row_range_fix(expected : pd.DataFrame, actual : pd.DataFrame):
+    """
+        Use for dataframes that have index row range and you
+        obtain data from arctic with QueryBuilder
+    """
+    expected.reset_index(inplace = True, drop = True)
+    actual.reset_index(inplace = True, drop = True)
+    assert_frame_equal(expected, actual)
 
 def random_string(length: int):
     return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
