@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from typing import Mapping, Any, Optional, Iterable, NamedTuple, List, AnyStr
 import numpy as np
 import pandas as pd
+import datetime as dt
 import string
 import random
 import time
@@ -44,6 +45,113 @@ def create_df(start=0, columns=1) -> pd.DataFrame:
     index = np.arange(start, start + 10, dtype=np.int64)
     return pd.DataFrame(data, index=index)
 
+def create_df_index_rownum(num_columns: int, start_index: int, end_index : int) -> pd.DataFrame:
+    """
+        Creates a data frame with (integer index) specified number of columns with integer index starting
+        from specified and ending in specified position. The content of the dataframe is 
+        integer random numbers ['start_index', 'end_index')
+
+        Why this is useful? Consider this example:
+
+          df1 = create_df_index_rownum(num_columns=2, start_index=0, end_index=2)
+          df2 = create_df_index_rownum(num_columns=2, start_index=2, end_index=4)
+          df_full = pd.concat([df1, df2])
+        
+        This will produce 3 dataframes and the result of the update full operation would be 
+        visibly correct, even without other methods of comparison:
+
+            df1:
+            COL_0  COL_1
+            0      1      1
+            1      1      0
+            --------------------
+            df2:
+            COL_0  COL_1
+            2      3      2
+            3      2      2
+            --------------------
+            df_full:
+            COL_0  COL_1
+            0      1      1
+            1      1      0
+            2      3      2
+            3      2      2
+
+    """
+    rows = end_index - start_index
+    cols = [f'COL_{i}' for i in range(num_columns)]
+    rng = np.random.default_rng()
+    df = pd.DataFrame(rng.integers(start_index, 
+                                        end_index, 
+                                        size=(rows, num_columns),
+                                        dtype=np.int64), 
+                                        columns=cols)
+    df.index = np.arange(start_index, end_index, 1)
+    return df
+
+def create_df_index_datetime(num_columns: int, start_hour: int, end_hour : int) -> pd.DataFrame:
+    """
+        Creates data frame with specified number of columns 
+        with datetime index sorted, starting from start_hour till
+        end hour (you can use thousands of hours if needed). 
+        The data is random integer data again with min 'start_hour' and
+        max 'end_hour'. The goal is to achieve same visually understandable 
+        correctness validation of append/update operations (see 'create_df_index_rownum()' doc)
+    """
+    assert start_hour >= 0 , "start index must be positive"
+    assert end_hour >= 0 , "end index must be positive"
+
+    time_start = dt.datetime(2000, 1, 1, 0)
+    rows = end_hour - start_hour
+    cols = [f'COL_{i}' for i in range(num_columns)]
+    rng = np.random.default_rng()
+    df = pd.DataFrame(rng.integers(start_hour, 
+                                        end_hour, 
+                                        size=(rows, num_columns),
+                                        dtype=np.int64), 
+                                        columns=cols)
+    start_date = time_start + dt.timedelta(hours=start_hour)
+    dr = pd.date_range(start_date, periods=rows, freq='h').astype("datetime64[ns]")
+    df.index = dr
+    return df
+
+def dataframe_dump_to_log(label_for_df, df: pd.DataFrame):
+    """
+        Useful for printing in log content and data types of columns of
+        a dataframe. This way in the full log of a test we will have actual dataframe, that later
+        we could use to reproduce something or further analyze failures caused by
+        a problems in test code or arctic
+    """
+    print("-" * 80)
+    print('dataframe : , ', label_for_df)
+    print(df.to_csv())
+    print("column definitions : ")
+    print(df.dtypes)
+    print("-" * 80)
+
+def dataframe_simulate_arcticdb_update_static(existing_df: pd.DataFrame, update_df:  pd.DataFrame) ->  pd.DataFrame:
+    """
+        Does implement arctic logic of update() method functionality over pandas dataframes.
+        In other words the result, new data frame will have the content of 'existing_df' dataframe
+        updated with the content of "update_df" dataframe the same way that arctic is supposed to work.
+        Useful for prediction of result content of arctic database after update operation
+        NOTE: you have to pass indexed dataframe
+    """
+
+    assert existing_df.dtypes.to_list() == update_df.dtypes.to_list() , "Dataframe must have identical columns types in same order"
+    assert existing_df.columns.to_list() == update_df.columns.to_list() , "Columns names also need to be in same order"
+
+    start2 = update_df.first_valid_index()
+    end2 = update_df.last_valid_index()
+
+    chunks = []
+    df1 = existing_df[existing_df.index < start2]
+    chunks.append(df1)
+    chunks.append(update_df)
+    df2 = existing_df[existing_df.index > end2]
+    chunks.append(df2)
+    result_df = pd.concat(chunks)
+    return result_df
 
 def maybe_not_check_freq(f):
     """Ignore frequency when pandas is newer as starts to check frequency which it did not previously do."""
@@ -52,14 +160,27 @@ def maybe_not_check_freq(f):
     def wrapper(*args, **kwargs):
         if PANDAS_VERSION >= CHECK_FREQ_VERSION and "check_freq" not in kwargs:
             kwargs["check_freq"] = False
-        return f(*args, **kwargs)
+        try:
+            return f(*args, **kwargs)
+        except AssertionError as ae:
+            df = []
+            if "left" in kwargs:
+                df = kwargs["left"]
+            else:
+                df = args[0]
+            dataframe_dump_to_log("LEFT dataframe (expected)", df)
+            if "right" in kwargs:
+                df = kwargs["right"]
+            else:
+                df = args[1]
+            dataframe_dump_to_log("RIGHT dataframe (actual)", df)
+            raise ae
 
     return wrapper
 
 
 assert_frame_equal = maybe_not_check_freq(pd.testing.assert_frame_equal)
 assert_series_equal = maybe_not_check_freq(pd.testing.assert_series_equal)
-
 
 def random_string(length: int):
     return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
