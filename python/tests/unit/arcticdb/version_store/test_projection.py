@@ -43,15 +43,16 @@ def test_project_column_not_present(lmdb_version_store_v1):
 def test_project_string_binary_arithmetic(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     symbol = "test_project_string_arithmetic"
-    lib.write(symbol, pd.DataFrame({"a": [0], "b": ["hello"], "c": ["bonjour"]}))
-    q = QueryBuilder()
-    operands = [q["a"], q["b"], q["c"], "0", 0]
+    lib.write(symbol, pd.DataFrame({"col_a": [0], "col_b": ["hello"], "col_c": ["bonjour"]}))
+    operands = ["col_a", "col_b", "col_c", "0", 0]
     for lhs in operands:
         for rhs in operands:
-            if (lhs == q["a"] and rhs in [q["a"], 0]) or (rhs == q["a"] and lhs in [q["a"], 0]):
+            if ((lhs == "col_a" and rhs in ["col_a", 0]) or
+                (rhs == "col_a" and lhs in ["col_a", 0]) or
+                (lhs in ["0", 0] and rhs in ["0", 0])):
                 continue
             q = QueryBuilder()
-            q = q.apply("d", lhs + rhs)
+            q = q.apply("d", (q[lhs] if isinstance(lhs, str) and lhs.startswith("col_") else lhs) + (q[rhs] if isinstance(rhs, str) and rhs.startswith("col_") else rhs))
             with pytest.raises(UserInputException):
                 lib.read(symbol, query_builder=q)
 
