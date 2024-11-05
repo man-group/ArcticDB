@@ -275,7 +275,8 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
     GroupingMap grouping_map;
     // Iterating backwards as we are going to erase from this vector as we go along
     // This is to spread out deallocation of the input segments
-    for (auto it = row_slices.rbegin(); it != row_slices.rend(); ++it) {
+    auto it = row_slices.rbegin();
+    while(it != row_slices.rend()) {
         auto& row_slice = *it;
         auto partitioning_column = row_slice.get(ColumnName(grouping_column_));
         if (std::holds_alternative<ColumnWithStrings>(partitioning_column)) {
@@ -383,7 +384,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
         } else {
             util::raise_rte("Expected single column from expression");
         }
-        row_slices.erase(std::next(it).base());
+        it = static_cast<decltype(row_slices)::reverse_iterator>((row_slices.erase(std::next(it).base())));
     }
     SegmentInMemory seg;
     auto index_col = std::make_shared<Column>(make_scalar_type(grouping_data_type), grouping_map.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
