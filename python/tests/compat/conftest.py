@@ -182,8 +182,9 @@ def arctic_uri(request):
 
 @pytest.fixture()
 def old_venv_and_arctic_uri(old_venv, arctic_uri):
-    if Version(old_venv.version) <= Version("4.5.0") and arctic_uri.startswith("mongo"):
-        pytest.skip("Mongo storage backend has a desctruction bug present until 4.5.0, which can cause flaky segfaults.")
+    if arctic_uri.startswith("mongo"):
+        # TODO: We tought the bug was fixed in 4.5.1 but it's still present.
+        pytest.skip("Mongo storage backend has a desctruction bug, which can cause flaky segfaults.")
     if Version(old_venv.version) <= Version("4.5.0") and arctic_uri.startswith("lmdb"):
         pytest.skip("LMDB storage backend has a desctruction bug present until 4.5.0, which can cause flaky segfaults.")
     if arctic_uri.startswith("azure"):
