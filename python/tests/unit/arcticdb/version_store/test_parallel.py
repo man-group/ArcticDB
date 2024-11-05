@@ -21,12 +21,28 @@ from arcticdb.util.test import (
 )
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb_ext.storage import KeyType
-import arcticdb.toolbox.library_tool
+
 
 def get_append_keys(lib, sym):
     lib_tool = lib.library_tool()
-    keys = lib_tool.find_keys_for_symbol(arcticdb.toolbox.library_tool.KeyType.APPEND_DATA, sym)
+    keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)
     return keys
+
+
+def test_staging_doesnt_write_append_ref(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    lib_tool = lib.library_tool()
+    sym = "test_staging_doesnt_write_append_ref"
+    df = pd.DataFrame({"col": [0]})
+    lib.write(sym, df, parallel=True)
+    assert not len(lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, sym))
+    lib.version_store.clear()
+    lib.write(sym, df, incomplete=True)
+    assert not len(lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, sym))
+    lib.version_store.clear()
+    lib.append(sym, df, incomplete=True)
+    assert not len(lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, sym))
+
 
 def test_remove_incomplete(basic_store):
     lib = basic_store
@@ -565,7 +581,6 @@ def test_parallel_no_column_slicing(lmdb_version_store_tiny_segment):
 def test_parallel_write_static_schema_type_changing(lmdb_version_store_tiny_segment, rows_per_incomplete, delete_staged_data_on_failure):
     lib = lmdb_version_store_tiny_segment
     sym = "test_parallel_write_static_schema_type_changing"
-    lib_tool = lib.library_tool()
     df_0 = pd.DataFrame({"col": np.arange(rows_per_incomplete, dtype=np.uint8)}, index=pd.date_range("2024-01-01", periods=rows_per_incomplete))
     df_1 = pd.DataFrame({"col": np.arange(rows_per_incomplete, 2 * rows_per_incomplete, dtype=np.uint16)}, index=pd.date_range("2024-01-03", periods=rows_per_incomplete))
     lib.write(sym, df_0, parallel=True)
