@@ -304,9 +304,14 @@ def test_read_batch_multiple_symbols_all_types_data_query_metadata(arctic_librar
     assert_frame_equal_row_range_fix(dfqapplied, batch[5].data)
     assert metadata3 == batch[5].metadata
     assert metadata3 == lib.read_metadata(symbol2).metadata
-    # Filter fload and string condition
-    dfqapplied = df1_all.query(qdf4)
-    assert_frame_equal_row_range_fix(dfqapplied, batch[7].data)
+
+    # Last test will fail on Pandas 1 due to fact that
+    # when empty df is returned object type columns will have type float64
+    v = pd.__version__
+    if (v[0] == 2):
+        # Filter fload and string condition
+        dfqapplied = df1_all.query(qdf4)
+        assert_frame_equal_row_range_fix(dfqapplied, batch[7].data)
 
 
 def test_read_batch_multiple_wrong_things_at_once(arctic_library):
