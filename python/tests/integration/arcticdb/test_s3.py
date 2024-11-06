@@ -9,6 +9,7 @@ import re
 
 import pytest
 import pandas as pd
+import sys
 
 from arcticdb_ext.exceptions import StorageException
 from arcticdb_ext import set_config_string
@@ -53,6 +54,8 @@ def test_s3_running_on_aws_fast_check(lib_name, s3_storage_factory, run_on_aws):
         assert lib_tool.inspect_env_variable("AWS_EC2_METADATA_DISABLED") == "true"
 
 
+@pytest.mark.skipif(sys.version_info.major == 3 and sys.version_info.minor == 6 and sys.platform == "linux",
+                    reason="Test setup segfaults")
 def test_nfs_backed_s3_storage(lib_name, nfs_backed_s3_storage):
     # Given
     lib = nfs_backed_s3_storage.create_version_store_factory(lib_name)()
