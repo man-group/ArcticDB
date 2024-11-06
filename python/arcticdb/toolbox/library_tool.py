@@ -188,3 +188,13 @@ class LibraryTool(LibraryToolImpl):
         assert column in old_df.columns
         new_df = old_df.astype({column: to_type})
         return self.overwrite_append_data_with_dataframe(key, new_df)
+
+    def append_incomplete(self, symbol: str, df: pd.DataFrame, validate_index: bool = False):
+        """
+        Appends the given dataframe to the APPEND_DATA key linked list. Useful for testing, as staging segments through
+        either the V1 or V2 API only creates APPEND_DATA keys, not the APPEND_REF key or the linked-list structure that
+        # streaming data does.
+        """
+        dynamic_strings = self._nvs._resolve_dynamic_strings({})
+        _, item, norm_meta = self._nvs._try_normalize(symbol, df, None, False, dynamic_strings, None)
+        self._nvs.version_store.append_incomplete(symbol, item, norm_meta, None, validate_index)
