@@ -14,12 +14,13 @@ from arcticdb.util.test import assert_frame_equal
 @pytest.mark.parametrize("batch", (True, False))
 def test_read_incompletes_with_indexed_data(lmdb_version_store_v1, batch):
     lib = lmdb_version_store_v1
+    lib_tool = lib.library_tool()
     sym = "test_read_incompletes_with_indexed_data"
     num_rows = 10
     df = pd.DataFrame({"col": np.arange(num_rows)}, pd.date_range("2024-01-01", periods=num_rows))
     lib.write(sym, df.iloc[:num_rows // 2])
     for idx in range(num_rows // 2, num_rows):
-        lib.write(sym, df.iloc[idx: idx+1], incomplete=True)
+        lib_tool.append_incomplete(sym, df.iloc[idx: idx+1])
     assert lib.has_symbol(sym)
     if batch:
         received_vit = lib.batch_read([sym], date_ranges=[(df.index[1], df.index[-2])], incomplete=True)[sym]
@@ -32,11 +33,12 @@ def test_read_incompletes_with_indexed_data(lmdb_version_store_v1, batch):
 @pytest.mark.parametrize("batch", (True, False))
 def test_read_incompletes_no_indexed_data(lmdb_version_store_v1, batch):
     lib = lmdb_version_store_v1
+    lib_tool = lib.library_tool()
     sym = "test_read_incompletes_no_indexed_data"
     num_rows = 10
     df = pd.DataFrame({"col": np.arange(num_rows)}, pd.date_range("2024-01-01", periods=num_rows))
     for idx in range(num_rows):
-        lib.write(sym, df.iloc[idx: idx+1], incomplete=True)
+        lib_tool.append_incomplete(sym, df.iloc[idx: idx+1])
     assert not lib.has_symbol(sym)
     if batch:
         received_vit = lib.batch_read([sym], date_ranges=[(df.index[1], df.index[-2])], incomplete=True)[sym]
