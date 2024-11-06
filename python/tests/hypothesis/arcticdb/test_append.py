@@ -77,6 +77,7 @@ def test_append_partial_read(version_store_factory, colnum, periods, rownum, col
 def test_incomplete_append_partial_read(version_store_factory, colnum, periods, rownum, cols, tsbounds, append_point):
     tz = "America/New_York"
     version_store = version_store_factory(col_per_group=colnum, row_per_segment=rownum)
+    lib_tool = version_store.library_tool()
     dtidx = pd.date_range("2019-02-06 11:43", periods=6).tz_localize(tz)
     a = np.arange(dtidx.shape[0])
     tf = TimeFrame(dtidx.values, columns_names=["a", "b", "c"], columns_values=[a, a + a, a * 10])
@@ -86,7 +87,7 @@ def test_incomplete_append_partial_read(version_store_factory, colnum, periods, 
     sid = "XXX"
     version_store.write(sid, tf1)
     tf2 = tf.tsloc[c2:]
-    version_store.append(sid, tf2, incomplete=True)
+    lib_tool.append_incomplete(sid, tf2)
 
     dtr = (dtidx[tsbounds[0]], dtidx[tsbounds[1]])
     vit = version_store.read(sid, date_range=dtr, columns=list(cols), incomplete=True)
