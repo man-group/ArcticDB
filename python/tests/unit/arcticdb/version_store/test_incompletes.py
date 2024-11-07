@@ -50,9 +50,9 @@ def test_read_incompletes_no_indexed_data(lmdb_version_store_v1, batch):
 
 
 @pytest.mark.parametrize("batch", (True, False))
-def test_read_incompletes_non_existant_symbol(lmdb_version_store_v1, batch):
+def test_read_incompletes_non_existent_symbol(lmdb_version_store_v1, batch):
     lib = lmdb_version_store_v1
-    sym = "test_read_incompletes_non_existant_symbol"
+    sym = "test_read_incompletes_non_existent_symbol"
     # Incomplete reads require a date range
     date_range = (pd.Timestamp(0), pd.Timestamp(1))
     with pytest.raises(MissingDataException):
