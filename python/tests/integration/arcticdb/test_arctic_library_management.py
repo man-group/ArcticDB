@@ -273,12 +273,18 @@ def test_create_library_with_invalid_name(arctic_client):
     ac = arctic_client
 
     # These should succeed because the names are valid
-    valid_names = ["lib", "lib/with/slash", "lib-with-dash", "lib.with.dot", "lib123"]
+    valid_names = ["lib", "lib-with-dash", "lib.with.dot", "lib123"]
+    # These should fail because the names are invalid
+    invalid_names = [chr(0), "lib>", "lib<", "lib*", "/lib", "lib...lib", "lib" * 1000]
+    # This name should fail on mongo, and succeed on other storages
+    if "mongo" in ac.get_uri():
+        invalid_names += ["lib/with/slash"]
+    else:
+        valid_names += ["lib/with/slash"]
+
     for lib_name in valid_names:
         ac.create_library(lib_name)
 
-    # These should fail because the names are invalid
-    invalid_names = [chr(0), "lib>", "lib<", "lib*", "/lib", "lib...lib", "lib" * 1000]
     for lib_name in invalid_names:
         with pytest.raises(UserInputException):
             ac.create_library(lib_name)
@@ -287,14 +293,13 @@ def test_create_library_with_invalid_name(arctic_client):
     assert set(ac.list_libraries()) == set(valid_names)
 
 
-# TODO: Fix issue #1247, then use "arctic_client" instead of "arctic_client_no_lmdb"
 @pytest.mark.parametrize("prefix", ["", "prefix"])
 @pytest.mark.parametrize("suffix", ["", "suffix"])
-def test_create_library_with_all_chars(arctic_client_no_lmdb, prefix, suffix):
+def test_create_library_with_all_chars(arctic_client, prefix, suffix):
     # Create library names with each character (except '\' because Azure replaces it with '/' in some cases)
     names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != "\\"]
 
-    ac = arctic_client_no_lmdb
+    ac = arctic_client
 
     created_libraries = set()
     for name in names:
