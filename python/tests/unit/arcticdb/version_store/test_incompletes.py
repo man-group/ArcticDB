@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from arcticdb.util.test import assert_frame_equal
+from arcticdb.exceptions import MissingDataException
 
 
 @pytest.mark.parametrize("batch", (True, False))
@@ -46,3 +47,16 @@ def test_read_incompletes_no_indexed_data(lmdb_version_store_v1, batch):
         received_vit = lib.read(sym, date_range=(df.index[1], df.index[-2]), incomplete=True)
     assert received_vit.symbol == sym
     assert_frame_equal(df.iloc[1:-1], received_vit.data)
+
+
+@pytest.mark.parametrize("batch", (True, False))
+def test_read_incompletes_non_existant_symbol(lmdb_version_store_v1, batch):
+    lib = lmdb_version_store_v1
+    sym = "test_read_incompletes_non_existant_symbol"
+    # Incomplete reads require a date range
+    date_range = (pd.Timestamp(0), pd.Timestamp(1))
+    with pytest.raises(MissingDataException):
+        if batch:
+            lib.batch_read([sym], date_ranges=[date_range], incomplete=True)
+        else:
+            lib.read(sym, date_range=date_range, incomplete=True)
