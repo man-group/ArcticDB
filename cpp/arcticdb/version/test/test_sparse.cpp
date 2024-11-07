@@ -84,8 +84,8 @@ TEST_F(SparseTestStore, SimpleRoundtrip) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     read_options.set_incompletes(true);
-    pipelines::ReadQuery read_query;
-    read_query.row_filter = universal_range();
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
@@ -176,8 +176,8 @@ TEST_F(SparseTestStore, SimpleRoundtripBackwardsCompat) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     read_options.set_incompletes(true);
-    pipelines::ReadQuery read_query;
-    read_query.row_filter = universal_range();
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
@@ -227,8 +227,8 @@ TEST_F(SparseTestStore, DenseToSparse) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     read_options.set_incompletes(true);
-    pipelines::ReadQuery read_query;
-    read_query.row_filter = universal_range();
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
@@ -276,8 +276,8 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     read_options.set_incompletes(true);
-    pipelines::ReadQuery read_query;
-    read_query.row_filter = universal_range();
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->row_filter = universal_range();
     auto handler_data = get_type_handler_data();
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame = read_result.frame_data.frame();;
@@ -330,8 +330,8 @@ TEST_F(SparseTestStore, Multiblock) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     read_options.set_incompletes(true);
-    pipelines::ReadQuery read_query;
-    read_query.row_filter = universal_range();
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
@@ -383,8 +383,8 @@ TEST_F(SparseTestStore, Segment) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     read_options.set_incompletes(true);
-    pipelines::ReadQuery read_query;
-    read_query.row_filter = universal_range();
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
@@ -443,8 +443,8 @@ TEST_F(SparseTestStore, SegmentWithExistingIndex) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     read_options.set_incompletes(true);
-    pipelines::ReadQuery read_query;
-    read_query.row_filter = universal_range();
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
@@ -503,9 +503,9 @@ TEST_F(SparseTestStore, SegmentAndFilterColumn) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     read_options.set_incompletes(true);
-    pipelines::ReadQuery read_query;
-    read_query.columns = {"time", "first"};
-    read_query.row_filter = universal_range();
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->columns = {"time", "first"};
+    read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
@@ -560,8 +560,8 @@ TEST_F(SparseTestStore, SegmentWithRangeFilter) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     read_options.set_incompletes(true);
-    pipelines::ReadQuery read_query;
-    read_query.row_filter = IndexRange(timestamp{3000}, timestamp{6999});
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->row_filter = IndexRange(timestamp{3000}, timestamp{6999});
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
@@ -614,8 +614,8 @@ TEST_F(SparseTestStore, Compact) {
 
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
-    pipelines::ReadQuery read_query;
-    read_query.row_filter = universal_range();
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
@@ -673,8 +673,8 @@ TEST_F(SparseTestStore, CompactWithStrings) {
 
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
-    pipelines::ReadQuery read_query;
-    read_query.row_filter = universal_range();
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->row_filter = universal_range();
     auto handler_data = get_type_handler_data();
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame = read_result.frame_data.frame();

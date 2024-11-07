@@ -125,8 +125,8 @@ TEST_F(IngestionStressStore, ScalarIntAppend) {
     ro.allow_sparse_ = true;
     ro.set_dynamic_schema(true);
     ro.set_incompletes(true);
-    ReadQuery read_query;
-    read_query.row_filter = universal_range();
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
     auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ro, handler_data);
@@ -213,8 +213,8 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     read_options.set_dynamic_schema(true);
     read_options.set_allow_sparse(true);
     read_options.set_incompletes(true);
-    ReadQuery read_query;
-    read_query.row_filter = universal_range();
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
     auto read_result = test_store_->read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, handler_data);
@@ -266,8 +266,8 @@ TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {
     read_options.set_dynamic_schema(true);
     read_options.set_allow_sparse(true);
     read_options.set_incompletes(true);
-    ReadQuery read_query;
-    read_query.row_filter = universal_range();
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
     auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, read_options, handler_data);

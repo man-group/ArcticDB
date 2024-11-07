@@ -101,7 +101,7 @@ public:
     virtual ReadVersionOutput read_dataframe_version_internal(
         const StreamId &stream_id,
         const VersionQuery& version_query,
-        ReadQuery& read_query,
+        const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options,
         std::any& handler_data) = 0;
 

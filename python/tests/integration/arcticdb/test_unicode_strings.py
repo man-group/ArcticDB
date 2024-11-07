@@ -1,7 +1,11 @@
+import copy
 import os
 from pandas.testing import assert_frame_equal
 import pandas as pd
 import numpy as np
+
+from arcticdb import QueryBuilder
+
 
 def read_strings():
     script_directory = os.path.dirname(os.path.abspath(__file__))
@@ -63,6 +67,24 @@ def test_update_blns(lmdb_version_store):
     lmdb_version_store.update(symbol, df_middle_half)
     vit = lmdb_version_store.read(symbol)
     assert_frame_equal(df, vit.data)
+
+
+def test_batch_read_blns(lmdb_version_store):
+    lib = lmdb_version_store
+    strings = read_strings()
+    num_symbols = 10
+    symbols = [f"blns_batch_read_{idx}" for idx in range(num_symbols)]
+    dfs = [create_dataframe(strings) for _ in range(num_symbols)]
+    lib.batch_write(symbols, dfs)
+    q = QueryBuilder()
+    q = q[q["ints"] > 50]
+    qbs = (num_symbols // 2) * [None, copy.deepcopy(q)]
+    res = lib.batch_read(symbols, query_builder=qbs)
+    for idx, sym in enumerate(symbols):
+        expected = dfs[idx]
+        if idx % 2 == 1:
+            expected = expected[expected["ints"] > 50]
+        assert_frame_equal(expected, res[sym].data)
 
 
 def assert_dicts_of_dfs_equal(dict1, dict2):

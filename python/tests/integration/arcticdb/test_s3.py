@@ -9,6 +9,7 @@ import re
 
 import pytest
 import pandas as pd
+import sys
 
 from arcticdb_ext.exceptions import StorageException
 from arcticdb_ext import set_config_string
@@ -16,6 +17,12 @@ from arcticdb.util.test import create_df
 
 from arcticdb.storage_fixtures.s3 import MotoNfsBackedS3StorageFixtureFactory
 from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory
+
+
+pytestmark = pytest.mark.skipif(
+    sys.version_info.major == 3 and sys.version_info.minor == 6 and sys.platform == "linux",
+    reason="Test setup segfaults"
+)
 
 
 def test_s3_storage_failures(mock_s3_store_with_error_simulation):
