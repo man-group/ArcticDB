@@ -82,11 +82,6 @@ struct StreamSource {
     virtual folly::Future<std::pair<VariantKey, TimeseriesDescriptor>>
         read_timeseries_descriptor(const entity::VariantKey& key,
                                    storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) = 0;
-
-    virtual folly::Future<std::pair<VariantKey, TimeseriesDescriptor>>
-    read_timeseries_descriptor_for_incompletes(const entity::VariantKey& key,
-                               storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) = 0;
-
 };
 
 } // namespace arcticdb::stream
