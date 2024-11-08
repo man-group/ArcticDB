@@ -390,10 +390,6 @@ set(arcticdb_srcs
         version/version_store_objects.hpp
         version/version_utils.hpp
         # CPP files
-
-        # TODO: Remove used only to test Coverity PR comments
-        test_coverity_pr_comments.cpp
-
         async/async_store.cpp
         async/bit_rate_stats.cpp
         async/task_scheduler.cpp
