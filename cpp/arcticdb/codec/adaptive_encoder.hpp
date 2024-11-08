@@ -28,6 +28,7 @@ struct AdaptiveEncoderV1 {
     }
 };
 
+
 template<template<typename> class BlockType, class TD>
 struct AdaptiveEncoder {
     using Opts = AdaptiveCodec;

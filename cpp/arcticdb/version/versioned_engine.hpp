@@ -109,8 +109,7 @@ public:
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame,
         bool prune_previous_versions,
-        bool allow_sparse,
-        bool validate_index
+        bool validate_index = false
     ) = 0;
 
     virtual VersionedItem write_individual_segment(

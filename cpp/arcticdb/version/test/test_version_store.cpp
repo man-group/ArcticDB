@@ -51,7 +51,7 @@ auto write_version_frame(
     auto wrapper = get_test_simple_frame(stream_id, rows, start_val);
     auto& frame = wrapper.frame_;
     auto store = pvs._test_get_store();
-    auto var_key = write_frame(std::move(pk), frame, slicing, store, de_dup_map).get();
+    auto var_key = write_frame(std::move(pk), frame, slicing, store, de_dup_map, {}, codec::default_lz4_codec()).get();
     auto key = to_atom(var_key); // Moves
     if (update_version_map) {
         pvs.write_version_and_prune_previous(prune_previous, key, previous_key);
@@ -189,7 +189,7 @@ TEST_F(VersionStoreTest, SortMerge) {
         }
 
         wrapper.aggregator_.commit();
-        data.emplace_back( SegmentToInputFrameAdapter{std::move(wrapper.segment())});
+        data.emplace_back(std::move(wrapper.segment()));
     }
     std::mt19937 mt{42};
     std::shuffle(data.begin(), data.end(), mt);
@@ -252,7 +252,7 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     for(auto& frame : data) {
         ASSERT_TRUE(frame.segment_.is_index_sorted());
         frame.segment_.descriptor().set_sorted(SortedValue::ASCENDING);
-        test_store_->write_parallel_frame(symbol, std::move(frame.input_frame_), true, false, std::nullopt);
+        test_store_->write_parallel_frame(symbol, frame.input_frame_, true, false, std::nullopt);
     }
 
     auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
@@ -503,7 +503,7 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
 
         for(int j = 0; j < 10; ++j) {
             auto wrapper = get_test_simple_frame(symbol, 10, i + j);
-            test_store_->write_versioned_dataframe_internal(symbol, std::move(wrapper.frame_), false, false, false);
+            test_store_->write_versioned_dataframe_internal(symbol, std::move(wrapper.frame_), false);
         }
 
         for(int k = 1; k < 10; ++k) {
@@ -672,8 +672,8 @@ TEST(VersionStore, UpdateWithin) {
         scalar_field(DataType::UINT16, "thing4")
     };
 
-    auto test_frame =  get_test_frame<TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
+    auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
+    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false);
 
     constexpr RowRange update_range{10, 15};
     constexpr size_t update_val{100};
@@ -713,7 +713,7 @@ TEST(VersionStore, UpdateBefore) {
     };
 
     auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
+    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false);
 
     constexpr RowRange update_range{0, 10};
     constexpr size_t update_val{1};
@@ -753,7 +753,7 @@ TEST(VersionStore, UpdateAfter) {
     };
 
     auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
+    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false);
 
     constexpr RowRange update_range{100, 110};
     constexpr size_t update_val{1};
@@ -793,7 +793,7 @@ TEST(VersionStore, UpdateIntersectBefore) {
     };
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
+    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false);
 
     constexpr RowRange update_range{0, 10};
     constexpr size_t update_val{1};
@@ -834,7 +834,7 @@ TEST(VersionStore, UpdateIntersectAfter) {
     };
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
+    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false);
 
     constexpr RowRange update_range{95, 105};
     constexpr size_t update_val{1};
@@ -876,7 +876,7 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
     version_store.
-        write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
+        write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false);
 
     constexpr RowRange update_range{10, 15};
     constexpr size_t update_val{1};
@@ -936,7 +936,7 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     };
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
+    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false);
 
     constexpr RowRange update_range{10, 15};
     constexpr size_t update_val{1};
@@ -1001,3 +1001,26 @@ TEST(VersionStore, TestWriteAppendMapHead) {
     ASSERT_EQ(next_key, key);
     ASSERT_EQ(total_rows, num_rows);
 }
+
+TEST(VersionStore, AdaptiveEncoding) {
+    using namespace arcticdb;
+    arcticdb::proto::storage::VersionStoreConfig cfg;
+    cfg.set_encoding_version(1);
+    auto version_store = get_local_versioned_engine_adaptive_encoding(cfg);
+
+    size_t num_rows{100};
+    size_t start_val{0};
+
+    std::vector<FieldRef> fields{
+        scalar_field(DataType::UINT8, "thing1"),
+        scalar_field(DataType::UINT8, "thing2"),
+        scalar_field(DataType::UINT16, "thing3"),
+        scalar_field(DataType::UINT16, "thing4")
+    };
+
+    StreamId symbol{"adaptive"};
+    auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
+    version_store.write_versioned_dataframe_internal(symbol, test_frame.frame_, false);
+
+}
+>>>>>>> e49711b22 (Adaptive encoding)

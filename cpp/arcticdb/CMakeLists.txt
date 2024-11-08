@@ -537,7 +537,19 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
+<<<<<<< HEAD
         util/buffer_holder.cpp)
+=======
+        util/buffer_holder.cpp
+        codec/frequency_encoding.hpp
+        codec/constant_encoding.hpp
+        codec/calculate_stats.hpp
+        codec/fastlanes_common.hpp
+        codec/delta.hpp codec/ffor.hpp
+        codec/bitpack_fused.hpp
+        codec/adaptive_encoder.hpp
+        codec/adaptive_encoder.hpp codec/scanner.hpp)
+>>>>>>> e49711b22 (Adaptive encoding)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 

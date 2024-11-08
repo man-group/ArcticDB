@@ -370,17 +370,6 @@ public:
     }
 
     std::vector<RemoveKeyResultType> remove_keys_sync(
-            const std::vector<entity::VariantKey>& keys,
-            storage::RemoveOpts opts) override {
-        std::vector<RemoveKeyResultType> output;
-        for (const auto& key : keys) {
-            output.emplace_back(remove_key_sync(key, opts));
-        }
-
-        return output;
-    }
-
-    std::vector<RemoveKeyResultType> remove_keys_sync(
             std::vector<entity::VariantKey>&& keys,
             storage::RemoveOpts opts) override {
         std::vector<RemoveKeyResultType> output;

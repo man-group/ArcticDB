@@ -12,7 +12,7 @@
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/block.hpp>
-
+#include <arcticdb/column_store/statistics.hpp>
 #include <boost/iterator/iterator_facade.hpp>
 
 
@@ -295,23 +295,22 @@ public:
         const ChunkedBuffer* data,
         const Buffer* shapes,
         const TypeDescriptor &type,
-        const util::BitMagic* bit_vector) :
+        const util::BitMagic* bit_vector,
+        const Statistics* statistics) :
         data_(data),
         shapes_(shapes),
         pos_(0),
         shape_pos_(0),
         type_(type),
-        bit_vector_(bit_vector){}
+        bit_vector_(bit_vector),
+        statistics_(statistics) { }
 
     ColumnData(
         const ChunkedBuffer* data,
         const TypeDescriptor &type) :
         data_(data),
-        shapes_(nullptr),
-        pos_(0),
-        shape_pos_(0),
-        type_(type),
-        bit_vector_(nullptr){}
+        type_(type) {
+    }
 
     ARCTICDB_MOVE_COPY_DEFAULT(ColumnData)
 
@@ -476,11 +475,12 @@ public:
     [[nodiscard]] bool current_tensor_is_empty() const;
 
     const ChunkedBuffer* data_;
-    const Buffer* shapes_;
-    size_t pos_;
-    size_t shape_pos_;
+    const Buffer* shapes_ = nullptr;
+    size_t pos_ = 0;
+    size_t shape_pos_ = 0;
     TypeDescriptor type_;
-    const util::BitMagic* bit_vector_;
+    const util::BitMagic* bit_vector_ = nullptr;
+    const Statistics* statistics_ = nullptr;
 };
 
 }

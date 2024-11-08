@@ -131,10 +131,10 @@ private:
                 return f(EncoderTag<ZstdEncoder>());
             case Codec::LZ4:
                 return f(EncoderTag<Lz4Encoder>());
-        case Codec::PASS :
+            case Codec::PASS :
                 return f(EncoderTag<PassthroughEncoder>());
-        case Codec::ADAPTIVE :
-            return f(EncoderTag<AdaptiveEncoder>());
+            case Codec::ADAPTIVE :
+                return f(EncoderTag<AdaptiveEncoder>());
             default:
                 return f(EncoderTag<PassthroughEncoder>());
         }

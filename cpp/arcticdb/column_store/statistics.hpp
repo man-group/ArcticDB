@@ -153,6 +153,30 @@ struct FieldStatsImpl : public FieldStats {
             }
         }
     }
+
+    template<typename T>
+    void set_min(const void* t) const {
+        util::check(impl_->type() == typeid(T), "Bad type case in statistics set_min {} != {}", impl_->type().name(), typeid(T).name());
+        impl_->set_min(t);
+    }
+
+    template<typename T>
+    void set_max(const void* t) const {
+        util::check(impl_->type() == typeid(T), "Bad type case in statistics get_max {} != {}", impl_->type().name(), typeid(T).name());
+        impl_->set_max(t);
+    }
+
+    void set_unique_count(size_t count) {
+        unique_count_ = count;
+    }
+
+    [[nodiscard]] size_t get_unique_count() const { return unique_count_; }
+
+    void set_sorted(bool sorted) {
+        sorted_ = sorted;
+    }
+
+    [[nodiscard]] size_t get_sorted() const { return sorted_; }
 };
 
 template <typename T>
