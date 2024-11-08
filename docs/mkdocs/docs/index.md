@@ -1,4 +1,5 @@
- ![](images/FullWithBorder.png)
+<img src="images/FullWithBorder.png" alt="logo" width="400"/>
+
 
 ## What is ArcticDB?
 
@@ -118,7 +119,7 @@ import numpy as np
 from datetime import datetime
 cols = ['COL_%d' % i for i in range(50)]
 df = pd.DataFrame(np.random.randint(0, 50, size=(25, 50)), columns=cols)
-df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
+df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="h")
 df.head(5)
 ```
 _output (the first 5 rows of the data)_
@@ -271,7 +272,7 @@ Then create 3 new rows to append. For append to work the new data must have its 
 ```python
 random_data = np.random.randint(0, 50, size=(3, 50))
 df_append = pd.DataFrame(random_data, columns=['COL_%d' % i for i in range(50)])
-df_append.index = pd.date_range(datetime(2000, 1, 2, 7), periods=3, freq="H")
+df_append.index = pd.date_range(datetime(2000, 1, 2, 7), periods=3, freq="h")
 df_append
 ```
 _output_
@@ -319,7 +320,7 @@ Here we create a new DataFrame for the update, with only 2 rows that are 2 hours
 ```python
 random_data = np.random.randint(0, 50, size=(2, 50))
 df = pd.DataFrame(random_data, columns=['COL_%d' % i for i in range(50)])
-df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=2, freq="2H")
+df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=2, freq="2h")
 df
 ```
 _output (rows 0 and 2 only as selected by the `iloc[]`)_

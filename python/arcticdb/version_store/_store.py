@@ -58,6 +58,7 @@ from arcticdb.version_store._custom_normalizers import get_custom_normalizer, Co
 from arcticdb.version_store._normalization import (
     NPDDataFrame,
     normalize_metadata,
+    normalize_recursive_metastruct,
     denormalize_user_metadata,
     denormalize_dataframe,
     MsgPackNormalizer,
@@ -93,13 +94,18 @@ class VersionedItem:
         For data retrieval (read) operations, contains the data read.
         For data modification operations, the value might not be populated.
     version: int
-        For data retrieval operations, the version the `as_of` argument resolved to.
+        For data retrieval operations, the version the `as_of` argument resolved to. In the special case where no
+        versions have been written yet, but data is being read exclusively from incomplete segments, this will be
+        2^64-1.
         For data modification operations, the version the data has been written under.
     metadata: Any
         The metadata saved alongside `data`.
         Availability depends on the method used and may be different from that of `data`.
     host: Optional[str]
         Informational / for backwards compatibility.
+    timestamp: Optional[int]
+        The time in nanoseconds since epoch that this version was written. In the special case where no versions have
+        been written yet, but data is being read exclusively from incomplete segments, this will be 0.
     """
 
     symbol: str = attr.ib()
@@ -340,7 +346,7 @@ class NativeVersionStore:
         )
         empty_types = self.resolve_defaults("empty_types", self._lib_cfg.lib_desc.version.write_options, False)
         try:
-            udm = normalize_metadata(metadata) if metadata is not None else None
+            udm = normalize_metadata(metadata)
             opt_custom = self._custom_normalizer.normalize(dataframe)
             if opt_custom is not None:
                 item, custom_norm_meta = opt_custom
@@ -394,8 +400,8 @@ class NativeVersionStore:
                     _, item, norm_meta = self._try_normalize(k, v, None, pickle_on_failure, dynamic_strings, None)
                     items.append(item)
                     norm_metas.append(norm_meta)
-                normalized_udm = normalize_metadata(metadata) if metadata is not None else None
-                normalized_metastruct = normalize_metadata(metastruct)
+                normalized_udm = normalize_metadata(metadata)
+                normalized_metastruct = normalize_recursive_metastruct(metastruct)
                 vit_composite = self.version_store.write_versioned_composite_data(
                     symbol,
                     normalized_metastruct,
@@ -460,6 +466,30 @@ class NativeVersionStore:
             pass
 
         return global_default
+
+    def stage(
+            self,
+            symbol: str,
+            data: Any,
+            validate_index: bool = False,
+            sort_on_index: bool = False,
+            sort_columns: List[str] = None,
+            **kwargs):
+        norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
+        _handle_categorical_columns(symbol, data, True)
+        udm, item, norm_meta = self._try_normalize(
+            symbol,
+            data,
+            None,
+            pickle_on_failure=False,
+            dynamic_strings=True,
+            coerce_columns=None,
+            norm_failure_options_msg=norm_failure_options_msg,
+        )
+        if isinstance(item, NPDDataFrame):
+            self.version_store.write_parallel(symbol, item, norm_meta, validate_index, sort_on_index, sort_columns)
+        else:
+            log.warning("The data could not be normalized to an ArcticDB format and has not been written")
 
     def write(
         self,
@@ -585,11 +615,8 @@ class NativeVersionStore:
         )
         # TODO: allow_sparse for write_parallel / recursive normalizers as well.
         if isinstance(item, NPDDataFrame):
-            if parallel:
-                self.version_store.write_parallel(symbol, item, norm_meta, udm, validate_index)
-                return None
-            elif incomplete:
-                self.version_store.append_incomplete(symbol, item, norm_meta, udm, validate_index)
+            if parallel or incomplete:
+                self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 return None
             else:
                 vit = self.version_store.write_versioned_dataframe(
@@ -597,6 +624,8 @@ class NativeVersionStore:
                 )
 
             return self._convert_thin_cxx_item_to_python(vit, metadata)
+        else:
+            log.warning("The data could not be normalized to an ArcticDB format and has not been written")
 
     def _resolve_dynamic_strings(self, kwargs):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
@@ -714,7 +743,7 @@ class NativeVersionStore:
         if isinstance(item, NPDDataFrame):
             with _diff_long_stream_descriptor_mismatch(self):
                 if incomplete:
-                    self.version_store.append_incomplete(symbol, item, norm_meta, udm, validate_index)
+                    self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 else:
                     vit = self.version_store.append(
                         symbol, item, norm_meta, udm, write_if_missing, prune_previous_version, validate_index
@@ -1835,7 +1864,7 @@ class NativeVersionStore:
             original_data = Flattener().create_original_obj_from_metastruct_new(meta_struct, key_map)
 
             return VersionedItem(
-                symbol=vitem.symbol,
+                symbol=meta_struct["symbol"],
                 library=vitem.library,
                 data=original_data,
                 version=vitem.version,
@@ -2001,7 +2030,7 @@ class NativeVersionStore:
         prune_previous_version = self.resolve_defaults(
             "prune_previous_version", self._write_options(), global_default=False, existing_value=prune_previous_version
         )
-        udm = normalize_metadata(metadata) if metadata is not None else None
+        udm = normalize_metadata(metadata)
         vit = self.version_store.compact_incomplete(
             symbol, append, convert_int_to_float, via_iteration, sparsify, udm, prune_previous_version, validate_index, delete_staged_data_on_failure
         )
@@ -2230,7 +2259,7 @@ class NativeVersionStore:
             skip_symbols = []
         if not versions:
             versions = {}
-        metadata = normalize_metadata(metadata) if metadata else None
+        metadata = normalize_metadata(metadata)
 
         self.version_store.snapshot(snap_name, metadata, skip_symbols, versions, allow_partial_snapshot)
 
@@ -2867,7 +2896,7 @@ class NativeVersionStore:
         prune_previous_version = self.resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
-        udm = normalize_metadata(metadata) if metadata is not None else None
+        udm = normalize_metadata(metadata)
         v = self.version_store.write_metadata(symbol, udm, prune_previous_version)
         return self._convert_thin_cxx_item_to_python(v, metadata)
 

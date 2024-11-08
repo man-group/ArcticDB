@@ -11,6 +11,7 @@ from ..util.mark import (
     MONGO_TESTS_MARK,
     VENV_COMPAT_TESTS_MARK,
 )
+from packaging.version import Version
 
 logger = logging.getLogger("Compatibility tests")
 
@@ -22,8 +23,15 @@ def is_running_on_windows():
 
 def run_shell_command(command : List[Union[str, os.PathLike]], cwd : Optional[os.PathLike] = None) -> subprocess.CompletedProcess:
     logger.info(f"Executing command: {command}")
-    # shell=True is required for running the correct python executable on Windows
-    result = subprocess.run(command, cwd=cwd, capture_output=True, shell=is_running_on_windows())
+    result = None
+    if is_running_on_windows():
+        # shell=True is required for running the correct python executable on Windows
+        result = subprocess.run(command, cwd=cwd, capture_output=True, shell=True)
+    else:
+        # On linux we need shell=True for conda feedstock runners (because otherwise they fail to expand path variables)
+        # But to correctly work with shell=True we need a single command string.
+        command_string = ' '.join(command)
+        result = subprocess.run(command_string, cwd=cwd, capture_output=True, shell=True, stdin=subprocess.DEVNULL)
     if result.returncode != 0:
         logger.warning(f"Command failed, stdout: {str(result.stdout)}, stderr: {str(result.stderr)}")
     return result
@@ -139,13 +147,14 @@ class VenvLib:
     scope="session",
     params=[
         pytest.param("1.6.2", marks=VENV_COMPAT_TESTS_MARK),
-        pytest.param("4.5.0", marks=VENV_COMPAT_TESTS_MARK),
+        pytest.param("4.5.1", marks=VENV_COMPAT_TESTS_MARK),
     ] # TODO: Extend this list with other old versions
 )
 def old_venv(request):
     version = request.param
     path = os.path.join("venvs", version)
-    requirements_file = os.path.abspath(os.path.join("tests", "compat", f"requirements-{version}.txt"))
+    compat_dir = os.path.dirname(os.path.abspath(__file__))
+    requirements_file = os.path.join(compat_dir, f"requirements-{version}.txt")
     with Venv(path, requirements_file, version) as old_venv:
         yield old_venv
 
@@ -173,9 +182,12 @@ def arctic_uri(request):
 
 @pytest.fixture()
 def old_venv_and_arctic_uri(old_venv, arctic_uri):
-    if old_venv.version == "1.6.2" and arctic_uri.startswith("mongo"):
-        pytest.skip("Mongo storage backend is not supported on 1.6.2")
-    if old_venv.version == "4.5.0" and arctic_uri.startswith("mongo"):
-        # TODO: Replace 4.5.0 with 4.5.1 when it is released and re-enable mongo.
-        pytest.skip("Mongo storage backend has a desctruction bug present in 4.5.0, which can cause flaky segfaults.")
+    # TODO: Once #1979 is understood and fixed reenable mongo, lmdb and azure for versions which have the fix.
+    if arctic_uri.startswith("mongo"):
+        pytest.skip("Mongo storage backend has a probable desctruction bug, which can cause flaky segfaults.")
+    if arctic_uri.startswith("lmdb"):
+        pytest.skip("LMDB storage backend has a probable desctruction bug, which can cause flaky segfaults.")
+    if arctic_uri.startswith("azure"):
+        pytest.skip("Azure storage backend has probable a desctruction bug, which can cause flaky segfaults.")
+
     return old_venv, arctic_uri

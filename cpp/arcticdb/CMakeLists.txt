@@ -71,6 +71,8 @@ else()
     find_package(LMDB REQUIRED)
     find_package(LMDBXX REQUIRED)
 
+    find_package(EnTT REQUIRED)
+
     if(${BUILD_WITH_REMOTERY})
         find_package(Remotery REQUIRED)
     endif()
@@ -344,6 +346,7 @@ set(arcticdb_srcs
         util/spinlock.hpp
         util/key_utils.hpp
         util/lock_table.hpp
+        util/lru_cache.hpp
         util/magic_num.hpp
         util/movable_priority_queue.hpp
         util/movable_priority_queue.hpp
@@ -666,7 +669,6 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
-        EnTT::EnTT
 )
 
 if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
@@ -696,6 +698,7 @@ else()
     list (APPEND arcticdb_core_libraries
         unofficial::pcre::pcre
         msgpackc-cxx
+        EnTT::EnTT
         lmdb
     )
     if(${BUILD_WITH_REMOTERY})
@@ -911,6 +914,7 @@ if(${TEST})
             processing/test/test_filter_and_project_sparse.cpp
             processing/test/test_has_valid_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
+            processing/test/test_parallel_processing.cpp
             processing/test/test_resample.cpp
             processing/test/test_set_membership.cpp
             processing/test/test_signed_unsigned_comparison.cpp
@@ -957,8 +961,7 @@ if(${TEST})
             version/test/version_map_model.hpp
             python/python_handlers.cpp
             storage/test/common.hpp
-            version/test/test_sort_index.cpp
-    )
+            version/test/test_sort_index.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
@@ -1061,8 +1064,8 @@ if(${TEST})
             util/test/rapidcheck_generators.cpp
             util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
-            version/test/rapidcheck_version_map.cpp
-    )
+            util/test/rapidcheck_lru_cache.cpp
+            version/test/rapidcheck_version_map.cpp)
 
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
     install(TARGETS arcticdb_rapidcheck_tests RUNTIME

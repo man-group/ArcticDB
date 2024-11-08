@@ -10,13 +10,21 @@ on:
   # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
   pull_request:
 
+  workflow_dispatch:
+    inputs:
+      run_on_arm_mac:
+        description: 'Run on arm macos'
+        type: boolean
+        required: false
+        default: false
+
 jobs:
 
   linux:
     if: |
       always() &&
       !cancelled()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     services:
@@ -24,15 +32,16 @@ jobs:
         image: mongo:4.4
     steps:
       - uses: actions/checkout@v3.3.0
-        with:
-          submodules: recursive
+        # DONT use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
 
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
 
       - name: Install Conda environment from environment_unix.yml
-        uses: mamba-org/setup-micromamba@v1.6.0
+        uses: mamba-org/setup-micromamba@v2.0.0
         with:
           environment-file: environment_unix.yml
           init-shell: >-
@@ -103,20 +112,21 @@ jobs:
           - os: macos-12
 
       fail-fast: false
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ inputs.run_on_arm_mac == true && 'macos-13-xlarge' || matrix.os }}
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
       - uses: actions/checkout@v3.3.0
-        with:
-          submodules: recursive
+        # DONT use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
 
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
 
       - name: Install Conda environment from environment_unix.yml
-        uses: mamba-org/setup-micromamba@v1.6.0
+        uses: mamba-org/setup-micromamba@v2.0.0
         with:
           environment-file: environment_unix.yml
           environment-name: arcticdb

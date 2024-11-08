@@ -125,10 +125,16 @@ ColumnStats get_column_stats_info_impl(
     const std::shared_ptr<Store>& store,
     const VersionedItem& versioned_item);
 
-FrameAndDescriptor read_multi_key(
+folly::Future<ReadVersionOutput> read_multi_key(
     const std::shared_ptr<Store>& store,
     const SegmentInMemory& index_key_seg,
     std::any& handler_data);
+
+folly::Future<std::vector<EntityId>> schedule_clause_processing(
+        std::shared_ptr<ComponentManager> component_manager,
+        std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
+        std::vector<std::vector<size_t>>&& processing_unit_indexes,
+        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses);
 
 FrameAndDescriptor read_segment_impl(
     const std::shared_ptr<Store>& store,
@@ -148,34 +154,10 @@ VersionedItem compact_incomplete_impl(
 
 struct PredefragmentationInfo{
     std::shared_ptr<PipelineContext> pipeline_context;
-    ReadQuery read_query;
+    std::shared_ptr<ReadQuery> read_query;
     size_t segments_need_compaction;
     std::optional<size_t> append_after;
 };
-
-folly::Future<version_store::ReadVersionOutput> async_read_direct_impl(
-    const std::shared_ptr<Store>& store,
-    const VariantKey& index_key,
-    SegmentInMemory&& index_segment,
-    const std::shared_ptr<ReadQuery>& read_query,
-    DecodePathData shared_data,
-    std::any& handler_data,
-    const ReadOptions& read_options);
-
-SegmentInMemory prepare_output_frame(
-    std::vector<SliceAndKey>&& items,
-    const std::shared_ptr<PipelineContext>& pipeline_context,
-    const std::shared_ptr<Store>& store,
-    const ReadOptions& read_options,
-    std::any& handler_data);
-
-SegmentInMemory do_direct_read_or_process(
-    const std::shared_ptr<Store>& store,
-    ReadQuery& read_query,
-    const ReadOptions& read_options,
-    const std::shared_ptr<PipelineContext>& pipeline_context,
-    const DecodePathData& shared_data,
-    std::any& handler_data);
 
 PredefragmentationInfo get_pre_defragmentation_info(
         const std::shared_ptr<Store>& store,
@@ -217,10 +199,10 @@ void add_index_columns_to_query(
     const ReadQuery& read_query, 
     const TimeseriesDescriptor& desc);
 
-FrameAndDescriptor read_frame_for_version(
+folly::Future<ReadVersionOutput> read_frame_for_version(
     const std::shared_ptr<Store>& store,
     const std::variant<VersionedItem, StreamId>& version_info,
-    ReadQuery& read_query,
+    const std::shared_ptr<ReadQuery>& read_query,
     const ReadOptions& read_options,
     std::any& handler_data
 );

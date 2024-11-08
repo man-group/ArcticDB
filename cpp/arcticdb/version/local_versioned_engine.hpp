@@ -141,7 +141,7 @@ public:
     ReadVersionOutput read_dataframe_version_internal(
         const StreamId &stream_id,
         const VersionQuery& version_query,
-        ReadQuery& read_query,
+        const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options,
         std::any& handler_data) override;
 
@@ -152,7 +152,9 @@ public:
     void write_parallel_frame(
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame,
-        bool validate_index) const override;
+        bool validate_index,
+        bool sort_on_index,
+        const std::optional<std::vector<std::string>>& sort_columns) const override;
 
     void delete_tree(
         const std::vector<IndexTypeKey>& idx_to_be_deleted,
@@ -190,7 +192,7 @@ public:
         std::optional<AtomKey>&& key);
 
     folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>> get_metadata_async(
-        folly::Future<std::optional<AtomKey>>&& version_fut,
+        folly::Future<std::optional<AtomKey>>&& opt_index_key_fut,
         const StreamId& stream_id,
         const VersionQuery& version_query);
 
@@ -198,7 +200,7 @@ public:
         AtomKey&& key);
 
     folly::Future<DescriptorItem> get_descriptor_async(
-        folly::Future<std::optional<AtomKey>>&& version_fut,
+        folly::Future<std::optional<AtomKey>>&& opt_index_key_fut,
         const StreamId& stream_id,
         const VersionQuery& version_query);
 
@@ -283,12 +285,6 @@ public:
         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
         const ReadOptions& read_options,
         std::any& handler_data);
-
-    std::vector<std::variant<ReadVersionOutput, DataError>> temp_batch_read_internal_direct(
-        const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries,
-        std::vector<std::shared_ptr<ReadQuery>>& read_queries,
-        const ReadOptions& read_options);
 
     std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor_internal(
             const std::vector<StreamId>& stream_ids,

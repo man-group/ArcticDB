@@ -267,14 +267,19 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
             });
 
         output.push_back(std::move(version_entry_fut)
+             .via(&async::cpu_executor())
              .thenValue([vq = version_query, sid = *symbol](auto version_or_snapshot) {
                  return util::variant_match(version_or_snapshot,
                     [&vq](const std::shared_ptr<VersionMapEntry> &version_map_entry) {
                         return get_key_for_version_query(version_map_entry, vq);
                     },
-                    [&sid](std::optional<SnapshotPair> snapshot) {
-                        if (!snapshot)
-                            return std::make_optional<AtomKey>();
+                    [&vq, &sid](std::optional<SnapshotPair> snapshot) -> std::optional<AtomKey> {
+                        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                                snapshot,
+                                "batch_get_versions_async: version matching query '{}' not found for symbol '{}'",
+                                vq,
+                                sid
+                        );
 
                         auto [snap_key, snap_segment] = std::move(*snapshot);
                         auto opt_id = row_id_for_stream_in_snapshot_segment(

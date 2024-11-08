@@ -173,7 +173,7 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
         grouping_column_(grouping_column) {
     clause_info_.input_structure_ = ProcessingStructure::HASH_BUCKETED;
     clause_info_.can_combine_with_column_selection_ = false;
-    clause_info_.new_index_ = grouping_column_;
+    clause_info_.index_ = NewIndex(grouping_column_);
     clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>({grouping_column_});
     clause_info_.modifies_output_descriptor_ = true;
     str_ = "AGGREGATE {";
@@ -275,7 +275,8 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
     GroupingMap grouping_map;
     // Iterating backwards as we are going to erase from this vector as we go along
     // This is to spread out deallocation of the input segments
-    for (auto it = row_slices.rbegin(); it != row_slices.rend(); ++it) {
+    auto it = row_slices.rbegin();
+    while(it != row_slices.rend()) {
         auto& row_slice = *it;
         auto partitioning_column = row_slice.get(ColumnName(grouping_column_));
         if (std::holds_alternative<ColumnWithStrings>(partitioning_column)) {
@@ -383,7 +384,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
         } else {
             util::raise_rte("Expected single column from expression");
         }
-        row_slices.erase(std::next(it).base());
+        it = static_cast<decltype(row_slices)::reverse_iterator>((row_slices.erase(std::next(it).base())));
     }
     SegmentInMemory seg;
     auto index_col = std::make_shared<Column>(make_scalar_type(grouping_data_type), grouping_map.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
@@ -885,7 +886,7 @@ std::vector<std::vector<EntityId>> MergeClause::structure_for_processing(std::ve
     const RowRange row_range{min_start_row, max_end_row};
     const ColRange col_range{min_start_col, max_end_col};
     std::vector<std::vector<EntityId>> ret;
-    std::visit([this, &ret, &input_streams, &comp=compare, stream_id=stream_id_, &row_range, &col_range](auto idx, auto density) {
+    std::visit([this, &ret, &input_streams, stream_id=stream_id_, &row_range, &col_range](auto idx, auto density) {
             if (dynamic_schema_) {
                 merge_impl<decltype(idx), decltype(density), decltype(input_streams), true>(
                     component_manager_,

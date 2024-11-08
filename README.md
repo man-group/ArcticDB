@@ -7,7 +7,7 @@
 <div align="center">
   <p><b>Three minute ArcticDB demo from PyQuantNews</b></p>
   <a href="https://www.youtube.com/watch?v=5_AjD7aVEEM">
-    <img src="https://github.com/user-attachments/assets/f3b7afa1-98f3-486c-86b0-c0f413d8cd3a" alt="Options data in ArcticDB" width="33%">
+    <img src="https://github.com/man-group/ArcticDB/raw/master/static/pqn_video_thumbnail.png" alt="Options data in ArcticDB" width="33%">
   </a>
 </div>
 
@@ -162,6 +162,7 @@ Please see version conversion dates in the below table:
 | 4.3 | Business Source License 1.1 | Feb 7, 2026 |
 | 4.4 | Business Source License 1.1 | Apr 5, 2026 |
 | 4.5 | Business Source License 1.1 | Aug 14, 2026 |
+| 5.0 | Business Source License 1.1 | Oct 31, 2026 |
 ## Code of Conduct
 
 [Code of Conduct](https://github.com/man-group/ArcticDB/blob/master/CODE_OF_CONDUCT.md)

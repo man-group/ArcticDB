@@ -18,6 +18,10 @@
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 
+namespace arcticdb::toolbox::apy{
+    class LibraryTool;
+}
+
 namespace arcticdb::async {
 
 std::pair<VariantKey, std::optional<Segment>> lookup_match_in_dedup_map(
@@ -247,12 +251,6 @@ folly::Future<std::pair<VariantKey, TimeseriesDescriptor>> read_timeseries_descr
     return read_and_continue(key, library_, opts, DecodeTimeseriesDescriptorTask{});
 }
 
-folly::Future<std::pair<VariantKey, TimeseriesDescriptor>> read_timeseries_descriptor_for_incompletes(
-        const entity::VariantKey &key,
-        storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) override {
-    return read_and_continue(key, library_, opts, DecodeTimeseriesDescriptorForIncompletesTask{});
-}
-
 folly::Future<bool> key_exists(entity::VariantKey &&key) {
     return async::submit_io_task(KeyExistsTask{std::move(key), library_});
 }
@@ -395,6 +393,7 @@ folly::Future<SliceAndKey> async_write(
     }
 
 private:
+    friend class arcticdb::toolbox::apy::LibraryTool;
     std::shared_ptr<storage::Library> library_;
     std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_;
     const EncodingVersion encoding_version_;

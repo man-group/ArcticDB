@@ -401,3 +401,26 @@ def test_prune_previous_defragment_symbol_data(version_store_factory, monkeypatc
     lib.defragment_symbol_data(sym, prune_previous_version=arg)
 
     assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 3
+
+
+@pytest.mark.parametrize("index_start", range(9))
+def test_update_index_overlap_corner_cases(lmdb_version_store_tiny_segment, index_start):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_update_index_overlap_corner_cases"
+
+    index = [pd.Timestamp(index_start), pd.Timestamp(index_start + 1)]
+
+    # Gap of 2 nanoseconds so we can insert inbetween the 2 tiny segments
+    initial_df = pd.DataFrame({"col": [1, 2, 3, 4]}, index=[pd.Timestamp(2), pd.Timestamp(3), pd.Timestamp(6), pd.Timestamp(7)])
+    update_df = pd.DataFrame({"col": [100, 200]}, index=index)
+    lib.write(sym, initial_df)
+    lib.update(sym, update_df)
+
+    # TODO: Use dataframe_arctic_update once #1951 is merged
+    chunks = []
+    chunks.append(initial_df[initial_df.index < index[0]])
+    chunks.append(update_df)
+    chunks.append(initial_df[initial_df.index > index[1]])
+    expected_df = pd.concat(chunks)
+    received_df = lib.read(sym).data
+    assert_frame_equal(expected_df, received_df)

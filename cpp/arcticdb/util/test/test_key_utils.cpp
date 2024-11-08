@@ -11,7 +11,7 @@
 
 using namespace arcticdb;
 
-auto write_version_frame_with_three_segments(
+static auto write_version_frame_with_three_segments(
     const arcticdb::StreamId& stream_id,
     arcticdb::VersionId v_id,
     arcticdb::version_store::PythonVersionStore& pvs
@@ -99,10 +99,12 @@ TEST(KeyUtils, RecurseIndexKeyIgnoreMissing) {
     // Given
     auto [version_store, mock_store] = python_version_store_in_memory();
 
-    StreamId first_id{"first"};
+    const StreamId first_id{"first"};
     write_version_frame_with_three_segments(first_id, 0, version_store);
-    StreamId second_id{"second"};
+    const StreamId second_id{"second"};
     write_version_frame_with_three_segments(second_id, 0, version_store);
+    const StreamId third_id{"third"};
+    write_version_frame_with_three_segments(third_id, 0, version_store);
 
     std::vector<AtomKeyImpl> index_keys;
     AtomKeyImpl index_for_second;
@@ -113,16 +115,10 @@ TEST(KeyUtils, RecurseIndexKeyIgnoreMissing) {
             index_for_second = ak;
         }
     });
-    ASSERT_EQ(index_keys.size(), 2);
+    ASSERT_EQ(index_keys.size(), 3);
     ASSERT_EQ(index_for_second.id(), second_id);
 
-    storage::RemoveOpts remove_opts;
-    mock_store->remove_key(index_for_second, remove_opts);
-
-    std::vector<AtomKeyImpl> data_keys;
-    mock_store->iterate_type(KeyType::TABLE_DATA, [&](auto&& vk) {
-        data_keys.emplace_back(std::get<AtomKeyImpl>(vk));
-    });
+    mock_store->remove_key(index_for_second, storage::RemoveOpts{});
 
     // When
     storage::ReadKeyOpts opts;
@@ -130,5 +126,16 @@ TEST(KeyUtils, RecurseIndexKeyIgnoreMissing) {
     auto res = recurse_index_keys(mock_store, index_keys, opts);
 
     // Then
-    ASSERT_EQ(res.size(), 3);
+    ASSERT_EQ(res.size(), 6);
+    int count_first = 0;
+    int count_third = 0;
+    for (const AtomKey& atom_key : res) {
+        if (atom_key.id() == first_id) {
+            count_first++;
+        } else if (atom_key.id() == third_id) {
+            count_third++;
+        }
+    }
+    ASSERT_EQ(3, count_first);
+    ASSERT_EQ(3, count_third);
 }

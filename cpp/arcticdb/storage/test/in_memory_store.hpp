@@ -206,15 +206,35 @@ namespace arcticdb {
                                        });
         }
 
-        folly::Future<storage::KeySegmentPair> read_compressed(const entity::VariantKey&, storage::ReadKeyOpts) override {
-            throw std::runtime_error("Not implemented");
+        folly::Future<storage::KeySegmentPair> read_compressed(const entity::VariantKey& key, storage::ReadKeyOpts opts) override {
+            // Anything read_compressed_sync() throws should be returned inside the Future, so:
+            return folly::makeFutureWith([&](){ return read_compressed_sync(key, opts); });
         }
 
         storage::KeySegmentPair read_compressed_sync(
-                const entity::VariantKey&,
+                const entity::VariantKey& key,
                 storage::ReadKeyOpts
         ) override {
-            throw std::runtime_error("Not implemented");
+            StorageFailureSimulator::instance()->go(FailureType::READ);
+            std::lock_guard lock{mutex_};
+            auto segment_in_memory = util::variant_match(
+                    key,
+                    [&] (const RefKey& ref_key) {
+                        auto it = seg_by_ref_key_.find(ref_key);
+                        if (it == seg_by_ref_key_.end())
+                           throw storage::KeyNotFoundException(Composite<VariantKey>(ref_key));
+                        ARCTICDB_DEBUG(log::storage(), "Mock store returning compressed ref key {}", ref_key);
+                        return it->second->clone();
+                    },
+                    [&] (const AtomKey& atom_key) {
+                        auto it = seg_by_atom_key_.find(atom_key);
+                        if (it == seg_by_atom_key_.end())
+                           throw storage::KeyNotFoundException(Composite<VariantKey>(atom_key));
+                        ARCTICDB_DEBUG(log::storage(), "Mock store returning compressed atom key {}", atom_key);
+                        return it->second->clone();
+                    });
+            auto key_copy = key;
+            return storage::KeySegmentPair(std::move(key_copy), ::arcticdb::encode_dispatch(std::move(segment_in_memory), codec_, EncodingVersion::V1));
         }
 
         folly::Future<std::pair<VariantKey, SegmentInMemory>> read(const VariantKey& key, storage::ReadKeyOpts opts) override {
@@ -432,24 +452,6 @@ namespace arcticdb {
             });
         }
 
-        folly::Future<std::pair<std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>, arcticdb::TimeseriesDescriptor>>
-        read_timeseries_descriptor_for_incompletes(const entity::VariantKey& key,
-                                   storage::ReadKeyOpts /*opts*/) override {
-            return util::variant_match(key, [&](const AtomKey &ak) {
-                                           auto it = seg_by_atom_key_.find(ak);
-                                           if (it == seg_by_atom_key_.end())
-                                               throw storage::KeyNotFoundException(Composite<VariantKey>(ak));
-                                           ARCTICDB_DEBUG(log::storage(), "Mock store read for atom key {}", ak);
-                                           auto tsd = it->second->index_descriptor();
-                                           tsd.set_stream_descriptor(it->second->descriptor());
-                                           return std::make_pair(key, it->second->index_descriptor());
-                                       },
-                                       [&](const RefKey&) {
-                                           util::raise_rte("Not implemented");
-                                           return std::make_pair(key, TimeseriesDescriptor{});
-                                       });
-        }
-
         void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator &) override {}
 
         std::string name() const override {
@@ -475,6 +477,7 @@ namespace arcticdb {
         std::recursive_mutex mutex_; // Allow iterate_type() to be re-entrant
         std::unordered_map<AtomKey, std::unique_ptr<SegmentInMemory>> seg_by_atom_key_;
         std::unordered_map<RefKey, std::unique_ptr<SegmentInMemory>> seg_by_ref_key_;
+        arcticdb::proto::encoding::VariantCodec codec_;
     };
 
 } //namespace arcticdb

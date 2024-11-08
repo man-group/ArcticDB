@@ -271,6 +271,27 @@ inline SegmentInMemory get_standard_timeseries_segment(const std::string& name, 
     return wrapper.segment();
 }
 
+inline SegmentInMemory get_seqnum_timeseries_segment(const std::string& name, size_t num_rows = 10, size_t num_seq = 3) {
+    auto wrapper = SinkWrapper(name, {
+        scalar_field(DataType::UINT64, "seqnum"),
+        scalar_field(DataType::INT8, "int8"),
+        scalar_field(DataType::UTF_DYNAMIC64, "strings")
+    });
+
+    uint64_t seqnum = 0UL;
+    for (timestamp i = 0UL; i < timestamp(num_rows / num_seq); ++i) {
+        for(auto j = 0UL; j < num_seq; ++j) {
+            wrapper.aggregator_.start_row(timestamp{i})([&](auto &&rb) {
+                rb.set_scalar(1, seqnum++);
+                rb.set_scalar(2, int8_t(i * 2));
+                rb.set_string(3, fmt::format("string_{}", i));
+            });
+        }
+    }
+    wrapper.aggregator_.commit();
+    return wrapper.segment();
+}
+
 inline SegmentInMemory get_groupable_timeseries_segment(const std::string& name, size_t rows_per_group, std::initializer_list<size_t> group_ids) {
     auto wrapper = SinkWrapper(name, {
             scalar_field(DataType::INT8, "int8"),

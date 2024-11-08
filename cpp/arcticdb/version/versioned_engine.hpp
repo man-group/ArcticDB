@@ -79,7 +79,9 @@ public:
     virtual void write_parallel_frame(
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame,
-        bool validate_index) const = 0;
+        bool validate_index,
+        bool sort_on_index,
+        const std::optional<std::vector<std::string>>& sort_columns) const = 0;
 
     /**
      * Delete the given index keys, and their associated data excluding those shared with keys not in the argument.
@@ -99,7 +101,7 @@ public:
     virtual ReadVersionOutput read_dataframe_version_internal(
         const StreamId &stream_id,
         const VersionQuery& version_query,
-        ReadQuery& read_query,
+        const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options,
         std::any& handler_data) = 0;
 
