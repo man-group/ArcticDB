@@ -7,7 +7,7 @@
       name: Polaris Coverity Static Analysis
       permissions:
         packages: write
-      runs-on: ubuntu-latest
+      runs-on: ubuntu-22.04
       env:
         VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
         VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
@@ -38,6 +38,9 @@
 
         - name: CMake configure
           uses: lukka/run-cmake@v10.8
+          env:
+            CC: "gcc-10"
+            CXX: "g++-10"
           with:
             cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
             configurePreset: linux-release
