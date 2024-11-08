@@ -1,6 +1,7 @@
 ---
   name: Coverity Static Analysis
-  on: [pull_request]
+  on: [pull_request, workflow_dispatch]
+
   jobs:
     polaris-scan:
       name: Polaris Coverity Static Analysis
@@ -39,11 +40,11 @@
           uses: lukka/run-cmake@v10.8
           with:
             cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
-            configurePreset: linux-debug
+            configurePreset: linux-release
             configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DCMAKE_C_COMPILER=gcc-10', '-DCMAKE_CXX_COMPILER=g++-10']"
 
         - name: Copy Coverity config
-          run: cp ${{github.workspace}}/coverity.yaml ${{github.workspace}}/cpp/out/linux-debug-build
+          run: cp ${{github.workspace}}/coverity.yaml ${{github.workspace}}/cpp/out/linux-release-build
 
         - name: Polaris PR Scan
           uses: synopsys-sig/synopsys-action@v1.13.0
@@ -58,7 +59,7 @@
             coverity_build_command: make -j ${{ steps.cpu-cores.outputs.count }}
             coverity_clean_command: make clean
             github_token: ${{ secrets.POLARIS_GITHUB_TOKEN }}
-            project_directory: ${{github.workspace}}/cpp/out/linux-debug-build
+            project_directory: ${{github.workspace}}/cpp/out/linux-release-build
             include_diagnostics: true
             polaris_reports_sarif_create: true
             polaris_reports_sarif_groupSCAIssues: true
