@@ -1,0 +1,6 @@
+---
+capture:
+  analyze:
+    aggressiveness-level: high
+    c-cpp-fnptr: true
+    c-cpp-virtual: true

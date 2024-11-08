@@ -42,6 +42,9 @@
             configurePreset: linux-debug
             configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DCMAKE_C_COMPILER=gcc-10', '-DCMAKE_CXX_COMPILER=g++-10']"
 
+        - name: Copy Coverity config
+          run: cp ${{github.workspace}}/coverity.yaml ${{github.workspace}}/cpp/out/linux-debug-build
+
         - name: Polaris PR Scan
           uses: synopsys-sig/synopsys-action@v1.13.0
           with:
