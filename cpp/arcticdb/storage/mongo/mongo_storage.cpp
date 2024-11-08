@@ -25,6 +25,8 @@
 
 namespace arcticdb::storage::mongo {
 
+const auto UNSUPPORTED_MONGO_CHARS = std::unordered_set<char>{'/'};
+
 std::string MongoStorage::collection_name(KeyType k) {
     return (fmt::format("{}{}", prefix_, k));
 }
@@ -216,6 +218,12 @@ bool MongoStorage::do_iterate_type_until_match(KeyType key_type, const IterateTy
         }
     }
     return false;
+}
+
+bool MongoStorage::do_is_path_valid(const std::string_view path) const {
+    return std::none_of(path.cbegin(), path.cend(), [](auto c) {
+        return UNSUPPORTED_MONGO_CHARS.contains(c);
+    });
 }
 
 bool MongoStorage::do_key_exists(const VariantKey& key) {
