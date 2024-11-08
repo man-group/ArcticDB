@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import sys
 
 import pytest
 import pandas as pd
@@ -296,10 +297,11 @@ def test_create_library_with_invalid_name(arctic_client):
 @pytest.mark.parametrize("prefix", ["", "prefix"])
 @pytest.mark.parametrize("suffix", ["", "suffix"])
 def test_create_library_with_all_chars(arctic_client, prefix, suffix):
+    ac = arctic_client
+    if sys.platform == "win32" and "lmdb" in ac.get_uri():
+        pytest.skip(reason="Github actions runners run out of disk space on Windows in this test with lmdb")
     # Create library names with each character (except '\' because Azure replaces it with '/' in some cases)
     names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != "\\"]
-
-    ac = arctic_client
 
     created_libraries = set()
     for name in names:
