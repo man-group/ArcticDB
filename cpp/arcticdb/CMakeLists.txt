@@ -1001,9 +1001,6 @@ if(${TEST})
                 GTest::gtest
                 GTest::gmock
                 Python::Python # + pybind11::pybind11 (transitively included) = pybind11::embed, but latter is sometimes not found...
-                curl
-                krb5support
-                k5crypto
                 util # TODO: find out where we lost the transitive link to it
                 )
         if(NOT APPLE)
