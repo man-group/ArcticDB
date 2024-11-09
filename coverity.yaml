@@ -1,6 +1,9 @@
 ---
 capture:
-  analyze:
-    aggressiveness-level: high
-    c-cpp-fnptr: true
-    c-cpp-virtual: true
+  languages:
+    include:
+     - c-family
+analyze:
+  aggressiveness-level: high
+  c-cpp-fnptr: true
+  c-cpp-virtual: true
