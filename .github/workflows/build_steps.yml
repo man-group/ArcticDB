@@ -104,7 +104,11 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       # ========================= Leader steps =========================
-      - name: Remove GitHub default packages # To save space
+      - name: Remove GitHub default packages (baseimage) # To save space
+        if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
+        uses: jlumbroso/free-disk-space@main
+
+      - name: Remove GitHub default packages (manylinux) # To save space
         if: inputs.job_type == 'cpp-tests' && matrix.os == 'linux'
         run: |
           du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
