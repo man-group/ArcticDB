@@ -83,7 +83,8 @@ S3Result<Segment> MockS3Client::get_object(
 S3Result<std::monostate> MockS3Client::put_object(
         const std::string &s3_object_name,
         Segment &&segment,
-        const std::string &bucket_name) {
+        const std::string &bucket_name,
+        bool if_none_match[[maybe_unused]]) {
     auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::WRITE);
     if (maybe_error.has_value()) {
         return {*maybe_error};

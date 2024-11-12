@@ -36,6 +36,10 @@ class MappedFileStorage final : public SingleFileStorage {
 
     void do_write(Composite<KeySegmentPair>&& kvs) override;
 
+    void do_write_if_none(KeySegmentPair&& kv [[maybe_unused]]) final {
+        storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>("Atomic operations are only supported for s3 backend");
+    };
+
     void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) override;
 
     void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts opts) override;

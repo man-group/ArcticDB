@@ -107,6 +107,10 @@ public:
         return write(Composite<KeySegmentPair>{std::move(kv)});
     }
 
+    void write_if_none(KeySegmentPair&& kv) {
+        return do_write_if_none(std::move(kv));
+    }
+
     void update(Composite<KeySegmentPair> &&kvs, UpdateOpts opts) {
         ARCTICDB_SAMPLE(StorageUpdate, 0)
         return do_update(std::move(kvs), opts);
@@ -185,6 +189,8 @@ public:
 
 private:
     virtual void do_write(Composite<KeySegmentPair>&& kvs) = 0;
+
+    virtual void do_write_if_none(KeySegmentPair&& kv) = 0;
 
     virtual void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) = 0;
 
