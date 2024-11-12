@@ -184,6 +184,23 @@ struct WriteSegmentTask : BaseTask {
     }
 };
 
+struct WriteIfNoneTask : BaseTask {
+    std::shared_ptr<storage::Library> lib_;
+
+    explicit WriteIfNoneTask(std::shared_ptr<storage::Library> lib) :
+    lib_(std::move(lib)) {
+    }
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(WriteIfNoneTask)
+
+    VariantKey operator()(storage::KeySegmentPair &&key_seg) const {
+        ARCTICDB_SAMPLE(WriteSegmentTask, 0)
+        auto k = key_seg.variant_key();
+        lib_->write_if_none(std::move(key_seg));
+        return k;
+    }
+};
+
 struct UpdateSegmentTask : BaseTask {
     std::shared_ptr<storage::Library> lib_;
     storage::UpdateOpts opts_;

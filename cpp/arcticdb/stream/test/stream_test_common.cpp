@@ -9,6 +9,4 @@
 
 namespace arcticdb {
 
-std::atomic<timestamp> PilotedClock::time_{0};
-
 } //namespace arcticdb
