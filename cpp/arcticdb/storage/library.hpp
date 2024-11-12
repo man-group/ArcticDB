@@ -90,6 +90,14 @@ class Library {
         storages_->write(std::move(kvs));
     }
 
+    void write_if_none(KeySegmentPair&& kv) {
+        if (open_mode() < OpenMode::WRITE) {
+            throw LibraryPermissionException(library_path_, open_mode(), "write");
+        }
+
+        storages_->write_if_none(std::move(kv));
+    }
+
     void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(LibraryUpdate, 0)
         if (open_mode() < OpenMode::WRITE)

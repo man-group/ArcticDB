@@ -151,6 +151,15 @@ entity::VariantKey write_sync(
     return WriteSegmentTask{library_}(std::move(encoded));
 }
 
+entity::VariantKey write_if_none_sync(
+        KeyType key_type,
+        const StreamId &stream_id,
+        SegmentInMemory &&segment) override {
+    util::check(is_ref_key_class(key_type), "Expected ref key type got  {}", key_type);
+    auto encoded = EncodeRefTask{key_type, stream_id, std::move(segment), codec_, encoding_version_}();
+    return WriteIfNoneTask{library_}(std::move(encoded));
+}
+
 bool is_path_valid(const std::string_view path) const override {
     return library_->is_path_valid(path);
 }
