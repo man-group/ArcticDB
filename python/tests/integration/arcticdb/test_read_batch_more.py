@@ -19,19 +19,19 @@ from arcticdb.util.test import (assert_frame_equal,
                                 create_df_index_datetime, 
                                 dataframe_simulate_arcticdb_update_static, 
                                 get_sample_dataframe,
-                                assert_frame_equal_row_range_fix,
+                                assert_frame_equal_rebuild_index_first,
                                 dataframe_single_column_string,
                                 dataframe_combine_all_dfs_into_one,
                                 dataframe_filter_with_datetime_index
                                 )
 
+from python.arcticdb.util._versions import IS_PANDAS_TWO
+
 def dataframe_concat_sort(*df_args : pd.DataFrame) -> pd.DataFrame:
     """
         Concatenates and sorts row range indexed dataframes
     """
-    result = pd.concat(df_args[0:2], copy=True)
-    for idx in range(2,len(df_args),1):
-        result = pd.concat([result, df_args[idx]],copy=True)
+    result = pd.concat(list(df_args),copy=True)
     result.sort_index(inplace=True) # We need to sort it at the end
     return result
 
@@ -45,18 +45,18 @@ def test_read_batch_2tables_7reads_different_slices(arctic_library):
     lib = arctic_library
 
     symbol1 = "sym1"
-    df1_0 = create_df_index_datetime(7, 0, 5)
-    df1_1 = create_df_index_datetime(7, 4, 6)
-    df1_2 = create_df_index_datetime(7, 6, 10)
-    df1_3 = create_df_index_datetime(7, 0, 10)
+    df1_0 = create_df_index_datetime(num_columns=7, start_hour=0, end_hour=5)
+    df1_1 = create_df_index_datetime(num_columns=7, start_hour=4, end_hour=6)
+    df1_2 = create_df_index_datetime(num_columns=7, start_hour=6, end_hour=10)
+    df1_3 = create_df_index_datetime(num_columns=7, start_hour=0, end_hour=10)
     df1_till2 = dataframe_simulate_arcticdb_update_static(df1_0, df1_1)  # DF of state 0+1
     df1_till3 = dataframe_concat_sort(df1_till2, df1_2) # DF of state 0+1+2
     df1_all = dataframe_simulate_arcticdb_update_static(df1_till3, df1_3)
 
     symbol2 = "sym2"
-    df2_0 = create_df_index_datetime(200, 0, 100)  
-    df2_1 = create_df_index_datetime(200, 100, 200)
-    df2_2 = create_df_index_datetime(200, 200, 300)
+    df2_0 = create_df_index_datetime(num_columns=200, start_hour=0, end_hour=100)  
+    df2_1 = create_df_index_datetime(num_columns=200, start_hour=100, end_hour=200)
+    df2_2 = create_df_index_datetime(num_columns=200, start_hour=200, end_hour=300)
     df2_till2 = dataframe_concat_sort(df2_0, df2_1) # DF of state 0+1
     df2_all = dataframe_concat_sort(df2_till2, df2_2)
     # A DF with certain colums selected
@@ -93,7 +93,6 @@ def test_read_batch_2tables_7reads_different_slices(arctic_library):
     # Assure last version is exactly what we expect
     symbol1_data_sorted = lib.read(symbol1).data
     assert_frame_equal(df1_all, symbol1_data_sorted)
-    assert_frame_equal(df1_3, symbol1_data_sorted)
 
     # Assure previous version is what we expect
     symbol1_data_sorted_ver_minus_one = lib.read(symbol1, as_of=1).data
@@ -181,7 +180,7 @@ def test_read_batch_metadata_on_different_version(arctic_library):
     assert meta1 == lib.read_metadata(symbol).metadata
     assert meta0 == batch[1].metadata
     assert meta1 == batch[0].metadata
-    assert None == batch[2].metadata
+    assert batch[2].metadata is None
 
     lib.append(symbol, df_2)
 
@@ -190,11 +189,11 @@ def test_read_batch_metadata_on_different_version(arctic_library):
                                     symbol,
                                     ReadRequest(symbol, as_of=1)])
 
-    assert None == lib.read_metadata(symbol).metadata
+    assert lib.read_metadata(symbol).metadata is None
     assert meta0 == batch[1].metadata
     assert meta1 == batch[0].metadata
-    assert None == batch[2].metadata
-    assert None == batch[3].metadata
+    assert batch[2].metadata is None
+    assert batch[3].metadata is None
 
     lib.append(symbol, df_3, meta2)
 
@@ -207,11 +206,11 @@ def test_read_batch_metadata_on_different_version(arctic_library):
     assert meta0 == batch[1].metadata
     assert meta1 == batch[0].metadata
     assert meta2 == batch[2].metadata
-    assert None == batch[3].metadata
-    assert_frame_equal_row_range_fix(df_0, batch[1].data)
-    assert_frame_equal_row_range_fix(df_till1, batch[0].data)
-    assert_frame_equal_row_range_fix(df_till1, batch[3].data)
-    assert_frame_equal_row_range_fix(df_all, batch[2].data)
+    assert batch[3].metadata is None
+    assert_frame_equal_rebuild_index_first(df_0, batch[1].data)
+    assert_frame_equal_rebuild_index_first(df_till1, batch[0].data)
+    assert_frame_equal_rebuild_index_first(df_till1, batch[3].data)
+    assert_frame_equal_rebuild_index_first(df_all, batch[2].data)
 
 def test_read_batch_multiple_symbols_all_types_data_query_metadata(arctic_library):
     """
@@ -245,8 +244,8 @@ def test_read_batch_multiple_symbols_all_types_data_query_metadata(arctic_librar
     metadata1 = {"version" : 1 , "data" : [1,3,5]}
 
     symbol2 = "s2"
-    df2_0 = create_df_index_datetime(5, 0, 10)
-    df2_1 = create_df_index_datetime(5, 10, 20)
+    df2_0 = create_df_index_datetime(num_columns=5, start_hour=0, end_hour=10)
+    df2_1 = create_df_index_datetime(num_columns=5, start_hour=10, end_hour=20)
     df2_all = pd.concat([df2_0, df2_1])
     df2_all_added = df2_all.copy(deep=True)
     df2_all_added["ADDED"] = df2_all_added["COL_1"] + df2_all_added["COL_2"] + 1
@@ -290,29 +289,30 @@ def test_read_batch_multiple_symbols_all_types_data_query_metadata(arctic_librar
                                     ])
 
     assert_frame_equal(df1_all, batch[0].data)
-    assert None == batch[0].metadata #metadata is only per the version it was specified for
+    assert batch[0].metadata  is None #metadata is only per the version it was specified for
     assert_frame_equal(df1_0, batch[1].data)
     # Filter with boolean condition
     dfqapplied = df1_0.query(qdf1)
-    assert_frame_equal_row_range_fix(dfqapplied, batch[2].data)
+    assert_frame_equal_rebuild_index_first(dfqapplied, batch[2].data)
     assert_frame_equal(df2_all, batch[3].data)
     # Filter with boolean and integer condition
     dfqapplied = df1_all.query(qdf2)
-    assert_frame_equal_row_range_fix(dfqapplied, batch[4].data)
+    assert_frame_equal_rebuild_index_first(dfqapplied, batch[4].data)
     # filter with column between another column and apply clause
     dfqapplied = df2_all_added.query(qdf3)
-    assert_frame_equal_row_range_fix(dfqapplied, batch[5].data)
+    assert_frame_equal_rebuild_index_first(dfqapplied, batch[5].data)
     assert metadata3 == batch[5].metadata
     assert metadata3 == lib.read_metadata(symbol2).metadata
 
     # Last test will fail on Pandas 1 due to fact that
     # when empty df is returned object type columns will have type float64
-    v = pd.__version__
-    if (v[0] == 2):
+    dfqapplied = df1_all.query(qdf4)
+    if IS_PANDAS_TWO:
         # Filter fload and string condition
-        dfqapplied = df1_all.query(qdf4)
-        assert_frame_equal_row_range_fix(dfqapplied, batch[7].data)
-
+        assert_frame_equal_rebuild_index_first(dfqapplied, batch[7].data)
+    else:
+        with pytest.raises(AssertionError):
+            assert_frame_equal_rebuild_index_first(dfqapplied, batch[7].data)
 
 def test_read_batch_multiple_wrong_things_at_once(arctic_library):
     """
@@ -331,8 +331,8 @@ def test_read_batch_multiple_wrong_things_at_once(arctic_library):
     q = q[q["bool"]]
 
     symbol2 = "s2"
-    df2_0 = create_df_index_datetime(7, 0, 5)
-    df2_1 = create_df_index_datetime(7, 10, 50)
+    df2_0 = create_df_index_datetime(num_columns=7, start_hour=0, end_hour=5)
+    df2_1 = create_df_index_datetime(num_columns=7, start_hour=10, end_hour=50)
     df2_all= pd.concat([df2_0,df2_1])
 
     lib.write(symbol1, df1_0)
@@ -355,10 +355,10 @@ def test_read_batch_multiple_wrong_things_at_once(arctic_library):
     assert batch[1].error_code == ErrorCode.E_NO_SUCH_VERSION
     assert isinstance(batch[2], DataError)
     assert batch[2].symbol == "nonExisting"
-    assert_frame_equal_row_range_fix(df1_0, batch[3].data)
+    assert_frame_equal_rebuild_index_first(df1_0, batch[3].data)
     # No such column error
     assert isinstance(batch[4], DataError)
     # This query is ok and we expect results
     df = df1_0.query(qdf)
-    assert_frame_equal_row_range_fix(df, batch[5].data)
+    assert_frame_equal_rebuild_index_first(df, batch[5].data)
 
