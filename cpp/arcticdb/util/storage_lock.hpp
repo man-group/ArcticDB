@@ -70,6 +70,8 @@ inline std::thread::id get_thread_id() noexcept {
     return std::this_thread::get_id();
 }
 
+// This StorageLock is inherently unreliable. It does not use atomic operations and it is possible for two processes to aquire if the timing is right.
+// If you want a reliable alternative which is slower but uses atomic primitives you can look at the `ReliableStorageLock`.
 template <class ClockType = util::SysClock>
 class StorageLock {
     // 1 Day
