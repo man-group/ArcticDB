@@ -57,7 +57,8 @@ public:
     virtual S3Result<std::monostate> put_object(
             const std::string& s3_object_name,
             Segment&& segment,
-            const std::string& bucket_name) = 0;
+            const std::string& bucket_name,
+            bool if_none_match = false) = 0;
 
     virtual S3Result<DeleteOutput> delete_objects(
             const std::vector<std::string>& s3_object_names,

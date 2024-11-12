@@ -133,12 +133,16 @@ S3Result<Segment> RealS3Client::get_object(
 S3Result<std::monostate> RealS3Client::put_object(
         const std::string &s3_object_name,
         Segment &&segment,
-        const std::string &bucket_name) {
+        const std::string &bucket_name,
+        bool if_none_match) {
 
     ARCTICDB_SUBSAMPLE(S3StorageWritePreamble, 0)
     Aws::S3::Model::PutObjectRequest request;
     request.SetBucket(bucket_name.c_str());
     request.SetKey(s3_object_name.c_str());
+    if (if_none_match) {
+        request.SetIfNoneMatch("*");
+    }
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Set s3 key {}", request.GetKey().c_str());
 
     auto [dst, write_size, buffer] = segment.serialize_header();
