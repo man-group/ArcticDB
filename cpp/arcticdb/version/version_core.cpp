@@ -1404,9 +1404,7 @@ void delete_incomplete_keys(PipelineContext& pipeline_context, Store& store) {
     store.remove_keys(keys_to_delete).get();
 }
 
-class DeleteIncompleteKeysOnExit {
-public:
-    DeleteIncompleteKeysOnExit(
+DeleteIncompleteKeysOnExit::DeleteIncompleteKeysOnExit(
         std::shared_ptr<PipelineContext> pipeline_context,
         std::shared_ptr<Store> store,
         bool via_iteration)
@@ -1414,36 +1412,24 @@ public:
               store_(store),
               via_iteration_(via_iteration) {
     }
-    ARCTICDB_NO_MOVE_OR_COPY(DeleteIncompleteKeysOnExit)
 
-    ~DeleteIncompleteKeysOnExit() {
-        if(released_)
-            return;
+DeleteIncompleteKeysOnExit::~DeleteIncompleteKeysOnExit() {
+    if(released_)
+        return;
 
-        try {
-            if (context_->incompletes_after_) {
-                delete_incomplete_keys(*context_, *store_);
-            } else {
-                // If an exception is thrown before read_incompletes_to_pipeline the keys won't be placed inside the
-                // context thus they must be read manually.
-                auto entries = read_incomplete_keys_for_symbol(store_, context_->stream_id_, via_iteration_);
-                store_->remove_keys(entries).get();
-            }
-        } catch (...) {
-            // Don't emit exceptions from destructor
+    try {
+        if (context_->incompletes_after_) {
+            delete_incomplete_keys(*context_, *store_);
+        } else {
+            // If an exception is thrown before read_incompletes_to_pipeline the keys won't be placed inside the
+            // context thus they must be read manually.
+            auto entries = read_incomplete_keys_for_symbol(store_, context_->stream_id_, via_iteration_);
+            store_->remove_keys(entries).get();
         }
+    } catch (...) {
+        // Don't emit exceptions from destructor
     }
-
-    void release() {
-        released_ = true;
-    }
-
-private:
-    std::shared_ptr<PipelineContext> context_;
-    std::shared_ptr<Store> store_;
-    bool via_iteration_;
-    bool released_ = false;
-};
+}
 
 std::optional<DeleteIncompleteKeysOnExit> get_delete_keys_on_failure(
     const std::shared_ptr<PipelineContext>& pipeline_context,
@@ -1583,18 +1569,15 @@ VersionedItem compact_incomplete_impl(
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
     const UpdateInfo& update_info,
     const CompactIncompleteOptions& options,
-    const WriteOptions& write_options) {
+    const WriteOptions& write_options,
+    std::shared_ptr<PipelineContext>& pipeline_context) {
 
-    auto pipeline_context = std::make_shared<PipelineContext>();
-    pipeline_context->stream_id_ = stream_id;
-    pipeline_context->version_id_ = update_info.next_version_id_;
     ReadQuery read_query;
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
-
     std::optional<SegmentInMemory> last_indexed;
     std::optional<SortedValue> previous_sorted_value;
-    auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store, options);
+
     if(options.append_ && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, read_options);
         if (!write_options.dynamic_schema) {
@@ -1666,9 +1649,7 @@ VersionedItem compact_incomplete_impl(
         user_meta);
 
 
-    delete_incomplete_keys(*pipeline_context, *store);
-    if(delete_keys_on_failure)
-        delete_keys_on_failure->release();
+
 
     return vit;
 }
