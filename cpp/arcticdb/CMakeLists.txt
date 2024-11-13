@@ -502,8 +502,8 @@ set(arcticdb_srcs
         util/timer.cpp
         util/trace.cpp
         util/type_handler.cpp
-        version/block_key.hpp
-        version/block_key.cpp
+        version/key_block.hpp
+        version/key_block.cpp
         version/local_versioned_engine.cpp
         version/op_log.cpp
         version/snapshot.cpp
@@ -948,7 +948,7 @@ if(${TEST})
             util/test/test_string_utils.cpp
             util/test/test_tracing_allocator.cpp
             version/test/test_append.cpp
-            version/test/test_block_key.cpp
+            version/test/test_key_block.cpp
             version/test/test_sort_index.cpp
             version/test/test_sorting_info_state_machine.cpp
             version/test/test_sparse.cpp

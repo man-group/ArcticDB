@@ -4,7 +4,7 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
-#include <arcticdb/version/block_key.hpp>
+#include <arcticdb/version/key_block.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/stream/index_aggregator.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
@@ -12,41 +12,41 @@
 
 namespace arcticdb::version_store {
 
-BlockKey::BlockKey(KeyType key_type, StreamId id, SegmentInMemory &&segment) {
+KeyBlock::KeyBlock(KeyType key_type, StreamId id, SegmentInMemory &&segment) {
     util::check(is_block_ref_key_class(key_type), "Expected block ref key but type was {}", key_type);
-    expected_key_type_of_contents_ = expected_key_type_of_contents(key_type);
-    block_key_type_ = key_type;
+    expected_key_type_ = expected_key_type_of_contents(key_type);
+    key_block_type_ = key_type;
     id_ = std::move(id);
     keys_ = map_from_segment(std::move(segment));
 }
 
-BlockKey::BlockKey(KeyType key_type, StreamId id)
-    : BlockKey(key_type, std::move(id), SegmentInMemory()) {
+KeyBlock::KeyBlock(KeyType key_type, StreamId id)
+    : KeyBlock(key_type, std::move(id), SegmentInMemory()) {
 }
 
-BlockKey::BlockKey(KeyType key_type, StreamId id, std::unordered_map<StreamId, AtomKey> keys)
-    : keys_(std::move(keys)), block_key_type_(key_type), id_(std::move(id)) {
-    expected_key_type_of_contents_ = expected_key_type_of_contents(key_type);
+KeyBlock::KeyBlock(KeyType key_type, StreamId id, std::unordered_map<StreamId, AtomKey> keys)
+    : keys_(std::move(keys)), key_block_type_(key_type), id_(std::move(id)) {
+    expected_key_type_ = expected_key_type_of_contents(key_type);
 }
 
-BlockKey BlockKey::block_with_same_keys(StreamId new_id) {
+KeyBlock KeyBlock::block_with_same_id(StreamId new_id) {
     return {key_type(), std::move(new_id), keys_};
 }
 
-void BlockKey::upsert(AtomKey&& key) {
-    util::check(valid_, "Attempt to use BlockKey after release_segment_in_memory");
-    util::check(key.type() == expected_key_type_of_contents_, "Unexpected key_type, was {} expected {}", key.type(),
-                expected_key_type_of_contents_);
+void KeyBlock::upsert(AtomKey&& key) {
+    util::check(valid_, "Attempt to use KeyBlock after release_segment_in_memory");
+    util::check(key.type() == expected_key_type_, "Unexpected key_type, was {} expected {}", key.type(),
+                expected_key_type_);
     keys_[key.id()] = std::move(key);
 }
 
-bool BlockKey::remove(const StreamId &id) {
-    util::check(valid_, "Attempt to use BlockKey after release_segment_in_memory");
+bool KeyBlock::remove(const StreamId &id) {
+    util::check(valid_, "Attempt to use KeyBlock after release_segment_in_memory");
     return keys_.erase(id) == 1;
 }
 
-std::optional<AtomKey> BlockKey::read(const StreamId &id) const {
-    util::check(valid_, "Attempt to use BlockKey after release_segment_in_memory");
+std::optional<AtomKey> KeyBlock::read(const StreamId &id) const {
+    util::check(valid_, "Attempt to use KeyBlock after release_segment_in_memory");
     auto it = keys_.find(id);
     if (it == keys_.end()) {
         return std::nullopt;
@@ -55,8 +55,8 @@ std::optional<AtomKey> BlockKey::read(const StreamId &id) const {
     }
 }
 
-SegmentInMemory BlockKey::release_segment_in_memory() {
-    util::check(valid_, "Attempt to release_segment_in_memory on a BlockKey twice");
+SegmentInMemory KeyBlock::release_segment_in_memory() {
+    util::check(valid_, "Attempt to release_segment_in_memory on a KeyBlock twice");
     valid_ = false;
     SegmentInMemory result;
     stream::IndexAggregator<stream::RowCountIndex> agg(id_, [&result](SegmentInMemory&& segment) {
@@ -72,26 +72,26 @@ SegmentInMemory BlockKey::release_segment_in_memory() {
     return result;
 }
 
-KeyType BlockKey::key_type() const {
-    return block_key_type_;
+KeyType KeyBlock::key_type() const {
+    return key_block_type_;
 }
 
-StreamId BlockKey::id() const {
+StreamId KeyBlock::id() const {
     return id_;
 }
 
-std::unordered_map<StreamId, AtomKey> BlockKey::map_from_segment(SegmentInMemory &&segment) {
+std::unordered_map<StreamId, AtomKey> KeyBlock::map_from_segment(SegmentInMemory &&segment) {
     std::unordered_map<StreamId, AtomKey> result;
     for (size_t idx = 0; idx < segment.row_count(); idx++) {
         auto id = stream::stream_id_from_segment<pipelines::index::Fields>(segment, idx);
         auto row_key = stream::read_key_row_into_builder<pipelines::index::Fields>(segment, idx)
-            .build(id, expected_key_type_of_contents_);
+            .build(id, expected_key_type_);
         result.insert({id, row_key});
     }
     return result;
 }
 
-KeyType BlockKey::expected_key_type_of_contents(const KeyType &key_type) {
+KeyType KeyBlock::expected_key_type_of_contents(const KeyType &key_type) {
     switch (key_type) {
         case KeyType::BLOCK_VERSION_REF:
             return KeyType::VERSION;
@@ -100,7 +100,7 @@ KeyType BlockKey::expected_key_type_of_contents(const KeyType &key_type) {
     }
 }
 
-void write_block_key(Store *store, BlockKey &&key) {
+void write_key_block(Store *store, KeyBlock &&key) {
     store->write_sync(
         key.key_type(),
         key.id(),
@@ -108,15 +108,15 @@ void write_block_key(Store *store, BlockKey &&key) {
     );
 }
 
-BlockKey read_block_key(Store *store, const KeyType key_type, const StreamId &id) {
+KeyBlock read_key_block(Store *store, const KeyType key_type, const StreamId &id) {
     util::check(is_block_ref_key_class(key_type), "Expected block ref key but type was {}", key_type);
     auto opts = storage::ReadKeyOpts{};
     opts.dont_warn_about_missing_key = true;
     try {
         SegmentInMemory segment = store->read_sync(RefKey{id, key_type}, opts).second;
-        return BlockKey{key_type, id, std::move(segment)};
+        return KeyBlock{key_type, id, std::move(segment)};
     } catch (storage::KeyNotFoundException&) {
-        return BlockKey{key_type, id};
+        return KeyBlock{key_type, id};
     }
 }
 

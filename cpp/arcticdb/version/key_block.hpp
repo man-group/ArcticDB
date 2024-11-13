@@ -15,22 +15,22 @@ namespace arcticdb::version_store {
 /**
  * A key whose segment stores many atom keys (all of the same type).
  */
-class BlockKey {
+class KeyBlock {
 public:
 
     /**
-     * Loaded from an existing block key.
+     * Loaded from an existing key block.
      */
-    BlockKey(KeyType key_type, StreamId id, SegmentInMemory&& segment);
+    KeyBlock(KeyType key_type, StreamId id, SegmentInMemory&& segment);
 
     /**
-     * A new block key.
+     * A new key block.
      */
-    BlockKey(KeyType key_type, StreamId id);
+    KeyBlock(KeyType key_type, StreamId id);
 
-    BlockKey(KeyType key_type, StreamId id, std::unordered_map<StreamId, AtomKey> keys);
+    KeyBlock(KeyType key_type, StreamId id, std::unordered_map<StreamId, AtomKey> keys);
 
-    BlockKey block_with_same_keys(StreamId new_id);
+    KeyBlock block_with_same_id(StreamId new_id);
 
     void upsert(AtomKey&& key);
 
@@ -57,19 +57,19 @@ private:
 
     std::unordered_map<StreamId, AtomKey> keys_;
     bool valid_{true};
-    KeyType block_key_type_;
+    KeyType key_block_type_;
     StreamId id_;
-    KeyType expected_key_type_of_contents_;
+    KeyType expected_key_type_;
 };
 
 /**
  * Write the key to storage. Invalidates the in-memory key.
  */
-void write_block_key(Store* store, BlockKey&& key);
+void write_key_block(Store* store, KeyBlock&& key);
 
 /**
- * Read the block key from storage. If the key does not exist in the storage, returns an empty BlockKey.
+ * Read the key block from storage. If the key does not exist in the storage, returns an empty KeyBlock.
  */
-BlockKey read_block_key(Store* store, KeyType key_type, const StreamId& id);
+KeyBlock read_key_block(Store* store, KeyType key_type, const StreamId& id);
 
 }

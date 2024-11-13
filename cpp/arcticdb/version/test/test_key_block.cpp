@@ -9,16 +9,16 @@
 
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/util/test/generators.hpp>
-#include <arcticdb/version/block_key.hpp>
+#include <arcticdb/version/key_block.hpp>
 
 using namespace arcticdb;
 using namespace arcticdb::version_store;
 
-TEST(BlockKey, BasicRoundtrip) {
-    auto store = test_store("BlockKey.BasicRoundtrip")->_test_get_store();
-    StreamId block_id{"block_key"};
+TEST(KeyBlock, BasicRoundtrip) {
+    auto store = test_store("KeyBlock.BasicRoundtrip")->_test_get_store();
+    StreamId block_id{"key_block"};
 
-    BlockKey block_key = BlockKey{KeyType::BLOCK_VERSION_REF, block_id};
+    KeyBlock key_block = KeyBlock{KeyType::BLOCK_VERSION_REF, block_id};
 
     std::vector<StreamId> streams{"symbol_1", "symbol_2"};
     for (size_t i = 0; i < streams.size(); i++) {
@@ -30,16 +30,16 @@ TEST(BlockKey, BasicRoundtrip) {
             .content_hash(2 + i)
             .build<KeyType::VERSION>(streams[i]);
 
-        block_key.upsert(std::move(k));
+        key_block.upsert(std::move(k));
     }
 
-    write_block_key(store.get(), std::move(block_key));
-    block_key = read_block_key(store.get(), KeyType::BLOCK_VERSION_REF, block_id);
+    write_key_block(store.get(), std::move(key_block));
+    key_block = read_key_block(store.get(), KeyType::BLOCK_VERSION_REF, block_id);
 
-    ASSERT_EQ(KeyType::BLOCK_VERSION_REF, block_key.key_type());
-    ASSERT_EQ(block_id, block_key.id());
+    ASSERT_EQ(KeyType::BLOCK_VERSION_REF, key_block.key_type());
+    ASSERT_EQ(block_id, key_block.id());
     for (int64_t i = 0; i < static_cast<int64_t>(streams.size()); i++) {
-        std::optional<AtomKey> version_key = block_key.read(streams[i]);
+        std::optional<AtomKey> version_key = key_block.read(streams[i]);
         ASSERT_TRUE(version_key.has_value());
         ASSERT_EQ(version_key->start_index(), IndexValue{10 + i});
         ASSERT_EQ(version_key->end_index(), IndexValue{100 + i});
@@ -50,11 +50,11 @@ TEST(BlockKey, BasicRoundtrip) {
     }
 }
 
-TEST(BlockKey, RemoveKey) {
-    auto store = test_store("BlockKey.BasicRoundtrip")->_test_get_store();
-    StreamId block_id{"block_key"};
+TEST(KeyBlock, RemoveKey) {
+    auto store = test_store("KeyBlock.BasicRoundtrip")->_test_get_store();
+    StreamId block_id{"key_block"};
 
-    BlockKey block_key = BlockKey{KeyType::BLOCK_VERSION_REF, block_id};
+    KeyBlock key_block = KeyBlock{KeyType::BLOCK_VERSION_REF, block_id};
 
     std::vector<StreamId> streams{"symbol_1", "symbol_2"};
     for (size_t i = 0; i < streams.size(); i++) {
@@ -66,22 +66,22 @@ TEST(BlockKey, RemoveKey) {
             .content_hash(2 + i)
             .build<KeyType::VERSION>(streams[i]);
 
-        block_key.upsert(std::move(k));
+        key_block.upsert(std::move(k));
     }
 
-    block_key.remove(streams[0]);
+    key_block.remove(streams[0]);
 
-    write_block_key(store.get(), std::move(block_key));
-    block_key = read_block_key(store.get(), KeyType::BLOCK_VERSION_REF, block_id);
+    write_key_block(store.get(), std::move(key_block));
+    key_block = read_key_block(store.get(), KeyType::BLOCK_VERSION_REF, block_id);
 
-    ASSERT_FALSE(block_key.read(streams[0]).has_value());
-    ASSERT_TRUE(block_key.read(streams[1]).has_value());
+    ASSERT_FALSE(key_block.read(streams[0]).has_value());
+    ASSERT_TRUE(key_block.read(streams[1]).has_value());
 }
 
-TEST(BlockKey, ErrorIfReleasedTwice) {
-    auto store = test_store("BlockKey.BasicRoundtrip")->_test_get_store();
-    StreamId block_id{"block_key"};
-    BlockKey block_key = BlockKey{KeyType::BLOCK_VERSION_REF, block_id};
+TEST(KeyBlock, ErrorIfReleasedTwice) {
+    auto store = test_store("KeyBlock.BasicRoundtrip")->_test_get_store();
+    StreamId block_id{"key_block"};
+    KeyBlock key_block = KeyBlock{KeyType::BLOCK_VERSION_REF, block_id};
 
     std::vector<StreamId> streams{"symbol_1", "symbol_2"};
     for (size_t i = 0; i < streams.size(); i++) {
@@ -93,18 +93,18 @@ TEST(BlockKey, ErrorIfReleasedTwice) {
             .content_hash(2 + i)
             .build<KeyType::VERSION>(streams[i]);
 
-        block_key.upsert(std::move(k));
+        key_block.upsert(std::move(k));
     }
 
-    write_block_key(store.get(), std::move(block_key));
-    ASSERT_THROW(write_block_key(store.get(), std::move(block_key)), InternalException);
+    write_key_block(store.get(), std::move(key_block));
+    ASSERT_THROW(write_key_block(store.get(), std::move(key_block)), InternalException);
 }
 
-TEST(BlockKey, CopySegmentToNewBlock) {
-    auto store = test_store("BlockKey.BasicRoundtrip")->_test_get_store();
-    StreamId block_id{"block_key"};
+TEST(KeyBlock, CopySegmentToNewBlock) {
+    auto store = test_store("KeyBlock.BasicRoundtrip")->_test_get_store();
+    StreamId block_id{"key_block"};
 
-    BlockKey block_key = BlockKey{KeyType::BLOCK_VERSION_REF, block_id};
+    KeyBlock key_block = KeyBlock{KeyType::BLOCK_VERSION_REF, block_id};
 
     std::vector<StreamId> streams{"symbol_1", "symbol_2"};
     for (size_t i = 0; i < streams.size(); i++) {
@@ -116,15 +116,15 @@ TEST(BlockKey, CopySegmentToNewBlock) {
             .content_hash(2 + i)
             .build<KeyType::VERSION>(streams[i]);
 
-        block_key.upsert(std::move(k));
+        key_block.upsert(std::move(k));
     }
 
-    StreamId new_block_id{"new_block_key"};
-    BlockKey block_key_copy = block_key.block_with_same_keys(new_block_id);
-    block_key_copy.remove(streams[0]);
+    StreamId new_block_id{"new_key_block"};
+    KeyBlock key_block_copy = key_block.block_with_same_id(new_block_id);
+    key_block_copy.remove(streams[0]);
 
-    ASSERT_FALSE(block_key_copy.read(streams[0]).has_value());
-    ASSERT_TRUE(block_key_copy.read(streams[1]).has_value());
-    ASSERT_TRUE(block_key.read(streams[0]).has_value());
-    ASSERT_TRUE(block_key.read(streams[1]).has_value());
+    ASSERT_FALSE(key_block_copy.read(streams[0]).has_value());
+    ASSERT_TRUE(key_block_copy.read(streams[1]).has_value());
+    ASSERT_TRUE(key_block.read(streams[0]).has_value());
+    ASSERT_TRUE(key_block.read(streams[1]).has_value());
 }
