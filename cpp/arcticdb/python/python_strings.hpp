@@ -177,7 +177,7 @@ private:
                     }
 
                     allocated.try_emplace(offset, obj);
-                    for (auto c = 0U; c < count; ++c)
+                    for (auto c = 1U; c < count; ++c)
                         inc_ref(obj);
                 }
             }
@@ -202,7 +202,7 @@ private:
             for (const auto &[offset, count] : unique_counts) {
                 const auto sv = get_string_from_pool(offset, string_pool);
                 auto obj = StringCreator::create(sv, has_type_conversion);
-                for (auto c = 0U; c < count; ++c)
+                for (auto c = 1U; c < count; ++c)
                     inc_ref(obj);
 
                 py_strings.insert(std::make_pair(offset, obj));
