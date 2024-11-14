@@ -71,7 +71,7 @@ namespace arcticdb::storage {
 
         std::shared_ptr<Store> store_;
         LRUCache<LibraryPath, std::shared_ptr<Library>> open_libraries_;
-        std::mutex open_libraries_mutex_;  // for open_libraries_
+        mutable std::mutex open_libraries_mutex_;  // for open_libraries_
     };
 }
 

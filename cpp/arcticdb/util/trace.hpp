@@ -14,4 +14,7 @@ namespace arcticdb {
 
 std::string get_type_name(const std::type_info& type_info);
 
-}
+#ifdef ARCTICDB_COUNT_ALLOCATIONS
+std::string unwind_stack(int max_depth);
+#endif
+}  // namespace arcticdb
