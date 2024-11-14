@@ -50,23 +50,4 @@ namespace arcticdb::async {
         decode_into_memory_segment(seg, hdr, segment_in_memory, desc);
         return pipelines::SegmentAndSlice(std::move(ranges_and_key_), std::move(segment_in_memory));
     }
-
-    pipelines::SliceAndKey DecodeSlicesTask::decode_into_slice(std::pair<Segment, pipelines::SliceAndKey>&& sk_pair) const {
-        auto [seg, sk] = std::move(sk_pair);
-        ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment with key {}",
-                      variant_key_view(sk.key()));
-
-        auto &hdr = seg.header();
-        const auto& desc = seg.descriptor();
-        auto descriptor = async::get_filtered_descriptor(desc, filter_columns_);
-        sk.slice_.adjust_columns(descriptor.field_count() - descriptor.index().field_count());
-
-        ARCTICDB_TRACE(log::codec(), "Creating segment");
-        SegmentInMemory res(std::move(descriptor));
-
-        decode_into_memory_segment(seg, hdr, res, desc);
-        sk.set_segment(std::move(res));
-        return sk;
-    }
-
 } //namespace arcticdb::async

@@ -10,14 +10,14 @@
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
-#include <arcticdb/storage/lmdb/lmdb_mock_client.hpp>
+#include <arcticdb/storage/mock/lmdb_mock_client.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
-#include <arcticdb/storage/s3/s3_mock_client.hpp>
+#include <arcticdb/storage/mock/s3_mock_client.hpp>
 #include <arcticdb/storage/azure/azure_storage.hpp>
-#include <arcticdb/storage/azure/azure_mock_client.hpp>
+#include <arcticdb/storage/mock/azure_mock_client.hpp>
 #include <arcticdb/storage/mongo/mongo_storage.hpp>
-#include <arcticdb/storage/mongo/mongo_mock_client.hpp>
+#include <arcticdb/storage/mock/mongo_mock_client.hpp>
 #include <arcticdb/storage/test/common.hpp>
 
 #include <filesystem>

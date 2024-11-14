@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <arcticdb/storage/lmdb/lmdb_client_wrapper.hpp>
+#include <arcticdb/storage/lmdb/lmdb_client_interface.hpp>
 
 #include <arcticdb/codec/segment.hpp>
 #include <arcticdb/entity/atom_key.hpp>

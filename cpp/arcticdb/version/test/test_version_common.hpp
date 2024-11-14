@@ -12,7 +12,6 @@
 using namespace arcticdb::storage;
 using namespace arcticdb::stream;
 using namespace arcticdb;
-namespace fg = folly::gen;
 
 const uint64_t NumVersions = 10;
 const uint64_t NumValues = 10;
