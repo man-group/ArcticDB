@@ -5,154 +5,74 @@
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/library_path.hpp>
+#include <arcticdb/storage/async_storage.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/util/composite.hpp>
-#include <util/composite.hpp>
+
+#include <folly/futures/Future.h>
+
+#include <span>
 
 namespace arcticdb::storage {
 
-using ReadVisitor = std::function<void(const VariantKey&, Segment &&)>;
-
-class DuplicateKeyException : public ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY> {
-public:
-    explicit DuplicateKeyException(std::string message) :
-        ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY>(message) { }
-
-    explicit DuplicateKeyException(VariantKey key) :
-        ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY>(std::string(variant_key_view(key))),
-        key_(std::move(key)) {}
-
-    [[nodiscard]] const VariantKey &key() const {
-        return key_;
-    }
-private:
-    VariantKey key_;
-};
-
-class NoDataFoundException : public ArcticCategorizedException<ErrorCategory::MISSING_DATA> {
-public:
-    explicit NoDataFoundException(VariantId key) :
-            ArcticCategorizedException<ErrorCategory::MISSING_DATA>(std::visit([](const auto &key) { return fmt::format("{}", key); }, key)),
-            key_(key){
-    }
-
-    explicit NoDataFoundException(const std::string& msg) :
-            ArcticCategorizedException<ErrorCategory::MISSING_DATA>(msg) {
-    }
-
-    explicit NoDataFoundException(const char* msg) :
-            ArcticCategorizedException<ErrorCategory::MISSING_DATA>(std::string(msg)) {
-    }
-
-    [[nodiscard]] const VariantId &key() const {
-        util::check(static_cast<bool>(key_), "Key not found");
-        return *key_;
-    }
-private:
-    std::optional<VariantId> key_;
-};
-
-class KeyNotFoundException : public ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND> {
-public:
-    explicit KeyNotFoundException(std::string message) :
-            ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(message) {
-    }
-
-    explicit KeyNotFoundException(Composite<VariantKey>&& keys) :
-        ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(fmt::format("Not found: {}", keys)),
-        keys_(std::make_shared<Composite<VariantKey>>(std::move(keys))) {
-    }
-
-    explicit KeyNotFoundException(Composite<VariantKey>&& keys, std::string err_output) :
-            ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(err_output),
-            keys_(std::make_shared<Composite<VariantKey>>(std::move(keys))) {
-    }
-
-    explicit KeyNotFoundException(const VariantKey& single_key):
-            KeyNotFoundException(Composite<VariantKey>{VariantKey{single_key}}) {}
-
-    explicit KeyNotFoundException(const VariantKey& single_key, std::string err_output):
-            KeyNotFoundException(Composite<VariantKey>{VariantKey{single_key}}, err_output) {}
-
-
-    Composite<VariantKey>& keys() {
-        return *keys_;
-    }
-private:
-    std::shared_ptr<Composite<VariantKey>> keys_;
-    mutable std::string msg_;
-};
-
 class Storage {
 public:
-
     Storage(LibraryPath library_path, OpenMode mode) :
         lib_path_(std::move(library_path)),
         mode_(mode) {}
 
     virtual ~Storage() = default;
+
     Storage(const Storage&) = delete;
     Storage& operator=(const Storage&) = delete;
     Storage(Storage&&) = default;
     Storage& operator=(Storage&&) = delete;
 
-    void write(Composite<KeySegmentPair> &&kvs) {
+    void write(KeySegmentPair&& key_seg) {
         ARCTICDB_SAMPLE(StorageWrite, 0)
-        return do_write(std::move(kvs));
-    }
-
-    void write(KeySegmentPair &&kv) {
-        return write(Composite<KeySegmentPair>{std::move(kv)});
+        return do_write(std::move(key_seg));
     }
 
     void write_if_none(KeySegmentPair&& kv) {
         return do_write_if_none(std::move(kv));
     }
 
-    void update(Composite<KeySegmentPair> &&kvs, UpdateOpts opts) {
+    void update(KeySegmentPair&& key_seg, UpdateOpts opts) {
         ARCTICDB_SAMPLE(StorageUpdate, 0)
-        return do_update(std::move(kvs), opts);
+        return do_update(std::move(key_seg), opts);
     }
 
-    void update(KeySegmentPair &&kv, UpdateOpts opts) {
-        return update(Composite<KeySegmentPair>{std::move(kv)}, opts);
+    void read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
+        return do_read(std::move(variant_key), visitor, opts);
     }
 
-    void read(Composite<VariantKey> &&ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
-        return do_read(std::move(ks), visitor, opts);
+    KeySegmentPair read(VariantKey&& variant_key, ReadKeyOpts opts) {
+        return do_read(std::move(variant_key), opts);
     }
 
-    void read(VariantKey&& key, const ReadVisitor& visitor, ReadKeyOpts opts) {
-        return read(Composite<VariantKey>{std::move(key)}, visitor, opts);
+    [[nodiscard]] virtual bool has_async_api() const {
+        return false;
     }
 
-    template<class KeyType>
-    KeySegmentPair read(KeyType&& key, ReadKeyOpts opts) {
-        KeySegmentPair key_seg;
-        const ReadVisitor& visitor = [&key_seg](const VariantKey & vk, Segment&& value) {
-            key_seg.set_key(vk);
-            key_seg.segment() = std::move(value);
-        };
-
-        read(std::forward<KeyType>(key), visitor, opts);
-        return key_seg;
+    virtual AsyncStorage* async_api() {
+        util::raise_rte("Request for async API on non-async storage");
     }
 
-    void remove(Composite<VariantKey> &&ks, RemoveOpts opts) {
-        do_remove(std::move(ks), opts);
+    void remove(VariantKey&& variant_key, RemoveOpts opts) {
+        do_remove(std::move(variant_key), opts);
     }
 
-    void remove(VariantKey&& key, RemoveOpts opts) {
-        return remove(Composite<VariantKey>{std::move(key)}, opts);
+    void remove(std::span<VariantKey> variant_keys, RemoveOpts opts) {
+        return do_remove(variant_keys, opts);
     }
 
-    bool supports_prefix_matching() const {
+    [[nodiscard]] bool supports_prefix_matching() const {
         return do_supports_prefix_matching();
     }
 
-    bool supports_atomic_writes() const {
+    [[nodiscard]] bool supports_atomic_writes() const {
         return do_supports_atomic_writes();
     }
 
@@ -178,29 +98,33 @@ public:
       do_iterate_type_until_match(key_type, predicate_visitor, prefix);
     }
 
-    std::string key_path(const VariantKey& key) const {
+    [[nodiscard]] std::string key_path(const VariantKey& key) const {
         return do_key_path(key);
     }
 
-    bool is_path_valid(const std::string_view path) const {
+    [[nodiscard]] bool is_path_valid(std::string_view path) const {
         return do_is_path_valid(path);
     }
 
     [[nodiscard]] const LibraryPath &library_path() const { return lib_path_; }
     [[nodiscard]] OpenMode open_mode() const { return mode_; }
 
-    virtual std::string name() const = 0;
+    [[nodiscard]] virtual std::string name() const = 0;
 
 private:
-    virtual void do_write(Composite<KeySegmentPair>&& kvs) = 0;
+    virtual void do_write(KeySegmentPair&& key_seg) = 0;
 
     virtual void do_write_if_none(KeySegmentPair&& kv) = 0;
 
-    virtual void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) = 0;
+    virtual void do_update(KeySegmentPair&& key_seg, UpdateOpts opts) = 0;
 
-    virtual void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) = 0;
+    virtual void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) = 0;
 
-    virtual void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) = 0;
+    virtual KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts opts) = 0;
+
+    virtual void do_remove(VariantKey&& variant_key, RemoveOpts opts) = 0;
+
+    virtual void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) = 0;
 
     virtual bool do_key_exists(const VariantKey& key) = 0;
 
@@ -214,9 +138,9 @@ private:
     // the predicate.
     virtual bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string & prefix) = 0;
 
-    virtual std::string do_key_path(const VariantKey& key) const = 0;
+    [[nodiscard]] virtual std::string do_key_path(const VariantKey& key) const = 0;
 
-    virtual bool do_is_path_valid(const std::string_view) const { return true; }
+    [[nodiscard]] virtual bool do_is_path_valid(std::string_view) const { return true; }
 
     LibraryPath lib_path_;
     OpenMode mode_;

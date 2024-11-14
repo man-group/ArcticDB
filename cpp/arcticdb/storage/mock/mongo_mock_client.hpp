@@ -8,8 +8,8 @@
 #pragma once
 
 #include <arcticdb/storage/storage_utils.hpp>
-#include <arcticdb/storage/mongo/mongo_client_wrapper.hpp>
-#include <arcticdb/storage/storage_mock_client.hpp>
+#include <arcticdb/storage/mongo/mongo_client_interface.hpp>
+#include <arcticdb/storage/mock/storage_mock_client.hpp>
 #include <mongocxx/exception/operation_exception.hpp>
 
 namespace arcticdb::storage::mongo {
@@ -78,12 +78,12 @@ public:
     bool write_segment(
             const std::string& database_name,
             const std::string& collection_name,
-            storage::KeySegmentPair&& kv) override;
+            storage::KeySegmentPair&& key_seg) override;
 
     UpdateResult update_segment(
             const std::string& database_name,
             const std::string& collection_name,
-            storage::KeySegmentPair&& kv,
+            storage::KeySegmentPair&& key_seg,
             bool upsert) override;
 
     std::optional<KeySegmentPair> read_segment(

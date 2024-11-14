@@ -13,6 +13,7 @@
 #include <arcticdb/util/timeouts.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/stream/schema.hpp>
+#include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/util/regex_filter.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/util/constructors.hpp>

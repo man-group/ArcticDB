@@ -147,10 +147,10 @@ MaybeCompaction last_compaction(const std::vector<AtomKey>& keys) {
 // provided in SegmentInMemory, because the symbol list structure is the only place where columns can have more entries
 // than the segment has rows. Hence, we need to bypass the checks inside SegmentInMemory's function and directly call the
 // Column's string_at and scalar_at.
-std::string string_at(const SegmentInMemory& seg, position_t row, position_t col){
+std::string_view string_at(const SegmentInMemory& seg, position_t row, position_t col){
     auto offset = seg.column(col).scalar_at<position_t>(row);
     util::check(offset.has_value(), "Symbol list trying to call string_at for missing row {}, column {}", row, col);
-    return std::string(seg.string_pool_ptr()->get_view(offset.value()));
+    return seg.string_pool_ptr()->get_view(offset.value());
 }
 
 template<typename T>
@@ -172,7 +172,7 @@ StreamId stream_id_from_segment(
     } else {
         auto sym = string_at(seg, row_id, column);
         ARCTICDB_DEBUG(log::symbol(), "Reading string symbol '{}'", sym);
-        return {std::move(sym)};
+        return StringId{sym};
     }
 }
 

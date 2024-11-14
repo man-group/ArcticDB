@@ -5,8 +5,8 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/storage/s3/s3_real_client.hpp>
-#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/s3/s3_client_impl.hpp>
+#include <arcticdb/storage/s3/s3_client_interface.hpp>
 
 #include <aws/s3/S3Client.h>
 
@@ -38,7 +38,7 @@ using namespace object_store_utils;
 
 namespace s3 {
 
-S3Result<std::monostate> RealS3Client::head_object(
+S3Result<std::monostate> S3ClientImpl::head_object(
         const std::string& s3_object_name,
         const std::string &bucket_name) const {
 
@@ -111,11 +111,11 @@ Aws::IOStreamFactory S3StreamFactory() {
     return [=]() { return Aws::New<S3IOStream>(""); };
 }
 
-S3Result<Segment> RealS3Client::get_object(
+S3Result<Segment> S3ClientImpl::get_object(
         const std::string &s3_object_name,
         const std::string &bucket_name) const {
-
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Looking for object {}", s3_object_name);
+    auto start = util::SysClock::coarse_nanos_since_epoch();
     Aws::S3::Model::GetObjectRequest request;
     request.WithBucket(bucket_name.c_str()).WithKey(s3_object_name.c_str());
     request.SetResponseStreamFactory(S3StreamFactory());
@@ -124,13 +124,57 @@ S3Result<Segment> RealS3Client::get_object(
     if (!outcome.IsSuccess()) {
         return {outcome.GetError()};
     }
-    auto &retrieved = dynamic_cast<S3IOStream &>(outcome.GetResult().GetBody());
 
-    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Returning object {}", s3_object_name);
+    auto &retrieved = dynamic_cast<S3IOStream &>(outcome.GetResult().GetBody());
+    auto nanos = util::SysClock::coarse_nanos_since_epoch() - start;
+    auto time_taken = double(nanos) / BILLION;
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Returning object {} in {}s", s3_object_name, time_taken);
     return {Segment::from_buffer(retrieved.get_buffer())};
 }
 
-S3Result<std::monostate> RealS3Client::put_object(
+struct GetObjectAsyncHandler {
+    std::shared_ptr<folly::Promise<S3Result<Segment>>> promise_;
+    timestamp start_;
+
+    GetObjectAsyncHandler(std::shared_ptr<folly::Promise<S3Result<Segment>>>&& promise) :
+        promise_(std::move(promise)),
+        start_(util::SysClock::coarse_nanos_since_epoch()){
+    }
+
+    ARCTICDB_MOVE_COPY_DEFAULT(GetObjectAsyncHandler)
+
+    void operator()(
+        const Aws::S3::S3Client*,
+        const Aws::S3::Model::GetObjectRequest& request,
+        const Aws::S3::Model::GetObjectOutcome& outcome,
+        const std::shared_ptr<const Aws::Client::AsyncCallerContext>&) {
+    if (outcome.IsSuccess()) {
+        auto& body = const_cast<Aws::S3::Model::GetObjectOutcome&>(outcome).GetResultWithOwnership().GetBody();
+        auto& stream = dynamic_cast<S3IOStream&>(body);
+        auto nanos = util::SysClock::coarse_nanos_since_epoch() - start_;
+        auto time_taken = double(nanos) / BILLION;
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Returning object {} in {}", request.GetKey(), time_taken);
+        promise_->setValue<S3Result<Segment>>({Segment::from_buffer(stream.get_buffer())});
+    } else {
+        promise_->setValue<S3Result<Segment>>({outcome.GetError()});
+    }
+}
+};
+
+folly::Future<S3Result<Segment>> S3ClientImpl::get_object_async(
+    const std::string &s3_object_name,
+    const std::string &bucket_name) const {
+    auto promise = std::make_shared<folly::Promise<S3Result<Segment>>>();
+    auto future = promise->getFuture().via(&async::io_executor());
+    Aws::S3::Model::GetObjectRequest request;
+    request.WithBucket(bucket_name.c_str()).WithKey(s3_object_name.c_str());
+    request.SetResponseStreamFactory(S3StreamFactory());
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Scheduling async read of {}", s3_object_name);
+    s3_client.GetObjectAsync(request, GetObjectAsyncHandler{std::move(promise)});
+    return future;
+}
+
+S3Result<std::monostate> S3ClientImpl::put_object(
         const std::string &s3_object_name,
         Segment &&segment,
         const std::string &bucket_name,
@@ -146,27 +190,23 @@ S3Result<std::monostate> RealS3Client::put_object(
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Set s3 key {}", request.GetKey().c_str());
 
     auto [dst, write_size, buffer] = segment.serialize_header();
-    auto body = std::make_shared<boost::interprocess::bufferstream>(
-            reinterpret_cast<char *>(dst), write_size);
+    auto body = std::make_shared<boost::interprocess::bufferstream>(reinterpret_cast<char *>(dst), write_size);
     util::check(body->good(), "Overflow of bufferstream with size {}", write_size);
     request.SetBody(body);
 
     ARCTICDB_SUBSAMPLE(S3StoragePutObject, 0)
     auto outcome = s3_client.PutObject(request);
-
     if (!outcome.IsSuccess()) {
         return {outcome.GetError()};
     }
-    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Wrote key '{}', with {} bytes of data",
-                           s3_object_name,
-                           segment.size());
+
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Wrote key '{}', with {} bytes of data", s3_object_name,segment.size());
     return {std::monostate()};
 }
 
-S3Result<DeleteOutput> RealS3Client::delete_objects(
+S3Result<DeleteOutput> S3ClientImpl::delete_objects(
         const std::vector<std::string>& s3_object_names,
         const std::string& bucket_name) {
-
     Aws::S3::Model::DeleteObjectsRequest request;
     request.WithBucket(bucket_name.c_str());
     Aws::S3::Model::Delete del_objects;
@@ -179,10 +219,10 @@ S3Result<DeleteOutput> RealS3Client::delete_objects(
     request.SetDelete(del_objects);
 
     auto outcome = s3_client.DeleteObjects(request);
-
     if (!outcome.IsSuccess()) {
         return {outcome.GetError()};
     }
+
     // AN-256: Per AWS S3 documentation, deleting non-exist objects is not an error, so not handling
     // RemoveOpts.ignores_missing_key_
     std::vector<FailedDelete> failed_deletes;
@@ -191,14 +231,13 @@ S3Result<DeleteOutput> RealS3Client::delete_objects(
     }
 
     DeleteOutput result = {failed_deletes};
-
     return {result};
 }
 
-S3Result<ListObjectsOutput> RealS3Client::list_objects(
+S3Result<ListObjectsOutput> S3ClientImpl::list_objects(
         const std::string& name_prefix,
         const std::string& bucket_name,
-        const std::optional<std::string> continuation_token) const {
+        const std::optional<std::string>& continuation_token) const {
 
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Searching for objects in bucket {} with prefix {}", bucket_name,
                            name_prefix);

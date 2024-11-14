@@ -21,11 +21,10 @@
 #include <string>
 #include <vector>
 
-#include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
-#include <arcticdb/storage/s3/s3_mock_client.hpp>
+#include <arcticdb/storage/mock/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
-#include <arcticdb/storage/storage_mock_client.hpp>
+#include <arcticdb/storage/mock/storage_mock_client.hpp>
 #include <aws/core/Aws.h>
 
 using namespace arcticdb;
@@ -35,7 +34,6 @@ namespace asl = arcticdb::storage::lmdb;
 namespace ast = arcticdb::stream;
 
 TEST(Async, SinkBasic) {
-
     as::EnvironmentName environment_name{"research"};
     as::StorageName storage_name("lmdb_local");
     as::LibraryPath library_path{"a", "b"};
@@ -323,6 +321,7 @@ TEST(Async, CopyCompressedInterStore) {
 
     auto env_config = arcticdb::get_test_environment_config(
         library_path, storage_name, environment_name, std::make_optional(config));
+
     auto config_resolver = as::create_in_memory_resolver(env_config);
     as::LibraryIndex library_index{environment_name, config_resolver};
 
