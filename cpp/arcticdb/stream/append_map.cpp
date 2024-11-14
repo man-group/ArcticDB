@@ -378,7 +378,7 @@ std::pair<TimeseriesDescriptor, std::optional<SegmentInMemory>> get_descriptor_a
     const std::shared_ptr<StreamSource>& store,
     const AtomKey& k,
     bool load_data,
-    storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) {
+    storage::ReadKeyOpts opts) {
     if(load_data) {
         auto seg = store->read_sync(k, opts).second;
         return std::make_pair(seg.index_descriptor(), std::make_optional<SegmentInMemory>(seg));

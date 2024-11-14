@@ -19,7 +19,7 @@
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 
-#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/s3/s3_client_interface.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
 
 namespace arcticdb::storage::nfs_backed {
@@ -33,17 +33,21 @@ public:
     std::string name() const final;
 
 private:
-    void do_write(Composite<KeySegmentPair>&& kvs) final;
+    void do_write(KeySegmentPair&& key_seg) final;
 
     void do_write_if_none(KeySegmentPair&& kv [[maybe_unused]]) final {
         storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>("Atomic operations are only supported for s3 backend");
     };
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
+    void do_update(KeySegmentPair&& key_seg, UpdateOpts opts) final;
 
-    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
+    void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
+    KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts opts) final;
+
+    void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
+
+    void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) final;
 
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
 
@@ -69,7 +73,7 @@ private:
     const std::string& region() const { return region_; }
 
     std::shared_ptr<s3::S3ApiInstance> s3_api_;
-    std::unique_ptr<storage::s3::S3ClientWrapper> s3_client_;
+    std::unique_ptr<storage::s3::S3ClientInterface> s3_client_;
     std::string root_folder_;
     std::string bucket_name_;
     std::string region_;

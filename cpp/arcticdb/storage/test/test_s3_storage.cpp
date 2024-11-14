@@ -10,7 +10,7 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
-#include <arcticdb/storage/s3/s3_mock_client.hpp>
+#include <arcticdb/storage/mock/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/nfs_backed_storage.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
 #include <arcticdb/entity/protobufs.hpp>
@@ -31,7 +31,7 @@ struct EnvFunctionShim : ::testing::Test {
 #endif
     }
 
-    virtual ~EnvFunctionShim() {
+    ~EnvFunctionShim() override {
         for (const char* envname : env_vars_to_unset) {
 #if (WIN32)
             _putenv_s(envname, "");
@@ -285,7 +285,7 @@ TEST_P(S3AndNfsStorageFixture, test_read_missing_key_in_exception){
         read_in_store(store, "snap-not-present", KeyType::SNAPSHOT_REF);
         FAIL();
     } catch (KeyNotFoundException& e) {
-        auto keys = e.keys().as_range();
+        auto keys = e.keys();
         ASSERT_EQ(keys.size(), 1);
         const auto& key = keys.at(0);
         ASSERT_EQ(variant_key_id(key), StreamId{"snap-not-present"});

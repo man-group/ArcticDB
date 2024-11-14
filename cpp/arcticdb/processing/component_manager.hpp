@@ -54,6 +54,7 @@ public:
     std::vector<EntityId> add_entities(Args... args) {
         std::vector<EntityId> ids;
         size_t entity_count{0};
+        ARCTICDB_SAMPLE_DEFAULT(AddEntities)
         std::unique_lock lock(mtx_);
         ([&]{
             if (entity_count == 0) {
@@ -79,6 +80,7 @@ public:
 
     template<typename T>
     void replace_entities(const std::vector<EntityId>& ids, T value) {
+        ARCTICDB_SAMPLE_DEFAULT(ReplaceEntities)
         std::unique_lock lock(mtx_);
         for (auto id: ids) {
             registry_.replace<T>(id, value);
@@ -90,6 +92,7 @@ public:
 
     template<typename T>
     void replace_entities(const std::vector<EntityId>& ids, const std::vector<T>& values) {
+        ARCTICDB_SAMPLE_DEFAULT(ReplaceEntityValues)
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(ids.size() == values.size(), "Received vectors of differing lengths in ComponentManager::replace_entities");
         std::unique_lock lock(mtx_);
         for (auto [idx, id]: folly::enumerate(ids)) {
@@ -100,18 +103,23 @@ public:
         }
     }
 
+    static_assert(sizeof(entt::entity) == sizeof(uint64_t));
+
     // Get a collection of entities. Returns a tuple of vectors, one for each component requested via Args
     template<class... Args>
     std::tuple<std::vector<Args>...> get_entities(const std::vector<EntityId>& ids, const bool decrement_fetch_count=true) {
         std::vector<std::tuple<Args...>> tuple_res;
+        ARCTICDB_SAMPLE_DEFAULT(GetEntities)
         tuple_res.reserve(ids.size());
         {
-            std::shared_lock lock(mtx_);
+            std::shared_lock lock{mtx_};
             // Using view.get theoretically and empirically faster than registry_.get
             auto view = registry_.view<const Args...>();
+
             for (auto id: ids) {
                 tuple_res.emplace_back(std::move(view.get(id)));
             }
+
             if (decrement_fetch_count) {
                 for (auto id: ids) {
                     decrement_entity_fetch_count(id);
@@ -140,3 +148,17 @@ private:
 };
 
 } // namespace arcticdb
+
+namespace fmt {
+template<>
+struct formatter<arcticdb::EntityId> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::EntityId& id, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", static_cast<uint64_t>(id));
+    }
+};
+
+} //namespace fmt

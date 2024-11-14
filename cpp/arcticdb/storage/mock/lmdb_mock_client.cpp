@@ -5,7 +5,7 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/storage/lmdb/lmdb_mock_client.hpp>
+#include <arcticdb/storage/mock/lmdb_mock_client.hpp>
 
 #include <arcticdb/codec/segment.hpp>
 #include <arcticdb/entity/atom_key.hpp>

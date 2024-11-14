@@ -585,7 +585,6 @@ class QueryBuilder:
             self._python_clauses[-1].aggregations = aggregations
         return self
 
-
     def resample(
             self,
             rule: Union[str, pd.DateOffset],
@@ -779,7 +778,6 @@ class QueryBuilder:
             self.clauses = self.clauses + [_ResampleClauseRightClosed(rule, boundary_map[label], offset_ns, origin)]
         self._python_clauses = self._python_clauses + [PythonResampleClause(rule=rule, closed=boundary_map[closed], label=boundary_map[label], offset=offset_ns, origin=origin)]
         return self
-
 
     # TODO: specify type of other must be QueryBuilder with from __future__ import annotations once only Python 3.7+
     # supported

@@ -70,8 +70,7 @@ void tombstone_snapshot(
 void tombstone_snapshot(
         const std::shared_ptr<StreamSink>& store,
         storage::KeySegmentPair&& key_segment_pair,
-        bool log_changes
-        ) {
+        bool log_changes) {
     store->remove_key(key_segment_pair.ref_key()).get(); // Make the snapshot "disappear" to normal APIs
     if (log_changes) {
         log_delete_snapshot(store, key_segment_pair.ref_key().id());
@@ -106,10 +105,9 @@ void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void
         try {
             visitor(vk);
         } catch (storage::KeyNotFoundException& e) {
-            e.keys().broadcast([&vk, &e](const VariantKey& key) {
-                if (key != vk) {
+            std::for_each(e.keys().begin(), e.keys().end(), [&vk, &e](const VariantKey& key) {
+                if (key != vk)
                     throw storage::KeyNotFoundException(std::move(e.keys()));
-                }
             });
             ARCTICDB_DEBUG(log::version(), "Ignored exception due to {} being deleted during iterate_snapshots().");
         }
@@ -117,9 +115,9 @@ void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void
 }
 
 std::optional<size_t> row_id_for_stream_in_snapshot_segment(
-    SegmentInMemory &seg,
-    bool using_ref_key,
-    const StreamId& stream_id) {
+        SegmentInMemory &seg,
+        bool using_ref_key,
+        const StreamId& stream_id) {
     if (using_ref_key) {
         // With ref keys we are sure the snapshot segment has the index atom keys sorted by stream_id.
         auto lb = std::lower_bound(std::begin(seg), std::end(seg), stream_id,

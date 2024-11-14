@@ -70,19 +70,19 @@ struct RangesAndEntity {
     }
     ARCTICDB_MOVE_COPY_DEFAULT(RangesAndEntity)
 
-    const RowRange& row_range() const {
+    [[nodiscard]] const RowRange& row_range() const {
         return *row_range_;
     }
 
-    const ColRange& col_range() const {
+    [[nodiscard]] const ColRange& col_range() const {
         return *col_range_;
     }
 
-    timestamp start_time() const {
+    [[nodiscard]] timestamp start_time() const {
         return timestamp_range_->first;
     }
 
-    timestamp end_time() const {
+    [[nodiscard]] timestamp end_time() const {
         return timestamp_range_->second;
     }
 
@@ -172,7 +172,7 @@ std::vector<std::vector<EntityId>> offsets_to_entity_ids(const std::vector<std::
  * clauses.
  */
 template<class... Args>
-ProcessingUnit gather_entities(ComponentManager& component_manager, std::vector<EntityId>&& entity_ids) {
+ProcessingUnit gather_entities(ComponentManager& component_manager, const std::vector<EntityId>& entity_ids) {
     ProcessingUnit res;
     auto components = component_manager.get_entities<Args...>(entity_ids);
     ([&]{
@@ -193,16 +193,21 @@ ProcessingUnit gather_entities(ComponentManager& component_manager, std::vector<
     }(), ...);
     return res;
 }
-
-std::vector<EntityId> push_entities(ComponentManager& component_manager, ProcessingUnit&& proc, EntityFetchCount entity_fetch_count=1);
-
 std::vector<EntityId> flatten_entities(std::vector<std::vector<EntityId>>&& entity_ids_vec);
 
-std::vector<folly::FutureSplitter<pipelines::SegmentAndSlice>> split_futures(
-        std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures);
+using FutureOrSplitter = std::variant<folly::Future<pipelines::SegmentAndSlice>, folly::FutureSplitter<pipelines::SegmentAndSlice>>;
+
+std::vector<FutureOrSplitter> split_futures(
+    std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
+    std::vector<EntityFetchCount>& segment_fetch_counts);
+
+std::vector<EntityId> push_entities(
+    ComponentManager& component_manager,
+    ProcessingUnit&& proc,
+    EntityFetchCount entity_fetch_count=1);
 
 std::shared_ptr<std::vector<EntityFetchCount>> generate_segment_fetch_counts(
-        const std::vector<std::vector<size_t>>& processing_unit_indexes,
-        size_t num_segments);
+    const std::vector<std::vector<size_t>>& processing_unit_indexes,
+    size_t num_segments);
 
-}//namespace arcticdb
+} //namespace arcticdb

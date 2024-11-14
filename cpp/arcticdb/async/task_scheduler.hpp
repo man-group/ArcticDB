@@ -174,11 +174,6 @@ inline auto get_default_num_cpus([[maybe_unused]] const std::string& cgroup_fold
  * 3/ Priority: How to assign priorities to task in order to treat the most pressing first.
  * 4/ Throttling: (similar to priority) how to absorb work spikes and apply memory backpressure
  */
-
-inline int64_t default_io_thread_count(uint64_t cpu_count) {
-    return std::min(int64_t(100L), static_cast<int64_t>(static_cast<double>(cpu_count) * 1.5));
-}
-
 class TaskScheduler {
   public:
     using CPUSchedulerType = folly::FutureExecutor<folly::CPUThreadPoolExecutor>;

@@ -6,12 +6,11 @@
  */
 
 #include <arcticdb/storage/s3/nfs_backed_storage.hpp>
-
-#include <arcticdb/util/simple_string_hash.hpp>
+#include <arcticdb/storage/mock/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
-#include <arcticdb/storage/s3/s3_real_client.hpp>
-#include <arcticdb/storage/s3/s3_mock_client.hpp>
-#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/s3/s3_client_impl.hpp>
+#include <arcticdb/storage/s3/s3_client_interface.hpp>
+#include <arcticdb/util/simple_string_hash.hpp>
 
 namespace arcticdb::storage::nfs_backed {
 
@@ -20,6 +19,7 @@ std::string add_suffix_char(const std::string& str) {
 }
 
 std::string remove_suffix_char(const std::string& str) {
+    util::check(!str.empty() && *str.rbegin() == '*', "Unexpected string passed to remove_suffix_char: {}", str);
     return str.substr(0, str.size()-1);
 }
 
@@ -93,7 +93,6 @@ std::string get_root_folder(const std::string& root_folder, const VariantKey& vk
     });
 }
 
-
 std::string NfsBucketizer::bucketize(const std::string& root_folder, const VariantKey& vk) {
         return get_root_folder(root_folder, vk);
     }
@@ -103,20 +102,19 @@ size_t NfsBucketizer::bucketize_length(KeyType key_type) {
     }
 
 VariantKey unencode_object_id(const VariantKey& key) {
-
     return util::variant_match(key,
-                        [] (const AtomKey& k) {
-                            auto decoded_id = decode_item<StreamId, StringId, NumericId>(k.id(), false);
-                            auto start_index = decode_item<IndexValue, StringIndex, NumericIndex>(k.start_index(), false);
-                            auto end_index = decode_item<IndexValue, StringIndex, NumericIndex>(k.end_index(), false);
-                            return VariantKey{atom_key_builder().version_id(k.version_id()).start_index(start_index)
-                                .end_index(end_index).creation_ts(k.creation_ts()).content_hash(k.content_hash())
-                                .build(decoded_id, k.type())};
-                        },
-                        [](const RefKey& r) {
-                            auto decoded_id = decode_item<StreamId, StringId, NumericId>(r.id(), true);
-                            return VariantKey{RefKey{decoded_id, r.type(), r.is_old_type()}};
-                        });
+        [] (const AtomKey& k) {
+            auto decoded_id = decode_item<StreamId, StringId, NumericId>(k.id(), false);
+            auto start_index = decode_item<IndexValue, StringIndex, NumericIndex>(k.start_index(), false);
+            auto end_index = decode_item<IndexValue, StringIndex, NumericIndex>(k.end_index(), false);
+            return VariantKey{atom_key_builder().version_id(k.version_id()).start_index(start_index)
+                .end_index(end_index).creation_ts(k.creation_ts()).content_hash(k.content_hash())
+                .build(decoded_id, k.type())};
+        },
+        [](const RefKey& r) {
+            auto decoded_id = decode_item<StreamId, StringId, NumericId>(r.id(), true);
+            return VariantKey{RefKey{decoded_id, r.type(), r.is_old_type()}};
+        });
 }
 
 NfsBackedStorage::NfsBackedStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
@@ -130,7 +128,7 @@ NfsBackedStorage::NfsBackedStorage(const LibraryPath &library_path, OpenMode mod
         log::storage().warn("Using Mock S3 storage for NfsBackedStorage");
         s3_client_ = std::make_unique<s3::MockS3Client>();
     } else {
-        s3_client_ = std::make_unique<s3::RealS3Client>(s3::get_aws_credentials(conf), s3::get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
+        s3_client_ = std::make_unique<s3::S3ClientImpl>(s3::get_aws_credentials(conf), s3::get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
     }
 
     if (conf.prefix().empty()) {
@@ -156,33 +154,40 @@ std::string NfsBackedStorage::name() const {
     return fmt::format("nfs_backed_storage-{}/{}/{}", region_, bucket_name_, root_folder_);
 }
 
-void NfsBackedStorage::do_write(Composite<KeySegmentPair>&& kvs) {
-    auto enc = kvs.transform([] (auto&& key_seg) {
-        return KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
-    });
+void NfsBackedStorage::do_write(KeySegmentPair&& key_seg) {
+    auto enc = KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
     s3::detail::do_write_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
-void NfsBackedStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
-    auto enc = kvs.transform([] (auto&& key_seg) {
-        return KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
-    });
+void NfsBackedStorage::do_update(KeySegmentPair&& key_seg, UpdateOpts) {
+    auto enc = KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
     s3::detail::do_update_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
-void NfsBackedStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
-    auto enc = ks.transform([] (auto&& key) {
-        return encode_object_id(key);
-    });
-
-    s3::detail::do_read_impl(std::move(enc), visitor, unencode_object_id, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, opts);
+void NfsBackedStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
+   auto encoded_key = encode_object_id(variant_key);
+   auto decoder = [] (auto&& k) { return unencode_object_id(std::move(k)); };
+   s3::detail::do_read_impl(std::move(variant_key), visitor, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, std::move(decoder), opts);
 }
 
-void NfsBackedStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
-    auto enc = ks.transform([] (auto&& key) {
+KeySegmentPair NfsBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts opts) {
+    auto encoded_key = encode_object_id(variant_key);
+    auto decoder = [] (auto&& k) { return unencode_object_id(std::move(k)); };
+    return s3::detail::do_read_impl(std::move(encoded_key), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, std::move(decoder), opts);
+}
+
+void NfsBackedStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
+    auto enc = encode_object_id(variant_key);
+    s3::detail::do_remove_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
+}
+
+void NfsBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts) {
+    std::vector<VariantKey> enc;
+    enc.reserve(variant_keys.size());
+    std::transform(std::begin(variant_keys), std::end(variant_keys), std::back_inserter(enc), [] (auto&& key) {
         return encode_object_id(key);
     });
-    s3::detail::do_remove_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
+    s3::detail::do_remove_impl(std::span(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
 bool NfsBackedStorage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix) {
