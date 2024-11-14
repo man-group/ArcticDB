@@ -19,6 +19,9 @@
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/util/test/random_throw.hpp>
 #include <ankerl/unordered_dense.h>
+#include <ranges>
+
+namespace rng = std::ranges;
 
 namespace arcticdb {
 
@@ -510,16 +513,13 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
     if (ranges_and_keys.empty()) {
         return {};
     }
-    TimestampRange index_range(
-            std::min_element(ranges_and_keys.begin(), ranges_and_keys.end(),
-                             [](const RangesAndKey& left, const RangesAndKey& right) {
-                                 return left.start_time() < right.start_time();
-                             })->start_time(),
-            std::max_element(ranges_and_keys.begin(), ranges_and_keys.end(),
-                             [](const RangesAndKey& left, const RangesAndKey& right) {
-                                 return left.end_time() < right.end_time();
-                             })->end_time()
-    );
+    
+    const TimestampRange index_range = std::accumulate(
+        std::next(ranges_and_keys.begin()),
+        ranges_and_keys.end(),
+        TimestampRange{ ranges_and_keys.begin()->start_time(), ranges_and_keys.begin()->end_time() },
+        [](const TimestampRange& rng, const RangesAndKey& el) { return TimestampRange{std::min(rng.first, el.start_time()), std::max(rng.second, el.end_time())};});
+
     if (date_range_.has_value()) {
         date_range_->first = std::max(date_range_->first, index_range.first);
         date_range_->second = std::min(date_range_->second, index_range.second);
@@ -531,7 +531,7 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
     if (bucket_boundaries_.size() < 2) {
         return {};
     }
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(std::is_sorted(bucket_boundaries_.begin(), bucket_boundaries_.end()),
+    debug::check<ErrorCode::E_ASSERTION_FAILURE>(rng::is_sorted(bucket_boundaries_),
                                                  "Resampling expects provided bucket boundaries to be strictly monotonically increasing");
     return structure_by_time_bucket<closed_boundary>(ranges_and_keys, bucket_boundaries_);
 }
@@ -560,7 +560,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
     if (bucket_boundaries_.size() < 2) {
         return {};
     }
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(std::is_sorted(bucket_boundaries_.begin(), bucket_boundaries_.end()),
+    debug::check<ErrorCode::E_ASSERTION_FAILURE>(rng::is_sorted(bucket_boundaries_),
                                                  "Resampling expects provided bucket boundaries to be strictly monotonically increasing");
 
     auto new_structure_offsets = structure_by_time_bucket<closed_boundary>(ranges_and_entities, bucket_boundaries_);
@@ -575,7 +575,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
         }
     }
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            std::all_of(expected_fetch_counts.begin(), expected_fetch_counts.end(), [](EntityFetchCount fetch_count) {
+            rng::all_of(expected_fetch_counts, [](EntityFetchCount fetch_count) {
                 return fetch_count == 1 || fetch_count == 2;
             }),
             "ResampleClause::structure_for_processing: invalid expected entity fetch count (should be 1 or 2)"
