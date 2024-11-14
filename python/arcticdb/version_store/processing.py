@@ -647,6 +647,8 @@ class QueryBuilder:
             * start_day: origin is the first day at midnight of the timeseries
             * end: origin is the last value of the timeseries
             * end_day: origin is the ceiling midnight of the last day
+
+            `start`, `start_day`, `end`, `end_day` origin values are not supported in conjunction with `date_range`.
         Returns
         -------
         QueryBuilder
@@ -667,6 +669,8 @@ class QueryBuilder:
             * The library has dynamic schema enabled, and at least one of the columns being aggregated is missing
               from at least one row-slice.
             * At least one of the columns being aggregated contains sparse data.
+        UserInputException
+            `start`, `start_day`, `end`, `end_day` is used in conjunction with `date_range`
 
         Examples
         --------

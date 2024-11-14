@@ -12,7 +12,7 @@ import datetime as dt
 import pytest
 
 from arcticdb import QueryBuilder
-from arcticdb.exceptions import ArcticDbNotYetImplemented, SchemaException
+from arcticdb.exceptions import ArcticDbNotYetImplemented, SchemaException, UserInputException
 from arcticdb.util.test import assert_frame_equal
 from packaging.version import Version
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
@@ -669,7 +669,7 @@ class TestResamplingOrigin:
         end = pd.Timestamp("2025-01-02 12:00:20")
         idx = pd.date_range(start, end, freq='10s')
         rng = np.random.default_rng()
-        df = pd.DataFrame({"col": range(len(idx))}, index=idx)
+        df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
         generic_resample_test(
             lib,
@@ -693,7 +693,7 @@ class TestResamplingOrigin:
         start, end = date_range
         idx = pd.date_range(start, end, freq='10s')
         rng = np.random.default_rng()
-        df = pd.DataFrame({"col": range(len(idx))}, index=idx)
+        df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
         generic_resample_test(
             lib,
@@ -714,7 +714,7 @@ class TestResamplingOrigin:
         end = pd.Timestamp("1800-01-02 10:00:00")
         idx = pd.date_range(start, end, freq='30s')
         rng = np.random.default_rng()
-        df = pd.DataFrame({"col": range(len(idx))}, index=idx)
+        df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
         generic_resample_test(
             lib,
@@ -739,7 +739,7 @@ class TestResamplingOrigin:
         start, end = date_range
         idx = pd.date_range(start, end, freq='10s')
         rng = np.random.default_rng()
-        df = pd.DataFrame({"col": range(len(idx))}, index=idx)
+        df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
         generic_resample_test(
             lib,
@@ -750,6 +750,41 @@ class TestResamplingOrigin:
             origin=origin,
             drop_empty_buckets_for="col",
             label=label
+        )
+
+    @pytest.mark.parametrize("origin", ["start_day", "end_day", "start", "end"])
+    def test_origin_start_throws_with_daterange(self, lmdb_version_store_v1, origin, label, closed):
+        lib = lmdb_version_store_v1
+        sym = "test_origin_start_throws_with_daterange"
+
+        lib.write(sym, pd.DataFrame({"col": [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")])))
+        q = QueryBuilder()
+        q = q.resample('1min', origin=origin, label=label, closed=closed).agg({"col_min":("col", "min")})
+        with pytest.raises(UserInputException) as exception_info:
+            lib.read(sym, query_builder=q, date_range=(pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")))
+        assert all(w in str(exception_info.value) for w in [origin, "origin"])
+
+    @pytest.mark.parametrize("origin", ["epoch", pd.Timestamp("2025-01-03 12:00:00")])
+    def test_epoch_and_ts_origin_works_with_date_range(self, lmdb_version_store_v1, closed, origin, label):
+        lib = lmdb_version_store_v1
+        sym = "test_origin_special_values"
+        # Start and end are picked so that #bins * rule + start != end on purpose to test
+        # the bin generation in case of end and end_day
+        start = pd.Timestamp("2025-01-01 00:00:00")
+        end = pd.Timestamp("2025-01-04 00:00:00")
+        idx = pd.date_range(start, end, freq='3s')
+        rng = np.random.default_rng()
+        df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
+        lib.write(sym, df)
+        generic_resample_test(
+            lib,
+            sym,
+            "2min",
+            all_aggregations_dict("col"),
+            closed=closed,
+            origin=origin,
+            label=label,
+            date_range=(pd.Timestamp("2025-01-02 00:00:00"), pd.Timestamp("2025-01-03 00:00:00"))
         )
 
 

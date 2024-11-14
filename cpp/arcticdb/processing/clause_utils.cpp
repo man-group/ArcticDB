@@ -6,6 +6,9 @@
  */
 
 #include <arcticdb/processing/clause_utils.hpp>
+#include <ranges>
+
+namespace rng = std::ranges;
 
 namespace arcticdb {
 
@@ -101,7 +104,7 @@ std::shared_ptr<std::vector<EntityFetchCount>> generate_segment_fetch_counts(
         }
     }
     debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-            std::all_of(res->begin(), res->end(), [](const size_t& val) { return val != 0; }),
+            rng::none_of(*res, [](size_t val) { return val == 0; }),
             "All segments should be needed by at least one ProcessingUnit");
     return res;
 }

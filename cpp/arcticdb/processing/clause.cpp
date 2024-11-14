@@ -466,6 +466,16 @@ std::string ResampleClause<closed_boundary>::rule() const {
 
 template<ResampleBoundary closed_boundary>
 void ResampleClause<closed_boundary>::set_date_range(timestamp date_range_start, timestamp date_range_end) {
+    // Start and end need to read the first and last segments of the date range. At the moment buckets are set up before
+    // reading and processing the data.
+    constexpr static std::array unsupported_origin{ "start", "end", "start_day", "end_day" };
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+        util::variant_match(origin_,
+            [&](const std::string& origin) { return rng::none_of(unsupported_origin, [&](std::string_view el) { return el == origin; }); },
+            [](const auto&) { return true;}
+        ),
+        "Resampling origins {} are not supported in conjunction with date range", unsupported_origin
+    );
     date_range_.emplace(date_range_start, date_range_end);
 }
 
