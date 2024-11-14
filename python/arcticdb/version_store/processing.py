@@ -754,7 +754,7 @@ class QueryBuilder:
         if not (type(origin) is pd.Timestamp or origin in ["start", "end", "start_day", "end_day", "epoch"]):
             raise UserInputException(f'Argument origin must be either of type pd.Timestamp or one of ["start", "end", "start_day", "end_day", "epoch"]. Got {offset} instead')
         if type(origin) is pd.Timestamp:
-            origin = origin.nanosecond
+            origin = origin.value
         # This set is documented here:
         # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.resample.html#pandas.Series.resample
         # and lifted directly from pandas.core.resample.TimeGrouper.__init__, and so is inherently fragile to upstream

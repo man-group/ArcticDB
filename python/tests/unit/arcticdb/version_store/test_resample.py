@@ -779,3 +779,21 @@ def test_origin_offset_combined(lmdb_version_store_v1, closed, origin, label, of
         label=label,
         offset=offset
     )
+
+def test_max_with_one_infinity_element(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_max_with_one_infinity_element"
+
+    lib.write(sym, pd.DataFrame({"col": [np.inf]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
+    q = QueryBuilder()
+    q = q.resample('1min').agg({"col_max":("col", "max")})
+    assert np.isinf(lib.read(sym, query_builder=q).data['col_max'][0])
+
+def test_min_with_one_infinity_element(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_min_with_one_infinity_element"
+
+    lib.write(sym, pd.DataFrame({"col": [-np.inf]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
+    q = QueryBuilder()
+    q = q.resample('1min').agg({"col_min":("col", "min")})
+    assert np.isneginf(lib.read(sym, query_builder=q).data['col_min'][0])

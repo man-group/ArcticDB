@@ -25,44 +25,31 @@
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
-
 namespace arcticdb::version_store {
 
-/// @param ts in nanoseconds
-[[nodiscard]] static std::tm nanoseconds_to_tm(timestamp ts) {
-    // Uses boost to convert to std::tm because STL's functions don't work with pre-epoch timestamps
-    const timestamp seconds = ts / 1'000'000'000;
-    const boost::posix_time::ptime time_point = boost::posix_time::ptime(boost::gregorian::date(1970, 1, 1)) + boost::posix_time::seconds(seconds);
-    return boost::posix_time::to_tm(time_point);
-}
-
-[[nodiscard]] static timestamp tm_to_nanoseconds(const std::tm& tm) {
-    // Uses boost to convert to std::tm because STL's functions don't work with pre-epoch timestamps
-    const boost::posix_time::ptime time_point = boost::posix_time::ptime_from_tm(tm);
-    return boost::posix_time::to_time_t(time_point) * 1'000'000'000;
-}
-
-/// @param ts in nanoseconds
-[[nodiscard]] static timestamp start_of_day_nanoseconds(timestamp ts) {
-    std::tm tm = nanoseconds_to_tm(ts);
-    tm.tm_hour = 0;
-    tm.tm_min = 0;
-    tm.tm_sec = 0;
-    return tm_to_nanoseconds(tm);
-}
-
-[[nodiscard]] static timestamp end_of_day_nanoseconds(timestamp ts) {
-    std::tm tm = nanoseconds_to_tm(ts);
-    tm.tm_hour = 23;
-    tm.tm_min = 59;
-    tm.tm_sec = 59;
-    return tm_to_nanoseconds(tm) + 1'000'000'000;
+static consteval timestamp one_day_in_nanoseconds() {
+    return timestamp(24) * 60 * 60 * 1'000'000'000;
 }
 
 template<typename T>
 requires std::integral<T>
 [[nodiscard]] static T python_mod(T a, T b) {
     return (a % b + b) % b;
+}
+
+/// @param ts in nanoseconds
+[[nodiscard]] static timestamp start_of_day_nanoseconds(timestamp ts) {
+    return ts - python_mod(ts, one_day_in_nanoseconds());
+}
+
+/// @param ts in nanoseconds
+[[nodiscard]] static timestamp end_of_day_nanoseconds(timestamp ts) {
+    const timestamp start_of_day = start_of_day_nanoseconds(ts);
+    const bool is_midnnight = start_of_day == ts;
+    if (is_midnnight) {
+        return ts;
+    }
+    return start_of_day + one_day_in_nanoseconds();
 }
 
 [[nodiscard]] static std::pair<timestamp, timestamp> compute_first_last_dates(
