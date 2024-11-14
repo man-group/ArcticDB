@@ -304,11 +304,25 @@ def arctic_client_no_lmdb(request, encoding_version):
     assert not ac.list_libraries()
     return ac
 
+@pytest.fixture(
+    scope="function",
+    params=[
+        "lmdb"
+    ],
+)
+def arctic_client_lmdb(request, encoding_version):
+    storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
+    ac = storage_fixture.create_arctic(encoding_version=encoding_version)
+    assert not ac.list_libraries()
+    return ac
 
 @pytest.fixture
 def arctic_library(arctic_client, lib_name):
     return arctic_client.create_library(lib_name)
 
+@pytest.fixture
+def arctic_library_lmdb(arctic_client_lmdb, lib_name):
+    return arctic_client_lmdb.create_library(lib_name)
 
 @pytest.fixture(
     scope="function",
