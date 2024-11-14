@@ -16,6 +16,3 @@
 [submodule "cpp/vcpkg"]
 	path = cpp/vcpkg
 	url = https://github.com/microsoft/vcpkg.git
-[submodule "cpp/third_party/entt"]
-	path = cpp/third_party/entt
-	url = https://github.com/skypjack/entt.git
