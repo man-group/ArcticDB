@@ -670,7 +670,9 @@ class QueryBuilder:
               from at least one row-slice.
             * At least one of the columns being aggregated contains sparse data.
         UserInputException
-            `start`, `start_day`, `end`, `end_day` is used in conjunction with `date_range`
+
+            * `start`, `start_day`, `end`, `end_day` is used in conjunction with `date_range`
+            * `origin` is not one of `start`, `start_day`, `end`, `end_day`, `epoch` or a `pd.Timestamp`
 
         Examples
         --------
