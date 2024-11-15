@@ -55,7 +55,7 @@ jobs:
 
   publish_benchmark_results_to_gh_pages:  
     name: Publish benchmark results to gh-pages
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master' && github.head_ref == '' # head_ref is empty for commits pushed to PR event
     needs: [benchmark_commits]  
     runs-on: ubuntu-22.04
     container:
