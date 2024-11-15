@@ -21,7 +21,6 @@ from arcticdb.util.test import (assert_frame_equal,
                                 get_sample_dataframe,
                                 assert_frame_equal_rebuild_index_first,
                                 dataframe_single_column_string,
-                                dataframe_combine_all_dfs_into_one,
                                 dataframe_filter_with_datetime_index
                                 )
 
@@ -34,6 +33,18 @@ def dataframe_concat_sort(*df_args : pd.DataFrame) -> pd.DataFrame:
     result = pd.concat(list(df_args),copy=True)
     result.sort_index(inplace=True) # We need to sort it at the end
     return result
+
+
+def generate_mixed_dataframe(num_rows: int, seed=0):
+    """
+        Generation of a timeframe that is row ranged and has more string 
+        columns to work with
+    """
+    result = pd.concat([get_sample_dataframe(num_rows), 
+                        dataframe_single_column_string(num_rows,"short",1,1), 
+                        dataframe_single_column_string(num_rows,"long",1,279)], axis=1, copy=True)
+    return result
+
 
 def test_read_batch_2tables_7reads_different_slices(arctic_library):
     """
@@ -221,16 +232,6 @@ def test_read_batch_multiple_symbols_all_types_data_query_metadata(arctic_librar
     
     lib = arctic_library
     
-    def generate_mixed_dataframe(num_rows: int, seed=0):
-        """
-            Generation of a timeframe that is row ranged and has more string 
-            columns to work with
-        """
-        result = dataframe_combine_all_dfs_into_one(get_sample_dataframe(num_rows), 
-                                       dataframe_single_column_string(num_rows,"short",1,1), 
-                                       dataframe_single_column_string(num_rows,"long",1,279))
-        return result
-
     symbol1 = "s1"
     # Row ranged DF. This would not produce filter data with 
     # correct indexes
@@ -342,7 +343,7 @@ def test_read_batch_multiple_wrong_things_at_once(arctic_library):
     lib.delete(symbol1, versions=[1])
 
     batch = lib.read_batch(symbols=[symbol2,
-                                ReadRequest(symbol1, as_of=1),
+                                ReadRequest(symbol1, as_of=0),
                                 ReadRequest("nonExisting"),
                                 ReadRequest(symbol1),
                                 ReadRequest(symbol1, query_builder=q_wrong),
@@ -361,4 +362,117 @@ def test_read_batch_multiple_wrong_things_at_once(arctic_library):
     # This query is ok and we expect results
     df = df1_0.query(qdf)
     assert_frame_equal_rebuild_index_first(df, batch[5].data)
+
+@pytest.mark.xfail(reason = "ArcticDB#2004")
+def test_read_batch_query_and_columns_returned_order(arctic_library):
+    '''
+        Column order is expected to match the 'columns' attribute lits
+    '''
+
+    def q(q):
+        return q[q["bool"]]
+
+    lib = arctic_library
+    
+    symbol = "sym"
+    df = get_sample_dataframe(size=100)
+    df.reset_index(inplace = True, drop = True)
+    columns = ['int32', 'float64', 'strings', 'bool']
+
+    lib.write(symbol, df)
+
+    batch = lib.read_batch(symbols=[ReadRequest(symbol, as_of=0, query_builder=q(QueryBuilder()), columns=columns)])
+
+    df_filtered = q(df)[columns]
+    assert_frame_equal_rebuild_index_first(df_filtered, batch[0].data)
+
+@pytest.mark.xfail(reason = "ArcticDB#2005")
+def test_read_batch_query_and_columns_wrong_column_names_passed(arctic_library):
+    '''
+        Allong with existing column names if we pass non exising names of 
+        columns for 'column' attrinute, we should be stopped by arctic and indicated an error
+    '''
+
+    def q(q):
+        return q[q["bool"]]
+
+    lib = arctic_library
+    
+    symbol = "sym"
+    df = get_sample_dataframe(size=100)
+    df.reset_index(inplace = True, drop = True)
+    columns = ['wrong', 'int32', 'float64', 'strings', 'bool', 'wrong']
+
+    lib.write(symbol, df)
+
+    batch = lib.read_batch(symbols=[ReadRequest(symbol, as_of=0, query_builder=q(QueryBuilder()), columns=columns)])
+
+    assert isinstance(batch[0], DataError)    
+
+def test_read_batch_query_and_columns(arctic_library):
+
+    def q1(q):
+        return q[(q["short"].isin(["A", "B", "C", "Z"])) & (q["bool"] == True)]
+    
+    def q2(q):
+        return q[q["long"] == 'impossible to match']
+    
+    def q3(q):
+        return q[q["uint8"] > 155]
+
+    lib = arctic_library
+    
+    symbol = "sym"
+    df1 = generate_mixed_dataframe(num_rows=100)
+    df2 = generate_mixed_dataframe(num_rows=50)
+    df_all = pd.concat([df1, df2],ignore_index=True)
+    df_all.reset_index(inplace = True, drop = True)
+    metadata = {"name" : "SomeInterestingName", "info" : [1,3,5,6]}
+    columns1 = ['int32', 'float64', 'bool', 'short']
+    columns2 = ['bool', 'long']
+    columns3 = ["uint8", "strings", "int16", "bool"]
+    columns_one_1 = ["long"] 
+    columns_one_2 = ["bool"] 
+    columns_one_3 = ["int64"] 
+    columns_wrong = ["wrong", "uint8", "float32", "int32", "bool", "wrong"]
+    columns_mixed = ['int32', 'float64', 'short', 'bool']
+
+    lib.write(symbol, df1)
+    lib.append(symbol, df2, metadata=metadata)
+
+    batch = lib.read_batch(symbols=[ReadRequest(symbol, as_of=0, query_builder=q3(QueryBuilder()), columns=columns3),
+                                    ReadRequest(symbol, query_builder=q1(QueryBuilder()), columns=columns1),
+                                    ReadRequest(symbol, query_builder=q2(QueryBuilder()), columns=columns2),
+                                    ReadRequest(symbol, query_builder=q3(QueryBuilder()), columns=columns_one_1),
+                                    ReadRequest(symbol, query_builder=q2(QueryBuilder()), columns=columns_one_2, as_of=0),
+                                    ReadRequest(symbol, query_builder=q1(QueryBuilder()), columns=columns_one_3, as_of=0),
+                                    ReadRequest(symbol, query_builder=q1(QueryBuilder()), columns=[], as_of=0)
+                                    ])
+
+    print(q3(df_all)[columns3])
+
+    df_filtered = q3(df1)[columns3]
+    assert_frame_equal_rebuild_index_first(df_filtered, batch[0].data)
+    assert batch[0].metadata is None
+    df_filtered = q1(df_all)[columns1]
+    assert_frame_equal_rebuild_index_first(df_filtered, batch[1].data)
+    assert metadata == batch[1].metadata
+    df_filtered = q2(df_all)[columns2]
+    assert_frame_equal_rebuild_index_first(df_filtered, batch[2].data)
+    assert metadata == batch[2].metadata
+    df_filtered = q3(df_all)[columns_one_1]
+    assert_frame_equal_rebuild_index_first(df_filtered, batch[3].data)
+    assert metadata == batch[3].metadata
+    df_filtered = q2(df1)[columns_one_2]
+    assert_frame_equal_rebuild_index_first(df_filtered, batch[4].data)
+    assert metadata == batch[3].metadata
+    df_filtered = q1(df1)[columns_one_3]
+    assert_frame_equal_rebuild_index_first(df_filtered, batch[5].data)
+    assert metadata == batch[3].metadata
+
+    # Assert_frame_equal does not deal well with indexes coparizon when inferred_type is different
+    dfg : pd.DataFrame = batch[6].data
+    assert df1[[]].columns.to_list() == dfg.columns.tolist()
+    assert df1[[]].shape[0] == dfg.shape[0]
+    assert df1.index.to_list() == dfg.index.to_list()
 
