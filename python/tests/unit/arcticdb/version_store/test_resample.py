@@ -658,7 +658,16 @@ class TestResamplingOrigin:
     # Timestamps: pre start, between start and end, post end
     @pytest.mark.parametrize(
         "origin",
-        ["start", "start_day", "end", "end_day", "epoch", pd.Timestamp("2024-01-01"), pd.Timestamp("2025-01-01 15:00:00"), pd.Timestamp("2025-01-03 15:00:00")]
+        [
+            "start",
+            "start_day",
+            pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+            pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+            "epoch",
+            pd.Timestamp("2024-01-01"),
+            pd.Timestamp("2025-01-01 15:00:00"),
+            pd.Timestamp("2025-01-03 15:00:00")
+        ]
     )
     def test_origin(self, lmdb_version_store_v1, closed, origin, label):
         lib = lmdb_version_store_v1
@@ -681,11 +690,16 @@ class TestResamplingOrigin:
             label=label
         )
 
-    @pytest.mark.parametrize("origin", ["start", "start_day", "end", "end_day"])
+    @pytest.mark.parametrize("origin", [
+        "start",
+        "start_day",
+        pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+        pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported"))
+    ])
     @pytest.mark.parametrize("date_range", [
-        (pd.Timestamp("2025-01-01 10:00:00"), pd.Timestamp("2025-01-02 12:00:00")), # start and end are multiples
-        (pd.Timestamp("2025-01-01 10:00:00"), pd.Timestamp("2025-01-02 12:00:03")), # start is multiple
-        (pd.Timestamp("2025-01-01 10:00:03"), pd.Timestamp("2025-01-02 12:00:00")) # end is multiple
+        (pd.Timestamp("2025-01-01 10:00:00"), pd.Timestamp("2025-01-02 12:00:00")), # start and end are multiples of rule
+        (pd.Timestamp("2025-01-01 10:00:00"), pd.Timestamp("2025-01-02 12:00:03")), # start is multiple of rule
+        (pd.Timestamp("2025-01-01 10:00:03"), pd.Timestamp("2025-01-02 12:00:00")) # end is multiple of rule
     ])
     def test_origin_is_multiple_of_freq(self, lmdb_version_store_v1, closed, origin, label, date_range):
         lib = lmdb_version_store_v1
@@ -706,7 +720,13 @@ class TestResamplingOrigin:
             label=label
         )
 
-    @pytest.mark.parametrize("origin", ["start", "start_day", "end", "end_day", "epoch"])
+    @pytest.mark.parametrize("origin", [
+        "start",
+        "start_day",
+        pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+        pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+        "epoch"
+    ])
     def test_pre_epoch_data(self, lmdb_version_store_v1, closed, origin, label):
         lib = lmdb_version_store_v1
         sym = "test_origin_special_values"
@@ -727,7 +747,12 @@ class TestResamplingOrigin:
             label=label
         )
 
-    @pytest.mark.parametrize("origin", ["start", "start_day", "end", "end_day"])
+    @pytest.mark.parametrize("origin", [
+        "start",
+        "start_day",
+        pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+        pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+    ])
     @pytest.mark.parametrize("date_range",
         list(itertools.product(
             [pd.Timestamp("2024-01-01") - pd.Timedelta(1), pd.Timestamp("2024-01-01") - pd.Timedelta(1)],
@@ -752,7 +777,12 @@ class TestResamplingOrigin:
             label=label
         )
 
-    @pytest.mark.parametrize("origin", ["start_day", "end_day", "start", "end"])
+    @pytest.mark.parametrize("origin", [
+        "start_day",
+        "start",
+        pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+        pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported"))
+    ])
     def test_origin_start_throws_with_daterange(self, lmdb_version_store_v1, origin, label, closed):
         lib = lmdb_version_store_v1
         sym = "test_origin_start_throws_with_daterange"
@@ -787,10 +817,19 @@ class TestResamplingOrigin:
             date_range=(pd.Timestamp("2025-01-02 00:00:00"), pd.Timestamp("2025-01-03 00:00:00"))
         )
 
-
+@pytest.mark.skipif(PANDAS_VERSION < Version("1.1.0"), reason="Pandas < 1.1.0 do not have offset param")
 @pytest.mark.parametrize("closed", ["left", "right"])
 @pytest.mark.parametrize("label", ["left", "right"])
-@pytest.mark.parametrize("origin",["start", "start_day", "end", "end_day", "epoch", pd.Timestamp("2024-01-01"), pd.Timestamp("2025-01-01 15:00:00"), pd.Timestamp("2025-01-03 15:00:00")])
+@pytest.mark.parametrize("origin",[
+    "start",
+    "start_day",
+    pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+    pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+    "epoch",
+    pd.Timestamp("2024-01-01"),
+    pd.Timestamp("2025-01-01 15:00:00"),
+    pd.Timestamp("2025-01-03 15:00:00")
+])
 @pytest.mark.parametrize("offset", ['10s', '13s', '2min'])
 def test_origin_offset_combined(lmdb_version_store_v1, closed, origin, label, offset):
     lib = lmdb_version_store_v1
