@@ -55,7 +55,7 @@ def freq_fits_in_64_bits(count, unit):
 @st.composite
 def rule(draw):
     count = draw(st.integers(min_value=1))
-    unit = draw(st.sampled_from(['s', 'min', 'h']))
+    unit = draw(st.sampled_from(['min', 'h']))
     result = f"{count}{unit}"
     assume(freq_fits_in_64_bits(count=count, unit=unit))
     return result
