@@ -15,8 +15,8 @@ import pandas as pd
 import arcticdb as adb
 from pympler import muppy, summary
 
-from python.arcticdb.util.test import get_sample_dataframe
-from python.arcticdb.version_store._store import NativeVersionStore
+from arcticdb.util.test import get_sample_dataframe
+from arcticdb.version_store._store import NativeVersionStore
 
 
 def get_process_by_id(id: int | None) -> psutil.Process:
@@ -141,6 +141,8 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
 
     df = get_sample_dataframe(size=1000000)
     df = grow_exp(df, 5)
+
+    l
 
     symbol = "test"
     lib.write(symbol, df)
