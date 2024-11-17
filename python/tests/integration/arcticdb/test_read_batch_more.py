@@ -24,7 +24,7 @@ from arcticdb.util.test import (assert_frame_equal,
                                 dataframe_filter_with_datetime_index
                                 )
 
-from python.arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb.util._versions import IS_PANDAS_TWO
 
 def dataframe_concat_sort(*df_args : pd.DataFrame) -> pd.DataFrame:
     """
