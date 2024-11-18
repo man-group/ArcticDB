@@ -38,6 +38,7 @@ from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
+from arcticdb.arctic import Arctic
 from .util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -281,7 +282,7 @@ def mem_storage() -> Iterator[InMemoryStorageFixture]:
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
     ],
 )
-def arctic_client(request, encoding_version):
+def arctic_client(request, encoding_version) -> Arctic:
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
     ac = storage_fixture.create_arctic(encoding_version=encoding_version)
     assert not ac.list_libraries()
@@ -298,7 +299,7 @@ def arctic_client(request, encoding_version):
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
     ],
 )
-def arctic_client_no_lmdb(request, encoding_version):
+def arctic_client_no_lmdb(request, encoding_version) -> Arctic:
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
     ac = storage_fixture.create_arctic(encoding_version=encoding_version)
     assert not ac.list_libraries()
@@ -306,7 +307,7 @@ def arctic_client_no_lmdb(request, encoding_version):
 
 
 @pytest.fixture
-def arctic_library(arctic_client, lib_name):
+def arctic_library(arctic_client, lib_name) -> Arctic:
     return arctic_client.create_library(lib_name)
 
 
@@ -318,7 +319,7 @@ def arctic_library(arctic_client, lib_name):
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
     ],
 )
-def basic_arctic_client(request, encoding_version):
+def basic_arctic_client(request, encoding_version) -> Arctic:
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
     ac = storage_fixture.create_arctic(encoding_version=encoding_version)
     assert not ac.list_libraries()
@@ -326,7 +327,7 @@ def basic_arctic_client(request, encoding_version):
 
 
 @pytest.fixture
-def basic_arctic_library(basic_arctic_client, lib_name):
+def basic_arctic_library(basic_arctic_client, lib_name) -> Arctic:
     return basic_arctic_client.create_library(lib_name)
 
 
@@ -554,17 +555,17 @@ def azure_version_store_dynamic_schema(azure_store_factory):
 
 
 @pytest.fixture
-def lmdb_version_store_string_coercion(version_store_factory):
+def lmdb_version_store_string_coercion(version_store_factory) ->NativeVersionStore:
     return version_store_factory()
 
 
 @pytest.fixture
-def lmdb_version_store_v1(version_store_factory):
+def lmdb_version_store_v1(version_store_factory) -> NativeVersionStore:
     return version_store_factory(dynamic_strings=True)
 
 
 @pytest.fixture
-def lmdb_version_store_v2(version_store_factory, lib_name):
+def lmdb_version_store_v2(version_store_factory, lib_name) -> NativeVersionStore:
     library_name = lib_name + "_v2"
     return version_store_factory(dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name)
 
@@ -575,31 +576,31 @@ def lmdb_version_store(request):
 
 
 @pytest.fixture
-def lmdb_version_store_prune_previous(version_store_factory):
+def lmdb_version_store_prune_previous(version_store_factory) -> NativeVersionStore:
     return version_store_factory(dynamic_strings=True, prune_previous_version=True, use_tombstones=True)
 
 
 @pytest.fixture
-def lmdb_version_store_big_map(version_store_factory):
+def lmdb_version_store_big_map(version_store_factory) -> NativeVersionStore:
     return version_store_factory(lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
-def lmdb_version_store_very_big_map(version_store_factory):
+def lmdb_version_store_very_big_map(version_store_factory) -> NativeVersionStore:
     return version_store_factory(lmdb_config={"map_size": 2**35})
 
 @pytest.fixture
-def lmdb_version_store_column_buckets(version_store_factory):
+def lmdb_version_store_column_buckets(version_store_factory) -> NativeVersionStore:
     return version_store_factory(dynamic_schema=True, column_group_size=3, segment_row_size=2, bucketize_dynamic=True)
 
 
 @pytest.fixture
-def lmdb_version_store_dynamic_schema_v1(version_store_factory, lib_name):
+def lmdb_version_store_dynamic_schema_v1(version_store_factory, lib_name) -> NativeVersionStore:
     return version_store_factory(dynamic_schema=True, dynamic_strings=True)
 
 
 @pytest.fixture
-def lmdb_version_store_dynamic_schema_v2(version_store_factory, lib_name):
+def lmdb_version_store_dynamic_schema_v2(version_store_factory, lib_name) -> NativeVersionStore:
     library_name = lib_name + "_v2"
     return version_store_factory(
         dynamic_schema=True, dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name
@@ -619,13 +620,13 @@ def lmdb_version_store_dynamic_schema(
 
 
 @pytest.fixture
-def lmdb_version_store_empty_types_v1(version_store_factory, lib_name):
+def lmdb_version_store_empty_types_v1(version_store_factory, lib_name) -> NativeVersionStore:
     library_name = lib_name + "_v1"
     return version_store_factory(dynamic_strings=True, empty_types=True, name=library_name)
 
 
 @pytest.fixture
-def lmdb_version_store_empty_types_v2(version_store_factory, lib_name):
+def lmdb_version_store_empty_types_v2(version_store_factory, lib_name) -> NativeVersionStore:
     library_name = lib_name + "_v2"
     return version_store_factory(
         dynamic_strings=True, empty_types=True, encoding_version=int(EncodingVersion.V2), name=library_name
@@ -633,13 +634,13 @@ def lmdb_version_store_empty_types_v2(version_store_factory, lib_name):
 
 
 @pytest.fixture
-def lmdb_version_store_empty_types_dynamic_schema_v1(version_store_factory, lib_name):
+def lmdb_version_store_empty_types_dynamic_schema_v1(version_store_factory, lib_name) -> NativeVersionStore:
     library_name = lib_name + "_v1"
     return version_store_factory(dynamic_strings=True, empty_types=True, dynamic_schema=True, name=library_name)
 
 
 @pytest.fixture
-def lmdb_version_store_empty_types_dynamic_schema_v2(version_store_factory, lib_name):
+def lmdb_version_store_empty_types_dynamic_schema_v2(version_store_factory, lib_name) -> NativeVersionStore:
     library_name = lib_name + "_v2"
     return version_store_factory(
         dynamic_strings=True,
@@ -651,14 +652,14 @@ def lmdb_version_store_empty_types_dynamic_schema_v2(version_store_factory, lib_
 
 
 @pytest.fixture
-def lmdb_version_store_delayed_deletes_v1(version_store_factory):
+def lmdb_version_store_delayed_deletes_v1(version_store_factory) -> NativeVersionStore:
     return version_store_factory(
         delayed_deletes=True, dynamic_strings=True, empty_types=True, prune_previous_version=True
     )
 
 
 @pytest.fixture
-def lmdb_version_store_delayed_deletes_v2(version_store_factory, lib_name):
+def lmdb_version_store_delayed_deletes_v2(version_store_factory, lib_name) -> NativeVersionStore:
     library_name = lib_name + "_v2"
     return version_store_factory(
         dynamic_strings=True,
@@ -670,52 +671,52 @@ def lmdb_version_store_delayed_deletes_v2(version_store_factory, lib_name):
 
 
 @pytest.fixture
-def lmdb_version_store_tombstones_no_symbol_list(version_store_factory):
+def lmdb_version_store_tombstones_no_symbol_list(version_store_factory) -> NativeVersionStore:
     return version_store_factory(use_tombstones=True, dynamic_schema=True, symbol_list=False, dynamic_strings=True)
 
 
 @pytest.fixture
-def lmdb_version_store_allows_pickling(version_store_factory, lib_name):
+def lmdb_version_store_allows_pickling(version_store_factory, lib_name) -> NativeVersionStore:
     return version_store_factory(use_norm_failure_handler_known_types=True, dynamic_strings=True)
 
 
 @pytest.fixture
-def lmdb_version_store_no_symbol_list(version_store_factory):
+def lmdb_version_store_no_symbol_list(version_store_factory) -> NativeVersionStore:
     return version_store_factory(col_per_group=None, row_per_segment=None, symbol_list=False)
 
 
 @pytest.fixture
-def lmdb_version_store_tombstone_and_pruning(version_store_factory):
+def lmdb_version_store_tombstone_and_pruning(version_store_factory) -> NativeVersionStore:
     return version_store_factory(use_tombstones=True, prune_previous_version=True)
 
 
 @pytest.fixture
-def lmdb_version_store_tombstone(version_store_factory):
+def lmdb_version_store_tombstone(version_store_factory) -> NativeVersionStore:
     return version_store_factory(use_tombstones=True)
 
 
 @pytest.fixture
-def lmdb_version_store_tombstone_and_sync_passive(version_store_factory):
+def lmdb_version_store_tombstone_and_sync_passive(version_store_factory) -> NativeVersionStore:
     return version_store_factory(use_tombstones=True, sync_passive=True)
 
 
 @pytest.fixture
-def lmdb_version_store_ignore_order(version_store_factory):
+def lmdb_version_store_ignore_order(version_store_factory) -> NativeVersionStore:
     return version_store_factory(ignore_sort_order=True)
 
 
 @pytest.fixture
-def lmdb_version_store_small_segment(version_store_factory):
+def lmdb_version_store_small_segment(version_store_factory) -> NativeVersionStore:
     return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
-def lmdb_version_store_tiny_segment(version_store_factory):
+def lmdb_version_store_tiny_segment(version_store_factory) -> NativeVersionStore:
     return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
-def lmdb_version_store_tiny_segment_dynamic(version_store_factory):
+def lmdb_version_store_tiny_segment_dynamic(version_store_factory) -> NativeVersionStore:
     return version_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
 
 
