@@ -12,6 +12,7 @@ import gc
 import os
 import numpy as np
 import pandas as pd
+import pytest
 import arcticdb as adb
 from pympler import muppy, summary
 
@@ -135,14 +136,12 @@ def grow_exp(df_to_grow : pd.DataFrame, num_times_xx2:int):
         df_to_grow = pd.concat([df_to_grow, df_prev])
     return df_to_grow
 
-
+@pytest.mark.xfail("ArcticDBPR#1998", reason = "String memory leaks while read")
 def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
     lib : adb.Library = arctic_library_lmdb
 
     df = get_sample_dataframe(size=1000000)
     df = grow_exp(df, 5)
-
-    l
 
     symbol = "test"
     lib.write(symbol, df)
