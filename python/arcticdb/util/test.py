@@ -8,9 +8,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import os
 from contextlib import contextmanager
-from typing import Mapping, Any, Optional, Iterable, NamedTuple, List, AnyStr
+from typing import Mapping, Any, Optional, Iterable, NamedTuple, List, AnyStr, Sequence
 import numpy as np
 import pandas as pd
+from pandas.core.series import Series
+from pandas import Index
+from pandas._typing import Scalar
 import datetime as dt
 import string
 import random
@@ -34,7 +37,6 @@ from arcticdb.config import _DEFAULT_ENVS_PATH
 from arcticdb_ext import set_config_int, get_config_int, unset_config_int
 
 from arcticdb import log
-
 
 def create_df(start=0, columns=1) -> pd.DataFrame:
     data = {}
@@ -153,6 +155,26 @@ def dataframe_simulate_arcticdb_update_static(existing_df: pd.DataFrame, update_
     result_df = pd.concat(chunks)
     return result_df
 
+def dataframe_single_column_string(length=1000, column_label='string_short', seed=0, string_len=1):
+    """
+        creates a dataframe with one column, which label can be changed, containing string
+        with specified length. Useful for combining this dataframe with another dataframe
+    """
+    np.random.seed(seed)
+    return pd.DataFrame({ column_label : [random_string(string_len) for _ in range(length)] })
+
+def dataframe_filter_with_datetime_index(df: pd.DataFrame, start_timestamp:Scalar, end_timestamp:Scalar, inclusive='both') -> pd.DataFrame:
+    """
+        Filters dataframe which has datetime index, and selects dates from start till end,
+        where inclusive can be one of (both,left,right,neither)
+        start and end can be pandas.Timeframe, datetime or string datetime
+    """
+
+    return df[
+        df.index.to_series()
+        .between(start_timestamp, end_timestamp, inclusive='both')
+        ]
+
 def maybe_not_check_freq(f):
     """Ignore frequency when pandas is newer as starts to check frequency which it did not previously do."""
 
@@ -178,9 +200,20 @@ def maybe_not_check_freq(f):
 
     return wrapper
 
-
 assert_frame_equal = maybe_not_check_freq(pd.testing.assert_frame_equal)
 assert_series_equal = maybe_not_check_freq(pd.testing.assert_series_equal)
+
+def assert_frame_equal_rebuild_index_first(expected : pd.DataFrame, actual : pd.DataFrame) -> None:
+    """
+        Use for dataframes that have index row range and you
+        obtain data from arctic with QueryBuilder.
+
+        First will rebuild index for dataframes to assure we
+        have same index in both frames when row range index is used
+    """
+    expected.reset_index(inplace = True, drop = True)
+    actual.reset_index(inplace = True, drop = True)
+    assert_frame_equal(left=expected, right=actual)
 
 def random_string(length: int):
     return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
