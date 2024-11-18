@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 from arcticdb import DataError, ErrorCode
+from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.library import ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 import pytest
@@ -24,7 +25,6 @@ from arcticdb.util.test import (assert_frame_equal,
                                 dataframe_filter_with_datetime_index
                                 )
 
-from arcticdb.util._versions import IS_PANDAS_TWO
 
 def dataframe_concat_sort(*df_args : pd.DataFrame) -> pd.DataFrame:
     """
@@ -343,7 +343,7 @@ def test_read_batch_multiple_wrong_things_at_once(arctic_library):
     lib.delete(symbol1, versions=[1])
 
     batch = lib.read_batch(symbols=[symbol2,
-                                ReadRequest(symbol1, as_of=0),
+                                ReadRequest(symbol1, as_of=1),
                                 ReadRequest("nonExisting"),
                                 ReadRequest(symbol1),
                                 ReadRequest(symbol1, query_builder=q_wrong),
