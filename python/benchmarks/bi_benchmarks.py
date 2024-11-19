@@ -12,6 +12,26 @@ from arcticdb.version_store.processing import QueryBuilder
 
 from .common import *
 
+
+def get_query_groupby_city_count_all(q):
+    return q.groupby("City").agg({"Keyword": "count"})
+
+
+def get_query_groupby_city_count_isin_filter(q):
+    return q[q["Keyword"].isin(["bimbo", "twat", "faggot"])].groupby("City").agg({"Keyword": "count"})
+
+
+def get_query_groupby_city_count_filter_two_aggregations(q):
+    return q[q["Keyword"] == "faggot" ].groupby("City").agg({"Keyword": "count", "Number of Records" : "sum"})  
+
+def assert_frame_equal(pandas_df:pd.DataFrame, arctic_df:pd.DataFrame):
+    arctic_df.sort_index(inplace=True)
+    pd.testing.assert_frame_equal(pandas_df,
+                                    arctic_df, 
+                                    check_column_type=False, 
+                                    check_dtype=False)
+
+
 class BIBenchmarks:
     '''
         Sample test benchmark for using one opensource BI CSV source.
@@ -68,43 +88,35 @@ class BIBenchmarks:
                 for i in range(1, (BIBenchmarks.params[-1])):
                     dfcum = pd.concat([dfcum, self.df])            
                 _df = dfcum
+                print("DF for iterration xSize original ready: ", num)
+                _df.info(verbose=True,memory_usage='deep')
             self.lib.write(f"{self.symbol}{num}", _df)
 
         print("If pandas query produces different dataframe than arctic one stop tests!")
         print("This will mean query problem is there most likely")
 
-        print("Pre-check correctness for query_groupaby_city_count_all")
+        print("Pre-check correctness for query_groupby_city_count_all")
         _df = self.df.copy(deep=True)
-        arctic_df = self.time_query_groupaby_city_count_all(BIBenchmarks.params[0])
-        _df = self.get_query_groupaby_city_count_all(_df)
-        arctic_df.sort_index(inplace=True)
-        self.assert_frame_equal(_df, arctic_df)
+        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])
+        _df = get_query_groupby_city_count_all(_df)
+        assert_frame_equal(_df, arctic_df)
 
-        print("Pre-check correctness for query_groupaby_city_count_isin_filter")
+        print("Pre-check correctness for query_groupby_city_count_isin_filter")
         _df = self.df.copy(deep=True)
-        arctic_df = self.time_query_groupaby_city_count_isin_filter(BIBenchmarks.params[0])
-        _df = self.get_query_groupaby_city_count_isin_filter(_df)
-        arctic_df.sort_index(inplace=True)
-        self.assert_frame_equal(_df, arctic_df)
+        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])
+        _df = get_query_groupby_city_count_isin_filter(_df)
+        assert_frame_equal(_df, arctic_df)
 
-        print("Pre-check correctness for query_groupaby_city_count_filter_two_aggregations")
+        print("Pre-check correctness for query_groupby_city_count_filter_two_aggregations")
         _df = self.df.copy(deep=True)
-        arctic_df = self.time_query_groupaby_city_count_filter_two_aggregations(BIBenchmarks.params[0])
-        _df = self.get_query_groupaby_city_count_filter_two_aggregations(_df)
-        arctic_df.sort_index(inplace=True)
-        self.assert_frame_equal(_df, arctic_df)
+        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])
+        _df = get_query_groupby_city_count_filter_two_aggregations(_df)
+        assert_frame_equal(_df, arctic_df)
 
         print("All pre-checks completed SUCCESSFULLY")
 
         del self.ac
     
-    def assert_frame_equal(self, pandas_df:pd.DataFrame, arctic_df:pd.DataFrame):
-        arctic_df.sort_index(inplace=True)
-        pd.testing.assert_frame_equal(pandas_df,
-                                      arctic_df, 
-                                      check_column_type=False, 
-                                      check_dtype=False)
-
     def setup(self, num_rows):
         self.ac = Arctic(f"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB")
         self.lib = self.ac.get_library(self.lib_name)
@@ -114,36 +126,43 @@ class BIBenchmarks:
 
     def time_query_readall(self, times_bigger):
         self.lib.read(f"{self.symbol}{times_bigger}")
-
-    def get_query_groupaby_city_count_all(self, q):
-        return q.groupby("City").agg({"Keyword": "count"})
-               
-    def time_query_groupaby_city_count_all(self, times_bigger) -> pd.DataFrame:
-        q = QueryBuilder()
-        q = self.get_query_groupaby_city_count_all( q)
-        df = self.lib.read(f"{self.symbol}{times_bigger}", query_builder=q)
-        return df.data
-
-    def get_query_groupaby_city_count_isin_filter(self, q):
-        return q[q["Keyword"].isin(["bimbo", "twat", "faggot"])].groupby("City").agg({"Keyword": "count"})
-
-    def time_query_groupaby_city_count_isin_filter(self, times_bigger) -> pd.DataFrame:
-        q = QueryBuilder()
-        q = self.get_query_groupaby_city_count_isin_filter(q)   
-        df = self.lib.read(f"{self.symbol}{times_bigger}", query_builder=q)
-        return df.data
-
-    def get_query_groupaby_city_count_filter_two_aggregations(self, q):
-        return q[q["Keyword"] == "faggot" ].groupby("City").agg({"Keyword": "count", "Number of Records" : "sum"})  
     
-    def time_query_groupaby_city_count_filter_two_aggregations(self, times_bigger) -> pd.DataFrame:
+    def peakmem_query_readall(self, times_bigger):
+        self.lib.read(f"{self.symbol}{times_bigger}")
+
+    def query_groupby_city_count_all(self, times_bigger) -> pd.DataFrame:
         q = QueryBuilder()
-        q = self.get_query_groupaby_city_count_filter_two_aggregations(q) 
+        q = get_query_groupby_city_count_all( q)
         df = self.lib.read(f"{self.symbol}{times_bigger}", query_builder=q)
         return df.data
 
-    def peakmem_query_groupaby_city_count_filter_two_aggregations(self, times_bigger):
+    def time_query_groupby_city_count_all(self, times_bigger) -> pd.DataFrame:
+        return self.query_groupby_city_count_all(times_bigger)
+
+    def peakmem_query_groupby_city_count_all(self, times_bigger) -> pd.DataFrame:
+        return self.query_groupby_city_count_all(times_bigger)
+    
+    def query_groupby_city_count_isin_filter(self, times_bigger) -> pd.DataFrame:
         q = QueryBuilder()
-        q = self.get_query_groupaby_city_count_filter_two_aggregations(q) 
+        q = get_query_groupby_city_count_isin_filter(q)   
         df = self.lib.read(f"{self.symbol}{times_bigger}", query_builder=q)
+        return df.data
+
+    def time_query_groupby_city_count_isin_filter(self, times_bigger) -> pd.DataFrame:
+        return self.query_groupby_city_count_isin_filter(times_bigger)
+
+    def peakmem_query_groupby_city_count_isin_filter(self, times_bigger) -> pd.DataFrame:
+        return self.query_groupby_city_count_isin_filter(times_bigger)
+
+    def query_groupby_city_count_filter_two_aggregations(self, times_bigger) -> pd.DataFrame:
+        q = QueryBuilder()
+        q = get_query_groupby_city_count_filter_two_aggregations(q) 
+        df = self.lib.read(f"{self.symbol}{times_bigger}", query_builder=q)
+        return df.data
+
+    def time_query_groupby_city_count_filter_two_aggregations(self, times_bigger) -> pd.DataFrame:
+        return self.query_groupby_city_count_filter_two_aggregations(times_bigger)
+
+    def peakmem_query_groupby_city_count_filter_two_aggregations(self, times_bigger):
+        return self.query_groupby_city_count_filter_two_aggregations(times_bigger)
         
