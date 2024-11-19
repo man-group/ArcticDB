@@ -275,22 +275,22 @@ set(arcticdb_srcs
         storage/library.hpp
         storage/library_index.hpp
         storage/library_manager.hpp
-        storage/storage_mock_client.hpp
-        storage/azure/azure_client_wrapper.hpp
-        storage/azure/azure_mock_client.hpp
-        storage/azure/azure_real_client.hpp
+        storage/mock/storage_mock_client.hpp
+        storage/azure/azure_client_interface.hpp
+        storage/mock/azure_mock_client.hpp
+        storage/azure/azure_client_impl.hpp
         storage/azure/azure_storage.hpp
         storage/lmdb/lmdb.hpp
-        storage/lmdb/lmdb_client_wrapper.hpp
-        storage/lmdb/lmdb_mock_client.hpp
-        storage/lmdb/lmdb_real_client.hpp
+        storage/lmdb/lmdb_client_interface.hpp
+        storage/mock/lmdb_mock_client.hpp
+        storage/lmdb/lmdb_client_impl.hpp
         storage/lmdb/lmdb_storage.hpp
         storage/memory/memory_storage.hpp
         storage/memory/memory_storage.cpp
         storage/mongo/mongo_client.hpp
         storage/mongo/mongo_instance.hpp
-        storage/mongo/mongo_client_wrapper.hpp
-        storage/mongo/mongo_mock_client.hpp
+        storage/mongo/mongo_client_interface.hpp
+        storage/mock/mongo_mock_client.hpp
         storage/mongo/mongo_storage.hpp
         storage/object_store_utils.hpp
         storage/file/file_store.hpp
@@ -298,7 +298,7 @@ set(arcticdb_srcs
         storage/file/file_store.hpp
         storage/single_file_storage.hpp
         storage/s3/nfs_backed_storage.hpp
-        storage/s3/s3_client_wrapper.hpp
+        storage/s3/s3_client_interface.hpp
         storage/s3/s3_storage_tool.hpp
         storage/storage_factory.hpp
         storage/storage_options.hpp
@@ -463,21 +463,21 @@ set(arcticdb_srcs
         storage/failure_simulation.cpp
         storage/library_manager.cpp
         storage/azure/azure_storage.cpp
-        storage/azure/azure_real_client.cpp
-        storage/azure/azure_mock_client.cpp
-        storage/lmdb/lmdb_mock_client.cpp
-        storage/lmdb/lmdb_real_client.cpp
+        storage/azure/azure_client_impl.cpp
+        storage/mock/azure_mock_client.cpp
+        storage/mock/lmdb_mock_client.cpp
+        storage/lmdb/lmdb_client_impl.cpp
         storage/lmdb/lmdb_storage.cpp
         storage/file/mapped_file_storage.cpp
         storage/mongo/mongo_client.cpp
         storage/mongo/mongo_instance.cpp
-        storage/mongo/mongo_mock_client.cpp
+        storage/mock/mongo_mock_client.cpp
         storage/mongo/mongo_storage.cpp
         storage/s3/nfs_backed_storage.cpp
         storage/s3/ec2_utils.cpp
         storage/s3/s3_api.cpp
-        storage/s3/s3_real_client.cpp
-        storage/s3/s3_mock_client.cpp
+        storage/s3/s3_client_impl.cpp
+        storage/mock/s3_mock_client.cpp
         storage/s3/s3_storage.cpp
         storage/s3/s3_storage_tool.cpp
         storage/storage_factory.cpp

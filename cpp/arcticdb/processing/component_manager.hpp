@@ -54,6 +54,7 @@ public:
     std::vector<EntityId> add_entities(Args... args) {
         std::vector<EntityId> ids;
         size_t entity_count{0};
+        ARCTICDB_SAMPLE_DEFAULT(AddEntities)
         std::unique_lock lock(mtx_);
         ([&]{
             if (entity_count == 0) {
@@ -79,6 +80,7 @@ public:
 
     template<typename T>
     void replace_entities(const std::vector<EntityId>& ids, T value) {
+        ARCTICDB_SAMPLE_DEFAULT(ReplaceEntities)
         std::unique_lock lock(mtx_);
         for (auto id: ids) {
             registry_.replace<T>(id, value);
@@ -90,6 +92,7 @@ public:
 
     template<typename T>
     void replace_entities(const std::vector<EntityId>& ids, const std::vector<T>& values) {
+        ARCTICDB_SAMPLE_DEFAULT(ReplaceEntityValues)
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(ids.size() == values.size(), "Received vectors of differing lengths in ComponentManager::replace_entities");
         std::unique_lock lock(mtx_);
         for (auto [idx, id]: folly::enumerate(ids)) {
@@ -104,6 +107,7 @@ public:
     template<class... Args>
     std::tuple<std::vector<Args>...> get_entities(const std::vector<EntityId>& ids, const bool decrement_fetch_count=true) {
         std::vector<std::tuple<Args...>> tuple_res;
+        ARCTICDB_SAMPLE_DEFAULT(GetEntities)
         tuple_res.reserve(ids.size());
         {
             std::shared_lock lock(mtx_);

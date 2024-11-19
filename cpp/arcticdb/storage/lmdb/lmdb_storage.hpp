@@ -11,7 +11,7 @@
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/storage/lmdb/lmdb.hpp>
 #include <arcticdb/util/composite.hpp>
-#include <arcticdb/storage/lmdb/lmdb_client_wrapper.hpp>
+#include <arcticdb/storage/lmdb/lmdb_client_interface.hpp>
 
 #include <filesystem>
 

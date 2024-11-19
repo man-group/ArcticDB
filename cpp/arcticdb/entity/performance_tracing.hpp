@@ -13,7 +13,7 @@
 
 #include <memory>
 
-//#define ARCTICDB_LOG_PERFORMANCE
+#define ARCTICDB_LOG_PERFORMANCE
 
 #define ARCTICDB_RUNTIME_SAMPLE(name, flags) \
 static bool _scoped_timer_active_ = ConfigsMap::instance()->get_int("Logging.timings", 0) == 1 || ConfigsMap::instance()->get_int("Logging.ALL", 0) == 1; \

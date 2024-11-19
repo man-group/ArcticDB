@@ -9,7 +9,7 @@
 #include <fmt/format.h>
 
 #include <arcticdb/storage/storage.hpp>
-#include <arcticdb/storage/mongo/mongo_client_wrapper.hpp>
+#include <arcticdb/storage/mongo/mongo_client_interface.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 
 namespace arcticdb::storage::mongo {

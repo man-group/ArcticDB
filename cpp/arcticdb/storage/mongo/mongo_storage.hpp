@@ -9,7 +9,7 @@
 
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
-#include <arcticdb/storage/mongo/mongo_client_wrapper.hpp>
+#include <arcticdb/storage/mongo/mongo_client_interface.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/pb_util.hpp>

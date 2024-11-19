@@ -112,7 +112,7 @@ class Library {
         storages_->remove(std::move(ks), opts);
     }
 
-    std::optional<std::shared_ptr<SingleFileStorage>> get_single_file_storage() const {
+    [[nodiscard]] std::optional<std::shared_ptr<SingleFileStorage>> get_single_file_storage() const {
         return storages_->get_single_file_storage();
     }
 
@@ -128,7 +128,7 @@ class Library {
         return storages_->key_exists(key);
     }
 
-    bool is_path_valid(const std::string_view path) const {
+    [[nodiscard]] bool is_path_valid(const std::string_view path) const {
         return storages_->is_path_valid(path);
     }
 
@@ -145,7 +145,7 @@ class Library {
     }
 
     /** Calls VariantStorage::do_key_path on the primary storage */
-    std::string key_path(const VariantKey& key) const {
+    [[nodiscard]] std::string key_path(const VariantKey& key) const {
         return storages_->key_path(key);
     }
 
@@ -153,13 +153,13 @@ class Library {
         storages_->move_storage(key_type, horizon, storage_index);
     }
 
-    bool supports_prefix_matching() const { return storages_->supports_prefix_matching(); }
+    [[nodiscard]] bool supports_prefix_matching() const { return storages_->supports_prefix_matching(); }
 
-    const LibraryPath &library_path() const { return library_path_; }
+    [[nodiscard]] const LibraryPath &library_path() const { return library_path_; }
 
-    OpenMode open_mode() const { return storages_->open_mode(); }
+    [[nodiscard]] OpenMode open_mode() const { return storages_->open_mode(); }
 
-    const auto & config() const { return config_;}
+    [[nodiscard]] const auto & config() const { return config_;}
 
     void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) {
        StorageFailureSimulator::instance()->configure(cfg);

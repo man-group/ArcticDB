@@ -16,7 +16,7 @@
 #include <arcticdb/storage/mongo/mongo_instance.hpp>
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/storage/mongo/mongo_client.hpp>
-#include <arcticdb/storage/mongo/mongo_mock_client.hpp>
+#include "arcticdb/storage/mock/mongo_mock_client.hpp"
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/storage/storage.hpp>

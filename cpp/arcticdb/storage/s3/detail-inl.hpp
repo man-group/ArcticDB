@@ -10,7 +10,7 @@
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
-#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/s3/s3_client_interface.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
@@ -102,7 +102,7 @@ namespace s3 {
                 Composite<KeySegmentPair> &&kvs,
                 const std::string &root_folder,
                 const std::string &bucket_name,
-                S3ClientWrapper &s3_client,
+                S3ClientInterface &s3_client,
                 KeyBucketizer &&bucketizer) {
             ARCTICDB_SAMPLE(S3StorageWrite, 0)
             auto fmt_db = [](auto &&kv) { return kv.key_type(); };
@@ -134,7 +134,7 @@ namespace s3 {
                 Composite<KeySegmentPair> &&kvs,
                 const std::string &root_folder,
                 const std::string &bucket_name,
-                S3ClientWrapper &s3_client,
+                S3ClientInterface &s3_client,
                 KeyBucketizer &&bucketizer) {
             // s3 updates the key if it already exists. We skip the check for key not found to save a round-trip.
             do_write_impl(std::move(kvs), root_folder, bucket_name, s3_client, std::move(bucketizer));
@@ -145,7 +145,7 @@ namespace s3 {
                           const ReadVisitor &visitor,
                           const std::string &root_folder,
                           const std::string &bucket_name,
-                          const S3ClientWrapper &s3_client,
+                          const S3ClientInterface &s3_client,
                           KeyBucketizer &&bucketizer,
                           ReadKeyOpts opts) {
             ARCTICDB_SAMPLE(S3StorageRead, 0)
@@ -203,7 +203,7 @@ namespace s3 {
         void do_remove_impl(Composite<VariantKey> &&ks,
                             const std::string &root_folder,
                             const std::string &bucket_name,
-                            S3ClientWrapper &s3_client,
+                            S3ClientInterface &s3_client,
                             KeyBucketizer &&bucketizer) {
             ARCTICDB_SUBSAMPLE(S3StorageDeleteBatch, 0)
             auto fmt_db = [](auto &&k) { return variant_key_type(k); };
@@ -276,7 +276,7 @@ namespace s3 {
         const IterateTypePredicate &visitor,
         const std::string &root_folder,
         const std::string &bucket_name,
-        const S3ClientWrapper &s3_client,
+        const S3ClientInterface &s3_client,
         KeyBucketizer &&bucketizer,
         PrefixHandler &&prefix_handler = default_prefix_handler(),
         const std::string &prefix = std::string{}) {
@@ -347,7 +347,7 @@ namespace s3 {
                 const VariantKey &key,
                 const std::string &root_folder,
                 const std::string &bucket_name,
-                const S3ClientWrapper &s3_client,
+                const S3ClientInterface &s3_client,
                 KeyBucketizer &&b
         ) {
             auto key_type_dir = key_type_folder(root_folder, variant_key_type(key));

@@ -10,7 +10,7 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
-#include <arcticdb/storage/azure/azure_client_wrapper.hpp>
+#include <arcticdb/storage/azure/azure_client_interface.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>

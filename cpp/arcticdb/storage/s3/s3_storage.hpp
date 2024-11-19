@@ -14,7 +14,7 @@
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
-#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/s3/s3_client_interface.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
@@ -69,7 +69,7 @@ class S3Storage final : public Storage {
     const std::string& root_folder() const { return root_folder_; }
 
     std::shared_ptr<S3ApiInstance> s3_api_;
-    std::unique_ptr<S3ClientWrapper> s3_client_;
+    std::unique_ptr<S3ClientInterface> s3_client_;
     std::string root_folder_;
     std::string bucket_name_;
     std::string region_;
@@ -232,11 +232,12 @@ auto get_s3_config(const ConfigType& conf) {
         client_configuration.caFile = conf.ca_cert_path();
         client_configuration.caPath = conf.ca_cert_dir();
     }
-    client_configuration.maxConnections = conf.max_connections() == 0 ?
-            ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", 16) :
-            conf.max_connections();
+    //client_configuration.maxConnections = conf.max_connections() == 0 ?
+    //        ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", 16) :
+    //        conf.max_connections();
 
-
+    client_configuration.maxConnections = 10000;
+    log::storage().info("Setting S3 max connections");
     client_configuration.connectTimeoutMs = ConfigsMap::instance()->get_int("S3Storage.ConnectTimeoutMs",
                                                 conf.connect_timeout() == 0 ? 30000 : conf.connect_timeout());
     client_configuration.httpRequestTimeoutMs = ConfigsMap::instance()->get_int("S3Storage.HttpRequestTimeoutMs", 0);

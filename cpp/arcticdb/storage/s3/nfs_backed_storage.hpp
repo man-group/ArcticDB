@@ -19,7 +19,7 @@
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 
-#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/s3/s3_client_interface.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
 
 namespace arcticdb::storage::nfs_backed {
@@ -61,7 +61,7 @@ private:
     const std::string& region() const { return region_; }
 
     std::shared_ptr<s3::S3ApiInstance> s3_api_;
-    std::unique_ptr<storage::s3::S3ClientWrapper> s3_client_;
+    std::unique_ptr<storage::s3::S3ClientInterface> s3_client_;
     std::string root_folder_;
     std::string bucket_name_;
     std::string region_;

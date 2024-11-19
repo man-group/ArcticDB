@@ -9,7 +9,7 @@
 
 #include <aws/s3/S3Client.h>
 
-#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/s3/s3_client_interface.hpp>
 
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/pb_util.hpp>
@@ -25,11 +25,10 @@
 
 namespace arcticdb::storage::s3{
 
-// A real S3ClientWrapper around Aws::S3::Client, which executes actual requests to S3 storage.
-class RealS3Client : public S3ClientWrapper {
+class S3ClientImpl : public S3ClientInterface {
 public:
     template<typename ...Args>
-    RealS3Client(Args && ...args):s3_client(std::forward<Args>(args)...){};
+    S3ClientImpl(Args && ...args):s3_client(std::forward<Args>(args)...){};
 
     S3Result<std::monostate> head_object(const std::string& s3_object_name, const std::string& bucket_name) const override;
 
@@ -47,7 +46,7 @@ public:
     S3Result<ListObjectsOutput> list_objects(
             const std::string& prefix,
             const std::string& bucket_name,
-            const std::optional<std::string> continuation_token) const override;
+            const std::optional<std::string>& continuation_token) const override;
 private:
     Aws::S3::S3Client s3_client;
 };

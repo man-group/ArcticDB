@@ -15,76 +15,6 @@ namespace arcticdb::storage {
 
 using ReadVisitor = std::function<void(const VariantKey&, Segment &&)>;
 
-class DuplicateKeyException : public ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY> {
-public:
-    explicit DuplicateKeyException(std::string message) :
-        ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY>(message) { }
-
-    explicit DuplicateKeyException(VariantKey key) :
-        ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY>(std::string(variant_key_view(key))),
-        key_(std::move(key)) {}
-
-    [[nodiscard]] const VariantKey &key() const {
-        return key_;
-    }
-private:
-    VariantKey key_;
-};
-
-class NoDataFoundException : public ArcticCategorizedException<ErrorCategory::MISSING_DATA> {
-public:
-    explicit NoDataFoundException(VariantId key) :
-            ArcticCategorizedException<ErrorCategory::MISSING_DATA>(std::visit([](const auto &key) { return fmt::format("{}", key); }, key)),
-            key_(key){
-    }
-
-    explicit NoDataFoundException(const std::string& msg) :
-            ArcticCategorizedException<ErrorCategory::MISSING_DATA>(msg) {
-    }
-
-    explicit NoDataFoundException(const char* msg) :
-            ArcticCategorizedException<ErrorCategory::MISSING_DATA>(std::string(msg)) {
-    }
-
-    [[nodiscard]] const VariantId &key() const {
-        util::check(static_cast<bool>(key_), "Key not found");
-        return *key_;
-    }
-private:
-    std::optional<VariantId> key_;
-};
-
-class KeyNotFoundException : public ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND> {
-public:
-    explicit KeyNotFoundException(std::string message) :
-            ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(message) {
-    }
-
-    explicit KeyNotFoundException(Composite<VariantKey>&& keys) :
-        ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(fmt::format("Not found: {}", keys)),
-        keys_(std::make_shared<Composite<VariantKey>>(std::move(keys))) {
-    }
-
-    explicit KeyNotFoundException(Composite<VariantKey>&& keys, std::string err_output) :
-            ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(err_output),
-            keys_(std::make_shared<Composite<VariantKey>>(std::move(keys))) {
-    }
-
-    explicit KeyNotFoundException(const VariantKey& single_key):
-            KeyNotFoundException(Composite<VariantKey>{VariantKey{single_key}}) {}
-
-    explicit KeyNotFoundException(const VariantKey& single_key, std::string err_output):
-            KeyNotFoundException(Composite<VariantKey>{VariantKey{single_key}}, err_output) {}
-
-
-    Composite<VariantKey>& keys() {
-        return *keys_;
-    }
-private:
-    std::shared_ptr<Composite<VariantKey>> keys_;
-    mutable std::string msg_;
-};
-
 class Storage {
 public:
 
@@ -144,7 +74,7 @@ public:
         return remove(Composite<VariantKey>{std::move(key)}, opts);
     }
 
-    bool supports_prefix_matching() const {
+    [[nodiscard]] bool supports_prefix_matching() const {
         return do_supports_prefix_matching();
     }
 
@@ -170,18 +100,18 @@ public:
       do_iterate_type_until_match(key_type, predicate_visitor, prefix);
     }
 
-    std::string key_path(const VariantKey& key) const {
+    [[nodiscard]] std::string key_path(const VariantKey& key) const {
         return do_key_path(key);
     }
 
-    bool is_path_valid(const std::string_view path) const {
+    [[nodiscard]] bool is_path_valid(const std::string_view path) const {
         return do_is_path_valid(path);
     }
 
     [[nodiscard]] const LibraryPath &library_path() const { return lib_path_; }
     [[nodiscard]] OpenMode open_mode() const { return mode_; }
 
-    virtual std::string name() const = 0;
+    [[nodiscard]] virtual std::string name() const = 0;
 
 private:
     virtual void do_write(Composite<KeySegmentPair>&& kvs) = 0;
@@ -194,7 +124,7 @@ private:
 
     virtual bool do_key_exists(const VariantKey& key) = 0;
 
-    virtual bool do_supports_prefix_matching() const = 0;
+    [[nodiscard]] virtual bool do_supports_prefix_matching() const = 0;
 
     virtual bool do_fast_delete() = 0;
 
@@ -202,9 +132,9 @@ private:
     // the predicate.
     virtual bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string & prefix) = 0;
 
-    virtual std::string do_key_path(const VariantKey& key) const = 0;
+    [[nodiscard]] virtual std::string do_key_path(const VariantKey& key) const = 0;
 
-    virtual bool do_is_path_valid(const std::string_view) const { return true; }
+    [[nodiscard]] virtual bool do_is_path_valid(const std::string_view) const { return true; }
 
     LibraryPath lib_path_;
     OpenMode mode_;

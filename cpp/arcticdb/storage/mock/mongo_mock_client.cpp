@@ -5,9 +5,9 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/storage/mongo/mongo_client_wrapper.hpp>
-#include <arcticdb/storage/mongo/mongo_mock_client.hpp>
-#include <arcticdb/storage/object_store_utils.hpp>
+#include "arcticdb/storage/mongo/mongo_client_interface.hpp"
+#include "mongo_mock_client.hpp"
+#include "arcticdb/storage/object_store_utils.hpp"
 #include <bsoncxx/builder/basic/document.hpp>
 #include <mongocxx/exception/operation_exception.hpp>
 #include <mongocxx/exception/bulk_write_exception.hpp>

@@ -20,8 +20,8 @@
 #include <arcticdb/util/composite.hpp>
 
 #include <aws/s3/model/DeleteObjectRequest.h>
-#include <arcticdb/storage/s3/s3_real_client.hpp>
-#include <arcticdb/storage/s3/s3_mock_client.hpp>
+#include <arcticdb/storage/s3/s3_client_impl.hpp>
+#include <arcticdb/storage/mock/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
 
 #undef GetMessage
@@ -95,10 +95,10 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Confi
     }
     else if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN && creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN){
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms");
-        s3_client_ = std::make_unique<RealS3Client>(get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
+        s3_client_ = std::make_unique<S3ClientImpl>(get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
     } else {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using provided auth credentials");
-        s3_client_ = std::make_unique<RealS3Client>(creds, get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
+        s3_client_ = std::make_unique<S3ClientImpl>(creds, get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
     }
 
     if (conf.prefix().empty()) {

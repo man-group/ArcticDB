@@ -13,6 +13,76 @@
 
 namespace arcticdb::storage {
 
+class DuplicateKeyException : public ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY> {
+public:
+    explicit DuplicateKeyException(std::string message) :
+        ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY>(message) { }
+
+    explicit DuplicateKeyException(VariantKey key) :
+        ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY>(std::string(variant_key_view(key))),
+        key_(std::move(key)) {}
+
+    [[nodiscard]] const VariantKey &key() const {
+        return key_;
+    }
+private:
+    VariantKey key_;
+};
+
+class NoDataFoundException : public ArcticCategorizedException<ErrorCategory::MISSING_DATA> {
+public:
+    explicit NoDataFoundException(VariantId key) :
+        ArcticCategorizedException<ErrorCategory::MISSING_DATA>(std::visit([](const auto &key) { return fmt::format("{}", key); }, key)),
+        key_(key){
+    }
+
+    explicit NoDataFoundException(const std::string& msg) :
+        ArcticCategorizedException<ErrorCategory::MISSING_DATA>(msg) {
+    }
+
+    explicit NoDataFoundException(const char* msg) :
+        ArcticCategorizedException<ErrorCategory::MISSING_DATA>(std::string(msg)) {
+    }
+
+    [[nodiscard]] const VariantId &key() const {
+        util::check(static_cast<bool>(key_), "Key not found");
+        return *key_;
+    }
+private:
+    std::optional<VariantId> key_;
+};
+
+class KeyNotFoundException : public ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND> {
+public:
+    explicit KeyNotFoundException(std::string message) :
+        ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(message) {
+    }
+
+    explicit KeyNotFoundException(Composite<VariantKey>&& keys) :
+        ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(fmt::format("Not found: {}", keys)),
+        keys_(std::make_shared<Composite<VariantKey>>(std::move(keys))) {
+    }
+
+    explicit KeyNotFoundException(Composite<VariantKey>&& keys, std::string err_output) :
+        ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(err_output),
+        keys_(std::make_shared<Composite<VariantKey>>(std::move(keys))) {
+    }
+
+    explicit KeyNotFoundException(const VariantKey& single_key):
+        KeyNotFoundException(Composite<VariantKey>{VariantKey{single_key}}) {}
+
+    explicit KeyNotFoundException(const VariantKey& single_key, std::string err_output):
+        KeyNotFoundException(Composite<VariantKey>{VariantKey{single_key}}, err_output) {}
+
+
+    Composite<VariantKey>& keys() {
+        return *keys_;
+    }
+private:
+    std::shared_ptr<Composite<VariantKey>> keys_;
+    mutable std::string msg_;
+};
+
 class LibraryPermissionException : public PermissionException {
   public:
     LibraryPermissionException(const LibraryPath &path, OpenMode mode, std::string_view operation) :

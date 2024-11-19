@@ -31,9 +31,9 @@
 
 #include <boost/interprocess/streams/bufferstream.hpp>
 
-#include <arcticdb/storage/azure/azure_client_wrapper.hpp>
-#include <arcticdb/storage/azure/azure_real_client.hpp>
-#include <arcticdb/storage/azure/azure_mock_client.hpp>
+#include <arcticdb/storage/azure/azure_client_interface.hpp>
+#include <arcticdb/storage/azure/azure_client_impl.hpp>
+#include "arcticdb/storage/mock/azure_mock_client.hpp"
 
 #undef GetMessage
 

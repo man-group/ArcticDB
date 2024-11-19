@@ -51,7 +51,7 @@ class Storages {
         primary().update(std::move(kvs), opts);
     }
 
-    bool supports_prefix_matching() const {
+    [[nodiscard]] bool supports_prefix_matching() const {
         return primary().supports_prefix_matching();
     }
 
@@ -67,7 +67,7 @@ class Storages {
         return primary().key_exists(key);
     }
 
-    bool is_path_valid(const std::string_view path) const {
+    [[nodiscard]] bool is_path_valid(const std::string_view path) const {
         return primary().is_path_valid(path);
     }
 
@@ -116,7 +116,7 @@ class Storages {
     }
 
     /** Calls Storage::do_key_path on the primary storage. Remember to check the open mode. */
-    std::string key_path(const VariantKey& key) const {
+    [[nodiscard]] std::string key_path(const VariantKey& key) const {
         return primary().key_path(key);
     }
 
@@ -148,14 +148,14 @@ class Storages {
 
         source.iterate_type(key_type, visitor);
    }
-    std::optional<std::shared_ptr<SingleFileStorage>> get_single_file_storage() const {
+    [[nodiscard]] std::optional<std::shared_ptr<SingleFileStorage>> get_single_file_storage() const {
         if (dynamic_cast<SingleFileStorage*>(storages_[0].get()) != nullptr) {
             return std::dynamic_pointer_cast<SingleFileStorage>(storages_[0]);
         } else {
             return std::nullopt;
         }
     }
-    std::string name() const {
+    [[nodiscard]] std::string name() const {
         return primary().name();
     }
 
@@ -165,7 +165,7 @@ class Storages {
         return *storages_[0];
     }
 
-    const Storage& primary() const {
+    [[nodiscard]] const Storage& primary() const {
         util::check(!storages_.empty(), "No storages configured");
         return *storages_[0];
     }

@@ -6,8 +6,8 @@
  */
 
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
-#include <arcticdb/storage/lmdb/lmdb_real_client.hpp>
-#include <arcticdb/storage/lmdb/lmdb_mock_client.hpp>
+#include <arcticdb/storage/lmdb/lmdb_client_impl.hpp>
+#include "arcticdb/storage/mock/lmdb_mock_client.hpp"
 
 #include <filesystem>
 

@@ -5,8 +5,8 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/storage/s3/s3_real_client.hpp>
-#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/s3/s3_client_impl.hpp>
+#include <arcticdb/storage/s3/s3_client_interface.hpp>
 
 #include <aws/s3/S3Client.h>
 
@@ -38,7 +38,7 @@ using namespace object_store_utils;
 
 namespace s3 {
 
-S3Result<std::monostate> RealS3Client::head_object(
+S3Result<std::monostate> S3ClientImpl::head_object(
         const std::string& s3_object_name,
         const std::string &bucket_name) const {
 
@@ -111,7 +111,7 @@ Aws::IOStreamFactory S3StreamFactory() {
     return [=]() { return Aws::New<S3IOStream>(""); };
 }
 
-S3Result<Segment> RealS3Client::get_object(
+S3Result<Segment> S3ClientImpl::get_object(
         const std::string &s3_object_name,
         const std::string &bucket_name) const {
 
@@ -130,7 +130,7 @@ S3Result<Segment> RealS3Client::get_object(
     return {Segment::from_buffer(retrieved.get_buffer())};
 }
 
-S3Result<std::monostate> RealS3Client::put_object(
+S3Result<std::monostate> S3ClientImpl::put_object(
         const std::string &s3_object_name,
         Segment &&segment,
         const std::string &bucket_name) {
@@ -159,7 +159,7 @@ S3Result<std::monostate> RealS3Client::put_object(
     return {std::monostate()};
 }
 
-S3Result<DeleteOutput> RealS3Client::delete_objects(
+S3Result<DeleteOutput> S3ClientImpl::delete_objects(
         const std::vector<std::string>& s3_object_names,
         const std::string& bucket_name) {
 
@@ -191,10 +191,10 @@ S3Result<DeleteOutput> RealS3Client::delete_objects(
     return {result};
 }
 
-S3Result<ListObjectsOutput> RealS3Client::list_objects(
+S3Result<ListObjectsOutput> S3ClientImpl::list_objects(
         const std::string& name_prefix,
         const std::string& bucket_name,
-        const std::optional<std::string> continuation_token) const {
+        const std::optional<std::string>& continuation_token) const {
 
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Searching for objects in bucket {} with prefix {}", bucket_name,
                            name_prefix);

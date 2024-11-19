@@ -7,9 +7,9 @@
 
 #pragma once
 
-#include <arcticdb/storage/storage_utils.hpp>
-#include <arcticdb/storage/mongo/mongo_client_wrapper.hpp>
-#include <arcticdb/storage/storage_mock_client.hpp>
+#include "arcticdb/storage/storage_utils.hpp"
+#include "arcticdb/storage/mongo/mongo_client_interface.hpp"
+#include "arcticdb/storage/mock/storage_mock_client.hpp"
 #include <mongocxx/exception/operation_exception.hpp>
 
 namespace arcticdb::storage::mongo {

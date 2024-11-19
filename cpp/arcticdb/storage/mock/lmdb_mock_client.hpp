@@ -7,18 +7,39 @@
 
 #pragma once
 
-#include <arcticdb/storage/lmdb/lmdb_client_wrapper.hpp>
+#include "arcticdb/storage/lmdb/lmdb_client_interface.hpp"
 
-#include <arcticdb/codec/segment.hpp>
-#include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/entity/variant_key.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
+#include "arcticdb/codec/segment.hpp"
+#include "arcticdb/entity/atom_key.hpp"
+#include "arcticdb/entity/variant_key.hpp"
+#include "arcticdb/storage/mock/storage_mock_client.hpp"
+#include "arcticdb/storage/storage_utils.hpp"
 
 
 namespace arcticdb::storage::lmdb {
 
-class RealLmdbClient : public LmdbClientWrapper {
+struct LmdbKey {
+    std::string db_name_;
+    std::string path_;
+
+    bool operator==(const LmdbKey& other) const {
+        return std::pair(db_name_, path_) == std::pair(other.db_name_, other.path_);
+    }
+};
+
+struct LmdbKeyHash {
+    std::size_t operator()(const LmdbKey& k) const {
+        return std::hash<std::pair<std::string, std::string>>{}(std::pair(k.db_name_, k.path_));
+    }
+};
+
+class MockLmdbClient : public LmdbClientWrapper {
 public:
+    static std::string get_failure_trigger(
+            const std::string& path,
+            StorageOperation operation_to_fail,
+            int error_code);
+
     bool exists(
             const std::string& db_name,
             std::string& path,
@@ -47,6 +68,11 @@ public:
             ::lmdb::txn& txn,
             ::lmdb::dbi& dbi,
             KeyType key_type) const override;
+
+private:
+    std::unordered_map<LmdbKey, Segment, LmdbKeyHash> lmdb_contents_;
+
+    bool has_key(const LmdbKey& key) const;
 };
 
 } // namespace arcticdb::storage::lmdb

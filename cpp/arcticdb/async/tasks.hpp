@@ -418,7 +418,7 @@ struct DecodeSliceTask : BaseTask {
             pipelines::RangesAndKey&& ranges_and_key,
             std::shared_ptr<std::unordered_set<std::string>> columns_to_decode):
             ranges_and_key_(std::move(ranges_and_key)),
-            columns_to_decode_(columns_to_decode) {
+            columns_to_decode_(std::move(columns_to_decode)) {
     }
 
     pipelines::SegmentAndSlice operator()(storage::KeySegmentPair&& key_segment_pair) {
@@ -494,22 +494,6 @@ struct MemSegmentProcessingTask : BaseTask {
         return std::move(entity_ids_);
     }
 
-};
-
-struct MemSegmentFunctionTask : BaseTask {
-    stream::StreamSource::DecodeContinuation func_;
-
-    explicit MemSegmentFunctionTask(
-            stream::StreamSource::DecodeContinuation&& func) :
-            func_(std::move(func)) {
-    }
-
-    ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentFunctionTask)
-
-    folly::Unit operator()(std::pair<VariantKey, SegmentInMemory> &&seg_pair) {
-        func_(std::move(seg_pair.second));
-        return folly::Unit{};
-    }
 };
 
 struct DecodeMetadataTask : BaseTask {

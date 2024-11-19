@@ -9,20 +9,20 @@
 
 #include <aws/s3/S3Client.h>
 
-#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
-#include <arcticdb/storage/storage_mock_client.hpp>
+#include "arcticdb/storage/s3/s3_client_interface.hpp"
+#include "storage_mock_client.hpp"
 
-#include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/pb_util.hpp>
-#include <arcticdb/log/log.hpp>
-#include <arcticdb/util/buffer_pool.hpp>
+#include "arcticdb/util/preconditions.hpp"
+#include "arcticdb/util/pb_util.hpp"
+#include "arcticdb/log/log.hpp"
+#include "arcticdb/util/buffer_pool.hpp"
 
-#include <arcticdb/storage/object_store_utils.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
-#include <arcticdb/entity/serialized_key.hpp>
-#include <arcticdb/util/exponential_backoff.hpp>
-#include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/util/composite.hpp>
+#include "arcticdb/storage/object_store_utils.hpp"
+#include "arcticdb/storage/storage_utils.hpp"
+#include "arcticdb/entity/serialized_key.hpp"
+#include "arcticdb/util/exponential_backoff.hpp"
+#include "arcticdb/util/configs_map.hpp"
+#include "arcticdb/util/composite.hpp"
 
 namespace arcticdb::storage::s3 {
 
@@ -35,10 +35,10 @@ struct S3Key {
     }
 };
 
-// A mock S3ClientWrapper which can simulate failures.
+// A mock S3ClientInterface which can simulate failures.
 // The MockS3Client stores the segments in memory to simulate regular S3 behavior for unit tests.
 // The MockS3Client can simulate storage failures by using the get_failure_trigger for s3_object_names.
-class MockS3Client : public S3ClientWrapper {
+class MockS3Client : public S3ClientInterface {
 public:
     MockS3Client(){}
 
@@ -54,9 +54,9 @@ public:
             Aws::S3::S3Errors error_to_fail_with,
             bool retryable=true);
 
-    S3Result<std::monostate> head_object(const std::string& s3_object_name, const std::string& bucket_name) const override;
+    [[nodiscard]] S3Result<std::monostate> head_object(const std::string& s3_object_name, const std::string& bucket_name) const override;
 
-    S3Result<Segment> get_object(const std::string& s3_object_name, const std::string& bucket_name) const override;
+    [[nodiscard]] S3Result<Segment> get_object(const std::string& s3_object_name, const std::string& bucket_name) const override;
 
     S3Result<std::monostate> put_object(
             const std::string& s3_object_name,
@@ -70,7 +70,7 @@ public:
     S3Result<ListObjectsOutput> list_objects(
             const std::string& prefix,
             const std::string& bucket_name,
-            const std::optional<std::string> continuation_token) const override;
+            const std::optional<std::string>& continuation_token) const override;
 
 private:
     std::map<S3Key, Segment> s3_contents;

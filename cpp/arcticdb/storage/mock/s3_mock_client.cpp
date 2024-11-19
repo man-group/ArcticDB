@@ -5,13 +5,13 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/storage/s3/s3_mock_client.hpp>
-#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include "s3_mock_client.hpp"
+#include "arcticdb/storage/s3/s3_client_interface.hpp"
 
-#include <arcticdb/log/log.hpp>
-#include <arcticdb/util/buffer_pool.hpp>
+#include "arcticdb/log/log.hpp"
+#include "arcticdb/util/buffer_pool.hpp"
 
-#include <arcticdb/storage/storage_utils.hpp>
+#include "arcticdb/storage/storage_utils.hpp"
 
 #include <aws/s3/S3Errors.h>
 
@@ -122,7 +122,7 @@ constexpr auto page_size = 10;
 S3Result<ListObjectsOutput> MockS3Client::list_objects(
         const std::string& name_prefix,
         const std::string& bucket_name,
-        const std::optional<std::string> continuation_token) const {
+        const std::optional<std::string>& continuation_token) const {
     // Terribly inefficient but fine for tests.
     auto matching_names = std::vector<std::string>();
     for (auto& key : s3_contents) {
