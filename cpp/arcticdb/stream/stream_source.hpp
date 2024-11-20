@@ -11,8 +11,6 @@
 #include <arcticdb/codec/segment.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>
-#include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/async/batch_read_args.hpp>
 #include <arcticdb/processing/clause.hpp>
 
@@ -55,7 +53,7 @@ struct StreamSource {
     virtual bool supports_prefix_matching() const = 0;
     virtual bool fast_delete() = 0;
 
-    using ReadContinuation = folly::Function<entity::VariantKey(storage::KeySegmentPair &&)>;
+    using ReadContinuation = folly::Function<VariantKey(storage::KeySegmentPair &&)>;
 
     virtual folly::Future<std::vector<VariantKey>> batch_read_compressed(
         std::vector<std::pair<entity::VariantKey, ReadContinuation>> &&ks,

@@ -328,6 +328,7 @@ set(arcticdb_srcs
         stream/stream_utils.hpp
         stream/stream_writer.hpp
         toolbox/library_tool.hpp
+        toolbox/storage_mover.hpp
         util/allocator.hpp
         util/bitset.hpp
         util/buffer.hpp
