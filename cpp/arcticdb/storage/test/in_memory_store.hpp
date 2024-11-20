@@ -477,7 +477,7 @@ namespace arcticdb {
         std::recursive_mutex mutex_; // Allow iterate_type() to be re-entrant
         std::unordered_map<AtomKey, std::unique_ptr<SegmentInMemory>> seg_by_atom_key_;
         std::unordered_map<RefKey, std::unique_ptr<SegmentInMemory>> seg_by_ref_key_;
-        arcticdb::proto::encoding::VariantCodec codec_;
+        BlockCodecImpl codec_;
     };
 
 } //namespace arcticdb

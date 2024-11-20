@@ -14,7 +14,6 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/stream/aggregator.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
@@ -38,7 +37,8 @@ WriteToSegmentTask::WriteToSegmentTask(
     folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)>&& partial_key_gen,
     size_t slice_num_for_column,
     Index index,
-    bool sparsify_floats
+    WriteOptions write_options,
+    BlockCodecImpl block_codec
     ) :
     frame_(std::move(frame)),
     slice_(std::move(slice)),
@@ -46,7 +46,8 @@ WriteToSegmentTask::WriteToSegmentTask(
     partial_key_gen_(std::move(partial_key_gen)),
     slice_num_for_column_(slice_num_for_column),
     index_(std::move(index)),
-    sparsify_floats_(sparsify_floats) {
+    write_options_(write_options),
+    block_codec_(block_codec){
     slice_.check_magic();
 }
 
@@ -86,6 +87,8 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
                 agg, 0, rows_to_write, offset_in_frame, slice_num_for_column_, regular_slice_size, false);
             if (opt_error.has_value()) {
                 opt_error->raise(frame_->desc.fields(0).name(), offset_in_frame);
+            } else if (block_codec_.codec_type() == Codec::ADAPTIVE)  {
+                agg.populate_statistics(0);
             }
         }
 
@@ -96,9 +99,11 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
             auto opt_error = aggregator_set_data(
                 fd.type(),
                 tensor, agg, abs_col, rows_to_write, offset_in_frame, slice_num_for_column_,
-                regular_slice_size, sparsify_floats_);
+                regular_slice_size, write_options_.sparsify_floats);
             if (opt_error.has_value()) {
                 opt_error->raise(fd.name(), offset_in_frame);
+            } else if (block_codec_.codec_type() == Codec::ADAPTIVE) {
+                agg.populate_statistics(abs_col);
             }
         }
 
@@ -133,13 +138,14 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
         IndexPartialKey&& key,
         const std::shared_ptr<stream::StreamSink>& sink,
         const std::shared_ptr<DeDupMap>& de_dup_map,
-        bool sparsify_floats) {
+        const WriteOptions& write_options,
+        const BlockCodecImpl& block_codec) {
     ARCTICDB_SAMPLE(WriteSlices, 0)
 
     auto slice_and_rowcount = get_slice_and_rowcount(slices);
 
     const auto write_window = ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow", 2 * async::TaskScheduler::instance()->io_thread_count());
-    return folly::collect(folly::window(std::move(slice_and_rowcount), [de_dup_map, frame, slicing, key=std::move(key), sink, sparsify_floats](auto&& slice) {
+    return folly::collect(folly::window(std::move(slice_and_rowcount), [de_dup_map, frame, slicing, key=std::move(key), sink, &write_options, &block_codec](auto&& slice) {
             return async::submit_cpu_task(WriteToSegmentTask(
                 frame,
                 slice.first,
@@ -147,7 +153,8 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
                 get_partial_key_gen(frame, key),
                 slice.second,
                 frame->index,
-                sparsify_floats))
+                write_options,
+                block_codec))
             .then([sink, de_dup_map] (auto&& ks) {
                 return sink->async_write(ks, de_dup_map);
             });
@@ -159,30 +166,31 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
         const SlicingPolicy &slicing,
         IndexPartialKey&& key,
         const std::shared_ptr<stream::StreamSink>& sink,
-        const std::shared_ptr<DeDupMap>& de_dup_map,
-        bool sparsify_floats) {
+        const WriteOptions& write_options,
+        const BlockCodecImpl& block_codec,
+        const std::shared_ptr<DeDupMap>& de_dup_map) {
+
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceFrame)
     auto slices = slice(*frame, slicing);
     if(slices.empty())
         return folly::makeFuture(std::vector<SliceAndKey>{});
 
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)
-    return write_slices(frame, std::move(slices), slicing, std::move(key), sink, de_dup_map, sparsify_floats);
+    return write_slices(frame, std::move(slices), slicing, std::move(key), sink, de_dup_map, write_options, block_codec);
 }
 
-folly::Future<entity::AtomKey>
-write_frame(
+folly::Future<entity::AtomKey> write_frame(
         IndexPartialKey&& key,
         const std::shared_ptr<InputTensorFrame>& frame,
         const SlicingPolicy &slicing,
         const std::shared_ptr<Store>& store,
         const std::shared_ptr<DeDupMap>& de_dup_map,
-        bool sparsify_floats) {
-    ARCTICDB_SAMPLE_DEFAULT(WriteFrame)
-    auto fut_slice_keys = slice_and_write(frame, slicing, IndexPartialKey{key}, store, de_dup_map, sparsify_floats);
-    // Write the keys of the slices into an index segment
+        const WriteOptions& write_options,
+        const BlockCodecImpl& block_codec) {
+    ARCTICDB_SAMPLE_DEFAULT(WriteToFrame)
+    auto slice_key_futures = slice_and_write(frame, slicing, IndexPartialKey{key}, store, write_options, block_codec, de_dup_map);
     ARCTICDB_SUBSAMPLE_DEFAULT(WriteIndex)
-    return std::move(fut_slice_keys).thenValue([frame=frame, key=std::move(key), &store](auto&& slice_keys) mutable {
+    return std::move(slice_key_futures).thenValue([frame=frame, key=std::move(key), &store](auto&& slice_keys) mutable {
         return index::write_index(frame, std::forward<decltype(slice_keys)>(slice_keys), key, store);
     });
 }
@@ -193,7 +201,8 @@ folly::Future<entity::AtomKey> append_frame(
         const SlicingPolicy& slicing,
         index::IndexSegmentReader& index_segment_reader,
         const std::shared_ptr<Store>& store,
-        bool dynamic_schema,
+        const WriteOptions& write_options,
+        const BlockCodecImpl& block_codec,
         bool ignore_sort_order)
 {
     ARCTICDB_SAMPLE_DEFAULT(AppendFrame)
@@ -218,12 +227,12 @@ folly::Future<entity::AtomKey> append_frame(
     );
 
     auto existing_slices = unfiltered_index(index_segment_reader);
-    auto keys_fut = slice_and_write(frame, slicing, IndexPartialKey{key}, store);
+    auto keys_fut = slice_and_write(frame, slicing, IndexPartialKey{key}, store, write_options, block_codec, {});
     return std::move(keys_fut)
-    .thenValue([dynamic_schema, slices_to_write=std::move(existing_slices), frame=frame, index_segment_reader=std::move(index_segment_reader), key=std::move(key), store](auto&& slice_and_keys_to_append) mutable {
+    .thenValue([&write_options, slices_to_write=std::move(existing_slices), frame=frame, index_segment_reader=std::move(index_segment_reader), key=std::move(key), store](auto&& slice_and_keys_to_append) mutable {
         slices_to_write.insert(std::end(slices_to_write), std::make_move_iterator(std::begin(slice_and_keys_to_append)), std::make_move_iterator(std::end(slice_and_keys_to_append)));
         std::sort(std::begin(slices_to_write), std::end(slices_to_write));
-        auto tsd = index::get_merged_tsd(frame->num_rows + frame->offset, dynamic_schema, index_segment_reader.tsd(), frame);
+        auto tsd = index::get_merged_tsd(frame->num_rows + frame->offset, write_options.dynamic_schema, index_segment_reader.tsd(), frame);
         return index::write_index(stream::index_type_from_descriptor(tsd.as_stream_descriptor()), tsd, std::move(slices_to_write), key, store);
     });
 }
@@ -262,7 +271,7 @@ std::optional<SliceAndKey> rewrite_partial_segment(
     auto kv = store->read(key).get();
     const SegmentInMemory& segment = kv.second;
     const RowRange affected_row_range = partial_rewrite_row_range(segment, index_range, affected_part);
-    const int64_t num_rows = affected_row_range.end() - affected_row_range.start();
+    const int64_t num_rows = static_cast<int64_t>(affected_row_range.end()) - affected_row_range.start();
     if (num_rows <= 0) {
         return std::nullopt;
     }

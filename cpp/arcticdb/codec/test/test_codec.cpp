@@ -20,11 +20,11 @@
 namespace arcticdb {
     struct ColumnEncoderV1 {
         static std::pair<size_t, size_t> max_compressed_size(
-            const arcticdb::proto::encoding::VariantCodec& codec_opts,
+            const BlockCodecImpl& codec_opts,
             ColumnData& column_data);
 
         static void encode(
-            const arcticdb::proto::encoding::VariantCodec &codec_opts,
+            const BlockCodecImpl& codec_opts,
             ColumnData& column_data,
             EncodedFieldImpl& variant_field,
             Buffer& out,
@@ -34,13 +34,14 @@ namespace arcticdb {
     struct ColumnEncoderV2 {
     public:
         static void encode(
-            const arcticdb::proto::encoding::VariantCodec &codec_opts,
+            const BlockCodecImpl& codec_opts,
             ColumnData& column_data,
             EncodedFieldImpl& variant_field,
             Buffer& out,
             std::ptrdiff_t& pos);
+
         static std::pair<size_t, size_t> max_compressed_size(
-            const arcticdb::proto::encoding::VariantCodec& codec_opts,
+            const BlockCodecImpl& codec_opts,
             ColumnData& column_data);
     private:
         static void encode_shapes(
@@ -50,7 +51,7 @@ namespace arcticdb {
             std::ptrdiff_t& pos_in_buffer);
 
         static void encode_blocks(
-            const arcticdb::proto::encoding::VariantCodec &codec_opts,
+            const BlockCodecImpl& codec_opts,
             ColumnData& column_data,
             EncodedFieldImpl& variant_field,
             Buffer& out,
@@ -74,7 +75,7 @@ protected:
     static constexpr size_t values_byte_size = values.size() * sizeof(decltype(values)::value_type);
     static constexpr size_t expected_bytes = values.size() * sizeof(ValuesTypeDescriptorTag::DataTypeTag::raw_type);
     static_assert(std::is_same_v<ValuesTypeDescriptorTag::DataTypeTag::raw_type, decltype(values)::value_type>);
-    arcticdb::proto::encoding::VariantCodec passthorugh_encoding_options;
+    BlockCodecImpl passthrough_encoding_options = codec::default_passthrough_codec();
 };
 
 template<typename EncodedFieldType>
@@ -92,9 +93,9 @@ TYPED_TEST(FieldEncoderTestDim0, Passthrough_v1) {
         TestFixture::values.size(),
         nullptr);
     TypeParam encoded_field;
-    Buffer out{Encoder::max_compressed_size(TestFixture::passthorugh_encoding_options, values_block)};
+    Buffer out{Encoder::max_compressed_size(TestFixture::passthrough_encoding_options, values_block)};
     std::ptrdiff_t pos = 0;
-    Encoder::encode(TestFixture::passthorugh_encoding_options, values_block, encoded_field, out, pos);
+    Encoder::encode(TestFixture::passthrough_encoding_options, values_block, encoded_field, out, pos);
     auto& nd = encoded_field.ndarray();
     ASSERT_EQ(nd.items_count(), TestFixture::values.size());
     ASSERT_EQ(nd.shapes_size(), 0);
@@ -114,9 +115,9 @@ TYPED_TEST(FieldEncoderTestDim0, Passthrough_v2) {
         TestFixture::values.size(),
         nullptr);
     TypeParam encoded_field;
-    Buffer out{Encoder::max_compressed_size(TestFixture::passthorugh_encoding_options, values_block)};
+    Buffer out{Encoder::max_compressed_size(TestFixture::passthrough_encoding_options, values_block)};
     std::ptrdiff_t pos = 0;
-    Encoder::encode_values(TestFixture::passthorugh_encoding_options, values_block, encoded_field, out, pos);
+    Encoder::encode_values(TestFixture::passthrough_encoding_options, values_block, encoded_field, out, pos);
     auto& nd = encoded_field.ndarray();
     ASSERT_EQ(nd.items_count(), TestFixture::values.size());
     ASSERT_EQ(nd.shapes_size(), 0);
@@ -150,11 +151,11 @@ TYPED_TEST(FieldEncoderTestFromColumnDim0, Passthrough) {
     ColumnData column_data(&values_buffer, &shapes_buffer, TestFixture::type_descriptor, nullptr);
     EncodedFieldType field;
     std::ptrdiff_t pos = 0;
-    const auto [_, max_compressed_size] = ColumnEncoder::max_compressed_size(TestFixture::passthorugh_encoding_options,
+    const auto [_, max_compressed_size] = ColumnEncoder::max_compressed_size(TestFixture::passthrough_encoding_options,
         column_data);
     Buffer out(max_compressed_size);
     column_data.reset();
-    ColumnEncoder::encode(TestFixture::passthorugh_encoding_options, column_data, field, out, pos);
+    ColumnEncoder::encode(TestFixture::passthrough_encoding_options, column_data, field, out, pos);
     auto& nd = field.ndarray();
     ASSERT_EQ(nd.items_count(), TestFixture::values.size());
     ASSERT_EQ(nd.shapes_size(), 0);
@@ -175,7 +176,7 @@ protected:
     static constexpr size_t values_expected_bytes =
         values.size() * sizeof(ValuesTypeDescriptorTag::DataTypeTag::raw_type);
     static_assert(std::is_same_v<ValuesTypeDescriptorTag::DataTypeTag::raw_type, decltype(values)::value_type>);
-    arcticdb::proto::encoding::VariantCodec passthorugh_encoding_options;
+    static constexpr BlockCodecImpl passthrough_encoding_options = codec::default_passthrough_codec();;
 };
 
 TEST_F(FieldEncoderTestDim1, PassthroughV1NativeField) {
@@ -192,9 +193,9 @@ TEST_F(FieldEncoderTestDim1, PassthroughV1NativeField) {
     std::array<uint8_t, encoded_field_size> encoded_field_memory;
     EncodedFieldImpl* field = new(encoded_field_memory.data()) EncodedFieldImpl;
 
-    Buffer out(Encoder::max_compressed_size(passthorugh_encoding_options, block));
+    Buffer out(Encoder::max_compressed_size(passthrough_encoding_options, block));
     std::ptrdiff_t pos = 0;
-    Encoder::encode(passthorugh_encoding_options, block, *field, out, pos);
+    Encoder::encode(passthrough_encoding_options, block, *field, out, pos);
 
     const auto& nd = field->ndarray();
     ASSERT_EQ(nd.items_count(), shapes.size());
@@ -228,8 +229,8 @@ TEST_F(FieldEncoderTestDim1, PassthroughV2NativeField) {
         0,
         nullptr);
 
-    const size_t values_max_compressed_size = Encoder::max_compressed_size(passthorugh_encoding_options, values_block);
-    const size_t shapes_max_compressed_size = ShapesEncoder::max_compressed_size(passthorugh_encoding_options, shapes_block);
+    const size_t values_max_compressed_size = Encoder::max_compressed_size(passthrough_encoding_options, values_block);
+    const size_t shapes_max_compressed_size = ShapesEncoder::max_compressed_size(passthrough_encoding_options, shapes_block);
     const size_t total_max_compressed_size = values_max_compressed_size + shapes_max_compressed_size;
     // one block for shapes and one for values
     constexpr size_t encoded_field_size = EncodedFieldImpl::Size + 2 * sizeof(EncodedBlock);
@@ -237,8 +238,8 @@ TEST_F(FieldEncoderTestDim1, PassthroughV2NativeField) {
     EncodedFieldImpl* field = new(encoded_field_memory.data()) EncodedFieldImpl;
     Buffer out(total_max_compressed_size);
     std::ptrdiff_t pos = 0;
-    ShapesEncoder::encode_shapes(passthorugh_encoding_options, shapes_block, *field, out, pos);
-    Encoder::encode_values(passthorugh_encoding_options, values_block, *field, out, pos);
+    ShapesEncoder::encode_shapes(passthrough_encoding_options, shapes_block, *field, out, pos);
+    Encoder::encode_values(passthrough_encoding_options, values_block, *field, out, pos);
 
     const auto& nd = field->ndarray();
     ASSERT_EQ(nd.items_count(), shapes.size());
@@ -280,7 +281,7 @@ protected:
     static constexpr size_t second_block_data_byte_size = sizeof(decltype(second_block_data)::value_type) * second_block_data.size();
     static constexpr std::array<shape_t, 2> shapes_data = {first_block_data.size(), second_block_data.size()};
     static constexpr size_t shapes_data_byte_size = sizeof(decltype(shapes_data)::value_type) * shapes_data.size();
-    arcticdb::proto::encoding::VariantCodec passthorugh_encoding_options;
+    static constexpr BlockCodecImpl passthrough_encoding_options = codec::default_passthrough_codec();
     ChunkedBuffer data_buffer;
     Buffer shapes_buffer;
 };
@@ -290,11 +291,11 @@ TEST_F(TestMultiblockData_Dim1, EncodingVersion_2) {
     std::array<uint8_t, encoded_field_size> encoded_field_owner;
     EncodedFieldImpl* encoded_field = new(encoded_field_owner.data()) EncodedFieldImpl;
     ColumnData column_data(&data_buffer, &shapes_buffer, type_descriptor, nullptr);
-    const auto [_, max_compressed_size] = ColumnEncoderV2::max_compressed_size(passthorugh_encoding_options, column_data);
+    const auto [_, max_compressed_size] = ColumnEncoderV2::max_compressed_size(passthrough_encoding_options, column_data);
     Buffer out(max_compressed_size);
     ptrdiff_t out_pos = 0;
     column_data.reset();
-    ColumnEncoderV2::encode(passthorugh_encoding_options, column_data, *encoded_field, out, out_pos);
+    ColumnEncoderV2::encode(passthrough_encoding_options, column_data, *encoded_field, out, out_pos);
     const auto& ndarray = encoded_field->ndarray();
     ASSERT_EQ(ndarray.shapes_size(), 1);
     ASSERT_EQ(ndarray.values_size(), 2);
@@ -312,12 +313,9 @@ TYPED_TEST(SegmentStringEncodingTest, EncodeSingleString) {
     s.set_scalar(0, timestamp(123));
     s.set_string(1, "happy");
     s.end_row();
-    arcticdb::proto::encoding::VariantCodec opt;
-    auto lz4ptr = opt.mutable_lz4();
-    lz4ptr->set_acceleration(1);
     auto copy = s.clone();
     constexpr EncodingVersion encoding_version = TypeParam::value;
-    Segment seg = encode_dispatch(s.clone(), opt, encoding_version);
+    Segment seg = encode_dispatch(s.clone(), codec::default_lz4_codec(), encoding_version);
 
     SegmentInMemory res = decode_segment(std::move(seg));
     ASSERT_EQ(copy.string_at(0, 1), res.string_at(0, 1));
@@ -339,12 +337,9 @@ TYPED_TEST(SegmentStringEncodingTest, EncodeStringsBasic) {
     s.set_string(3, "baggy");
     s.set_string(4, "trousers");
     s.end_row();
-    arcticdb::proto::encoding::VariantCodec opt;
-    auto lz4ptr = opt.mutable_lz4();
-    lz4ptr->set_acceleration(1);
     auto copy = s.clone();
     constexpr EncodingVersion encoding_version = TypeParam::value;
-    Segment seg = encode_dispatch(SegmentInMemory{s}, opt, encoding_version);
+    Segment seg = encode_dispatch(SegmentInMemory{s}, codec::default_lz4_codec(), encoding_version);
 
     SegmentInMemory res = decode_segment(std::move(seg));
     ASSERT_EQ(copy.string_at(0, 1), res.string_at(0, 1));

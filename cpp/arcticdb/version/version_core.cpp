@@ -61,14 +61,14 @@ VersionedItem write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
-    const WriteOptions& options,
     const std::shared_ptr<DeDupMap>& de_dup_map,
-    bool sparsify_floats,
+    const WriteOptions& options,
+    const BlockCodecImpl& block_codec,
     bool validate_index
     ) {
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
     ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}, {} rows", frame->desc.id(), version_id, frame->num_rows);
-    auto atom_key_fut = async_write_dataframe_impl(store, version_id, frame, options, de_dup_map, sparsify_floats, validate_index);
+    auto atom_key_fut = async_write_dataframe_impl(store, version_id, frame, de_dup_map, options, block_codec, validate_index);
     return VersionedItem(std::move(atom_key_fut).get());
 }
 
@@ -76,11 +76,10 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
     const std::shared_ptr<InputTensorFrame>& frame,
-    const WriteOptions& options,
     const std::shared_ptr<DeDupMap> &de_dup_map,
-    bool sparsify_floats,
-    bool validate_index
-    ) {
+    const WriteOptions& options,
+    const BlockCodecImpl& block_codec,
+    bool validate_index) {
     ARCTICDB_SAMPLE(DoWrite, 0)
     if (version_id == 0)
         verify_symbol_key(frame->desc.id());
@@ -91,7 +90,7 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(*frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>("When calling write with validate_index enabled, input data must be sorted");
     }
-    return write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, sparsify_floats);
+    return write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, options, block_codec);
 }
 
 namespace {
@@ -123,8 +122,8 @@ folly::Future<AtomKey> async_append_impl(
     const UpdateInfo& update_info,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
-    bool validate_index,
-    bool empty_types) {
+    const BlockCodecImpl& block_codec,
+    bool validate_index) {
 
     util::check(update_info.previous_index_key_.has_value(), "Cannot append as there is no previous index key to append to");
     const StreamId stream_id = frame->desc.id();
@@ -134,14 +133,14 @@ folly::Future<AtomKey> async_append_impl(
     auto row_offset = index_segment_reader.tsd().total_rows();
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
     frame->set_offset(static_cast<ssize_t>(row_offset));
-    fix_descriptor_mismatch_or_throw(APPEND, options.dynamic_schema, index_segment_reader, *frame, empty_types);
+    fix_descriptor_mismatch_or_throw(APPEND, options.dynamic_schema, index_segment_reader, *frame, options.empty_types);
     if (validate_index) {
         sorted_data_check_append(*frame, index_segment_reader);
     }
 
     frame->set_bucketize_dynamic(bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);
-    return append_frame(IndexPartialKey{stream_id, update_info.next_version_id_}, frame, slicing_arg, index_segment_reader, store, options.dynamic_schema, options.ignore_sort_order);
+    return append_frame(IndexPartialKey{stream_id, update_info.next_version_id_}, frame, slicing_arg, index_segment_reader, store, options, block_codec, false);
 }
 
 VersionedItem append_impl(
@@ -149,16 +148,18 @@ VersionedItem append_impl(
     const UpdateInfo& update_info,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
-    bool validate_index,
-    bool empty_types) {
+    const BlockCodecImpl& block_codec,
+    bool validate_index) {
 
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
-    auto version_key_fut = async_append_impl(store,
-                                             update_info,
-                                             frame,
-                                             options,
-                                             validate_index,
-                                             empty_types);
+    auto version_key_fut = async_append_impl(
+         store,
+         update_info,
+         frame,
+         options,
+         block_codec,
+         validate_index);
+
     auto version_key = std::move(version_key_fut).get();
     auto versioned_item = VersionedItem(to_atom(std::move(version_key)));
     ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}", versioned_item.symbol(), update_info.next_version_id_);
@@ -309,9 +310,8 @@ VersionedItem update_impl(
     const UpdateInfo& update_info,
     const UpdateQuery& query,
     const std::shared_ptr<InputTensorFrame>& frame,
-    const WriteOptions&& options,
-    bool dynamic_schema,
-    bool empty_types) {
+    const WriteOptions& options,
+    const BlockCodecImpl& block_codec) {
     util::check(update_info.previous_index_key_.has_value(), "Cannot update as there is no previous index key to update into");
     const StreamId stream_id = frame->desc.id();
     ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", stream_id, update_info.previous_index_key_->version_id());
@@ -324,11 +324,11 @@ VersionedItem update_impl(
     );
     check_update_data_is_sorted(*frame, index_segment_reader);
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    (void)check_and_mark_slices(index_segment_reader, dynamic_schema, false, std::nullopt, bucketize_dynamic);
-    fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, *frame, empty_types);
+    (void)check_and_mark_slices(index_segment_reader, options.dynamic_schema, false, std::nullopt, bucketize_dynamic);
+    fix_descriptor_mismatch_or_throw(UPDATE, options.dynamic_schema, index_segment_reader, *frame, options.empty_types);
 
     std::vector<FilterQuery<index::IndexSegmentReader>> queries =
-        build_update_query_filters<index::IndexSegmentReader>(query.row_filter, frame->index, frame->index_range, dynamic_schema, index_segment_reader.bucketize_dynamic());
+        build_update_query_filters<index::IndexSegmentReader>(query.row_filter, frame->index, frame->index_range, options.dynamic_schema, index_segment_reader.bucketize_dynamic());
     auto combined = combine_filter_functions(queries);
     auto affected_keys = filter_index(index_segment_reader, std::move(combined));
     std::vector<SliceAndKey> unaffected_keys;
@@ -344,7 +344,7 @@ VersionedItem update_impl(
     frame->set_bucketize_dynamic(bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);
 
-    auto new_slice_and_keys = slice_and_write(frame, slicing_arg, IndexPartialKey{stream_id, update_info.next_version_id_}, store).wait().value();
+    auto new_slice_and_keys = slice_and_write(frame, slicing_arg, IndexPartialKey{stream_id, update_info.next_version_id_}, store, options, block_codec, {}).wait().value();
     std::sort(std::begin(new_slice_and_keys), std::end(new_slice_and_keys));
 
     IndexRange orig_filter_range;
@@ -385,7 +385,7 @@ VersionedItem update_impl(
                 unaffected_keys.size(), new_keys_size, affected_keys.size(), flattened_slice_and_keys.size());
 
     std::sort(std::begin(flattened_slice_and_keys), std::end(flattened_slice_and_keys));
-    auto tsd = index::get_merged_tsd(row_count, dynamic_schema, index_segment_reader.tsd(), frame);
+    auto tsd = index::get_merged_tsd(row_count, options.dynamic_schema, index_segment_reader.tsd(), frame);
     auto version_key_fut = index::write_index(stream::index_type_from_descriptor(tsd.as_stream_descriptor()), std::move(tsd), std::move(flattened_slice_and_keys), IndexPartialKey{stream_id, update_info.next_version_id_}, store);
     auto version_key = std::move(version_key_fut).get();
     auto versioned_item = VersionedItem(to_atom(std::move(version_key)));
@@ -459,7 +459,7 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
         std::vector<std::vector<size_t>>&& processing_unit_indexes,
         std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses) {
     // All the shared pointers as arguments to this function and created within it are to ensure that resources are
-    // correctly kept alive after this function returns it's future
+    // correctly kept alive after this function returns its future
     auto num_segments = segment_and_slice_futures.size();
     auto segment_and_slice_future_splitters = split_futures(std::move(segment_and_slice_futures));
 

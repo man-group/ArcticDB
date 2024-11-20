@@ -11,21 +11,20 @@
 
 namespace arcticdb::codec {
 
-inline arcticdb::proto::encoding::VariantCodec default_lz4_codec() {
-    arcticdb::proto::encoding::VariantCodec codec;
+constexpr inline BlockCodecImpl default_lz4_codec() {
+    BlockCodecImpl codec;
     auto lz4ptr = codec.mutable_lz4();
-    lz4ptr->set_acceleration(1);
+    lz4ptr->acceleration_ = 1;
     return codec;
 }
 
-inline arcticdb::proto::encoding::VariantCodec default_passthrough_codec() {
-    arcticdb::proto::encoding::VariantCodec codec;
-    auto lz4ptr = codec.mutable_passthrough();
-    lz4ptr->set_mark(true);
+constexpr inline BlockCodecImpl default_passthrough_codec() {
+    BlockCodecImpl codec;
+    codec.codec_ = Codec::PASS;
     return codec;
 }
 
-inline arcticdb::proto::encoding::VariantCodec default_shapes_codec() {
+inline BlockCodecImpl default_shapes_codec() {
     return codec::default_lz4_codec();
 }
 }

@@ -269,6 +269,10 @@ class Aggregator {
         return segmenting_policy_;
     }
 
+    void populate_statistics(position_t col) {
+        segment_.column(col).populate_statistics();
+    }
+
     AggregationStats& stats() { return stats_; }
 
 protected:

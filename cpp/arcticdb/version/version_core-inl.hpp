@@ -138,7 +138,7 @@ void do_compact(
                 continue;
             }
 
-            const auto& segment = sk.segment(store);
+            auto segment = sk.segment(store);
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
                 !validate_index || segment.descriptor().sorted() == SortedValue::ASCENDING ||
                     segment.descriptor().sorted() == SortedValue::UNKNOWN,
@@ -146,7 +146,7 @@ void do_compact(
             );
 
             aggregator.add_segment(
-                std::move(sk.segment(store)),
+                std::move(segment),
                 sk.slice(),
                 convert_int_to_float
             );

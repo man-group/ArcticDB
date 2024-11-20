@@ -27,8 +27,8 @@ constexpr std::string_view codec_type_to_string(Codec codec) {
         return "LZ4";
     case Codec::ZSTD:
         return "ZSTD";
-    case Codec::PFOR:
-        return "PFOR";
+    case Codec::ADAPTIVE:
+        return "ADAPTIVE";
     case Codec::PASS:
         return "PASS";
     default:
@@ -49,9 +49,7 @@ struct BlockCodecImpl : public BlockCodec {
         return &data_[0];
     }
 
-    BlockCodecImpl() {
-        memset(data(), 0, DataSize);
-    }
+    BlockCodecImpl() = default;
 
     ZstdCodec *mutable_zstd() {
         codec_ = Codec::ZSTD;
@@ -65,9 +63,9 @@ struct BlockCodecImpl : public BlockCodec {
         return lz4;
     }
 
-    PforCodec *mutable_pfor() {
-        codec_ = Codec::PFOR;
-        auto pfor = new(data()) PforCodec{};
+    AdaptiveCodec *mutable_adaptive() {
+        codec_ = Codec::ADAPTIVE;
+        auto pfor = new(data()) AdaptiveCodec{};
         return pfor;
     }
 
@@ -87,9 +85,9 @@ struct BlockCodecImpl : public BlockCodec {
         return *reinterpret_cast<const Lz4Codec*>(data());
     }
 
-    [[nodiscard]] const PforCodec& pfor() const {
-        util::check(codec_ == Codec::PFOR, "Not a pfor codec");
-        return *reinterpret_cast<const PforCodec*>(data());
+    [[nodiscard]] const AdaptiveCodec& adaptive() const {
+        util::check(codec_ == Codec::ADAPTIVE, "Not an adaptive codec");
+        return *reinterpret_cast<const AdaptiveCodec*>(data());
     }
 
     [[nodiscard]] const PassthroughCodec& passthrough() const {
