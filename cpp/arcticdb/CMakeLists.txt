@@ -511,7 +511,7 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-        util/buffer_holder.cpp)
+        util/buffer_holder.cpp storage/async_storage.hpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 

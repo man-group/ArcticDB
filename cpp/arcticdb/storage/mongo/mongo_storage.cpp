@@ -20,6 +20,9 @@
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/storage/storage_exceptions.hpp>
+
+
 #include <mongocxx/exception/operation_exception.hpp>
 #include <bsoncxx/json.hpp>
 
@@ -72,39 +75,35 @@ std::string MongoStorage::name() const {
     return fmt::format("mongo_storage-{}", db_);
 }
 
-void MongoStorage::do_write(Composite<KeySegmentPair>&& kvs) {
+void MongoStorage::do_write(KeySegmentPair&& key_seg) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&kv) { return kv.key_type(); };
 
     ARCTICDB_SAMPLE(MongoStorageWrite, 0)
 
-    (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
-        for (auto &kv : group.values()) {
-            auto collection = collection_name(kv.key_type());
-            auto key_view = kv.key_view();
-            try {
-                auto success = client_->write_segment(db_, collection, std::move(kv));
-                storage::check<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>(success, "Mongo did not acknowledge write for key {}", key_view);
-            } catch (const mongocxx::operation_exception& ex) {
-                std::string object_name = std::string(key_view);
-                raise_mongo_exception(ex, object_name);
-            }
-        }
-    });
+    auto collection = collection_name(key_seg.key_type());
+    auto key_view = key_seg.key_view();
+    try {
+        auto success = client_->write_segment(db_, collection, std::move(key_seg));
+        storage::check<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>(success,
+                                                            "Mongo did not acknowledge write for key {}",
+                                                            key_view);
+    } catch (const mongocxx::operation_exception &ex) {
+        std::string object_name = std::string(key_view);
+        raise_mongo_exception(ex, object_name);
+    }
 }
 
-void MongoStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
+void MongoStorage::do_update(KeySegmentPair&& key_seg, UpdateOpts opts) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&kv) { return kv.key_type(); };
 
     ARCTICDB_SAMPLE(MongoStorageWrite, 0)
 
-    (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
-        for (auto &kv : group.values()) {
-            auto collection = collection_name(kv.key_type());
-            auto key_view = kv.key_view();
+            auto collection = collection_name(key_seg.key_type());
+            auto key_view = key_seg.key_view();
             try {
-                auto result = client_->update_segment(db_, collection, std::move(kv), opts.upsert_);
+                auto result = client_->update_segment(db_, collection, std::move(key_seg), opts.upsert_);
                 storage::check<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>(result.modified_count.has_value(),
                                                                     "Mongo did not acknowledge write for key {}",
                                                                     key_view);
@@ -116,46 +115,40 @@ void MongoStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
                 std::string object_name = std::string(key_view);
                 raise_mongo_exception(ex, object_name);
             }
-        }
-    });
 }
 
-void MongoStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
+void MongoStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&k) { return variant_key_type(k); };
     ARCTICDB_SAMPLE(MongoStorageRead, 0)
     std::vector<VariantKey> keys_not_found;
 
-    (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
-        for (auto &k : group.values()) {
-            auto collection = collection_name(variant_key_type(k));
-            try {
-                auto kv = client_->read_segment(db_, collection, k);
-                // later we should add the key to failed_reads in this case
-                if (!kv.has_value()) {
-                    keys_not_found.push_back(k);
-                }
-                else {
-                    visitor(k, std::move(kv->segment()));
-                }
-
-            } catch (const mongocxx::operation_exception& ex) {
-                std::string object_name = std::string(variant_key_view(k));
-                raise_if_unexpected_error(ex, object_name);
-
-                log::storage().log(
-                        opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
-                        "Failed to find segment for key '{}' {}: {}",
-                        variant_key_view(k),
-                        ex.code().value(),
-                        ex.what());
-                keys_not_found.push_back(k);
-            }
+    auto collection = collection_name(variant_key_type(variant_key));
+    try {
+        auto kv = client_->read_segment(db_, collection, variant_key);
+        // later we should add the key to failed_reads in this case
+        if (!kv.has_value()) {
+            keys_not_found.push_back(variant_key);
         }
-    });
+        else {
+            visitor(variant_key, std::move(kv->segment()));
+        }
+
+    } catch (const mongocxx::operation_exception& ex) {
+        std::string object_name = std::string(variant_key_view(variant_key));
+        raise_if_unexpected_error(ex, object_name);
+
+     /*   log::storage().log(
+                opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
+                "Failed to find segment for key '{}' {}: {}",
+                variant_key_view(k),
+                ex.code().value(),
+                ex.what());
+        keys_not_found.push_back(k);
+    }
 
     if (!keys_not_found.empty()) {
-        throw KeyNotFoundException(Composite<VariantKey>{std::move(keys_not_found)});
+        throw KeyNotFoundException(Composite<VariantKey>{std::move(keys_not_found)});*/
     }
 }
 
@@ -167,13 +160,13 @@ bool MongoStorage::do_fast_delete() {
     return true;
 }
 
-void MongoStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) {
+void MongoStorage::do_remove(std::vector<VariantKey>&& variant_keys, RemoveOpts opts) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&k) { return variant_key_type(k); };
     ARCTICDB_SAMPLE(MongoStorageRemove, 0)
     Composite<VariantKey> keys_not_found;
 
-    (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
+    (fg::from(variant_keys) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         for (auto &k : group.values()) {
             auto collection = collection_name(variant_key_type(k));
             try {

@@ -41,14 +41,14 @@ class Storages {
         storages_(std::move(storages)), mode_(mode) {
     }
 
-    void write(Composite<KeySegmentPair>&& kvs) {
+    void write(KeySegmentPair&& key_seg) {
         ARCTICDB_SAMPLE(StoragesWrite, 0)
-        primary().write(std::move(kvs));
+        primary().write(std::move(key_seg));
     }
 
-    void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
+    void update(KeySegmentPair&& key_seg, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(StoragesUpdate, 0)
-        primary().update(std::move(kvs), opts);
+        primary().update(std::move(key_seg), opts);
     }
 
     [[nodiscard]] bool supports_prefix_matching() const {
@@ -71,26 +71,85 @@ class Storages {
         return primary().is_path_valid(path);
     }
 
-    auto read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts, bool primary_only=true) {
-        ARCTICDB_RUNTIME_SAMPLE(StoragesRead, 0)
-        if(primary_only)
-            return primary().read(std::move(ks), visitor, opts);
-
-        if(auto rg = ks.as_range(); !std::all_of(std::begin(rg), std::end(rg), [] (const auto& vk) {
-            return variant_key_type(vk) == KeyType::TABLE_DATA;
-        })) {
-            return primary().read(std::move(ks), visitor, opts);
-        }
-
-        for(const auto& storage : storages_) {
+    void read_sync_fallthrough(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
+        for (const auto &storage : storages_) {
             try {
-                return storage->read(std::move(ks), visitor, opts);
-            } catch (typename storage::KeyNotFoundException& ex) {
+                return storage->read(VariantKey{variant_key}, visitor, opts);
+            } catch (typename storage::KeyNotFoundException &ex) {
                 ARCTICDB_DEBUG(log::version(), "Keys not found in storage, continuing to next storage");
-                ks = std::move(ex.keys());
             }
         }
-        throw storage::KeyNotFoundException(std::move(ks));
+        throw storage::KeyNotFoundException(variant_key);
+    }
+
+    KeySegmentPair read_sync_fallthrough(VariantKey&& variant_key, ReadKeyOpts opts) {
+        for(const auto& storage : storages_) {
+            try {
+                return storage->read(VariantKey{variant_key}, opts);
+            } catch (typename storage::KeyNotFoundException& ex) {
+                ARCTICDB_DEBUG(log::version(), "Keys not found in storage, continuing to next storage");
+            }
+        }
+        throw storage::KeyNotFoundException(variant_key);
+    }
+    void read_sync(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts, bool primary_only=true) {
+        ARCTICDB_RUNTIME_SAMPLE(StoragesRead, 0)
+        if(primary_only || variant_key_type(variant_key) != KeyType::TABLE_DATA)
+            return primary().read(std::move(variant_key), visitor, opts);
+
+        read_sync_fallthrough(std::move(variant_key), visitor, opts);
+    }
+
+    KeySegmentPair read_sync(VariantKey&& variant_key, ReadKeyOpts opts, bool primary_only=true) {
+        ARCTICDB_RUNTIME_SAMPLE(StoragesRead, 0)
+        if(primary_only || variant_key_type(variant_key) != KeyType::TABLE_DATA)
+            return primary().read(std::move(variant_key), opts);
+
+        return read_sync_fallthrough(std::move(variant_key), opts);
+    }
+
+    static folly::Future<folly::Unit> async_read(Storage& storage, VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
+        if(storage.has_async_methods()) {
+            return storage.async_api()->async_read(std::move(variant_key), visitor, opts);
+        } else {
+            storage.read(std::move(variant_key), visitor, opts);
+            return folly::makeFuture();
+        }
+    }
+
+    static folly::Future<KeySegmentPair> async_read(Storage& storage, VariantKey&& variant_key, ReadKeyOpts opts) {
+        if(storage.has_async_methods()) {
+            return storage.async_api()->async_read(std::move(variant_key), opts);
+        } else {
+            auto key_seg = storage.read(std::move(variant_key), opts);
+            return folly::makeFuture(std::move(key_seg));
+        }
+    }
+
+    folly::Future<folly::Unit> read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts, bool primary_only=true) {
+        ARCTICDB_RUNTIME_SAMPLE(StoragesRead, 0)
+        if(primary_only || variant_key_type(variant_key) != KeyType::TABLE_DATA)
+            return async_read(primary(), std::move(variant_key), visitor, opts);
+
+        // Not supporting async fall-through at the moment as we would need to ensure that
+        // visitation was idempotent. Could be achieved with a mutex/call once wrapper around
+        // the visitor for simultaneous async reads, or with a window of size 1 and cancellation
+        // token.
+        read_sync_fallthrough(std::move(variant_key), visitor, opts);
+        return folly::makeFuture();
+    }
+
+    folly::Future<KeySegmentPair> read(VariantKey&& variant_key, ReadKeyOpts opts, bool primary_only=true) {
+        ARCTICDB_RUNTIME_SAMPLE(StoragesRead, 0)
+        if(primary_only || variant_key_type(variant_key) != KeyType::TABLE_DATA)
+            return async_read(primary(), std::move(variant_key), opts);
+
+        // Not supporting async fall-through at the moment as we would need to ensure that
+        // visitation was idempotent. Could be achieved with a mutex/call once wrapper around
+        // the visitor for simultaneous async reads, or with a window of size 1 and cancellation
+        // token.
+        auto res = read_sync_fallthrough(std::move(variant_key), opts);
+        return folly::makeFuture(std::move(res));
     }
 
     void iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix=std::string{}, bool primary_only=true) {
@@ -120,8 +179,12 @@ class Storages {
         return primary().key_path(key);
     }
 
-    void remove(Composite<VariantKey>&& ks, storage::RemoveOpts opts) {
-        primary().remove(std::move(ks), opts);
+    void remove(VariantKey&& variant_key, storage::RemoveOpts opts) {
+        primary().remove(std::move(variant_key), opts);
+    }
+
+    void remove(std::span<VariantKey> variant_keys, storage::RemoveOpts opts) {
+        primary().remove(variant_keys, opts);
     }
 
     [[nodiscard]] OpenMode open_mode() const { return mode_; }

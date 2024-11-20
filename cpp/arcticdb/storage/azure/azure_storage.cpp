@@ -25,15 +25,19 @@
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/composite.hpp>
+#include <arcticdb/storage/azure/azure_client_interface.hpp>
+#include <arcticdb/storage/azure/azure_client_impl.hpp>
+#include <arcticdb/storage/mock/azure_mock_client.hpp>
+#include <arcticdb/storage/azure/azure_client_interface.hpp>
+#include <arcticdb/storage/azure/azure_client_impl.hpp>
+#include <arcticdb/storage/storage_exceptions.hpp>
 
 #include <azure/core.hpp>
 #include <azure/storage/blobs.hpp>
 
 #include <boost/interprocess/streams/bufferstream.hpp>
 
-#include <arcticdb/storage/azure/azure_client_interface.hpp>
-#include <arcticdb/storage/azure/azure_client_impl.hpp>
-#include "arcticdb/storage/mock/azure_mock_client.hpp"
+
 
 #undef GetMessage
 
@@ -106,7 +110,7 @@ void raise_if_unexpected_error(const Azure::Core::RequestFailedException& e, con
 
 template<class KeyBucketizer>
 void do_write_impl(
-    Composite<KeySegmentPair>&& kvs,
+    KeySegmentPair&& key_seg,
     const std::string& root_folder,
     AzureClientWrapper& azure_client,
     KeyBucketizer&& bucketizer,
@@ -140,7 +144,7 @@ void do_write_impl(
 
 template<class KeyBucketizer>
 void do_update_impl(
-    Composite<KeySegmentPair>&& kvs,
+    KeySegmentPair&& key_seg,
     const std::string& root_folder,
     AzureClientWrapper& azure_client,
     KeyBucketizer&& bucketizer,
@@ -194,7 +198,7 @@ void do_read_impl(Composite<VariantKey> && ks,
 }
 
 template<class KeyBucketizer>
-void do_remove_impl(Composite<VariantKey>&& ks,
+void do_remove_impl(VariantKey&& variant_key,
     const std::string& root_folder,
     AzureClientWrapper& azure_client,
     KeyBucketizer&& bucketizer,
@@ -306,19 +310,19 @@ std::string AzureStorage::name() const {
     return fmt::format("azure_storage-{}/{}", container_name_, root_folder_);
 }
 
-void AzureStorage::do_write(Composite<KeySegmentPair>&& kvs) {
+void AzureStorage::do_write(KeySegmentPair&& key_seg) {
     detail::do_write_impl(std::move(kvs), root_folder_, *azure_client_, FlatBucketizer{}, upload_option_, request_timeout_);
 }
 
-void AzureStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
+void AzureStorage::do_update(KeySegmentPair&& key_seg, UpdateOpts) {
     detail::do_update_impl(std::move(kvs), root_folder_, *azure_client_, FlatBucketizer{}, upload_option_, request_timeout_);
 }
 
-void AzureStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
+void AzureStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
     detail::do_read_impl(std::move(ks), visitor, root_folder_, *azure_client_, FlatBucketizer{}, opts, download_option_, request_timeout_);
 }
 
-void AzureStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
+void AzureStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
     detail::do_remove_impl(std::move(ks), root_folder_, *azure_client_, FlatBucketizer{}, request_timeout_);
 }
 

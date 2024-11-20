@@ -46,20 +46,20 @@ std::string S3Storage::get_key_path(const VariantKey& key) const {
     // to most of them
 }
 
-void S3Storage::do_write(Composite<KeySegmentPair>&& kvs) {
-    detail::do_write_impl(std::move(kvs), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
+void S3Storage::do_write(KeySegmentPair&& key_seg) {
+    detail::do_write_impl(std::move(key_seg), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
 }
 
-void S3Storage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
-    detail::do_update_impl(std::move(kvs), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
+void S3Storage::do_update(KeySegmentPair&& key_seg, UpdateOpts) {
+    detail::do_update_impl(std::move(key_seg), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
 }
 
-void S3Storage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
-    detail::do_read_impl(std::move(ks), visitor, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{}, opts);
+void S3Storage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
+    detail::do_read_impl(std::move(variant_key), visitor, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{}, opts);
 }
 
-void S3Storage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
-    detail::do_remove_impl(std::move(ks), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
+void S3Storage::do_remove(VariantKey&& variant_key, RemoveOpts) {
+    detail::do_remove_impl(std::move(variant_key), root_folder_, bucket_name_, *s3_client_);
 }
 
 bool S3Storage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix) {
@@ -71,7 +71,7 @@ bool S3Storage::do_iterate_type_until_match(KeyType key_type, const IterateTypeP
 }
 
 bool S3Storage::do_key_exists(const VariantKey& key) {
-    return detail::do_key_exists_impl(key, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
+    return detail::do_key_exists_impl(key, root_folder_, bucket_name_, *s3_client_);
 }
 
 } // namespace s3

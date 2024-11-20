@@ -33,13 +33,17 @@ public:
     std::string name() const final;
 
 private:
-    void do_write(Composite<KeySegmentPair>&& kvs) final;
+    void do_write(KeySegmentPair&& key_seg) final;
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
+    void do_update(KeySegmentPair&& key_seg, UpdateOpts opts) final;
 
-    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
+    void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
+    KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts opts) final;
+
+    void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
+
+    void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) final;
 
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
 
@@ -47,6 +51,10 @@ private:
 
     bool do_supports_prefix_matching() const final {
         return true;
+    }
+
+    bool do_has_async_methods() const final {
+        return false;
     }
 
     bool do_fast_delete() final {

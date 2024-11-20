@@ -34,21 +34,28 @@ class S3Storage final : public Storage {
 
     S3Storage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
-    /**
-     * Full object path in S3 bucket.
-     */
     std::string get_key_path(const VariantKey& key) const;
 
     std::string name() const final;
 
+    bool has_async_api() const final {
+        return true;
+    }
+
+    AsyncStorage* async_api() {
+        return dynamic_cast<AsyncStorage*>(this);
+    }
+
   private:
-    void do_write(Composite<KeySegmentPair>&& kvs) final;
+    void do_write(KeySegmentPair&& key_seg) final;
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
+    void do_update(KeySegmentPair&& key_seg, UpdateOpts opts) final;
 
-    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
+    void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
+    KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts opts) final;
+
+    void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
 
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
 

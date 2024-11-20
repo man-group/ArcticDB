@@ -27,13 +27,15 @@ namespace arcticdb::storage::memory {
         std::string name() const final;
 
     private:
-        void do_write(Composite<KeySegmentPair>&& kvs) final;
+        void do_write(KeySegmentPair&& key_seg) final;
 
-        void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
+        void do_update(KeySegmentPair&& key_seg, UpdateOpts opts) final;
 
-        void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
+        void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-        void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
+        KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts opts) final;
+
+        void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
 
         bool do_key_exists(const VariantKey& key) final;
 

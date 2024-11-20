@@ -17,6 +17,7 @@
 
 namespace arcticdb::storage {
 
+using ReadVisitor = std::function<void(const entity::VariantKey&, Segment &&)>;
 
 struct EnvironmentNameTag{};
 using EnvironmentName = util::StringWrappingValue<EnvironmentNameTag>;

@@ -209,9 +209,15 @@ struct KeySegmentContinuation {
     Callable continuation_;
 };
 
-inline storage::KeySegmentPair read_dispatch(const entity::VariantKey& variant_key, const std::shared_ptr<storage::Library>& lib, const storage::ReadKeyOpts& opts) {
+inline folly::Future<storage::KeySegmentPair> read_dispatch(const entity::VariantKey& variant_key, const std::shared_ptr<storage::Library>& lib, const storage::ReadKeyOpts& opts) {
     return util::variant_match(variant_key, [&lib, &opts](const auto &key) {
         return lib->read(key, opts);
+    });
+}
+
+inline storage::KeySegmentPair read_sync_dispatch(const entity::VariantKey& variant_key, const std::shared_ptr<storage::Library>& lib, const storage::ReadKeyOpts& opts) {
+    return util::variant_match(variant_key, [&lib, &opts](const auto &key) {
+        return lib->read_sync(key, opts);
     });
 }
 
@@ -571,7 +577,7 @@ struct WriteCompressedTask : BaseTask {
     storage::KeySegmentPair kv_;
     std::shared_ptr<storage::Library> lib_;
 
-    WriteCompressedTask(storage::KeySegmentPair &&kv, std::shared_ptr<storage::Library> lib) :
+    WriteCompressedTask(storage::KeySegmentPair&& key_seg, std::shared_ptr<storage::Library> lib) :
     kv_(std::move(kv)), lib_(std::move(lib)) {
         ARCTICDB_DEBUG(log::storage(), "Creating write compressed task");
     }

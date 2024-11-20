@@ -85,7 +85,7 @@ uint64_t MappedFileStorage::write_segment(Segment&& seg) {
     return offset;
 }
 
-void MappedFileStorage::do_write(Composite<KeySegmentPair>&& kvs) {
+void MappedFileStorage::do_write(KeySegmentPair&& key_seg) {
     ARCTICDB_SAMPLE(MappedFileStorageWriteValues, 0)
     auto key_values = std::move(kvs);
     key_values.broadcast([this] (auto key_seg) {
@@ -95,11 +95,11 @@ void MappedFileStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     });
 }
 
-void MappedFileStorage::do_update(Composite<KeySegmentPair>&&, UpdateOpts) {
+void MappedFileStorage::do_update(VariantKey&&, UpdateOpts) {
     util::raise_rte("Update not implemented for file storages");
 }
 
-void MappedFileStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts) {
+void MappedFileStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, storage::ReadKeyOpts) {
     ARCTICDB_SAMPLE(MappedFileStorageRead, 0)
     auto keys = std::move(ks);
     keys.broadcast([&visitor, this] (const auto& key) {
@@ -116,7 +116,7 @@ bool MappedFileStorage::do_key_exists(const VariantKey& key) {
     return multi_segment_header_.get_offset_for_key(to_atom(key)) != std::nullopt;
 }
 
-void MappedFileStorage::do_remove(Composite<VariantKey>&&, RemoveOpts) {
+void MappedFileStorage::do_remove(VariantKey&&, RemoveOpts) {
     util::raise_rte("Remove not implemented for file storages");
 }
 

@@ -10,6 +10,7 @@
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
+#include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
@@ -97,47 +98,39 @@ namespace s3 {
             }
         }
 
-        template<class KeyBucketizer>
         void do_write_impl(
-                Composite<KeySegmentPair> &&kvs,
-                const std::string &root_folder,
-                const std::string &bucket_name,
-                S3ClientInterface &s3_client,
-                KeyBucketizer &&bucketizer) {
+                KeySegmentPair&& key_seg,
+                const std::string& root_folder,
+                const std::string& bucket_name,
+                S3ClientInterface& s3_client) {
             ARCTICDB_SAMPLE(S3StorageWrite, 0)
-            auto fmt_db = [](auto &&kv) { return kv.key_type(); };
 
-            (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
-                    [&s3_client, &bucket_name, &root_folder, b = std::move(bucketizer)](auto &&group) {
-                        auto key_type_dir = key_type_folder(root_folder, group.key());
-                        ARCTICDB_TRACE(log::storage(), "S3 key_type_folder is {}", key_type_dir);
+            auto key_type_dir = key_type_folder(root_folder, key_seg.key_type());
+            ARCTICDB_TRACE(log::storage(), "S3 key_type_folder is {}", key_type_dir);
 
-                        ARCTICDB_SUBSAMPLE(S3StorageWriteValues, 0)
-                        for (auto &kv: group.values()) {
-                            auto &k = kv.variant_key();
-                            auto s3_object_name = object_path(b.bucketize(key_type_dir, k), k);
-                            auto &seg = kv.segment();
+            ARCTICDB_SUBSAMPLE(S3StorageWriteValues, 0)
+                auto &k = key_seg.variant_key();
+                auto s3_object_name = object_path(key_type_dir, k);
+                auto &seg = key_seg.segment();
 
-                            auto put_object_result = s3_client.put_object(s3_object_name, std::move(seg), bucket_name);
+                auto put_object_result = s3_client.put_object(s3_object_name, std::move(seg), bucket_name);
 
-                            if (!put_object_result.is_success()) {
-                                auto& error = put_object_result.get_error();
-                                // No DuplicateKeyException is thrown because S3 overwrites the given key if it already exists.
-                                raise_s3_exception(error, s3_object_name);
-                            }
-                        }
-                    });
+                if (!put_object_result.is_success()) {
+                    auto& error = put_object_result.get_error();
+                    // No DuplicateKeyException is thrown because S3 overwrites the given key if it already exists.
+                    raise_s3_exception(error, s3_object_name);
+                }
         }
 
         template<class KeyBucketizer>
         void do_update_impl(
-                Composite<KeySegmentPair> &&kvs,
+                KeySegmentPair&& key_seg,
                 const std::string &root_folder,
                 const std::string &bucket_name,
                 S3ClientInterface &s3_client,
                 KeyBucketizer &&bucketizer) {
             // s3 updates the key if it already exists. We skip the check for key not found to save a round-trip.
-            do_write_impl(std::move(kvs), root_folder, bucket_name, s3_client, std::move(bucketizer));
+            do_write_impl(std::move(key_seg), root_folder, bucket_name, s3_client, std::move(bucketizer));
         }
 
         template<class KeyBucketizer>
@@ -187,7 +180,7 @@ namespace s3 {
                         }
                     });
             if (!keys_not_found.empty())
-                throw KeyNotFoundException(Composite<VariantKey>{std::move(keys_not_found)});
+                throw KeyNotFoundException(std::move(keys_not_found));
         }
 
         struct FailedDelete {
@@ -200,7 +193,7 @@ namespace s3 {
         };
 
         template<class KeyBucketizer>
-        void do_remove_impl(Composite<VariantKey> &&ks,
+        void do_remove_impl(std::vector<VariantKey> &&ks,
                             const std::string &root_folder,
                             const std::string &bucket_name,
                             S3ClientInterface &s3_client,
@@ -213,7 +206,7 @@ namespace s3 {
                     std::min(DELETE_OBJECTS_LIMIT,
                              static_cast<size_t>(ConfigsMap::instance()->get_int("S3Storage.DeleteBatchSize", 1000)));
 
-            (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
+            (fg::from(ks) | fg::move | fg::groupBy(fmt_db)).foreach(
                     [&s3_client, &root_folder, &bucket_name, &to_delete, b = std::move(
                             bucketizer), &failed_deletes](auto &&group) {
                         auto key_type_dir = key_type_folder(root_folder, group.key());

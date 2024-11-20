@@ -58,12 +58,12 @@ public:
         ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(message) {
     }
 
-    explicit KeyNotFoundException(Composite<VariantKey>&& keys) :
+    explicit KeyNotFoundException(std::vector<VariantKey>&& keys) :
         ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(fmt::format("Not found: {}", keys)),
         keys_(std::make_shared<Composite<VariantKey>>(std::move(keys))) {
     }
 
-    explicit KeyNotFoundException(Composite<VariantKey>&& keys, std::string err_output) :
+    explicit KeyNotFoundException(std::vector<VariantKey>&& keys, std::string err_output) :
         ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(err_output),
         keys_(std::make_shared<Composite<VariantKey>>(std::move(keys))) {
     }

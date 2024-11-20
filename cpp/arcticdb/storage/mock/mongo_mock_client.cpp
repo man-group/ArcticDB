@@ -98,7 +98,7 @@ bool MockMongoClient::has_key(const MongoKey& key) {
 bool MockMongoClient::write_segment(
         const std::string& database_name,
         const std::string& collection_name,
-        storage::KeySegmentPair&& kv) {
+        storage::KeySegmentPair&& key_seg) {
     auto key = MongoKey(database_name, collection_name, kv.variant_key());
 
     auto failure = has_failure_trigger(key, StorageOperation::WRITE);
@@ -114,7 +114,7 @@ bool MockMongoClient::write_segment(
 UpdateResult MockMongoClient::update_segment(
         const std::string& database_name,
         const std::string& collection_name,
-        storage::KeySegmentPair&& kv,
+        storage::KeySegmentPair&& key_seg,
         bool upsert) {
     auto key = MongoKey(database_name, collection_name, kv.variant_key());
 

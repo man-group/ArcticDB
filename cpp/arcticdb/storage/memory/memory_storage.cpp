@@ -14,6 +14,7 @@
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/codec/protobuf_mappings.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
+#include <arcticdb/storage/storage_exceptions.hpp>
 
 namespace arcticdb::storage::memory {
 
@@ -33,7 +34,7 @@ void add_serialization_fields(KeySegmentPair& kv) {
         return "memory_storage-0";
     }
 
-    void MemoryStorage::do_write(Composite<KeySegmentPair>&& kvs) {
+    void MemoryStorage::do_write(KeySegmentPair&& key_seg) {
         ARCTICDB_SAMPLE(MemoryStorageWrite, 0)
 
         auto fmt_db = [](auto &&k) { return variant_key_type(k.variant_key()); };
@@ -62,7 +63,7 @@ void add_serialization_fields(KeySegmentPair& kv) {
         });
     }
 
-    void MemoryStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
+    void MemoryStorage::do_update(KeySegmentPair&& key_seg, UpdateOpts opts) {
         ARCTICDB_SAMPLE(MemoryStorageUpdate, 0)
 
         auto fmt_db = [](auto &&k) { return variant_key_type(k.variant_key()); };
@@ -88,7 +89,7 @@ void add_serialization_fields(KeySegmentPair& kv) {
         });
     }
 
-    void MemoryStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts) {
+    void MemoryStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts) {
         ARCTICDB_SAMPLE(MemoryStorageRead, 0)
         auto fmt_db = [](auto &&k) { return variant_key_type(k); };
 
@@ -114,7 +115,7 @@ void add_serialization_fields(KeySegmentPair& kv) {
         return it != key_vec.end();
     }
 
-    void MemoryStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts)
+    void MemoryStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts)
     {
         ARCTICDB_SAMPLE(MemoryStorageRemove, 0)
         auto fmt_db = [](auto &&k) { return variant_key_type(k); };

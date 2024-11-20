@@ -188,12 +188,12 @@ class MongoClientImpl {
     bool write_segment(
         const std::string &database_name,
         const std::string &collection_name,
-        storage::KeySegmentPair&& kv);
+        storage::KeySegmentPair&& key_seg);
 
     UpdateResult update_segment(
         const std::string &database_name,
         const std::string &collection_name,
-        storage::KeySegmentPair&& kv,
+        storage::KeySegmentPair&& key_seg,
         bool upsert);
 
     std::optional<KeySegmentPair> read_segment(
@@ -249,7 +249,7 @@ class MongoClientImpl {
 
 bool MongoClientImpl::write_segment(const std::string &database_name,
                                     const std::string &collection_name,
-                                    storage::KeySegmentPair &&kv) {
+                                    storage::KeySegmentPair&& key_seg) {
     using namespace bsoncxx::builder::stream;
     using bsoncxx::builder::stream::document;
     ARCTICDB_SUBSAMPLE(MongoStorageWriteGetClient, 0)
@@ -277,7 +277,7 @@ bool MongoClientImpl::write_segment(const std::string &database_name,
 
 UpdateResult MongoClientImpl::update_segment(const std::string &database_name,
                                     const std::string &collection_name,
-                                    storage::KeySegmentPair &&kv,
+                                    storage::KeySegmentPair&& key_seg,
                                     bool upsert) {
     using namespace bsoncxx::builder::stream;
     using bsoncxx::builder::stream::document;
@@ -449,13 +449,13 @@ MongoClient::~MongoClient() {
 
 bool MongoClient::write_segment(const std::string &database_name,
                                  const std::string &collection_name,
-                                 storage::KeySegmentPair &&kv) {
+                                 storage::KeySegmentPair&& key_seg) {
     return client_->write_segment(database_name, collection_name, std::move(kv));
 }
 
 UpdateResult MongoClient::update_segment(const std::string &database_name,
                                 const std::string &collection_name,
-                                storage::KeySegmentPair &&kv,
+                                storage::KeySegmentPair&& key_seg,
                                 bool upsert) {
     return client_->update_segment(database_name, collection_name, std::move(kv), upsert);
 }
