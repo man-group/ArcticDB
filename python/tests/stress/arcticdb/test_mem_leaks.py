@@ -54,16 +54,16 @@ def count_drops(numbers, percentage_drop_0_1):
     return count    
 
 
-def check_process_memory_leaks(process_func , number_iterrations, max_total_mem_lost_treshold, max_machine_memory_percentage) -> np.int64:
+def check_process_memory_leaks(process_func , number_iterations, max_total_mem_lost_treshold, max_machine_memory_percentage) -> np.int64:
     """
-        This check accepts a function which will be called iterrativly 'number_iterrations'. During this 
+        This check accepts a function which will be called iterativly 'number_iterations'. During this 
         process the procedure will monitor RSS growth of python process in order to be below specified
         threshhold 'max_total_mem_lost_treshold' AND and the same time will watch so that machine
         utilization of memory is not above certain percentage 'max_machine_memory_percentage' to prevent 
         crash of the process
 
         Specify more than 3 iterations (advised min 30), and be sure that there will be some initial growth in the first 1-2 
-        iterrations, thus your expected growth threshold should be above that
+        iterations, thus your expected growth threshold should be above that
 
         IMPORTANT: It is strongly advised during creation of future tests to they are executed first 
         through command line to determine the optimal iteration  and 'max_total_mem_lost_treshold' for the
@@ -84,7 +84,7 @@ def check_process_memory_leaks(process_func , number_iterrations, max_total_mem_
     avail_mem_start : np.int64 = psutil.virtual_memory().available
     print ("-" * 80)
     print ("Start check process for memory leaks")
-    print ("Num iterrations: ", number_iterrations)
+    print ("Num iterations: ", number_iterations)
     print ("Maxumum memory growth/lost to the examined process: ", max_total_mem_lost_treshold)
     print ("Maxumum machine memory utilization: ", max_total_mem_lost_treshold)
     
@@ -99,7 +99,7 @@ def check_process_memory_leaks(process_func , number_iterrations, max_total_mem_
 
     mem_growth_each_iter = list()
 
-    for n in range(number_iterrations):
+    for n in range(number_iterations):
         p_iter_mem_start : np.int64  = p.memory_info().rss
         
         print("Starting watched code ...........")
@@ -128,7 +128,7 @@ def check_process_memory_leaks(process_func , number_iterrations, max_total_mem_
 
 def grow_exp(df_to_grow : pd.DataFrame, num_times_xx2:int):
     """
-        Quickly inflates the dataframe by doubling its size for each iterration
+        Quickly inflates the dataframe by doubling its size for each iteration
         Thus the final size will be 'num_times_xx2' power of two
     """
     for n in range(1,num_times_xx2):
@@ -136,7 +136,7 @@ def grow_exp(df_to_grow : pd.DataFrame, num_times_xx2:int):
         df_to_grow = pd.concat([df_to_grow, df_prev])
     return df_to_grow
 
-@pytest.mark.xfail("ArcticDBPR#1998", reason = "String memory leaks while read")
+@pytest.mark.xfail(reason = "ArcticDBPR#1998 String memory leaks while read")
 def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
     lib : adb.Library = arctic_library_lmdb
 
@@ -154,7 +154,27 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
     print(df)
     del df
 
-    check_process_memory_leaks(proc_to_examine, 30, 4808662528, 80.0)
+    '''
+        To determine optimal max_mem first set the procedure to a very high number like 10 GB
+        and run it from commandline for approx 10 iteration.
+
+        > python -m pytest -s python/tests/stress/arcticdb/test_mem_leaks.py::test_mem_leak_read_all_arctic_lib
+
+        Observe 2 things:
+         - maximum process memory growth
+         - ideally there should be one iteration the mem did go down indicating GC in C++ code
+
+         if both conditions are met then the process is likely to not leak big chunks of mem
+         and you can take the max mem growth number add 20 percent safety margin and you will
+         arrive at reasonable  max_mem
+
+         Then put for number of iterations 3x or 5x and this mem limit and 
+         run the test from command line again to assure it runs ok before commit 
+
+    '''
+    max_mem = 4808662528
+
+    check_process_memory_leaks(proc_to_examine, 30, max_mem, 80.0)
 
 def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     lib : NativeVersionStore = lmdb_version_store_very_big_map
@@ -173,4 +193,9 @@ def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     print(df)
     del df
 
-    check_process_memory_leaks(proc_to_examine, 30, 808662528, 80.0)
+    """ 
+        See comment in previous test
+    """
+    max_mem = 808662528
+
+    check_process_memory_leaks(proc_to_examine, 30, max_mem, 80.0)
