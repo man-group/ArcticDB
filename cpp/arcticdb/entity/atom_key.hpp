@@ -22,14 +22,13 @@ class AtomKeyImpl {
 
     template<class IndexValueType>
     AtomKeyImpl(
-        StreamId id,
-        VersionId version_id,
-        timestamp creation_ts,
-        ContentHash content_hash,
-        IndexValueType start_index,
-        IndexValueType end_index,
-        KeyType key_type)
-        :
+            StreamId id,
+            VersionId version_id,
+            timestamp creation_ts,
+            ContentHash content_hash,
+            IndexValueType start_index,
+            IndexValueType end_index,
+            KeyType key_type) :
         id_(std::move(id)),
         version_id_(version_id),
         creation_ts_(creation_ts),
@@ -58,11 +57,6 @@ class AtomKeyImpl {
     const IndexValue &start_index() const { return index_start_; }
     const IndexValue &end_index() const { return index_end_; }
     IndexRange index_range() const { IndexRange ir = {index_start_, index_end_}; ir.end_closed_ = false; return ir;}
-
-    auto change_type(KeyType new_type) {
-        key_type_ = new_type;
-        reset_cached();
-    }
 
     /**
      * Useful for caching/replacing the ID with an existing shared instance.

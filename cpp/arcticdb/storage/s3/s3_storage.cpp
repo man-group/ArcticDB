@@ -17,8 +17,6 @@
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/util/composite.hpp>
-
 #include <aws/s3/model/DeleteObjectRequest.h>
 #include <arcticdb/storage/s3/s3_client_impl.hpp>
 #include <arcticdb/storage/mock/s3_mock_client.hpp>
@@ -59,7 +57,11 @@ void S3Storage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, Re
 }
 
 void S3Storage::do_remove(VariantKey&& variant_key, RemoveOpts) {
-    detail::do_remove_impl(std::move(variant_key), root_folder_, bucket_name_, *s3_client_);
+    detail::do_remove_impl(std::move(variant_key), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
+}
+
+void S3Storage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts) {
+    detail::do_remove_impl(variant_keys, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
 }
 
 bool S3Storage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix) {
@@ -71,7 +73,7 @@ bool S3Storage::do_iterate_type_until_match(KeyType key_type, const IterateTypeP
 }
 
 bool S3Storage::do_key_exists(const VariantKey& key) {
-    return detail::do_key_exists_impl(key, root_folder_, bucket_name_, *s3_client_);
+    return detail::do_key_exists_impl(key, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
 }
 
 } // namespace s3

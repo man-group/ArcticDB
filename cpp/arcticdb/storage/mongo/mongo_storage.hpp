@@ -35,7 +35,7 @@ class MongoStorage final : public Storage {
 
     void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-    KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts opts) final;
+    KeySegmentPair do_read(VariantKey&& variant_key) final;
 
     void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
 
@@ -44,10 +44,6 @@ class MongoStorage final : public Storage {
     bool do_key_exists(const VariantKey& key) final;
 
     bool do_supports_prefix_matching() const final {
-        return false;
-    }
-
-    bool do_has_async_methods() const final {
         return false;
     }
 

@@ -53,9 +53,11 @@ class S3Storage final : public Storage {
 
     void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-    KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts opts) final;
+    KeySegmentPair do_read(VariantKey&& variant_key) final;
 
     void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
+
+    void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) final;
 
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
 

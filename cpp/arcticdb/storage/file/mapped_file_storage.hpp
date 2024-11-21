@@ -40,7 +40,7 @@ class MappedFileStorage final : public SingleFileStorage {
 
     void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, storage::ReadKeyOpts opts) override;
 
-    KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts opts) final;
+    KeySegmentPair do_read(VariantKey&& variant_key) final;
 
     void do_remove(VariantKey&& variant_key, RemoveOpts opts) override;
 

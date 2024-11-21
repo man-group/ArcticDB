@@ -33,9 +33,11 @@ namespace arcticdb::storage::memory {
 
         void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-        KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts opts) final;
+        KeySegmentPair do_read(VariantKey&& variant_key) final;
 
         void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
+
+        void do_remove(std::span<VariantKey> variant_key, RemoveOpts opts) final;
 
         bool do_key_exists(const VariantKey& key) final;
 

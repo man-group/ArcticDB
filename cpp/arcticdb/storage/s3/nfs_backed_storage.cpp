@@ -94,7 +94,6 @@ std::string get_root_folder(const std::string& root_folder, const VariantKey& vk
     });
 }
 
-
 std::string NfsBucketizer::bucketize(const std::string& root_folder, const VariantKey& vk) {
         return get_root_folder(root_folder, vk);
     }
@@ -104,20 +103,19 @@ size_t NfsBucketizer::bucketize_length(KeyType key_type) {
     }
 
 VariantKey unencode_object_id(const VariantKey& key) {
-
     return util::variant_match(key,
-                        [] (const AtomKey& k) {
-                            auto decoded_id = decode_item<StreamId, StringId, NumericId>(k.id(), false);
-                            auto start_index = decode_item<IndexValue, StringIndex, NumericIndex>(k.start_index(), false);
-                            auto end_index = decode_item<IndexValue, StringIndex, NumericIndex>(k.end_index(), false);
-                            return VariantKey{atom_key_builder().version_id(k.version_id()).start_index(start_index)
-                                .end_index(end_index).creation_ts(k.creation_ts()).content_hash(k.content_hash())
-                                .build(decoded_id, k.type())};
-                        },
-                        [](const RefKey& r) {
-                            auto decoded_id = decode_item<StreamId, StringId, NumericId>(r.id(), true);
-                            return VariantKey{RefKey{decoded_id, r.type(), r.is_old_type()}};
-                        });
+        [] (const AtomKey& k) {
+            auto decoded_id = decode_item<StreamId, StringId, NumericId>(k.id(), false);
+            auto start_index = decode_item<IndexValue, StringIndex, NumericIndex>(k.start_index(), false);
+            auto end_index = decode_item<IndexValue, StringIndex, NumericIndex>(k.end_index(), false);
+            return VariantKey{atom_key_builder().version_id(k.version_id()).start_index(start_index)
+                .end_index(end_index).creation_ts(k.creation_ts()).content_hash(k.content_hash())
+                .build(decoded_id, k.type())};
+        },
+        [](const RefKey& r) {
+            auto decoded_id = decode_item<StreamId, StringId, NumericId>(r.id(), true);
+            return VariantKey{RefKey{decoded_id, r.type(), r.is_old_type()}};
+        });
 }
 
 NfsBackedStorage::NfsBackedStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
@@ -158,16 +156,12 @@ std::string NfsBackedStorage::name() const {
 }
 
 void NfsBackedStorage::do_write(KeySegmentPair&& key_seg) {
-    auto enc = kvs.transform([] (auto&& key_seg) {
-        return KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
-    });
+    auto enc = KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
     s3::detail::do_write_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
 void NfsBackedStorage::do_update(KeySegmentPair&& key_seg, UpdateOpts) {
-    auto enc = kvs.transform([] (auto&& key_seg) {
-        return KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
-    });
+    auto enc = KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
     s3::detail::do_update_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
@@ -176,17 +170,12 @@ void NfsBackedStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visi
         visitor(unencode_object_id(k), std::move(seg));
     };
 
-    auto enc = ks.transform([] (auto&& key) {
-        return encode_object_id(key);
-    });
-
+    auto enc = encode_object_id(variant_key);
     s3::detail::do_read_impl(std::move(enc), func, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, opts);
 }
 
 void NfsBackedStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
-    auto enc = ks.transform([] (auto&& key) {
-        return encode_object_id(key);
-    });
+    auto enc = encode_object_id(variant_key);
     s3::detail::do_remove_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 

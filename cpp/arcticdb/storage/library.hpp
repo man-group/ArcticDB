@@ -109,12 +109,12 @@ class Library {
 
     void read_sync(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
         ARCTICDB_SAMPLE(LibraryRead, 0)
-        storages_->read_sync(std::move(variant_key), visitor, opts, !storage_fallthrough_);
+        storages_->read_sync(variant_key, visitor, opts, !storage_fallthrough_);
     }
 
-    KeySegmentPair read_sync(VariantKey&& key, ReadKeyOpts opts = ReadKeyOpts{}) {
+    KeySegmentPair read_sync(const VariantKey& key) {
         util::check(!std::holds_alternative<StringId>(variant_key_id(key)) || !std::get<StringId>(variant_key_id(key)).empty(), "Unexpected empty id");
-        return storages_->read_sync(std::move(key), opts, !storage_fallthrough_);
+        return storages_->read_sync(key, !storage_fallthrough_);
     }
 
     void remove(std::span<VariantKey> variant_keys, storage::RemoveOpts opts) {
@@ -123,7 +123,16 @@ class Library {
         }
 
         ARCTICDB_SAMPLE(LibraryRemove, 0)
-        storages_->remove(std::move(variant_keys), opts);
+        storages_->remove(variant_keys, opts);
+    }
+
+    void remove(VariantKey&& variant_key, storage::RemoveOpts opts) {
+        if (open_mode() < arcticdb::storage::OpenMode::DELETE) {
+            throw LibraryPermissionException(library_path_, open_mode(), "delete");
+        }
+
+        ARCTICDB_SAMPLE(LibraryRemove, 0)
+        storages_->remove(std::move(variant_key), opts);
     }
 
     [[nodiscard]] std::optional<std::shared_ptr<SingleFileStorage>> get_single_file_storage() const {
@@ -163,7 +172,7 @@ class Library {
 
     [[nodiscard]] const auto & config() const { return config_;}
 
-    void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) {
+    static void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) {
        StorageFailureSimulator::instance()->configure(cfg);
     }
 

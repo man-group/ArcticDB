@@ -42,6 +42,8 @@ class LmdbStorage final : public Storage {
 
     void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, storage::ReadKeyOpts opts) final;
 
+    KeySegmentPair do_read(VariantKey&& variant_key) final;
+
     void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
 
     void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) final;
@@ -49,10 +51,6 @@ class LmdbStorage final : public Storage {
     bool do_supports_prefix_matching() const final {
         return false;
     };
-
-    bool do_has_async_methods() const final {
-        return false;
-    }
 
     inline bool do_fast_delete() final;
 
@@ -62,7 +60,7 @@ class LmdbStorage final : public Storage {
 
     bool do_key_exists(const VariantKey & key) final;
 
-    bool do_is_path_valid(const std::string_view path) const final;
+    bool do_is_path_valid(std::string_view path) const final;
 
     ::lmdb::env& env();
 
@@ -74,7 +72,7 @@ class LmdbStorage final : public Storage {
 
     // _internal methods assume the write mutex is already held
     void do_write_internal(KeySegmentPair&& key_seg, ::lmdb::txn& txn);
-    std::vector<VariantKey> do_remove_internal(VariantKey&& variant_key, ::lmdb::txn& txn, RemoveOpts opts);
+    boost::container::small_vector<VariantKey, 1> do_remove_internal(std::span<VariantKey> variant_key, ::lmdb::txn& txn, RemoveOpts opts);
     std::unique_ptr<std::mutex> write_mutex_;
     std::shared_ptr<LmdbInstance> lmdb_instance_;
 

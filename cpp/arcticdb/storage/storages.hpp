@@ -71,7 +71,7 @@ class Storages {
         return primary().is_path_valid(path);
     }
 
-    void read_sync_fallthrough(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
+    void read_sync_fallthrough(const VariantKey& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
         for (const auto &storage : storages_) {
             try {
                 return storage->read(VariantKey{variant_key}, visitor, opts);
@@ -82,34 +82,34 @@ class Storages {
         throw storage::KeyNotFoundException(variant_key);
     }
 
-    KeySegmentPair read_sync_fallthrough(VariantKey&& variant_key, ReadKeyOpts opts) {
+    KeySegmentPair read_sync_fallthrough(const VariantKey& variant_key) {
         for(const auto& storage : storages_) {
             try {
-                return storage->read(VariantKey{variant_key}, opts);
+                return storage->read(VariantKey{variant_key});
             } catch (typename storage::KeyNotFoundException& ex) {
                 ARCTICDB_DEBUG(log::version(), "Keys not found in storage, continuing to next storage");
             }
         }
         throw storage::KeyNotFoundException(variant_key);
     }
-    void read_sync(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts, bool primary_only=true) {
+    void read_sync(const VariantKey& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts, bool primary_only=true) {
         ARCTICDB_RUNTIME_SAMPLE(StoragesRead, 0)
         if(primary_only || variant_key_type(variant_key) != KeyType::TABLE_DATA)
-            return primary().read(std::move(variant_key), visitor, opts);
+            return primary().read(VariantKey{variant_key}, visitor, opts);
 
-        read_sync_fallthrough(std::move(variant_key), visitor, opts);
+        read_sync_fallthrough(variant_key, visitor, opts);
     }
 
-    KeySegmentPair read_sync(VariantKey&& variant_key, ReadKeyOpts opts, bool primary_only=true) {
+    KeySegmentPair read_sync(const VariantKey& variant_key, bool primary_only=true) {
         ARCTICDB_RUNTIME_SAMPLE(StoragesRead, 0)
         if(primary_only || variant_key_type(variant_key) != KeyType::TABLE_DATA)
-            return primary().read(std::move(variant_key), opts);
+            return primary().read(VariantKey{variant_key});
 
-        return read_sync_fallthrough(std::move(variant_key), opts);
+        return read_sync_fallthrough(variant_key);
     }
 
     static folly::Future<folly::Unit> async_read(Storage& storage, VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
-        if(storage.has_async_methods()) {
+        if(storage.has_async_api()) {
             return storage.async_api()->async_read(std::move(variant_key), visitor, opts);
         } else {
             storage.read(std::move(variant_key), visitor, opts);
@@ -118,10 +118,10 @@ class Storages {
     }
 
     static folly::Future<KeySegmentPair> async_read(Storage& storage, VariantKey&& variant_key, ReadKeyOpts opts) {
-        if(storage.has_async_methods()) {
+        if(storage.has_async_api()) {
             return storage.async_api()->async_read(std::move(variant_key), opts);
         } else {
-            auto key_seg = storage.read(std::move(variant_key), opts);
+            auto key_seg = storage.read(std::move(variant_key));
             return folly::makeFuture(std::move(key_seg));
         }
     }
@@ -135,7 +135,7 @@ class Storages {
         // visitation was idempotent. Could be achieved with a mutex/call once wrapper around
         // the visitor for simultaneous async reads, or with a window of size 1 and cancellation
         // token.
-        read_sync_fallthrough(std::move(variant_key), visitor, opts);
+        read_sync_fallthrough(variant_key, visitor, opts);
         return folly::makeFuture();
     }
 
@@ -148,7 +148,7 @@ class Storages {
         // visitation was idempotent. Could be achieved with a mutex/call once wrapper around
         // the visitor for simultaneous async reads, or with a window of size 1 and cancellation
         // token.
-        auto res = read_sync_fallthrough(std::move(variant_key), opts);
+        auto res = read_sync_fallthrough(variant_key);
         return folly::makeFuture(std::move(res));
     }
 
@@ -198,7 +198,7 @@ class Storages {
             auto key = std::forward<VariantKey>(vk);
             if (to_atom(key).creation_ts() < horizon) {
                 try {
-                    auto key_seg = source.read(VariantKey{key}, ReadKeyOpts{});
+                    auto key_seg = source.read(VariantKey{key});
                     target.write(std::move(key_seg));
                     source.remove(std::move(key), storage::RemoveOpts{});
                 } catch (const std::exception& ex) {

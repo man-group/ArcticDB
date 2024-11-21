@@ -22,10 +22,6 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 
-
-#include <mongocxx/exception/operation_exception.hpp>
-#include <bsoncxx/json.hpp>
-
 namespace arcticdb::storage::mongo {
 
 const auto UNSUPPORTED_MONGO_CHARS = std::unordered_set<char>{'/'};
@@ -41,15 +37,17 @@ std::string MongoStorage::collection_name(KeyType k) {
  * - mongocxx::operation_exception has an error_code which is returned by the server as documented here: https://www.mongodb.com/docs/manual/reference/error-codes/
  * - some relevant error codes returned by the server are defined in MongoError enum.
  */
-void raise_mongo_exception(const mongocxx::operation_exception& e, const std::string& object_name) {
+void raise_mongo_exception(const mongocxx::operation_exception &e, const std::string &object_name) {
     auto error_code = e.code().value();
     auto mongo_error_suffix = fmt::format("MongoError#{}: {} for object {}", error_code, e.what(), object_name);
 
-    if (error_code == static_cast<int>(MongoError::NoSuchKey) || error_code == static_cast<int>(MongoError::KeyNotFound)) {
+    if (error_code == static_cast<int>(MongoError::NoSuchKey)
+        || error_code == static_cast<int>(MongoError::KeyNotFound)) {
         throw KeyNotFoundException(fmt::format("Key Not Found Error: {}", mongo_error_suffix));
     }
 
-    if (error_code == static_cast<int>(MongoError::UnAuthorized) || error_code == static_cast<int>(MongoError::AuthenticationFailed)) {
+    if (error_code == static_cast<int>(MongoError::UnAuthorized)
+        || error_code == static_cast<int>(MongoError::AuthenticationFailed)) {
         raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: {}", mongo_error_suffix));
     }
 
@@ -60,10 +58,11 @@ void raise_mongo_exception(const mongocxx::operation_exception& e, const std::st
 }
 
 bool is_expected_error_type(int error_code) {
-    return error_code == static_cast<int>(MongoError::KeyNotFound) || error_code == static_cast<int>(MongoError::NoSuchKey);
+    return error_code == static_cast<int>(MongoError::KeyNotFound)
+        || error_code == static_cast<int>(MongoError::NoSuchKey);
 }
 
-void raise_if_unexpected_error(const mongocxx::operation_exception& e, const std::string& object_name) {
+void raise_if_unexpected_error(const mongocxx::operation_exception &e, const std::string &object_name) {
     auto error_code = e.code().value();
 
     if (!is_expected_error_type(error_code)) {
@@ -75,10 +74,7 @@ std::string MongoStorage::name() const {
     return fmt::format("mongo_storage-{}", db_);
 }
 
-void MongoStorage::do_write(KeySegmentPair&& key_seg) {
-    namespace fg = folly::gen;
-    auto fmt_db = [](auto &&kv) { return kv.key_type(); };
-
+void MongoStorage::do_write(KeySegmentPair &&key_seg) {
     ARCTICDB_SAMPLE(MongoStorageWrite, 0)
 
     auto collection = collection_name(key_seg.key_type());
@@ -94,32 +90,30 @@ void MongoStorage::do_write(KeySegmentPair&& key_seg) {
     }
 }
 
-void MongoStorage::do_update(KeySegmentPair&& key_seg, UpdateOpts opts) {
+void MongoStorage::do_update(KeySegmentPair &&key_seg, UpdateOpts opts) {
     namespace fg = folly::gen;
-    auto fmt_db = [](auto &&kv) { return kv.key_type(); };
 
     ARCTICDB_SAMPLE(MongoStorageWrite, 0)
 
-            auto collection = collection_name(key_seg.key_type());
-            auto key_view = key_seg.key_view();
-            try {
-                auto result = client_->update_segment(db_, collection, std::move(key_seg), opts.upsert_);
-                storage::check<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>(result.modified_count.has_value(),
-                                                                    "Mongo did not acknowledge write for key {}",
-                                                                    key_view);
-                if (!opts.upsert_ && result.modified_count.value() == 0) {
-                    throw storage::KeyNotFoundException(
-                            fmt::format("update called with upsert=false but key does not exist: {}", key_view));
-                }
-            } catch (const mongocxx::operation_exception& ex) {
-                std::string object_name = std::string(key_view);
-                raise_mongo_exception(ex, object_name);
-            }
+    auto collection = collection_name(key_seg.key_type());
+    auto key_view = key_seg.key_view();
+    try {
+        auto result = client_->update_segment(db_, collection, std::move(key_seg), opts.upsert_);
+        storage::check<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>(result.modified_count.has_value(),
+                                                            "Mongo did not acknowledge write for key {}",
+                                                            key_view);
+        if (!opts.upsert_ && result.modified_count.value() == 0) {
+            throw storage::KeyNotFoundException(
+                fmt::format("update called with upsert=false but key does not exist: {}", key_view));
+        }
+    } catch (const mongocxx::operation_exception &ex) {
+        std::string object_name = std::string(key_view);
+        raise_mongo_exception(ex, object_name);
+    }
 }
 
-void MongoStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
+void MongoStorage::do_read(VariantKey &&variant_key, const ReadVisitor &visitor, ReadKeyOpts) {
     namespace fg = folly::gen;
-    auto fmt_db = [](auto &&k) { return variant_key_type(k); };
     ARCTICDB_SAMPLE(MongoStorageRead, 0)
     std::vector<VariantKey> keys_not_found;
 
@@ -129,42 +123,50 @@ void MongoStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor,
         // later we should add the key to failed_reads in this case
         if (!kv.has_value()) {
             keys_not_found.push_back(variant_key);
-        }
-        else {
+        } else {
             visitor(variant_key, std::move(kv->segment()));
         }
 
-    } catch (const mongocxx::operation_exception& ex) {
+    } catch (const mongocxx::operation_exception &ex) {
         std::string object_name = std::string(variant_key_view(variant_key));
         raise_if_unexpected_error(ex, object_name);
-
-     /*   log::storage().log(
-                opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
-                "Failed to find segment for key '{}' {}: {}",
-                variant_key_view(k),
-                ex.code().value(),
-                ex.what());
-        keys_not_found.push_back(k);
     }
+}
 
-    if (!keys_not_found.empty()) {
-        throw KeyNotFoundException(Composite<VariantKey>{std::move(keys_not_found)});*/
+KeySegmentPair MongoStorage::do_read(VariantKey&& variant_key) {
+    namespace fg = folly::gen;
+    ARCTICDB_SAMPLE(MongoStorageRead, 0)
+    std::vector<VariantKey> keys_not_found;
+
+    auto collection = collection_name(variant_key_type(variant_key));
+    try {
+        auto kv = client_->read_segment(db_, collection, variant_key);
+        // later we should add the key to failed_reads in this case
+        if (!kv.has_value()) {
+            keys_not_found.push_back(variant_key);
+        } else {
+            return {VariantKey{variant_key}, std::move(kv->segment())};
+        }
+
+    } catch (const mongocxx::operation_exception &ex) {
+        std::string object_name = std::string(variant_key_view(variant_key));
+        raise_if_unexpected_error(ex, object_name);
     }
 }
 
 bool MongoStorage::do_fast_delete() {
-    foreach_key_type([&] (KeyType key_type) {
+    foreach_key_type([&](KeyType key_type) {
         auto collection = collection_name(key_type);
         client_->drop_collection(db_, collection);
     });
     return true;
 }
 
-void MongoStorage::do_remove(std::vector<VariantKey>&& variant_keys, RemoveOpts opts) {
+void MongoStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&k) { return variant_key_type(k); };
     ARCTICDB_SAMPLE(MongoStorageRemove, 0)
-    Composite<VariantKey> keys_not_found;
+    std::vector<VariantKey> keys_not_found;
 
     (fg::from(variant_keys) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         for (auto &k : group.values()) {
@@ -179,7 +181,7 @@ void MongoStorage::do_remove(std::vector<VariantKey>&& variant_keys, RemoveOpts 
                 if (result.delete_count.value() == 0 && !opts.ignores_missing_key_) {
                     keys_not_found.push_back(k);
                 }
-            } catch (const mongocxx::operation_exception& ex) {
+            } catch (const mongocxx::operation_exception &ex) {
                 // mongo delete does not throw exception if key not found, it returns 0 as delete count
                 std::string object_name = std::string(variant_key_view(k));
                 raise_mongo_exception(ex, object_name);
@@ -191,13 +193,15 @@ void MongoStorage::do_remove(std::vector<VariantKey>&& variant_keys, RemoveOpts 
     }
 }
 
-bool MongoStorage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) {
+bool MongoStorage::do_iterate_type_until_match(KeyType key_type,
+                                               const IterateTypePredicate &visitor,
+                                               const std::string &prefix) {
     auto collection = collection_name(key_type);
     ARCTICDB_SAMPLE(MongoStorageItType, 0)
     std::vector<VariantKey> keys;
     try {
         keys = client_->list_keys(db_, collection, key_type, prefix);
-    } catch (const mongocxx::operation_exception& ex) {
+    } catch (const mongocxx::operation_exception &ex) {
         // We don't raise when key is not found because we want to return an empty list instead of raising.
         raise_if_unexpected_error(ex, collection);
         log::storage().warn("Failed to iterate key type with key '{}' {}: {}",
@@ -207,7 +211,7 @@ bool MongoStorage::do_iterate_type_until_match(KeyType key_type, const IterateTy
     }
     for (auto &key : keys) {
         if (visitor(std::move(key))) {
-          return true;
+            return true;
         }
     }
     return false;
@@ -219,18 +223,17 @@ bool MongoStorage::do_is_path_valid(const std::string_view path) const {
     });
 }
 
-bool MongoStorage::do_key_exists(const VariantKey& key) {
+bool MongoStorage::do_key_exists(const VariantKey &key) {
     auto collection = collection_name(variant_key_type(key));
     try {
         return client_->key_exists(db_, collection, key);
-    } catch (const mongocxx::operation_exception& ex) {
+    } catch (const mongocxx::operation_exception &ex) {
         std::string object_name = std::string(variant_key_view(key));
         raise_if_unexpected_error(ex, object_name);
     }
 
     return false;
 }
-
 
 using Config = arcticdb::proto::mongo_storage::Config;
 
@@ -239,16 +242,16 @@ MongoStorage::MongoStorage(
     OpenMode mode,
     const Config &config) :
     Storage(lib, mode) {
-    if(config.use_mock_storage_for_testing()) {
+    if (config.use_mock_storage_for_testing()) {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock Mongo storage");
         client_ = std::make_unique<MockMongoClient>();
     } else {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Real Mongo storage");
         client_ = std::make_unique<MongoClient>(
-                config,
-                ConfigsMap::instance()->get_int("MongoClient.MinPoolSize", 100),
-                ConfigsMap::instance()->get_int("MongoClient.MaxPoolSize", 1000),
-                ConfigsMap::instance()->get_int("MongoClient.SelectionTimeoutMs", 120000));
+            config,
+            ConfigsMap::instance()->get_int("MongoClient.MinPoolSize", 100),
+            ConfigsMap::instance()->get_int("MongoClient.MaxPoolSize", 1000),
+            ConfigsMap::instance()->get_int("MongoClient.SelectionTimeoutMs", 120000));
     }
     auto key_rg = lib.as_range();
     auto it = key_rg.begin();

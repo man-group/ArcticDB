@@ -87,28 +87,22 @@ uint64_t MappedFileStorage::write_segment(Segment&& seg) {
 
 void MappedFileStorage::do_write(KeySegmentPair&& key_seg) {
     ARCTICDB_SAMPLE(MappedFileStorageWriteValues, 0)
-    auto key_values = std::move(kvs);
-    key_values.broadcast([this] (auto key_seg) {
-        const auto offset = write_segment(std::move(key_seg.segment()));
-        const auto size = key_seg.segment().size();
-        multi_segment_header_.add_key_and_offset(key_seg.atom_key(), offset, size);
-    });
+    const auto offset = write_segment(std::move(key_seg.segment()));
+    const auto size = key_seg.segment().size();
+    multi_segment_header_.add_key_and_offset(key_seg.atom_key(), offset, size);
 }
 
-void MappedFileStorage::do_update(VariantKey&&, UpdateOpts) {
+void MappedFileStorage::do_update(KeySegmentPair&&, UpdateOpts) {
     util::raise_rte("Update not implemented for file storages");
 }
 
 void MappedFileStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, storage::ReadKeyOpts) {
     ARCTICDB_SAMPLE(MappedFileStorageRead, 0)
-    auto keys = std::move(ks);
-    keys.broadcast([&visitor, this] (const auto& key) {
-        auto maybe_offset = multi_segment_header_.get_offset_for_key(to_atom(key));
-        util::check(maybe_offset.has_value(), "Failed to find key {} in file", key);
+        auto maybe_offset = multi_segment_header_.get_offset_for_key(to_atom(variant_key));
+        util::check(maybe_offset.has_value(), "Failed to find key {} in file", variant_key);
         auto [offset, bytes] = std::move(maybe_offset.value());
         auto segment = Segment::from_bytes(file_.data() + offset, bytes);
-        visitor(key, std::move(segment));
-    });
+        visitor(variant_key, std::move(segment));
 }
 
 bool MappedFileStorage::do_key_exists(const VariantKey& key) {

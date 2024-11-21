@@ -25,7 +25,10 @@ public:
 
     virtual ~Storage() = default;
 
-    ARCTICDB_NO_MOVE_OR_COPY(Storage)
+    Storage(const Storage&) = delete;
+    Storage& operator=(const Storage&) = delete;
+    Storage(Storage&&) = default;
+    Storage& operator=(Storage&&) = delete;
 
     void write(KeySegmentPair&& key_seg) {
         ARCTICDB_SAMPLE(StorageWrite, 0)
@@ -41,8 +44,8 @@ public:
         return do_read(std::move(variant_key), visitor, opts);
     }
 
-    KeySegmentPair read(VariantKey&& variant_key, ReadKeyOpts opts) {
-        return do_read(std::move(variant_key), opts);
+    KeySegmentPair read(VariantKey&& variant_key) {
+        return do_read(std::move(variant_key));
     }
 
     [[nodiscard]] virtual bool has_async_api() const {
@@ -107,7 +110,7 @@ private:
 
     virtual void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) = 0;
 
-    virtual KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts opts) = 0;
+    virtual KeySegmentPair do_read(VariantKey&& variant_key) = 0;
 
     virtual void do_remove(VariantKey&& variant_key, RemoveOpts opts) = 0;
 
