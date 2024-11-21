@@ -13,6 +13,7 @@
 #include <arcticdb/stream/merge.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
+#include <arcticdb/version/schema_checks.hpp>
 
 namespace arcticdb {
 
@@ -99,6 +100,8 @@ void merge_frames_for_keys(
 
 }
 
+using StaticSchemaCompactionChecks = folly::Function<void(const SegmentInMemory&, const pipelines::PipelineContext* const)>;
+
 template <typename IndexType, typename SchemaType, typename SegmentationPolicy, typename DensityPolicy, typename IteratorType>
 void do_compact(
     IteratorType target_start,
@@ -109,7 +112,8 @@ void do_compact(
     const std::shared_ptr<Store>& store,
     bool convert_int_to_float,
     std::optional<size_t> segment_size,
-    bool validate_index){
+    bool validate_index,
+    StaticSchemaCompactionChecks&& checks) {
         auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
         stream::SegmentAggregator<IndexType, SchemaType, SegmentationPolicy, DensityPolicy>
         aggregator{
@@ -144,6 +148,10 @@ void do_compact(
                     segment.descriptor().sorted() == SortedValue::UNKNOWN,
                 "Cannot compact unordered segment."
             );
+
+            if constexpr (std::is_same_v<SchemaType, FixedSchema>) {
+                checks(segment, pipeline_context.get());
+            }
 
             aggregator.add_segment(
                 std::move(sk.segment(store)),

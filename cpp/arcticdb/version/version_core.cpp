@@ -890,25 +890,18 @@ bool read_incompletes_to_pipeline(
         ensure_timeseries_norm_meta(*pipeline_context->norm_meta_, pipeline_context->stream_id_, sparsify);
     }
 
-    if (!dynamic_schema) {
-        const auto first_different_seg = std::adjacent_find(
-            incomplete_segments.begin(),
-            incomplete_segments.end(),
-            [&](const SliceAndKey& left, const SliceAndKey& right) {
-                const StreamDescriptor& left_desc = left.segment(store).descriptor();
-                const StreamDescriptor& right_desc = right.segment(store).descriptor();
-                return !columns_match(left_desc, right_desc);
-            }
-        );
-        if (first_different_seg != incomplete_segments.end()) {
-            schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                "When static schema is used all staged segments must have the same column and column types."
-                "{} is different than {}",
-                first_different_seg->segment(store).descriptor(),
-                (first_different_seg + 1)->segment(store).descriptor()
-            );
+    if (dynamic_schema) {
+        pipeline_context->staged_descriptor_ =
+            merge_descriptors(seg.descriptor(), incomplete_segments, read_query.columns);
+        if (pipeline_context->desc_) {
+            const std::array fields_ptr = {pipeline_context->desc_->fields_ptr()};
+            pipeline_context->desc_ =
+                merge_descriptors(*pipeline_context->staged_descriptor_, fields_ptr, read_query.columns);
+        } else {
+            pipeline_context->desc_ = pipeline_context->staged_descriptor_;
         }
-        const StreamDescriptor& staged_desc = incomplete_segments[0].segment(store).descriptor();
+    } else {
+        const StreamDescriptor &staged_desc = incomplete_segments[0].segment(store).descriptor();
         if (pipeline_context->desc_) {
             schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                 columns_match(staged_desc, *pipeline_context->desc_),
@@ -919,16 +912,6 @@ bool read_incompletes_to_pipeline(
         }
         pipeline_context->staged_descriptor_ = staged_desc;
         pipeline_context->desc_ = staged_desc;
-    } else {
-        pipeline_context->staged_descriptor_ =
-            merge_descriptors(seg.descriptor(), incomplete_segments, read_query.columns);
-        if (pipeline_context->desc_) {
-            const std::array fields_ptr = {pipeline_context->desc_->fields_ptr()};
-            pipeline_context->desc_ =
-                merge_descriptors(*pipeline_context->staged_descriptor_, fields_ptr, read_query.columns);
-        } else {
-            pipeline_context->desc_ = pipeline_context->staged_descriptor_;
-        }
     }
 
     modify_descriptor(pipeline_context, read_options);
@@ -1404,6 +1387,7 @@ void delete_incomplete_keys(PipelineContext* pipeline_context, Store* store) {
     store->remove_keys(keys_to_delete).get();
 }
 
+// TODO similarly - delete the data keys too upon failure
 class IncompleteKeysRAII {
 public:
     IncompleteKeysRAII() = default;
@@ -1625,6 +1609,18 @@ VersionedItem compact_incomplete_impl(
         using SchemaType = std::remove_reference_t<decltype(schema)>;
         using ColumnPolicyType = std::remove_reference_t<decltype(column_policy)>;
         constexpr bool validate_index_sorted = IndexType::type() == IndexDescriptorImpl::Type::TIMESTAMP;
+
+        StaticSchemaCompactionChecks checks = [](const SegmentInMemory& cb_segment, const pipelines::PipelineContext* const cb_pipeline_context) {
+            if (!columns_match(cb_segment.descriptor(), cb_pipeline_context->descriptor())) {
+                schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                    "When static schema is used all staged segments must have the same column and column types."
+                    "{} is different than {}",
+                    cb_segment.descriptor(),
+                    cb_pipeline_context->descriptor()
+                );
+            }
+        };
+
         do_compact<IndexType, SchemaType, RowCountSegmentPolicy, ColumnPolicyType>(
                 pipeline_context->incompletes_begin(),
                 pipeline_context->end(),
@@ -1634,7 +1630,8 @@ VersionedItem compact_incomplete_impl(
                 store,
                 options.convert_int_to_float_,
                 write_options.segment_row_size,
-                validate_index_sorted);
+                validate_index_sorted,
+                std::move(checks));
         if constexpr(std::is_same_v<IndexType, TimeseriesIndex>) {
             pipeline_context->desc_->set_sorted(deduce_sorted(previous_sorted_value.value_or(SortedValue::ASCENDING), SortedValue::ASCENDING));
         }
@@ -1731,6 +1728,11 @@ VersionedItem defragment_symbol_data_impl(
         auto segments = read_and_process(store, pre_defragmentation_info.pipeline_context, pre_defragmentation_info.read_query, defragmentation_read_options_generator(options)).get();
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
+
+        StaticSchemaCompactionChecks checks = [](const SegmentInMemory&, const pipelines::PipelineContext* const) {
+            // No defrag specific checks yet
+        };
+
         do_compact<IndexType, SchemaType, RowCountSegmentPolicy, DenseColumnPolicy>(
             segments.begin(),
             segments.end(),
@@ -1740,7 +1742,8 @@ VersionedItem defragment_symbol_data_impl(
             store,
             false,
             segment_size,
-            false);
+            false,
+            std::move(checks));
     });
 
     auto keys = folly::collect(fut_vec).get();
