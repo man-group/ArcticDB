@@ -1,6 +1,6 @@
 #pragma once
 
-#include "version/version_store_api.hpp"
+#include <arcticdb/version/version_store_api.hpp>
 
 #include "codec/default_codecs.hpp"
 #include "column_store/column_utils.hpp"
@@ -9,7 +9,6 @@
 #include "util/variant.hpp"
 #include "fmt/format.h"
 #include <pybind11/pybind11.h>
-#include "python/python_utils.hpp"
 #include "async/async_store.hpp"
 #include "version/version_map.hpp"
 #include <util/timer.hpp>
@@ -22,8 +21,13 @@
 #include <util/format_bytes.hpp>
 #include <numeric>
 
-#include <arcticdb/util/timer.hpp>
 #include <arcticdb/stream/stream_source.hpp>
+#include <arcticdb/entity/metrics.hpp>
+#include <ranges>
+
+#include "version/version_functions.hpp"
+
+namespace rng = std::ranges;
 
 namespace arcticdb {
 
@@ -78,7 +82,7 @@ struct BatchCopier {
     }
 
     void go(std::unordered_map<KeyType, std::vector<VariantKey>>&& keys, bool perform_checks) {
-        size_t batch_size_per_thread = std::max(batch_size_ / thread_count_, size_t(1));
+        size_t batch_size_per_thread = std::max(batch_size_ / thread_count_, size_t{1});
         // Log approximately every 10000 objects
         uint64_t logging_frequency = 10000 / batch_size_per_thread;
         folly::FutureExecutor<folly::IOThreadPoolExecutor> exec{thread_count_};
@@ -93,9 +97,8 @@ struct BatchCopier {
                     const auto end = it->second.end();
                     const size_t size = std::distance(start, end);
                     std::vector<std::pair<VariantKey, StreamSource::ReadContinuation>> keys_to_copy;
-                    keys_to_copy.resize(size);
-                    auto segments_ptr = std::make_unique<std::vector<storage::KeySegmentPair>>();
-                    segments_ptr->reserve(size);
+                    keys_to_copy.reserve(size);
+                    auto segments_ptr = std::make_unique<std::vector<storage::KeySegmentPair>>(size);
                     std::transform(
                         std::make_move_iterator(start),
                         std::make_move_iterator(end),
@@ -109,7 +112,7 @@ struct BatchCopier {
                     );
                     it->second.erase(start, end);
                     futures.emplace_back(exec.addFuture(
-                    [this, keys_to_copy=std::move(keys_to_copy), &logging_frequency, check_target, check_source, segments_ptr = std::move(segments_ptr)]() mutable {
+                    [this, keys_to_copy=std::move(keys_to_copy), &logging_frequency, check_target, check_source, segments_ptr=std::move(segments_ptr)]() mutable {
                         for (const auto& key: keys_to_copy) {
                             if(check_source && !source_store_->key_exists(key.first).get()) {
                                 log::storage().warn("Found an unreadable key {}", key.first);
@@ -120,7 +123,7 @@ struct BatchCopier {
                         }
                         auto collected_kvs = source_store_->batch_read_compressed(std::move(keys_to_copy), BatchReadArgs{}).get();
                         if (!collected_kvs.empty()) {
-                            const size_t bytes_being_copied = std::accumulate(segments_ptr->begin(), segments_ptr->end(), size_t(0), [] (size_t a, const storage::KeySegmentPair& ks) {
+                            const size_t bytes_being_copied = std::accumulate(segments_ptr->begin(), segments_ptr->end(), size_t{0}, [] (size_t a, const storage::KeySegmentPair& ks) {
                                 return a + ks.segment().size();
                             });
                             target_store_->batch_write_compressed(*segments_ptr.release()).get();
@@ -175,7 +178,7 @@ struct BatchCopier {
         keys_.clear();
         auto collected_kvs = source_store_->batch_read_compressed(std::move(keys_to_copy), BatchReadArgs{}).get();
         if (!collected_kvs.empty()) {
-            bytes_moved_ += std::accumulate(segments.begin(), segments.end(), size_t(0), [] (size_t a, const storage::KeySegmentPair& ks) {
+            bytes_moved_ += std::accumulate(segments.begin(), segments.end(), size_t{0}, [] (size_t a, const storage::KeySegmentPair& ks) {
                 return a + ks.segment().size();
             });
             target_store_->batch_write_compressed(std::move(segments)).get();
@@ -247,19 +250,42 @@ struct BatchDeleter {
     }
 };
 
+inline MetricsConfig::Model get_model_from_proto_config(const proto::utils::PrometheusConfig& cfg) {
+    switch (cfg.prometheus_model()) {
+        case proto::utils::PrometheusConfig_PrometheusModel_NO_INIT: return MetricsConfig::Model::NO_INIT;
+        case proto::utils::PrometheusConfig_PrometheusModel_PUSH: return MetricsConfig::Model::PUSH;
+        case proto::utils::PrometheusConfig_PrometheusModel_WEB: return MetricsConfig::Model::PULL;
+        default: internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unknown Prometheus model {}", cfg.prometheus_model());
+    }
+}
+
 class ARCTICDB_VISIBILITY_HIDDEN StorageMover {
 public:
     StorageMover(std::shared_ptr<storage::Library> source_library, std::shared_ptr<storage::Library> target_library) :
         source_store_(std::make_shared<async::AsyncStore<util::SysClock>>(source_library,
-                                                                          codec::default_lz4_codec())),
+                                                                          codec::default_lz4_codec(),
+                                                                          encoding_version(source_library->config()))),
         target_store_(std::make_shared<async::AsyncStore<util::SysClock>>(target_library,
-                                                                          codec::default_lz4_codec())),
+                                                                          codec::default_lz4_codec(),
+                                                                          encoding_version(target_library->config()))),
         cfg_() {
+        codec::check<ErrorCode::E_ENCODING_VERSION_MISMATCH>(
+            encoding_version(source_library->config()) == encoding_version(target_library->config()),
+            "The encoding version of the source library {} is {} which is different than the encoding version {} of the target library {}",
+            source_library->name(), encoding_version(source_library->config()),encoding_version(target_library->config()), target_library->name());
         auto const& src_cfg = source_library->config();
         util::variant_match(src_cfg,
                             [](std::monostate){util::raise_rte("Invalid source library cfg");},
                             [&](const proto::storage::VersionStoreConfig& conf){
-                                PrometheusConfigInstance::instance()->config.CopyFrom(conf.prometheus_config());
+                                MetricsConfig prometheus_config(
+                                    conf.prometheus_config().host(),
+                                    conf.prometheus_config().port(),
+                                    conf.prometheus_config().job_name(),
+                                    conf.prometheus_config().instance(),
+                                    conf.prometheus_config().prometheus_env(),
+                                    get_model_from_proto_config(conf.prometheus_config())
+                                );
+                                PrometheusInstance::instance()->configure(std::move(prometheus_config));
                                 source_symbol_list_ = conf.symbol_list();
         });
 
@@ -285,8 +311,8 @@ public:
         py::list res;
         size_t count = 0;
         foreach_key_type([&](KeyType key_type) {
-            source_store_->iterate_type(key_type, [&](const VariantKey &&key) {
-                res.append(python_util::key_to_py(key));
+            source_store_->iterate_type(key_type, [&](const VariantKey& key) {
+                res.append(key);
                 if(++count % 10000 == 0)
                     log::storage().info("Got {} keys", count);
             });
@@ -440,7 +466,7 @@ public:
         py::list res;
         for(const auto& missing_of_type : all_missing) {
             for (const auto &key : missing_of_type.second)
-                res.append( python_util::key_to_py(key));
+                res.append(key);
         }
         return res;
     }
@@ -448,11 +474,11 @@ public:
     size_t clone_all_keys_for_symbol(const StreamId &stream_id, size_t batch_size) {
         std::vector<VariantKey> vkeys;
         foreach_key_type([&](KeyType key_type) {
-            source_store_->iterate_type(key_type, [&](const VariantKey &&key) {
+            source_store_->iterate_type(key_type, [&](const VariantKey& key) {
                 vkeys.push_back(key);
             }, std::get<StringId>(stream_id));
         });
-        return write_variant_keys_from_source_to_target(vkeys, batch_size);
+        return write_variant_keys_from_source_to_target(std::move(vkeys), batch_size);
     }
 
     size_t clone_all_keys_for_symbol_for_type(
@@ -460,30 +486,33 @@ public:
         size_t batch_size,
         KeyType key_type) {
         std::vector<VariantKey> vkeys;
-        source_store_->iterate_type(key_type, [&](const VariantKey &&key) {
+        source_store_->iterate_type(key_type, [&](const VariantKey& key) {
             vkeys.push_back(key);
         }, std::get<StringId>(stream_id));
-        return write_variant_keys_from_source_to_target(vkeys, batch_size);
+        return write_variant_keys_from_source_to_target(std::move(vkeys), batch_size);
     }
 
-    size_t write_variant_keys_from_source_to_target(std::vector<VariantKey> vkeys, size_t batch_size) {
+    size_t write_variant_keys_from_source_to_target(std::vector<VariantKey>&& vkeys, size_t batch_size) {
         std::vector<folly::Future<folly::Unit>> write_futs;
 
-        size_t start = 0;
         size_t total_copied = 0;
-        std::vector<VariantKey> keys_to_copy;
-
-        for (; start < vkeys.size(); start += batch_size) {
-            keys_to_copy.clear();
-            size_t end = start + batch_size < vkeys.size() ? start + batch_size : vkeys.size();
-            std::copy(vkeys.begin() + start, vkeys.begin() + end, std::back_inserter(keys_to_copy));
-            keys_to_copy.erase(std::remove_if(std::begin(vkeys), std::end(vkeys), [&] (const auto& key) {
-                return !source_store_->key_exists(key).get() || target_store_->key_exists(key).get();
-            }),  vkeys.end());
-
-            total_copied += keys_to_copy.size();
-            auto kvs = source_store_->batch_read_compressed(std::move(keys_to_copy), BatchReadArgs{}, false);
-            write_futs.push_back(target_store_->batch_write_compressed(std::move(kvs)));
+        for (size_t start = 0; start < vkeys.size(); start += batch_size) {
+            const size_t end = std::min(start + batch_size, vkeys.size());
+            const size_t copy_max_size = end - start;
+            std::vector<std::pair<VariantKey, StreamSource::ReadContinuation>> keys_to_copy(copy_max_size);
+            std::vector<storage::KeySegmentPair> segments(copy_max_size);
+            size_t copied = 0;
+            for (size_t offset = start; offset < end; ++offset) {
+                if (VariantKey& key = vkeys[offset]; source_store_->key_exists(key).get() && !target_store_->key_exists(key).get()) {
+                    keys_to_copy[copied++] = std::pair{std::move(key), [copied, &segments](storage::KeySegmentPair&& ks) {
+                        segments[copied] = std::move(ks);
+                        return segments[copied].variant_key();
+                    }};
+                }
+            }
+            total_copied += copied;
+            [[maybe_unused]] auto keys = source_store_->batch_read_compressed(std::move(keys_to_copy), BatchReadArgs{}).get();
+            write_futs.push_back(target_store_->batch_write_compressed(std::move(segments)));
         }
         folly::collect(write_futs).get();
         return total_copied;
@@ -492,11 +521,15 @@ public:
 
     size_t write_keys_from_source_to_target(const std::vector<py::object>& py_keys, size_t batch_size) {
         std::vector<VariantKey > vkeys;
-        std::transform(py_keys.begin(), py_keys.end(), std::back_inserter(vkeys),
-                       [&](const auto &key) {
-                           return python_util::py_to_key(key);
-                       });
-        return write_variant_keys_from_source_to_target(vkeys, batch_size);
+        rng::transform(py_keys, std::back_inserter(vkeys), [](const auto& py_key) -> VariantKey {
+            if (py::isinstance<RefKey>(py_key)) {
+                return py_key.template cast<RefKey>();
+            } else if (py::isinstance<AtomKey>(py_key)) {
+                return py_key.template cast<AtomKey>();
+            }
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Invalid key type");
+        });
+        return write_variant_keys_from_source_to_target(std::move(vkeys), batch_size);
     }
 
     py::dict write_symbol_trees_from_source_to_target(const std::vector<py::object>& py_partial_keys, bool append_versions) {
@@ -521,7 +554,7 @@ public:
             for(const auto& id: ids) {
                 util::variant_match(id,
                                     [&](const VersionId& numeric_id) {
-                                        auto index_key = get_specific_version(source_store_, source_map, sym, numeric_id, true, false);
+                                        auto index_key = get_specific_version(source_store_, source_map, sym, numeric_id);
                                         if (!index_key) {
                                             sym_data[py::int_(numeric_id)] =
                                                     fmt::format("Sym:{},Version:{},Ex:{}", sym, numeric_id, "Numeric Id not found");
@@ -567,14 +600,13 @@ public:
                 try {
                     std::optional<VersionId> new_version_id;
                     if (append_versions) {
-                        auto maybe_prev = get_latest_version(target_store_, target_map, sym, true, true);
+                        auto [maybe_prev, _] = get_latest_version(target_store_, target_map, sym);
                         if (maybe_prev){
                             new_version_id = std::make_optional(maybe_prev.value().version_id() + 1);
                         }
                     } else {
-                        auto target_index_key = get_specific_version(target_store_, target_map, sym, v_id, true, true);
-                        if (target_index_key) {
-                            throw arcticc::storage::DuplicateKeyException(target_index_key.value());
+                        if (auto target_index_key = get_specific_version(target_store_, target_map, sym, v_id)) {
+                            throw storage::DuplicateKeyException(target_index_key.value());
                         }
                     }
                     const auto new_index_key = storage::copy_index_key_recursively(source_store_, target_store_,
@@ -617,7 +649,6 @@ public:
     }
 
 private:
-
     std::shared_ptr<Store> source_store_;
     std::shared_ptr<Store> target_store_;
     proto::storage::VersionStoreConfig cfg_;

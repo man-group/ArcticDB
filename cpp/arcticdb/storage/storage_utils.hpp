@@ -10,6 +10,10 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/storage/store.hpp>
 
+#include <ranges>
+
+namespace rng = std::ranges;
+
 namespace arcticdb {
 
 inline auto stream_id_prefix_matcher(const std::string &prefix) {
@@ -36,8 +40,7 @@ inline std::vector<VariantKey> filter_keys_on_existence(
 inline void filter_keys_on_existence(std::vector<AtomKey>& keys, const std::shared_ptr<Store>& store, bool pred) {
     std::vector<VariantKey> var_vector;
     var_vector.reserve(keys.size());
-    std::transform(keys.begin(), keys.end(), std::back_inserter(var_vector),
-                   [](auto&& k) { return VariantKey(std::move(k)); });
+    rng::copy(keys, std::back_inserter(var_vector));
 
     auto key_existence = store->batch_key_exists(var_vector);
 
@@ -51,5 +54,11 @@ inline void filter_keys_on_existence(std::vector<AtomKey>& keys, const std::shar
     }
     keys.erase(keys_itr, keys.end());
 }
+
+AtomKey copy_index_key_recursively(
+        const std::shared_ptr<Store>& source_store,
+        const std::shared_ptr<Store>& target_store,
+        const AtomKey& index_key,
+        std::optional<VersionId> new_version_id);
 
 }  //namespace arcticdb

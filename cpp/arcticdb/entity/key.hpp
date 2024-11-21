@@ -221,7 +221,7 @@ consteval auto key_types_write_precedence() {
 
 consteval auto key_types_read_precedence() {
     auto output = key_types_write_precedence();
-    std::reverse(std::begin(output), std::end(output));
+    rng::reverse(output);
     return output;
 }
 
@@ -251,7 +251,7 @@ enum class VariantType : char {
 
 VariantType variant_type_from_key_type(KeyType key_type);
 
-inline bool is_index_key_type(KeyType key_type) {
+constexpr bool is_index_key_type(KeyType key_type) {
     // TODO: Change name probably.
     return (key_type == KeyType::TABLE_INDEX) || (key_type == KeyType::MULTI_KEY);
 }
@@ -259,9 +259,7 @@ inline bool is_index_key_type(KeyType key_type) {
 bool is_string_key_type(KeyType k);
 
 bool is_ref_key_class(KeyType k);
-
-bool is_block_ref_key_class(KeyType k);
-
+    
 constexpr KeyType get_key_type_for_data_stream(const StreamId &) {
     return KeyType::TABLE_DATA;
 }
@@ -270,6 +268,7 @@ constexpr KeyType get_key_type_for_index_stream(const StreamId &) {
     return KeyType::TABLE_INDEX;
 }
 
+const char* get_key_description(KeyType type);
 
 template <typename Function>
 constexpr auto foreach_key_type_read_precedence(Function&& func) {
