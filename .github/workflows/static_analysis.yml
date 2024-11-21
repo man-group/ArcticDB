@@ -3,7 +3,7 @@
   on:
     workflow_dispatch:
     schedule:
-      - 0 3 * * *
+      - cron: "0 3 * * *"
 
   jobs:
     polaris-scan:
