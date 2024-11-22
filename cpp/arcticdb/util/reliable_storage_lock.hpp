@@ -62,6 +62,17 @@ private:
     folly::FunctionScheduler extend_lock_heartbeat_;
 };
 
+
+// Only used for python tests
+struct LostReliableLock : std::exception {};
+class ReliableStorageLockManager {
+public:
+    void take_lock_guard(const ReliableStorageLock<>& lock);
+    void free_lock_guard();
+private:
+    std::optional<std::shared_ptr<ReliableStorageLockGuard>> guard = std::nullopt;
+};
+
 }
 
 }
