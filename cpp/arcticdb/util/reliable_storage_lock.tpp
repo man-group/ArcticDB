@@ -228,6 +228,16 @@ ReliableStorageLockGuard::~ReliableStorageLockGuard() {
     }
 }
 
+void ReliableStorageLockManager::take_lock_guard(const ReliableStorageLock<> &lock) {
+    guard = std::make_shared<ReliableStorageLockGuard>(lock, [](){
+        throw LostReliableLock();
+    });
+}
+
+void ReliableStorageLockManager::free_lock_guard() {
+    guard = std::nullopt;
+}
+
 }
 
 }
