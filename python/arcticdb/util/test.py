@@ -21,6 +21,8 @@ import time
 import attr
 from functools import wraps
 
+from arcticdb.util.utils import TimestampNumber
+
 try:
     from pandas.errors import UndefinedVariableError
 except ImportError:
@@ -46,6 +48,7 @@ def create_df(start=0, columns=1) -> pd.DataFrame:
 
     index = np.arange(start, start + 10, dtype=np.int64)
     return pd.DataFrame(data, index=index)
+ 
 
 def create_df_index_rownum(num_columns: int, start_index: int, end_index : int) -> pd.DataFrame:
     """
@@ -91,6 +94,19 @@ def create_df_index_rownum(num_columns: int, start_index: int, end_index : int) 
     df.index = np.arange(start_index, end_index, 1)
     return df
 
+
+def create_datetime_index(df: pd.DataFrame, name_col:str, freq:TimestampNumber.SupportedFreqTypes, 
+        start_time: pd.Timestamp = TimestampNumber.TIME_ZERO):
+    """
+        creates a datetime index to a dataframe. The index will start at specified timestamp
+        and will be generated using specified frequency having same number of periods as the rows
+        in the table
+    """
+    periods = len(df)
+    index = pd.date_range(start=start_time, periods=periods, freq=freq, name=name_col)
+    df.index = index
+
+
 def create_df_index_datetime(num_columns: int, start_hour: int, end_hour : int) -> pd.DataFrame:
     """
         Creates data frame with specified number of columns 
@@ -117,6 +133,7 @@ def create_df_index_datetime(num_columns: int, start_hour: int, end_hour : int) 
     df.index = dr
     return df
 
+
 def dataframe_dump_to_log(label_for_df, df: pd.DataFrame):
     """
         Useful for printing in log content and data types of columns of
@@ -130,6 +147,7 @@ def dataframe_dump_to_log(label_for_df, df: pd.DataFrame):
     print("column definitions : ")
     print(df.dtypes)
     print("-" * 80)
+
 
 def dataframe_simulate_arcticdb_update_static(existing_df: pd.DataFrame, update_df:  pd.DataFrame) ->  pd.DataFrame:
     """
@@ -155,6 +173,7 @@ def dataframe_simulate_arcticdb_update_static(existing_df: pd.DataFrame, update_
     result_df = pd.concat(chunks)
     return result_df
 
+
 def dataframe_single_column_string(length=1000, column_label='string_short', seed=0, string_len=1):
     """
         creates a dataframe with one column, which label can be changed, containing string
@@ -162,6 +181,7 @@ def dataframe_single_column_string(length=1000, column_label='string_short', see
     """
     np.random.seed(seed)
     return pd.DataFrame({ column_label : [random_string(string_len) for _ in range(length)] })
+
 
 def dataframe_filter_with_datetime_index(df: pd.DataFrame, start_timestamp:Scalar, end_timestamp:Scalar, inclusive='both') -> pd.DataFrame:
     """
@@ -174,6 +194,7 @@ def dataframe_filter_with_datetime_index(df: pd.DataFrame, start_timestamp:Scala
         df.index.to_series()
         .between(start_timestamp, end_timestamp, inclusive='both')
         ]
+
 
 def maybe_not_check_freq(f):
     """Ignore frequency when pandas is newer as starts to check frequency which it did not previously do."""
@@ -215,16 +236,17 @@ def assert_frame_equal_rebuild_index_first(expected : pd.DataFrame, actual : pd.
     actual.reset_index(inplace = True, drop = True)
     assert_frame_equal(left=expected, right=actual)
 
+
 def random_string(length: int):
     return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
 
 
-def get_sample_dataframe(size=1000, seed=0):
+def get_sample_dataframe(size=1000, seed=0, str_size=10):
     np.random.seed(seed)
     df = pd.DataFrame(
         {
             "uint8": random_integers(size, np.uint8),
-            "strings": [random_string(10) for _ in range(size)],
+            "strings": [random_string(str_size) for _ in range(size)],
             "uint16": random_integers(size, np.uint16),
             "uint32": random_integers(size, np.uint32),
             "uint64": random_integers(size, np.uint64),

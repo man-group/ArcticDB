@@ -359,11 +359,22 @@ def basic_arctic_client(request, encoding_version) -> Arctic:
     assert not ac.list_libraries()
     return ac
 
+@pytest.fixture
+def arctic_client_lmdb_map_size_100gb(lmdb_storage) -> Arctic:
+    storage_fixture: LmdbStorageFixture = lmdb_storage
+    storage_fixture.arctic_uri = storage_fixture.arctic_uri + "?map_size=100GB"
+    ac = storage_fixture.create_arctic(encoding_version=EncodingVersion.V2)
+    assert not ac.list_libraries()
+    return ac
 
 @pytest.fixture
-def basic_arctic_library(basic_arctic_client, lib_name) -> Arctic:
+def basic_arctic_library(basic_arctic_client, lib_name) -> Library:
     return basic_arctic_client.create_library(lib_name)
 
+
+@pytest.fixture
+def basic_arctic_library(basic_arctic_client, lib_name) -> Library:
+    return basic_arctic_client.create_library(lib_name)
 
 # endregion
 # region ============================ `NativeVersionStore` Fixture Factories ============================
