@@ -1593,7 +1593,6 @@ VersionedItem compact_incomplete_impl(
     }
     const auto& first_seg = pipeline_context->slice_and_keys_.begin()->segment(store);
 
-    std::vector<folly::Future<VariantKey>> fut_vec;
     std::vector<FrameSlice> slices;
     bool dynamic_schema = write_options.dynamic_schema;
     const auto index = index_type_from_descriptor(first_seg.descriptor());
@@ -1603,29 +1602,30 @@ VersionedItem compact_incomplete_impl(
         options.sparsify_ ? VariantColumnPolicy{SparseColumnPolicy{}} : VariantColumnPolicy{DenseColumnPolicy{}}
         );
 
-    util::variant_match(std::move(policies), [
-        &fut_vec, &slices, pipeline_context=pipeline_context, &store, &options, &previous_sorted_value, &write_options] (auto &&idx, auto &&schema, auto &&column_policy) {
+    CompactionResult result = util::variant_match(std::move(policies), [
+        &slices, pipeline_context=pipeline_context, &store, &options, &previous_sorted_value, &write_options] (auto &&idx, auto &&schema, auto &&column_policy) {
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
         using ColumnPolicyType = std::remove_reference_t<decltype(column_policy)>;
         constexpr bool validate_index_sorted = IndexType::type() == IndexDescriptorImpl::Type::TIMESTAMP;
 
-        StaticSchemaCompactionChecks checks = [](const SegmentInMemory& cb_segment, const pipelines::PipelineContext* const cb_pipeline_context) {
+        StaticSchemaCompactionChecks checks = [](const SegmentInMemory& cb_segment, const pipelines::PipelineContext* const cb_pipeline_context) -> CheckOutcome {
             if (!columns_match(cb_segment.descriptor(), cb_pipeline_context->descriptor())) {
-                schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                    "When static schema is used all staged segments must have the same column and column types."
+                return Error{
+                    ErrorCode::E_DESCRIPTOR_MISMATCH,
+                    fmt::format("When static schema is used all staged segments must have the same column and column types."
                     "{} is different than {}",
                     cb_segment.descriptor(),
-                    cb_pipeline_context->descriptor()
-                );
+                    cb_pipeline_context->descriptor())
+                };
             }
+            return std::monostate{};
         };
 
-        do_compact<IndexType, SchemaType, RowCountSegmentPolicy, ColumnPolicyType>(
+        CompactionResult result = do_compact<IndexType, SchemaType, RowCountSegmentPolicy, ColumnPolicyType>(
                 pipeline_context->incompletes_begin(),
                 pipeline_context->end(),
                 pipeline_context,
-                fut_vec,
                 slices,
                 store,
                 options.convert_int_to_float_,
@@ -1635,20 +1635,29 @@ VersionedItem compact_incomplete_impl(
         if constexpr(std::is_same_v<IndexType, TimeseriesIndex>) {
             pipeline_context->desc_->set_sorted(deduce_sorted(previous_sorted_value.value_or(SortedValue::ASCENDING), SortedValue::ASCENDING));
         }
+
+        return result;
     });
 
-    auto keys = folly::collect(fut_vec).get();
-    auto vit = collate_and_write(
-        store,
-        pipeline_context,
-        slices,
-        keys,
-        pipeline_context->incompletes_after(),
-        user_meta);
-    if (!options.delete_staged_data_on_failure_) {
-        delete_incomplete_keys(pipeline_context.get(), store.get());
-    }
-    return vit;
+    return util::variant_match(std::move(result),
+                        [&slices, &pipeline_context, &store, &options, &user_meta](CompactionWrittenKeys& written_keys) -> VersionedItem {
+                            auto vit = collate_and_write(
+                                store,
+                                pipeline_context,
+                                slices,
+                                std::move(written_keys),
+                                pipeline_context->incompletes_after(),
+                                user_meta);
+                            if (!options.delete_staged_data_on_failure_) {
+                                delete_incomplete_keys(pipeline_context.get(), store.get());
+                            }
+                            return vit;
+                        },
+                        [](Error& error) -> VersionedItem {
+                            // TODO tidy up my dynamic error raising stuff, put it in error_code.hpp
+                            throw ArcticException(fmt::format("{} {}", get_error_code_data(error.code).name_, error.message));
+                        }
+                    );
 }
 
 PredefragmentationInfo get_pre_defragmentation_info(
@@ -1672,8 +1681,8 @@ PredefragmentationInfo get_pre_defragmentation_info(
     first_col_segment_idx.reserve(slice_and_keys.size());
     std::optional<CompactionStartInfo> compaction_start_info;
     size_t segment_idx = 0, num_to_segments_after_compact = 0, new_segment_row_size = 0;
-    for(auto it = slice_and_keys.begin(); it != slice_and_keys.end(); ++it) {
-        auto &slice = it->slice();
+    for(const auto & slice_and_key : slice_and_keys) {
+        auto &slice = slice_and_key.slice();
 
         if (slice.row_range.diff() < segment_size && !compaction_start_info)
             compaction_start_info = {slice.row_range.start(), segment_idx};
@@ -1714,7 +1723,6 @@ VersionedItem defragment_symbol_data_impl(
     util::check(is_symbol_fragmented_impl(pre_defragmentation_info.segments_need_compaction) && pre_defragmentation_info.append_after.has_value(), "Nothing to compact in defragment_symbol_data");
 
     // in the new index segment, we will start appending after this value
-    std::vector<folly::Future<VariantKey>> fut_vec;
     std::vector<FrameSlice> slices;
     const auto index = index_type_from_descriptor(pre_defragmentation_info.pipeline_context->descriptor());
     auto policies = std::make_tuple(
@@ -1722,8 +1730,8 @@ VersionedItem defragment_symbol_data_impl(
         options.dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index, stream_id)} : VariantSchema{FixedSchema::default_schema(index, stream_id)}
         );
 
-    util::variant_match(std::move(policies), [
-        &fut_vec, &slices, &store, &options, &pre_defragmentation_info, segment_size=segment_size] (auto &&idx, auto &&schema) {
+    CompactionResult result = util::variant_match(std::move(policies), [
+        &slices, &store, &options, &pre_defragmentation_info, segment_size=segment_size] (auto &&idx, auto &&schema) {
         pre_defragmentation_info.read_query->clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{pre_defragmentation_info.append_after.value()}));
         auto segments = read_and_process(store, pre_defragmentation_info.pipeline_context, pre_defragmentation_info.read_query, defragmentation_read_options_generator(options)).get();
         using IndexType = std::remove_reference_t<decltype(idx)>;
@@ -1731,13 +1739,13 @@ VersionedItem defragment_symbol_data_impl(
 
         StaticSchemaCompactionChecks checks = [](const SegmentInMemory&, const pipelines::PipelineContext* const) {
             // No defrag specific checks yet
+            return std::monostate{};
         };
 
-        do_compact<IndexType, SchemaType, RowCountSegmentPolicy, DenseColumnPolicy>(
+        return do_compact<IndexType, SchemaType, RowCountSegmentPolicy, DenseColumnPolicy>(
             segments.begin(),
             segments.end(),
             pre_defragmentation_info.pipeline_context,
-            fut_vec,
             slices,
             store,
             false,
@@ -1746,16 +1754,21 @@ VersionedItem defragment_symbol_data_impl(
             std::move(checks));
     });
 
-    auto keys = folly::collect(fut_vec).get();
-    auto vit = collate_and_write(
-        store,
-        pre_defragmentation_info.pipeline_context,
-        slices,
-        keys,
-        pre_defragmentation_info.append_after.value(),
-        std::nullopt);
-    
-    return vit;
+    return util::variant_match(std::move(result),
+                               [&slices, &pre_defragmentation_info, &store](CompactionWrittenKeys& written_keys) -> VersionedItem {
+                                return collate_and_write(
+                                        store,
+                                        pre_defragmentation_info.pipeline_context,
+                                        slices,
+                                        std::move(written_keys),
+                                        pre_defragmentation_info.append_after.value(),
+                                        std::nullopt);
+                               },
+                               [](Error& error) -> VersionedItem {
+                                   // TODO tidy up my dynamic error raising stuff, put it in error_code.hpp
+                                   throw ArcticException(fmt::format("{} {}", get_error_code_data(error.code).name_, error.message));
+                               }
+    );
 }
 
 void set_row_id_if_index_only(
@@ -1838,3 +1851,15 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 }
 
 } //namespace arcticdb::version_store
+
+namespace arcticdb::compaction_details {
+
+void remove_written_keys(
+    Store* const store,
+    CompactionWrittenKeys&& written_keys
+) {
+    log::version().debug("Error during compaction, removing {} keys written before failure", written_keys.size());
+    store->remove_keys_sync(std::move(written_keys));
+}
+
+} // namespace arcticdb::compaction_details
