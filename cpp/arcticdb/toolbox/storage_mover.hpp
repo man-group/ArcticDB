@@ -24,6 +24,7 @@
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/entity/metrics.hpp>
 #include <ranges>
+#include <functional>
 
 #include "version/version_functions.hpp"
 
@@ -255,7 +256,7 @@ inline MetricsConfig::Model get_model_from_proto_config(const proto::utils::Prom
         case proto::utils::PrometheusConfig_PrometheusModel_NO_INIT: return MetricsConfig::Model::NO_INIT;
         case proto::utils::PrometheusConfig_PrometheusModel_PUSH: return MetricsConfig::Model::PUSH;
         case proto::utils::PrometheusConfig_PrometheusModel_WEB: return MetricsConfig::Model::PULL;
-        default: internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unknown Prometheus model {}", cfg.prometheus_model());
+        default: internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unknown Prometheus proto model {}", int{cfg.prometheus_model()});
     }
 }
 
@@ -589,36 +590,35 @@ public:
                                     }
                 );
             }
-            std::sort(std::begin(index_keys), std::end(index_keys),
-                      [&](const auto& k1, const auto& k2) {return k1.version_id() < k2.version_id();});
             // Remove duplicate keys
-            index_keys.erase(std::unique(std::begin(index_keys), std::end(index_keys),
-                                         [&](const auto& k1, const auto& k2) {return k1.version_id()==k2.version_id();}), index_keys.end());
-
+            rng::sort(index_keys, [&](const auto& k1, const auto& k2) {return k1.version_id() < k2.version_id();});
+            auto to_erase = rng::unique(index_keys, rng::equal_to<VersionId>{}, [](const auto& k){ return k.version_id();});
+            index_keys.erase(to_erase.begin(), to_erase.end());
             for(const auto& index_key: index_keys) {
                 VersionId v_id = index_key.version_id();
                 try {
                     std::optional<VersionId> new_version_id;
+                    std::optional<AtomKey> previous_key;
                     if (append_versions) {
                         auto [maybe_prev, _] = get_latest_version(target_store_, target_map, sym);
                         if (maybe_prev){
                             new_version_id = std::make_optional(maybe_prev.value().version_id() + 1);
+                            previous_key = std::move(maybe_prev);
                         }
                     } else {
                         if (auto target_index_key = get_specific_version(target_store_, target_map, sym, v_id)) {
                             throw storage::DuplicateKeyException(target_index_key.value());
                         }
                     }
-                    const auto new_index_key = storage::copy_index_key_recursively(source_store_, target_store_,
-                            index_key, new_version_id);
-                    target_map->write_version(target_store_, new_index_key);
+                    const auto new_index_key = copy_index_key_recursively(source_store_, target_store_, index_key, new_version_id);
+                    target_map->write_version(target_store_, new_index_key, previous_key);
                     if(symbol_list)
-                        symbol_list->add_symbol(target_store_, new_index_key.id());
+                        symbol_list->add_symbol(target_store_, new_index_key.id(), new_version_id.value_or(0));
 
                     // Change the version in the result map
                     sym_data[py::int_(v_id)] = new_version_id ? new_version_id.value() : v_id;
                     // Give the new version id to the snapshots
-                    if (version_to_snapshot_map.count(v_id)) {
+                    if (version_to_snapshot_map.contains(v_id)) {
                         for(const auto& snap_name: version_to_snapshot_map[v_id]) {
                             sym_data[py::str(snap_name)] = sym_data[py::int_(v_id)];
                         }
@@ -629,7 +629,7 @@ public:
                     auto error = fmt::format("Sym:{},Version:{},Ex:{}", sym, v_id, e.what());
                     sym_data[key] = error;
                     // Give the error to snapshots which also had the same version_id
-                    if (version_to_snapshot_map.count(v_id)) {
+                    if (version_to_snapshot_map.contains(v_id)) {
                         for(const auto& snap_name: version_to_snapshot_map[v_id]) {
                             sym_data[py::str(snap_name)] = error;
                         }
