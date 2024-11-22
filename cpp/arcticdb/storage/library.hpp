@@ -112,9 +112,9 @@ class Library {
         storages_->read_sync(variant_key, visitor, opts, !storage_fallthrough_);
     }
 
-    KeySegmentPair read_sync(const VariantKey& key) {
+    KeySegmentPair read_sync(const VariantKey& key, ReadKeyOpts opts = ReadKeyOpts{}) {
         util::check(!std::holds_alternative<StringId>(variant_key_id(key)) || !std::get<StringId>(variant_key_id(key)).empty(), "Unexpected empty id");
-        return storages_->read_sync(key, !storage_fallthrough_);
+        return storages_->read_sync(key, opts, !storage_fallthrough_);
     }
 
     void remove(std::span<VariantKey> variant_keys, storage::RemoveOpts opts) {

@@ -105,12 +105,24 @@ void MappedFileStorage::do_read(VariantKey&& variant_key, const ReadVisitor& vis
         visitor(variant_key, std::move(segment));
 }
 
+KeySegmentPair MappedFileStorage::do_read(VariantKey&& variant_key, storage::ReadKeyOpts) {
+    ARCTICDB_SAMPLE(MappedFileStorageRead, 0)
+    auto maybe_offset = multi_segment_header_.get_offset_for_key(to_atom(variant_key));
+    util::check(maybe_offset.has_value(), "Failed to find key {} in file", variant_key);
+    auto [offset, bytes] = std::move(maybe_offset.value());
+    return {std::move(variant_key), Segment::from_bytes(file_.data() + offset, bytes)};
+}
+
 bool MappedFileStorage::do_key_exists(const VariantKey& key) {
     ARCTICDB_SAMPLE(MappedFileStorageKeyExists, 0)
     return multi_segment_header_.get_offset_for_key(to_atom(key)) != std::nullopt;
 }
 
 void MappedFileStorage::do_remove(VariantKey&&, RemoveOpts) {
+    util::raise_rte("Remove not implemented for file storages");
+}
+
+void MappedFileStorage::do_remove(std::span<VariantKey>, RemoveOpts) {
     util::raise_rte("Remove not implemented for file storages");
 }
 

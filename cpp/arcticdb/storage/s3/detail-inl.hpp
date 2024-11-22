@@ -88,6 +88,14 @@ inline void raise_s3_exception(const Aws::S3::S3Error& err, const std::string& o
     raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(error_message);
 }
 
+folly::Future<folly::Unit> do_async_read_impl(entity::VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
+    
+}
+
+folly::Future<KeySegmentPair> do_async_read_impl(entity::VariantKey&& variant_key, ReadKeyOpts opts) {
+
+}
+
 inline bool is_expected_error_type(Aws::S3::S3Errors err) {
     return err == Aws::S3::S3Errors::NO_SUCH_KEY || err == Aws::S3::S3Errors::RESOURCE_NOT_FOUND
         || err == Aws::S3::S3Errors::NO_SUCH_BUCKET;
@@ -137,29 +145,22 @@ void do_update_impl(
 }
 
 template<class KeyBucketizer>
-void do_read_impl(
+KeySegmentPair do_read_impl(
         VariantKey&& variant_key,
-        const ReadVisitor& visitor,
         const std::string& root_folder,
         const std::string& bucket_name,
         const S3ClientInterface& s3_client,
         KeyBucketizer&& bucketizer,
         ReadKeyOpts opts) {
     ARCTICDB_SAMPLE(S3StorageRead, 0)
-    std::vector<VariantKey> keys_not_found;
-
     auto key_type_dir = key_type_folder(root_folder, variant_key_type(variant_key));
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
 
-    auto get_object_result = s3_client.get_object(
-        s3_object_name,
-        bucket_name);
+    auto get_object_result = s3_client.get_object(s3_object_name, bucket_name);
 
     if (get_object_result.is_success()) {
         ARCTICDB_SUBSAMPLE(S3StorageVisitSegment, 0)
-
-        visitor(variant_key, std::move(get_object_result.get_output()));
-
+        return {VariantKey{variant_key}, std::move(get_object_result.get_output())};
         ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(variant_key), variant_key_view(variant_key));
     } else {
         auto& error = get_object_result.get_error();
@@ -172,11 +173,21 @@ void do_read_impl(
             error.GetExceptionName().c_str(),
             error.GetMessage().c_str());
 
-        keys_not_found.push_back(variant_key);
+        throw KeyNotFoundException(variant_key);
     }
+}
 
-    if (!keys_not_found.empty())
-        throw KeyNotFoundException(std::move(keys_not_found));
+template<class KeyBucketizer>
+void do_read_impl(
+    VariantKey&& variant_key,
+    const ReadVisitor& visitor,
+    const std::string& root_folder,
+    const std::string& bucket_name,
+    const S3ClientInterface& s3_client,
+    KeyBucketizer&& bucketizer,
+    ReadKeyOpts opts) {
+    auto key_seg = do_read_impl(std::move(variant_key), root_folder, bucket_name, s3_client, bucketizer, opts);
+    visitor(key_seg.variant_key(), std::move(key_seg.segment()));
 }
 
 struct FailedDelete {

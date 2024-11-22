@@ -28,6 +28,8 @@
 
 #include <boost/interprocess/streams/bufferstream.hpp>
 
+#include <folly/gen/Base.h>
+
 #undef GetMessage
 
 namespace arcticdb::storage {
@@ -172,12 +174,13 @@ void do_read_impl(
 
 template<class KeyBucketizer>
 KeySegmentPair do_read_impl(
-    VariantKey&& variant_key,
-    const std::string& root_folder,
-    AzureClientWrapper& azure_client,
-    KeyBucketizer&& bucketizer,
-    const Azure::Storage::Blobs::DownloadBlobToOptions& download_option,
-    unsigned int request_timeout) {
+        VariantKey&& variant_key,
+        const std::string& root_folder,
+        AzureClientWrapper& azure_client,
+        KeyBucketizer&& bucketizer,
+        ReadKeyOpts opts,
+        const Azure::Storage::Blobs::DownloadBlobToOptions& download_option,
+        unsigned int request_timeout) {
     ARCTICDB_SAMPLE(AzureStorageRead, 0)
     std::optional<VariantKey> failed_read;
 
@@ -189,6 +192,13 @@ KeySegmentPair do_read_impl(
     }
     catch (const Azure::Core::RequestFailedException& e) {
         raise_if_unexpected_error(e, blob_name);
+        if (!opts.dont_warn_about_missing_key) {
+            log::storage().warn("Failed to read azure segment with key '{}' {} {}: {}",
+                                variant_key,
+                                blob_name,
+                                static_cast<int>(e.StatusCode),
+                                e.ReasonPhrase);
+        }
         throw KeyNotFoundException(variant_key,
                                    fmt::format("Failed to read azure segment with key '{}' {} {}: {}",
                                                variant_key,
@@ -198,21 +208,22 @@ KeySegmentPair do_read_impl(
     }
 }
 
+namespace fg = folly::gen;
+
 template<class KeyBucketizer>
 void do_remove_impl(
-    VariantKey&& variant_key,
+    std::span<VariantKey> variant_keys,
     const std::string& root_folder,
     AzureClientWrapper& azure_client,
     KeyBucketizer&& bucketizer,
-    unsigned int request_timeout) {
+    unsigned int request_timeout)  {
     ARCTICDB_SUBSAMPLE(AzureStorageDeleteBatch, 0)
+    auto fmt_db = [](auto&& k) { return variant_key_type(k); };
     std::vector<std::string> to_delete;
     static const size_t delete_object_limit =
-        std::min(BATCH_SUBREQUEST_LIMIT,
-                 static_cast<size_t>(ConfigsMap::instance()->get_int("AzureStorage.DeleteBatchSize",
-                                                                     BATCH_SUBREQUEST_LIMIT)));
+        std::min(BATCH_SUBREQUEST_LIMIT, static_cast<size_t>(ConfigsMap::instance()->get_int("AzureStorage.DeleteBatchSize", BATCH_SUBREQUEST_LIMIT)));
 
-    auto submit_batch = [&azure_client, &request_timeout](auto& to_delete) {
+    auto submit_batch = [&azure_client, &request_timeout](auto &to_delete) {
         try {
             azure_client.delete_blobs(to_delete, request_timeout);
         } catch (const Azure::Core::RequestFailedException& e) {
@@ -222,12 +233,18 @@ void do_remove_impl(
         to_delete.clear();
     };
 
-    auto key_type_dir = key_type_folder(root_folder, variant_key_type(variant_key));
-    auto blob_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
-    to_delete.emplace_back(std::move(blob_name));
-    if (to_delete.size() == delete_object_limit) {
-        submit_batch(to_delete);
-    }
+    (fg::from(variant_keys) | fg::move | fg::groupBy(fmt_db)).foreach(
+        [&root_folder, b=std::move(bucketizer), delete_object_limit=delete_object_limit, &to_delete, &submit_batch] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
+            auto key_type_dir = key_type_folder(root_folder, group.key());
+            for (auto k : folly::enumerate(group.values())) {
+                auto blob_name = object_path(b.bucketize(key_type_dir, *k), *k);
+                to_delete.emplace_back(std::move(blob_name));
+                if (to_delete.size() == delete_object_limit) {
+                    submit_batch(to_delete);
+                }
+            }
+        }
+    );
     if (!to_delete.empty()) {
         submit_batch(to_delete);
     }
@@ -341,17 +358,23 @@ void AzureStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor,
                          request_timeout_);
 }
 
-KeySegmentPair AzureStorage::do_read(VariantKey&& variant_key) {
+KeySegmentPair AzureStorage::do_read(VariantKey&& variant_key, ReadKeyOpts opts) {
     return detail::do_read_impl(std::move(variant_key),
                                 root_folder_,
                                 *azure_client_,
                                 FlatBucketizer{},
+                                opts,
                                 download_option_,
                                 request_timeout_);
 }
 
 void AzureStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
-    detail::do_remove_impl(std::move(variant_key), root_folder_, *azure_client_, FlatBucketizer{}, request_timeout_);
+    std::array<VariantKey, 1> arr{std::move(variant_key)};
+    detail::do_remove_impl(std::span(arr), root_folder_, *azure_client_, FlatBucketizer{}, request_timeout_);
+}
+
+void AzureStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts) {
+    detail::do_remove_impl(std::move(variant_keys), root_folder_, *azure_client_, FlatBucketizer{}, request_timeout_);
 }
 
 bool AzureStorage::do_iterate_type_until_match(KeyType key_type,

@@ -91,8 +91,6 @@ void MongoStorage::do_write(KeySegmentPair &&key_seg) {
 }
 
 void MongoStorage::do_update(KeySegmentPair &&key_seg, UpdateOpts opts) {
-    namespace fg = folly::gen;
-
     ARCTICDB_SAMPLE(MongoStorageWrite, 0)
 
     auto collection = collection_name(key_seg.key_type());
@@ -112,45 +110,35 @@ void MongoStorage::do_update(KeySegmentPair &&key_seg, UpdateOpts opts) {
     }
 }
 
-void MongoStorage::do_read(VariantKey &&variant_key, const ReadVisitor &visitor, ReadKeyOpts) {
-    namespace fg = folly::gen;
-    ARCTICDB_SAMPLE(MongoStorageRead, 0)
-    std::vector<VariantKey> keys_not_found;
-
-    auto collection = collection_name(variant_key_type(variant_key));
-    try {
-        auto kv = client_->read_segment(db_, collection, variant_key);
-        // later we should add the key to failed_reads in this case
-        if (!kv.has_value()) {
-            keys_not_found.push_back(variant_key);
-        } else {
-            visitor(variant_key, std::move(kv->segment()));
-        }
-
-    } catch (const mongocxx::operation_exception &ex) {
-        std::string object_name = std::string(variant_key_view(variant_key));
-        raise_if_unexpected_error(ex, object_name);
-    }
+void MongoStorage::do_read(VariantKey &&variant_key, const ReadVisitor &visitor, ReadKeyOpts opts) {
+    auto key_seg = do_read(std::move(variant_key), opts);
+    visitor(key_seg.variant_key(), std::move(key_seg.segment()));
 }
 
-KeySegmentPair MongoStorage::do_read(VariantKey&& variant_key) {
-    namespace fg = folly::gen;
+KeySegmentPair MongoStorage::do_read(VariantKey&& variant_key, ReadKeyOpts opts) {
     ARCTICDB_SAMPLE(MongoStorageRead, 0)
-    std::vector<VariantKey> keys_not_found;
+    boost::container::small_vector<VariantKey, 1> keys_not_found;
 
     auto collection = collection_name(variant_key_type(variant_key));
     try {
         auto kv = client_->read_segment(db_, collection, variant_key);
         // later we should add the key to failed_reads in this case
         if (!kv.has_value()) {
-            keys_not_found.push_back(variant_key);
+            throw KeyNotFoundException(variant_key);
         } else {
             return {VariantKey{variant_key}, std::move(kv->segment())};
         }
-
     } catch (const mongocxx::operation_exception &ex) {
         std::string object_name = std::string(variant_key_view(variant_key));
         raise_if_unexpected_error(ex, object_name);
+        log::storage().log(
+            opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
+            "Failed to find segment for key '{}' {}: {}",
+            variant_key_view(variant_key),
+            ex.code().value(),
+            ex.what());
+
+        throw KeyNotFoundException(keys_not_found);
     }
 }
 
@@ -191,6 +179,11 @@ void MongoStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts
     if (!keys_not_found.empty()) {
         throw KeyNotFoundException(std::move(keys_not_found));
     }
+}
+
+void MongoStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts) {
+    std::array<VariantKey, 1> arr{std::move(variant_key)};
+    do_remove(std::span(arr), opts);
 }
 
 bool MongoStorage::do_iterate_type_until_match(KeyType key_type,

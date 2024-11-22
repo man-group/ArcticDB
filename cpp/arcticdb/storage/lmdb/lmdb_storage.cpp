@@ -130,7 +130,7 @@ void LmdbStorage::do_update(KeySegmentPair&& key_seg, UpdateOpts opts) {
     txn.commit();
 }
 
-KeySegmentPair LmdbStorage::do_read(VariantKey&& variant_key) {
+KeySegmentPair LmdbStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
     ARCTICDB_SAMPLE(LmdbStorageReadReturn, 0)
     std::optional<VariantKey> failed_read;
     auto db_name = fmt::format(FMT_COMPILE("{}"), variant_key_type(variant_key));

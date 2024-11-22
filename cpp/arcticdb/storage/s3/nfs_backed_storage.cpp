@@ -174,9 +174,24 @@ void NfsBackedStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visi
     s3::detail::do_read_impl(std::move(enc), func, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, opts);
 }
 
+KeySegmentPair NfsBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts opts) {
+    auto enc = encode_object_id(variant_key);
+    auto key_seg = s3::detail::do_read_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, opts);
+    return {unencode_object_id(key_seg.variant_key()), std::move(key_seg.segment())};
+}
+
 void NfsBackedStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
     auto enc = encode_object_id(variant_key);
     s3::detail::do_remove_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
+}
+
+void NfsBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts) {
+    std::vector<VariantKey> enc;
+    enc.reserve(variant_keys.size());
+    std::transform(std::begin(variant_keys), std::end(variant_keys), std::back_inserter(enc), [] (auto&& key) {
+        return encode_object_id(key);
+    });
+    s3::detail::do_remove_impl(std::span(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
 bool NfsBackedStorage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix) {

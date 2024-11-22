@@ -39,7 +39,7 @@ private:
 
     void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-    KeySegmentPair do_read(VariantKey&& variant_key) final;
+    KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts opts) final;
 
     void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
 

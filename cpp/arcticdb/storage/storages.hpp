@@ -85,13 +85,14 @@ class Storages {
     KeySegmentPair read_sync_fallthrough(const VariantKey& variant_key) {
         for(const auto& storage : storages_) {
             try {
-                return storage->read(VariantKey{variant_key});
+                return storage->read(VariantKey{variant_key}, ReadKeyOpts{});
             } catch (typename storage::KeyNotFoundException& ex) {
                 ARCTICDB_DEBUG(log::version(), "Keys not found in storage, continuing to next storage");
             }
         }
         throw storage::KeyNotFoundException(variant_key);
     }
+
     void read_sync(const VariantKey& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts, bool primary_only=true) {
         ARCTICDB_RUNTIME_SAMPLE(StoragesRead, 0)
         if(primary_only || variant_key_type(variant_key) != KeyType::TABLE_DATA)
@@ -100,10 +101,10 @@ class Storages {
         read_sync_fallthrough(variant_key, visitor, opts);
     }
 
-    KeySegmentPair read_sync(const VariantKey& variant_key, bool primary_only=true) {
+    KeySegmentPair read_sync(const VariantKey& variant_key, ReadKeyOpts opts, bool primary_only=true) {
         ARCTICDB_RUNTIME_SAMPLE(StoragesRead, 0)
         if(primary_only || variant_key_type(variant_key) != KeyType::TABLE_DATA)
-            return primary().read(VariantKey{variant_key});
+            return primary().read(VariantKey{variant_key}, opts);
 
         return read_sync_fallthrough(variant_key);
     }
@@ -121,7 +122,7 @@ class Storages {
         if(storage.has_async_api()) {
             return storage.async_api()->async_read(std::move(variant_key), opts);
         } else {
-            auto key_seg = storage.read(std::move(variant_key));
+            auto key_seg = storage.read(std::move(variant_key), opts);
             return folly::makeFuture(std::move(key_seg));
         }
     }
@@ -198,7 +199,7 @@ class Storages {
             auto key = std::forward<VariantKey>(vk);
             if (to_atom(key).creation_ts() < horizon) {
                 try {
-                    auto key_seg = source.read(VariantKey{key});
+                    auto key_seg = source.read(VariantKey{key}, ReadKeyOpts{});
                     target.write(std::move(key_seg));
                     source.remove(std::move(key), storage::RemoveOpts{});
                 } catch (const std::exception& ex) {

@@ -30,8 +30,6 @@ using namespace object_store_utils;
 
 namespace s3 {
 
-namespace fg = folly::gen;
-
 std::string S3Storage::name() const {
     return fmt::format("s3_storage-{}/{}/{}", region_, bucket_name_, root_folder_);
 }
@@ -54,6 +52,10 @@ void S3Storage::do_update(KeySegmentPair&& key_seg, UpdateOpts) {
 
 void S3Storage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
     detail::do_read_impl(std::move(variant_key), visitor, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{}, opts);
+}
+
+KeySegmentPair S3Storage::do_read(VariantKey&& variant_key, ReadKeyOpts opts) {
+    return detail::do_read_impl(std::move(variant_key), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{}, opts);
 }
 
 void S3Storage::do_remove(VariantKey&& variant_key, RemoveOpts) {

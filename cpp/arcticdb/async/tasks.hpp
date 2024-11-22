@@ -215,9 +215,9 @@ inline folly::Future<storage::KeySegmentPair> read_dispatch(entity::VariantKey&&
     });
 }
 
-inline storage::KeySegmentPair read_sync_dispatch(const entity::VariantKey& variant_key, const std::shared_ptr<storage::Library>& lib) {
-    return util::variant_match(variant_key, [&lib](const auto &key) {
-        return lib->read_sync(key);
+inline storage::KeySegmentPair read_sync_dispatch(const entity::VariantKey& variant_key, const std::shared_ptr<storage::Library>& lib, storage::ReadKeyOpts opts) {
+    return util::variant_match(variant_key, [&lib, opts](const auto &key) {
+        return lib->read_sync(key, opts);
     });
 }
 
@@ -366,7 +366,7 @@ private:
         if (!target_stores_.empty()) {
             storage::KeySegmentPair key_segment_pair;
             try {
-                key_segment_pair = source_store_->read_compressed_sync(key_to_read_, storage::ReadKeyOpts{});
+                key_segment_pair = source_store_->read_compressed_sync(key_to_read_);
             } catch (const storage::KeyNotFoundException& e) {
                 log::storage().debug("Key {} not found on the source: {}", variant_key_view(key_to_read_), e.what());
                 return failed_targets;

@@ -42,7 +42,7 @@ class LmdbStorage final : public Storage {
 
     void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, storage::ReadKeyOpts opts) final;
 
-    KeySegmentPair do_read(VariantKey&& variant_key) final;
+    KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts) final;
 
     void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
 

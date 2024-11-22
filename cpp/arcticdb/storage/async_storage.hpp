@@ -10,7 +10,6 @@
 
 namespace arcticdb::storage {
 class AsyncStorage {
-
 public:
     folly::Future<folly::Unit> async_read(entity::VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
         return do_async_read(std::move(variant_key), visitor, opts);

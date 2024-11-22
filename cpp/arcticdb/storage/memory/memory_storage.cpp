@@ -73,13 +73,18 @@ void MemoryStorage::do_update(KeySegmentPair &&key_seg, UpdateOpts opts) {
 }
 
 void MemoryStorage::do_read(VariantKey &&variant_key, const ReadVisitor &visitor, ReadKeyOpts) {
+    auto key_seg = do_read(std::move(variant_key), ReadKeyOpts{});
+    visitor(key_seg.variant_key(), std::move(key_seg.segment()));
+}
+
+KeySegmentPair MemoryStorage::do_read(VariantKey &&variant_key, ReadKeyOpts) {
     ARCTICDB_SAMPLE(MemoryStorageRead, 0)
     auto& key_vec = data_[variant_key_type(variant_key)];
     auto it = key_vec.find(variant_key);
 
     if (it != key_vec.end()) {
         ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(variant_key), variant_key_view(variant_key));
-        visitor(variant_key, it->second.clone());
+        return {std::move(variant_key), it->second.clone()};
     } else {
         throw KeyNotFoundException(variant_key);
     }

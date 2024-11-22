@@ -217,8 +217,8 @@ folly::Future<std::pair<entity::VariantKey, SegmentInMemory>> read(
     return read_and_continue(key, library_, opts, DecodeSegmentTask{});
 }
 
-std::pair<entity::VariantKey, SegmentInMemory> read_sync(const entity::VariantKey& key) override {
-    return DecodeSegmentTask{}(read_sync_dispatch(key, library_));
+std::pair<entity::VariantKey, SegmentInMemory> read_sync(const entity::VariantKey& key, storage::ReadKeyOpts opts) override {
+    return DecodeSegmentTask{}(read_sync_dispatch(key, library_, opts));
 }
 
 folly::Future<storage::KeySegmentPair> read_compressed(
@@ -227,8 +227,8 @@ folly::Future<storage::KeySegmentPair> read_compressed(
     return read_and_continue(key, library_, opts, PassThroughTask{});
 }
 
-storage::KeySegmentPair read_compressed_sync(const entity::VariantKey& key) override {
-        return read_sync_dispatch( key, library_);
+storage::KeySegmentPair read_compressed_sync(const entity::VariantKey& key, storage::ReadKeyOpts opts) override {
+        return read_sync_dispatch(key, library_, opts);
 }
 
 folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> read_metadata(const entity::VariantKey &key, storage::ReadKeyOpts opts) override {

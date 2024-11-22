@@ -28,7 +28,7 @@ namespace arcticdb::storage::s3 {
 
 const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
 
-class S3Storage final : public Storage {
+class S3Storage final : public Storage, AsyncStorage {
   public:
     using Config = arcticdb::proto::s3_storage::Config;
 
@@ -53,7 +53,7 @@ class S3Storage final : public Storage {
 
     void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-    KeySegmentPair do_read(VariantKey&& variant_key) final;
+    KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts opts) final;
 
     void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
 
