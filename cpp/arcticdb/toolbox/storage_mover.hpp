@@ -592,7 +592,7 @@ public:
             }
             // Remove duplicate keys
             rng::sort(index_keys, [&](const auto& k1, const auto& k2) {return k1.version_id() < k2.version_id();});
-            auto to_erase = rng::unique(index_keys, rng::equal_to<VersionId>{}, [](const auto& k){ return k.version_id();});
+            auto to_erase = rng::unique(index_keys, std::equal_to<VersionId>{}, [](const auto& k){ return k.version_id();});
             index_keys.erase(to_erase.begin(), to_erase.end());
             for(const auto& index_key: index_keys) {
                 VersionId v_id = index_key.version_id();
