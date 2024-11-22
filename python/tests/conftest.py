@@ -368,8 +368,8 @@ def arctic_client_lmdb_map_size_100gb(lmdb_storage) -> Arctic:
     return ac
 
 @pytest.fixture
-def basic_arctic_library(basic_arctic_client, lib_name) -> Library:
-    return basic_arctic_client.create_library(lib_name)
+def arctic_library_lmdb(arctic_client_lmdb_map_size_100gb, lib_name) -> Library:
+    return arctic_client_lmdb_map_size_100gb.create_library(lib_name)
 
 
 @pytest.fixture

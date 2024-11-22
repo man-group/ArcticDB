@@ -12,10 +12,9 @@ import time
 import numpy as np
 import pandas as pd
 from typing import Union, List
-from arcticdb.util.test import create_datetime_index, get_sample_dataframe, random_integers, random_string
 from arcticdb.version_store.library import Library, StagedDataFinalizeMethod
 from arcticdb.config import Defaults, set_log_level
-from arcticdb.util.utils import TimestampNumber
+from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
 
 from typing import Union
 import numpy as np
@@ -23,136 +22,9 @@ import pandas as pd
 
 # Uncomment for logging
 # set_log_level(default_level="DEBUG", console_output=False, file_output_path="/tmp/arcticdb.log")
-    
-class CachedDFGenerator:
-    """
-        Provides ability to generate dataframes based on sampling a larger
-        pregenerated dataframe
-    """
-
-    TIME_UNIT='s'
-
-    def __init__(self, max_size:int=1500000, size_string_flds_array=[25,1,5,56]):
-        """
-            Define the number of rows for the cached dataframe
-        """
-        self.__cached_xlarge_dataframe:pd.DataFrame = None
-        self.max_size = max_size
-        self.size_string_flds_array = size_string_flds_array
-
-    def generate_dataframe(self, num_rows:int) -> pd.DataFrame:
-        """
-            Generate a dataframe having specified number of rows sampling the 
-            cached dataframe
-        """
-        assert num_rows < self.max_size
-        if (self.__cached_xlarge_dataframe is None):
-            print(">>>> INITIAL PREPARATION OF LARGE DF")
-            self.__cached_xlarge_dataframe = self.generate_xLarge_samples_dataframe(
-                num_rows=self.max_size, size_string_flds_array=self.size_string_flds_array) 
-            print(">>>> COMPLETED")
-        else:
-            print(">>>> Use cached DF for sampling")
-        return self.__cached_xlarge_dataframe.sample(n=num_rows,axis=0)
-
-    def generate_dataframe_timestamp_indexed(self, rows:int, start_time:Union[int, TimestampNumber]=0, freq:str=TIME_UNIT ) -> pd.DataFrame:
-        """
-            Generates dataframe taking random number of 'rows' of the cached large
-            dataframe. Adds timestamp index starting at start_time and having a frequency
-            specified either by the TimeStampNumber or 'freq' parameter when start time is 
-            integer
-        """
-        df = self.generate_dataframe(rows)
-        if (isinstance(start_time, TimestampNumber)):
-            freq = start_time.get_type()
-            start_time = start_time.get_value()
-        start_timestamp, *other = TimestampNumber.calculate_timestamp_after_n_periods(
-            periods=start_time,
-            freq=freq,
-            start_time=TimestampNumber.TIME_ZERO)
-        create_datetime_index(df, "timestamp", "s", start_timestamp)
-        return df
-    
-    @classmethod
-    def generate_xLarge_samples_dataframe(cls, num_rows:int, size_string_flds_array:List[int] = [10]) -> pd.DataFrame:
-        """
-            Generates large dataframe by concatenating several time different DFs with same schema to the right. As the
-            method that generates dataframe with all supported column types is used this means that the result dataframe should
-            cover all cases that we have for serialization
-
-            'num_rows' - how many rows the dataframe should have
-            'size_string_flds_array' - this array contains sizes of the string fields in each dataframe. The total number
-                  of elements in the list will give how many times the sample dataframe will be generated and thus the 
-                  result dataframe will have that many times the number of column of the original sample dataframe
-        """
-        df = None
-        cnt = 0
-        iterc = len(size_string_flds_array)
-        print(f"Creating xLarge DF in {iterc} iterations")
-        for str_size in size_string_flds_array:
-            _df = get_sample_dataframe(size=num_rows, seed=str_size, str_size=str_size)
-            cls.dataframe_add_suffix_to_column_name(_df, f"-{cnt}")
-            print(f"DF of iteration {cnt} completed with {num_rows} rows")
-            if (df is None):
-                df = _df
-            else:
-                df = pd.concat([df,_df], axis=1)
-                print(f"Concatenation if DF of iteration {cnt} completed. Result is DF with {len(df.columns.array)}")
-            cnt = cnt + 1
-        return df
-    
-    @classmethod
-    def dataframe_add_suffix_to_column_name(cls, df: pd.DataFrame, suffix: str):
-        """
-            If we want to grow dataframe by adding once again a dataframe having same schema
-            abd number of rows on the right effectively extending the number of columns
-            we have to prepare the dataframes in such way that their columns have unique 
-            names. This can happen by adding an id to each of the columns as suffix
-        """            
-        df_cols = df.columns.to_list()
-        for col in df_cols:
-            df.rename( {col : col + suffix}, axis='columns',inplace=True)
-
-
-
-#####################################################################################################
-#####################################################################################################
-
 
 def generate_chunk_sizes(number_chunks:np.uint32, min_rows:np.uint32=100, max_rows:np.uint32=10000) -> List[np.uint32]:
     return np.random.randint(min_rows, max_rows, number_chunks, dtype=np.uint32)
-
-def stage_chunks(lib: Library, symbol:str, cachedDF:CachedDFGenerator, start_index:TimestampNumber, 
-                 array_chunk_number_rows:List[np.uint32], reverse_order:bool=False) -> pd.DataFrame:
-    
-    """
-        Stages dataframes to specified symbol in specified library. Will use a cached dataframe to obtain as fast as possible
-        random dataframes. They will be added in ascending or descending (reversed) order of the timestamps indexes based on 
-        reverse_order value
-    """
-    total = start_index.get_value()
-    num_rows_staged:int = 0
-    iter:int = 1
-    size = len(array_chunk_number_rows)
-    total_rows_to_stage = sum(array_chunk_number_rows)
-    final_index = total_rows_to_stage + total
-    for chunk_size in array_chunk_number_rows:
-        if (reverse_order):
-            # In this case we start from the end of datetime range
-            # And generate first the chunks with latest date time, then previous etc
-            # in other words we will reverse the order of chunks creating the worst case scenario
-            chunk_start_index = final_index - (chunk_size + num_rows_staged)
-            df = cachedDF.generate_dataframe_timestamp_indexed(chunk_size, chunk_start_index, cachedDF.TIME_UNIT)
-        else:
-            df = cachedDF.generate_dataframe_timestamp_indexed(chunk_size, total, cachedDF.TIME_UNIT)
-        lib.write(symbol, data=df, validate_index=True, staged=True)
-        print()
-        print(f"Staging iteration {iter} / {size}")
-        print(f"Staged DataFrame has {df.shape[0]} rows {len(df.columns.to_list())} cols")
-        print(f"Total number of rows staged {num_rows_staged}")
-        num_rows_staged = num_rows_staged + chunk_size
-        iter= iter + 1
-        total = total + chunk_size
 
 def test_finalize_monotonic_unique_chunks(arctic_library_lmdb):
 

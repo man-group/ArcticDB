@@ -12,7 +12,7 @@ from typing import Mapping, Any, Optional, Iterable, NamedTuple, List, AnyStr, S
 import numpy as np
 import pandas as pd
 from pandas.core.series import Series
-from pandas import Index
+from pandas import DateOffset, Index, Timedelta
 from pandas._typing import Scalar
 import datetime as dt
 import string
@@ -20,8 +20,6 @@ import random
 import time
 import attr
 from functools import wraps
-
-from arcticdb.util.utils import TimestampNumber
 
 try:
     from pandas.errors import UndefinedVariableError
@@ -95,8 +93,8 @@ def create_df_index_rownum(num_columns: int, start_index: int, end_index : int) 
     return df
 
 
-def create_datetime_index(df: pd.DataFrame, name_col:str, freq:TimestampNumber.SupportedFreqTypes, 
-        start_time: pd.Timestamp = TimestampNumber.TIME_ZERO):
+def create_datetime_index(df: pd.DataFrame, name_col:str, freq:str | dt.timedelta | Timedelta | DateOffset, 
+        start_time: pd.Timestamp = pd.Timestamp(0)):
     """
         creates a datetime index to a dataframe. The index will start at specified timestamp
         and will be generated using specified frequency having same number of periods as the rows
