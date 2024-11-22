@@ -335,7 +335,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     arcticdb::storage::apy::register_bindings(storage_submodule, base_exception);
 
     arcticdb::stream::register_bindings(m);
-    arcticdb::toolbox::apy::register_bindings(m);
+    arcticdb::toolbox::apy::register_bindings(m, base_exception);
 
     m.def("get_version_string", &arcticdb::get_arcticdb_version_string);
 
