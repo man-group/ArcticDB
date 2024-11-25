@@ -100,22 +100,28 @@ void merge_frames_for_keys(
 
 }
 
+namespace compaction_details {
+
+struct Error {
+
+    explicit Error(folly::Function<void(std::string)> raiser, std::string msg);
+    void throw_error();
+
+    folly::Function<void(std::string)> raiser_;
+    std::string msg_;
+};
+
 using CheckOutcome = std::variant<Error, std::monostate>;
 using StaticSchemaCompactionChecks = folly::Function<CheckOutcome(const SegmentInMemory&, const pipelines::PipelineContext* const)>;
 using CompactionWrittenKeys = std::vector<VariantKey>;
 using CompactionResult = std::variant<CompactionWrittenKeys, Error>;
 
-namespace compaction_details {
-
-void remove_written_keys(
-    Store* const store,
-    CompactionWrittenKeys&& written_keys
-    );
+void remove_written_keys(Store* const store, CompactionWrittenKeys&& written_keys);
 
 }
 
 template <typename IndexType, typename SchemaType, typename SegmentationPolicy, typename DensityPolicy, typename IteratorType>
-[[nodiscard]] CompactionResult do_compact(
+[[nodiscard]] compaction_details::CompactionResult do_compact(
     IteratorType to_compact_start,
     IteratorType to_compact_end,
     const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
@@ -124,7 +130,7 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
     bool convert_int_to_float,
     std::optional<size_t> segment_size,
     bool validate_index,
-    StaticSchemaCompactionChecks&& checks) {
+    compaction_details::StaticSchemaCompactionChecks&& checks) {
         using namespace compaction_details;
         CompactionResult result;
         auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
@@ -165,7 +171,7 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
             if(validate_index && segment.descriptor().sorted() != SortedValue::ASCENDING && segment.descriptor().sorted() != SortedValue::UNKNOWN) {
                 auto written_keys = folly::collect(write_futures).get();
                 remove_written_keys(store.get(), std::move(written_keys));
-                return Error{ErrorCode::E_UNSORTED_DATA, "Cannot compact unordered segment"};
+                return Error{throw_error<ErrorCode::E_UNSORTED_DATA>, "Cannot compact unordered segment"};
             }
 
             if constexpr (std::is_same_v<SchemaType, FixedSchema>) {
@@ -173,7 +179,7 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
                 if (std::holds_alternative<Error>(outcome)) {
                     auto written_keys = folly::collect(write_futures).get();
                     remove_written_keys(store.get(), std::move(written_keys));
-                    return std::get<Error>(outcome);
+                    return std::get<Error>(std::move(outcome));
                 }
             }
 

@@ -1550,6 +1550,8 @@ VersionedItem compact_incomplete_impl(
     const CompactIncompleteOptions& options,
     const WriteOptions& write_options) {
 
+    using namespace arcticdb::compaction_details;
+
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = stream_id;
     pipeline_context->version_id_ = update_info.next_version_id_;
@@ -1611,7 +1613,7 @@ VersionedItem compact_incomplete_impl(
         StaticSchemaCompactionChecks checks = [](const SegmentInMemory& cb_segment, const pipelines::PipelineContext* const cb_pipeline_context) -> CheckOutcome {
             if (!columns_match(cb_segment.descriptor(), cb_pipeline_context->descriptor())) {
                 return Error{
-                    ErrorCode::E_DESCRIPTOR_MISMATCH,
+                    throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
                     fmt::format("When static schema is used all staged segments must have the same column and column types."
                     "{} is different than {}",
                     cb_segment.descriptor(),
@@ -1653,7 +1655,8 @@ VersionedItem compact_incomplete_impl(
                             return vit;
                         },
                         [](Error& error) -> VersionedItem {
-                            throw error.to_exception();
+                            error.throw_error();
+                            return VersionedItem{}; // unreachable
                         }
                     );
 }
@@ -1717,6 +1720,7 @@ VersionedItem defragment_symbol_data_impl(
         const UpdateInfo& update_info,
         const WriteOptions& options,
         size_t segment_size) {
+    using namespace arcticdb::compaction_details;
     auto pre_defragmentation_info = get_pre_defragmentation_info(store, stream_id, update_info, options, segment_size);
     util::check(is_symbol_fragmented_impl(pre_defragmentation_info.segments_need_compaction) && pre_defragmentation_info.append_after.has_value(), "Nothing to compact in defragment_symbol_data");
 
@@ -1763,7 +1767,8 @@ VersionedItem defragment_symbol_data_impl(
                                         std::nullopt);
                                },
                                [](Error& error) -> VersionedItem {
-                                   throw error.to_exception();
+                                   error.throw_error();
+                                   return VersionedItem{}; // unreachable
                                }
     );
 }
@@ -1851,10 +1856,16 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 
 namespace arcticdb::compaction_details {
 
-void remove_written_keys(
-    Store* const store,
-    CompactionWrittenKeys&& written_keys
-) {
+Error::Error(folly::Function<void(std::string)> raiser, std::string msg)
+    : raiser_(std::move(raiser)), msg_(std::move(msg)) {
+
+}
+
+void Error::throw_error() {
+    raiser_(msg_);
+}
+
+void remove_written_keys(Store* const store, CompactionWrittenKeys&& written_keys) {
     log::version().debug("Error during compaction, removing {} keys written before failure", written_keys.size());
     store->remove_keys_sync(std::move(written_keys));
 }
