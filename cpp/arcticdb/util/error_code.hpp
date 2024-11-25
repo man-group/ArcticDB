@@ -157,6 +157,15 @@ struct ArcticSpecificException : public ArcticCategorizedException<get_error_cat
     }
 };
 
+struct Error {
+    ErrorCode code;
+    std::string message;
+
+    ArcticException to_exception() {
+        return ArcticException(fmt::format("{} {}", get_error_code_data(code).name_, message));
+    }
+};
+
 using InternalException = ArcticCategorizedException<ErrorCategory::INTERNAL>;
 using SchemaException = ArcticCategorizedException<ErrorCategory::SCHEMA>;
 using NormalizationException = ArcticCategorizedException<ErrorCategory::NORMALIZATION>;

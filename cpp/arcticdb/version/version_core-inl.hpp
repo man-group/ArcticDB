@@ -100,11 +100,6 @@ void merge_frames_for_keys(
 
 }
 
-struct Error {
-    ErrorCode code;
-    std::string message;
-};
-
 using CheckOutcome = std::variant<Error, std::monostate>;
 using StaticSchemaCompactionChecks = folly::Function<CheckOutcome(const SegmentInMemory&, const pipelines::PipelineContext* const)>;
 using CompactionWrittenKeys = std::vector<VariantKey>;

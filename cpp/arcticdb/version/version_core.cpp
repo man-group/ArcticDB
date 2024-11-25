@@ -1387,7 +1387,6 @@ void delete_incomplete_keys(PipelineContext* pipeline_context, Store* store) {
     store->remove_keys(keys_to_delete).get();
 }
 
-// TODO similarly - delete the data keys too upon failure
 class IncompleteKeysRAII {
 public:
     IncompleteKeysRAII() = default;
@@ -1654,8 +1653,7 @@ VersionedItem compact_incomplete_impl(
                             return vit;
                         },
                         [](Error& error) -> VersionedItem {
-                            // TODO tidy up my dynamic error raising stuff, put it in error_code.hpp
-                            throw ArcticException(fmt::format("{} {}", get_error_code_data(error.code).name_, error.message));
+                            throw error.to_exception();
                         }
                     );
 }
@@ -1765,8 +1763,7 @@ VersionedItem defragment_symbol_data_impl(
                                         std::nullopt);
                                },
                                [](Error& error) -> VersionedItem {
-                                   // TODO tidy up my dynamic error raising stuff, put it in error_code.hpp
-                                   throw ArcticException(fmt::format("{} {}", get_error_code_data(error.code).name_, error.message));
+                                   throw error.to_exception();
                                }
     );
 }

@@ -36,3 +36,9 @@ PID=112593
 Memory use before finalize 143.22MB
 Memory use after finalize 1254.268MB
 ```
+
+Next steps:
+- Fix up failing tests
+- Tests that the data keys get deleted when there is an error
+- Test memory use improvement
+- Test performance
