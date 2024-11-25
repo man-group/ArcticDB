@@ -746,6 +746,94 @@
         "version": "80de9b1982a498c300177d02874a8626152eccb57cd0ba4228a5bb168e7608c8",
         "warmup_time": -1
     },
+    "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data": {
+        "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, cache:CachedDFGenerator, param:int):\n        print(\">>> Library:\", self.lib)\n        print(\">>> Symbol:\", self.symbol)\n        print(\">>> Symbols:\", self.lib.list_symbols())\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache:CachedDFGenerator, param:int):\n        cachedDF = cache\n    \n        self.ac = Arctic(f\"lmdb://{self.lib_name}{param}?map_size=40GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(0, cachedDF.TIME_UNIT) # Synchronize index frequency\n    \n        df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)\n        list_of_chunks = [10000] * param\n        self.symbol\n    \n        self.lib.write(self.symbol, data=df, prune_previous_versions=True)\n        stage_chunks(self.lib, self.symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data types\n        cachedDF = CachedDFGenerator(350000, [5])\n        return cachedDF",
+        "name": "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data",
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1000",
+                "2000",
+                "3000"
+            ]
+        ],
+        "setup_cache_key": "finalize_staged_data:38",
+        "timeout": 1200000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "119d174f81aec2b2abf56385297f54658283018cb6baac8bfee08d4ec23b7d95"
+    },
+    "finalize_staged_data.FinalizeStagedData.time_finalize_staged_data": {
+        "code": "class FinalizeStagedData:\n    def time_finalize_staged_data(self, cache:CachedDFGenerator, param:int):\n        print(\">>> Library:\", self.lib)\n        print(\">>> Symbol:\", self.symbol)\n        print(\">>> Symbols:\", self.lib.list_symbols())\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache:CachedDFGenerator, param:int):\n        cachedDF = cache\n    \n        self.ac = Arctic(f\"lmdb://{self.lib_name}{param}?map_size=40GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(0, cachedDF.TIME_UNIT) # Synchronize index frequency\n    \n        df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)\n        list_of_chunks = [10000] * param\n        self.symbol\n    \n        self.lib.write(self.symbol, data=df, prune_previous_versions=True)\n        stage_chunks(self.lib, self.symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data types\n        cachedDF = CachedDFGenerator(350000, [5])\n        return cachedDF",
+        "min_run_count": 1,
+        "name": "finalize_staged_data.FinalizeStagedData.time_finalize_staged_data",
+        "number": 1,
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1000",
+                "2000",
+                "3000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "finalize_staged_data:38",
+        "timeout": 1200000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "6fd7457e998c553b7b0a402417049ecf967d309035952575e0b8e8619d6c5036",
+        "warmup_time": -1
+    },
+    "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.peakmem_finalize_staged_data": {
+        "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, cache:CachedDFGenerator, param:int):\n        print(\">>> Library:\", self.lib)\n        print(\">>> Symbol:\", self.symbol)\n        print(\">>> Symbols:\", self.lib.list_symbols())\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache:CachedDFGenerator, param:int):\n        cachedDF = cache\n    \n        self.ac = Arctic(f\"lmdb://{self.lib_name}{param}?map_size=40GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(0, cachedDF.TIME_UNIT) # Synchronize index frequency\n    \n        df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)\n        list_of_chunks = [10000] * param\n        self.symbol\n    \n        self.lib.write(self.symbol, data=df, prune_previous_versions=True)\n        stage_chunks(self.lib, self.symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)\n\nclass FinalizeStagedDataWiderDataframeX3:\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data type\n        cachedDF = CachedDFGenerator(350000, [5, 25, 50]) # 3 times wider DF with bigger string columns\n        return cachedDF",
+        "name": "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.peakmem_finalize_staged_data",
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1000",
+                "2000",
+                "3000"
+            ]
+        ],
+        "setup_cache_key": "finalize_staged_data:77",
+        "timeout": 1200000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "3c5d80baa47c6d198f4bf40cfd20979d2690b8ae84f308b4dfe6c3dd9a8b7453"
+    },
+    "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.time_finalize_staged_data": {
+        "code": "class FinalizeStagedData:\n    def time_finalize_staged_data(self, cache:CachedDFGenerator, param:int):\n        print(\">>> Library:\", self.lib)\n        print(\">>> Symbol:\", self.symbol)\n        print(\">>> Symbols:\", self.lib.list_symbols())\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache:CachedDFGenerator, param:int):\n        cachedDF = cache\n    \n        self.ac = Arctic(f\"lmdb://{self.lib_name}{param}?map_size=40GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(0, cachedDF.TIME_UNIT) # Synchronize index frequency\n    \n        df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)\n        list_of_chunks = [10000] * param\n        self.symbol\n    \n        self.lib.write(self.symbol, data=df, prune_previous_versions=True)\n        stage_chunks(self.lib, self.symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)\n\nclass FinalizeStagedDataWiderDataframeX3:\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data type\n        cachedDF = CachedDFGenerator(350000, [5, 25, 50]) # 3 times wider DF with bigger string columns\n        return cachedDF",
+        "min_run_count": 1,
+        "name": "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.time_finalize_staged_data",
+        "number": 1,
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1000",
+                "2000",
+                "3000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "finalize_staged_data:77",
+        "timeout": 1200000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "870fd7c1bfcda4d3046bc738b502a56c59306260d599870cecc1c4e2ba2129c3",
+        "warmup_time": -1
+    },
     "list_functions.ListFunctions.peakmem_list_symbols": {
         "code": "class ListFunctions:\n    def peakmem_list_symbols(self, num_symbols):\n        self.lib.list_symbols()\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_functions\")\n        self.lib = self.ac[f\"{num_symbols}_num_symbols\"]\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://list_functions\")\n    \n        num_symbols = ListFunctions.params\n        for syms in num_symbols:\n            lib_name = f\"{syms}_num_symbols\"\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            for sym in range(syms):\n                lib.write(f\"{sym}_sym\", generate_benchmark_df(ListFunctions.rows))",
         "name": "list_functions.ListFunctions.peakmem_list_symbols",
@@ -1245,7 +1333,7 @@
         "warmup_time": -1
     },
     "resample.Resample.peakmem_resample": {
-        "code": "class Resample:\n    def peakmem_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        if col_type == \"datetime\" and aggregation == \"sum\" or col_type == \"str\" and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]:\n            raise SkipNotImplemented(f\"{aggregation} not supported on columns of type {col_type}\")\n        else:\n            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        ac = Arctic(self.CONNECTION_STRING)\n        ac.delete_library(self.LIB_NAME)\n        lib = ac.create_library(self.LIB_NAME)\n        rng = np.random.default_rng()\n        col_types = self.params[2]\n        rows = max(self.params[0])\n        for col_type in col_types:\n            if col_type == \"str\":\n                num_unique_strings = 100\n                unique_strings = random_strings_of_length(num_unique_strings, 10, True)\n            sym = col_type\n            num_segments = rows // self.ROWS_PER_SEGMENT\n            for idx in range(num_segments):\n                index = pd.date_range(pd.Timestamp(idx * self.ROWS_PER_SEGMENT, unit=\"us\"), freq=\"us\", periods=self.ROWS_PER_SEGMENT)\n                if col_type == \"int\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                elif col_type == \"bool\":\n                    col_data = rng.integers(0, 2, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(bool)\n                elif col_type == \"float\":\n                    col_data = 100_000 * rng.random(self.ROWS_PER_SEGMENT)\n                elif col_type == \"datetime\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(\"datetime64[s]\")\n                elif col_type == \"str\":\n                    col_data = np.random.choice(unique_strings, self.ROWS_PER_SEGMENT)\n                df = pd.DataFrame({\"col\": col_data}, index=index)\n                lib.append(sym, df)",
+        "code": "class Resample:\n    def peakmem_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        if col_type == \"datetime\" and aggregation == \"sum\" or col_type == \"str\" and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]:\n            pass\n            # Use this when upgrading to ASV 0.6.0 or later\n            # raise SkipNotImplemented(f\"{aggregation} not supported on columns of type {col_type}\")\n        else:\n            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        ac = Arctic(self.CONNECTION_STRING)\n        ac.delete_library(self.LIB_NAME)\n        lib = ac.create_library(self.LIB_NAME)\n        rng = np.random.default_rng()\n        col_types = self.params[2]\n        rows = max(self.params[0])\n        for col_type in col_types:\n            if col_type == \"str\":\n                num_unique_strings = 100\n                unique_strings = random_strings_of_length(num_unique_strings, 10, True)\n            sym = col_type\n            num_segments = rows // self.ROWS_PER_SEGMENT\n            for idx in range(num_segments):\n                index = pd.date_range(pd.Timestamp(idx * self.ROWS_PER_SEGMENT, unit=\"us\"), freq=\"us\", periods=self.ROWS_PER_SEGMENT)\n                if col_type == \"int\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                elif col_type == \"bool\":\n                    col_data = rng.integers(0, 2, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(bool)\n                elif col_type == \"float\":\n                    col_data = 100_000 * rng.random(self.ROWS_PER_SEGMENT)\n                elif col_type == \"datetime\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(\"datetime64[s]\")\n                elif col_type == \"str\":\n                    col_data = np.random.choice(unique_strings, self.ROWS_PER_SEGMENT)\n                df = pd.DataFrame({\"col\": col_data}, index=index)\n                lib.append(sym, df)",
         "name": "resample.Resample.peakmem_resample",
         "param_names": [
             "num_rows",
@@ -1280,13 +1368,13 @@
                 "'count'"
             ]
         ],
-        "setup_cache_key": "resample:38",
+        "setup_cache_key": "resample:37",
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "e64300ebb5bd625e1a0f3774aadd035e5738b41295ec2a8ce082d2e9add9b580"
+        "version": "760c9d62e17a5467f1e93abb258d89057e8fdf9ee67d98ceb376e731157a4d2e"
     },
     "resample.Resample.time_resample": {
-        "code": "class Resample:\n    def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        if col_type == \"datetime\" and aggregation == \"sum\" or col_type == \"str\" and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]:\n            raise SkipNotImplemented(f\"{aggregation} not supported on columns of type {col_type}\")\n        else:\n            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        ac = Arctic(self.CONNECTION_STRING)\n        ac.delete_library(self.LIB_NAME)\n        lib = ac.create_library(self.LIB_NAME)\n        rng = np.random.default_rng()\n        col_types = self.params[2]\n        rows = max(self.params[0])\n        for col_type in col_types:\n            if col_type == \"str\":\n                num_unique_strings = 100\n                unique_strings = random_strings_of_length(num_unique_strings, 10, True)\n            sym = col_type\n            num_segments = rows // self.ROWS_PER_SEGMENT\n            for idx in range(num_segments):\n                index = pd.date_range(pd.Timestamp(idx * self.ROWS_PER_SEGMENT, unit=\"us\"), freq=\"us\", periods=self.ROWS_PER_SEGMENT)\n                if col_type == \"int\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                elif col_type == \"bool\":\n                    col_data = rng.integers(0, 2, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(bool)\n                elif col_type == \"float\":\n                    col_data = 100_000 * rng.random(self.ROWS_PER_SEGMENT)\n                elif col_type == \"datetime\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(\"datetime64[s]\")\n                elif col_type == \"str\":\n                    col_data = np.random.choice(unique_strings, self.ROWS_PER_SEGMENT)\n                df = pd.DataFrame({\"col\": col_data}, index=index)\n                lib.append(sym, df)",
+        "code": "class Resample:\n    def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        if col_type == \"datetime\" and aggregation == \"sum\" or col_type == \"str\" and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]:\n            pass\n            # Use this when upgrading to ASV 0.6.0 or later\n            # raise SkipNotImplemented(f\"{aggregation} not supported on columns of type {col_type}\")\n        else:\n            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        ac = Arctic(self.CONNECTION_STRING)\n        ac.delete_library(self.LIB_NAME)\n        lib = ac.create_library(self.LIB_NAME)\n        rng = np.random.default_rng()\n        col_types = self.params[2]\n        rows = max(self.params[0])\n        for col_type in col_types:\n            if col_type == \"str\":\n                num_unique_strings = 100\n                unique_strings = random_strings_of_length(num_unique_strings, 10, True)\n            sym = col_type\n            num_segments = rows // self.ROWS_PER_SEGMENT\n            for idx in range(num_segments):\n                index = pd.date_range(pd.Timestamp(idx * self.ROWS_PER_SEGMENT, unit=\"us\"), freq=\"us\", periods=self.ROWS_PER_SEGMENT)\n                if col_type == \"int\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                elif col_type == \"bool\":\n                    col_data = rng.integers(0, 2, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(bool)\n                elif col_type == \"float\":\n                    col_data = 100_000 * rng.random(self.ROWS_PER_SEGMENT)\n                elif col_type == \"datetime\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(\"datetime64[s]\")\n                elif col_type == \"str\":\n                    col_data = np.random.choice(unique_strings, self.ROWS_PER_SEGMENT)\n                df = pd.DataFrame({\"col\": col_data}, index=index)\n                lib.append(sym, df)",
         "min_run_count": 2,
         "name": "resample.Resample.time_resample",
         "number": 5,
@@ -1326,10 +1414,36 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "resample:38",
+        "setup_cache_key": "resample:37",
         "type": "time",
         "unit": "seconds",
-        "version": "2d10a27f3668632f382e90783829b4bb08cabb656c02754c00d5953ee42f3794",
+        "version": "1381d2db90e66cb5cd04febf62398827a3ac9928795eaced908daec35d5c0c31",
+        "warmup_time": -1
+    },
+    "resample.ResampleWide.peakmem_resample_wide": {
+        "code": "class ResampleWide:\n    def peakmem_resample_wide(self):\n        self.lib.read(self.SYM, query_builder=self.query_builder)\n\n    def setup(self):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        aggs = dict()\n        for col in self.COLS:\n            aggs[col] = \"last\"\n        self.query_builder = QueryBuilder().resample(\"30us\").agg(aggs)\n\n    def setup_cache(self):\n        ac = Arctic(self.CONNECTION_STRING)\n        ac.delete_library(self.LIB_NAME)\n        lib = ac.create_library(self.LIB_NAME)\n        rng = np.random.default_rng()\n        num_rows = 3000\n        index = pd.date_range(pd.Timestamp(0, unit=\"us\"), freq=\"us\", periods=num_rows)\n        data = dict()\n        for col in self.COLS:\n            data[col] = 100 * rng.random(num_rows, dtype=np.float64)\n        df = pd.DataFrame(data, index=index)\n        lib.write(self.SYM, df)",
+        "name": "resample.ResampleWide.peakmem_resample_wide",
+        "param_names": [],
+        "params": [],
+        "setup_cache_key": "resample:103",
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "53f042192048c92d282637c1bbcee9e52dacec9086c534782de30d7ff67e77eb"
+    },
+    "resample.ResampleWide.time_resample_wide": {
+        "code": "class ResampleWide:\n    def time_resample_wide(self):\n        self.lib.read(self.SYM, query_builder=self.query_builder)\n\n    def setup(self):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        aggs = dict()\n        for col in self.COLS:\n            aggs[col] = \"last\"\n        self.query_builder = QueryBuilder().resample(\"30us\").agg(aggs)\n\n    def setup_cache(self):\n        ac = Arctic(self.CONNECTION_STRING)\n        ac.delete_library(self.LIB_NAME)\n        lib = ac.create_library(self.LIB_NAME)\n        rng = np.random.default_rng()\n        num_rows = 3000\n        index = pd.date_range(pd.Timestamp(0, unit=\"us\"), freq=\"us\", periods=num_rows)\n        data = dict()\n        for col in self.COLS:\n            data[col] = 100 * rng.random(num_rows, dtype=np.float64)\n        df = pd.DataFrame(data, index=index)\n        lib.write(self.SYM, df)",
+        "min_run_count": 2,
+        "name": "resample.ResampleWide.time_resample_wide",
+        "number": 5,
+        "param_names": [],
+        "params": [],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "resample:103",
+        "type": "time",
+        "unit": "seconds",
+        "version": "ece714f981e8de31ee8296644624bf8f5fb895e6bf48d64a6ae2a9c50c5db7a2",
         "warmup_time": -1
     },
     "version": 2,

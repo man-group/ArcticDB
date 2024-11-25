@@ -1,3 +1,12 @@
+"""
+Copyright 2024 Man Group Operations Limited
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+from arcticdb import Arctic
+from tests.stress.arcticdb.version_store.test_stress_finalize_stage_data import CachedDFGenerator, stage_chunks
+from arcticdb.util.utils import TimestampNumber
+"""
+
 from typing import List, Literal, Tuple, Union
 import numpy as np
 import pandas as pd
@@ -29,33 +38,60 @@ class  TimestampNumber:
     TIME_ZERO : pd.Timestamp = pd.Timestamp(0)
 
     def __init__(self, value:np.int64, type:SupportedFreqTypes=DEFAULT_FREQ) -> None: 
+        self.init_value:np.int64 = value
         self.value:np.int64 = value
         self.__type:TimestampNumber.SupportedFreqTypes = type
-    
+
+
     def get_type(self) -> SupportedFreqTypes:
         return self.__type
-    
+
+
     def get_value(self) -> np.int64:
         """
             Returns the value as a number of specified units since Timestamp(0)
         """
         return self.value
-    
+
+
     def to_timestamp(self) -> pd.Timestamp:
         result, *other = self.calculate_timestamp_after_n_periods(self.value, self.__type)
         return result
-    
+
+
     def inc(self, add_number:np.int64) -> 'TimestampNumber':
         self.value = np.int64(self.value) + np.int64(add_number)
         return self
 
+
     def dec(self, add_number:np.int64) -> 'TimestampNumber':
         self.value = np.int64(self.value) - np.int64(add_number)
         return self
-    
+
+
     def to_zero(self) -> 'TimestampNumber':
+        '''
+            To Timestamp(0)
+        '''
         self.value = 0
         return self
+    
+
+    def to_initial_value(self) -> 'TimestampNumber':
+        '''
+            Revert to initial value
+        '''
+        self.value = self.init_value
+        return self
+
+
+    def get_initial_value(self) -> 'np.int64':
+        '''
+            Returns the initial value of the number.
+            This allows you to serve like a reference
+        '''
+        return self.init_value
+
     
     @classmethod
     def calculate_timestamp_after_n_periods(cls, periods:int, freq:SupportedFreqTypes='s', 
@@ -94,6 +130,7 @@ class  TimestampNumber:
             return end_time, (start_time, end_time)
         else:
             return end_time, (end_time , start_time)
+
 
     @classmethod
     def from_timestamp(cls, timestamp:pd.Timestamp, freq:SupportedFreqTypes=DEFAULT_FREQ) -> 'TimestampNumber':
