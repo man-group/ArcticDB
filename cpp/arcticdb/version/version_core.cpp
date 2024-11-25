@@ -681,6 +681,37 @@ std::vector<RangesAndKey> generate_ranges_and_keys(const std::vector<SliceAndKey
     return res;
 }
 
+std::vector<folly::Future<pipelines::SegmentAndSlice>> generate_segment_and_slice_futures(
+    const std::shared_ptr<Store> &store,
+    const std::shared_ptr<PipelineContext> &pipeline_context,
+    const ProcessingConfig &processing_config,
+    const std::vector<RangesAndKey>& all_ranges
+    ) {
+    auto complete_ranges = std::vector<RangesAndKey>(all_ranges.cbegin(), all_ranges.cbegin() + pipeline_context->incompletes_after());
+    auto segment_and_slice_futures = store->batch_read_uncompressed(std::move(complete_ranges), columns_to_decode(pipeline_context));
+    auto incomplete_ranges = std::vector<RangesAndKey>(all_ranges.cbegin() + pipeline_context->incompletes_after(), all_ranges.cend());
+    auto incomplete_segment_and_slice_futures = store->batch_read_uncompressed(std::move(incomplete_ranges), columns_to_decode(pipeline_context));
+
+    for (auto&& fut : incomplete_segment_and_slice_futures) {
+        segment_and_slice_futures.push_back(
+            std::move(fut)
+            .via(&async::cpu_executor())
+            .thenValue([&pipeline_context, processing_config](SegmentAndSlice&& read_result) {
+                if (!processing_config.dynamic_schema_ && !columns_match(read_result.segment_in_memory_.descriptor(), pipeline_context->descriptor())) {
+                    schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                        "When static schema is used all staged segments must have the same column and column types."
+                        "{} is different than {}",
+                        read_result.segment_in_memory_.descriptor(),
+                        pipeline_context->descriptor()
+                    );
+                }
+                return std::move(read_result);
+            }));
+    }
+
+    return segment_and_slice_futures;
+}
+
 /*
  * Processes the slices in the given pipeline_context.
  *
@@ -705,34 +736,15 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
         clause->set_component_manager(component_manager);
     }
 
-    // Generate RangesAndKey objects from pipeline SliceAndKey objects
-    auto ranges_and_keys = generate_ranges_and_keys(pipeline_context->slice_and_keys_);
+    auto all_ranges = generate_ranges_and_keys(pipeline_context->slice_and_keys_);
 
     // Each element of the vector corresponds to one processing unit containing the list of indexes in ranges_and_keys required for that processing unit
     // i.e. if the first processing unit needs ranges_and_keys[0] and ranges_and_keys[1], and the second needs ranges_and_keys[2] and ranges_and_keys[3]
     // then the structure will be {{0, 1}, {2, 3}}
-    std::vector<std::vector<size_t>> processing_unit_indexes = read_query->clauses_[0]->structure_for_processing(ranges_and_keys);
+    std::vector<std::vector<size_t>> processing_unit_indexes = read_query->clauses_[0]->structure_for_processing(all_ranges);
 
     // Start reading as early as possible
-    auto segment_and_slice_futures = store->batch_read_uncompressed(std::move(ranges_and_keys), columns_to_decode(pipeline_context));
-
-    // Chain a future on to the incompletes with additional checks
-    for (auto it = segment_and_slice_futures.begin() + pipeline_context->incompletes_after(); it < segment_and_slice_futures.end(); it++) {
-        *it = (*it)
-            .via(&async::cpu_executor())
-            .thenValue([&pipeline_context, processing_config](SegmentAndSlice&& read_result) {
-                // TODO pull out to a function
-                if (!processing_config.dynamic_schema_ && !columns_match(read_result.segment_in_memory_.descriptor(), pipeline_context->descriptor())) {
-                    schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                        "When static schema is used all staged segments must have the same column and column types."
-                        "{} is different than {}",
-                        read_result.segment_in_memory_.descriptor(),
-                        pipeline_context->descriptor()
-                    );
-                }
-                return std::move(read_result);
-            });
-    }
+    auto segment_and_slice_futures = generate_segment_and_slice_futures(store, pipeline_context, processing_config, all_ranges);
 
     return schedule_clause_processing(component_manager,
                                       std::move(segment_and_slice_futures),
