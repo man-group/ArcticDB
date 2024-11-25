@@ -46,16 +46,11 @@ SortedValue sorted_value_from_proto(arcticdb::proto::descriptors::SortedValue so
 }
 
 void set_data_type(DataType data_type, arcticdb::proto::descriptors::TypeDescriptor& type_desc) {
-    type_desc.set_size_bits(
-        static_cast<arcticdb::proto::descriptors::TypeDescriptor_SizeBits>(
-            static_cast<std::uint8_t>(slice_bit_size(data_type))));
-
-    type_desc.set_value_type(
-        static_cast<arcticdb::proto::descriptors::TypeDescriptor_ValueType>(
-            static_cast<std::uint8_t>(slice_value_type(data_type))));
+    type_desc.set_size_bits(size_bits_proto_from_data_type(data_type));
+    type_desc.set_value_type(value_proto_from_data_type(data_type));
 }
 
-[[nodiscard]] arcticdb::proto::descriptors::TypeDescriptor to_proto(const TypeDescriptor& desc) {
+[[nodiscard]] arcticdb::proto::descriptors::TypeDescriptor type_descriptor_to_proto(const TypeDescriptor& desc) {
     arcticdb::proto::descriptors::TypeDescriptor output;
     output.set_dimension(static_cast<std::uint32_t>(desc.dimension_));
     set_data_type(desc.data_type_, output);
