@@ -459,7 +459,7 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
         std::vector<std::vector<size_t>>&& processing_unit_indexes,
         std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses) {
     // All the shared pointers as arguments to this function and created within it are to ensure that resources are
-    // correctly kept alive after this function returns it's future
+    // correctly kept alive after this function returns its future
     auto num_segments = segment_and_slice_futures.size();
     auto segment_and_slice_future_splitters = split_futures(std::move(segment_and_slice_futures));
 
@@ -715,6 +715,24 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
 
     // Start reading as early as possible
     auto segment_and_slice_futures = store->batch_read_uncompressed(std::move(ranges_and_keys), columns_to_decode(pipeline_context));
+
+    // Chain a future on to the incompletes with additional checks
+    for (auto it = segment_and_slice_futures.begin() + pipeline_context->incompletes_after(); it < segment_and_slice_futures.end(); it++) {
+        *it = (*it)
+            .via(&async::cpu_executor())
+            .thenValue([&pipeline_context, processing_config](SegmentAndSlice&& read_result) {
+                // TODO pull out to a function
+                if (!processing_config.dynamic_schema_ && !columns_match(read_result.segment_in_memory_.descriptor(), pipeline_context->descriptor())) {
+                    schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                        "When static schema is used all staged segments must have the same column and column types."
+                        "{} is different than {}",
+                        read_result.segment_in_memory_.descriptor(),
+                        pipeline_context->descriptor()
+                    );
+                }
+                return std::move(read_result);
+            });
+    }
 
     return schedule_clause_processing(component_manager,
                                       std::move(segment_and_slice_futures),
@@ -1323,6 +1341,7 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
             return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
         });
     } else {
+        // TODO validation on the incompletes
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
         util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query->row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
         mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema_), pipeline_context->bucketize_dynamic_);
@@ -1470,8 +1489,6 @@ VersionedItem sort_merge_impl(
         [&](const stream::TimeseriesIndex &timeseries_index) {
             read_query->clauses_.emplace_back(std::make_shared<Clause>(SortClause{timeseries_index.name(), pipeline_context->incompletes_after()}));
             read_query->clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{}));
-            //const auto split_size = ConfigsMap::instance()->get_int("Split.RowCount", 10000);
-            //read_query->clauses_.emplace_back(std::make_shared<Clause>(SplitClause{static_cast<size_t>(split_size)}));
 
             read_query->clauses_.emplace_back(std::make_shared<Clause>(MergeClause{
                 timeseries_index,
@@ -1480,7 +1497,9 @@ VersionedItem sort_merge_impl(
                 pipeline_context->descriptor(),
                 write_options.dynamic_schema
             }));
-            auto segments = read_and_process(store, pipeline_context, read_query, ReadOptions{}).get();
+            ReadOptions read_options;
+            read_options.dynamic_schema_ = write_options.dynamic_schema;
+            auto segments = read_and_process(store, pipeline_context, read_query, read_options).get();
             if (options.append_ && update_info.previous_index_key_ && !segments.empty()) {
                 const timestamp last_index_on_disc = update_info.previous_index_key_->end_time() - 1;
                 const timestamp incomplete_start =
@@ -1510,15 +1529,16 @@ VersionedItem sort_merge_impl(
                     fut_vec.emplace_back(store->write(pk, std::move(segment)));
                 }};
 
-            for(auto sk = segments.begin(); sk != segments.end(); ++sk) {
-                SegmentInMemory segment = sk->release_segment(store);
+            for(auto& sk : segments) {
+                SegmentInMemory segment = sk.release_segment(store);
                 // Empty columns can appear only of one staged segment is empty and adds column which
                 // does not appear in any other segment. There can also be empty columns if all segments
                 // are empty in that case this loop won't be reached as segments.size() will be 0
                 if (write_options.dynamic_schema) {
                     segment.drop_empty_columns();
                 }
-                aggregator.add_segment(std::move(segment), sk->slice(), options.convert_int_to_float_);
+
+                aggregator.add_segment(std::move(segment), sk.slice(), options.convert_int_to_float_);
             }
             aggregator.commit();
             pipeline_context->desc_->set_sorted(deduce_sorted(previous_sorted_value.value_or(SortedValue::ASCENDING), SortedValue::ASCENDING));
