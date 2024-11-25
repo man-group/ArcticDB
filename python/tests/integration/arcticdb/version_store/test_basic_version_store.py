@@ -1111,7 +1111,7 @@ def test_read_ts(basic_store):
 
 def test_negative_strides(basic_store_tiny_segment):
     lmdb_version_store = basic_store_tiny_segment
-    negative_stride_np = np.array([[1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12]], np.int32)[::-1]
+    negative_stride_np = np.array([[1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12, 13]], np.int32)[::-1]
     lmdb_version_store.write("negative_strides", negative_stride_np)
     vit = lmdb_version_store.read("negative_strides")
     assert_array_equal(negative_stride_np, vit.data)
