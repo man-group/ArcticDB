@@ -40,11 +40,19 @@ def generate_bars(symbols, arctic_uri, arctic_library):
     return [(bar.symbol, bar.data) for bar in bars if isinstance(bar, adb.VersionedItem) and not bar.data.empty]
 
 
+from multiprocessing import Pool
+
+def gen_bars_m(symbols):
+    return generate_bars(symbols, arctic_uri=arctic_uri, arctic_library=arctic_library_name)
+
 def test_gen_bars():
+    pool_size = 35
     ac = adb.Arctic(arctic_uri)
     lib = ac.get_library(arctic_library_name, create_if_missing=True)
 
     symbols = lib.list_symbols()
     start_time = datetime.now()
-    bars = generate_bars(symbols, arctic_uri=arctic_uri, arctic_library=arctic_library_name)
+    with Pool(pool_size) as pool:
+        data = pool.map(gen_bars_m, symbols, 10)
+
     print("Read took {}".format(datetime.now() - start_time))

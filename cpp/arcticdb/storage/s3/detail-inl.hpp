@@ -88,14 +88,6 @@ inline void raise_s3_exception(const Aws::S3::S3Error& err, const std::string& o
     raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(error_message);
 }
 
-folly::Future<folly::Unit> do_async_read_impl(entity::VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
-    
-}
-
-folly::Future<KeySegmentPair> do_async_read_impl(entity::VariantKey&& variant_key, ReadKeyOpts opts) {
-
-}
-
 inline bool is_expected_error_type(Aws::S3::S3Errors err) {
     return err == Aws::S3::S3Errors::NO_SUCH_KEY || err == Aws::S3::S3Errors::RESOURCE_NOT_FOUND
         || err == Aws::S3::S3Errors::NO_SUCH_BUCKET;
@@ -175,6 +167,23 @@ KeySegmentPair do_read_impl(
 
         throw KeyNotFoundException(variant_key);
     }
+}
+
+template <typename KeyBucketizer>
+folly::Future<folly::Unit> do_async_read_impl(
+    VariantKey&& variant_key,
+    const std::string& root_folder,
+    const std::string& bucket_name,
+    const S3ClientInterface& s3_client,
+    KeyBucketizer&& bucketizer,
+    ReadKeyOpts opts
+    ) {
+    auto key_type_dir = key_type_folder(root_folder, variant_key_type(variant_key));
+    auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
+}
+
+folly::Future<KeySegmentPair> do_async_read_impl(entity::VariantKey&& variant_key, ReadKeyOpts opts) {
+
 }
 
 template<class KeyBucketizer>

@@ -15,7 +15,9 @@ bucket = 'user-wdealtry-dev'
 endpoint = 's3.vast.gdc.storage.dev.m'
 
 
-arctic_uri = "s3://{}:{}?access={}&secret={}".format(endpoint, bucket, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+#arctic_uri = "s3://{}:{}?access={}&secret={}".format(endpoint, bucket, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+
+arctic_uri = "lmdb:///users/is/wdealtry/perf"
 
 arctic_library_name = "ticks"
 def generate_and_write_data(sec_ids, days, ticks_per_day, trading_days, adb_uri, adb_lib):

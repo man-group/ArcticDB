@@ -130,6 +130,26 @@ S3Result<Segment> S3ClientImpl::get_object(
     return {Segment::from_buffer(retrieved.get_buffer())};
 }
 
+void GetObjectAsyncHandler(const Aws::S3::S3Client* client,
+                           const Aws::S3::Model::GetObjectRequest& request,
+                           const Aws::S3::Model::GetObjectOutcome& outcome,
+                           const std::shared_ptr<const Aws::Client::AsyncCallerContext>& context) {
+    if (outcome.IsSuccess()) {
+        auto& retrievedFile = outcome.GetResultWithOwnership().GetBody();
+        std::ofstream outputFile("output.txt", std::ios::binary);
+        outputFile << retrievedFile.rdbuf();
+        std::cout << "Successfully downloaded the file." << std::endl;
+    } else {
+        std::cerr << "Failed to download file: " << outcome.GetError().GetMessage() << std::endl;
+    }
+}
+
+S3Result<Segment> S3ClientImpl::get_object_async(
+    const std::string &s3_object_name,
+    const std::string &bucket_name) const {
+
+}
+
 S3Result<std::monostate> S3ClientImpl::put_object(
         const std::string &s3_object_name,
         Segment &&segment,
