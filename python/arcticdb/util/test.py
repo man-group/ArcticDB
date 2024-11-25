@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import os
 from contextlib import contextmanager
-from typing import Mapping, Any, Optional, Iterable, NamedTuple, List, AnyStr, Sequence
+from typing import Mapping, Any, Optional, Iterable, NamedTuple, List, AnyStr, Sequence, Union
 import numpy as np
 import pandas as pd
 from pandas.core.series import Series
@@ -93,7 +93,7 @@ def create_df_index_rownum(num_columns: int, start_index: int, end_index : int) 
     return df
 
 
-def create_datetime_index(df: pd.DataFrame, name_col:str, freq:str | dt.timedelta | Timedelta | DateOffset, 
+def create_datetime_index(df: pd.DataFrame, name_col:str, freq:Union(str | dt.timedelta | Timedelta | DateOffset), 
         start_time: pd.Timestamp = pd.Timestamp(0)):
     """
         creates a datetime index to a dataframe. The index will start at specified timestamp
