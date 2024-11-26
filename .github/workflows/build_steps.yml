@@ -75,7 +75,7 @@ jobs:
           # Replace default repo as centos 7 has reached EOL
           sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g; s|baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/*.repo
           sed -i '/mirrorlist.centos.org/d' /etc/yum.repos.d/*.repo
-          yum update && yum -y install wget
+          yum update -y && yum install -y  wget
           touch "$HOME/.bashrc"
           wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
           export NVM_DIR="$HOME/.nvm"
