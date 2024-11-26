@@ -7,8 +7,8 @@ from tests.stress.arcticdb.version_store.test_stress_finalize_stage_data import 
 from arcticdb.util.utils import TimestampNumber
 """
 
-from typing import List, Tuple, Union
-from typing_extensions import Literal
+from typing import List
+from typing_extensions import Literal, Tuple, Union
 import numpy as np
 import pandas as pd
 
