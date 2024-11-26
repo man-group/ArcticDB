@@ -85,10 +85,10 @@ jobs:
           nvm install 16
           which node
           
-      - name: Checkout
-        uses: actions/checkout@v3.3.0
-        with:
-          submodules: recursive # Just in case a dep has its own third-party deps
+      # - name: Checkout
+      #   uses: actions/checkout@v3.3.0
+      #   with:
+      #     submodules: recursive # Just in case a dep has its own third-party deps
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.3
