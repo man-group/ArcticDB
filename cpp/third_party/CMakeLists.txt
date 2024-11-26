@@ -1,5 +1,4 @@
 if(NOT ${ARCTICDB_USING_CONDA})
-    add_subdirectory(pybind11)
     add_subdirectory(recycle)
     add_subdirectory(semimap EXCLUDE_FROM_ALL)
     add_subdirectory(msgpack-c)

@@ -24,7 +24,7 @@ dependencies:
   - zstd
   # TODO: pybind 2.11.X became stricter regarding the handling of reference counts
   # See: https://github.com/pybind/pybind11/issues/4748#issuecomment-1639445403
-  - pybind11 <2.11
+  - pybind11==2.11.1
   - pcre
   - cyrus-sasl
   - aws-sdk-cpp

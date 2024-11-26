@@ -40,6 +40,7 @@ find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.c
 
 find_package(azure-identity-cpp CONFIG REQUIRED)
 find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
+find_package(pybind11 REQUIRED)
 
 if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
@@ -60,8 +61,6 @@ else()
     add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
 
     SET(HIDE_LINKED_SYMBOLS OFF)
-
-    find_package(pybind11 REQUIRED)
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
     find_package(semimap REQUIRED)
