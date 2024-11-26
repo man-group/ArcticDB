@@ -673,6 +673,7 @@ def test_bools_are_pickled(lmdb_version_store_allows_pickling):
     lib.get_info(sym)['type'] == 'pickled'
     assert_frame_equal(df, lib.read(sym).data)
 
+
 def test_bools_with_nan_throw_without_pickling(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_bools_throw_without_pickling"
@@ -680,6 +681,7 @@ def test_bools_with_nan_throw_without_pickling(lmdb_version_store_v1):
     df = pd.DataFrame({"a": [True, False, np.nan]})
     with pytest.raises(Exception):
         lib.write(sym, df)
+
 
 def test_arrays_are_pickled(lmdb_version_store_allows_pickling):
     lib = lmdb_version_store_allows_pickling
@@ -695,6 +697,7 @@ def test_arrays_are_pickled(lmdb_version_store_allows_pickling):
     lib.get_info(sym)['type'] == 'pickled'
     assert_frame_equal(df, lib.read(sym).data)
 
+
 def test_arrays_throw_without_pickling(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_arrays_throw_without_pickling"
@@ -703,3 +706,11 @@ def test_arrays_throw_without_pickling(lmdb_version_store_v1):
 
     with pytest.raises(Exception):
         lib.write(sym, df)
+
+
+def test_series_zero_name(lmdb_version_store, sym):
+    lib = lmdb_version_store
+    series = pd.Series([3.14, np.nan, 5.7, np.inf], pd.date_range("2020-01-01", periods=4, freq="D", name="date")).rename(0)
+    lib.write(sym, series)
+    vit = lib.read(sym)
+    assert vit.data.equals(series)
