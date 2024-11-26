@@ -82,7 +82,8 @@ struct SlowIncrementTask : async::BaseTask {
         cnt_(cnt), lock_(lock), sleep_time_(sleep_time) {}
 
     void operator()() {
-        auto guard = ReliableStorageLockGuard(lock_, [that = this](){
+        auto aquired = lock_.retry_until_take_lock();
+        auto guard = ReliableStorageLockGuard(lock_, aquired, [that = this](){
             that->lock_lost_ = true;
         });
         auto value_before_sleep = cnt_;

@@ -55,6 +55,10 @@ class AzureStorage final : public Storage {
         return true;
     }
 
+    bool do_supports_atomic_writes() const final {
+        return false;
+    }
+
     bool do_fast_delete() final {
         return false;
     }

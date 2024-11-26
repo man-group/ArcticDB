@@ -21,16 +21,15 @@ namespace lock {
 
 const auto SEPARATOR = '*';
 const auto EXTENDS_PER_TIMEOUT = 5u;
-const auto KEEP_LAST_N_LOCKS = 5u;
 
-StreamDescriptor lock_stream_descriptor(const StreamId &stream_id) {
+inline StreamDescriptor lock_stream_descriptor(const StreamId &stream_id) {
     return StreamDescriptor{stream_descriptor(
             stream_id,
             stream::RowCountIndex(),
             {scalar_field(DataType::INT64, "expiration")})};
 }
 
-SegmentInMemory lock_segment(const StreamId &name, timestamp expiration) {
+inline SegmentInMemory lock_segment(const StreamId &name, timestamp expiration) {
     SegmentInMemory output{lock_stream_descriptor(name)};
     output.set_scalar(0, expiration);
     output.end_row();
@@ -40,6 +39,7 @@ SegmentInMemory lock_segment(const StreamId &name, timestamp expiration) {
 template <class ClockType>
 ReliableStorageLock<ClockType>::ReliableStorageLock(const std::string &base_name, const std::shared_ptr<Store> store, timestamp timeout) :
     base_name_(base_name), store_(store), timeout_(timeout) {
+    storage::check<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>(store_->supports_atomic_writes(), "Storage does not support atomic writes, so we can't create a lock");
     auto s3_timeout = ConfigsMap::instance()->get_int("S3Storage.RequestTimeoutMs", 200000) * ONE_MILLISECOND;
     if (2 * s3_timeout > timeout) {
         log::lock().warn(
@@ -53,7 +53,7 @@ timestamp ReliableStorageLock<ClockType>::timeout() const {
     return timeout_;
 }
 
-Epoch get_next_epoch(std::optional<Epoch> maybe_prev) {
+inline Epoch get_next_epoch(std::optional<Epoch> maybe_prev) {
     if (maybe_prev.has_value()) {
         return maybe_prev.value() + 1;
     }
@@ -65,12 +65,11 @@ StreamId ReliableStorageLock<ClockType>::get_stream_id(Epoch e) const {
     return fmt::format("{}{}{}", base_name_, SEPARATOR, e);
 }
 
-Epoch extract_epoch_from_stream_id(const StreamId& stream_id) {
+inline Epoch extract_epoch_from_stream_id(const StreamId& stream_id) {
     auto string_id = std::get<StringId>(stream_id);
     auto epoch_string = string_id.substr(string_id.find(SEPARATOR)+1, string_id.size());
     return std::stoull(epoch_string);
 }
-
 
 template <class ClockType>
 std::pair<std::vector<Epoch>, std::optional<Epoch>> ReliableStorageLock<ClockType>::get_all_locks() const {
@@ -195,10 +194,9 @@ std::optional<Epoch> ReliableStorageLock<ClockType>::try_take_next_epoch(const s
     return epoch;
 }
 
-ReliableStorageLockGuard::ReliableStorageLockGuard(const ReliableStorageLock<> &lock, folly::Func&& on_lost_lock) :
+inline ReliableStorageLockGuard::ReliableStorageLockGuard(const ReliableStorageLock<> &lock, Epoch aquired_epoch, folly::Func&& on_lost_lock) :
         lock_(lock), aquired_epoch_(std::nullopt), on_lost_lock_(std::move(on_lost_lock)) {
-    aquired_epoch_ = lock_.retry_until_take_lock();
-    util::check(aquired_epoch_.has_value(), "We should have waited until we surely aquire a lock");
+    aquired_epoch_ = aquired_epoch;
     // We heartbeat 5 times per lock timeout to extend the lock.
     auto hearbeat_frequency = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::nanoseconds(lock_.timeout() / EXTENDS_PER_TIMEOUT));
@@ -215,26 +213,27 @@ ReliableStorageLockGuard::ReliableStorageLockGuard(const ReliableStorageLock<> &
     extend_lock_heartbeat_.start();
 }
 
-void ReliableStorageLockGuard::cleanup_on_lost_lock() {
+inline void ReliableStorageLockGuard::cleanup_on_lost_lock() {
     // We do not use shutdown because we don't want to run it from within a FunctionScheduler thread to avoid a deadlock
     extend_lock_heartbeat_.cancelAllFunctions();
     on_lost_lock_();
 }
 
-ReliableStorageLockGuard::~ReliableStorageLockGuard() {
+inline ReliableStorageLockGuard::~ReliableStorageLockGuard() {
     extend_lock_heartbeat_.shutdown();
     if (aquired_epoch_.has_value()) {
         lock_.free_lock(aquired_epoch_.value());
     }
 }
 
-void ReliableStorageLockManager::take_lock_guard(const ReliableStorageLock<> &lock) {
-    guard = std::make_shared<ReliableStorageLockGuard>(lock, [](){
+inline void ReliableStorageLockManager::take_lock_guard(const ReliableStorageLock<> &lock) {
+    auto aquired = lock.retry_until_take_lock();
+    guard = std::make_shared<ReliableStorageLockGuard>(lock, aquired, [](){
         throw LostReliableLock();
     });
 }
 
-void ReliableStorageLockManager::free_lock_guard() {
+inline void ReliableStorageLockManager::free_lock_guard() {
     guard = std::nullopt;
 }
 

@@ -99,6 +99,8 @@ struct StreamSink {
         const StreamId &stream_id,
         SegmentInMemory &&segment) = 0;
 
+    virtual bool supports_atomic_writes() const = 0;
+
     virtual entity::VariantKey write_if_none_sync(
             KeyType key_type,
             const StreamId &stream_id,

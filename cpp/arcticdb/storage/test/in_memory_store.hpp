@@ -39,6 +39,10 @@ namespace arcticdb {
             return false;
         }
 
+        bool supports_atomic_writes() const override {
+            return true;
+        }
+
         bool fast_delete() override {
             return false;
         }
