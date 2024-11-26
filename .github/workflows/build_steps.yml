@@ -72,8 +72,8 @@ jobs:
       run: {shell: bash}
     steps:
       - uses: actions/setup-node@v4
-      with:
-        node-version: 16
+        with:
+          node-version: 16
           
       - name: Checkout
         uses: actions/checkout@v3.3.0
