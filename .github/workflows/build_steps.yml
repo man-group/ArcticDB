@@ -74,7 +74,6 @@ jobs:
       - name: Setup Node 16
         if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
         run: |
-          rm -rf /__e/node20
           # Replace default repo as centos 7 has reached EOL
           sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g; s|baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/*.repo
           sed -i '/mirrorlist.centos.org/d' /etc/yum.repos.d/*.repo
@@ -84,6 +83,7 @@ jobs:
           export NVM_DIR="$HOME/.nvm"
           [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
           nvm install 16
+          which node
           
       - name: Checkout
         uses: actions/checkout@v3.3.0
