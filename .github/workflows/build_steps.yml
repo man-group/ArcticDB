@@ -69,18 +69,31 @@ jobs:
     defaults:
       run: {shell: bash}
     steps:
-      - name: Setup Node 16
-        if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
+      - name: Prepare Image
         run: |
           # Replace default repo as centos 7 has reached EOL
           sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g; s|baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/*.repo
           sed -i '/mirrorlist.centos.org/d' /etc/yum.repos.d/*.repo
-          yum update -y && yum install -y  wget
-          touch "$HOME/.bashrc"
-          wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-          export NVM_DIR="$HOME/.nvm"
-          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-          nvm install 16
+          # TODO Should have a custom Docker image rather than this step
+          # tools
+          yum update -y
+          yum install -y zip flex bison krb5-devel cyrus-sasl-devel openssl-devel \
+          devtoolset-11-gdb devtoolset-10-libatomic-devel unzip tar epel-release jq wget libcurl-devel python3 \
+          rh-python38-python-devel rh-python38-python-pip perl-IPC-Cmd
+
+          yum install -y mono-complete
+
+          yum clean all
+
+          # sccache
+          sccache_ver=`curl -sL -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/mozilla/sccache/releases/latest | jq -r ".tag_name"`
+          
+          wget -nv https://github.com/mozilla/sccache/releases/download/$sccache_ver/sccache-$sccache_ver-x86_64-unknown-linux-musl.tar.gz \
+            -O /tmp/sccache.tar.gz
+          tar -xvf /tmp/sccache.tar.gz -C /tmp/
+          cp /tmp/sccache-*/sccache /usr/local/bin/
+          rm /tmp/sccache.tar.gz
           
       - name: Checkout
         uses: actions/checkout@v3.3.0
