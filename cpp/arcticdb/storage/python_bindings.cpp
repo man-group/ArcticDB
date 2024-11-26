@@ -51,6 +51,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .value("STORAGE_INFO", KeyType::STORAGE_INFO)
         .value("APPEND_REF", KeyType::APPEND_REF)
         .value("LOCK", KeyType::LOCK)
+        .value("SLOW_LOCK", KeyType::SLOW_LOCK)
         .value("SNAPSHOT_REF", KeyType::SNAPSHOT_REF)
         .value("TOMBSTONE", KeyType::TOMBSTONE)
         .value("APPEND_DATA", KeyType::APPEND_DATA)

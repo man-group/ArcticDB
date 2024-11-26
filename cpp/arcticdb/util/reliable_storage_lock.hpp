@@ -47,11 +47,12 @@ private:
     timestamp timeout_;
 };
 
-// The ReliableStorageLockGuard aquires a ReliableStorageLock on construction and frees it on destruction. While the lock
-// is held it periodically extends its timeout in a heartbeating thread.
+// The ReliableStorageLockGuard protects an aquired ReliableStorageLock::Epoch and frees it on destruction. While the lock
+// is held it periodically extends its timeout in a heartbeating thread. If for some reason the lock is lost we get notified
+// via the on_lock_lost.
 class ReliableStorageLockGuard {
 public:
-    ReliableStorageLockGuard(const ReliableStorageLock<> &lock, folly::Func&& on_lost_lock);
+    ReliableStorageLockGuard(const ReliableStorageLock<> &lock, Epoch aquired_epoch, folly::Func&& on_lost_lock);
 
     ~ReliableStorageLockGuard();
 private:

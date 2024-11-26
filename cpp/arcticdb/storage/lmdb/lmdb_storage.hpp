@@ -52,6 +52,10 @@ class LmdbStorage final : public Storage {
         return false;
     };
 
+    bool do_supports_atomic_writes() const final {
+        return false;
+    }
+
     inline bool do_fast_delete() final;
 
     void cleanup() override;
