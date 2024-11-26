@@ -669,14 +669,18 @@ std::shared_ptr<std::unordered_set<std::string>> columns_to_decode(const std::sh
     return res;
 }
 
-std::vector<RangesAndKey> generate_ranges_and_keys(const std::vector<SliceAndKey>& slice_and_keys) {
+std::vector<RangesAndKey> generate_ranges_and_keys(PipelineContext* const pipeline_context) {
     std::vector<RangesAndKey> res;
-    res.reserve(slice_and_keys.size());
-    for (auto& slice_and_key: slice_and_keys) {
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(slice_and_key.key_.has_value(), "Missing key in pipeline context");
+    res.reserve(pipeline_context->slice_and_keys_.size());
+    bool is_incomplete{false};
+    for (auto it = pipeline_context->begin(); it != pipeline_context->end(); it++) {
+        if (it == pipeline_context->incompletes_begin()) {
+            is_incomplete = true;
+        }
+        auto& sk = it->slice_and_key();
         // Take a copy here as things like defrag need the keys in pipeline_context->slice_and_keys_ that aren't being modified at the end
-        auto key = *slice_and_key.key_;
-        res.emplace_back(slice_and_key.slice_, std::move(key));
+        auto key = sk.key();
+        res.emplace_back(sk.slice(), std::move(key), is_incomplete);
     }
     return res;
 }
@@ -687,27 +691,33 @@ std::vector<folly::Future<pipelines::SegmentAndSlice>> generate_segment_and_slic
     const ProcessingConfig &processing_config,
     const std::vector<RangesAndKey>& all_ranges
     ) {
-    auto complete_ranges = std::vector<RangesAndKey>(all_ranges.cbegin(), all_ranges.cbegin() + pipeline_context->incompletes_after());
-    auto segment_and_slice_futures = store->batch_read_uncompressed(std::move(complete_ranges), columns_to_decode(pipeline_context));
-    auto incomplete_ranges = std::vector<RangesAndKey>(all_ranges.cbegin() + pipeline_context->incompletes_after(), all_ranges.cend());
-    auto incomplete_segment_and_slice_futures = store->batch_read_uncompressed(std::move(incomplete_ranges), columns_to_decode(pipeline_context));
+    std::vector<folly::Future<pipelines::SegmentAndSlice>> res;
+    auto ranges_copy = all_ranges;
+    auto segment_and_slice_futures = store->batch_read_uncompressed(std::move(ranges_copy), columns_to_decode(pipeline_context));
 
-    for (auto&& fut : incomplete_segment_and_slice_futures) {
-        segment_and_slice_futures.push_back(
-            std::move(fut)
-            .via(&async::cpu_executor())
-            .thenValue([&pipeline_context, processing_config](SegmentAndSlice&& read_result) {
-                if (!processing_config.dynamic_schema_) {
-                    auto check = check_schema_matches_incomplete(read_result.segment_in_memory_.descriptor(), pipeline_context.get());
-                    if (std::holds_alternative<Error>(check)) {
-                        std::get<Error>(check).throw_error();
-                    }
-                }
-                return std::move(read_result);
-            }));
+    for (size_t i = 0; i < segment_and_slice_futures.size(); ++i) {
+        auto&& fut = segment_and_slice_futures.at(i);
+        bool is_incomplete = all_ranges.at(i).is_incomplete();
+        if (is_incomplete) {
+            res.push_back(
+                std::move(fut)
+                    .via(&async::cpu_executor())
+                    .thenValue([&pipeline_context, processing_config](SegmentAndSlice &&read_result) {
+                        if (!processing_config.dynamic_schema_) {
+                            auto check = check_schema_matches_incomplete(read_result.segment_in_memory_.descriptor(),
+                                                                         pipeline_context.get());
+                            if (std::holds_alternative<Error>(check)) {
+                                std::get<Error>(check).throw_error();
+                            }
+                        }
+                        return std::move(read_result);
+                    }));
+        } else {
+            res.push_back(std::move(fut));
+        }
     }
 
-    return segment_and_slice_futures;
+    return res;
 }
 
 /*
@@ -734,7 +744,7 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
         clause->set_component_manager(component_manager);
     }
 
-    auto all_ranges = generate_ranges_and_keys(pipeline_context->slice_and_keys_);
+    auto all_ranges = generate_ranges_and_keys(pipeline_context.get());
 
     // Each element of the vector corresponds to one processing unit containing the list of indexes in ranges_and_keys required for that processing unit
     // i.e. if the first processing unit needs ranges_and_keys[0] and ranges_and_keys[1], and the second needs ranges_and_keys[2] and ranges_and_keys[3]
@@ -1351,7 +1361,6 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
             return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
         });
     } else {
-        // TODO validation on the incompletes
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
         util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query->row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
         mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema_), pipeline_context->bucketize_dynamic_);
