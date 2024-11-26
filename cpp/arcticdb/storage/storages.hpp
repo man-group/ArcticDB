@@ -59,6 +59,10 @@ class Storages {
         return primary().supports_prefix_matching();
     }
 
+    bool supports_atomic_writes() const {
+        return primary().supports_atomic_writes();
+    }
+
     bool fast_delete() {
         return primary().fast_delete();
     }
