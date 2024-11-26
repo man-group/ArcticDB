@@ -683,6 +683,7 @@ class DataFrameNormalizer(_PandasNormalizer):
 
     def __init__(self, *args, **kwargs):
         super(DataFrameNormalizer, self).__init__(*args, **kwargs)
+        self._skip_df_consolidation = os.getenv("SKIP_DF_CONSOLIDATION") is not None
 
     def df_without_consolidation(self, columns, index, item, n_indexes, data):
         """
@@ -737,10 +738,40 @@ class DataFrameNormalizer(_PandasNormalizer):
 
         columns, denormed_columns, data = _denormalize_columns(item, norm_meta, idx_type, n_indexes)
 
-        if index is not None:
-            df = self.df_without_consolidation(columns, index, item, n_indexes, data)
+        if not self._skip_df_consolidation:
+            df = DataFrame(data, index=index, columns=columns)
+            # Setting the columns' dtype manually, since pandas might just convert the dtype of some
+            # (empty) columns to another one and since the `dtype` keyword for `pd.DataFrame` constructor
+            # does not accept a mapping such as `columns_dtype`.
+            # For instance the following code has been tried but returns a pandas.DataFrame full of NaNs:
+            #
+            #       columns_mapping = {} if data is None else {
+            #           name: pd.Series(np_array, index=index, dtype=np_array.dtype)
+            #           for name, np_array in data.items()
+            #       }
+            #       df = DataFrame(index=index, columns=columns_mapping, copy=False)
+            #
+            if not IS_PANDAS_TWO:
+                # TODO(jjerphan): Remove once pandas < 2 is not supported anymore.
+                # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
+                # See: https://github.com/pandas-dev/pandas/issues/17261
+                # EMPTY type column are returned as pandas.Series with "object" dtype to match Pandas 2.0 default.
+                # We cast it back to "float" so that it matches Pandas 1.0 default for empty series.
+                # Moreover, we explicitly provide the index otherwise Pandas 0.X overrides it for a RangeIndex
+                empty_columns_names = (
+                    [] if data is None else
+                    [
+                        name for name, np_array in data.items()
+                        if np_array.dtype in OBJECT_TOKENS and len(df[name]) == 0
+                    ]
+                )
+                for column_name in empty_columns_names:
+                    df[column_name] = pd.Series([], index=index, dtype='float64')
         else:
-            df = self.df_without_consolidation(columns, item.data[0], item, n_indexes, data)
+            if index is not None:
+                df = self.df_without_consolidation(columns, index, item, n_indexes, data)
+            else:
+                df = self.df_without_consolidation(columns, item.data[0], item, n_indexes, data)
 
         if denormed_columns is not None:
             df.columns = denormed_columns

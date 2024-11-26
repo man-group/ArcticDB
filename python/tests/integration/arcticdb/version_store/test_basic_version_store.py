@@ -61,6 +61,9 @@ def assert_equal_value(data, expected):
     expected = expected.reindex(sorted(expected.columns), axis=1)
     assert_frame_equal(received, expected)
 
+def assert_equal(received, expected):
+    assert_frame_equal(received, expected)
+    assert received.equals(expected)
 
 def test_simple_flow(basic_store_no_symbol_list, symbol):
     df = sample_dataframe()
@@ -70,7 +73,7 @@ def test_simple_flow(basic_store_no_symbol_list, symbol):
 
     basic_store_no_symbol_list.write(symbol, modified_df)
     vitem = basic_store_no_symbol_list.read(symbol)
-    assert_frame_equal(vitem.data, modified_df)
+    assert_equal(vitem.data, modified_df)
     assert basic_store_no_symbol_list.list_symbols() == [symbol]
 
     basic_store_no_symbol_list.delete(symbol)
@@ -87,7 +90,7 @@ def test_special_chars(object_version_store):
             df = sample_dataframe()
             object_version_store.write(sym, df)
             vitem = object_version_store.read(sym)
-            assert_frame_equal(vitem.data, df)
+            assert_equal(vitem.data, df)
         except AssertionError as e:
             errors.append(f"Failed for character {special_char}: {str(e)}")
     assert not errors, "errors occurred:\n" + "\n".join(errors)
@@ -282,8 +285,8 @@ def test_with_prune(object_and_mem_and_lmdb_version_store, symbol):
     # previous versions should have been deleted by now.
     assert len([ver for ver in version_store.list_versions() if not ver["deleted"]]) == 1
     # previous versions should be accessible through snapshot
-    assert_frame_equal(version_store.read(symbol, as_of="my_snap").data, modified_df)
-    assert_frame_equal(version_store.read(symbol, as_of="my_snap2").data, final_df)
+    assert_equal(version_store.read(symbol, as_of="my_snap").data, modified_df)
+    assert_equal(version_store.read(symbol, as_of="my_snap2").data, final_df)
 
 
 def test_prune_previous_versions_explicit_method(basic_store, symbol):
@@ -303,9 +306,9 @@ def test_prune_previous_versions_explicit_method(basic_store, symbol):
     basic_store.prune_previous_versions(symbol)
 
     # Then - only latest version and snapshots should survive
-    assert_frame_equal(basic_store.read(symbol).data, final_df)
+    assert_equal(basic_store.read(symbol).data, final_df)
     assert len([ver for ver in basic_store.list_versions() if not ver["deleted"]]) == 1
-    assert_frame_equal(basic_store.read(symbol, as_of="my_snap").data, modified_df)
+    assert_equal(basic_store.read(symbol, as_of="my_snap").data, modified_df)
 
 
 def test_prune_previous_versions_nothing_to_do(basic_store, symbol):
@@ -317,7 +320,7 @@ def test_prune_previous_versions_nothing_to_do(basic_store, symbol):
 
     # Then
     result = basic_store.read(symbol).data
-    assert_frame_equal(result, df)
+    assert_equal(result, df)
     assert len(basic_store.list_versions(symbol)) == 1
     assert len([ver for ver in basic_store.list_versions(symbol) if not ver["deleted"]]) == 1
 
@@ -337,7 +340,7 @@ def test_prune_previous_versions_no_snapshot(basic_store, symbol):
     basic_store.prune_previous_versions(symbol)
 
     # Then - only latest version should survive
-    assert_frame_equal(basic_store.read(symbol).data, final_df)
+    assert_equal(basic_store.read(symbol).data, final_df)
     assert len([ver for ver in basic_store.list_versions() if not ver["deleted"]]) == 1
 
 
@@ -354,14 +357,14 @@ def test_prune_previous_versions_multiple_times(basic_store, symbol):
     basic_store.prune_previous_versions(symbol)
 
     # Then - only latest version should survive
-    assert_frame_equal(basic_store.read(symbol).data, modified_df)
+    assert_equal(basic_store.read(symbol).data, modified_df)
     assert len([ver for ver in basic_store.list_versions() if not ver["deleted"]]) == 1
 
     # Let's write and prune again
     final_df = sample_dataframe(2)
     basic_store.write(symbol, final_df, prune_previous_version=False)
     basic_store.prune_previous_versions(symbol)
-    assert_frame_equal(basic_store.read(symbol).data, final_df)
+    assert_equal(basic_store.read(symbol).data, final_df)
     assert len([ver for ver in basic_store.list_versions() if not ver["deleted"]]) == 1
 
 
@@ -465,7 +468,7 @@ def test_batch_append_unicode(basic_store):
     )
     basic_store.batch_write(symbols=[symbol], data_vector=[df1])
     vit = basic_store.batch_read([symbol])[symbol]
-    assert_frame_equal(vit.data, df1)
+    assert_equal(vit.data, df1)
 
     df2 = pd.DataFrame(
         index=[pd.Timestamp("2018-01-04"), pd.Timestamp("2018-01-05")],
@@ -474,7 +477,7 @@ def test_batch_append_unicode(basic_store):
     basic_store.batch_append(symbols=[symbol], data_vector=[df2])
     vit = basic_store.batch_read([symbol])[symbol]
     expected = pd.concat([df1, df2])
-    assert_frame_equal(vit.data, expected)
+    assert_equal(vit.data, expected)
 
 
 def test_batch_write_metadata_unicode(basic_store):
@@ -487,7 +490,7 @@ def test_batch_write_metadata_unicode(basic_store):
 
     basic_store.batch_write(symbols=[symbol], data_vector=[df1])
     vit = basic_store.batch_read([symbol])[symbol]
-    assert_frame_equal(vit.data, df1)
+    assert_equal(vit.data, df1)
 
     meta = {"a": 1, "b": uc}
     basic_store.batch_write_metadata(symbols=[symbol], metadata_vector=[meta])
@@ -501,7 +504,7 @@ def test_deleting_unknown_symbol(basic_store, symbol):
 
     basic_store.write(symbol, df, metadata={"something": "something"})
 
-    assert_frame_equal(basic_store.read(symbol).data, df)
+    assert_equal(basic_store.read(symbol).data, df)
 
     # Should not raise.
     basic_store.delete("does_not_exist")
@@ -587,11 +590,11 @@ def test_range_index(basic_store, sym):
     basic_store.write(sym, df)
 
     vit = basic_store.read(sym)
-    assert_frame_equal(df, vit.data)
+    assert_equal(df, vit.data)
 
     vit = basic_store.read(sym, columns=["y"])
     expected = pd.DataFrame({"y": d1["y"]}, index=idx)
-    assert_frame_equal(expected, vit.data)
+    assert_equal(expected, vit.data)
 
 
 @pytest.mark.pipeline
@@ -703,14 +706,14 @@ def test_date_range_row_sliced(basic_store_tiny_segment, use_date_range_clause):
         received = lib.read(sym, query_builder=q).data
     else:
         received = lib.read(sym, date_range=date_range).data
-    assert_frame_equal(expected, received)
+    assert_equal(expected, received)
 
     date_range = (index[0] + pd.Timedelta(12, unit="h"), index[-1] - pd.Timedelta(12, unit="h"))
     if use_date_range_clause:
         received = lib.read(sym, query_builder=q).data
     else:
         received = lib.read(sym, date_range=date_range).data
-    assert_frame_equal(expected, received)
+    assert_equal(expected, received)
 
 
 def test_get_info(basic_store):
@@ -1118,7 +1121,7 @@ def test_negative_strides(basic_store_tiny_segment):
     negative_stride_df = pd.DataFrame(negative_stride_np)
     lmdb_version_store.write("negative_strides_df", negative_stride_df)
     vit2 = lmdb_version_store.read("negative_strides_df")
-    assert_frame_equal(negative_stride_df, vit2.data)
+    assert_equal(negative_stride_df, vit2.data)
 
 
 def test_dynamic_strings(basic_store):
@@ -1126,7 +1129,7 @@ def test_dynamic_strings(basic_store):
     df = pd.DataFrame({"x": row})
     basic_store.write("strings", df, dynamic_strings=True)
     vit = basic_store.read("strings")
-    assert_frame_equal(vit.data, df)
+    assert_equal(vit.data, df)
 
 
 def test_dynamic_strings_non_contiguous(basic_store):
@@ -1158,7 +1161,7 @@ def test_dynamic_strings_with_none(basic_store):
     df = pd.DataFrame({"x": row})
     basic_store.write("strings", df, dynamic_strings=True)
     vit = basic_store.read("strings")
-    assert_frame_equal(vit.data, df)
+    assert_equal(vit.data, df)
 
 
 def test_dynamic_strings_with_none_first_element(basic_store):
@@ -1182,7 +1185,7 @@ def test_dynamic_strings_with_none_first_element(basic_store):
     df = pd.DataFrame({"x": row})
     basic_store.write("strings", df, dynamic_strings=True)
     vit = basic_store.read("strings")
-    assert_frame_equal(vit.data, df)
+    assert_equal(vit.data, df)
 
 
 def test_dynamic_strings_with_all_nones(basic_store):
@@ -1240,7 +1243,7 @@ def test_dynamic_strings_with_nan(basic_store):
     df = pd.DataFrame({"x": row})
     basic_store.write("strings", df, dynamic_strings=True)
     vit = basic_store.read("strings")
-    assert_frame_equal(vit.data, df)
+    assert_equal(vit.data, df)
 
 
 def test_metadata_with_snapshots(basic_store):
@@ -1680,8 +1683,8 @@ def test_force_delete(basic_store):
     with pytest.raises(NoDataFoundException):
         basic_store.read("sym2")
 
-    assert_frame_equal(basic_store.read("sym1").data, df2)
-    assert_frame_equal(basic_store.read("sym1", as_of=0).data, df1)
+    assert_equal(basic_store.read("sym1").data, df2)
+    assert_equal(basic_store.read("sym1", as_of=0).data, df1)
 
 
 def test_force_delete_with_delayed_deletes(basic_store_delayed_deletes):
@@ -1697,14 +1700,14 @@ def test_force_delete_with_delayed_deletes(basic_store_delayed_deletes):
     with pytest.raises(NoDataFoundException):
         basic_store_delayed_deletes.read("sym2")
 
-    assert_frame_equal(basic_store_delayed_deletes.read("sym1").data, df2)
-    assert_frame_equal(basic_store_delayed_deletes.read("sym1", as_of=0).data, df1)
+    assert_equal(basic_store_delayed_deletes.read("sym1").data, df2)
+    assert_equal(basic_store_delayed_deletes.read("sym1", as_of=0).data, df1)
 
 
 def test_dataframe_with_NaN_in_timestamp_column(basic_store):
     normal_df = pd.DataFrame({"col": [pd.Timestamp("now"), pd.NaT]})
     basic_store.write("normal", normal_df)
-    assert_frame_equal(normal_df, basic_store.read("normal").data)
+    assert_equal(normal_df, basic_store.read("normal").data)
 
 
 def test_dataframe_with_nan_and_nat_in_timestamp_column(basic_store):
@@ -1718,7 +1721,7 @@ def test_dataframe_with_nan_and_nat_in_timestamp_column(basic_store):
 def test_dataframe_with_nan_and_nat_only(basic_store):
     df_with_nan_and_nat_only = pd.DataFrame({"col": [pd.NaT, pd.NaT, np.NaN]})  # Sample will be pd.NaT
     basic_store.write("nan_nat", df_with_nan_and_nat_only)
-    assert_frame_equal(basic_store.read("nan_nat").data, pd.DataFrame({"col": [pd.NaT, pd.NaT, pd.NaT]}))
+    assert_equal(basic_store.read("nan_nat").data, pd.DataFrame({"col": [pd.NaT, pd.NaT, pd.NaT]}))
 
 
 def test_coercion_to_float(basic_store):
@@ -2132,7 +2135,7 @@ def test_dynamic_schema_similar_index_column_dataframe(basic_store_dynamic_schem
     date_series = pd.DataFrame({"date": np.arange(len(dr))}, index=dr)
     lib.write("date_series", date_series)
     returned = lib.read("date_series").data
-    assert_frame_equal(returned, date_series)
+    assert_equal(returned, date_series)
 
 
 def test_dynamic_schema_similar_index_column_dataframe_multiple_col(basic_store_dynamic_schema):
@@ -2141,7 +2144,7 @@ def test_dynamic_schema_similar_index_column_dataframe_multiple_col(basic_store_
     date_series = pd.DataFrame({"col": np.arange(len(dr)), "date": np.arange(len(dr))}, index=dr)
     lib.write("date_series", date_series)
     returned = lib.read("date_series").data
-    assert_frame_equal(returned, date_series)
+    assert_equal(returned, date_series)
 
 
 def test_restore_version(basic_store_tiny_segment):
@@ -2161,7 +2164,7 @@ def test_restore_version(basic_store_tiny_segment):
     assert restore_item.version == 2
     assert restore_item.metadata == metadata
     latest = lib.read(symbol)
-    assert_frame_equal(latest.data, df1)
+    assert_equal(latest.data, df1)
     assert latest.metadata == metadata
 
 
@@ -2190,7 +2193,7 @@ def test_restore_version_latest_is_noop(basic_store):
     assert restore_item.version == 1
     assert restore_item.metadata == metadata
     latest = basic_store.read(symbol)
-    assert_frame_equal(latest.data, df2)
+    assert_equal(latest.data, df2)
     assert latest.metadata == metadata
     assert latest.version == 1
 
@@ -2236,7 +2239,7 @@ def test_batch_restore_version(basic_store_tombstone):
 
     for d, symbol in enumerate(symbols):
         read_df = lmdb_version_store.read(symbol).data
-        assert_frame_equal(read_df, dfs[d])
+        assert_equal(read_df, dfs[d])
 
 
 def test_batch_append(basic_store_tombstone, three_col_df):
@@ -2260,7 +2263,7 @@ def test_batch_append(basic_store_tombstone, three_col_df):
     for sym in multi_data.keys():
         expected = pd.concat((multi_data[sym], multi_append[sym]))
         vit = lmdb_version_store.read(sym)
-        assert_frame_equal(expected, vit.data)
+        assert_equal(expected, vit.data)
         assert vit.metadata == append_metadata[sym]
 
 
@@ -2312,7 +2315,7 @@ def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_
         date_range = date_ranges[x]
         start = date_range[0]
         end = date_range[-1]
-        assert_frame_equal(vit.data, dfs[x].loc[start:end])
+        assert_equal(vit.data, dfs[x].loc[start:end])
 
 
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
@@ -2347,7 +2350,7 @@ def test_batch_read_row_range(lmdb_version_store_v1, use_row_range_clause):
     for idx, sym in enumerate(result_dict.keys()):
         df = result_dict[sym].data
         row_range = row_ranges[idx]
-        assert_frame_equal(df, dfs[idx].iloc[row_range[0]:row_range[1]])
+        assert_equal(df, dfs[idx].iloc[row_range[0]:row_range[1]])
 
 
 def test_batch_read_columns(basic_store_tombstone_and_sync_passive):
@@ -2447,7 +2450,7 @@ def test_dynamic_schema_column_hash_update(basic_store_column_buckets):
     # to float64.
     df.update(df2)
     df = df.astype("int64", copy=False)
-    assert_frame_equal(vit.data, df)
+    assert_equal(vit.data, df)
 
 
 def test_dynamic_schema_column_hash_append(basic_store_column_buckets):
@@ -2478,7 +2481,7 @@ def test_dynamic_schema_column_hash_append(basic_store_column_buckets):
     lib.append("symbol", df2)
     vit = lib.read("symbol")
     new_df = pd.concat([df, df2])
-    assert_frame_equal(vit.data, new_df)
+    assert_equal(vit.data, new_df)
 
 
 def test_dynamic_schema_column_hash(basic_store_column_buckets):
@@ -2493,16 +2496,16 @@ def test_dynamic_schema_column_hash(basic_store_column_buckets):
     lib.write("symbol", df)
 
     read_df = lib.read("symbol").data
-    assert_frame_equal(df, read_df)
+    assert_equal(df, read_df)
 
     read_df = lib.read("symbol", columns=["a", "b"]).data
-    assert_frame_equal(df[["a", "b"]], read_df)
+    assert_equal(df[["a", "b"]], read_df)
 
     read_df = lib.read("symbol", columns=["a", "e"]).data
-    assert_frame_equal(df[["a", "e"]], read_df)
+    assert_equal(df[["a", "e"]], read_df)
 
     read_df = lib.read("symbol", columns=["a", "c"]).data
-    assert_frame_equal(df[["a", "c"]], read_df)
+    assert_equal(df[["a", "c"]], read_df)
 
 
 def test_list_versions_without_snapshots(basic_store):
@@ -2630,7 +2633,7 @@ def test_missing_first_version_key_single(basic_store):
     remove_most_recent_version_key(basic_store, symbol)
 
     vit = lib.read(symbol, as_of=pd.Timestamp(v1_write_time))
-    assert_frame_equal(df1, vit.data)
+    assert_equal(df1, vit.data)
 
 
 def test_update_with_missing_version_key(version_store_factory):
@@ -2651,7 +2654,7 @@ def test_update_with_missing_version_key(version_store_factory):
     remove_most_recent_version_key(lmdb_version_store, symbol)
 
     vit = lmdb_version_store.read(symbol, as_of=pd.Timestamp(v1_write_time))
-    assert_frame_equal(vit.data, df)
+    assert_equal(vit.data, df)
 
 
 def test_append_with_missing_version_key(basic_store):
@@ -2667,7 +2670,7 @@ def test_append_with_missing_version_key(basic_store):
     remove_most_recent_version_key(basic_store, symbol)
 
     vit = basic_store.read(symbol, as_of=pd.Timestamp(v1_write_time))
-    assert_frame_equal(vit.data, df1)
+    assert_equal(vit.data, df1)
 
 
 def test_missing_first_version_key_batch(basic_store):
@@ -2700,4 +2703,4 @@ def test_missing_first_version_key_batch(basic_store):
 
     vits = lib.batch_read(symbols, as_ofs=write_times)
     for x in range(num_items):
-        assert_frame_equal(vits[symbols[x]].data, expected[x])
+        assert_equal(vits[symbols[x]].data, expected[x])
