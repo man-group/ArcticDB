@@ -52,7 +52,7 @@ jobs:
                   mongodb:
                     image: "mongo:4.4"
                 container:
-                  image: quay.io/pypa/manylinux2014_x86_64
+                  image: ${{needs.cibw_docker_image.outputs.tag}}
                   volumes:
                     - /:/mnt
             windows_matrix:
