@@ -84,11 +84,13 @@ jobs:
           [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
           nvm install 16
           which node
+          # Add /github/home/.nvm/versions/node/v16.20.2/bin to GITHUB_PATH
+          echo -e "/github/home/.nvm/versions/node/v16.20.2/bin" | tee -a $GITHUB_PATH
           
-      # - name: Checkout
-      #   uses: actions/checkout@v3.3.0
-      #   with:
-      #     submodules: recursive # Just in case a dep has its own third-party deps
+      - name: Checkout
+        uses: actions/checkout@v3.3.0
+        with:
+          submodules: recursive # Just in case a dep has its own third-party deps
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.3
