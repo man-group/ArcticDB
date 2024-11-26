@@ -12,8 +12,6 @@ import json
 import os
 import re
 import sys
-import trustme
-import subprocess
 import platform
 from tempfile import mkdtemp
 
@@ -339,7 +337,8 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
             self.client_cert_file = ""
         self.client_cert_dir = self.working_dir
         
-        self._p = multiprocessing.Process(
+        spawn_context = multiprocessing.get_context('spawn')
+        self._p = spawn_context.Process(
             target=self.run_server,
             args=(
                 port,
@@ -438,7 +437,7 @@ _PermissionCapableFactory = MotoS3StorageFixtureFactory
 
 class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
 
-    def create_fixture(self, default_prefix=None, use_raw_prefix=False) -> NfsS3Bucket:
+    def create_fixture(self) -> NfsS3Bucket:
         bucket = f"test_bucket_{self._bucket_id}"
         self._s3_admin.create_bucket(Bucket=bucket)
         self._bucket_id += 1
