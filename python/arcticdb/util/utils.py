@@ -7,7 +7,8 @@ from tests.stress.arcticdb.version_store.test_stress_finalize_stage_data import 
 from arcticdb.util.utils import TimestampNumber
 """
 
-from typing import List, Literal, Tuple, Union
+from typing import List, Tuple, Union
+from typing_extensions import Literal
 import numpy as np
 import pandas as pd
 
@@ -212,6 +213,9 @@ class CachedDFGenerator:
         self.__cached_xlarge_dataframe:pd.DataFrame = None
         self.max_size = max_size
         self.size_string_flds_array = size_string_flds_array
+
+    def get_dataframe(self) -> pd.DataFrame: 
+        return self.__cached_xlarge_dataframe
 
     def generate_dataframe(self, num_rows:int) -> pd.DataFrame:
         """
