@@ -697,13 +697,11 @@ std::vector<folly::Future<pipelines::SegmentAndSlice>> generate_segment_and_slic
             std::move(fut)
             .via(&async::cpu_executor())
             .thenValue([&pipeline_context, processing_config](SegmentAndSlice&& read_result) {
-                if (!processing_config.dynamic_schema_ && !columns_match(read_result.segment_in_memory_.descriptor(), pipeline_context->descriptor())) {
-                    schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                        "When static schema is used all staged segments must have the same column and column types."
-                        "{} is different than {}",
-                        read_result.segment_in_memory_.descriptor(),
-                        pipeline_context->descriptor()
-                    );
+                if (!processing_config.dynamic_schema_) {
+                    auto check = check_schema_matches_incomplete(read_result.segment_in_memory_.descriptor(), pipeline_context.get());
+                    if (std::holds_alternative<Error>(check)) {
+                        std::get<Error>(check).throw_error();
+                    }
                 }
                 return std::move(read_result);
             }));
@@ -1582,8 +1580,6 @@ VersionedItem compact_incomplete_impl(
     const CompactIncompleteOptions& options,
     const WriteOptions& write_options) {
 
-    using namespace arcticdb::compaction_details;
-
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = stream_id;
     pipeline_context->version_id_ = update_info.next_version_id_;
@@ -1642,19 +1638,6 @@ VersionedItem compact_incomplete_impl(
         using ColumnPolicyType = std::remove_reference_t<decltype(column_policy)>;
         constexpr bool validate_index_sorted = IndexType::type() == IndexDescriptorImpl::Type::TIMESTAMP;
 
-        StaticSchemaCompactionChecks checks = [](const SegmentInMemory& cb_segment, const pipelines::PipelineContext* const cb_pipeline_context) -> CheckOutcome {
-            if (!columns_match(cb_segment.descriptor(), cb_pipeline_context->descriptor())) {
-                return Error{
-                    throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
-                    fmt::format("When static schema is used all staged segments must have the same column and column types."
-                    "{} is different than {}",
-                    cb_segment.descriptor(),
-                    cb_pipeline_context->descriptor())
-                };
-            }
-            return std::monostate{};
-        };
-
         CompactionResult result = do_compact<IndexType, SchemaType, RowCountSegmentPolicy, ColumnPolicyType>(
                 pipeline_context->incompletes_begin(),
                 pipeline_context->end(),
@@ -1664,7 +1647,7 @@ VersionedItem compact_incomplete_impl(
                 options.convert_int_to_float_,
                 write_options.segment_row_size,
                 validate_index_sorted,
-                std::move(checks));
+                check_schema_matches_incomplete);
         if constexpr(std::is_same_v<IndexType, TimeseriesIndex>) {
             pipeline_context->desc_->set_sorted(deduce_sorted(previous_sorted_value.value_or(SortedValue::ASCENDING), SortedValue::ASCENDING));
         }
@@ -1752,7 +1735,6 @@ VersionedItem defragment_symbol_data_impl(
         const UpdateInfo& update_info,
         const WriteOptions& options,
         size_t segment_size) {
-    using namespace arcticdb::compaction_details;
     auto pre_defragmentation_info = get_pre_defragmentation_info(store, stream_id, update_info, options, segment_size);
     util::check(is_symbol_fragmented_impl(pre_defragmentation_info.segments_need_compaction) && pre_defragmentation_info.append_after.has_value(), "Nothing to compact in defragment_symbol_data");
 
@@ -1771,7 +1753,7 @@ VersionedItem defragment_symbol_data_impl(
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
 
-        StaticSchemaCompactionChecks checks = [](const SegmentInMemory&, const pipelines::PipelineContext* const) {
+        StaticSchemaCompactionChecks checks = [](const StreamDescriptor&, const pipelines::PipelineContext* const) {
             // No defrag specific checks yet
             return std::monostate{};
         };
@@ -1883,10 +1865,9 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
         });
     });
 }
-
 } //namespace arcticdb::version_store
 
-namespace arcticdb::compaction_details {
+namespace arcticdb {
 
 Error::Error(folly::Function<void(std::string)> raiser, std::string msg)
     : raiser_(std::move(raiser)), msg_(std::move(msg)) {
@@ -1902,4 +1883,17 @@ void remove_written_keys(Store* const store, CompactionWrittenKeys&& written_key
     store->remove_keys_sync(std::move(written_keys));
 }
 
-} // namespace arcticdb::compaction_details
+CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const pipelines::PipelineContext* const pipeline_context) {
+    if (!columns_match(stream_descriptor_incomplete, pipeline_context->descriptor())) {
+        return Error{
+            throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
+            fmt::format("When static schema is used all staged segments must have the same column and column types."
+                        "{} is different than {}",
+                        stream_descriptor_incomplete,
+                        pipeline_context->descriptor())
+        };
+    }
+    return std::monostate{};
+}
+
+}

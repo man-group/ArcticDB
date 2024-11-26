@@ -27,6 +27,7 @@
 #include <arcticdb/util/spinlock.hpp>
 #include <arcticdb/python/python_strings.hpp>
 #include <arcticdb/pipeline/string_reducers.hpp>
+#include <arcticdb/version/version_core.hpp>
 
 #include <ankerl/unordered_dense.h>
 #include <folly/gen/Base.h>
@@ -681,18 +682,30 @@ folly::Future<SegmentInMemory> fetch_data(
     context->ensure_vectors();
     {
         ARCTICDB_SUBSAMPLE_DEFAULT(QueueReadContinuations)
-        for ( auto& row : *context) {
-            keys_and_continuations.emplace_back(row.slice_and_key().key(),
-            [row=row, frame=frame, dynamic_schema=dynamic_schema, shared_data, &handler_data](auto &&ks) mutable {
-                auto key_seg = std::forward<storage::KeySegmentPair>(ks);
-                if(dynamic_schema) {
-                    decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), shared_data, handler_data);
-                } else {
-                    decode_into_frame_static(frame, row, std::move(key_seg.segment()), shared_data, handler_data);
-                }
+        bool is_incompletes{false};
+        auto it = context->begin();
+        while (it != context->end()) {
+            if (it == context->incompletes_begin()) {
+                is_incompletes = true;
+            }
+            keys_and_continuations.emplace_back(it->slice_and_key().key(),
+                                                [row=(*it), frame=frame, dynamic_schema=dynamic_schema, shared_data, is_incompletes, &handler_data](auto &&ks) mutable {
+                                                    auto key_seg = std::forward<storage::KeySegmentPair>(ks);
+                                                    if(dynamic_schema) {
+                                                        decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), shared_data, handler_data);
+                                                    } else {
+                                                        decode_into_frame_static(frame, row, std::move(key_seg.segment()), shared_data, handler_data);
+                                                        if (is_incompletes) {
+                                                            auto check = check_schema_matches_incomplete(key_seg.segment().descriptor(), (row.parent_).get());
+                                                            if (std::holds_alternative<Error>(check)) {
+                                                                std::get<Error>(check).throw_error();
+                                                            }
+                                                        }
+                                                    }
 
-                return key_seg.variant_key();
-            });
+                                                    return key_seg.variant_key();
+                                                });
+            ++it;
         }
     }
     ARCTICDB_SUBSAMPLE_DEFAULT(DoBatchReadCompressed)
