@@ -70,8 +70,12 @@ jobs:
       run: {shell: bash}
     steps:
       - name: Setup Node 16
+        if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
         run: |
-          apt update && apt -y install wget
+          # Replace default repo as centos 7 has reached EOL
+          sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g; s|baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/*.repo
+          sed -i '/mirrorlist.centos.org/d' /etc/yum.repos.d/*.repo
+          yum update && yum -y install wget
           touch "$HOME/.bashrc"
           wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
           export NVM_DIR="$HOME/.nvm"
@@ -273,15 +277,6 @@ jobs:
       distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
-      - name: Setup Node 16
-        run: |
-          apt update && apt -y install wget
-          touch "$HOME/.bashrc"
-          wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-          export NVM_DIR="$HOME/.nvm"
-          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-          nvm install 16
-
       - name: Checkout
         uses: actions/checkout@v3.3.0
 
