@@ -47,6 +47,10 @@ class MongoStorage final : public Storage {
         return false;
     }
 
+    bool do_supports_atomic_writes() const final {
+        return false;
+    }
+
     inline bool do_fast_delete() final;
 
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;

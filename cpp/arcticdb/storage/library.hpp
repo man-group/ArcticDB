@@ -163,6 +163,8 @@ class Library {
 
     bool supports_prefix_matching() const { return storages_->supports_prefix_matching(); }
 
+    bool supports_atomic_writes() const { return storages_->supports_atomic_writes(); }
+
     const LibraryPath &library_path() const { return library_path_; }
 
     OpenMode open_mode() const { return storages_->open_mode(); }
