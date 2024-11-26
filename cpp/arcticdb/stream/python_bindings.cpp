@@ -83,10 +83,10 @@ void register_types(py::module &m) {
         .def(py::self != py::self)
         .def("data_type", &TypeDescriptor::data_type)
         .def_property_readonly("value_type", [] (const TypeDescriptor& self) {
-            return entity::value_proto_from_data_type(self.data_type());
+            return static_cast<int>(entity::value_proto_from_data_type(self.data_type()));
         })
         .def_property_readonly("dimension", [] (const TypeDescriptor& self) {
-            return entity::type_descriptor_to_proto(self).dimension();
+            return static_cast<int>(entity::type_descriptor_to_proto(self).dimension());
         }));
 
     python_util::add_repr(py::class_<FieldRef>(m, "FieldDescriptor")
