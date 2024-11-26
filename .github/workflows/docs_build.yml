@@ -38,7 +38,7 @@ jobs:
       - id: download-wheel-artifact
         name: Download wheel artifact from last successful build
         if: ${{!inputs.version}}
-        uses: dawidd6/action-download-artifact@v2.28.0
+        uses: dawidd6/action-download-artifact@v6
         with:
           name: wheel-${{env.PY_IMPL}}-manylinux_x86_64
           workflow: build.yml
