@@ -169,7 +169,7 @@ KeySegmentPair do_read_impl(
     }
 }
 
-template <typename KeyBucketizer>
+/*template <typename KeyBucketizer>
 folly::Future<folly::Unit> do_async_read_impl(
     VariantKey&& variant_key,
     const std::string& root_folder,
@@ -180,10 +180,20 @@ folly::Future<folly::Unit> do_async_read_impl(
     ) {
     auto key_type_dir = key_type_folder(root_folder, variant_key_type(variant_key));
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
-}
+    return s3_client.get_object_async(bucket_name, s3_object_name);
+}*/
 
-folly::Future<KeySegmentPair> do_async_read_impl(entity::VariantKey&& variant_key, ReadKeyOpts opts) {
-
+template <typename KeyBucketizer>
+folly::Future<KeySegmentPair> do_async_read_impl(
+    VariantKey&& variant_key,
+    const std::string& root_folder,
+    const std::string& bucket_name,
+    const S3ClientInterface& s3_client,
+    KeyBucketizer&& bucketizer,
+    ReadKeyOpts opts) {
+    auto key_type_dir = key_type_folder(root_folder, variant_key_type(variant_key));
+    auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
+    return s3_client.get_object_async(bucket_name, s3_object_name);
 }
 
 template<class KeyBucketizer>

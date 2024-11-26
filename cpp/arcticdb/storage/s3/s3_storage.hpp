@@ -55,6 +55,10 @@ class S3Storage final : public Storage, AsyncStorage {
 
     KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts opts) final;
 
+    folly::Future<folly::Unit> do_async_read(entity::VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
+
+    folly::Future<KeySegmentPair> do_async_read(entity::VariantKey&& variant_key, ReadKeyOpts opts) final;
+
     void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
 
     void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) final;

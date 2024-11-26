@@ -38,6 +38,10 @@ public:
         const std::string& s3_object_name,
         const std::string& bucket_name) const override;
 
+    folly::Future<S3Result<Segment>> get_object_async(
+        const std::string& s3_object_name,
+        const std::string& bucket_name) const override;
+
     S3Result<std::monostate> put_object(
         const std::string& s3_object_name,
         Segment&& segment,

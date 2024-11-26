@@ -114,7 +114,6 @@ Aws::IOStreamFactory S3StreamFactory() {
 S3Result<Segment> S3ClientImpl::get_object(
         const std::string &s3_object_name,
         const std::string &bucket_name) const {
-
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Looking for object {}", s3_object_name);
     Aws::S3::Model::GetObjectRequest request;
     request.WithBucket(bucket_name.c_str()).WithKey(s3_object_name.c_str());
@@ -124,37 +123,66 @@ S3Result<Segment> S3ClientImpl::get_object(
     if (!outcome.IsSuccess()) {
         return {outcome.GetError()};
     }
-    auto &retrieved = dynamic_cast<S3IOStream &>(outcome.GetResult().GetBody());
 
+    auto &retrieved = dynamic_cast<S3IOStream &>(outcome.GetResult().GetBody());
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Returning object {}", s3_object_name);
     return {Segment::from_buffer(retrieved.get_buffer())};
 }
 
-void GetObjectAsyncHandler(const Aws::S3::S3Client* client,
-                           const Aws::S3::Model::GetObjectRequest& request,
-                           const Aws::S3::Model::GetObjectOutcome& outcome,
-                           const std::shared_ptr<const Aws::Client::AsyncCallerContext>& context) {
+struct GetObjectAsyncHandler {
+    std::shared_ptr<folly::Promise<S3Result<Segment>>> promise_;
+
+    GetObjectAsyncHandler(std::shared_ptr<folly::Promise<S3Result<Segment>>>&& promise) :
+        promise_(std::move(promise)) {
+    }
+
+    ARCTICDB_MOVE_COPY_DEFAULT(GetObjectAsyncHandler)
+
+    void operator()(
+        const Aws::S3::S3Client*,
+        const Aws::S3::Model::GetObjectRequest& request,
+        const Aws::S3::Model::GetObjectOutcome& outcome,
+        const std::shared_ptr<const Aws::Client::AsyncCallerContext>&) {
     if (outcome.IsSuccess()) {
-        auto& retrievedFile = outcome.GetResultWithOwnership().GetBody();
-        std::ofstream outputFile("output.txt", std::ios::binary);
-        outputFile << retrievedFile.rdbuf();
-        std::cout << "Successfully downloaded the file." << std::endl;
+        auto& body = const_cast<Aws::S3::Model::GetObjectOutcome&>(outcome).GetResultWithOwnership().GetBody();
+        auto& stream = dynamic_cast<S3IOStream&>(body);
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Returning object {}", request.GetKey());
+        promise_->setValue<S3Result<Segment>>({Segment::from_buffer(stream.get_buffer())});
     } else {
-        std::cerr << "Failed to download file: " << outcome.GetError().GetMessage() << std::endl;
+        promise_->setValue<S3Result<Segment>>({outcome.GetError()});
     }
 }
+};
 
-S3Result<Segment> S3ClientImpl::get_object_async(
+folly::Future<S3Result<Segment>> S3ClientImpl::get_object_async(
     const std::string &s3_object_name,
     const std::string &bucket_name) const {
-
+    auto promise = std::make_shared<folly::Promise<S3Result<Segment>>>();
+    auto future = promise->getFuture().via(&async::io_executor());
+    Aws::S3::Model::GetObjectRequest request;
+    request.WithBucket(bucket_name.c_str()).WithKey(s3_object_name.c_str());
+    request.SetResponseStreamFactory(S3StreamFactory());
+    s3_client.GetObjectAsync(request, GetObjectAsyncHandler{std::move(promise)});
+    return future;
 }
+
+/*folly::Future<S3Result<Segment>> S3ClientImpl::get_object_async(
+    const std::string &s3_object_name,
+    const std::string &bucket_name,
+    ReadVisitor&& visitor) const {
+    auto promise = std::make_shared<folly::Promise<S3Result<Segment>>>();
+    auto future = promise->getFuture().via(&async::io_executor());
+    Aws::S3::Model::GetObjectRequest request;
+    request.WithBucket(bucket_name.c_str()).WithKey(s3_object_name.c_str());
+    request.SetResponseStreamFactory(S3StreamFactory());
+    s3_client.GetObjectAsync(request, GetObjectAsyncHandler{std::move(promise)});
+    return future;
+}*/
 
 S3Result<std::monostate> S3ClientImpl::put_object(
         const std::string &s3_object_name,
         Segment &&segment,
         const std::string &bucket_name) {
-
     ARCTICDB_SUBSAMPLE(S3StorageWritePreamble, 0)
     Aws::S3::Model::PutObjectRequest request;
     request.SetBucket(bucket_name.c_str());
@@ -162,27 +190,23 @@ S3Result<std::monostate> S3ClientImpl::put_object(
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Set s3 key {}", request.GetKey().c_str());
 
     auto [dst, write_size, buffer] = segment.serialize_header();
-    auto body = std::make_shared<boost::interprocess::bufferstream>(
-            reinterpret_cast<char *>(dst), write_size);
+    auto body = std::make_shared<boost::interprocess::bufferstream>(reinterpret_cast<char *>(dst), write_size);
     util::check(body->good(), "Overflow of bufferstream with size {}", write_size);
     request.SetBody(body);
 
     ARCTICDB_SUBSAMPLE(S3StoragePutObject, 0)
     auto outcome = s3_client.PutObject(request);
-
     if (!outcome.IsSuccess()) {
         return {outcome.GetError()};
     }
-    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Wrote key '{}', with {} bytes of data",
-                           s3_object_name,
-                           segment.size());
+
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Wrote key '{}', with {} bytes of data", s3_object_name,segment.size());
     return {std::monostate()};
 }
 
 S3Result<DeleteOutput> S3ClientImpl::delete_objects(
         const std::vector<std::string>& s3_object_names,
         const std::string& bucket_name) {
-
     Aws::S3::Model::DeleteObjectsRequest request;
     request.WithBucket(bucket_name.c_str());
     Aws::S3::Model::Delete del_objects;
@@ -195,10 +219,10 @@ S3Result<DeleteOutput> S3ClientImpl::delete_objects(
     request.SetDelete(del_objects);
 
     auto outcome = s3_client.DeleteObjects(request);
-
     if (!outcome.IsSuccess()) {
         return {outcome.GetError()};
     }
+
     // AN-256: Per AWS S3 documentation, deleting non-exist objects is not an error, so not handling
     // RemoveOpts.ignores_missing_key_
     std::vector<FailedDelete> failed_deletes;
@@ -207,7 +231,6 @@ S3Result<DeleteOutput> S3ClientImpl::delete_objects(
     }
 
     DeleteOutput result = {failed_deletes};
-
     return {result};
 }
 

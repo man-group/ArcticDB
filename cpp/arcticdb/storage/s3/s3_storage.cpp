@@ -58,6 +58,15 @@ KeySegmentPair S3Storage::do_read(VariantKey&& variant_key, ReadKeyOpts opts) {
     return detail::do_read_impl(std::move(variant_key), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{}, opts);
 }
 
+folly::Future<folly::Unit> S3Storage::do_async_read(entity::VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
+
+}
+
+folly::Future<KeySegmentPair> S3Storage::do_async_read(entity::VariantKey&& variant_key, ReadKeyOpts opts) {
+    return detail::do_async_read_impl(std::move(variant_key), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{}, opts);
+}
+
+
 void S3Storage::do_remove(VariantKey&& variant_key, RemoveOpts) {
     detail::do_remove_impl(std::move(variant_key), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
 }
