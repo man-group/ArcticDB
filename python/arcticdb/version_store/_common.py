@@ -151,8 +151,11 @@ def _column_name_to_strings(name):
         return str(tuple(map(_column_name_to_strings, name)))
     elif isinstance(name, collections.abc.Sequence):
         raise TypeError("Unsupported type for MultiIndex level")
+    elif isinstance(name, int):
+        return str(name)
     elif name is None:
         return None
+
     return _stringify(name)
 
 
