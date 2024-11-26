@@ -69,6 +69,15 @@ jobs:
     defaults:
       run: {shell: bash}
     steps:
+      - name: Setup Node 16
+        run: |
+          apt update && apt -y install wget
+          touch "$HOME/.bashrc"
+          wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          nvm install 16
+          
       - name: Checkout
         uses: actions/checkout@v3.3.0
         with:
@@ -264,6 +273,15 @@ jobs:
       distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
+      - name: Setup Node 16
+        run: |
+          apt update && apt -y install wget
+          touch "$HOME/.bashrc"
+          wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          nvm install 16
+
       - name: Checkout
         uses: actions/checkout@v3.3.0
 
