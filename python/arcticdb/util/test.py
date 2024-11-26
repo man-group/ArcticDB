@@ -92,7 +92,7 @@ def create_df_index_rownum(num_columns: int, start_index: int, end_index : int) 
     df.index = np.arange(start_index, end_index, 1)
     return df
 
-def create_datetime_index(df: pd.DataFrame, name_col:str, freq:Union[str | dt.timedelta | Timedelta | DateOffset], 
+def create_datetime_index(df: pd.DataFrame, name_col:str, freq:Union[str , dt.timedelta , Timedelta , DateOffset], 
         start_time: pd.Timestamp = pd.Timestamp(0)):
     """
         creates a datetime index to a dataframe. The index will start at specified timestamp
