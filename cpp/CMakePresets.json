@@ -64,6 +64,7 @@
       "environment": { "cmakepreset_expected_host_system": "Windows" },
       "cacheVariables": {
         "ARCTICDB_USE_PCH": "ON",
+        "VCPKG_OVERLAY_TRIPLETS": "custom-triplets",
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-msvc"
       }
     },
@@ -97,6 +98,7 @@
       "installDir": "${sourceDir}/out/install",
       "cacheVariables": {
         "CMAKE_CXX_FLAGS": "/MP",
+        "VCPKG_OVERLAY_TRIPLETS": "custom-triplets",
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-msvc",
         "ARCTICDB_PYTHON_EXPLICIT_LINK": "ON"
       }
