@@ -66,7 +66,7 @@ jobs:
       python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-      USE_UNSHALLOW: ${{(matrix.os == 'linux' && inputs.job_type != 'build-python-wheels') && '1' || '0'}}
+      USE_UNSHALLOW: ${{(matrix.os == 'linux' && inputs.job_type != 'build-python-wheels') && '0' || '1'}}
     defaults:
       run: {shell: bash}
     steps:
