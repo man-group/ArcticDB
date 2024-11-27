@@ -3,11 +3,11 @@
 pushd $(realpath $(dirname $BASH_SOURCE))/../cpp/vcpkg
 
 if [[ -e "$VCPKG_INSTALLATION_ROOT" ]] ; then
-    git fetch file://$VCPKG_INSTALLATION_ROOT
+    git fetch --unshallow file://$VCPKG_INSTALLATION_ROOT
 elif [[ -n "$VCPKG_INSTALLATION_ROOT" && -e "/host$VCPKG_INSTALLATION_ROOT" ]] ; then
-    git fetch file:///host$VCPKG_INSTALLATION_ROOT
+    git fetch --unshallow file:///host$VCPKG_INSTALLATION_ROOT
 else
-    git fetch origin master
+    git fetch --unshallow origin master
 fi
 
 cd ..

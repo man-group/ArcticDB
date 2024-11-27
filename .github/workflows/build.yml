@@ -53,8 +53,6 @@ jobs:
                     image: "mongo:4.4"
                 container:
                   image: ${{needs.cibw_docker_image.outputs.tag}}
-                  volumes:
-                    - /:/mnt
             windows_matrix:
               - os: windows
                 distro: windows-latest
