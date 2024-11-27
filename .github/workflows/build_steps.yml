@@ -71,19 +71,17 @@ jobs:
     defaults:
       run: {shell: bash}
     steps:
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 16
-          
       - name: Checkout
+        if: matrix.os != 'linux'
         uses: actions/checkout@v3.3.0
         with:
           submodules: recursive # Just in case a dep has its own third-party deps
 
-      - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: "v0.4.0"
+      - name: Manual checkout
+        if: matrix.os == 'linux'
+        run: |
+          git clone https://github.com/man-group/ArcticDB.git . --branch $GITHUB_REF --depth 1
+          git submodule update --init --recursive
 
       - name: Windows Pagefile
         if: matrix.os == 'windows'
