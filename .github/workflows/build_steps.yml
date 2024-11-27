@@ -146,13 +146,11 @@ jobs:
 
       - name: CMake compile without Node
         if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
-        run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET
+        run: cd cpp; cmake --preset $ARCTIC_CMAKE_PRESET
 
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
-        run: |
-          python setup.py develop
-          cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target install
+        run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target install
 
       - name: C++ Rapidcheck
         if: inputs.job_type == 'cpp-tests'
@@ -273,7 +271,7 @@ jobs:
           ${{fromJSON(inputs.matrix)}}
     name: ${{matrix.type}}${{matrix.python_deps_id}}
     runs-on: ${{matrix.distro}}
-    container: ${{matrix.os == 'linux' && needs.compile.outputs.manylinux_image || null}}
+    # container: ${{matrix.os == 'linux' && needs.compile.outputs.manylinux_image || null}}
     defaults:
       run: {shell: bash}
     services: ${{matrix.test_services}}
@@ -282,15 +280,6 @@ jobs:
       distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
-      - name: Setup Node 16
-        run: |
-          apt update && apt -y install wget
-          touch "$HOME/.bashrc"
-          wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-          export NVM_DIR="$HOME/.nvm"
-          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-          nvm install 16
-
       - name: Checkout
         uses: actions/checkout@v3.3.0
 
@@ -300,12 +289,12 @@ jobs:
           name: wheel-${{needs.compile.outputs.cibw_build}}
           path: ${{runner.temp}}
 
-      - name: Select Python (Linux)
-        if: matrix.os == 'linux'
-        run: echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH
+      # - name: Select Python (Linux)
+      #   if: matrix.os == 'linux'
+      #   run: echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH
 
       - name: Select Python (Windows)
-        if: matrix.os == 'windows'
+        # if: matrix.os == 'windows'
         uses: actions/setup-python@v4.7.1
         with:
           python-version: "3.${{inputs.python3}}"
