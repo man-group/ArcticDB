@@ -135,7 +135,7 @@ jobs:
         run: . build_tooling/prep_cpp_build.sh # Also applies to Windows
 
       - name: CMake compile
-        if: matrix.os == 'windows' || (matrix.os == 'linux' && inputs.job_type == 'build-python-wheels')
+        if: matrix.os == 'windows' && inputs.job_type != 'build-python-wheels'
         # We are pinning the version to 10.6 because >= 10.7, use node20 which is not supported in the container
         uses: lukka/run-cmake@v10.6
         with:
