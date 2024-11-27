@@ -146,7 +146,7 @@ jobs:
 
       - name: CMake compile without Node
         if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
-        run: cd cpp; cmake --preset $ARCTIC_CMAKE_PRESET
+        run: cmake -DTEST=ON --preset $ARCTIC_CMAKE_PRESET cpp
 
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
