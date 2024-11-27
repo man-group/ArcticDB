@@ -71,18 +71,33 @@ jobs:
     defaults:
       run: {shell: bash}
     steps:
+      - name: Setup Node 16
+        if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
+        run: |
+          # Replace default repo as centos 7 has reached EOL
+          sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g; s|baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/*.repo
+          sed -i '/mirrorlist.centos.org/d' /etc/yum.repos.d/*.repo
+          yum update -y && yum install -y wget
+          touch "$HOME/.bashrc"
+          wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          nvm install 16
+          which node
+          mv node20 node20.bak
+          ln -s node16 node20
+          # Add /github/home/.nvm/versions/node/v16.20.2/bin to GITHUB_PATH
+          echo -e "/github/home/.nvm/versions/node/v16.20.2/bin" | tee -a $GITHUB_PATH
+          
       - name: Checkout
-        if: matrix.os != 'linux'
         uses: actions/checkout@v3.3.0
         with:
           submodules: recursive # Just in case a dep has its own third-party deps
 
-      - name: Manual checkout
-        if: matrix.os == 'linux'
-        run: |
-          git config --global --add safe.directory /__w/ArcticDB/ArcticDB
-          git clone https://github.com/man-group/ArcticDB.git . --branch ${{github.head_ref || github.ref_name}} --depth 1
-          git submodule update --init --recursive
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: "v0.4.0"
 
       - name: Windows Pagefile
         if: matrix.os == 'windows'
