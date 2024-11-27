@@ -1012,7 +1012,18 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     log::version().debug("Compacting incomplete symbol {}", stream_id);
 
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
+    auto pipeline_context = std::make_shared<PipelineContext>();
+    pipeline_context->stream_id_ = stream_id;
+    pipeline_context->version_id_ = update_info.next_version_id_;
+
+
+    auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), options);
+
     auto versioned_item = compact_incomplete_impl(store_, stream_id, user_meta, update_info, options, get_write_options());
+
+    delete_incomplete_keys(*pipeline_context, *store());
+    if(delete_keys_on_failure)
+        delete_keys_on_failure->release();
 
     write_version_and_prune_previous(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
     add_to_symbol_list_on_compaction(stream_id, options, update_info);

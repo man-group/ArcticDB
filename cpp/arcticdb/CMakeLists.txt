@@ -945,6 +945,7 @@ if(${TEST})
             util/test/test_storage_lock.cpp
             util/test/test_string_pool.cpp
             util/test/test_string_utils.cpp
+            util/test/random_throw.hpp
             util/test/test_tracing_allocator.cpp
             version/test/test_append.cpp
             version/test/test_sparse.cpp
@@ -957,7 +958,8 @@ if(${TEST})
             version/test/version_map_model.hpp
             python/python_handlers.cpp
             storage/test/common.hpp
-            version/test/test_sort_index.cpp)
+            version/test/test_sort_index.cpp
+            )
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
