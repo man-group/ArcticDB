@@ -125,6 +125,7 @@ jobs:
         if: matrix.os == 'windows'
         run: |
           choco install -y -f visualstudio2022buildtools --version=117.11.4 --params "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --installChannelUri https://aka.ms/vs/17/release/390666095_1317821361/channel"
+          choco install -y ninja
 
       - name: Enable Windows compiler commands
         if: matrix.os == 'windows'
