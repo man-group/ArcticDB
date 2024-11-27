@@ -66,27 +66,10 @@ jobs:
       python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-      USE_UNSHALLOW: ${{(matrix.os == 'linux' && inputs.job_type != 'build-python-wheels') && '0' || '1'}}
+      USE_UNSHALLOW: ${{(matrix.os == 'linux' && inputs.job_type != 'build-python-wheels') && '1' || '0'}}
     defaults:
       run: {shell: bash}
     steps:
-      # - name: Setup Node 16
-      #   if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
-      #   run: |
-      #     # Replace default repo as centos 7 has reached EOL
-      #     sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g; s|baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/*.repo
-      #     sed -i '/mirrorlist.centos.org/d' /etc/yum.repos.d/*.repo
-      #     yum update -y && yum install -y wget
-      #     touch "$HOME/.bashrc"
-      #     wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-      #     export NVM_DIR="$HOME/.nvm"
-      #     [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-      #     nvm install 16
-      #     which node
-      #     # Add /github/home/.nvm/versions/node/v16.20.2/bin to GITHUB_PATH
-      #     echo -e "/github/home/.nvm/versions/node/v16.20.2/bin" | tee -a $GITHUB_PATH
-      #     # try to print the path
-      #     echo $GITHUB_PATH
       - name: Checkout
         if: matrix.os == 'windows' || (matrix.os == 'linux' && inputs.job_type == 'build-python-wheels')
         uses: actions/checkout@v3.3.0
@@ -152,7 +135,7 @@ jobs:
         run: . build_tooling/prep_cpp_build.sh # Also applies to Windows
 
       - name: CMake compile
-        if: inputs.job_type != 'build-python-wheels'
+        matrix.os == 'windows' || (matrix.os == 'linux' && inputs.job_type == 'build-python-wheels')
         # We are pinning the version to 10.6 because >= 10.7, use node20 which is not supported in the container
         uses: lukka/run-cmake@v10.6
         with:
@@ -160,6 +143,10 @@ jobs:
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
           configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
+
+      - name: CMake compile without Node
+        if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
+        run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET
 
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
