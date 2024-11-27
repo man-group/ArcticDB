@@ -92,7 +92,13 @@ jobs:
         with:
           submodules: recursive # Just in case a dep has its own third-party deps
 
-      - name: Checkout
+      - name: Configure sccache
+        if: matrix.os == 'windows' || (matrix.os == 'linux' && inputs.job_type == 'build-python-wheels')
+        uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: "v0.4.0"
+
+      - name: Checkout without Node
         if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
         uses: taiki-e/checkout-action@v1
 
@@ -100,12 +106,6 @@ jobs:
       - name: Checkout submodules
         if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
         run: git submodule update --init --recursive
-
-      - name: Configure sccache
-        if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
-        uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: "v0.4.0"
 
       - name: Windows Pagefile
         if: matrix.os == 'windows'
