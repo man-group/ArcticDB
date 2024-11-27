@@ -150,7 +150,9 @@ jobs:
 
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
-        run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target install
+        run: |
+          python setup.py develop
+          cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target install
 
       - name: C++ Rapidcheck
         if: inputs.job_type == 'cpp-tests'
