@@ -86,13 +86,23 @@ jobs:
       #     echo -e "/github/home/.nvm/versions/node/v16.20.2/bin" | tee -a $GITHUB_PATH
       #     # try to print the path
       #     echo $GITHUB_PATH
-          
       - name: Checkout
-        uses: taiki-e/checkout-action@v1
+        if: matrix.os == 'windows' || (matrix.os == 'linux' && inputs.job_type == 'build-python-wheels')
+        uses: actions/checkout@v3.3.0
         with:
           submodules: recursive # Just in case a dep has its own third-party deps
 
+      - name: Checkout
+        if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
+        uses: taiki-e/checkout-action@v1
+
+
+      - name: Checkout submodules
+        if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
+        run: git submodule update --init --recursive
+
       - name: Configure sccache
+        if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
         uses: mozilla-actions/sccache-action@v0.0.3
         with:
           version: "v0.4.0"
