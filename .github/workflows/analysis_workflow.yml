@@ -31,15 +31,9 @@ jobs:
     outputs:
       matrix: ${{ steps.get_tags.outputs.commits }}
 
-  cibw_docker_image:
-    uses: ./.github/workflows/cibw_docker_image.yml
-    permissions: {packages: write}
-    with:
-        cibuildwheel_ver: "2.12.1"
-        force_update: false
 
   benchmark_commits:
-    needs: [get_commits_to_benchmark, cibw_docker_image]  
+    needs: [get_commits_to_benchmark]  
     strategy:
       fail-fast: false
       matrix: 
@@ -49,7 +43,6 @@ jobs:
     secrets: inherit
     with:
       commit: ${{ matrix.commits }}
-      cibw_image_tag: ${{ needs.cibw_docker_image.outputs.tag }}
       run_all_benchmarks: ${{ inputs.run_all_benchmarks || false }}
       run_on_pr_head: ${{ github.event_name == 'pull_request_target' }}
 
@@ -107,10 +100,9 @@ jobs:
           python -m asv gh-pages -v --rewrite
 
   code_coverage:
-    needs: [cibw_docker_image]  
     runs-on: "ubuntu-22.04"
     container:
-        image: ${{needs.cibw_docker_image.outputs.tag}}
+        image: quay.io/pypa/manylinux_2_28_x86_64:latest
     services:
       mongodb:
         image: mongo:4.4
@@ -133,7 +125,11 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
 
+      - name: Install deps
+        uses: ./.github/actions/setup_deps
+
       - name: Extra envs
+        shell: bash -l {0}
         run: |
           . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
           echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
