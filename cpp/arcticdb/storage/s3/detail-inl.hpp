@@ -45,7 +45,7 @@ static const size_t DELETE_OBJECTS_LIMIT = 1000;
 template<class It>
 using Range = folly::Range<It>;
 
-inline void raise_s3_exception(const Aws::S3::S3Error& err, const std::string& object_name) {
+[[noreturn]] inline void raise_s3_exception(const Aws::S3::S3Error& err, const std::string& object_name) {
     std::string error_message;
     auto type = err.GetErrorType();
 
@@ -190,10 +190,15 @@ folly::Future<KeySegmentPair> do_async_read_impl(
     const std::string& bucket_name,
     const S3ClientInterface& s3_client,
     KeyBucketizer&& bucketizer,
-    ReadKeyOpts opts) {
+    ReadKeyOpts) {
     auto key_type_dir = key_type_folder(root_folder, variant_key_type(variant_key));
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
-    return s3_client.get_object_async(bucket_name, s3_object_name);
+    return s3_client.get_object_async(bucket_name, s3_object_name).thenValue([vk=std::move(variant_key)] (auto&& result) mutable -> KeySegmentPair {
+        if(result.is_success())
+            return KeySegmentPair(std::move(vk), std::move(result.get_output()));
+        else
+            raise_s3_exception(result.get_error(), fmt::format("{}", vk));
+    });
 }
 
 template<class KeyBucketizer>

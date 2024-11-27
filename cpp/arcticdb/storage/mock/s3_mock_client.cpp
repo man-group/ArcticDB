@@ -80,6 +80,12 @@ S3Result<Segment> MockS3Client::get_object(
     return {pos->second.clone()};
 }
 
+folly::Future<S3Result<Segment>> MockS3Client::get_object_async(
+    const std::string &s3_object_name,
+    const std::string &bucket_name) const {
+    return folly::makeFuture(get_object(s3_object_name, bucket_name));
+}
+
 S3Result<std::monostate> MockS3Client::put_object(
         const std::string &s3_object_name,
         Segment &&segment,
