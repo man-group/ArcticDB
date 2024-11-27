@@ -1896,8 +1896,9 @@ CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_desc
     if (!columns_match(stream_descriptor_incomplete, pipeline_context->descriptor())) {
         return Error{
             throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
-            fmt::format("When static schema is used all staged segments must have the same column and column types."
+            fmt::format("{} When static schema is used all staged segments must have the same column and column types."
                         "{} is different than {}",
+                        error_code_data<ErrorCode::E_DESCRIPTOR_MISMATCH>.name_,
                         stream_descriptor_incomplete,
                         pipeline_context->descriptor())
         };
