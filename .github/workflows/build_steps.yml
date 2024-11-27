@@ -66,24 +66,27 @@ jobs:
       python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-      ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
-      ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
     defaults:
       run: {shell: bash}
     steps:
+      - name: Setup Node 16
+        run: |
+          apt update && apt -y install wget
+          touch "$HOME/.bashrc"
+          wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          nvm install 16
+          sudo rm -rf /__e/node20
       - name: Checkout
-        if: matrix.os != 'linux'
         uses: actions/checkout@v3.3.0
         with:
           submodules: recursive # Just in case a dep has its own third-party deps
 
-      - name: Manual checkout
-        if: matrix.os == 'linux'
-        run: |
-          git config --global --add safe.directory $GITHUB_WORKSPACE
-          cd $GITHUB_WORKSPACE
-          git clone https://github.com/man-group/ArcticDB.git . --branch ${{github.head_ref || github.ref_name}} --depth 1
-          git submodule update --init --recursive
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: "v0.4.0"
 
       - name: Windows Pagefile
         if: matrix.os == 'windows'
@@ -270,19 +273,17 @@ jobs:
       distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
-      - name: Checkout
-        if: matrix.os != 'linux'
-        uses: actions/checkout@v3.3.0
-        with:
-          submodules: recursive # Just in case a dep has its own third-party deps
-
-      - name: Manual checkout
-        if: matrix.os == 'linux'
+      - name: Setup Node 16
         run: |
-          git config --global --add safe.directory $GITHUB_WORKSPACE
-          cd $GITHUB_WORKSPACE
-          git clone https://github.com/man-group/ArcticDB.git . --branch ${{github.head_ref || github.ref_name}} --depth 1
-          git submodule update --init --recursive
+          apt update && apt -y install wget
+          touch "$HOME/.bashrc"
+          wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          nvm install 16
+
+      - name: Checkout
+        uses: actions/checkout@v3.3.0
 
       - name: Get wheel artifact
         uses: actions/download-artifact@v3.0.2
