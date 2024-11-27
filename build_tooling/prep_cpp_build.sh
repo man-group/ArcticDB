@@ -2,12 +2,18 @@
 
 pushd $(realpath $(dirname $BASH_SOURCE))/../cpp/vcpkg
 
-if [[ -e "$VCPKG_INSTALLATION_ROOT" ]] ; then
-    git fetch --unshallow file://$VCPKG_INSTALLATION_ROOT
-elif [[ -n "$VCPKG_INSTALLATION_ROOT" && -e "/host$VCPKG_INSTALLATION_ROOT" ]] ; then
-    git fetch --unshallow file:///host$VCPKG_INSTALLATION_ROOT
+if [[ "$USE_UNSHALLOW" == "1" ]]; then
+    UNSHALLOW_OPTION="--unshallow"
 else
-    git fetch --unshallow origin master
+    UNSHALLOW_OPTION=""
+fi
+
+if [[ -e "$VCPKG_INSTALLATION_ROOT" ]] ; then
+    git fetch $UNSHALLOW_OPTION file://$VCPKG_INSTALLATION_ROOT
+elif [[ -n "$VCPKG_INSTALLATION_ROOT" && -e "/host$VCPKG_INSTALLATION_ROOT" ]] ; then
+    git fetch $UNSHALLOW_OPTION file:///host$VCPKG_INSTALLATION_ROOT
+else
+    git fetch $UNSHALLOW_OPTION origin master
 fi
 
 cd ..
