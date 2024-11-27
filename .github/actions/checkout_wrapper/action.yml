@@ -1,0 +1,19 @@
+name: 'Wrapper for actions/checkout'
+description: 'Wraps the actions/checkout action to set up the environment for ArcticDB CI tests'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout
+      if: matrix.os != 'linux'
+      uses: actions/checkout@v3.3.0
+      with:
+        submodules: recursive # Just in case a dep has its own third-party deps
+
+    - name: Manual checkout
+      if: matrix.os == 'linux'
+      run: |
+        git config --global --add safe.directory $GITHUB_WORKSPACE
+        cd $GITHUB_WORKSPACE
+        git clone https://github.com/man-group/ArcticDB.git . --branch ${{github.head_ref || github.ref_name}} --depth 1
+        git submodule update --init --recursive
