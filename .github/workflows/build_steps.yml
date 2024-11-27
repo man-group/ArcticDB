@@ -80,7 +80,7 @@ jobs:
       - name: Manual checkout
         if: matrix.os == 'linux'
         run: |
-          git clone https://github.com/man-group/ArcticDB.git . --branch $GITHUB_REF --depth 1
+          git clone https://github.com/man-group/ArcticDB.git . --branch ${{github.head_ref || github.ref_name}} --depth 1
           git submodule update --init --recursive
 
       - name: Windows Pagefile
