@@ -80,6 +80,7 @@ jobs:
       - name: Manual checkout
         if: matrix.os == 'linux'
         run: |
+          git config --global --add safe.directory /__w/ArcticDB/ArcticDB
           git clone https://github.com/man-group/ArcticDB.git . --branch ${{github.head_ref || github.ref_name}} --depth 1
           git submodule update --init --recursive
 
