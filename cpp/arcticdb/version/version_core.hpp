@@ -222,11 +222,13 @@ struct Error {
 };
 
 using CheckOutcome = std::variant<Error, std::monostate>;
-using StaticSchemaCompactionChecks = folly::Function<CheckOutcome(const StreamDescriptor&, const pipelines::PipelineContext* const)>;
+using StaticSchemaCompactionChecks = folly::Function<CheckOutcome(const StreamDescriptor&, const pipelines::PipelineContext&)>;
 using CompactionWrittenKeys = std::vector<VariantKey>;
 using CompactionResult = std::variant<CompactionWrittenKeys, Error>;
 
 void remove_written_keys(Store* store, CompactionWrittenKeys&& written_keys);
+
+bool is_segment_unsorted(const SegmentInMemory& segment);
 
 template <typename IndexType, typename SchemaType, typename SegmentationPolicy, typename DensityPolicy, typename IteratorType>
 [[nodiscard]] CompactionResult do_compact(
@@ -275,14 +277,14 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
 
         const SegmentInMemory& segment = sk.segment(store);
 
-        if(validate_index && segment.descriptor().sorted() != SortedValue::ASCENDING && segment.descriptor().sorted() != SortedValue::UNKNOWN) {
+        if(validate_index && is_segment_unsorted(segment)) {
             auto written_keys = folly::collect(write_futures).get();
             remove_written_keys(store.get(), std::move(written_keys));
             return Error{throw_error<ErrorCode::E_UNSORTED_DATA>, "Cannot compact unordered segment"};
         }
 
         if constexpr (std::is_same_v<SchemaType, FixedSchema>) {
-            CheckOutcome outcome = checks(segment.descriptor(), pipeline_context.get());
+            CheckOutcome outcome = checks(segment.descriptor(), *pipeline_context);
             if (std::holds_alternative<Error>(outcome)) {
                 auto written_keys = folly::collect(write_futures).get();
                 remove_written_keys(store.get(), std::move(written_keys));
@@ -302,7 +304,7 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
     return folly::collect(std::move(write_futures)).get();
 }
 
-CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const pipelines::PipelineContext* const pipeline_context);
+CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const pipelines::PipelineContext& pipeline_context);
 
 }
 

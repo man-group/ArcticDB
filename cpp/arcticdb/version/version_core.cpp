@@ -669,12 +669,12 @@ std::shared_ptr<std::unordered_set<std::string>> columns_to_decode(const std::sh
     return res;
 }
 
-std::vector<RangesAndKey> generate_ranges_and_keys(PipelineContext* const pipeline_context) {
+std::vector<RangesAndKey> generate_ranges_and_keys(PipelineContext& pipeline_context) {
     std::vector<RangesAndKey> res;
-    res.reserve(pipeline_context->slice_and_keys_.size());
+    res.reserve(pipeline_context.slice_and_keys_.size());
     bool is_incomplete{false};
-    for (auto it = pipeline_context->begin(); it != pipeline_context->end(); it++) {
-        if (it == pipeline_context->incompletes_begin()) {
+    for (auto it = pipeline_context.begin(); it != pipeline_context.end(); it++) {
+        if (it == pipeline_context.incompletes_begin()) {
             is_incomplete = true;
         }
         auto& sk = it->slice_and_key();
@@ -705,7 +705,7 @@ std::vector<folly::Future<pipelines::SegmentAndSlice>> generate_segment_and_slic
                     .thenValue([&pipeline_context, processing_config](SegmentAndSlice &&read_result) {
                         if (!processing_config.dynamic_schema_) {
                             auto check = check_schema_matches_incomplete(read_result.segment_in_memory_.descriptor(),
-                                                                         pipeline_context.get());
+                                                                         *pipeline_context);
                             if (std::holds_alternative<Error>(check)) {
                                 std::get<Error>(check).throw_error();
                             }
@@ -744,7 +744,7 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
         clause->set_component_manager(component_manager);
     }
 
-    auto all_ranges = generate_ranges_and_keys(pipeline_context.get());
+    auto all_ranges = generate_ranges_and_keys(*pipeline_context);
 
     // Each element of the vector corresponds to one processing unit containing the list of indexes in ranges_and_keys required for that processing unit
     // i.e. if the first processing unit needs ranges_and_keys[0] and ranges_and_keys[1], and the second needs ranges_and_keys[2] and ranges_and_keys[3]
@@ -1407,10 +1407,10 @@ VersionedItem collate_and_write(
     });
 }
 
-void delete_incomplete_keys(PipelineContext* pipeline_context, Store* store) {
+void delete_incomplete_keys(PipelineContext& pipeline_context, Store* store) {
     std::vector<entity::VariantKey> keys_to_delete;
-    keys_to_delete.reserve(pipeline_context->slice_and_keys_.size() - pipeline_context->incompletes_after());
-    for (auto sk = pipeline_context->incompletes_begin(); sk != pipeline_context->end(); ++sk) {
+    keys_to_delete.reserve(pipeline_context.slice_and_keys_.size() - pipeline_context.incompletes_after());
+    for (auto sk = pipeline_context.incompletes_begin(); sk != pipeline_context.end(); ++sk) {
         const auto& slice_and_key = sk->slice_and_key();
         if (ARCTICDB_LIKELY(slice_and_key.key().type() == KeyType::APPEND_DATA)) {
             keys_to_delete.emplace_back(slice_and_key.key());
@@ -1441,7 +1441,7 @@ public:
     ~IncompleteKeysRAII() {
         if (context_ && store_) {
             if (context_->incompletes_after_) {
-                delete_incomplete_keys(context_.get(), store_.get());
+                delete_incomplete_keys(*context_, store_.get());
             } else {
                 // If an exception is thrown before read_incompletes_to_pipeline the keys won't be placed inside the
                 // context thus they must be read manually.
@@ -1576,7 +1576,7 @@ VersionedItem sort_merge_impl(
         pipeline_context->incompletes_after(),
         norm_meta);
     if (!options.delete_staged_data_on_failure_) {
-        delete_incomplete_keys(pipeline_context.get(), store.get());
+        delete_incomplete_keys(*pipeline_context, store.get());
     }
     return vit;
 }
@@ -1674,7 +1674,7 @@ VersionedItem compact_incomplete_impl(
                                 pipeline_context->incompletes_after(),
                                 user_meta);
                             if (!options.delete_staged_data_on_failure_) {
-                                delete_incomplete_keys(pipeline_context.get(), store.get());
+                                delete_incomplete_keys(*pipeline_context, store.get());
                             }
                             return vit;
                         },
@@ -1762,7 +1762,7 @@ VersionedItem defragment_symbol_data_impl(
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
 
-        StaticSchemaCompactionChecks checks = [](const StreamDescriptor&, const pipelines::PipelineContext* const) {
+        StaticSchemaCompactionChecks checks = [](const StreamDescriptor&, const pipelines::PipelineContext&) {
             // No defrag specific checks yet
             return std::monostate{};
         };
@@ -1892,15 +1892,19 @@ void remove_written_keys(Store* const store, CompactionWrittenKeys&& written_key
     store->remove_keys_sync(std::move(written_keys));
 }
 
-CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const pipelines::PipelineContext* const pipeline_context) {
-    if (!columns_match(stream_descriptor_incomplete, pipeline_context->descriptor())) {
+bool is_segment_unsorted(const SegmentInMemory& segment) {
+    return segment.descriptor().sorted() == SortedValue::DESCENDING || segment.descriptor().sorted() == SortedValue::UNSORTED;
+}
+
+CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const pipelines::PipelineContext& pipeline_context) {
+    if (!columns_match(stream_descriptor_incomplete, pipeline_context.descriptor())) {
         return Error{
             throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
             fmt::format("{} When static schema is used all staged segments must have the same column and column types."
                         "{} is different than {}",
                         error_code_data<ErrorCode::E_DESCRIPTOR_MISMATCH>.name_,
                         stream_descriptor_incomplete,
-                        pipeline_context->descriptor())
+                        pipeline_context.descriptor())
         };
     }
     return std::monostate{};
