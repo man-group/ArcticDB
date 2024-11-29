@@ -28,6 +28,7 @@ theme:
     - navigation.tabs
     - navigation.sections
     - content.code.copy
+    - toc.integrate
 
 extra:
   version:
