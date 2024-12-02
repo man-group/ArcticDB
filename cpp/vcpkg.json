@@ -33,7 +33,6 @@
     "mongo-cxx-driver",
     {
       "name": "aws-sdk-cpp",
-      "version>=": "1.11.405",
       "$version reason": "Version which contains atomic put operations",
       "default-features": false,
       "features": [ "s3", "identity-management" ]
@@ -105,6 +104,7 @@
   ],
   "overrides": [
     { "name": "openssl", "version-string": "3.3.0" },
+    { "name": "aws-sdk-cpp", "version": "1.11.405" },
     { "name": "azure-core-cpp", "version": "1.12.0" },
     { "name": "benchmark", "version": "1.9.0" },
     { "name": "bitmagic", "version": "7.12.3" },
