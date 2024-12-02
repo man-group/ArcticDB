@@ -117,11 +117,11 @@ def lmdb_storage(tmp_path) -> Iterator[LmdbStorageFixture]:
         yield f
 
 @pytest.fixture
-def lmdb_library(lmdb_storage, lib_name):
+def lmdb_library(lmdb_storage, lib_name) -> Library:
     return lmdb_storage.create_arctic().create_library(lib_name)
 
 @pytest.fixture
-def lmdb_library_dynamic_schema(lmdb_storage, lib_name):
+def lmdb_library_dynamic_schema(lmdb_storage, lib_name) -> Library:
     return lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(dynamic_schema=True))
 
 @pytest.fixture(
@@ -804,7 +804,7 @@ def basic_store_dynamic_schema_v2(basic_store_factory, lib_name) -> NativeVersio
 
 
 @pytest.fixture
-def basic_store_dynamic_schema(basic_store_dynamic_schema_v1, basic_store_dynamic_schema_v2, encoding_version):
+def basic_store_dynamic_schema(basic_store_dynamic_schema_v1, basic_store_dynamic_schema_v2, encoding_version) -> NativeVersionStore:
     if encoding_version == EncodingVersion.V1:
         return basic_store_dynamic_schema_v1
     elif encoding_version == EncodingVersion.V2:
