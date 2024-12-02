@@ -1,5 +1,3 @@
-#pragma once
-
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/preprocess.hpp>
 
@@ -13,13 +11,6 @@ struct PilotedClock {
 
     static void reset() {
         PilotedClock::time_ = 0;
-    }
-};
-
-struct PilotedClockNoAutoIncrement {
-    static std::atomic<entity::timestamp> time_;
-    static entity::timestamp nanos_since_epoch() {
-        return PilotedClockNoAutoIncrement::time_;
     }
 };
 
