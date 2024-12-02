@@ -365,18 +365,14 @@ class NativeVersionStore:
                 )
         except ArcticDbNotYetImplemented as ex:
             raise ArcticDbNotYetImplemented(
-                f"Not supported: normalizing\n"
-                f"symbol: {symbol}\n"
-                f"data:\n"
-                f"{dataframe}\n"
-                f"metadata:\n"
-                f"{metadata}\n"
-                f"Reason:\n"
-                f"{ex}\n"
+                f"Not supported: normalizing"
+                f"symbol: {symbol}"
+                f"Reason:"
+                f"{ex}"
                 f"{norm_failure_options_msg}"
             )
         except Exception as ex:
-            log.error("Error while normalizing symbol={}, data={}, metadata={}, {}", symbol, dataframe, metadata, ex)
+            log.error("Error while normalizing symbol={}, {}", symbol, ex)
             raise ArcticNativeException(str(ex))
 
         if norm_meta is None:
