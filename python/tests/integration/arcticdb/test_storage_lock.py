@@ -5,11 +5,10 @@ import pytest
 from arcticdb_ext.tools import ReliableStorageLock, ReliableStorageLockManager
 from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED, REAL_S3_TESTS_MARK
 
-from multiprocessing import Process, set_start_method
-set_start_method("fork") # Okay to fork an S3 lib
 import time
 
 from arcticdb.util.test import assert_frame_equal
+from multiprocessing import Process
 
 
 one_sec = 1_000_000_000
@@ -30,6 +29,7 @@ def test_many_increments(real_s3_version_store, num_processes, max_sleep):
     lib = real_s3_version_store
     init_df = pd.DataFrame({"col": [0]})
     symbol = "counter"
+    lib.version_store.force_delete_symbol(symbol)
     lib.write(symbol, init_df)
     lock = ReliableStorageLock("test_lock", lib._library, 10*one_sec)
     lock_manager = ReliableStorageLockManager()
@@ -44,6 +44,8 @@ def test_many_increments(real_s3_version_store, num_processes, max_sleep):
     for p in processes:
         p.join()
 
-    read_df = lib.read(symbol).data
+    vit = lib.read(symbol)
+    read_df = vit.data
     expected_df = pd.DataFrame({"col": [num_processes]})
     assert_frame_equal(read_df, expected_df)
+    assert vit.version == num_processes

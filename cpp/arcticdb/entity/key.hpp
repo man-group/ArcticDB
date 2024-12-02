@@ -189,7 +189,7 @@ enum class KeyType : int {
     /*
      * Used for a list based reliable storage lock
      */
-    SLOW_LOCK = 27,
+    ATOMIC_LOCK = 27,
     UNDEFINED
 };
 

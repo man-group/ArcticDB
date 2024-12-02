@@ -46,6 +46,11 @@ struct DeleteOutput{
     std::vector<FailedDelete> failed_deletes;
 };
 
+enum class PutHeader{
+    NONE,
+    IF_NONE_MATCH
+};
+
 // An abstract class, which is responsible for sending the requests and parsing the responses from S3.
 // It can be derived as either a real connection to S3 or a mock used for unit tests.
 class S3ClientWrapper {
@@ -58,7 +63,7 @@ public:
             const std::string& s3_object_name,
             Segment&& segment,
             const std::string& bucket_name,
-            bool if_none_match = false) = 0;
+            PutHeader header = PutHeader::NONE) = 0;
 
     virtual S3Result<DeleteOutput> delete_objects(
             const std::vector<std::string>& s3_object_names,

@@ -11,7 +11,7 @@
 #include <folly/executors/FutureExecutor.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <arcticdb/util/test/gtest_utils.hpp>
-#include <arcticdb/stream/piloted_clock.hpp>
+#include <arcticdb/util/clock.hpp>
 
 using namespace arcticdb;
 using namespace lock;
@@ -20,33 +20,37 @@ using namespace lock;
 
 TEST(ReliableStorageLock, SingleThreaded) {
     auto store = std::make_shared<InMemoryStore>();
-    using Clock = PilotedClockNoAutoIncrement;
+    using Clock = util::ManualClock;
     // We have 2 locks, one with timeout of 20 and another with a timeout of 10
     ReliableStorageLock<Clock> lock1{StringId{"test_lock"}, store, 20};
     ReliableStorageLock<Clock> lock2{StringId{"test_lock"}, store, 10};
 
     auto count_locks = [&]() {
         auto number_of_lock_keys = 0;
-        store->iterate_type(KeyType::SLOW_LOCK, [&number_of_lock_keys](VariantKey&& _ [[maybe_unused]]){++number_of_lock_keys;});
+        store->iterate_type(KeyType::ATOMIC_LOCK, [&number_of_lock_keys](VariantKey&& _ [[maybe_unused]]){++number_of_lock_keys;});
         return number_of_lock_keys;
     };
 
     // We take the first lock at 0 and it should not expire until 20
     Clock::time_ = 0;
     ASSERT_EQ(lock1.try_take_lock(), std::optional<uint64_t>{0});
+    ASSERT_EQ(lock2.try_take_lock(), std::nullopt);
     Clock::time_ = 5;
+    ASSERT_EQ(lock1.try_take_lock(), std::nullopt);
     ASSERT_EQ(lock2.try_take_lock(), std::nullopt);
     Clock::time_ = 10;
+    ASSERT_EQ(lock1.try_take_lock(), std::nullopt);
     ASSERT_EQ(lock2.try_take_lock(), std::nullopt);
     Clock::time_ = 19;
     ASSERT_EQ(lock1.try_take_lock(), std::nullopt);
+    ASSERT_EQ(lock2.try_take_lock(), std::nullopt);
 
-    // Once the first lock has expired we can take a new lock with epoch=1
+    // Once the first lock has expired we can take a new lock with lock_id=1
     Clock::time_ = 20;
     ASSERT_EQ(lock2.try_take_lock(), std::optional<uint64_t>{1});
     ASSERT_EQ(count_locks(), 2);
 
-    // We can extend the lock timeout at 25 to 35 and get an epoch=2
+    // We can extend the lock timeout at 25 to 35 and get an lock_id=2
     Clock::time_ = 25;
     ASSERT_EQ(lock1.try_take_lock(), std::nullopt);
     ASSERT_EQ(lock2.try_extend_lock(1), std::optional<uint64_t>{2});
@@ -54,7 +58,7 @@ TEST(ReliableStorageLock, SingleThreaded) {
     Clock::time_ = 34;
     ASSERT_EQ(lock1.try_take_lock(), std::nullopt);
 
-    // At time 35 the lock with epoch=2 has expired and we can re-aquire the lock
+    // At time 35 the lock with lock_id=2 has expired and we can re-acquire the lock
     Clock::time_ = 35;
     ASSERT_EQ(lock1.try_take_lock(), std::optional<uint64_t>{3});
     ASSERT_EQ(count_locks(), 4);
@@ -63,11 +67,10 @@ TEST(ReliableStorageLock, SingleThreaded) {
     // And we can free the lock immediately to allow re-aquiring without waiting for timeout
     lock1.free_lock(3);
     ASSERT_EQ(lock2.try_take_lock(), std::optional<uint64_t>{4});
-    // Taking lock2 with timeout=10 means we should clear all locks which have expired before 25. In this case just epoch=0
-    ASSERT_EQ(count_locks(), 4);
+    ASSERT_EQ(count_locks(), 5);
 
-    // But if we take a lock at 100 all locks would have expired a timeout=10 ago, and we should clear all apart from latest epoch=5
-    Clock::time_ = 100;
+    // But if we take a lock at 1000 all locks would have expired a 10xtimeout=100 ago, and we should clear all apart from latest lock_id=5
+    Clock::time_ = 1000;
     ASSERT_EQ(lock2.try_take_lock(), std::optional<uint64_t>{5});
     ASSERT_EQ(count_locks(), 1);
 }
@@ -82,19 +85,16 @@ struct SlowIncrementTask : async::BaseTask {
         cnt_(cnt), lock_(lock), sleep_time_(sleep_time) {}
 
     void operator()() {
-        auto aquired = lock_.retry_until_take_lock();
-        auto guard = ReliableStorageLockGuard(lock_, aquired, [that = this](){
+        auto acquired = lock_.retry_until_take_lock();
+        auto guard = ReliableStorageLockGuard(lock_, acquired, [that = this](){
             that->lock_lost_ = true;
         });
         auto value_before_sleep = cnt_;
-        // std::cout<<"Taken a lock with "<<value_before_sleep<<std::endl;
         std::this_thread::sleep_for(sleep_time_);
         if (lock_lost_) {
             // Return early on a lost lock. We will raise an issue if this happens.
-            std::cout<<"Lost a lock with "<<value_before_sleep<<std::endl;
             return;
         }
-        // std::cout<<"Freeing a lock with "<<value_before_sleep<<std::endl;
         cnt_ = value_before_sleep + 1;
     }
 };

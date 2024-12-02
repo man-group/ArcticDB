@@ -27,7 +27,7 @@ dependencies:
   - pybind11 <2.11
   - pcre
   - cyrus-sasl
-  - aws-sdk-cpp
+  - aws-sdk-cpp >=1.11.405
   - prometheus-cpp
   - libprotobuf
   - openssl

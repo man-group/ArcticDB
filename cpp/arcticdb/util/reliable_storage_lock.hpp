@@ -19,46 +19,49 @@ namespace arcticdb {
 
 namespace lock {
 
-using Epoch = uint64_t;
+using AcquiredLockId = uint64_t;
 
 // The ReliableStorageLock is a storage lock which relies on atomic If-None-Match Put and ListObject operations to
-// provide a slower but more reliable lock than the StorageLock. It should be completely consistent unless a process
-// holding a lock get's paused for times comparable to the lock timeout.
+// provide a more reliable lock than the StorageLock but it requires the backend to support atomic operations. It should
+// be completely consistent unless a process holding a lock gets paused for times comparable to the lock timeout.
 // It lock follows the algorithm described here:
 // https://www.morling.dev/blog/leader-election-with-s3-conditional-writes/
+// Note that the ReliableStorageLock just provides methods for requesting or extending acquired locks. It doesn't hold any
+// information about the acquired locks so far and none of its APIs are re-entrant. Thus the user is responsible for
+// protecting and extending the acquired locks (which can be done through the ReliableStorageLockGuard).
 template <class ClockType = util::SysClock>
 class ReliableStorageLock {
 public:
     ReliableStorageLock(const std::string& base_name, const std::shared_ptr<Store> store, timestamp timeout);
 
-    Epoch retry_until_take_lock() const;
-    std::optional<Epoch> try_take_lock() const;
-    std::optional<Epoch> try_extend_lock(Epoch held_lock_epoch) const;
-    void free_lock(Epoch held_lock_epoch) const;
+    AcquiredLockId retry_until_take_lock() const;
+    std::optional<AcquiredLockId> try_take_lock() const;
+    std::optional<AcquiredLockId> try_extend_lock(AcquiredLockId acquired_lock) const;
+    void free_lock(AcquiredLockId acquired_lock) const;
     timestamp timeout() const;
 private:
-    std::optional<Epoch> try_take_next_epoch(const std::vector<Epoch>& existing_locks, std::optional<Epoch> latest) const;
-    std::pair<std::vector<Epoch>, std::optional<Epoch>> get_all_locks() const;
+    std::optional<AcquiredLockId> try_take_next_id(const std::vector<AcquiredLockId>& existing_locks, std::optional<AcquiredLockId> latest) const;
+    std::pair<std::vector<AcquiredLockId>, std::optional<AcquiredLockId>> get_all_locks() const;
     timestamp get_expiration(RefKey lock_key) const;
-    void clear_old_locks(const std::vector<Epoch>& epochs) const;
-    StreamId get_stream_id(Epoch e) const;
+    void clear_old_locks(const std::vector<AcquiredLockId>& acquired_locks) const;
+    StreamId get_stream_id(AcquiredLockId acquired_lock) const;
     std::string base_name_;
     std::shared_ptr<Store> store_;
     timestamp timeout_;
 };
 
-// The ReliableStorageLockGuard protects an aquired ReliableStorageLock::Epoch and frees it on destruction. While the lock
-// is held it periodically extends its timeout in a heartbeating thread. If for some reason the lock is lost we get notified
+// The ReliableStorageLockGuard protects an AcquiredLockId and frees it on destruction. While the lock is held it
+// periodically extends its timeout in a heartbeating thread. If for some reason the lock is lost we get notified
 // via the on_lock_lost.
 class ReliableStorageLockGuard {
 public:
-    ReliableStorageLockGuard(const ReliableStorageLock<> &lock, Epoch aquired_epoch, folly::Func&& on_lost_lock);
+    ReliableStorageLockGuard(const ReliableStorageLock<> &lock, AcquiredLockId acquired_lock, folly::Func&& on_lost_lock);
 
     ~ReliableStorageLockGuard();
 private:
     void cleanup_on_lost_lock();
     const ReliableStorageLock<> &lock_;
-    std::optional<Epoch> aquired_epoch_;
+    std::optional<AcquiredLockId> acquired_lock_;
     folly::Func on_lost_lock_;
     folly::FunctionScheduler extend_lock_heartbeat_;
 };
@@ -78,4 +81,4 @@ private:
 
 }
 
-#include "arcticdb/util/reliable_storage_lock.tpp"
+#include "arcticdb/util/reliable_storage_lock-inl.hpp"
