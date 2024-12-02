@@ -148,9 +148,6 @@ jobs:
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
           configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
-        env:
-          CMAKE_BUILD_PARALLEL_LEVEL: ${{ (matrix.os == 'linux' && inputs.job_type != 'build-python-wheels') && 1 || vars.CMAKE_BUILD_PARALLEL_LEVEL}}
-          CXX: /opt/rh/gcc-toolset-10/root/bin/g++
 
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
