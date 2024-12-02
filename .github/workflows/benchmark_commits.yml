@@ -4,7 +4,6 @@ on:
     inputs:
       run_all_benchmarks: {required: true, type: boolean, description: Run all benchmarks or just the one for the given commit}
       commit:             {required: true, type: string, description: commit hash that will be benchmarked}
-      cibw_image_tag:     {required: true, type: string, description: Linux only. As built by cibw_docker_image.yml workflow}
       run_on_pr_head:     {required: false, default: false, type: boolean, description: Specifies if the benchmark should run on PR head branch}
 jobs:
   start_ec2_runner:
@@ -20,7 +19,7 @@ jobs:
       always() &&
       !cancelled()
     runs-on: ${{ needs.start_ec2_runner.outputs.label }}
-    container: ${{ inputs.cibw_image_tag}}
+    container: quay.io/pypa/manylinux_2_28_x86_64:latest
     env:
       # this is potentially overflowing the cache, so should be looked into after we address issue #1057
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
@@ -44,9 +43,13 @@ jobs:
         with:
           version: "v0.4.0"
         
+      - name: Install deps
+        uses: ./.github/actions/setup_deps
+
       # We are changing the python here because we want to use the default python to build (it is devel version)
       # and this python for the rest of the testing
       - name: Select Python (Linux)
+        shell: bash -el {0}
         run: |
           ls /opt/python  
           echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH

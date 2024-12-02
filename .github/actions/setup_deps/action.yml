@@ -1,0 +1,43 @@
+name: 'Install GCC related dependencies'
+description: 'Installs GCC related dependencies for building ArcticDB'
+runs:
+  using: "composite"
+  steps:
+    - name: Install deps
+      shell: bash -l {0} 
+      run: |
+        dnf update -y
+        dnf remove -y 'gcc-toolset-13-*'
+        dnf install -y zip flex bison gcc-toolset-10 gcc-toolset-10-gdb gcc-toolset-10-libatomic-devel krb5-devel cyrus-sasl-devel openssl-devel \
+        unzip tar epel-release jq wget libcurl-devel python3 \
+        python3-devel python3-pip perl-IPC-Cmd
+
+        dnf groupinstall -y 'Development Tools'
+
+        echo "CC=/opt/rh/gcc-toolset-10/root/bin/gcc" | tee -a $GITHUB_ENV
+        echo "CMAKE_C_COMPILER=/opt/rh/gcc-toolset-10/root/bin/gcc" | tee -a $GITHUB_ENV
+        echo "CXX=/opt/rh/gcc-toolset-10/root/bin/g++" | tee -a $GITHUB_ENV
+        echo "CMAKE_CXX_COMPILER=/opt/rh/gcc-toolset-10/root/bin/g++" | tee -a $GITHUB_ENV
+        echo "LD_LIBRARY_PATH=/opt/rh/gcc-toolset-10/root/usr/lib64:/opt/rh/gcc-toolset-10/root/usr/lib:/opt/rh/gcc-toolset-10/root/usr/lib64/dyninst" | tee -a $GITHUB_ENV
+        echo "/opt/rh/devtoolset-10/root/usr/bin" | tee -a $GITHUB_PATH
+
+        echo $GITHUB_ENV
+
+        echo $GITHUB_PATH
+
+        dnf install -y mono-complete
+
+        dnf clean all
+
+        # sccache
+        sccache_ver=`curl -sL -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" \
+          https://api.github.com/repos/mozilla/sccache/releases/latest | jq -r ".tag_name"`
+        
+        wget -nv https://github.com/mozilla/sccache/releases/download/$sccache_ver/sccache-$sccache_ver-x86_64-unknown-linux-musl.tar.gz \
+          -O /tmp/sccache.tar.gz
+        tar -xvf /tmp/sccache.tar.gz -C /tmp/
+        cp /tmp/sccache-*/sccache /usr/local/bin/
+        rm /tmp/sccache.tar.gz
+
+        which gcc
+        which g++

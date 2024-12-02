@@ -31,15 +31,9 @@ jobs:
     outputs:
       matrix: ${{ steps.get_tags.outputs.commits }}
 
-  cibw_docker_image:
-    uses: ./.github/workflows/cibw_docker_image.yml
-    permissions: {packages: write}
-    with:
-        cibuildwheel_ver: "2.12.1"
-        force_update: false
 
   benchmark_commits:
-    needs: [get_commits_to_benchmark, cibw_docker_image]  
+    needs: [get_commits_to_benchmark]  
     strategy:
       fail-fast: false
       matrix: 
@@ -49,7 +43,6 @@ jobs:
     secrets: inherit
     with:
       commit: ${{ matrix.commits }}
-      cibw_image_tag: ${{ needs.cibw_docker_image.outputs.tag }}
       run_all_benchmarks: ${{ inputs.run_all_benchmarks || false }}
       run_on_pr_head: ${{ github.event_name == 'pull_request_target' }}
 
@@ -106,172 +99,175 @@ jobs:
           python -m asv publish -v
           python -m asv gh-pages -v --rewrite
 
-  code_coverage:
-    needs: [cibw_docker_image]  
-    runs-on: "ubuntu-22.04"
-    container:
-        image: ${{needs.cibw_docker_image.outputs.tag}}
-    services:
-      mongodb:
-        image: mongo:4.4
-        ports:
-          - 27017:27017
-    env:
-      VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
-      VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
-      VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
-      VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
-      ARCTIC_CMAKE_PRESET: linux-debug
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-    steps:
-      - uses: actions/checkout@v3.3.0
-        with:
-          submodules: recursive
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }} # Note: This is dangerous if we run automatic CI on external PRs
+  # code_coverage:
+  #   runs-on: "ubuntu-22.04"
+  #   container:
+  #       image: quay.io/pypa/manylinux_2_28_x86_64:latest
+  #   services:
+  #     mongodb:
+  #       image: mongo:4.4
+  #       ports:
+  #         - 27017:27017
+  #   env:
+  #     VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
+  #     VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
+  #     VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
+  #     VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
+  #     ARCTIC_CMAKE_PRESET: linux-debug
+  #     ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  #   steps:
+  #     - uses: actions/checkout@v3.3.0
+  #       with:
+  #         submodules: recursive
+  #         ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }} # Note: This is dangerous if we run automatic CI on external PRs
 
-      - name: Get number of CPU cores
-        uses: SimenB/github-actions-cpu-cores@v1.1.0
-        id: cpu-cores
+  #     - name: Get number of CPU cores
+  #       uses: SimenB/github-actions-cpu-cores@v1.1.0
+  #       id: cpu-cores
 
-      - name: Extra envs
-        run: |
-          . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
-          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
-          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
-          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
-          echo "ARCTICDB_CODE_COVERAGE_BUILD=1" | tee -a $GITHUB_ENV
-        env:
-          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
+  #     - name: Install deps
+  #       uses: ./.github/actions/setup_deps
 
-      - name: Prepare C++ compilation env
-        run: . build_tooling/prep_cpp_build.sh 
+  #     - name: Extra envs
+  #       shell: bash -l {0}
+  #       run: |
+  #         . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
+  #         echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
+  #         VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
+  #         cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
+  #         echo "ARCTICDB_CODE_COVERAGE_BUILD=1" | tee -a $GITHUB_ENV
+  #       env:
+  #         CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
+
+  #     - name: Prepare C++ compilation env
+  #       run: . build_tooling/prep_cpp_build.sh 
       
-      - name: CMake compile
-        # We are pinning the version to 10.6 because >= 10.7, use node20 which is not supported in the container
-        uses: lukka/run-cmake@v10.6
-        with:
-          cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
-          configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
-          buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
-        env:
-          ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
-          python_impl_name: 'cp311'
+  #     - name: CMake compile
+  #       # We are pinning the version to 10.6 because >= 10.7, use node20 which is not supported in the container
+  #       uses: lukka/run-cmake@v10.6
+  #       with:
+  #         cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
+  #         configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
+  #         buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
+  #       env:
+  #         ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
+  #         python_impl_name: 'cp311'
         
-      - name: Run C++ Tests
-        shell: bash -l {0}
-        run: |
-          cd cpp/out/linux-debug-build/
-          ls arcticdb
-          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
-          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
-          ctest
+  #     - name: Run C++ Tests
+  #       shell: bash -l {0}
+  #       run: |
+  #         cd cpp/out/linux-debug-build/
+  #         ls arcticdb
+  #         make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
+  #         make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+  #         ctest
 
-      # We are chainging the python here because we want to use the default python to build (it is devel version)
-      # and this python for the rest of the testing
-      - name: Select Python (Linux)
-        run: echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
+  #     # We are chainging the python here because we want to use the default python to build (it is devel version)
+  #     # and this python for the rest of the testing
+  #     - name: Select Python (Linux)
+  #       run: echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
 
-      - name: Install local dependencies with pip
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          ARCTIC_CMAKE_PRESET=skip pip install -ve .[Testing]
+  #     - name: Install local dependencies with pip
+  #       shell: bash
+  #       run: |
+  #         python -m pip install --upgrade pip
+  #         ARCTIC_CMAKE_PRESET=skip pip install -ve .[Testing]
 
-      # - name: Test with pytest
-      #   uses: ./.github/actions/run_local_pytest
-      #   with:
-      #     build_type: debug
-      #     threads: 1
-      #     fast_tests_only: 0
-      #     other_params: '-m coverage run '
+  #     # - name: Test with pytest
+  #     #   uses: ./.github/actions/run_local_pytest
+  #     #   with:
+  #     #     build_type: debug
+  #     #     threads: 1
+  #     #     fast_tests_only: 0
+  #     #     other_params: '-m coverage run '
 
-      - name: Get python Coverage report
-        shell: bash -l {0}
-        run: |
-          cd python
-          python -m coverage report -m | tee output.txt
-          python -m coverage html
-          zip -r python_cov.zip htmlcov/
+  #     - name: Get python Coverage report
+  #       shell: bash -l {0}
+  #       run: |
+  #         cd python
+  #         python -m coverage report -m | tee output.txt
+  #         python -m coverage html
+  #         zip -r python_cov.zip htmlcov/
 
-          echo "PYTHON_COV_PERCENT=$(cat output.txt | grep 'TOTAL' | awk '{print $NF}' | tr -d '%')" >> $GITHUB_ENV
+  #         echo "PYTHON_COV_PERCENT=$(cat output.txt | grep 'TOTAL' | awk '{print $NF}' | tr -d '%')" >> $GITHUB_ENV
 
-      - name: Run Gcovr manually post-pytest
-        shell: bash -l {0}
-        run: |
-          cd cpp/out/linux-debug-build/
-          python -m pip install gcovr
-          mkdir coverage
-          python -m gcovr --txt --html-details coverage/index.html -e vcpkg_installed/ -e proto/ -e ../../third_party -e ../../arcticdb/util/test/ -r ../.. --exclude-throw-branches --exclude-unreachable-branches -u --exclude-function-lines | tee output.txt
-          zip -r coverage.zip coverage/
+  #     - name: Run Gcovr manually post-pytest
+  #       shell: bash -l {0}
+  #       run: |
+  #         cd cpp/out/linux-debug-build/
+  #         python -m pip install gcovr
+  #         mkdir coverage
+  #         python -m gcovr --txt --html-details coverage/index.html -e vcpkg_installed/ -e proto/ -e ../../third_party -e ../../arcticdb/util/test/ -r ../.. --exclude-throw-branches --exclude-unreachable-branches -u --exclude-function-lines | tee output.txt
+  #         zip -r coverage.zip coverage/
 
-          echo "CPP_COV_PERCENT=$(cat output.txt | grep 'TOTAL' | awk '{print $NF}' | tr -d '%')" >> $GITHUB_ENV
+  #         echo "CPP_COV_PERCENT=$(cat output.txt | grep 'TOTAL' | awk '{print $NF}' | tr -d '%')" >> $GITHUB_ENV
 
-      - name: Upload Coverage
-        uses: actions/upload-artifact@v3.1.3
-        with:
-          name: cpp-coverage-artifact
-          path: cpp/out/linux-debug-build/coverage.zip
+  #     - name: Upload Coverage
+  #       uses: actions/upload-artifact@v3.1.3
+  #       with:
+  #         name: cpp-coverage-artifact
+  #         path: cpp/out/linux-debug-build/coverage.zip
 
-      - name: Upload Python Coverage
-        uses: actions/upload-artifact@v3.1.3
-        with:
-          name: python-coverage-artifact
-          path: python/python_cov.zip
+  #     - name: Upload Python Coverage
+  #       uses: actions/upload-artifact@v3.1.3
+  #       with:
+  #         name: python-coverage-artifact
+  #         path: python/python_cov.zip
 
-      - name: Restore cached CPP Coverage Percentage from the previous run
-        id: cache-cov-restore
-        uses: actions/cache/restore@v3.3.2
-        with:
-          path: prev_coverage.txt
-          key: coverage
+  #     - name: Restore cached CPP Coverage Percentage from the previous run
+  #       id: cache-cov-restore
+  #       uses: actions/cache/restore@v3.3.2
+  #       with:
+  #         path: prev_coverage.txt
+  #         key: coverage
       
-      - name: Get and compare coverage if cache was restored
-        run: |
-          # if cache was restored, compare coverage
-          if [ -f coverage.txt ]; then
-            PREV_COVERAGE=$(cat prev_coverage.txt | cut -d' ' -f2)
-            echo "Previous coverage: $PREV_COVERAGE"
-            CURR_COVERAGE=${{env.CPP_COV_PERCENT}}
-            echo "CPP_COV_PREV_PERCENT=$PREV_COVERAGE" >> $GITHUB_ENV
-            echo "Current coverage: $CURR_COVERAGE"
-            if [ $CURR_COVERAGE -gt $PREV_COVERAGE ]; then
-              echo "Coverage increased"
-            elif [ $CURR_COVERAGE -lt $PREV_COVERAGE ]; then
-              echo "Coverage decreased"
-            else
-              echo "Coverage unchanged"
-            fi
-          fi
+  #     - name: Get and compare coverage if cache was restored
+  #       run: |
+  #         # if cache was restored, compare coverage
+  #         if [ -f coverage.txt ]; then
+  #           PREV_COVERAGE=$(cat prev_coverage.txt | cut -d' ' -f2)
+  #           echo "Previous coverage: $PREV_COVERAGE"
+  #           CURR_COVERAGE=${{env.CPP_COV_PERCENT}}
+  #           echo "CPP_COV_PREV_PERCENT=$PREV_COVERAGE" >> $GITHUB_ENV
+  #           echo "Current coverage: $CURR_COVERAGE"
+  #           if [ $CURR_COVERAGE -gt $PREV_COVERAGE ]; then
+  #             echo "Coverage increased"
+  #           elif [ $CURR_COVERAGE -lt $PREV_COVERAGE ]; then
+  #             echo "Coverage decreased"
+  #           else
+  #             echo "Coverage unchanged"
+  #           fi
+  #         fi
 
-      - name: Save CPP Coverage Percentage to file
-        run: |
-          echo "Coverage: ${{ env.CPP_COV_PERCENT }}" > current_coverage.txt
+  #     - name: Save CPP Coverage Percentage to file
+  #       run: |
+  #         echo "Coverage: ${{ env.CPP_COV_PERCENT }}" > current_coverage.txt
 
-      - name: Save the current CPP Coverage Percentage to the cache
-        id: cache-cov-save
-        uses: actions/cache/save@v3.3.2
-        with:
-          path: current_coverage.txt
-          key: coverage
+  #     - name: Save the current CPP Coverage Percentage to the cache
+  #       id: cache-cov-save
+  #       uses: actions/cache/save@v3.3.2
+  #       with:
+  #         path: current_coverage.txt
+  #         key: coverage
 
-      - name: Check percentage and send Slack notification
-        if: ${{ env.CPP_COV_PREV_PERCENT && env.CPP_COV_PERCENT && env.CPP_COV_PERCENT < env.CPP_COV_PREV_PERCENT }}
-        uses: slackapi/slack-github-action@v1.24.0
-        with:
-          # For posting a rich message using Block Kit
-          payload: |
-            {
-              "text": "The CPP Code Coverage has been reduced",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "The CPP Code Coverage from the current run(${{ env.CPP_COV_PERCENT }}%) is lower the previous one(${{ env.CPP_COV_PREV_PERCENT }}%)."
-                  }
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.ARCTICDB_DEV_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+  #     - name: Check percentage and send Slack notification
+  #       if: ${{ env.CPP_COV_PREV_PERCENT && env.CPP_COV_PERCENT && env.CPP_COV_PERCENT < env.CPP_COV_PREV_PERCENT }}
+  #       uses: slackapi/slack-github-action@v1.24.0
+  #       with:
+  #         # For posting a rich message using Block Kit
+  #         payload: |
+  #           {
+  #             "text": "The CPP Code Coverage has been reduced",
+  #             "blocks": [
+  #               {
+  #                 "type": "section",
+  #                 "text": {
+  #                   "type": "mrkdwn",
+  #                   "text": "The CPP Code Coverage from the current run(${{ env.CPP_COV_PERCENT }}%) is lower the previous one(${{ env.CPP_COV_PREV_PERCENT }}%)."
+  #                 }
+  #               }
+  #             ]
+  #           }
+  #       env:
+  #         SLACK_WEBHOOK_URL: ${{ secrets.ARCTICDB_DEV_WEBHOOK_URL }}
+  #         SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
