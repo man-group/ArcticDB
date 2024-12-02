@@ -368,6 +368,7 @@ set(arcticdb_srcs
         util/sparse_utils.hpp
         util/storage_lock.hpp
         util/reliable_storage_lock.hpp
+        util/reliable_storage_lock-inl.hpp
         util/string_utils.hpp
         util/thread_cached_int.hpp
         util/timeouts.hpp
@@ -515,8 +516,7 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/version_map_batch_methods.cpp
-        util/reliable_storage_lock.tpp)
+        version/version_map_batch_methods.cpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
