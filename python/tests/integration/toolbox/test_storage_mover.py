@@ -4,16 +4,44 @@ import pytest
 from typing import List, Tuple
 from hypothesis import given, strategies as st, settings
 from arcticdb.config import Defaults
-from arcticdb.version_store.helper import ArcticMemoryConfig, get_lib_cfg
+from arcticdb.version_store.helper import ArcticMemoryConfig, get_lib_cfg, add_lmdb_library_to_env
 from arcticdb.toolbox.library_tool import KeyType
 from arcticdb_ext.tools import StorageMover
 from pandas import DataFrame
 from pandas.testing import assert_frame_equal
 from arcticdb.util.test import sample_dataframe
+from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 
 from arcticdb.version_store.library import SymbolVersion as SymbolVersionsPair
 
 # configure_test_logger("DEBUG")
+
+def create_local_lmdb_cfg(lib_name=Defaults.LIB, db_dir=Defaults.DATA_DIR, description=None):
+    cfg = EnvironmentConfigsMap()
+    add_lmdb_library_to_env(
+        cfg,
+        lib_name=lib_name,
+        env_name=Defaults.ENV,
+        db_dir=db_dir,
+        description=description
+    )
+    return cfg
+
+@pytest.fixture
+def arcticc_native_local_lib_cfg_extra(tmpdir):
+    def create():
+        return create_local_lmdb_cfg(lib_name="local.extra", db_dir=str(tmpdir))
+
+    return create
+
+@pytest.fixture
+def arcticc_native_local_lib_cfg(tmpdir):
+    def create(lib_name):
+        return create_local_lmdb_cfg(lib_name=lib_name, db_dir=str(tmpdir))
+    return create
+
+def create_default_config():
+    return create_local_lmdb_cfg()
 
 def add_data(version_store):
     version_store.write("symbol", sample_dataframe())

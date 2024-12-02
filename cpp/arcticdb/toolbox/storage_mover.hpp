@@ -278,15 +278,17 @@ public:
         util::variant_match(src_cfg,
                             [](std::monostate){util::raise_rte("Invalid source library cfg");},
                             [&](const proto::storage::VersionStoreConfig& conf){
-                                MetricsConfig prometheus_config(
-                                    conf.prometheus_config().host(),
-                                    conf.prometheus_config().port(),
-                                    conf.prometheus_config().job_name(),
-                                    conf.prometheus_config().instance(),
-                                    conf.prometheus_config().prometheus_env(),
-                                    get_model_from_proto_config(conf.prometheus_config())
-                                );
-                                PrometheusInstance::instance()->configure(std::move(prometheus_config));
+                                if (conf.has_prometheus_config()) {
+                                    MetricsConfig prometheus_config(
+                                        conf.prometheus_config().host(),
+                                        conf.prometheus_config().port(),
+                                        conf.prometheus_config().job_name(),
+                                        conf.prometheus_config().instance(),
+                                        conf.prometheus_config().prometheus_env(),
+                                        get_model_from_proto_config(conf.prometheus_config())
+                                    );
+                                    PrometheusInstance::instance()->configure(prometheus_config);
+                                }
                                 source_symbol_list_ = conf.symbol_list();
         });
 
