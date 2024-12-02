@@ -173,11 +173,13 @@ private:
 
 // Collection of these objects is the input to batch_read_uncompressed
 struct RangesAndKey {
-    explicit RangesAndKey(const FrameSlice& frame_slice, entity::AtomKey&& key):
+    explicit RangesAndKey(const FrameSlice& frame_slice, entity::AtomKey&& key, bool is_incomplete):
     row_range_(frame_slice.rows()),
     col_range_(frame_slice.columns()),
-    key_(std::move(key)) {
+    key_(std::move(key)),
+    is_incomplete_(is_incomplete) {
     }
+
     explicit RangesAndKey(const RowRange& row_range, const ColRange& col_range, const entity::AtomKey& key):
             row_range_(row_range),
             col_range_(col_range),
@@ -203,6 +205,10 @@ struct RangesAndKey {
         return key_.end_time() - 1;
     }
 
+    bool is_incomplete() const {
+        return is_incomplete_;
+    }
+
     friend bool operator==(const RangesAndKey& left, const RangesAndKey& right) {
         return left.row_range_ == right.row_range_ && left.col_range_ == right.col_range_ && left.key_ == right.key_;
     }
@@ -214,6 +220,7 @@ struct RangesAndKey {
     RowRange row_range_;
     ColRange col_range_;
     entity::AtomKey key_;
+    bool is_incomplete_{false};
 };
 
 /*

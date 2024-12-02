@@ -29,6 +29,18 @@ def get_append_keys(lib, sym):
     return keys
 
 
+def get_data_keys(lib, sym):
+    lib_tool = lib.library_tool()
+    keys = lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, sym)
+    return keys
+
+
+def get_index_keys(lib, sym):
+    lib_tool = lib.library_tool()
+    keys = lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, sym)
+    return keys
+
+
 def test_staging_doesnt_write_append_ref(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     lib_tool = lib.library_tool()
@@ -603,6 +615,33 @@ def test_parallel_write_dynamic_schema_type_changing(lmdb_version_store_tiny_seg
     expected = pd.concat([df_0, df_1])
     received = lib.read(sym).data
     assert_frame_equal(expected, received)
+    assert len(get_data_keys(lib, sym)) == rows_per_incomplete
+    assert len(get_index_keys(lib, sym)) == 1
+
+
+@pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+@pytest.mark.parametrize("symbol_already_exists", [True, False])
+def test_parallel_write_static_schema_type_changing_cleans_up_data_keys(lmdb_version_store_tiny_segment, delete_staged_data_on_failure, symbol_already_exists):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_parallel_write_static_schema_type_changing"
+    rows_per_incomplete = 2  # tiny segment store uses 2 rows per segment
+    if symbol_already_exists:
+        df_0 = pd.DataFrame({"col": np.arange(rows_per_incomplete, dtype=np.uint8)}, index=pd.date_range("2024-01-01", periods=rows_per_incomplete))
+        lib.write(sym, df_0)
+
+    df_1 = pd.DataFrame({"col": np.arange(rows_per_incomplete, dtype=np.uint8)}, index=pd.date_range("2024-01-03", periods=rows_per_incomplete))
+    df_2 = pd.DataFrame({"col": np.arange(rows_per_incomplete, 2 * rows_per_incomplete, dtype=np.uint16)}, index=pd.date_range("2024-01-05", periods=rows_per_incomplete))
+    lib.write(sym, df_1, parallel=True)
+    lib.write(sym, df_2, parallel=True)
+    with pytest.raises(SchemaException):
+        lib.compact_incomplete(sym, False, False, delete_staged_data_on_failure=delete_staged_data_on_failure)
+    expected_key_count = 0 if delete_staged_data_on_failure else 2
+    assert len(get_append_keys(lib, sym)) == expected_key_count
+
+    expected_key_count = 1 if symbol_already_exists else 0
+    assert len(get_data_keys(lib, sym)) == expected_key_count
+    assert len(get_index_keys(lib, sym)) == expected_key_count
+
 
 @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
 def test_parallel_write_static_schema_missing_column(lmdb_version_store_tiny_segment, delete_staged_data_on_failure):
