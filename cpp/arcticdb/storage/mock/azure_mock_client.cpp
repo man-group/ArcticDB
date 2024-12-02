@@ -9,10 +9,10 @@
 #include <azure/core.hpp>
 #include <azure/storage/blobs.hpp>
 
-#include <arcticdb/storage/storage_utils.hpp>
-#include <arcticdb/storage/azure/azure_client_wrapper.hpp>
-#include <arcticdb/storage/azure/azure_mock_client.hpp>
-#include <arcticdb/storage/object_store_utils.hpp>
+#include "arcticdb/storage/storage_utils.hpp"
+#include "arcticdb/storage/azure/azure_client_interface.hpp"
+#include "azure_mock_client.hpp"
+#include "arcticdb/storage/object_store_utils.hpp"
 
 namespace arcticdb::storage::azure {
 

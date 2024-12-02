@@ -17,6 +17,7 @@ namespace arcticdb {
 inline ankerl::unordered_dense::set<entity::position_t> unique_values_for_string_column(const Column &column) {
     ankerl::unordered_dense::set<entity::position_t> output_set;
     // Guessing that unique values is a third of the column length
+    // TODO would be useful to have actual unique count here from stats
     static auto map_reserve_ratio = ConfigsMap::instance()->get_int("UniqueColumns.AllocationRatio", 3);
     output_set.reserve(column.row_count() / map_reserve_ratio);
 
@@ -24,7 +25,7 @@ inline ankerl::unordered_dense::set<entity::position_t> unique_values_for_string
         using type_info = ScalarTypeInfo<decltype(col_desc_tag)>;
         if constexpr(is_sequence_type(type_info::data_type)) {
             Column::for_each<typename type_info::TDT>(column, [&output_set](auto value) {
-                output_set.insert(value);
+                output_set.emplace(value);
             });
         } else {
             util::raise_rte("Column {} is not a string type column");

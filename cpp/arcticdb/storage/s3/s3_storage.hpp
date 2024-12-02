@@ -14,7 +14,7 @@
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
-#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/s3/s3_client_interface.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
@@ -28,27 +28,40 @@ namespace arcticdb::storage::s3 {
 
 const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
 
-class S3Storage final : public Storage {
+class S3Storage final : public Storage, AsyncStorage {
   public:
     using Config = arcticdb::proto::s3_storage::Config;
 
     S3Storage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
-    /**
-     * Full object path in S3 bucket.
-     */
     std::string get_key_path(const VariantKey& key) const;
 
     std::string name() const final;
 
+    bool has_async_api() const final {
+        return true;
+    }
+
+    AsyncStorage* async_api() {
+        return dynamic_cast<AsyncStorage*>(this);
+    }
+
   private:
-    void do_write(Composite<KeySegmentPair>&& kvs) final;
+    void do_write(KeySegmentPair&& key_seg) final;
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
+    void do_update(KeySegmentPair&& key_seg, UpdateOpts opts) final;
 
-    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
+    void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
+    KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts opts) final;
+
+    folly::Future<folly::Unit> do_async_read(entity::VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
+
+    folly::Future<KeySegmentPair> do_async_read(entity::VariantKey&& variant_key, ReadKeyOpts opts) final;
+
+    void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
+
+    void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) final;
 
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
 
@@ -69,7 +82,7 @@ class S3Storage final : public Storage {
     const std::string& root_folder() const { return root_folder_; }
 
     std::shared_ptr<S3ApiInstance> s3_api_;
-    std::unique_ptr<S3ClientWrapper> s3_client_;
+    std::unique_ptr<S3ClientInterface> s3_client_;
     std::string root_folder_;
     std::string bucket_name_;
     std::string region_;
@@ -232,11 +245,12 @@ auto get_s3_config(const ConfigType& conf) {
         client_configuration.caFile = conf.ca_cert_path();
         client_configuration.caPath = conf.ca_cert_dir();
     }
-    client_configuration.maxConnections = conf.max_connections() == 0 ?
-            ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", 16) :
-            conf.max_connections();
+    //client_configuration.maxConnections = conf.max_connections() == 0 ?
+    //        ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", 16) :
+    //        conf.max_connections();
 
-
+    client_configuration.maxConnections = 10000;
+    log::storage().info("Setting S3 max connections");
     client_configuration.connectTimeoutMs = ConfigsMap::instance()->get_int("S3Storage.ConnectTimeoutMs",
                                                 conf.connect_timeout() == 0 ? 30000 : conf.connect_timeout());
     client_configuration.httpRequestTimeoutMs = ConfigsMap::instance()->get_int("S3Storage.HttpRequestTimeoutMs", 0);

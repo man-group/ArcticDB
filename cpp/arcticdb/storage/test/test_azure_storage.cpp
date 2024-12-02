@@ -10,7 +10,7 @@
 
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/azure/azure_storage.hpp>
-#include <arcticdb/storage/azure/azure_mock_client.hpp>
+#include "arcticdb/storage/mock/azure_mock_client.hpp"
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/storage/test/common.hpp>
 

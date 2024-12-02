@@ -8,19 +8,21 @@
 #pragma once
 
 #include <azure/core/http/curl_transport.hpp>
-#include <azure/core/http/http_status_code.hpp>
 #include <azure/core.hpp>
 #include <azure/storage/blobs.hpp>
 
 #include <arcticdb/storage/storage_utils.hpp>
-#include <arcticdb/storage/azure/azure_client_wrapper.hpp>
-#include <arcticdb/storage/storage_mock_client.hpp>
+#include <arcticdb/storage/azure/azure_client_interface.hpp>
 
 namespace arcticdb::storage::azure {
+class RealAzureClient : public AzureClientWrapper {
+private:
+    Azure::Storage::Blobs::BlobContainerClient container_client;
 
-class MockAzureClient : public AzureClientWrapper {
-
+    static Azure::Storage::Blobs::BlobClientOptions get_client_options(const Config &conf);
 public:
+
+    explicit RealAzureClient(const Config &conf);
 
     void write_blob(
             const std::string& blob_name,
@@ -40,16 +42,5 @@ public:
     bool blob_exists(const std::string& blob_name) override;
 
     Azure::Storage::Blobs::ListBlobsPagedResponse list_blobs(const std::string& prefix) override;
-
-    static std::string get_failure_trigger(
-            const std::string& blob_name,
-            StorageOperation operation_to_fail,
-            const std::string& error_code,
-            Azure::Core::Http::HttpStatusCode error_to_fail_with);
-
-private:
-    // Stores a mapping from blob_name to a Segment.
-    std::map<std::string, Segment> azure_contents;
 };
-
 }

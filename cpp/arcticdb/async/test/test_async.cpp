@@ -23,9 +23,9 @@
 
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
-#include <arcticdb/storage/s3/s3_mock_client.hpp>
+#include "arcticdb/storage/s3/mock/s3_mock_client.hpp"
 #include <arcticdb/storage/s3/detail-inl.hpp>
-#include <arcticdb/storage/storage_mock_client.hpp>
+#include "arcticdb/storage/mock/storage_mock_client.hpp"
 #include <aws/core/Aws.h>
 
 using namespace arcticdb;

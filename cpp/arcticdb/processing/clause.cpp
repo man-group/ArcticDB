@@ -100,6 +100,7 @@ std::vector<EntityId> PassthroughClause::process(std::vector<EntityId>&& entity_
 }
 
 std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) const {
+    ARCTICDB_SAMPLE(FilterClause, 0)
     if (entity_ids.empty()) {
         return {};
     }
@@ -232,6 +233,7 @@ std::vector<std::vector<EntityId>> AggregationClause::structure_for_processing(s
 }
 
 std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_ids) const {
+    ARCTICDB_SAMPLE(AggregationClause, 0)
     if (entity_ids.empty()) {
         return {};
     }
@@ -552,6 +554,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
 
 template<ResampleBoundary closed_boundary>
 std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<EntityId>&& entity_ids) const {
+    ARCTICDB_SAMPLE(ResampleClause, 0)
     if (entity_ids.empty()) {
         return {};
     }
