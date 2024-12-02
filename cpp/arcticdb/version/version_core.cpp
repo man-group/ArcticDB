@@ -694,6 +694,7 @@ std::vector<folly::Future<pipelines::SegmentAndSlice>> generate_segment_and_slic
     std::vector<folly::Future<pipelines::SegmentAndSlice>> res;
     auto ranges_copy = all_ranges;
     auto segment_and_slice_futures = store->batch_read_uncompressed(std::move(ranges_copy), columns_to_decode(pipeline_context));
+    auto pipeline_desc = pipeline_context->descriptor();
 
     for (size_t i = 0; i < segment_and_slice_futures.size(); ++i) {
         auto&& fut = segment_and_slice_futures.at(i);
@@ -702,10 +703,9 @@ std::vector<folly::Future<pipelines::SegmentAndSlice>> generate_segment_and_slic
             res.push_back(
                 std::move(fut)
                     .via(&async::cpu_executor())
-                    .thenValue([&pipeline_context, processing_config](SegmentAndSlice &&read_result) {
+                    .thenValue([pipeline_desc, processing_config](SegmentAndSlice &&read_result) {
                         if (!processing_config.dynamic_schema_) {
-                            auto check = check_schema_matches_incomplete(read_result.segment_in_memory_.descriptor(),
-                                                                         *pipeline_context);
+                            auto check = check_schema_matches_incomplete(read_result.segment_in_memory_.descriptor(), pipeline_desc);
                             if (std::holds_alternative<Error>(check)) {
                                 std::get<Error>(check).throw_error();
                             }
@@ -744,15 +744,15 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
         clause->set_component_manager(component_manager);
     }
 
-    auto all_ranges = generate_ranges_and_keys(*pipeline_context);
+    auto ranges_and_keys = generate_ranges_and_keys(*pipeline_context);
 
     // Each element of the vector corresponds to one processing unit containing the list of indexes in ranges_and_keys required for that processing unit
     // i.e. if the first processing unit needs ranges_and_keys[0] and ranges_and_keys[1], and the second needs ranges_and_keys[2] and ranges_and_keys[3]
     // then the structure will be {{0, 1}, {2, 3}}
-    std::vector<std::vector<size_t>> processing_unit_indexes = read_query->clauses_[0]->structure_for_processing(all_ranges);
+    std::vector<std::vector<size_t>> processing_unit_indexes = read_query->clauses_[0]->structure_for_processing(ranges_and_keys);
 
     // Start reading as early as possible
-    auto segment_and_slice_futures = generate_segment_and_slice_futures(store, pipeline_context, processing_config, all_ranges);
+    auto segment_and_slice_futures = generate_segment_and_slice_futures(store, pipeline_context, processing_config, ranges_and_keys);
 
     return schedule_clause_processing(component_manager,
                                       std::move(segment_and_slice_futures),
@@ -1762,7 +1762,7 @@ VersionedItem defragment_symbol_data_impl(
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
 
-        StaticSchemaCompactionChecks checks = [](const StreamDescriptor&, const pipelines::PipelineContext&) {
+        StaticSchemaCompactionChecks checks = [](const StreamDescriptor&, const StreamDescriptor&) {
             // No defrag specific checks yet
             return std::monostate{};
         };
@@ -1896,15 +1896,15 @@ bool is_segment_unsorted(const SegmentInMemory& segment) {
     return segment.descriptor().sorted() == SortedValue::DESCENDING || segment.descriptor().sorted() == SortedValue::UNSORTED;
 }
 
-CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const pipelines::PipelineContext& pipeline_context) {
-    if (!columns_match(stream_descriptor_incomplete, pipeline_context.descriptor())) {
+CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const StreamDescriptor& pipeline_desc) {
+    if (!columns_match(stream_descriptor_incomplete, pipeline_desc)) {
         return Error{
             throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
             fmt::format("{} When static schema is used all staged segments must have the same column and column types."
                         "{} is different than {}",
                         error_code_data<ErrorCode::E_DESCRIPTOR_MISMATCH>.name_,
                         stream_descriptor_incomplete,
-                        pipeline_context.descriptor())
+                        pipeline_desc)
         };
     }
     return std::monostate{};

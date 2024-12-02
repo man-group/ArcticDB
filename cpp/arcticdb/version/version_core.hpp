@@ -222,7 +222,7 @@ struct Error {
 };
 
 using CheckOutcome = std::variant<Error, std::monostate>;
-using StaticSchemaCompactionChecks = folly::Function<CheckOutcome(const StreamDescriptor&, const pipelines::PipelineContext&)>;
+using StaticSchemaCompactionChecks = folly::Function<CheckOutcome(const StreamDescriptor&, const StreamDescriptor&)>;
 using CompactionWrittenKeys = std::vector<VariantKey>;
 using CompactionResult = std::variant<CompactionWrittenKeys, Error>;
 
@@ -284,7 +284,7 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
         }
 
         if constexpr (std::is_same_v<SchemaType, FixedSchema>) {
-            CheckOutcome outcome = checks(segment.descriptor(), *pipeline_context);
+            CheckOutcome outcome = checks(segment.descriptor(), pipeline_context->descriptor());
             if (std::holds_alternative<Error>(outcome)) {
                 auto written_keys = folly::collect(write_futures).get();
                 remove_written_keys(store.get(), std::move(written_keys));
@@ -304,7 +304,7 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
     return folly::collect(std::move(write_futures)).get();
 }
 
-CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const pipelines::PipelineContext& pipeline_context);
+CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const StreamDescriptor& pipeline_context);
 
 }
 
