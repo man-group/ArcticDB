@@ -39,7 +39,7 @@ public:
             const std::string& s3_object_name,
             Segment&& segment,
             const std::string& bucket_name,
-            bool if_none_match = false) override;
+            PutHeader header = PutHeader::NONE) override;
 
     S3Result<DeleteOutput> delete_objects(
             const std::vector<std::string>& s3_object_names,
