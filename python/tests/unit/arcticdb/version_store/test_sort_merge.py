@@ -23,7 +23,6 @@ def assert_delete_staged_data_clears_append_keys(lib, sym):
     lib.delete_staged_data(sym)
     assert len(get_append_keys(lib, sym)) == 0
 
-
 def test_merge_single_column(lmdb_library_static_dynamic):
     lib = lmdb_library_static_dynamic
 
