@@ -84,6 +84,9 @@ if(WIN32)
     endif()
 else()
     if(${ARCTICDB_USING_CONDA})
+        # Required to allow protobuf to aquire the correct version of absl:
+        # https://github.com/protocolbuffers/protobuf/issues/12292#issuecomment-1529680040
+        find_package(protobuf REQUIRED CONFIG)
         # Required to be able to include headers from glog since glog 0.7
         # See: https://github.com/google/glog/pull/1030
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra -DGLOG_USE_GLOG_EXPORT")
