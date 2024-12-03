@@ -13,7 +13,6 @@
 #include <arcticdb/stream/merge.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
-#include <arcticdb/version/schema_checks.hpp>
 
 namespace arcticdb {
 
@@ -98,6 +97,62 @@ void merge_frames_for_keys(
             target_id, idx, std::move(segmentation_policy), index_keys, query, store, std::move(func));
     }, index, density_policy);
 
+}
+
+template <typename IndexType, typename SchemaType, typename SegmentationPolicy, typename DensityPolicy, typename IteratorType>
+void do_compact(
+    IteratorType target_start,
+    IteratorType target_end,
+    const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
+    std::vector<folly::Future<VariantKey>>& fut_vec,
+    std::vector<pipelines::FrameSlice>& slices,
+    const std::shared_ptr<Store>& store,
+    bool convert_int_to_float,
+    std::optional<size_t> segment_size,
+    bool validate_index){
+        auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
+        stream::SegmentAggregator<IndexType, SchemaType, SegmentationPolicy, DensityPolicy>
+        aggregator{
+            [&slices](pipelines::FrameSlice &&slice) {
+                slices.emplace_back(std::move(slice));
+            },
+            SchemaType{pipeline_context->descriptor(), index},
+            [&fut_vec, &store, &pipeline_context](SegmentInMemory &&segment) {
+                auto local_index_start = IndexType::start_value_for_segment(segment);
+                auto local_index_end = pipelines::end_index_generator(IndexType::end_value_for_segment(segment));
+                stream::StreamSink::PartialKey
+                pk{KeyType::TABLE_DATA, pipeline_context->version_id_, pipeline_context->stream_id_, local_index_start, local_index_end};
+                fut_vec.emplace_back(store->write(pk, std::move(segment)));
+            },
+            segment_size.has_value() ? SegmentationPolicy{*segment_size} : SegmentationPolicy{}
+        };
+
+        for(auto it = target_start; it != target_end; ++it) {
+            auto sk = [&it](){
+                if constexpr(std::is_same_v<IteratorType, pipelines::PipelineContext::iterator>)
+                    return it->slice_and_key();
+                else
+                    return *it;
+            }();
+            if (sk.slice().rows().diff() == 0) {
+                continue;
+            }
+
+            const auto& segment = sk.segment(store);
+            sorting::check<ErrorCode::E_UNSORTED_DATA>(
+                !validate_index || segment.descriptor().sorted() == SortedValue::ASCENDING ||
+                    segment.descriptor().sorted() == SortedValue::UNKNOWN,
+                "Cannot compact unordered segment."
+            );
+
+            aggregator.add_segment(
+                std::move(sk.segment(store)),
+                sk.slice(),
+                convert_int_to_float
+            );
+            sk.unset_segment();
+        }
+        aggregator.commit();
 }
 
 [[nodiscard]] inline ReadOptions defragmentation_read_options_generator(const WriteOptions &options){
