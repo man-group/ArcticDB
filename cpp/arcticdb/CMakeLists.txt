@@ -32,7 +32,9 @@ if(NOT WIN32 AND ${SSL_LINK})
     find_package(Kerberos REQUIRED)
 endif()
 
-find_package(Protobuf REQUIRED)
+# Required to allow protobuf to get the correct version of absl:
+# https://github.com/protocolbuffers/protobuf/issues/12292#issuecomment-1529680040
+find_package(protobuf REQUIRED CONFIG)
 find_package(mongocxx REQUIRED)
 find_package(bsoncxx REQUIRED)
 find_package(xxHash REQUIRED)
