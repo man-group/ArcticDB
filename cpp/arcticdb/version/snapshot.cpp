@@ -89,7 +89,7 @@ void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void
     std::unordered_set<SnapshotId> seen;
 
     store->iterate_type(KeyType::SNAPSHOT_REF, [&snap_variant_keys, &seen](VariantKey &&vk) {
-        util::check(std::holds_alternative<RefKey>(vk), "Expected shapshot ref to be reference type, got {}", variant_key_view(vk));
+        util::check(std::holds_alternative<RefKey>(vk), "Expected snapshot ref to be reference type, got {}", variant_key_view(vk));
         auto ref_key = std::get<RefKey>(std::move(vk));
         seen.insert(ref_key.id());
         snap_variant_keys.emplace_back(ref_key);
