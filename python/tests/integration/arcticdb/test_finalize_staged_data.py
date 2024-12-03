@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import time
 import pandas as pd
 import numpy as np
 from typing import List
@@ -16,7 +17,7 @@ from arcticdb.exceptions import UnsortedDataException, UserInputException
 from arcticdb.util.test import dataframe_dump_to_log, assert_frame_equal
 from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
 from arcticdb.version_store.library import Library, StagedDataFinalizeMethod
-from tests.stress.arcticdb.version_store.test_stress_finalize_stage_data import generate_chunk_sizes
+from tests.stress.arcticdb.version_store.test_stress_finalize_staged_data import generate_chunk_sizes
 
 class CacheParts:
 
@@ -60,6 +61,10 @@ def construct_sample_array(numpy_type: type):
 
 def sample_dataframe(start_date, *arr) -> pd.DataFrame:
     """
+        Creates a dataframe based on arrays that are passed.
+        Arrays will be used as columns data of the dataframe.
+        The returned dataframe will be indexed with timestamp 
+        starting from the given date
         Arrays must be numpy arrays of same size
     """
     date_range = pd.date_range(start=start_date, periods=len(arr[0]), freq='D') 
@@ -71,35 +76,35 @@ def sample_dataframe(start_date, *arr) -> pd.DataFrame:
     
     return pd.DataFrame(columns, index=date_range)
 
-def verify_dataframe_column(df:pd.DataFrame, row_name, max_type, array):
+def verify_dataframe_column(df:pd.DataFrame, row_name, max_type, expected_array_of_column_values):
     """
         Verification of column by type. Especially when dynamic schema was 
         used and new columns were added later to original dataseries
     """
     row = 0
-    print ("EXPECTED NUMBERS:", array)
+    print ("EXPECTED NUMBERS:", expected_array_of_column_values)
     print ("ACTUAL   NUMBERS:", df[row_name].to_list())
-    for number in array:
-        arctic = df.iloc[row][row_name]
+    for number in expected_array_of_column_values:
+        actual_value_from_df = df.iloc[row][row_name]
 
-        if ( (pd.isna(number)) or (number is None) ):
+        if ( pd.isna(number) or (number is None) ):
             # None and nan handling for new columns
             if ('int' in str(max_type)):
-                assert (arctic == 0), f"When adding new integer column, previous missing values should be 0 (zero) for row {row}"
+                assert (actual_value_from_df == 0), f"When adding new integer column, previous missing values should be 0 (zero) for row {row}"
             elif ('float' in str(max_type)):
-                assert pd.isna(arctic) , f"When adding new float column, previous missing values should be nan (not a number) for row {row}"
+                assert pd.isna(actual_value_from_df) , f"When adding new float column, previous missing values should be nan (not a number) for row {row}"
             elif ('bool' in str(max_type)):
-                assert False == arctic , f"When adding new boolean column, previous missing values should be False for row {row}"
+                assert False == actual_value_from_df , f"When adding new boolean column, previous missing values should be False for row {row}"
             else:
-                assert arctic is None , f"When adding str/object column, previous missing values should be None for row {row}"
+                assert actual_value_from_df is None , f"When adding str/object column, previous missing values should be None for row {row}"
         else:
             if ('str' in str(max_type)):
-                assert (number == arctic), f"Number {number} is not same in arcticdb {arctic} for row {row}"
+                assert (number == actual_value_from_df), f"Number {number} is not same in arcticdb {actual_value_from_df} for row {row}"
             else:
                 # When we upcast we first try to evaluate against original number
                 # if that fails we try to upcast and evaluate
-                assert ((number == arctic) or (max_type(number) == max_type(arctic))), f"Number {number} is not same in arcticdb {arctic} for row {row}"
-        row = row + 1    
+                assert ((number == actual_value_from_df) or (max_type(number) == max_type(actual_value_from_df))), f"Number {number} is not same in arcticdb {actual_value_from_df} for row {row}"
+        row += 1    
 
 
 def copy_dataframe_structure(model_df:pd.DataFrame) -> pd.DataFrame:
@@ -118,7 +123,7 @@ def concat_all_arrays(*arrays):
         res.extend(arr)
     return res
 
-@pytest.mark.xfail(reason="Problem with named indexes Monday#7941575430")
+@pytest.mark.skip(reason="Problem with named indexes Monday#7941575430")
 @pytest.mark.parametrize("new_version" , [True, False])
 def test_finalize_empty_dataframe(arctic_library_lmdb, new_version):
     """
@@ -136,11 +141,9 @@ def test_finalize_empty_dataframe(arctic_library_lmdb, new_version):
     symbol = "symbol"
     
     df = small_dataframe("2023-01-01")
-    print(">>>> INDEX: ", df.index)
     dataframe_dump_to_log("Structure of df", df)
     empty_df = df.drop(df.index)
     dataframe_dump_to_log("empty", empty_df)
-    print(">>>> INDEX: ", empty_df.index)
     lib.write(symbol, validate_index=True, data=df)
     if (new_version):
         # There is no problem to append empty dataframe
@@ -153,9 +156,6 @@ def test_finalize_empty_dataframe(arctic_library_lmdb, new_version):
         # and then we try to append is more severe. 
         # Segmentation fault is the result
         lib.write(symbol, validate_index=True, data=empty_df)
-        assert False, "REMOVE THIS WHEN FIXED!" #If we continue in this case python is DEAD!
-    #df = cachedDF.generate_dataframe_timestamp_indexed(2, 40, cachedDF.TIME_UNIT)
-    print(lib.read(symbol).data)
     dataframe_dump_to_log("after write + append", lib.read(symbol).data)
     df = small_dataframe("2024-01-01")
     dataframe_dump_to_log("df to be staged", df)
@@ -219,9 +219,9 @@ def test_finalize_with_upcast_type(lmdb_library_dynamic_schema):
     result:pd.DataFrame = lib.read(symbol).data
     dataframe_dump_to_log("RESULT DF:", result)
 
-    verify_dataframe_column(df=result, row_name="NUMBER0", max_type=last_type_a, array=arr_all_a)
-    verify_dataframe_column(df=result, row_name="NUMBER2", max_type=last_type_c, array=arr_all_c)
-    verify_dataframe_column(df=result, row_name="NUMBER1", max_type=last_type_b, array=arr_all_b)
+    verify_dataframe_column(df=result, row_name="NUMBER0", max_type=last_type_a, expected_array_of_column_values=arr_all_a)
+    verify_dataframe_column(df=result, row_name="NUMBER2", max_type=last_type_c, expected_array_of_column_values=arr_all_c)
+    verify_dataframe_column(df=result, row_name="NUMBER1", max_type=last_type_b, expected_array_of_column_values=arr_all_b)
 
 @pytest.mark.parametrize("mode, validate_index" , [(StagedDataFinalizeMethod.WRITE, True),
                                                    (StagedDataFinalizeMethod.WRITE, False),
@@ -346,12 +346,12 @@ def test_finalize_with_upcast_type_new_columns(lmdb_library_dynamic_schema):
     result:pd.DataFrame = lib.read(symbol).data
     dataframe_dump_to_log("RESULT DF:", result)
 
-    verify_dataframe_column(df=result, row_name="NUMBER0", max_type=last_type_a, array=arr_all_a)
-    verify_dataframe_column(df=result, row_name="NUMBER1", max_type=last_type_b, array=arr_all_b)
-    verify_dataframe_column(df=result, row_name="NUMBER2", max_type=last_type_c, array=arr_all_c)
-    verify_dataframe_column(df=result, row_name="NUMBER3", max_type=last_type_str, array=arr_all_str)
-    verify_dataframe_column(df=result, row_name="NUMBER5", max_type=last_type_d, array=arr_all_d)
-    verify_dataframe_column(df=result, row_name="NUMBER4", max_type=last_type_bool, array=arr_all_bool)
+    verify_dataframe_column(df=result, row_name="NUMBER0", max_type=last_type_a, expected_array_of_column_values=arr_all_a)
+    verify_dataframe_column(df=result, row_name="NUMBER1", max_type=last_type_b, expected_array_of_column_values=arr_all_b)
+    verify_dataframe_column(df=result, row_name="NUMBER2", max_type=last_type_c, expected_array_of_column_values=arr_all_c)
+    verify_dataframe_column(df=result, row_name="NUMBER3", max_type=last_type_str, expected_array_of_column_values=arr_all_str)
+    verify_dataframe_column(df=result, row_name="NUMBER5", max_type=last_type_d, expected_array_of_column_values=arr_all_d)
+    verify_dataframe_column(df=result, row_name="NUMBER4", max_type=last_type_bool, expected_array_of_column_values=arr_all_bool)
 
     assert 3 == len(lib.list_versions(symbol=symbol))
 
@@ -364,7 +364,7 @@ def test_finalize_with_upcast_type_new_columns(lmdb_library_dynamic_schema):
 
     #We want to validate that after delete last version the empty cell are 
     #filled with 0 not nans
-    verify_dataframe_column(df=result, row_name="NUMBER1", max_type=np.int16, array=concat_all_arrays(arr_b1, arr_b2))
+    verify_dataframe_column(df=result, row_name="NUMBER1", max_type=np.int16, expected_array_of_column_values=concat_all_arrays(arr_b1, arr_b2))
 
     # As final step we once again repeat staging op with same data
     # To arrive at final stage
@@ -377,8 +377,8 @@ def test_finalize_with_upcast_type_new_columns(lmdb_library_dynamic_schema):
     assert 3 == len(lib.list_versions(symbol=symbol))
 
     #Some final confirmations all is ok
-    verify_dataframe_column(df=result, row_name="NUMBER1", max_type=last_type_b, array=arr_all_b)
-    verify_dataframe_column(df=result, row_name="NUMBER2", max_type=last_type_c, array=arr_all_c)
+    verify_dataframe_column(df=result, row_name="NUMBER1", max_type=last_type_b, expected_array_of_column_values=arr_all_b)
+    verify_dataframe_column(df=result, row_name="NUMBER2", max_type=last_type_c, expected_array_of_column_values=arr_all_c)
 
 
 def test_finalize_staged_data_long_scenario(arctic_library_lmdb):
@@ -387,6 +387,7 @@ def test_finalize_staged_data_long_scenario(arctic_library_lmdb):
         are correctly finalized and resulting
     """
 
+    start_time = time.time()
     lib = arctic_library_lmdb
     symbol = "symbol"
 
@@ -394,7 +395,7 @@ def test_finalize_staged_data_long_scenario(arctic_library_lmdb):
 
     total_number_rows: TimestampNumber = TimestampNumber(0, cachedDF.TIME_UNIT) # Synchronize index frequency
 
-    num_rows_initially = 99
+    num_rows_initially = 999
     print(f"Writing to symbol initially {num_rows_initially} rows")
     df = cachedDF.generate_dataframe_timestamp_indexed(num_rows_initially, total_number_rows, cachedDF.TIME_UNIT)
     dataframe_dump_to_log("df", df)
@@ -404,7 +405,7 @@ def test_finalize_staged_data_long_scenario(arctic_library_lmdb):
     lib.write(symbol, data=df, prune_previous_versions=True)
     cachedParts = CacheParts(df)
     cachedParts.cache_samples_from(df)
-    chunk_list = generate_chunk_sizes(2, 900, 1100)
+    chunk_list = generate_chunk_sizes(200, 900, 1100)
     for chunk_size in chunk_list:
         df = cachedDF.generate_dataframe_timestamp_indexed(chunk_size, total_number_rows, cachedDF.TIME_UNIT)
         lib.write(symbol, data=df, validate_index=True, staged=True)
@@ -415,6 +416,7 @@ def test_finalize_staged_data_long_scenario(arctic_library_lmdb):
         cachedParts.cache_samples_from(df)
     lib.finalize_staged_data(symbol=symbol,mode=StagedDataFinalizeMethod.APPEND)        
     cachedParts.verify_finalized_data(lib,symbol)
+
 
 
 

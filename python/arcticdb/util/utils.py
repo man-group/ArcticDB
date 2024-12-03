@@ -2,9 +2,6 @@
 Copyright 2024 Man Group Operations Limited
 Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
-from arcticdb import Arctic
-from tests.stress.arcticdb.version_store.test_stress_finalize_stage_data import CachedDFGenerator, stage_chunks
-from arcticdb.util.utils import TimestampNumber
 """
 
 from typing import List
@@ -17,10 +14,12 @@ from arcticdb.version_store.library import Library
 
 class  TimestampNumber:
     """
-        Represents the timestamp as a typed number (can be seconds, minutes, hours),
-        Thus allowing simple arithmetic with numbers - adding and subtracting
+        Represents the timestamp as a typed number (can be seconds, minutes, hours).
+        This allows considering timestamp index of type "s" or "m" or "h" as a autoincrement
+        integer of specified type (original Timestamp is based on nanoseconds), 
+        That further allowing simple arithmetic with numbers - adding and subtracting
         specified number of same type units results in increasing or decreasing the timestamp with same
-        amount of time that type/freq represents
+        amount of time that type/freq represents. 
 
         In other words any numbers added, subtracted or compared with this type
         are implicitly considered as instances of the same type seconds, minutes, hours
@@ -96,7 +95,7 @@ class  TimestampNumber:
     
     @classmethod
     def calculate_timestamp_after_n_periods(cls, periods:int, freq:SupportedFreqTypes='s', 
-            start_time: pd.Timestamp = TIME_ZERO) -> Union[pd.Timestamp, Tuple[pd.Timestamp, pd.Timestamp]]:
+            start_time: pd.Timestamp = TIME_ZERO) -> Tuple[pd.Timestamp, Tuple[pd.Timestamp, pd.Timestamp]]:
         """ 
             Calculates end timestamp, based on supplied start timestamp, by adding specified
             number of time periods denoted by 'freq' parameter ('s' - seconds, 'm' - minutes, 'h' - hours)
@@ -128,9 +127,9 @@ class  TimestampNumber:
             raise Exception("Not supported frequency")
 
         if (add):
-            return end_time, (start_time, end_time)
+            return (end_time, (start_time, end_time))
         else:
-            return end_time, (end_time , start_time)
+            return (end_time, (end_time , start_time))
 
 
     @classmethod
@@ -208,13 +207,19 @@ class CachedDFGenerator:
 
     def __init__(self, max_size:int=1500000, size_string_flds_array=[25,1,5,56]):
         """
-            Define the number of rows for the cached dataframe
+            Define the number of rows for the cached dataframe through 'max_size'
+            'size_string_flds_array' pass an array of sizes of the string columns
+            in the dataframe. The length of the array will define how many times 
+            a DF produced generate_sample_dataframe() will be invoked and the resulting
+            X number of dataframes stitched together on the right of first will
+            produce the XLarge dataframe
         """
         self.__cached_xlarge_dataframe:pd.DataFrame = None
         self.max_size = max_size
         self.size_string_flds_array = size_string_flds_array
 
     def get_dataframe(self) -> pd.DataFrame: 
+        assert self.__cached_xlarge_dataframe, "invoke generate_dataframe() first"
         return self.__cached_xlarge_dataframe
 
     def generate_dataframe(self, num_rows:int) -> pd.DataFrame:

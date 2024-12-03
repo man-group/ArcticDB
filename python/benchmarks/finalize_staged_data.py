@@ -24,7 +24,7 @@ class FinalizeStagedData:
     repeat = 1
     min_run_count = 1
 
-    timeout = 1200000
+    timeout = 1200
     LIB_NAME = "Finalize_Staged_Data_LIB"
 
     #Define the number of chunks
@@ -43,10 +43,10 @@ class FinalizeStagedData:
     def setup(self, cache:CachedDFGenerator, param:int):
         cachedDF = cache
         
-        # Unfortunately there is no way to tel asv to run single time 
+        # Unfortunately there is no way to tell asv to run single time 
         # each of finalize_stage_data() tests if we do the large setup in the
-        # setup_cache() method. We can only force it work with single execution
-        # if the symbol setup wit stage data is in the setup() method
+        # setup_cache() method. We can only force it to work with single execution
+        # if the symbol setup with stage data is in the setup() method
 
         self.ac = Arctic(f"lmdb://{self.lib_name}{param}?map_size=40GB")
         self.ac.delete_library(self.lib_name)
@@ -64,13 +64,11 @@ class FinalizeStagedData:
     def time_finalize_staged_data(self, cache:CachedDFGenerator, param:int):
         print(">>> Library:", self.lib)
         print(">>> Symbol:", self.symbol)
-        print(">>> Symbols:", self.lib.list_symbols())
         self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)
 
     def peakmem_finalize_staged_data(self, cache:CachedDFGenerator, param:int):
         print(">>> Library:", self.lib)
         print(">>> Symbol:", self.symbol)
-        print(">>> Symbols:", self.lib.list_symbols())
         self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)
 
     def teardown(self):

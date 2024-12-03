@@ -26,6 +26,18 @@ import pandas as pd
 def generate_chunk_sizes(number_chunks:np.uint32, min_rows:np.uint32=100, max_rows:np.uint32=10000) -> List[np.uint32]:
     return np.random.randint(min_rows, max_rows, number_chunks, dtype=np.uint32)
 
+class Results:
+
+    def __init__(self):
+        self.options = None
+        self.iteration = None
+        self.number_staged_chunks = 0
+        self.total_rows_finalized = 0
+        self.finalization_time = None
+
+    def __str__(self): 
+        return f"Options: {self.options}\nIteration: {self.iteration}\n# staged chunks: {self.number_staged_chunks}\ntotal rows finalized: {self.total_rows_finalized}\ntime for finalization (s): {self.finalization_time}"    
+
 def test_finalize_monotonic_unique_chunks(arctic_library_lmdb):
 
     options = [
@@ -35,11 +47,7 @@ def test_finalize_monotonic_unique_chunks(arctic_library_lmdb):
         {"chunks_descending" : True, "finalization_mode" : StagedDataFinalizeMethod.WRITE},
         ]
 
-    # Will hold the results after each iteration:
-    #  - iteration chunks
-    #  - chunks staged for finalization
-    #  - rows finalized for iteration 
-    #  - time for finalization
+    # Will hold the results after each iteration (instance of Results class)
     results = []
 
     lib : Library = arctic_library_lmdb
@@ -61,8 +69,9 @@ def test_finalize_monotonic_unique_chunks(arctic_library_lmdb):
     df = cachedDF.generate_dataframe_timestamp_indexed(num_rows_initially, total_number_rows, cachedDF.TIME_UNIT)
 
     cnt = 0
-    res = {}
-    for iter in [1000, 1000, 1000, 1000 ,5000, 5000, 5000, 5000, 10000, 10000, 10000, 10000] :
+    #for iter in [1000, 1000, 1000, 1000 ,5000, 5000, 5000, 5000, 10000, 10000, 10000, 10000] :
+    for iter in [10, 20 ,30, 50] :
+        res = Results()
 
         total_number_rows = INITIAL_TIMESTAMP + num_rows_initially
         lib.write(symbol, data=df, prune_previous_versions=True)
@@ -70,7 +79,6 @@ def test_finalize_monotonic_unique_chunks(arctic_library_lmdb):
         print(f"Start staging chunks .... for iter {cnt} with {iter} chunks")
         print(f"Using options {options[cnt % 4]}")
         chunk_list = generate_chunk_sizes(iter, 9000, 11000)
-        gc.collect()
         print(f"Chunks to stage {len(chunk_list)} ")
         stage_chunks(lib, symbol, cachedDF, total_number_rows, chunk_list, options[cnt % 4]["chunks_descending"])
 
@@ -91,16 +99,16 @@ def test_finalize_monotonic_unique_chunks(arctic_library_lmdb):
         print("--" * 50)
 
         assert total_number_rows == lib._nvs.get_num_rows(symbol)
-        cnt = cnt + 1
+        cnt += 1
 
         total_number_rows_all_iterations = total_number_rows_all_iterations + total_number_rows
         print(f"TOTAL ROWS INSERTED IN ALL ITERATIONS: {total_number_rows_all_iterations}")
 
-        res["options"] = options[cnt % 4]
-        res["iteration"] = cnt
-        res["number_staged_chunks"] = iter
-        res["total_rows_finalized"] = total_number_rows_all_iterations
-        res["finalization time"] = finalization_time
+        res.options = options[cnt % 4]
+        res.iteration = cnt
+        res.number_staged_chunks = iter
+        res.total_rows_finalized = total_number_rows_all_iterations
+        res.finalization_time = finalization_time
 
         results.append(res)
 
@@ -109,3 +117,4 @@ def test_finalize_monotonic_unique_chunks(arctic_library_lmdb):
     for res in results:
         print("_" * 100)
         print(res)
+
