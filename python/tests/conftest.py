@@ -333,9 +333,8 @@ def arctic_library_lmdb(arctic_client_lmdb, lib_name):
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
     ],
 )
-def basic_arctic_client(request, encoding_version) -> Arctic:
-    storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
-    ac = storage_fixture.create_arctic(encoding_version=encoding_version)
+def basic_arctic_client(lmdb_storage, encoding_version) -> Arctic:
+    ac = lmdb_storage.create_arctic(encoding_version=encoding_version)
     assert not ac.list_libraries()
     return ac
 
