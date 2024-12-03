@@ -182,6 +182,12 @@ enum class KeyType : int {
      * Used for storing the ids of storages that failed to sync
      */
     REPLICATION_FAIL_INFO = 26,
+
+    /*
+     * A reference key storing many versions, used to track state within some of our background jobs.
+     */
+    BLOCK_VERSION_REF = 27,
+
     UNDEFINED
 };
 
@@ -247,6 +253,8 @@ inline bool is_index_key_type(KeyType key_type) {
 bool is_string_key_type(KeyType k);
 
 bool is_ref_key_class(KeyType k);
+
+bool is_block_ref_key_class(KeyType k);
 
 inline KeyType get_key_type_for_data_stream(const StreamId &) {
     return KeyType::TABLE_DATA;
