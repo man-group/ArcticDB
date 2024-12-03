@@ -24,11 +24,11 @@ class FinalizeStagedData:
     repeat = 1
     min_run_count = 1
 
-    timeout = 1200
+    timeout = 600
     LIB_NAME = "Finalize_Staged_Data_LIB"
 
     #Define the number of chunks
-    params = [1000, 2000, 3000]
+    params = [1000, 2000]
 
     def __init__(self):
         self.lib_name = FinalizeStagedData.LIB_NAME
@@ -71,7 +71,7 @@ class FinalizeStagedData:
         print(">>> Symbol:", self.symbol)
         self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)
 
-    def teardown(self):
+    def teardown(self, cache:CachedDFGenerator, param:int):
         self.ac.delete_library(self.lib_name)
 
 class FinalizeStagedDataWiderDataframeX3(FinalizeStagedData):
