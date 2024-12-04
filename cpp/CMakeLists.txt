@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.21) # TARGET_RUNTIME_DLLS
 
+#link_directories("C:/Users/Alex/AppData/Local/Programs/Python/Python312/libs")
+#set(Python_EXECUTABLE "C:/Users/<username>/AppData/Local/Programs/Python/Python312/python.exe")
 # Make the `project` command handle the version of the project.
 cmake_policy(SET CMP0048 NEW)
 

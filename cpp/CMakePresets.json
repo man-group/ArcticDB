@@ -63,8 +63,9 @@
       "generator": "Ninja",
       "environment": { "cmakepreset_expected_host_system": "Windows" },
       "cacheVariables": {
-        "ARCTICDB_USE_PCH": "ON",
-        "VCPKG_OVERLAY_TRIPLETS": "custom-triplets",
+        "CMAKE_C_COMPILER": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.41.34120/bin/Hostx64/x64/cl.exe",
+        "CMAKE_CXX_COMPILER": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.41.34120/bin/Hostx64/x64/cl.exe",
+        "VCPKG_OVERLAY_TRIPLETS": "C:/Users/Alex/source/ArcticDB/cpp/custom-triplets",
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-msvc"
       }
     },
@@ -77,12 +78,8 @@
         "strategy": "external"
       },
       "toolset": {
-        "value": "host=x64",
+        "value": "version=14.41,host=x64",
         "strategy": "external"
-      },
-      "cacheVariables": {
-        "CMAKE_C_COMPILER": "cl",
-        "CMAKE_CXX_COMPILER": "cl"
       }
     },
     {
@@ -145,8 +142,8 @@
     { "name": "darwin-conda-release",     "inherits": "darwin-conda-debug",     "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } }
   ],
   "buildPresets": [
-    {"name": "windows-cl-debug",          "configurePreset": "windows-cl-debug",          "targets": "arcticdb_ext" },
-    {"name": "windows-cl-release",        "configurePreset": "windows-cl-release",        "targets": "arcticdb_ext" },
+    {"name": "windows-cl-debug",          "configurePreset": "windows-cl-debug",          "targets": "arcticdb_ext", "jobs": 14 },
+    {"name": "windows-cl-release",        "configurePreset": "windows-cl-release",        "targets": "arcticdb_ext", "jobs": 14 },
     {"name": "windows-cl-conda-debug",    "configurePreset": "windows-cl-conda-debug",    "targets": "arcticdb_ext" },
     {"name": "windows-cl-conda-release",  "configurePreset": "windows-cl-conda-release",  "targets": "arcticdb_ext" },
     {"name": "linux-debug",               "configurePreset": "linux-debug",               "targets": "arcticdb_ext" },
