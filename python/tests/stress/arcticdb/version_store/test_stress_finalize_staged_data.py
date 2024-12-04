@@ -12,6 +12,8 @@ import time
 import numpy as np
 import pandas as pd
 from typing import Union, List
+
+import pytest
 from arcticdb.version_store.library import Library, StagedDataFinalizeMethod
 from arcticdb.config import Defaults, set_log_level
 from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
@@ -19,6 +21,8 @@ from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
 from typing import Union
 import numpy as np
 import pandas as pd
+
+from tests.util.mark import SLOW_TESTS_MARK
 
 # Uncomment for logging
 # set_log_level(default_level="DEBUG", console_output=False, file_output_path="/tmp/arcticdb.log")
@@ -38,19 +42,22 @@ class Results:
     def __str__(self): 
         return f"Options: {self.options}\nIteration: {self.iteration}\n# staged chunks: {self.number_staged_chunks}\ntotal rows finalized: {self.total_rows_finalized}\ntime for finalization (s): {self.finalization_time}"    
 
+@SLOW_TESTS_MARK
 def test_finalize_monotonic_unique_chunks(arctic_library_lmdb):
 
     options = [
-        {"chunks_descending" : False, "finalization_mode" : StagedDataFinalizeMethod.APPEND},
         {"chunks_descending" : True, "finalization_mode" : StagedDataFinalizeMethod.APPEND},
-        {"chunks_descending" : False, "finalization_mode" : StagedDataFinalizeMethod.WRITE},
         {"chunks_descending" : True, "finalization_mode" : StagedDataFinalizeMethod.WRITE},
+        {"chunks_descending" : False, "finalization_mode" : StagedDataFinalizeMethod.WRITE},
+        {"chunks_descending" : False, "finalization_mode" : StagedDataFinalizeMethod.APPEND},
         ]
 
     # Will hold the results after each iteration (instance of Results class)
     results = []
 
     lib : Library = arctic_library_lmdb
+
+    total_start_time = time.time()
 
     # We would need to generate as fast as possible kind of random
     # dataframes. To do that we build a large cache and will 
@@ -69,8 +76,7 @@ def test_finalize_monotonic_unique_chunks(arctic_library_lmdb):
     df = cachedDF.generate_dataframe_timestamp_indexed(num_rows_initially, total_number_rows, cachedDF.TIME_UNIT)
 
     cnt = 0
-    #for iter in [1000, 1000, 1000, 1000 ,5000, 5000, 5000, 5000, 10000, 10000, 10000, 10000] :
-    for iter in [10, 20 ,30, 50] :
+    for iter in [1000, 2000, 3000, 4000] :
         res = Results()
 
         total_number_rows = INITIAL_TIMESTAMP + num_rows_initially
@@ -117,4 +123,8 @@ def test_finalize_monotonic_unique_chunks(arctic_library_lmdb):
     for res in results:
         print("_" * 100)
         print(res)
+
+    total_time = time.time() - total_start_time
+    print("TOTAL TIME: ", total_time)
+
 

@@ -7,11 +7,11 @@ from tests.stress.arcticdb.version_store.test_stress_finalize_stage_data import 
 from arcticdb.util.utils import TimestampNumber
 """
 
-import gc
 from arcticdb.arctic import Arctic
 from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
 from arcticdb.version_store.library import Library, StagedDataFinalizeMethod
 from .common import *
+from asv_runner.benchmarks.mark import SkipNotImplemented
 
 class FinalizeStagedData:
     '''
@@ -83,3 +83,23 @@ class FinalizeStagedDataWiderDataframeX3(FinalizeStagedData):
         # Generating dataframe with all kind of supported data type
         cachedDF = CachedDFGenerator(350000, [5, 25, 50]) # 3 times wider DF with bigger string columns
         return cachedDF
+    
+    def setup(self, cache:CachedDFGenerator, param:int):
+        if (not SLOW_TESTS):
+            raise SkipNotImplemented ("Slow tests are skipped")
+        super().setup(cache,param)
+
+    def time_finalize_staged_data(self, cache:CachedDFGenerator, param:int):
+        if (not SLOW_TESTS):
+            raise SkipNotImplemented ("Slow tests are skipped")
+        super().time_finalize_staged_data(cache,param)
+
+    def peakmem_finalize_staged_data(self, cache:CachedDFGenerator, param:int):
+        if (not SLOW_TESTS):
+            raise SkipNotImplemented ("Slow tests are skipped")
+        super().peakmem_finalize_staged_data(cache,param)
+
+    def teardown(self, cache:CachedDFGenerator, param:int):
+        if (SLOW_TESTS):
+            # Run only on slow tests
+            self.ac.delete_library(self.lib_name)
