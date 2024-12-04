@@ -91,8 +91,8 @@ class AtomKeyImpl {
     }
 
     friend bool operator<(const AtomKeyImpl &l, const AtomKeyImpl &r) {
-        auto lt = std::tie(l.id_, l.version_id_, l.index_start_, l.index_end_, l.creation_ts_);
-        auto rt = std::tie(r.id_, r.version_id_, r.index_start_, r.index_end_, r.creation_ts_);
+        const auto lt = std::tie(l.id_, l.version_id_, l.index_start_, l.index_end_, l.creation_ts_);
+        const auto rt = std::tie(r.id_, r.version_id_, r.index_start_, r.index_end_, r.creation_ts_);
         return lt < rt;
     }
 

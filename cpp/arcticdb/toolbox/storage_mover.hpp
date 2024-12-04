@@ -541,13 +541,11 @@ public:
         std::optional<SymbolList> symbol_list;
         if(target_symbol_list_)
             symbol_list .emplace(target_map);
-
         // res is a dict with key sym and value a dict showing results of the versions
         py::dict res;
         target_map->set_log_changes(true);
         for(const auto& py_pkey: py_partial_keys) {
-            // For each version, outputs the version_id which was written in the dest if no error
-            //                   otherwise error string
+            // For each version, outputs the version_id which was written in the dest if no error otherwise error string
             py::dict sym_data;
             std::unordered_map<VersionId, std::vector<StringId>> version_to_snapshot_map;
             auto sym = py_pkey.attr("id").cast<StreamId>();

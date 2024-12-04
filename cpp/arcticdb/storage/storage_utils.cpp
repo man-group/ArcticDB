@@ -106,7 +106,7 @@ AtomKey copy_multi_key_from_source_to_target(
         new_data_keys.emplace_back(std::move(new_key));
     }
     // Write new MULTI_KEY
-    google::protobuf::Any metadata = *index_seg.metadata();
+
     folly::Future<VariantKey> multi_key_fut = folly::Future<VariantKey>::makeEmpty();
     IndexAggregator<RowCountIndex> multi_index_agg(index_key.id(), [&new_version_id, &index_key, &multi_key_fut, &target_store](auto &&segment) {
         multi_key_fut = target_store->write(KeyType::MULTI_KEY,
@@ -119,7 +119,13 @@ AtomKey copy_multi_key_from_source_to_target(
     for (auto &key: new_data_keys) {
         multi_index_agg.add_key(to_atom(key));
     }
-    multi_index_agg.set_metadata(std::move(metadata));
+    if (index_seg.has_metadata()) {
+        google::protobuf::Any metadata = *index_seg.metadata();
+        multi_index_agg.set_metadata(std::move(metadata));
+    }
+    if (index_seg.has_index_descriptor()) {
+        multi_index_agg.set_timeseries_descriptor(index_seg.index_descriptor());
+    }
     multi_index_agg.commit();
     return to_atom(multi_key_fut.value());
 }

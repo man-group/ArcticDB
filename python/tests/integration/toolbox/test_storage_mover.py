@@ -6,13 +6,14 @@ from hypothesis import given, strategies as st, settings
 from arcticdb.config import Defaults
 from arcticdb.version_store.helper import ArcticMemoryConfig, get_lib_cfg, add_lmdb_library_to_env
 from arcticdb.toolbox.library_tool import KeyType
+from arcticdb.toolbox.storage import SymbolVersionsPair
 from arcticdb_ext.tools import StorageMover
 from pandas import DataFrame
 from pandas.testing import assert_frame_equal
 from arcticdb.util.test import sample_dataframe
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
+import hypothesis
 
-from arcticdb.version_store.library import SymbolVersion as SymbolVersionsPair
 
 # configure_test_logger("DEBUG")
 
@@ -79,32 +80,32 @@ def compare_two_libs(lib1, lib2):
     assert lib1.read("rec_norm", as_of="mysnap2").data.keys() == lib2.read("rec_norm", as_of="mysnap2").data.keys()
 
 
-def test_storage_mover_single_go(lmdb_version_store, arcticc_native_local_lib_cfg_extra):
-    add_data(lmdb_version_store)
+def test_storage_mover_single_go(lmdb_version_store_v1, arcticc_native_local_lib_cfg_extra):
+    add_data(lmdb_version_store_v1)
     arcticc = ArcticMemoryConfig(arcticc_native_local_lib_cfg_extra(), env=Defaults.ENV)
     lib_cfg = get_lib_cfg(arcticc, Defaults.ENV, "local.extra")
     lib_cfg.version.symbol_list = True
     dst_lib = arcticc["local.extra"]
 
-    s = StorageMover(lmdb_version_store._library, dst_lib._library)
+    s = StorageMover(lmdb_version_store_v1._library, dst_lib._library)
     s.go()
 
-    compare_two_libs(lmdb_version_store, dst_lib)
+    compare_two_libs(lmdb_version_store_v1, dst_lib)
 
 
-def test_storage_mover_key_by_key(lmdb_version_store, arcticc_native_local_lib_cfg_extra):
-    add_data(lmdb_version_store)
+def test_storage_mover_key_by_key(lmdb_version_store_v1, arcticc_native_local_lib_cfg_extra):
+    add_data(lmdb_version_store_v1)
     arcticc = ArcticMemoryConfig(arcticc_native_local_lib_cfg_extra(), env=Defaults.ENV)
     lib_cfg = get_lib_cfg(arcticc, Defaults.ENV, "local.extra")
     lib_cfg.version.symbol_list = True
     dst_lib = arcticc["local.extra"]
 
-    s = StorageMover(lmdb_version_store._library, dst_lib._library)
+    s = StorageMover(lmdb_version_store_v1._library, dst_lib._library)
     all_keys = s.get_all_source_keys()
     for key in all_keys:
         s.write_keys_from_source_to_target([key], 2)
 
-    compare_two_libs(lmdb_version_store, dst_lib)
+    compare_two_libs(lmdb_version_store_v1, dst_lib)
 
 
 def test_storage_mover_symbol_tree(arcticc_native_local_lib_cfg_extra, arcticc_native_local_lib_cfg, lib_name):
@@ -123,7 +124,7 @@ def test_storage_mover_symbol_tree(arcticc_native_local_lib_cfg_extra, arcticc_n
     lmdb_version_store_symbol_list.snapshot("my_snap")
     lmdb_version_store_symbol_list.snapshot("my_snap2")
     lmdb_version_store_symbol_list.snapshot("snapshot_test", 2)
-    lmdb_version_store_symbol_list._delete_version("snapshot_test", 0)
+    lmdb_version_store_symbol_list.delete_version("snapshot_test", 0)
     lmdb_version_store_symbol_list.write("pickled", {"a": 1}, metadata="cantyolo", pickle_on_failure=True)
     lmdb_version_store_symbol_list.write("pickled", {"b": 1}, metadata="cantyolo2", pickle_on_failure=True)
     lmdb_version_store_symbol_list.write("pickled", {"c": 1}, metadata="yoloded", pickle_on_failure=True)
@@ -193,7 +194,7 @@ def test_storage_mover_symbol_tree(arcticc_native_local_lib_cfg_extra, arcticc_n
     lmdb_version_store_symbol_list.write("new_symbol", 2)
     lmdb_version_store_symbol_list.snapshot("new_snap2")
     lmdb_version_store_symbol_list.write("new_symbol", 3)
-    lmdb_version_store_symbol_list._delete_version("new_symbol", 1)
+    lmdb_version_store_symbol_list.delete_version("new_symbol", 1)
     sv6 = SymbolVersionsPair("new_symbol", [2, 0, "new_snap", "new_snap2"])
     dst_lib.write("new_symbol", 0)
 
@@ -211,38 +212,38 @@ def test_storage_mover_symbol_tree(arcticc_native_local_lib_cfg_extra, arcticc_n
     assert dst_lib.read("new_symbol", 3).data == 3
 
 
-def test_storage_mover_and_key_checker(lmdb_version_store, arcticc_native_local_lib_cfg_extra):
-    add_data(lmdb_version_store)
+def test_storage_mover_and_key_checker(lmdb_version_store_v1, arcticc_native_local_lib_cfg_extra):
+    add_data(lmdb_version_store_v1)
     arcticc = ArcticMemoryConfig(arcticc_native_local_lib_cfg_extra(), env=Defaults.ENV)
     lib_cfg = get_lib_cfg(arcticc, Defaults.ENV, "local.extra")
     lib_cfg.version.symbol_list = True
     dst_lib = arcticc["local.extra"]
 
-    s = StorageMover(lmdb_version_store._library, dst_lib._library)
+    s = StorageMover(lmdb_version_store_v1._library, dst_lib._library)
     s.go()
 
     keys = s.get_keys_in_source_only()
     assert len(keys) == 0
 
 
-def test_storage_mover_clone_keys_for_symbol(lmdb_version_store, arcticc_native_local_lib_cfg_extra):
-    add_data(lmdb_version_store)
-    lmdb_version_store.write("a", 1)
-    lmdb_version_store.write("a", 2)
-    lmdb_version_store.write("b", 1)
+def test_storage_mover_clone_keys_for_symbol(lmdb_version_store_v1, arcticc_native_local_lib_cfg_extra):
+    add_data(lmdb_version_store_v1)
+    lmdb_version_store_v1.write("a", 1)
+    lmdb_version_store_v1.write("a", 2)
+    lmdb_version_store_v1.write("b", 1)
     arcticc = ArcticMemoryConfig(arcticc_native_local_lib_cfg_extra(), env=Defaults.ENV)
     lib_cfg = get_lib_cfg(arcticc, Defaults.ENV, "local.extra")
     lib_cfg.version.symbol_list = True
     dst_lib = arcticc["local.extra"]
 
-    s = StorageMover(lmdb_version_store._library, dst_lib._library)
+    s = StorageMover(lmdb_version_store_v1._library, dst_lib._library)
     s.clone_all_keys_for_symbol("a", 1000)
     assert dst_lib.read("a").data == 2
 
 
 @pytest.fixture()
 def lib_with_gaps_and_reused_keys(version_store_factory):
-    lib = version_store_factory(name="source", de_duplication=True)
+    lib = version_store_factory(name="source", de_duplication=True, col_per_group=2, segment_row_size=2)
 
     lib.write("x", 0)
     lib.write("x", 1)
@@ -258,24 +259,25 @@ def lib_with_gaps_and_reused_keys(version_store_factory):
 
 
 @pytest.mark.parametrize("mode", ("check assumptions", "go", "no force"))
-def test_correct_versions_in_destination(mode, lib_with_gaps_and_reused_keys, lmdb_version_store):
-    s = StorageMover(lib_with_gaps_and_reused_keys._library, lmdb_version_store._library)
+def test_correct_versions_in_destination(mode, lib_with_gaps_and_reused_keys, lmdb_version_store_v1):
+    s = StorageMover(lib_with_gaps_and_reused_keys._library, lmdb_version_store_v1._library)
     if mode == "check assumptions":
         check = lib_with_gaps_and_reused_keys
     elif mode == "go":
         s.go()
-        check = lmdb_version_store
+        check = lmdb_version_store_v1
     else:
         s.write_symbol_trees_from_source_to_target([SymbolVersionsPair("x", ["s2", 4, 6])], False)
-        check = lmdb_version_store
+        check = lmdb_version_store_v1
 
     lt = check.library_tool()
+
     assert {vi["version"] for vi in check.list_versions("x")} == {2, 4, 6}
     assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 3
     assert [k.version_id for k in lt.find_keys(KeyType.TABLE_DATA)] == [2, 3, 4, 4, 6]
 
 
-@settings(deadline=None)
+@settings(deadline=None, suppress_health_check=(hypothesis.HealthCheck.function_scoped_fixture,))
 @given(to_copy=st.permutations(["s2", 4, 6]), existing=st.booleans())
 def test_correct_versions_in_destination_force(to_copy, existing, lib_with_gaps_and_reused_keys, version_store_factory):
     try:
