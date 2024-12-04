@@ -162,7 +162,7 @@ jobs:
         uses: actions/upload-artifact@v3.1.3
         with:
           name: test_unit_arcticdb
-          path: cpp/out/install/arcticdb_rapidcheck_tests
+          path: cpp/out/install/arcticdb_rapidcheck_tests.exe
 
       - name: C++ unit tests
         if: inputs.job_type == 'cpp-tests'
@@ -181,7 +181,7 @@ jobs:
         uses: actions/upload-artifact@v3.1.3
         with:
           name: test_unit_arcticdb
-          path: cpp/out/install/test_unit_arcticdb
+          path: cpp/out/install/test_unit_arcticdb.exe
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()
@@ -352,6 +352,10 @@ jobs:
           echo -e "${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
           if [[ -n "$MSYSTEM" ]] ; then
             echo "LOCALAPPDATA=$LOCALAPPDATA" | tee -a $GITHUB_ENV
+            MSYS_NO_PATHCONV=1 reg.exe ADD 'HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
+              cd "/proc/registry/HKEY_LOCAL_MACHINE/SOFTWARE/Microsoft"
+              find "Windows NT/CurrentVersion/AeDebug" "Windows/Windows Error Reporting/LocalDumps" \
+                -type f -print -exec xxd -p '{}' \; || true
           fi
           ${{vars.EXTRA_TEST_PREPARE_CMD || ''}}
         env:
