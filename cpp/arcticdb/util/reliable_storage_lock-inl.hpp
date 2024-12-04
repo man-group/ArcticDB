@@ -189,7 +189,7 @@ std::optional<AcquiredLockId> ReliableStorageLock<ClockType>::try_take_next_id(c
     return lock_id;
 }
 
-inline ReliableStorageLockGuard::ReliableStorageLockGuard(const ReliableStorageLock<> &lock, AcquiredLockId acquired_lock, folly::Func&& on_lost_lock) :
+inline ReliableStorageLockGuard::ReliableStorageLockGuard(const ReliableStorageLock<> &lock, AcquiredLockId acquired_lock, std::optional<folly::Func>&& on_lost_lock) :
         lock_(lock), acquired_lock_(std::nullopt), on_lost_lock_(std::move(on_lost_lock)) {
     acquired_lock_ = acquired_lock;
     // We heartbeat 5 times per lock timeout to extend the lock.
@@ -211,13 +211,23 @@ inline ReliableStorageLockGuard::ReliableStorageLockGuard(const ReliableStorageL
 inline void ReliableStorageLockGuard::cleanup_on_lost_lock() {
     // We do not use shutdown because we don't want to run it from within a FunctionScheduler thread to avoid a deadlock
     extend_lock_heartbeat_.cancelAllFunctions();
-    on_lost_lock_();
+    if (on_lost_lock_.has_value()){
+        on_lost_lock_.value()();
+    }
 }
 
 inline ReliableStorageLockGuard::~ReliableStorageLockGuard() {
     extend_lock_heartbeat_.shutdown();
     if (acquired_lock_.has_value()) {
         lock_.free_lock(acquired_lock_.value());
+    }
+}
+
+inline void ReliableStorageLockGuard::set_on_lost_lock(folly::Func &&on_lost_lock) {
+    on_lost_lock_ = std::make_optional<folly::Func>(std::move(on_lost_lock));
+    if (!acquired_lock_.has_value()) {
+        // Lock was lost before we set on_lost_lock. Running callback immediately.
+        on_lost_lock_.value()();
     }
 }
 
