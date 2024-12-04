@@ -25,9 +25,6 @@ case `uname -a` in
 
             echo "LOCALAPPDATA=$LOCALAPPDATA" | tee -a $GITHUB_ENV
             MSYS_NO_PATHCONV=1 reg.exe ADD 'HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
-              cd "/proc/registry/HKEY_LOCAL_MACHINE/SOFTWARE/Microsoft"
-              find "Windows NT/CurrentVersion/AeDebug" "Windows/Windows Error Reporting/LocalDumps" \
-                -type f -print -exec xxd -p '{}' \; || true
         fi
     fi
 
