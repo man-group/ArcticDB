@@ -64,8 +64,7 @@
     "azure-core-cpp",
     "azure-identity-cpp",
     "azure-storage-blobs-cpp",
-    "benchmark",
-    "pybind11"
+    "benchmark"
   ],
   "overrides": [
     { "name": "openssl", "version-string": "3.3.0" },
@@ -171,8 +170,7 @@
     { "name": "spdlog", "version": "1.13.0" },
     { "name": "xxhash", "version": "0.8.2" },
     { "name": "zlib", "version": "1.2.13" },
-    { "name": "zstd", "version": "1.5.2" },
-    { "name": "pybind11", "version": "2.11.1" }
+    { "name": "zstd", "version": "1.5.2" }
   ],
   "vcpkg-configuration": {
     "overlay-ports": ["third_party/vcpkg_overlays"]
