@@ -220,7 +220,7 @@ private:
     void increment_nan_refcount(size_t none_count) {
         std::lock_guard lock(handler_data_.spin_lock());
         for(auto i = 0u; i < none_count; ++i)
-            handler_data_.py_nan_->inc_ref();
+            Py_INCREF(handler_data_.py_nan_->ptr());
     }
 
     std::pair<size_t, size_t> write_strings_to_column_dense(

@@ -6,8 +6,10 @@
  */
 
 
-/* The class is introduced purely to selectively bypass the GIL check introduced in pybind11 v2.11.0. None in python is a global static. 
- * Therefore GIL is not needed. To bypass the check, we could define PYBIND11_NO_ASSERT_GIL_HELD_INCREF_DECREF to globally disable the check
+/* The class is introduced purely to selectively bypass the GIL check introduced in pybind11 v2.11.0. 
+ * None in python is a global static. Therefore GIL is not needed. 
+ * For other object, it's fine as long as GIL is held during allocation and deallocation, e.g. nan
+ * To bypass the check, we could define PYBIND11_NO_ASSERT_GIL_HELD_INCREF_DECREF to globally disable the check
  */
 
 #pragma once
