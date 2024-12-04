@@ -163,6 +163,12 @@ TEST(PythonVersionStore, IterationVsRefWrite) {
     }
 }
 
+TEST(CrashTest, ExampleCrash)
+{
+    int* a = nullptr;
+    std::cout << *a;
+}
+
 TEST_F(VersionStoreTest, SortMerge) {
     using namespace arcticdb;
     using namespace arcticdb::storage;
