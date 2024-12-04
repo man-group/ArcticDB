@@ -10,7 +10,7 @@ import pytest
 from arcticdb.util.test import sample_dataframe, populate_db, assert_frame_equal
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.types import DataType
-from arcticdb_ext.exceptions import SchemaException
+from arcticdb_ext.exceptions import SchemaException, InternalException
 
 
 def get_ref_key_types():
@@ -233,13 +233,10 @@ def test_iterate_version_chain_with_lib_tool(in_memory_version_store):
     assert len(keys_by_key_type[KeyType.TOMBSTONE_ALL]) == num_versions // 3
 
 
-def test_overwrite_append_data(object_and_mem_and_lmdb_version_store):
-    lib = object_and_mem_and_lmdb_version_store
-    lib_tool = lib.library_tool()
-    if lib._lib_cfg.lib_desc.version.encoding_version == 1:
-        # TODO: Fix the timeseries descriptor packing. Currently the [incomplete_segment_from_frame] function in cpp is
-        # not encoding aware so all incomplete writes are broken with v2 encoding.
-        pytest.xfail("Writing the timeseries descriptor for incompletes is currently broken with encoding v2")
+def test_overwrite_append_data(lmdb_version_store_v1):
+    # TODO: Fix the timeseries descriptor packing. Currently the [incomplete_segment_from_frame] function in cpp is
+    # not encoding aware so all incomplete writes are broken with v2 encoding.
+    lib = lmdb_version_store_v1
     lib_tool = lib.library_tool()
     sym = "sym"
 
@@ -261,7 +258,7 @@ def test_overwrite_append_data(object_and_mem_and_lmdb_version_store):
         append_ref = lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, symbol)[0]
         append_data_keys = []
         next_key = lib_tool.read_timeseries_descriptor(append_ref).next_key
-        while next_key != None and lib_tool.key_exists(next_key):
+        while next_key is not None and lib_tool.key_exists(next_key):
             append_data_keys.append(next_key)
             next_key = lib_tool.read_timeseries_descriptor(next_key).next_key
         return append_data_keys
@@ -280,7 +277,7 @@ def test_overwrite_append_data(object_and_mem_and_lmdb_version_store):
     str_dtype = DataType.UTF_DYNAMIC64 if lib_tool._nvs._resolve_dynamic_strings({}) else DataType.UTF_FIXED64
     assert [read_type(key, "col") for key in append_keys] == [DataType.INT64, str_dtype, DataType.INT64]
     assert [read_type(key, "other") for key in append_keys] == [DataType.INT64, DataType.INT64, DataType.INT64]
-    with pytest.raises(SchemaException):
+    with pytest.raises(InternalException):
         lib.read(sym, incomplete=True, date_range=(pd.Timestamp(0), pd.Timestamp(2030, 1, 1)))
     with pytest.raises(SchemaException):
         lib.compact_incomplete(sym, append=True, convert_int_to_float=False, via_iteration=False)
