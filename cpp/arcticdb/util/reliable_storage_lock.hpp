@@ -33,6 +33,7 @@ template <class ClockType = util::SysClock>
 class ReliableStorageLock {
 public:
     ReliableStorageLock(const std::string& base_name, const std::shared_ptr<Store> store, timestamp timeout);
+    ReliableStorageLock(const ReliableStorageLock<ClockType>& other) = default;
 
     AcquiredLockId retry_until_take_lock() const;
     std::optional<AcquiredLockId> try_take_lock() const;
@@ -55,14 +56,17 @@ private:
 // via the on_lock_lost.
 class ReliableStorageLockGuard {
 public:
-    ReliableStorageLockGuard(const ReliableStorageLock<> &lock, AcquiredLockId acquired_lock, folly::Func&& on_lost_lock);
+    ReliableStorageLockGuard(const ReliableStorageLock<>& lock, AcquiredLockId acquired_lock, std::optional<folly::Func>&& on_lost_lock);
 
     ~ReliableStorageLockGuard();
+
+    // Will immediately trigger [on_lost_lock] if lock is already lost.
+    void set_on_lost_lock(folly::Func&& on_lost_lock);
 private:
     void cleanup_on_lost_lock();
-    const ReliableStorageLock<> &lock_;
+    const ReliableStorageLock<> lock_;
     std::optional<AcquiredLockId> acquired_lock_;
-    folly::Func on_lost_lock_;
+    std::optional<folly::Func> on_lost_lock_;
     folly::FunctionScheduler extend_lock_heartbeat_;
 };
 
