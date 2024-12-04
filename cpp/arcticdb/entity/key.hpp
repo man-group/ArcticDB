@@ -259,7 +259,9 @@ constexpr bool is_index_key_type(KeyType key_type) {
 bool is_string_key_type(KeyType k);
 
 bool is_ref_key_class(KeyType k);
-    
+
+bool is_block_ref_key_class(KeyType k);
+
 constexpr KeyType get_key_type_for_data_stream(const StreamId &) {
     return KeyType::TABLE_DATA;
 }
