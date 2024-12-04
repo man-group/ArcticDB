@@ -74,9 +74,6 @@ jobs:
         with:
           submodules: recursive # Just in case a dep has its own third-party deps
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.3
         with:
