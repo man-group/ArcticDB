@@ -206,15 +206,12 @@ private:
         return py_strings;
     }
 
-    void increment_none_refcount(size_t none_count, py::none& none) {
-        std::lock_guard lock(handler_data_.spin_lock());
-        for(auto i = 0u; i < none_count; ++i)
-            Py_INCREF(none.ptr());
-    }
-
     void increment_none_refcount(size_t none_count, std::shared_ptr<py::none>& none) {
-        util::check(static_cast<bool>(none), "Got null pointer to py::none in increment_none_refcount");
-        increment_none_refcount(none_count, *none);
+        util::check(none, "Got null pointer to py::none in increment_none_refcount");
+        std::lock_guard lock(handler_data_.spin_lock());
+        for(auto i = 0u; i < none_count; ++i) {
+            Py_INCREF(none->ptr());
+        }
     }
 
     void increment_nan_refcount(size_t none_count) {
