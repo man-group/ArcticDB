@@ -29,14 +29,14 @@ def create_local_lmdb_cfg(lib_name=Defaults.LIB, db_dir=Defaults.DATA_DIR, descr
     return cfg
 
 @pytest.fixture
-def arcticc_native_local_lib_cfg_extra(tmpdir):
+def arctidb_native_local_lib_cfg_extra(tmpdir):
     def create():
         return create_local_lmdb_cfg(lib_name="local.extra", db_dir=str(tmpdir))
 
     return create
 
 @pytest.fixture
-def arcticc_native_local_lib_cfg(tmpdir):
+def arctidb_native_local_lib_cfg(tmpdir):
     def create(lib_name):
         return create_local_lmdb_cfg(lib_name=lib_name, db_dir=str(tmpdir))
     return create
@@ -80,12 +80,12 @@ def compare_two_libs(lib1, lib2):
     assert lib1.read("rec_norm", as_of="mysnap2").data.keys() == lib2.read("rec_norm", as_of="mysnap2").data.keys()
 
 
-def test_storage_mover_single_go(lmdb_version_store_v1, arcticc_native_local_lib_cfg_extra):
+def test_storage_mover_single_go(lmdb_version_store_v1, arctidb_native_local_lib_cfg_extra):
     add_data(lmdb_version_store_v1)
-    arcticc = ArcticMemoryConfig(arcticc_native_local_lib_cfg_extra(), env=Defaults.ENV)
-    lib_cfg = get_lib_cfg(arcticc, Defaults.ENV, "local.extra")
+    arctic = ArcticMemoryConfig(arctidb_native_local_lib_cfg_extra(), env=Defaults.ENV)
+    lib_cfg = get_lib_cfg(arctic, Defaults.ENV, "local.extra")
     lib_cfg.version.symbol_list = True
-    dst_lib = arcticc["local.extra"]
+    dst_lib = arctic["local.extra"]
 
     s = StorageMover(lmdb_version_store_v1._library, dst_lib._library)
     s.go()
@@ -93,12 +93,12 @@ def test_storage_mover_single_go(lmdb_version_store_v1, arcticc_native_local_lib
     compare_two_libs(lmdb_version_store_v1, dst_lib)
 
 
-def test_storage_mover_key_by_key(lmdb_version_store_v1, arcticc_native_local_lib_cfg_extra):
+def test_storage_mover_key_by_key(lmdb_version_store_v1, arctidb_native_local_lib_cfg_extra):
     add_data(lmdb_version_store_v1)
-    arcticc = ArcticMemoryConfig(arcticc_native_local_lib_cfg_extra(), env=Defaults.ENV)
-    lib_cfg = get_lib_cfg(arcticc, Defaults.ENV, "local.extra")
+    arctic = ArcticMemoryConfig(arctidb_native_local_lib_cfg_extra(), env=Defaults.ENV)
+    lib_cfg = get_lib_cfg(arctic, Defaults.ENV, "local.extra")
     lib_cfg.version.symbol_list = True
-    dst_lib = arcticc["local.extra"]
+    dst_lib = arctic["local.extra"]
 
     s = StorageMover(lmdb_version_store_v1._library, dst_lib._library)
     all_keys = s.get_all_source_keys()
@@ -108,10 +108,10 @@ def test_storage_mover_key_by_key(lmdb_version_store_v1, arcticc_native_local_li
     compare_two_libs(lmdb_version_store_v1, dst_lib)
 
 
-def test_storage_mover_symbol_tree(arcticc_native_local_lib_cfg_extra, arcticc_native_local_lib_cfg, lib_name):
+def test_storage_mover_symbol_tree(arctidb_native_local_lib_cfg_extra, arctidb_native_local_lib_cfg, lib_name):
     col_per_group = 5
     row_per_segment = 10
-    local_lib_cfg = arcticc_native_local_lib_cfg(lib_name)
+    local_lib_cfg = arctidb_native_local_lib_cfg(lib_name)
     lib = local_lib_cfg.env_by_id[Defaults.ENV].lib_by_path[lib_name]
     lib.version.write_options.column_group_size = col_per_group
     lib.version.write_options.segment_row_size = row_per_segment
@@ -143,10 +143,10 @@ def test_storage_mover_symbol_tree(arcticc_native_local_lib_cfg_extra, arcticc_n
 
     lmdb_version_store_symbol_list.write("dup_data", np.array(["YOLO"] * 10000))
 
-    arcticc = ArcticMemoryConfig(arcticc_native_local_lib_cfg_extra(), env=Defaults.ENV)
-    lib_cfg = get_lib_cfg(arcticc, Defaults.ENV, "local.extra")
+    arctic = ArcticMemoryConfig(arctidb_native_local_lib_cfg_extra(), env=Defaults.ENV)
+    lib_cfg = get_lib_cfg(arctic, Defaults.ENV, "local.extra")
     lib_cfg.version.symbol_list = True
-    dst_lib = arcticc["local.extra"]
+    dst_lib = arctic["local.extra"]
 
     s = StorageMover(lmdb_version_store_symbol_list._library, dst_lib._library)
     sv1 = SymbolVersionsPair("symbol", [1, 0])
@@ -212,12 +212,12 @@ def test_storage_mover_symbol_tree(arcticc_native_local_lib_cfg_extra, arcticc_n
     assert dst_lib.read("new_symbol", 3).data == 3
 
 
-def test_storage_mover_and_key_checker(lmdb_version_store_v1, arcticc_native_local_lib_cfg_extra):
+def test_storage_mover_and_key_checker(lmdb_version_store_v1, arctidb_native_local_lib_cfg_extra):
     add_data(lmdb_version_store_v1)
-    arcticc = ArcticMemoryConfig(arcticc_native_local_lib_cfg_extra(), env=Defaults.ENV)
-    lib_cfg = get_lib_cfg(arcticc, Defaults.ENV, "local.extra")
+    arctic = ArcticMemoryConfig(arctidb_native_local_lib_cfg_extra(), env=Defaults.ENV)
+    lib_cfg = get_lib_cfg(arctic, Defaults.ENV, "local.extra")
     lib_cfg.version.symbol_list = True
-    dst_lib = arcticc["local.extra"]
+    dst_lib = arctic["local.extra"]
 
     s = StorageMover(lmdb_version_store_v1._library, dst_lib._library)
     s.go()
@@ -226,15 +226,15 @@ def test_storage_mover_and_key_checker(lmdb_version_store_v1, arcticc_native_loc
     assert len(keys) == 0
 
 
-def test_storage_mover_clone_keys_for_symbol(lmdb_version_store_v1, arcticc_native_local_lib_cfg_extra):
+def test_storage_mover_clone_keys_for_symbol(lmdb_version_store_v1, arctidb_native_local_lib_cfg_extra):
     add_data(lmdb_version_store_v1)
     lmdb_version_store_v1.write("a", 1)
     lmdb_version_store_v1.write("a", 2)
     lmdb_version_store_v1.write("b", 1)
-    arcticc = ArcticMemoryConfig(arcticc_native_local_lib_cfg_extra(), env=Defaults.ENV)
-    lib_cfg = get_lib_cfg(arcticc, Defaults.ENV, "local.extra")
+    arctic = ArcticMemoryConfig(arctidb_native_local_lib_cfg_extra(), env=Defaults.ENV)
+    lib_cfg = get_lib_cfg(arctic, Defaults.ENV, "local.extra")
     lib_cfg.version.symbol_list = True
-    dst_lib = arcticc["local.extra"]
+    dst_lib = arctic["local.extra"]
 
     s = StorageMover(lmdb_version_store_v1._library, dst_lib._library)
     s.clone_all_keys_for_symbol("a", 1000)
