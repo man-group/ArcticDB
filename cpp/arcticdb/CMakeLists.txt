@@ -973,6 +973,9 @@ if(${TEST})
                 DESTINATION .
                 PERMISSIONS ${EXECUTABLE_PERMS}
                 COMPONENT Tests)
+                
+    target_compile_definitions(test_unit_arcticdb PRIVATE PYBIND11_NO_ASSERT_GIL_HELD_INCREF_DECREF)
+
 
     if (WIN32)
         target_link_libraries(
