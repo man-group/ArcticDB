@@ -163,12 +163,6 @@ TEST(PythonVersionStore, IterationVsRefWrite) {
     }
 }
 
-TEST(CrashTest, ExampleCrash)
-{
-    int* a = nullptr;
-    std::cout << *a;
-}
-
 TEST_F(VersionStoreTest, SortMerge) {
     using namespace arcticdb;
     using namespace arcticdb::storage;
@@ -179,9 +173,61 @@ TEST_F(VersionStoreTest, SortMerge) {
     size_t count = 0;
 
     std::vector<SegmentToInputFrameAdapter> data;
+
+    for (auto symbol_n = 0; symbol_n < 1000; symbol_n++) {
+        StreamId symbol = fmt::format("compact_me_{}", symbol_n);
+
+        for (auto i = 0; i < 10; ++i) {
+            auto wrapper = SinkWrapper(symbol, {
+                scalar_field(DataType::UINT64, "thing1"),
+                scalar_field(DataType::UINT64,  "thing2")
+            });
+
+            for(auto j = 0; j < 20; ++j ) {
+                wrapper.aggregator_.start_row(timestamp(count++))([&](auto &&rb) {
+                    rb.set_scalar(1, j);
+                    rb.set_scalar(2, i + j);
+                });
+            }
+
+            wrapper.aggregator_.commit();
+            data.emplace_back( SegmentToInputFrameAdapter{std::move(wrapper.segment())});
+        }
+        std::mt19937 mt{42};
+        std::shuffle(data.begin(), data.end(), mt);
+
+        for(auto&& frame : data) {
+            test_store_->append_incomplete_frame(symbol, std::move(frame.input_frame_), true);
+        }
+
+        CompactIncompleteOptions options{
+                .prune_previous_versions_=false,
+                .append_=true,
+                .convert_int_to_float_=false,
+                .via_iteration_=false,
+                .sparsify_=false
+        };
+
+        test_store_->sort_merge_internal(symbol, std::nullopt, options);
+    }
+}
+
+TEST_F(VersionStoreTest, SortMergeStress) {
+    using namespace arcticdb;
+    using namespace arcticdb::storage;
+    using namespace arcticdb::stream;
+    using namespace arcticdb::pipelines;
+    using namespace arcticdb::version_store;
+    ScopedConfig cpu("VersionStore.NumCPUThreads", 1);
+    ScopedConfig io("VersionStore.NumIOThreads", 1);
+    async::TaskScheduler::reattach_instance();
+
+    size_t count = 0;
+
+    std::vector<SegmentToInputFrameAdapter> data;
     StreamId symbol{"compact_me"};
 
-    for (auto i = 0; i < 10; ++i) {
+    for (auto i = 0; i < 100; ++i) {
         auto wrapper = SinkWrapper(symbol, {
             scalar_field(DataType::UINT64, "thing1"),
             scalar_field(DataType::UINT64,  "thing2")
@@ -205,12 +251,12 @@ TEST_F(VersionStoreTest, SortMerge) {
     }
 
     CompactIncompleteOptions options{
-            .prune_previous_versions_=false,
-            .append_=true,
-            .convert_int_to_float_=false,
-            .via_iteration_=false,
-            .sparsify_=false
-    };
+        .prune_previous_versions_=false,
+        .append_=true,
+        .convert_int_to_float_=false,
+        .via_iteration_=false,
+        .sparsify_=false
+};
 
     test_store_->sort_merge_internal(symbol, std::nullopt, options);
 }
