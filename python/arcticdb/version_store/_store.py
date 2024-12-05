@@ -381,19 +381,14 @@ class NativeVersionStore:
                     **kwargs,
                 )
         except ArcticDbNotYetImplemented as ex:
-            raise ArcticDbNotYetImplemented(
-                f"Not supported: normalizing"
-                f"symbol: {symbol}"
-                f"Reason:"
-                f"{ex}"
-                f"{norm_failure_options_msg}"
-            )
+            log.debug(f"ArcticDbNotYetImplemented: data: \n{dataframe}, metadata: {metadata}")
+            raise ArcticDbNotYetImplemented(f"Not supported: normalizing, symbol: {symbol}, Reason: {ex}, {norm_failure_options_msg}")
         except Exception as ex:
-            log.error("Error while normalizing symbol={}, {}", symbol, ex)
-            raise ArcticNativeException(str(ex))
+            log.debug(f"ArcticNativeException: data: \n{dataframe}, metadata: {metadata}")
+            raise ArcticNativeException(f"Error while normalizing symbol={symbol}, {ex}")
 
         if norm_meta is None:
-            raise ArcticNativeException("Cannot normalize input {}".format(symbol))
+            raise ArcticNativeException(f"Cannot normalize input {symbol}")
 
         return udm, item, norm_meta
 
