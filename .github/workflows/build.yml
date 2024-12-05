@@ -53,6 +53,7 @@ jobs:
                     image: "mongo:4.4"
                 container:
                   image: quay.io/pypa/manylinux_2_28_x86_64
+                  options: --user root --privileged --ulimit core=-1 --security-opt seccomp=unconfined
                   volumes:
                     - /:/mnt
             windows_matrix:

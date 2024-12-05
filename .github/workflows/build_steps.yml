@@ -74,6 +74,13 @@ jobs:
         with:
           submodules: recursive # Just in case a dep has its own third-party deps
 
+      - name: Core Dump
+        if: matrix.os == 'linux'
+        run: |
+          ulimit -c unlimited
+          mkdir /tmp/coredumps
+          echo '/tmp/coredumps/core.%h.%e.%t' > /proc/sys/kernel/core_pattern
+
       - name: Setup tmate session
         if: matrix.os == 'windows'
         uses: mxschmitt/action-tmate@v3
@@ -195,6 +202,13 @@ jobs:
         with:
           name: crashdump-cpp-unit-tests
           path: D:/CrashDumps/
+
+      - name: Collect crash dumps (Linux)
+        if: matrix.os == 'linux' && failure()
+        uses: actions/upload-artifact@v3.1.3
+        with:
+          name: crashdump-cpp-unit-tests
+          path: /tmp/coredumps
 
       # We don't do anything with the benchmarks automatically yet, but check that they at least compile and run.
       - name: Compile C++ Benchmarks
