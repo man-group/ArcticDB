@@ -22,6 +22,16 @@ case `uname -a` in
         else
             mkdir "${ARCTICDB_BUILD_DIR:?environment variable is not set}"
             MSYS=winsymlinks:nativestrict ln -s "$ARCTICDB_BUILD_DIR" out
+
+            echo "LOCALAPPDATA=$LOCALAPPDATA" | tee -a $GITHUB_ENV
+
+            MSYS_NO_PATHCONV=1 reg.exe add 'HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps' /v DumpFolder /t REG_EXPAND_SZ /d "D:/CrashDumps"
+            MSYS_NO_PATHCONV=1 reg.exe add 'HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps' /v DumpCount /t REG_DWORD /d 10
+            MSYS_NO_PATHCONV=1 reg.exe add 'HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps' /v DumpType /t REG_DWORD /d 1
+
+            MSYS_NO_PATHCONV=1 reg.exe QUERY 'HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps' /v DumpFolder
+            MSYS_NO_PATHCONV=1 reg.exe QUERY 'HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps' /v DumpCount
+            MSYS_NO_PATHCONV=1 reg.exe QUERY 'HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps' /v DumpType
         fi
     fi
 
