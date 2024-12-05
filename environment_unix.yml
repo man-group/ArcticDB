@@ -81,3 +81,4 @@ dependencies:
   - pytest
   - trustme
   - entt
+  - psutil
