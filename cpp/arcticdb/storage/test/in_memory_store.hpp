@@ -484,7 +484,7 @@ namespace arcticdb {
             ARCTICDB_DEBUG(log::storage(), "Adding segment with key {}", key);
             if (if_none_match) {
                 if (seg_by_ref_key_.find(key) != seg_by_ref_key_.end()) {
-                    storage::raise<ErrorCode::E_UNEXPECTED_S3_ERROR>("Precondition failed. Object is already present.");
+                    storage::raise<ErrorCode::E_ATOMIC_OPERATION_FAILED>("Precondition failed. Object is already present.");
                 }
             }
             seg_by_ref_key_[key] = std::make_unique<SegmentInMemory>(std::move(seg));
