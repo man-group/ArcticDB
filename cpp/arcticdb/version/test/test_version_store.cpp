@@ -163,6 +163,10 @@ TEST(PythonVersionStore, IterationVsRefWrite) {
     }
 }
 
+TEST(DeliberatelyFailingTest, FailingTest) {
+    ASSERT_EQ(1, 0);
+}
+
 TEST_F(VersionStoreTest, SortMerge) {
     using namespace arcticdb;
     using namespace arcticdb::storage;
