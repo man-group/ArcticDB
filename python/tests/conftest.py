@@ -70,7 +70,7 @@ if platform.system() == "Linux":
 
 
 @pytest.fixture()
-def sym(request : pytest.FixtureRequest):
+def sym(request: pytest.FixtureRequest):
     return request.node.name + datetime.utcnow().strftime("%Y-%m-%dT%H_%M_%S_%f")
 
 
@@ -116,28 +116,31 @@ def lmdb_storage(tmp_path) -> Iterator[LmdbStorageFixture]:
     with LmdbStorageFixture(tmp_path) as f:
         yield f
 
+
 @pytest.fixture
 def lmdb_library(lmdb_storage, lib_name):
     return lmdb_storage.create_arctic().create_library(lib_name)
+
 
 @pytest.fixture
 def lmdb_library_dynamic_schema(lmdb_storage, lib_name):
     return lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(dynamic_schema=True))
 
+
 @pytest.fixture(
     scope="function",
-    params=(
-        "lmdb_library",
-        "lmdb_library_dynamic_schema"
-    ),
+    params=("lmdb_library", "lmdb_library_dynamic_schema"),
 )
 def lmdb_library_static_dynamic(request):
     yield request.getfixturevalue(request.param)
 
+
 # ssl is enabled by default to maximize test coverage as ssl is enabled most of the times in real world
 @pytest.fixture(scope="session")
 def s3_storage_factory() -> Iterator[MotoS3StorageFixtureFactory]:
-    with MotoS3StorageFixtureFactory(use_ssl=SSL_TEST_SUPPORTED, ssl_test_support=SSL_TEST_SUPPORTED, bucket_versioning=False) as f:
+    with MotoS3StorageFixtureFactory(
+        use_ssl=SSL_TEST_SUPPORTED, ssl_test_support=SSL_TEST_SUPPORTED, bucket_versioning=False
+    ) as f:
         yield f
 
 
@@ -154,7 +157,7 @@ def s3_ssl_disabled_storage_factory() -> Iterator[MotoS3StorageFixtureFactory]:
 
 
 @pytest.fixture(scope="session")
-def s3_bucket_versioning_storage_factory() -> Iterator[MotoS3StorageFixtureFactory] :
+def s3_bucket_versioning_storage_factory() -> Iterator[MotoS3StorageFixtureFactory]:
     with MotoS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=True) as f:
         yield f
 
@@ -340,9 +343,27 @@ def arctic_client_no_lmdb(request, encoding_version) -> Arctic:
     return ac
 
 
+@pytest.fixture(
+    scope="function",
+    params=[
+        "lmdb"
+    ],
+)
+def arctic_client_lmdb(request, encoding_version) -> Arctic:
+    storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
+    ac = storage_fixture.create_arctic(encoding_version=encoding_version)
+    assert not ac.list_libraries()
+    return ac
+
+
 @pytest.fixture
 def arctic_library(arctic_client, lib_name) -> Arctic:
     return arctic_client.create_library(lib_name)
+
+
+@pytest.fixture
+def arctic_library_lmdb(arctic_client_lmdb, lib_name):
+    return arctic_client_lmdb.create_library(lib_name)
 
 
 @pytest.fixture(
@@ -599,7 +620,7 @@ def azure_version_store_dynamic_schema(azure_store_factory):
 
 
 @pytest.fixture
-def lmdb_version_store_string_coercion(version_store_factory) ->NativeVersionStore:
+def lmdb_version_store_string_coercion(version_store_factory) -> NativeVersionStore:
     return version_store_factory()
 
 
@@ -632,6 +653,7 @@ def lmdb_version_store_big_map(version_store_factory) -> NativeVersionStore:
 @pytest.fixture
 def lmdb_version_store_very_big_map(version_store_factory) -> NativeVersionStore:
     return version_store_factory(lmdb_config={"map_size": 2**35})
+
 
 @pytest.fixture
 def lmdb_version_store_column_buckets(version_store_factory) -> NativeVersionStore:
@@ -863,6 +885,7 @@ def basic_store_small_segment(basic_store_factory) -> NativeVersionStore:
 @pytest.fixture
 def basic_store_tiny_segment(basic_store_factory) -> NativeVersionStore:
     return basic_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
+
 
 @pytest.fixture
 def basic_store_tiny_segment_dynamic(basic_store_factory) -> NativeVersionStore:
