@@ -946,6 +946,7 @@ if(${TEST})
             util/test/test_id_transformation.cpp
             util/test/test_key_utils.cpp
             util/test/test_ranges_from_future.cpp
+            util/test/test_reliable_storage_lock.cpp
             util/test/test_slab_allocator.cpp
             util/test/test_storage_lock.cpp
             util/test/test_string_pool.cpp
@@ -963,15 +964,7 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
             python/python_handlers.cpp
-            storage/test/common.hpp
-<<<<<<< HEAD
-    )
-||||||| parent of 02f753a1 (Reliable storage lock)
-            version/test/test_sort_index.cpp)
-=======
-            version/test/test_sort_index.cpp
-            util/test/test_reliable_storage_lock.cpp)
->>>>>>> 02f753a1 (Reliable storage lock)
+            storage/test/common.hpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
