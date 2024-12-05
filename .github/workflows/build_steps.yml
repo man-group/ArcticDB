@@ -74,6 +74,12 @@ jobs:
         with:
           submodules: recursive # Just in case a dep has its own third-party deps
 
+      - name: Setup tmate session
+        if: matrix.os == 'windows'
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: true
+
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.3
         with:
