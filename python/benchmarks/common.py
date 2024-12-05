@@ -5,9 +5,15 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import os
 import pandas as pd
 import numpy as np
 
+## You can now define SLOW ASV tests
+## To run those tests also you have to set following OS variable
+## Then you can use this variable along with asv_runner.benchmarks.mark.SkipNotImplemented exception
+## (see finalized_staged_data.py)
+SLOW_TESTS = os.getenv("ARCTICDB_SLOW_TESTS") == "1"
 
 def generate_pseudo_random_dataframe(n, freq="s", end_timestamp="1/1/2023"):
     """
