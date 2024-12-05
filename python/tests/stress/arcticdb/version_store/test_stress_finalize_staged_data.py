@@ -6,21 +6,17 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import copy
 import gc
 import time
 import numpy as np
-import pandas as pd
-from typing import Union, List
-
-import pytest
-from arcticdb.version_store.library import Library, StagedDataFinalizeMethod
-from arcticdb.config import Defaults, set_log_level
-from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
-
-from typing import Union
+from typing import List
 import numpy as np
 import pandas as pd
+
+from arcticdb.version_store.library import Library, StagedDataFinalizeMethod
+from arcticdb.config import set_log_level
+from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
+
 
 from tests.util.mark import SLOW_TESTS_MARK
 
@@ -43,7 +39,17 @@ class Results:
         return f"Options: {self.options}\nIteration: {self.iteration}\n# staged chunks: {self.number_staged_chunks}\ntotal rows finalized: {self.total_rows_finalized}\ntime for finalization (s): {self.finalization_time}"    
 
 @SLOW_TESTS_MARK
-def test_finalize_monotonic_unique_chunks(arctic_library_lmdb):
+def test_finalize_monotonic_unique_chunks(basic_arctic_library):
+    """
+        The test is designed to staged thousands of chunks with variable chunk size.
+        To experiment on local computer you can move up to 20k number of chunks approx 10k each
+
+        For stress testing this number is reduced due to github runner HDD size - 16 GB only
+
+        On local disk you must use "arctic_library_lmdb" fixture as it sets 100 GB limit.
+        If you use "basic_arctic_library" you might end with much more space taken eating all your space
+        if you want to experiment with more number of chunks
+    """
 
     options = [
         {"chunks_descending" : True, "finalization_mode" : StagedDataFinalizeMethod.APPEND},
@@ -55,7 +61,7 @@ def test_finalize_monotonic_unique_chunks(arctic_library_lmdb):
     # Will hold the results after each iteration (instance of Results class)
     results = []
 
-    lib : Library = arctic_library_lmdb
+    lib : Library = basic_arctic_library
 
     total_start_time = time.time()
 
@@ -76,7 +82,7 @@ def test_finalize_monotonic_unique_chunks(arctic_library_lmdb):
     df = cachedDF.generate_dataframe_timestamp_indexed(num_rows_initially, total_number_rows, cachedDF.TIME_UNIT)
 
     cnt = 0
-    for iter in [1000, 2000, 3000, 4000] :
+    for iter in [500, 1000, 1500, 2000] :
         res = Results()
 
         total_number_rows = INITIAL_TIMESTAMP + num_rows_initially

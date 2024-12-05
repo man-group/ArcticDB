@@ -4,8 +4,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-from typing import List
-from typing_extensions import Literal, Tuple, Union
+from typing import List, Tuple, Union
+from typing_extensions import Literal
 import numpy as np
 import pandas as pd
 
