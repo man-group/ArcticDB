@@ -170,43 +170,45 @@ TEST_F(VersionStoreTest, SortMerge) {
     using namespace arcticdb::pipelines;
     using namespace arcticdb::version_store;
 
-    size_t count = 0;
+    for (auto run_number = 0; run_number < 100; run_number++) {
+        StreamId symbol = fmt::format("sym_{}", run_number);
+        size_t count = 0;
 
-    std::vector<SegmentToInputFrameAdapter> data;
-    StreamId symbol{"compact_me"};
+        std::vector<SegmentToInputFrameAdapter> data;
 
-    for (auto i = 0; i < 10; ++i) {
-        auto wrapper = SinkWrapper(symbol, {
-            scalar_field(DataType::UINT64, "thing1"),
-            scalar_field(DataType::UINT64,  "thing2")
-        });
-
-        for(auto j = 0; j < 20; ++j ) {
-            wrapper.aggregator_.start_row(timestamp(count++))([&](auto &&rb) {
-                rb.set_scalar(1, j);
-                rb.set_scalar(2, i + j);
+        for (auto i = 0; i < 10; ++i) {
+            auto wrapper = SinkWrapper(symbol, {
+                scalar_field(DataType::UINT64, "thing1"),
+                scalar_field(DataType::UINT64,  "thing2")
             });
+
+            for(auto j = 0; j < 20; ++j ) {
+                wrapper.aggregator_.start_row(timestamp(count++))([&](auto &&rb) {
+                    rb.set_scalar(1, j);
+                    rb.set_scalar(2, i + j);
+                });
+            }
+
+            wrapper.aggregator_.commit();
+            data.emplace_back( SegmentToInputFrameAdapter{std::move(wrapper.segment())});
+        }
+        std::mt19937 mt{42};
+        std::shuffle(data.begin(), data.end(), mt);
+
+        for(auto&& frame : data) {
+            test_store_->append_incomplete_frame(symbol, std::move(frame.input_frame_), true);
         }
 
-        wrapper.aggregator_.commit();
-        data.emplace_back( SegmentToInputFrameAdapter{std::move(wrapper.segment())});
+        CompactIncompleteOptions options{
+                .prune_previous_versions_=false,
+                .append_=true,
+                .convert_int_to_float_=false,
+                .via_iteration_=false,
+                .sparsify_=false
+        };
+
+        test_store_->sort_merge_internal(symbol, std::nullopt, options);
     }
-    std::mt19937 mt{42};
-    std::shuffle(data.begin(), data.end(), mt);
-
-    for(auto&& frame : data) {
-        test_store_->append_incomplete_frame(symbol, std::move(frame.input_frame_), true);
-    }
-
-    CompactIncompleteOptions options{
-            .prune_previous_versions_=false,
-            .append_=true,
-            .convert_int_to_float_=false,
-            .via_iteration_=false,
-            .sparsify_=false
-    };
-
-    test_store_->sort_merge_internal(symbol, std::nullopt, options);
 }
 
 TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
