@@ -70,6 +70,10 @@ namespace s3 {
                                                            error_message_suffix));
             }
 
+            if (type == Aws::S3::S3Errors::UNKNOWN && err.GetExceptionName().find("Precondition") != std::string::npos) {
+                raise<ErrorCode::E_ATOMIC_OPERATION_FAILED>(fmt::format("Atomic operation failed: {}", error_message_suffix));
+            }
+
             // We create a more detailed error explanation in case of NETWORK_CONNECTION errors to remedy #880.
             if (type == Aws::S3::S3Errors::NETWORK_CONNECTION) {
                 error_message = fmt::format("Unexpected network error: {} "

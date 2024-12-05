@@ -181,7 +181,7 @@ std::optional<AcquiredLockId> ReliableStorageLock<ClockType>::try_take_next_id(c
         // Either way it's safe to assume we have failed to acquire the lock in case of transient S3 error.
         // If error persists we'll approprieately raise in the next attempt to LIST/GET the existing lock and propagate
         // the transient error.
-        log::lock().warn("Failed to acquire lock (likely someone acquired it before us): {}", e.what());
+        log::lock().debug("Failed to acquire lock (likely someone acquired it before us): {}", e.what());
         return std::nullopt;
     }
     // We clear old locks only after aquiring the lock to avoid duplicating the deletion work
