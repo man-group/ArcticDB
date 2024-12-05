@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21) # TARGET_RUNTIME_DLLS
 
 #link_directories("C:/Users/Alex/AppData/Local/Programs/Python/Python312/libs")
-#set(Python_EXECUTABLE "C:/Users/<username>/AppData/Local/Programs/Python/Python312/python.exe")
+set(Python_EXECUTABLE "C:/Users/Alex/AppData/Local/Programs/Python/Python312/python.exe")
 # Make the `project` command handle the version of the project.
 cmake_policy(SET CMP0048 NEW)
 
@@ -17,7 +17,7 @@ project(arcticdb VERSION 0.0.1)
 enable_testing()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(ARCTICDB_MSVC_OMIT_RUNTIME_CHECKS OFF CACHE BOOL "")
+set(ARCTICDB_MSVC_OMIT_RUNTIME_CHECKS ON CACHE BOOL "")
 set(ARCTICDB_USE_PCH OFF CACHE BOOL "Whether to use precompiled headers")
 option(
     ARCTICDB_USING_CONDA
