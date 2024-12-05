@@ -45,7 +45,7 @@ TEST(Async, SinkBasic) {
     as::LibraryIndex library_index{environment_name, config_resolver};
 
     as::UserAuth au{"abc"};
-    auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, au);
+    auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, au, as::NativeVariantStorage());
     auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
     aa::TaskScheduler sched{1};
 
@@ -76,7 +76,7 @@ TEST(Async, DeDupTest) {
     as::LibraryIndex library_index{environment_name, config_resolver};
 
     as::UserAuth au{"abc"};
-    auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, au);
+    auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, au, storage::NativeVariantStorage());
     auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
     aa::AsyncStore store(lib, *codec_opt, EncodingVersion::V2);
     auto seg = SegmentInMemory();
@@ -304,7 +304,7 @@ std::shared_ptr<arcticdb::Store> create_store(const storage::LibraryPath &librar
                   as::LibraryIndex &library_index,
                   const storage::UserAuth &user_auth,
                   std::shared_ptr<proto::encoding::VariantCodec> &codec_opt) {
-    auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, user_auth);
+    auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, user_auth, storage::NativeVariantStorage());
     auto store = aa::AsyncStore(lib, *codec_opt, EncodingVersion::V1);
     return std::make_shared<aa::AsyncStore<>>(std::move(store));
 }

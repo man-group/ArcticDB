@@ -14,23 +14,36 @@ import re
 import sys
 import platform
 from tempfile import mkdtemp
+import boto3
+import time
 
 
 import requests
-from typing import NamedTuple, Optional, Any, Type
+from typing import Optional, Any, Type
 
 from .api import *
 from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree, get_ca_cert_for_testing
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_s3_library_to_env
+from arcticdb_ext.storage import AWSAuthMethod, NativeVariantStorage
+
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 
-Key = NamedTuple("Key", [("id", str), ("secret", str), ("user_name", str)])
 _PermissionCapableFactory: Type["MotoS3StorageFixtureFactory"] = None  # To be set later
 
 logging.getLogger("botocore").setLevel(logging.INFO)
+logger = logging.getLogger("S3 Storage Fixture")
 
+S3_CONFIG_PATH = os.path.expanduser(os.path.join("~", ".aws", "config"))
+S3_BACKUP_CONFIG_PATH = os.path.expanduser(os.path.join("~", ".aws", "bk_config"))
+
+
+class Key:
+    def __init__(self, *, id: str, secret: str, user_name: str):
+        self.id = id
+        self.secret = secret
+        self.user_name = user_name
 
 class S3Bucket(StorageFixture):
     _FIELD_REGEX = {
@@ -41,15 +54,22 @@ class S3Bucket(StorageFixture):
         ArcticUriFields.PATH_PREFIX: re.compile("[?&](path_prefix=)([^&]+)(&?)"),
         ArcticUriFields.CA_PATH: re.compile("[?&](CA_cert_path=)([^&]*)(&?)"),
         ArcticUriFields.SSL: re.compile("[?&](ssl=)([^&]+)(&?)"),
+        ArcticUriFields.AWS_AUTH: re.compile("[?&](aws_auth=)([^&]+)(&?)"),
+        ArcticUriFields.AWS_PROFILE: re.compile("[?&](aws_profile=)([^&]+)(&?)"),
     }
 
     key: Key
     _boto_bucket: Any = None
 
-    def __init__(self, factory: "BaseS3StorageFixtureFactory", bucket: str):
+    def __init__(self, 
+                 factory: "BaseS3StorageFixtureFactory", 
+                 bucket: str, 
+                 native_config: Optional[NativeVariantStorage] = None
+                 ):
         super().__init__()
         self.factory = factory
         self.bucket = bucket
+        self.native_config = native_config
 
         if isinstance(factory, _PermissionCapableFactory) and factory.enforcing_permissions:
             self.key = factory._create_user_get_key(bucket + "_user")
@@ -57,7 +77,16 @@ class S3Bucket(StorageFixture):
             self.key = factory.default_key
 
         secure, host, port = re.match(r"(?:http(s?)://)?([^:/]+)(?::(\d+))?", factory.endpoint).groups()
-        self.arctic_uri = f"s3{secure or ''}://{host}:{self.bucket}?access={self.key.id}&secret={self.key.secret}"
+        self.arctic_uri = f"s3{secure or ''}://{host}:{self.bucket}?"
+        
+        if factory.aws_auth == None or factory.aws_auth == AWSAuthMethod.DISABLED:
+            self.arctic_uri += f"access={self.key.id}&secret={self.key.secret}"
+        elif factory.aws_auth == AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER:
+            assert factory.aws_profile is not None
+            self.arctic_uri += "aws_auth=sts"
+            self.arctic_uri += f"&aws_profile={factory.aws_profile}"
+        else:
+            self.arctic_uri += "aws_auth=default"
         if port:
             self.arctic_uri += f"&port={port}"
         if factory.default_prefix:
@@ -96,8 +125,11 @@ class S3Bucket(StorageFixture):
             ca_cert_path=self.factory.client_cert_file,
             is_nfs_layout=False,
             use_raw_prefix=self.factory.use_raw_prefix,
+            aws_auth=self.factory.aws_auth,
+            aws_profile=self.factory.aws_profile,
+            native_cfg=self.native_config,
         )# client_cert_dir is skipped on purpose; It will be tested manually in other tests
-        return cfg
+        return cfg, self.native_config
 
     def set_permission(self, *, read: bool, write: bool):
         factory = self.factory
@@ -152,7 +184,9 @@ class NfsS3Bucket(S3Bucket):
             ssl=self.factory.ssl,
             ca_cert_path=self.factory.client_cert_file,
             is_nfs_layout=True,
-            use_raw_prefix=self.factory.use_raw_prefix
+            use_raw_prefix=self.factory.use_raw_prefix,
+            aws_auth=self.factory.aws_auth,
+            aws_profile=self.factory.aws_profile,
         )# client_cert_dir is skipped on purpose; It will be tested manually in other tests
         return cfg
 
@@ -169,17 +203,22 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
     clean_bucket_on_fixture_exit = True
     use_mock_storage_for_testing = None  # If set to true allows error simulation
 
-    def __init__(self):
+    def __init__(self, native_config: Optional[dict] = None):
         self.client_cert_file = None
         self.client_cert_dir = None
         self.ssl = False
+        self.aws_auth = None
+        self.aws_profile = None
+        self.aws_policy_name = None
+        self.aws_role = None
+        self.aws_role_arn = None
+        self.sts_test_key = None
+        self.native_config = native_config
 
     def __str__(self):
         return f"{type(self).__name__}[{self.default_bucket or self.endpoint}]"
 
     def _boto(self, service: str, key: Key, api="client"):
-        import boto3
-
         ctor = getattr(boto3, api)
         return ctor(
             service_name=service,
@@ -191,28 +230,259 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
         )  # verify=False cannot skip verification on buggy boto3 in py3.6
 
     def create_fixture(self) -> S3Bucket:
-        return S3Bucket(self, self.default_bucket)
+        return S3Bucket(self, self.default_bucket, self.native_config)
 
     def cleanup_bucket(self, b: S3Bucket):
         # When dealing with a potentially shared bucket, we only clear our the libs we know about:
         b.slow_cleanup(failure_consequence="We will be charged unless we manually delete it. ")
 
 
-def real_s3_from_environment_variables(*, shared_path: bool):
-    out = BaseS3StorageFixtureFactory()
+def real_s3_from_environment_variables(shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""):
+    out = BaseS3StorageFixtureFactory(native_config=native_config)
     out.endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
     out.region = os.getenv("ARCTICDB_REAL_S3_REGION")
     out.default_bucket = os.getenv("ARCTICDB_REAL_S3_BUCKET")
     access_key = os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY")
     secret_key = os.getenv("ARCTICDB_REAL_S3_SECRET_KEY")
-    out.default_key = Key(access_key, secret_key, "unknown user")
+    out.default_key = Key(id=access_key, secret=secret_key, user_name="unknown user")
     out.clean_bucket_on_fixture_exit = os.getenv("ARCTICDB_REAL_S3_CLEAR").lower() in ["true", "1"]
     out.ssl = out.endpoint.startswith("https://")
     if shared_path:
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
     else:
-        out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX")
+        out.default_prefix = os.getenv('ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX', "") + additional_suffix
     return out
+
+
+def real_s3_sts_from_environment_variables(user_name: str, role_name: str, policy_name: str, profile_name: str, native_config: NativeVariantStorage, additional_suffix: str):
+    out = real_s3_from_environment_variables(False, native_config, additional_suffix)
+    iam_client = boto3.client("iam", aws_access_key_id=out.default_key.id, aws_secret_access_key=out.default_key.secret)
+    # Create IAM user
+    try:
+        iam_client.create_user(UserName=user_name)
+        out.sts_test_key = Key(id=None, secret=None, user_name=user_name)
+        logger.info("User created successfully.")
+    except iam_client.exceptions.EntityAlreadyExistsException:
+        logger.warn("User already exists.")
+    except Exception as e:
+        logger.error(f"Error creating user: {e}")
+        raise e
+
+    account_id = boto3.client("sts", aws_access_key_id=out.default_key.id, aws_secret_access_key=out.default_key.secret).get_caller_identity().get("Account")
+    # Create IAM role
+    assume_role_policy_document = {
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Principal": {
+                "Service": "ec2.amazonaws.com",
+                "AWS": account_id
+            },
+            "Action": "sts:AssumeRole"
+        }
+        ]
+    }
+
+    try:
+        role_response = iam_client.create_role(
+            RoleName=role_name,
+            AssumeRolePolicyDocument=json.dumps(assume_role_policy_document)
+        )
+        out.aws_role_arn = role_response["Role"]["Arn"]
+        out.aws_role = role_name
+        logger.info("Role created successfully.")
+    except iam_client.exceptions.EntityAlreadyExistsException:
+        out.aws_role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
+        logger.warn("Role already exists.")
+    except Exception as e:
+        logger.error(f"Error creating role: {e}")
+        raise e
+
+    # Create a policy for S3 bucket access
+    s3_access_policy_document = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListBucket"],
+                "Resource": [f"arn:aws:s3:::{out.default_bucket}"]
+            },
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListObject"],
+                "Resource": [f"arn:aws:s3:::{out.default_bucket}/*"]
+            }
+        ]
+    }
+
+    try:
+        policy_response = iam_client.create_policy(
+            PolicyName=policy_name,
+            PolicyDocument=json.dumps(s3_access_policy_document)
+        )
+        out.aws_policy_name = policy_response["Policy"]["Arn"]
+        logger.info("Policy created successfully.")
+    except iam_client.exceptions.EntityAlreadyExistsException:
+        out.aws_policy_name = f"arn:aws:iam::{account_id}:policy/{policy_name}"
+        logger.warn("Policy already exists.")
+    except Exception as e:
+        logger.error(f"Error creating policy: {e}")
+        raise e
+
+    # Attach the policy to the role
+    try:
+        iam_client.attach_role_policy(
+            RoleName=role_name,
+            PolicyArn=out.aws_policy_name
+        )
+        logger.info("Policy attached to role successfully.")
+    except Exception as e:
+        logger.error(f"Error attaching policy to role: {e}")
+        raise e
+
+    # Create an inline policy for the user to assume the role
+    assume_role_user_policy_document = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": "sts:AssumeRole",
+                "Resource": f"arn:aws:iam::{account_id}:role/{role_name}",
+            }
+        ]
+    }
+
+    try:
+        iam_client.put_user_policy(
+            UserName=user_name,
+            PolicyName="AssumeRolePolicy",
+            PolicyDocument=json.dumps(assume_role_user_policy_document)
+        )
+        logger.info("Inline policy to assume role attached to user successfully.")
+    except Exception as e:
+        logger.error(f"Error attaching inline policy to user: {e}")
+        raise e
+
+    logger.info("User created with role to access bucket.")
+
+    try:
+        access_key_response = iam_client.create_access_key(UserName=user_name)
+        out.sts_test_key.id = access_key_response["AccessKey"]["AccessKeyId"]
+        out.sts_test_key.secret = access_key_response["AccessKey"]["SecretAccessKey"]
+        logger.info("Access key created successfully.")
+    except Exception as e:
+        logger.error(f"Error creating access key: {e}")
+        raise e
+    
+    out.aws_auth = AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER
+    out.aws_profile = profile_name
+    real_s3_sts_write_local_credentials(out)
+    return out
+
+
+def real_s3_sts_write_local_credentials(factory: BaseS3StorageFixtureFactory):
+    base_profile_name = factory.aws_profile + "_base"
+    aws_credentials = f"""
+[profile {factory.aws_profile}]
+role_arn = {factory.aws_role_arn}
+source_profile = {base_profile_name}
+
+[profile {base_profile_name}]
+aws_access_key_id = {factory.sts_test_key.id}
+aws_secret_access_key = {factory.sts_test_key.secret}
+"""
+    aws_dir = os.path.dirname(S3_CONFIG_PATH)
+    if not os.path.exists(aws_dir):
+        os.makedirs(aws_dir)
+
+    if os.path.exists(S3_CONFIG_PATH):
+        os.rename(S3_CONFIG_PATH, S3_BACKUP_CONFIG_PATH)
+
+    with open(S3_CONFIG_PATH, "w") as config_file:
+        config_file.write(aws_credentials)
+
+
+def real_s3_sts_resources_ready(factory: BaseS3StorageFixtureFactory): 
+    sts_client = boto3.client(
+        "sts",
+        aws_access_key_id=factory.sts_test_key.id,
+        aws_secret_access_key=factory.sts_test_key.secret
+    )
+    for _ in range(20):
+        try:
+            assumed_role = sts_client.assume_role(
+                RoleArn=factory.aws_role_arn,
+                RoleSessionName="TestSession"
+            )
+            logger.info("Boto3 assume role successful.")
+            s3_client = boto3.client(
+                "s3",
+                aws_access_key_id=assumed_role['Credentials']['AccessKeyId'],
+                aws_secret_access_key=assumed_role['Credentials']['SecretAccessKey'],
+                aws_session_token=assumed_role['Credentials']['SessionToken']
+            )
+            response = s3_client.list_objects_v2(Bucket=factory.default_bucket)
+            logger.info(f"S3 list objects test successful: {response['ResponseMetadata']['HTTPStatusCode']}")
+            return
+        except:
+            logger.warn(f"Assume role failed. Retrying in 1 second...") # Don't print the exception as it could contain sensitive information, e.g. user id
+            time.sleep(1)
+
+    raise Exception("iam resources not ready")
+
+
+def real_s3_sts_clean_up(role_name: str, policy_name: str, user_name: str):
+    iam_client = boto3.client("iam", aws_access_key_id=os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY"), aws_secret_access_key=os.getenv("ARCTICDB_REAL_S3_SECRET_KEY"))
+    logger.info("Starting cleanup process...")
+    try:
+        for policy in iam_client.list_attached_role_policies(RoleName=role_name)["AttachedPolicies"]:
+            iam_client.detach_role_policy(
+                RoleName=role_name,
+                PolicyArn=policy["PolicyArn"]
+            )
+            iam_client.delete_policy(
+                PolicyArn=policy["PolicyArn"]
+            )
+        logger.info("Policy deleted successfully.")
+    except Exception:
+        logger.error("Error deleting policy")
+
+    try:
+        iam_client.delete_role(
+            RoleName=role_name
+        )
+        logger.info("Role deleted successfully.")
+    except Exception:
+        logger.error("Error deleting role") # Role could be non-existent as creation of it may fail
+
+    
+    try:
+        for key in iam_client.list_access_keys(UserName=user_name)["AccessKeyMetadata"]:
+            iam_client.delete_access_key(
+                UserName=user_name,
+                AccessKeyId=key["AccessKeyId"]
+            )
+        logger.info("Access key deleted successfully.")
+    except Exception:
+        logger.error("Error deleting access key id")
+
+    try:
+        for policy_name in iam_client.list_user_policies(UserName=user_name)["PolicyNames"]:
+            iam_client.delete_user_policy(UserName=user_name, PolicyName=policy_name)
+        logger.info("Detached and deleted inline policy from user")
+
+        # Delete the user
+        iam_client.delete_user(
+            UserName=user_name
+        )
+        logger.info("User deleted successfully.")
+    except Exception:
+        logger.error("Error deleting user") # User could be non-existent as creation of it may fail
+
+        
+    if os.path.exists(S3_CONFIG_PATH) and os.path.exists(S3_BACKUP_CONFIG_PATH):
+        os.remove(S3_CONFIG_PATH)
+        os.rename(S3_BACKUP_CONFIG_PATH, S3_CONFIG_PATH)
 
 
 def mock_s3_with_error_simulation():
@@ -224,14 +494,14 @@ def mock_s3_with_error_simulation():
     out = BaseS3StorageFixtureFactory()
     out.use_mock_storage_for_testing = True
     # We set some values which don't matter since we're using the mock storage
-    out.default_key = Key("access key", "secret key", "unknown user")
+    out.default_key = Key(id="access key", secret="secret key", user_name="unknown user")
     out.endpoint = "http://test"
     out.region = "us-east-1"
     return out
 
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
-    default_key = Key("awd", "awd", "dummy")
+    default_key = Key(id="awd", secret="awd", user_name="dummy")
     _RO_POLICY: str
     _RW_POLICY: str
     host = "localhost"
@@ -251,7 +521,9 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                  ssl_test_support: bool,
                  bucket_versioning: bool,
                  default_prefix: str = None,
-                 use_raw_prefix: bool = False):
+                 use_raw_prefix: bool = False,
+                 native_config: Optional[NativeVariantStorage] = None):
+        super().__init__(native_config)
         self.http_protocol = "https" if use_ssl else "http"
         self.ssl_test_support = ssl_test_support
         self.bucket_versioning = bucket_versioning
@@ -369,7 +641,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         iam = iam or self._iam_admin
         user_id = iam.create_user(UserName=user)["User"]["UserId"]
         response = iam.create_access_key(UserName=user)["AccessKey"]
-        return Key(response["AccessKeyId"], response["SecretAccessKey"], user)
+        return Key(id=response["AccessKeyId"], secret=response["SecretAccessKey"], username=user)
 
     @property
     def enforcing_permissions(self):
@@ -416,7 +688,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                 }
             )
 
-        out = S3Bucket(self, bucket)
+        out = S3Bucket(self, bucket, self.native_config)
         self._live_buckets.append(out)
         return out
 
