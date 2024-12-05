@@ -56,7 +56,8 @@ namespace arcticdb::storage {
         [[nodiscard]] std::shared_ptr<Library> get_library(
                 const LibraryPath& path,
                 const StorageOverride& storage_override,
-                bool ignore_cache);
+                bool ignore_cache,
+                const NativeVariantStorage& native_storage_config);
 
         void cleanup_library_if_open(const LibraryPath& path);
 
