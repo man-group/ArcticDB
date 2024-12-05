@@ -125,7 +125,7 @@ def concat_all_arrays(*arrays):
 
 @pytest.mark.skip(reason="Problem with named indexes Monday#7941575430")
 @pytest.mark.parametrize("new_version" , [True, False])
-def test_finalize_empty_dataframe(arctic_library_lmdb, new_version):
+def test_finalize_empty_dataframe(basic_arctic_library, new_version):
     """
         Primary goal of the test is to finalize with staged empty array that has
         exactly same schema as the one in symbol
@@ -137,7 +137,7 @@ def test_finalize_empty_dataframe(arctic_library_lmdb, new_version):
         df.index.name = 'timestamp'
         return df
 
-    lib = arctic_library_lmdb
+    lib = basic_arctic_library
     symbol = "symbol"
     
     df = small_dataframe("2023-01-01")
@@ -381,14 +381,14 @@ def test_finalize_with_upcast_type_new_columns(lmdb_library_dynamic_schema):
     verify_dataframe_column(df=result, row_name="NUMBER2", max_type=last_type_c, expected_array_of_column_values=arr_all_c)
 
 
-def test_finalize_staged_data_long_scenario(arctic_library_lmdb):
+def test_finalize_staged_data_long_scenario(basic_arctic_library):
     """
         The purpose of of the test is to assure all staged segments along with their data
         are correctly finalized and resulting
     """
 
     start_time = time.time()
-    lib = arctic_library_lmdb
+    lib = basic_arctic_library
     symbol = "symbol"
 
     cachedDF = CachedDFGenerator(25000, [1])
