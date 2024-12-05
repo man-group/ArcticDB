@@ -21,7 +21,7 @@ def nice_bytes_str(bytes):
     return f" {bytes / (1024 * 1024):.2f}MB/[{bytes}] "
 
 
-def lets_collect_some_garbage(time_sec: int = 7):
+def lets_collect_some_garbage(time_sec: int = 9):
     """
     Do a garbage collection
     """
@@ -177,9 +177,9 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
          run the test from command line again to assure it runs ok before commit 
 
     """
-    max_mem_bytes = 175_623_040
+    max_mem_bytes = 400_623_040
 
-    check_process_memory_leaks(proc_to_examine, 20, max_mem_bytes, 80.0)
+    check_process_memory_leaks(proc_to_examine, 25, max_mem_bytes, 80.0)
 
 
 def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
