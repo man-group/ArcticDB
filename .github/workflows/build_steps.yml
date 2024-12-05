@@ -155,13 +155,13 @@ jobs:
 
       - name: C++ Rapidcheck
         if: inputs.job_type == 'cpp-tests'
-        run: cpp/out/install/arcticdb_rapidcheck_tests
+        run: cpp/out/install/arcticdb_rapidcheck_tests --gtest_catch_exceptions=0
 
-      - name: Collect arcticdb_rapidcheck_tests binary on failure
+      - name: Collect arcticdb_rapidcheck_tests binary on failure (Windows)
         if: matrix.os == 'windows' && failure()
         uses: actions/upload-artifact@v3.1.3
         with:
-          name: test_unit_arcticdb
+          name: arcticdb_rapidcheck_tests_win
           path: cpp/out/install/arcticdb_rapidcheck_tests.exe
 
       - name: C++ unit tests
@@ -169,18 +169,18 @@ jobs:
         run: |
           cd cpp/out
           install/test_unit_arcticdb --gtest_output=json:test_unit_arcticdb.json \
-            --gtest_filter=-TestNfsBackedStorage.*:TestS3Storage.* || true
+            --gtest_filter=-TestNfsBackedStorage.*:TestS3Storage.* --gtest_catch_exceptions=0 || true
           [[ $(jq '.tests' test_unit_arcticdb.json) -gt 0 ]]
           [[ $(jq '.failures' test_unit_arcticdb.json) -eq 0 ]]
           [[ $(jq '.errors' test_unit_arcticdb.json) -eq 0 ]]
         env:
           ARCTICDB_memory_loglevel: INFO
 
-      - name: Collect test_unit_arcticdb binary on failure
+      - name: Collect test_unit_arcticdb binary on failure (Windows)
         if: matrix.os == 'windows' && failure()
         uses: actions/upload-artifact@v3.1.3
         with:
-          name: test_unit_arcticdb
+          name: test_unit_arcticdb_win
           path: cpp/out/install/test_unit_arcticdb.exe
 
       - name: Collect crash dumps (Windows)
