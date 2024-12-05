@@ -1,7 +1,6 @@
 import numpy as np
 import pytest
 
-from typing import List, Tuple
 from hypothesis import given, strategies as st, settings
 from arcticdb.config import Defaults
 from arcticdb.version_store.helper import ArcticMemoryConfig, get_lib_cfg, add_lmdb_library_to_env
@@ -13,6 +12,7 @@ from pandas.testing import assert_frame_equal
 from arcticdb.util.test import sample_dataframe
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 import hypothesis
+import sys
 
 
 # configure_test_logger("DEBUG")
@@ -107,7 +107,7 @@ def test_storage_mover_key_by_key(lmdb_version_store_v1, arctidb_native_local_li
 
     compare_two_libs(lmdb_version_store_v1, dst_lib)
 
-
+@pytest.mark.xfail(sys.platform == "win32", reason="Numpy strings are not implemented for Windows")
 def test_storage_mover_symbol_tree(arctidb_native_local_lib_cfg_extra, arctidb_native_local_lib_cfg, lib_name):
     col_per_group = 5
     row_per_segment = 10
