@@ -7,11 +7,13 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import gc
+import sys
 import time
 import numpy as np
 from typing import List
 import numpy as np
 import pandas as pd
+import pytest
 
 from arcticdb.version_store.library import Library, StagedDataFinalizeMethod
 from arcticdb.config import set_log_level
@@ -39,6 +41,7 @@ class Results:
         return f"Options: {self.options}\nIteration: {self.iteration}\n# staged chunks: {self.number_staged_chunks}\ntotal rows finalized: {self.total_rows_finalized}\ntime for finalization (s): {self.finalization_time}"    
 
 @SLOW_TESTS_MARK
+@pytest.mark.skipif(sys.platform == "win32", reason="Not enough storage on Windows runners")
 def test_finalize_monotonic_unique_chunks(basic_arctic_library):
     """
         The test is designed to staged thousands of chunks with variable chunk size.
