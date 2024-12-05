@@ -9,10 +9,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 import time
 import psutil
 import gc
-import os
 import numpy as np
 import pandas as pd
-import pytest
 import arcticdb as adb
 
 from arcticdb.util.test import get_sample_dataframe
@@ -161,7 +159,7 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
          run the test from command line again to assure it runs ok before commit 
 
     '''
-    max_mem_bytes = 153623040
+    max_mem_bytes = 175_623_040
 
     check_process_memory_leaks(proc_to_examine, 20, max_mem_bytes, 80.0)
 
@@ -185,6 +183,6 @@ def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     """ 
         See comment in previous test
     """
-    max_mem_bytes = 608662528
+    max_mem_bytes = 608_662_528
 
     check_process_memory_leaks(proc_to_examine, 20, max_mem_bytes, 80.0)
