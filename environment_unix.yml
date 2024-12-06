@@ -11,8 +11,10 @@ dependencies:
   - benchmark
   - doxygen
   - libboost-devel
-  - grpcio
-  - grpcio-tools
+  # The grpcio pins are just to resolve issues with our own CI.
+  # Feedstock should NOT be updated to have those pins
+  - grpcio <=1.62.2
+  - grpcio-tools <=1.62.2
   - protobuf
   # Build dependencies
   - krb5
