@@ -89,6 +89,10 @@ KeyClass key_class_from_key_type(KeyType key_type) {
     return get_key_data(key_type).key_class_;
 }
 
+const char* get_key_description(KeyType key_type) {
+    return get_key_data(key_type).description_;
+}
+
 bool is_string_key_type(KeyType key_type){
     return variant_type_from_key_type(key_type) == VariantType::STRING_TYPE;
 }

@@ -7,12 +7,10 @@
 
 #include <arcticdb/version/python_bindings.hpp>
 #include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/version/version_store_api.hpp>
-#include <arcticdb/python/arctic_version.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -25,6 +23,7 @@
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
+
 
 namespace arcticdb::version_store {
 
@@ -111,6 +110,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     .def(pybind11::self == pybind11::self)
     .def(pybind11::self != pybind11::self)
     .def("__repr__", &AtomKey::view)
+    .def(py::self < py::self)
     ;
 
     py::class_<RefKey, std::shared_ptr<RefKey>>(version, "RefKey")

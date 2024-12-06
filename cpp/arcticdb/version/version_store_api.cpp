@@ -11,7 +11,6 @@
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/util/timer.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/util/ranges_from_future.hpp>

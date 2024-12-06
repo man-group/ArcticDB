@@ -51,11 +51,11 @@ class AsyncStore : public Store {
 public:
     AsyncStore(
         std::shared_ptr<storage::Library> library,
-        const arcticdb::proto::encoding::VariantCodec &codec,
+        const proto::encoding::VariantCodec &codec,
         EncodingVersion encoding_version
     ) :
         library_(std::move(library)),
-        codec_(std::make_shared<arcticdb::proto::encoding::VariantCodec>(codec)),
+        codec_(std::make_shared<proto::encoding::VariantCodec>(codec)),
         encoding_version_(encoding_version) {
     }
 

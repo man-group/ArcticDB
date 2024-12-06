@@ -16,6 +16,10 @@
 #include <memory>
 #include <algorithm>
 #include <variant>
+#include <array>
+#include <ranges>
+
+namespace rng = std::ranges;
 
 namespace arcticdb::entity {
 
@@ -191,10 +195,10 @@ enum class KeyType : int {
     UNDEFINED
 };
 
-inline std::vector<KeyType> key_types_write_precedence() {
+consteval auto key_types_write_precedence() {
     // TOMBSTONE[_ALL] keys are not included because they're not written to the storage,
     // they just exist inside version keys
-    return {
+    return std::array {
         KeyType::LIBRARY_CONFIG,
         KeyType::TABLE_DATA,
         KeyType::TABLE_INDEX,
@@ -213,9 +217,9 @@ inline std::vector<KeyType> key_types_write_precedence() {
     };
 }
 
-inline std::vector<KeyType> key_types_read_precedence() {
+consteval auto key_types_read_precedence() {
     auto output = key_types_write_precedence();
-    std::reverse(std::begin(output), std::end(output));
+    rng::reverse(output);
     return output;
 }
 
@@ -245,7 +249,7 @@ enum class VariantType : char {
 
 VariantType variant_type_from_key_type(KeyType key_type);
 
-inline bool is_index_key_type(KeyType key_type) {
+constexpr bool is_index_key_type(KeyType key_type) {
     // TODO: Change name probably.
     return (key_type == KeyType::TABLE_INDEX) || (key_type == KeyType::MULTI_KEY);
 }
@@ -256,30 +260,26 @@ bool is_ref_key_class(KeyType k);
 
 bool is_block_ref_key_class(KeyType k);
 
-inline KeyType get_key_type_for_data_stream(const StreamId &) {
+constexpr KeyType get_key_type_for_data_stream(const StreamId &) {
     return KeyType::TABLE_DATA;
 }
 
-inline KeyType get_key_type_for_index_stream(const StreamId &) {
+constexpr KeyType get_key_type_for_index_stream(const StreamId &) {
     return KeyType::TABLE_INDEX;
 }
 
+const char* get_key_description(KeyType type);
 
 template <typename Function>
-auto foreach_key_type_read_precedence(Function&& func) {
-    auto types = key_types_read_precedence();
-    for(auto type : types) {
-        func(KeyType(type));
-    }
+constexpr auto foreach_key_type_read_precedence(Function&& func) {
+    rng::for_each(key_types_read_precedence(), func);
 }
 
 template <typename Function>
-auto foreach_key_type_write_precedence(Function&& func) {
-    auto types = key_types_write_precedence();
-    for(auto type : types) {
-        func(KeyType(type));
-    }
+constexpr auto foreach_key_type_write_precedence(Function&& func) {
+    rng::for_each(key_types_write_precedence(), func);
 }
+
 inline KeyType key_type_from_int(int type_num) {
     util::check(type_num > 0 && type_num < int(KeyType::UNDEFINED), "Unrecognized key type number {}", type_num);
     return KeyType(type_num);
