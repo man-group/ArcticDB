@@ -23,4 +23,4 @@ from arcticdb.version_store.library import (
 
 set_config_from_env_vars(_os.environ)
 
-__version__ = "5.1.0rc0"
+__version__ = "5.1.2rc0"
