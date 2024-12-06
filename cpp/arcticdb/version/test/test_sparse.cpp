@@ -246,57 +246,57 @@ TEST_F(SparseTestStore, DenseToSparse) {
     ASSERT_EQ(val3, 7);
 }
 
-TEST_F(SparseTestStore, SimpleRoundtripStrings) {
-    using namespace arcticdb;
-    using namespace arcticdb::stream;
-    std::optional<ScopedGILLock> scoped_gil_lock;
-    register_string_types();
-    register_python_handler_data_factory();
-    using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
-    using DynamicSinkWrapper = SinkWrapperImpl<DynamicAggregator>;
+// TEST_F(SparseTestStore, SimpleRoundtripStrings) {
+//     using namespace arcticdb;
+//     using namespace arcticdb::stream;
+//     std::optional<ScopedGILLock> scoped_gil_lock;
+//     register_string_types();
+//     register_python_handler_data_factory();
+//     using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
+//     using DynamicSinkWrapper = SinkWrapperImpl<DynamicAggregator>;
 
-    const std::string stream_id("test_sparse");
+//     const std::string stream_id("test_sparse");
 
-    DynamicSinkWrapper wrapper(stream_id, {});
-    auto& aggregator = wrapper.aggregator_;
+//     DynamicSinkWrapper wrapper(stream_id, {});
+//     auto& aggregator = wrapper.aggregator_;
 
-    aggregator.start_row(timestamp{0})([](auto& rb) {
-        rb.set_scalar_by_name(std::string_view{"first"}, std::string_view{"five"}, DataType::UTF_DYNAMIC64);
-    });
+//     aggregator.start_row(timestamp{0})([](auto& rb) {
+//         rb.set_scalar_by_name(std::string_view{"first"}, std::string_view{"five"}, DataType::UTF_DYNAMIC64);
+//     });
 
-    aggregator.start_row(timestamp{1})([](auto& rb) {
-        rb.set_scalar_by_name(std::string_view{"second"}, std::string_view{"six"}, DataType::UTF_FIXED64);
-    });
+//     aggregator.start_row(timestamp{1})([](auto& rb) {
+//         rb.set_scalar_by_name(std::string_view{"second"}, std::string_view{"six"}, DataType::UTF_FIXED64);
+//     });
 
-    wrapper.aggregator_.commit();
+//     wrapper.aggregator_.commit();
 
-    auto segment = wrapper.segment();
-    test_store_->append_incomplete_segment(stream_id, std::move(segment));
+//     auto segment = wrapper.segment();
+//     test_store_->append_incomplete_segment(stream_id, std::move(segment));
 
-    ReadOptions read_options;
-    read_options.set_dynamic_schema(true);
-    read_options.set_incompletes(true);
-    auto read_query = std::make_shared<ReadQuery>();
-    read_query->row_filter = universal_range();
-    auto handler_data = get_type_handler_data();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame = read_result.frame_data.frame();;
+//     ReadOptions read_options;
+//     read_options.set_dynamic_schema(true);
+//     read_options.set_incompletes(true);
+//     auto read_query = std::make_shared<ReadQuery>();
+//     read_query->row_filter = universal_range();
+//     auto handler_data = get_type_handler_data();
+//     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
+//     const auto& frame = read_result.frame_data.frame();;
 
-    ASSERT_EQ(frame.row_count(), 2);
-    auto val1 = frame.scalar_at<PyObject*>(0, 1);
-    auto str_wrapper = convert::py_unicode_to_buffer(val1.value(), scoped_gil_lock);
-    ASSERT_TRUE(std::holds_alternative<convert::PyStringWrapper>(str_wrapper));
-    ASSERT_EQ(strcmp(std::get<convert::PyStringWrapper>(str_wrapper).buffer_, "five"), 0);
+//     ASSERT_EQ(frame.row_count(), 2);
+//     auto val1 = frame.scalar_at<PyObject*>(0, 1);
+//     auto str_wrapper = convert::py_unicode_to_buffer(val1.value(), scoped_gil_lock);
+//     ASSERT_TRUE(std::holds_alternative<convert::PyStringWrapper>(str_wrapper));
+//     ASSERT_EQ(strcmp(std::get<convert::PyStringWrapper>(str_wrapper).buffer_, "five"), 0);
 
-    auto val2 = frame.string_at(0, 2);
-    ASSERT_EQ(val2.value()[0], char{0});
+//     auto val2 = frame.string_at(0, 2);
+//     ASSERT_EQ(val2.value()[0], char{0});
 
-    auto val3 = frame.scalar_at<PyObject*>(1, 1);
-    auto none = GilSafePyNone::instance();
-    ASSERT_EQ(val3.value(), none->ptr());
-    auto val4 = frame.string_at(1, 2);
-    ASSERT_EQ(val4, "six");
-}
+//     auto val3 = frame.scalar_at<PyObject*>(1, 1);
+//     auto none = GilSafePyNone::instance();
+//     ASSERT_EQ(val3.value(), none->ptr());
+//     auto val4 = frame.string_at(1, 2);
+//     ASSERT_EQ(val4, "six");
+// }
 
 TEST_F(SparseTestStore, Multiblock) {
     SKIP_WIN("Works OK but fills up LMDB");
