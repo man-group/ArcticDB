@@ -10,6 +10,8 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/pipeline/frame_data_wrapper.hpp>
 
+#include <util/gil_safe_py_none.hpp>
+
 #include <pybind11/pybind11.h>
 
 namespace arcticdb::detail {
@@ -113,13 +115,13 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             // (numpy) array, thus the size of the element is not the size of the raw type, but the size of a pointer.
             // This also affects how we allocate columns. Check cpp/arcticdb/column_store/column.hpp::Column and
             // cpp/arcticdb/pipeline/column_mapping.hpp::external_datatype_size
-            auto none = py::none();
+            auto none = GilSafePyNone::instance();
             auto &api = py::detail::npy_api::get();
             auto it = column_data.buffer().iterator(sizeof(PyObject*));
             while(!it.finished()) {
                 auto* ptr = reinterpret_cast<PyObject*>(it.value());
                 util::check(ptr != nullptr, "Can't set base object on null item");
-                if(ptr != none.ptr())
+                if(ptr != none->ptr())
                     api.PyArray_SetBaseObject_(ptr, anchor.inc_ref().ptr());
 
                 it.next();

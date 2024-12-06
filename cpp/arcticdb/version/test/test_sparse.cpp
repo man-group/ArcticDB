@@ -292,8 +292,8 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     ASSERT_EQ(val2.value()[0], char{0});
 
     auto val3 = frame.scalar_at<PyObject*>(1, 1);
-    auto none = py::none{};
-    ASSERT_EQ(val3.value(), none.ptr());
+    auto none = GilSafePyNone::instance();
+    ASSERT_EQ(val3.value(), none->ptr());
     auto val4 = frame.string_at(1, 2);
     ASSERT_EQ(val4, "six");
 }
@@ -692,8 +692,8 @@ TEST_F(SparseTestStore, CompactWithStrings) {
         ASSERT_EQ(val2.value()[0], char{0});
 
         auto val3 = frame.scalar_at<PyObject*>(i + 1, 1);
-        auto none = py::none{};
-        ASSERT_EQ(val3.value(), none.ptr());
+        auto none = GilSafePyNone::instance();
+        ASSERT_EQ(val3.value(), none->ptr());
 
         auto val4 = frame.string_at(i + 1, 2);
 
