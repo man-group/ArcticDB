@@ -70,6 +70,10 @@ namespace s3 {
                                                            error_message_suffix));
             }
 
+            if (type == Aws::S3::S3Errors::UNKNOWN && err.GetExceptionName().find("Precondition") != std::string::npos) {
+                raise<ErrorCode::E_ATOMIC_OPERATION_FAILED>(fmt::format("Atomic operation failed: {}", error_message_suffix));
+            }
+
             // We create a more detailed error explanation in case of NETWORK_CONNECTION errors to remedy #880.
             if (type == Aws::S3::S3Errors::NETWORK_CONNECTION) {
                 error_message = fmt::format("Unexpected network error: {} "
@@ -127,6 +131,27 @@ namespace s3 {
                             }
                         }
                     });
+        }
+
+        template<class KeyBucketizer>
+        void do_write_if_none_impl(
+                KeySegmentPair &&kv,
+                const std::string &root_folder,
+                const std::string &bucket_name,
+                S3ClientWrapper &s3_client,
+                KeyBucketizer &&bucketizer) {
+            ARCTICDB_SAMPLE(S3StorageWriteIfNone, 0)
+            auto key_type_dir = key_type_folder(root_folder, kv.key_type());
+            auto &k = kv.variant_key();
+            auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
+            auto &seg = kv.segment();
+
+            auto put_object_result = s3_client.put_object(s3_object_name, std::move(seg), bucket_name, PutHeader::IF_NONE_MATCH);
+
+            if (!put_object_result.is_success()) {
+                auto& error = put_object_result.get_error();
+                raise_s3_exception(error, s3_object_name);
+            }
         }
 
         template<class KeyBucketizer>

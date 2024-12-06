@@ -39,6 +39,10 @@ namespace arcticdb {
             return false;
         }
 
+        bool supports_atomic_writes() const override {
+            return true;
+        }
+
         bool fast_delete() override {
             return false;
         }
@@ -142,6 +146,15 @@ namespace arcticdb {
                 const StreamId& stream_id,
                 SegmentInMemory &&segment) override {
             return write(key_type, stream_id, std::move(segment)).get();
+        }
+
+        entity::VariantKey write_if_none_sync(
+                KeyType key_type,
+                const StreamId& stream_id,
+                SegmentInMemory &&segment) override {
+            auto key = entity::RefKey{stream_id, key_type};
+            add_segment(key, std::move(segment), true);
+            return key;
         }
 
         bool is_path_valid(const std::string_view) const override {
@@ -465,10 +478,15 @@ namespace arcticdb {
             seg_by_atom_key_[key] = std::make_unique<SegmentInMemory>(std::move(seg));
         }
 
-        void add_segment(const RefKey &key, SegmentInMemory &&seg) {
+        void add_segment(const RefKey &key, SegmentInMemory &&seg, bool if_none_match = false) {
             StorageFailureSimulator::instance()->go(FailureType::WRITE);
             std::lock_guard lock{mutex_};
             ARCTICDB_DEBUG(log::storage(), "Adding segment with key {}", key);
+            if (if_none_match) {
+                if (seg_by_ref_key_.find(key) != seg_by_ref_key_.end()) {
+                    storage::raise<ErrorCode::E_ATOMIC_OPERATION_FAILED>("Precondition failed. Object is already present.");
+                }
+            }
             seg_by_ref_key_[key] = std::make_unique<SegmentInMemory>(std::move(seg));
         }
 

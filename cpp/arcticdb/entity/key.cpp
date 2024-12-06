@@ -60,6 +60,7 @@ KeyData get_key_data(KeyType key_type) {
     STRING_REF(KeyType::APPEND_REF, aref, 'a')
     STRING_KEY(KeyType::MULTI_KEY, mref, 'm')
     STRING_REF(KeyType::LOCK, lref, 'x')
+    STRING_REF(KeyType::ATOMIC_LOCK, alref, 'A')
     STRING_REF(KeyType::SNAPSHOT_TOMBSTONE, ttomb, 'X')
     STRING_KEY(KeyType::APPEND_DATA, app, 'b')
     STRING_REF(KeyType::BLOCK_VERSION_REF, bvref, 'R')

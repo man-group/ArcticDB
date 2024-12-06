@@ -44,6 +44,8 @@ class S3Storage final : public Storage {
   private:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
 
+    void do_write_if_none(KeySegmentPair&& kv) final;
+
     void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
 
     void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
@@ -57,6 +59,13 @@ class S3Storage final : public Storage {
     bool do_supports_prefix_matching() const final {
         return true;
     }
+
+    bool do_supports_atomic_writes() const final {
+        // There is no way to differentiate whether an s3 backed supports atomic writes. As of Nov 2024 S3 and MinIO
+        // support atomic If-None-Match and If-Match put operations. Unfortunately if we're running on VAST or PURE
+        // these would just work like regular PUTs with no way to know.
+        return true;
+    };
 
     bool do_fast_delete() final {
         return false;

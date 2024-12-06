@@ -107,6 +107,10 @@ public:
         return write(Composite<KeySegmentPair>{std::move(kv)});
     }
 
+    void write_if_none(KeySegmentPair&& kv) {
+        return do_write_if_none(std::move(kv));
+    }
+
     void update(Composite<KeySegmentPair> &&kvs, UpdateOpts opts) {
         ARCTICDB_SAMPLE(StorageUpdate, 0)
         return do_update(std::move(kvs), opts);
@@ -148,6 +152,10 @@ public:
         return do_supports_prefix_matching();
     }
 
+    bool supports_atomic_writes() const {
+        return do_supports_atomic_writes();
+    }
+
     bool fast_delete() {
         return do_fast_delete();
     }
@@ -186,6 +194,8 @@ public:
 private:
     virtual void do_write(Composite<KeySegmentPair>&& kvs) = 0;
 
+    virtual void do_write_if_none(KeySegmentPair&& kv) = 0;
+
     virtual void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) = 0;
 
     virtual void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) = 0;
@@ -195,6 +205,8 @@ private:
     virtual bool do_key_exists(const VariantKey& key) = 0;
 
     virtual bool do_supports_prefix_matching() const = 0;
+
+    virtual bool do_supports_atomic_writes() const = 0;
 
     virtual bool do_fast_delete() = 0;
 

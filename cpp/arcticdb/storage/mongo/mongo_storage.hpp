@@ -31,6 +31,10 @@ class MongoStorage final : public Storage {
   private:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
 
+    void do_write_if_none(KeySegmentPair&& kv [[maybe_unused]]) final {
+        storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>("Atomic operations are only supported for s3 backend");
+    };
+
     void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
 
     void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
@@ -40,6 +44,10 @@ class MongoStorage final : public Storage {
     bool do_key_exists(const VariantKey& key) final;
 
     bool do_supports_prefix_matching() const final {
+        return false;
+    }
+
+    bool do_supports_atomic_writes() const final {
         return false;
     }
 
