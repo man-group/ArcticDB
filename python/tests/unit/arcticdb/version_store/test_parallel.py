@@ -41,27 +41,6 @@ def get_index_keys(lib, sym):
     return keys
 
 
-def test_throw_before_vref_key_written(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
-    lib_tool = lib.library_tool()
-    sym = "test_throw_before_vref_key_written"
-    df = pd.DataFrame({"col": [0]}, index=[pd.Timestamp(0)])
-    lib.write(sym, df, parallel=True)
-    with pytest.raises(Exception):
-        lib.compact_incomplete(sym, False, False, delete_staged_data_on_failure=False)
-    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 1
-    with pytest.raises(Exception):
-        lib.version_store.sort_merge(sym, delete_staged_data_on_failure=False)
-    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 1
-    with pytest.raises(Exception):
-        lib.compact_incomplete(sym, False, False, delete_staged_data_on_failure=True)
-    assert not len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym))
-    lib.write(sym, df, parallel=True)
-    with pytest.raises(Exception):
-        lib.version_store.sort_merge(sym, delete_staged_data_on_failure=True)
-    assert not len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym))
-
-
 def test_staging_doesnt_write_append_ref(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     lib_tool = lib.library_tool()

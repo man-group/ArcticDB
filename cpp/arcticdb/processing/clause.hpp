@@ -22,7 +22,6 @@
 #include <arcticdb/processing/grouper.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/util/movable_priority_queue.hpp>
-#include <arcticdb/util/test/random_throw.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 
 #include <folly/Poly.h>
@@ -58,7 +57,6 @@ struct IClause {
 
         [[nodiscard]] std::vector<EntityId>
         process(std::vector<EntityId>&& entity_ids) const {
-            ARCTICDB_DEBUG_THROW(5)
             return std::move(folly::poly_call<2>(*this, std::move(entity_ids)));
         }
 

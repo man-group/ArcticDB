@@ -134,6 +134,7 @@ std::string FilterClause::to_string() const {
 }
 
 std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids) const {
+    ARCTICDB_DEBUG_THROW(5)
     if (entity_ids.empty()) {
         return {};
     }
@@ -236,6 +237,7 @@ std::vector<std::vector<EntityId>> AggregationClause::structure_for_processing(s
 }
 
 std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_ids) const {
+    ARCTICDB_DEBUG_THROW(5)
     if (entity_ids.empty()) {
         return {};
     }

@@ -1018,7 +1018,6 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), options);
 
     auto versioned_item = compact_incomplete_impl(store_, stream_id, user_meta, update_info, options, get_write_options(), pipeline_context);
-    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Alex throw");
 
     write_version_and_prune_previous(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
     add_to_symbol_list_on_compaction(stream_id, options, update_info);
@@ -1593,7 +1592,6 @@ VersionedItem LocalVersionedEngine::sort_merge_internal(
     auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), options);
 
     auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, update_info, options, get_write_options(), pipeline_context);
-    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Alex throw");
 
     write_version_and_prune_previous(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
     add_to_symbol_list_on_compaction(stream_id, options, update_info);
