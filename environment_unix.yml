@@ -11,8 +11,8 @@ dependencies:
   - benchmark
   - doxygen
   - libboost-devel
-  - grpcio
-  - grpcio-tools
+  - grpcio <=1.62
+  - grpcio-tools <=1.62
   - protobuf
   # Build dependencies
   - krb5
