@@ -8,8 +8,6 @@
 #include <vector>
 #include <variant>
 
-#include <folly/Poly.h>
-
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
@@ -17,10 +15,12 @@
 
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
-#include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <ankerl/unordered_dense.h>
+#include <ranges>
+
+namespace rng = std::ranges;
 
 namespace arcticdb {
 
@@ -426,6 +426,53 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
 }
 
 template<ResampleBoundary closed_boundary>
+ResampleClause<closed_boundary>::ResampleClause(std::string rule,
+    ResampleBoundary label_boundary,
+    BucketGeneratorT&& generate_bucket_boundaries,
+    timestamp offset,
+    ResampleOrigin origin) :
+    rule_(std::move(rule)),
+    label_boundary_(label_boundary),
+    generate_bucket_boundaries_(std::move(generate_bucket_boundaries)),
+    offset_(offset),
+    origin_(std::move(origin)) {
+    clause_info_.input_structure_ = ProcessingStructure::TIME_BUCKETED;
+    clause_info_.can_combine_with_column_selection_ = false;
+    clause_info_.modifies_output_descriptor_ = true;
+    clause_info_.index_ = KeepCurrentTopLevelIndex();
+}
+
+template<ResampleBoundary closed_boundary>
+const ClauseInfo& ResampleClause<closed_boundary>::clause_info() const {
+    return clause_info_;
+}
+
+template<ResampleBoundary closed_boundary>
+void ResampleClause<closed_boundary>::set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+    component_manager_ = std::move(component_manager);
+}
+
+template<ResampleBoundary closed_boundary>
+std::string ResampleClause<closed_boundary>::rule() const {
+    return rule_;
+}
+
+template<ResampleBoundary closed_boundary>
+void ResampleClause<closed_boundary>::set_date_range(timestamp date_range_start, timestamp date_range_end) {
+    // Start and end need to read the first and last segments of the date range. At the moment buckets are set up before
+    // reading and processing the data.
+    constexpr static std::array unsupported_origin{ "start", "end", "start_day", "end_day" };
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+        util::variant_match(origin_,
+            [&](const std::string& origin) { return rng::none_of(unsupported_origin, [&](std::string_view el) { return el == origin; }); },
+            [](const auto&) { return true;}
+        ),
+        "Resampling origins {} are not supported in conjunction with date range", unsupported_origin
+    );
+    date_range_.emplace(date_range_start, date_range_end);
+}
+
+template<ResampleBoundary closed_boundary>
 void ResampleClause<closed_boundary>::set_aggregations(const std::vector<NamedAggregator>& named_aggregators) {
     clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>();
     str_ = fmt::format("RESAMPLE({}) | AGGREGATE {{", rule());
@@ -469,16 +516,13 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
     if (ranges_and_keys.empty()) {
         return {};
     }
-    TimestampRange index_range(
-            std::min_element(ranges_and_keys.begin(), ranges_and_keys.end(),
-                             [](const RangesAndKey& left, const RangesAndKey& right) {
-                                 return left.start_time() < right.start_time();
-                             })->start_time(),
-            std::max_element(ranges_and_keys.begin(), ranges_and_keys.end(),
-                             [](const RangesAndKey& left, const RangesAndKey& right) {
-                                 return left.end_time() < right.end_time();
-                             })->end_time()
-    );
+    
+    const TimestampRange index_range = std::accumulate(
+        std::next(ranges_and_keys.begin()),
+        ranges_and_keys.end(),
+        TimestampRange{ ranges_and_keys.begin()->start_time(), ranges_and_keys.begin()->end_time() },
+        [](const TimestampRange& rng, const RangesAndKey& el) { return TimestampRange{std::min(rng.first, el.start_time()), std::max(rng.second, el.end_time())};});
+
     if (date_range_.has_value()) {
         date_range_->first = std::max(date_range_->first, index_range.first);
         date_range_->second = std::min(date_range_->second, index_range.second);
@@ -486,11 +530,11 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
         date_range_ = index_range;
     }
 
-    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary, offset_);
+    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary, offset_, origin_);
     if (bucket_boundaries_.size() < 2) {
         return {};
     }
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(std::is_sorted(bucket_boundaries_.begin(), bucket_boundaries_.end()),
+    debug::check<ErrorCode::E_ASSERTION_FAILURE>(rng::is_sorted(bucket_boundaries_),
                                                  "Resampling expects provided bucket boundaries to be strictly monotonically increasing");
     return structure_by_time_bucket<closed_boundary>(ranges_and_keys, bucket_boundaries_);
 }
@@ -515,12 +559,11 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
     }
 
     date_range_ = std::make_optional<TimestampRange>(min_start_ts, max_end_ts);
-
-    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary, offset_);
+    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary, offset_, origin_);
     if (bucket_boundaries_.size() < 2) {
         return {};
     }
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(std::is_sorted(bucket_boundaries_.begin(), bucket_boundaries_.end()),
+    debug::check<ErrorCode::E_ASSERTION_FAILURE>(rng::is_sorted(bucket_boundaries_),
                                                  "Resampling expects provided bucket boundaries to be strictly monotonically increasing");
 
     auto new_structure_offsets = structure_by_time_bucket<closed_boundary>(ranges_and_entities, bucket_boundaries_);
@@ -535,7 +578,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
         }
     }
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            std::all_of(expected_fetch_counts.begin(), expected_fetch_counts.end(), [](EntityFetchCount fetch_count) {
+            rng::all_of(expected_fetch_counts, [](EntityFetchCount fetch_count) {
                 return fetch_count == 1 || fetch_count == 2;
             }),
             "ResampleClause::structure_for_processing: invalid expected entity fetch count (should be 1 or 2)"

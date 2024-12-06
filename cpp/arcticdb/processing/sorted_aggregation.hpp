@@ -160,7 +160,7 @@ public:
     void push(T value) {
         if constexpr (std::is_floating_point_v<T>) {
             if (ARCTICDB_LIKELY(!std::isnan(value))) {
-                min_ = std::min(min_.value_or(std::numeric_limits<T>::max()), value);
+                min_ = std::min(min_.value_or(std::numeric_limits<T>::infinity()), value);
             }
         } else if constexpr (std::is_same_v<T, timestamp> && TimeType) {
             if (ARCTICDB_LIKELY(value != NaT)) {
@@ -202,7 +202,7 @@ public:
     void push(T value) {
         if constexpr (std::is_floating_point_v<T>) {
             if (ARCTICDB_LIKELY(!std::isnan(value))) {
-                max_ = std::max(max_.value_or(std::numeric_limits<T>::lowest()), value);
+                max_ = std::max(max_.value_or(-std::numeric_limits<T>::infinity()), value);
             }
         } else if constexpr (std::is_same_v<T, timestamp> && TimeType) {
             if (ARCTICDB_LIKELY(value != NaT)) {
