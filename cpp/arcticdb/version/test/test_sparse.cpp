@@ -322,7 +322,8 @@ TEST_F(SparseTestStore, Multiblock) {
     using namespace arcticdb;
     using namespace arcticdb::stream;
     using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
-
+    using DynamicSinkWrapper = SinkWrapperImpl<DynamicAggregator>;
+    
     const std::string stream_id("test_sparse");
 
     DynamicSinkWrapper wrapper(stream_id, {});
