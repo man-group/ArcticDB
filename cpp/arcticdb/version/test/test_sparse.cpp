@@ -250,27 +250,37 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     using namespace arcticdb;
     using namespace arcticdb::stream;
     std::optional<ScopedGILLock> scoped_gil_lock;
+    std::cout << "Registering string types" << std::endl;
     register_string_types();
+    std::cout << "Registering python handler data factory" << std::endl;
     register_python_handler_data_factory();
     using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
     using DynamicSinkWrapper = SinkWrapperImpl<DynamicAggregator>;
 
     const std::string stream_id("test_sparse");
 
+    std::cout << "Creating DynamicSinkWrapper" << std::endl;
     DynamicSinkWrapper wrapper(stream_id, {});
     auto& aggregator = wrapper.aggregator_;
 
+    std::cout << "Starting row 0" << std::endl;
     aggregator.start_row(timestamp{0})([](auto& rb) {
+        std::cout << "Setting scalar 'first' to 'five'" << std::endl;
         rb.set_scalar_by_name(std::string_view{"first"}, std::string_view{"five"}, DataType::UTF_DYNAMIC64);
     });
 
+    std::cout << "Starting row 1" << std::endl;
     aggregator.start_row(timestamp{1})([](auto& rb) {
+        std::cout << "Setting scalar 'second' to 'six'" << std::endl;
         rb.set_scalar_by_name(std::string_view{"second"}, std::string_view{"six"}, DataType::UTF_FIXED64);
     });
 
+    std::cout << "Committing aggregator" << std::endl;
     wrapper.aggregator_.commit();
 
+    std::cout << "Getting segment" << std::endl;
     auto segment = wrapper.segment();
+    std::cout << "Appending incomplete segment" << std::endl;
     test_store_->append_incomplete_segment(stream_id, std::move(segment));
 
     ReadOptions read_options;
@@ -279,21 +289,30 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     auto handler_data = get_type_handler_data();
+    std::cout << "Reading dataframe version" << std::endl;
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame = read_result.frame_data.frame();;
+    const auto& frame = read_result.frame_data.frame();
 
+    std::cout << "Asserting row count" << std::endl;
     ASSERT_EQ(frame.row_count(), 2);
+    std::cout << "Getting scalar at (0, 1)" << std::endl;
     auto val1 = frame.scalar_at<PyObject*>(0, 1);
+    std::cout << "Converting PyObject to buffer" << std::endl;
     auto str_wrapper = convert::py_unicode_to_buffer(val1.value(), scoped_gil_lock);
+    std::cout << "Asserting string value 'five'" << std::endl;
     ASSERT_TRUE(std::holds_alternative<convert::PyStringWrapper>(str_wrapper));
     ASSERT_EQ(strcmp(std::get<convert::PyStringWrapper>(str_wrapper).buffer_, "five"), 0);
 
+    std::cout << "Getting string at (0, 2)" << std::endl;
     auto val2 = frame.string_at(0, 2);
     ASSERT_EQ(val2.value()[0], char{0});
 
+    std::cout << "Getting scalar at (1, 1)" << std::endl;
     auto val3 = frame.scalar_at<PyObject*>(1, 1);
-    auto none = py::none{};
-    ASSERT_EQ(val3.value(), none.ptr());
+    std::cout << "GilSafePyNone::instance()" << std::endl;
+    auto none = GilSafePyNone::instance();
+    ASSERT_EQ(val3.value(), none->ptr());
+    std::cout << "Getting string at (1, 2)" << std::endl;
     auto val4 = frame.string_at(1, 2);
     ASSERT_EQ(val4, "six");
 }
@@ -304,7 +323,7 @@ TEST_F(SparseTestStore, Multiblock) {
     using namespace arcticdb::stream;
     using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
     using DynamicSinkWrapper = SinkWrapperImpl<DynamicAggregator>;
-
+    
     const std::string stream_id("test_sparse");
 
     DynamicSinkWrapper wrapper(stream_id, {});
@@ -692,8 +711,8 @@ TEST_F(SparseTestStore, CompactWithStrings) {
         ASSERT_EQ(val2.value()[0], char{0});
 
         auto val3 = frame.scalar_at<PyObject*>(i + 1, 1);
-        auto none = py::none{};
-        ASSERT_EQ(val3.value(), none.ptr());
+        auto none = GilSafePyNone::instance();
+        ASSERT_EQ(val3.value(), none->ptr());
 
         auto val4 = frame.string_at(i + 1, 2);
 

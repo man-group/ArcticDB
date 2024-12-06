@@ -60,7 +60,7 @@ else()
     add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
 
     SET(HIDE_LINKED_SYMBOLS OFF)
-
+    
     find_package(pybind11 REQUIRED)
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
@@ -373,6 +373,7 @@ set(arcticdb_srcs
         util/lazy.hpp
         util/type_traits.hpp
         util/variant.hpp
+        util/gil_safe_py_none.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
         version/schema_checks.hpp
@@ -505,6 +506,7 @@ set(arcticdb_srcs
         util/type_handler.cpp
         version/key_block.hpp
         version/key_block.cpp
+        util/gil_safe_py_none.cpp
         version/local_versioned_engine.cpp
         version/op_log.cpp
         version/snapshot.cpp
@@ -971,6 +973,7 @@ if(${TEST})
                 DESTINATION .
                 PERMISSIONS ${EXECUTABLE_PERMS}
                 COMPONENT Tests)
+                
 
     if (WIN32)
         target_link_libraries(
