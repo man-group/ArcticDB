@@ -9,8 +9,8 @@ runs:
         dnf update -y
         dnf remove -y 'gcc-toolset-13-*'
         dnf install -y zip flex bison gcc-toolset-10 gcc-toolset-10-gdb gcc-toolset-10-libatomic-devel krb5-devel cyrus-sasl-devel openssl-devel \
-        unzip tar epel-release jq wget libcurl-devel python3.10 \
-        python3.10-devel python3.10-pip perl-IPC-Cmd
+        unzip tar epel-release jq wget libcurl-devel python3.8 \
+        python3.8-devel python3.8-pip perl-IPC-Cmd
 
         dnf groupinstall -y 'Development Tools'
 
