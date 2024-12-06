@@ -27,7 +27,7 @@ class DynamicStringReducer  {
     size_t row_ = 0U;
     DecodePathData shared_data_;
     PythonHandlerData& handler_data_;
-    PyObject ** ptr_dest_;
+    PyObject** ptr_dest_;
     size_t total_rows_;
 public:
     DynamicStringReducer(
@@ -229,11 +229,10 @@ private:
     }
 
     std::pair<size_t, size_t> write_strings_to_column_dense(
-        size_t ,
-        const Column& source_column,
-        const std::unique_ptr<py::none>& none,
-        const ankerl::unordered_dense::map<entity::position_t, PyObject*>& py_strings
-        ) {
+            size_t ,
+            const Column& source_column,
+            const std::unique_ptr<py::none>& none,
+            const ankerl::unordered_dense::map<entity::position_t, PyObject*>& py_strings) {
         auto data = source_column.data();
         auto src = data.cbegin<ScalarTagType<DataTypeTag<DataType::UINT64>>, IteratorType::REGULAR, IteratorDensity::DENSE>();
         auto end = data.cend<ScalarTagType<DataTypeTag<DataType::UINT64>>, IteratorType::REGULAR, IteratorDensity::DENSE>();

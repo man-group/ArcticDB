@@ -11,15 +11,13 @@
 #include <pybind11/operators.h>
 #include <arcticdb/python/reader.hpp>
 
-#include <arcticdb/storage/python_bindings.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/row_builder.hpp>
 #include <arcticdb/stream/aggregator.hpp>
-#include <arcticdb/stream/stream_reader.hpp>
-#include <arcticdb/stream/stream_writer.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
+#include <arcticdb/entity/types_proto.hpp>
 
 namespace py = pybind11;
 
@@ -84,8 +82,12 @@ void register_types(py::module &m) {
         .def(py::self == py::self)
         .def(py::self != py::self)
         .def("data_type", &TypeDescriptor::data_type)
-        .def_property_readonly("value_type", &TypeDescriptor::value_type)
-        .def("dimension", &TypeDescriptor::dimension));
+        .def_property_readonly("value_type", [] (const TypeDescriptor& self) {
+            return static_cast<int>(entity::value_proto_from_data_type(self.data_type()));
+        })
+        .def_property_readonly("dimension", [] (const TypeDescriptor& self) {
+            return static_cast<int>(entity::type_descriptor_to_proto(self).dimension());
+        }));
 
     python_util::add_repr(py::class_<FieldRef>(m, "FieldDescriptor")
         .def(py::init<TypeDescriptor, std::string_view>())

@@ -87,11 +87,11 @@ jobs:
           maximum-size: 6GB
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
-        
-      - name: Enable Windows compiler commands
-        if: matrix.os == 'windows'
-        uses: ilammy/msvc-dev-cmd@v1.12.1
 
+      - name: Install deps
+        if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
+        uses: ./.github/actions/setup_deps
+          
       - name: Extra envs
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
         run: |
@@ -104,7 +104,11 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       # ========================= Leader steps =========================
-      - name: Remove GitHub default packages # To save space
+      - name: Remove GitHub default packages (baseimage) # To save space
+        if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
+        uses: jlumbroso/free-disk-space@main
+
+      - name: Remove GitHub default packages (manylinux) # To save space
         if: inputs.job_type == 'cpp-tests' && matrix.os == 'linux'
         run: |
           du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
@@ -117,6 +121,23 @@ jobs:
       - name: Prepare C++ compilation env
         if: inputs.job_type != 'build-python-wheels'
         run: . build_tooling/prep_cpp_build.sh # Also applies to Windows
+
+        # When a GitHub Windows image gets update the MSVC compiler also can get updated. New compilers can have compilation errors in Arctic or in the VCPKG dependencies.
+        # We needd to pin a particular MSVC so that runner updates don't affect us.
+        # When the MSVC version is update custom-triplets/x64-windows-static-msvc.cmake must also be updated with the correct toolsed version.
+      - name: Install Required MSVC
+        if: matrix.os == 'windows'
+        run: |
+          choco install -y -f visualstudio2022buildtools --version=117.11.4 --params "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --installChannelUri https://aka.ms/vs/17/release/390666095_1317821361/channel"
+          choco install -y ninja
+
+      - name: Enable Windows compiler commands
+        if: matrix.os == 'windows'
+        uses: TheMrMilchmann/setup-msvc-dev@v3
+        with:
+          arch: x64
+          toolset: 14.41
+          vs-path: 'C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools'
 
       - name: CMake compile
         if: inputs.job_type != 'build-python-wheels'
@@ -251,7 +272,7 @@ jobs:
           ${{fromJSON(inputs.matrix)}}
     name: ${{matrix.type}}${{matrix.python_deps_id}}
     runs-on: ${{matrix.distro}}
-    container: ${{matrix.os == 'linux' && needs.compile.outputs.manylinux_image || null}}
+    container: ${{matrix.os == 'linux' &&  matrix.container || null}}
     defaults:
       run: {shell: bash}
     services: ${{matrix.test_services}}

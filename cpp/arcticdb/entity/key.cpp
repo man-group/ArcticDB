@@ -62,6 +62,7 @@ KeyData get_key_data(KeyType key_type) {
     STRING_REF(KeyType::LOCK, lref, 'x')
     STRING_REF(KeyType::SNAPSHOT_TOMBSTONE, ttomb, 'X')
     STRING_KEY(KeyType::APPEND_DATA, app, 'b')
+    STRING_REF(KeyType::BLOCK_VERSION_REF, bvref, 'R')
     // Unused
     STRING_KEY(KeyType::PARTITION, pref, 'p')
     STRING_KEY(KeyType::REPLICATION_FAIL_INFO, rfail, 'F')
@@ -94,6 +95,11 @@ bool is_string_key_type(KeyType key_type){
 
 bool is_ref_key_class(KeyType key_type){
     return key_class_from_key_type(key_type) == KeyClass::REF_KEY;
+}
+
+bool is_block_ref_key_class(KeyType k) {
+    // Only block version ref currently implemented
+    return k == KeyType::BLOCK_VERSION_REF;
 }
 
 }

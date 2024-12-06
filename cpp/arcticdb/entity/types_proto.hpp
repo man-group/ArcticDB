@@ -4,6 +4,7 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
+#pragma once
 
 #include <descriptors.pb.h>
 #include "arcticdb/storage/memory_layout.hpp"
@@ -31,6 +32,18 @@ DataType get_data_type(const arcticdb::proto::descriptors::TypeDescriptor &type_
 TypeDescriptor type_desc_from_proto(const arcticdb::proto::descriptors::TypeDescriptor &type_desc);
 
 DataType data_type_from_proto(const arcticdb::proto::descriptors::TypeDescriptor &type_desc);
+
+[[nodiscard]] arcticdb::proto::descriptors::TypeDescriptor type_descriptor_to_proto(const TypeDescriptor& desc);
+
+inline arcticdb::proto::descriptors::TypeDescriptor::SizeBits size_bits_proto_from_data_type(DataType data_type) {
+    return static_cast<arcticdb::proto::descriptors::TypeDescriptor::SizeBits>(
+        static_cast<std::uint8_t>(slice_bit_size(data_type)));
+}
+
+inline arcticdb::proto::descriptors::TypeDescriptor::ValueType value_proto_from_data_type(DataType data_type) {
+    return static_cast<arcticdb::proto::descriptors::TypeDescriptor::ValueType>(
+        static_cast<std::uint8_t>(slice_value_type(data_type)));
+}
 
 arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor field_proto(
     DataType dt,
