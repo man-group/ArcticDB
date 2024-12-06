@@ -156,7 +156,6 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
         del data
 
     df = lib.read(symbol).data
-    print(df)
     del df
 
     """
@@ -196,7 +195,6 @@ def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
         del data
 
     df = lib.read(symbol).data
-    print(df)
     del df
 
     """ 
