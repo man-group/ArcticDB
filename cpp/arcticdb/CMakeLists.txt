@@ -932,6 +932,7 @@ if(${TEST})
             stream/test/test_types.cpp
             util/memory_tracing.hpp
             util/test/gtest_main.cpp
+            util/test/random_throw.hpp
             util/test/test_bitmagic.cpp
             util/test/test_buffer_pool.cpp
             util/test/test_composite.cpp
@@ -961,7 +962,7 @@ if(${TEST})
             version/test/version_map_model.hpp
             python/python_handlers.cpp
             storage/test/common.hpp
-    )
+            )
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

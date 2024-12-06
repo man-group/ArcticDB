@@ -151,7 +151,8 @@ VersionedItem compact_incomplete_impl(
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
     const UpdateInfo& update_info,
     const CompactIncompleteOptions& options,
-    const WriteOptions& write_options);
+    const WriteOptions& write_options,
+    std::shared_ptr<PipelineContext>& pipeline_context);
 
 struct PredefragmentationInfo{
     std::shared_ptr<PipelineContext> pipeline_context;
@@ -183,7 +184,8 @@ VersionedItem sort_merge_impl(
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
     const UpdateInfo& update_info,
     const CompactIncompleteOptions& options,
-    const WriteOptions& write_options);
+    const WriteOptions& write_options,
+    std::shared_ptr<PipelineContext>& pipeline_context);
 
 void modify_descriptor(
     const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
@@ -207,6 +209,34 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
     const ReadOptions& read_options,
     std::any& handler_data
 );
+
+class DeleteIncompleteKeysOnExit {
+public:
+    DeleteIncompleteKeysOnExit(
+        std::shared_ptr<PipelineContext> pipeline_context,
+        std::shared_ptr<Store> store,
+        bool via_iteration);
+
+    ARCTICDB_NO_MOVE_OR_COPY(DeleteIncompleteKeysOnExit)
+
+    ~DeleteIncompleteKeysOnExit();
+
+    void release() {
+        released_ = true;
+    }
+
+private:
+    std::shared_ptr<PipelineContext> context_;
+    std::shared_ptr<Store> store_;
+    bool via_iteration_;
+    bool released_ = false;
+};
+void delete_incomplete_keys(PipelineContext& pipeline_context, Store& store);
+
+std::optional<DeleteIncompleteKeysOnExit> get_delete_keys_on_failure(
+    const std::shared_ptr<PipelineContext>& pipeline_context,
+    const std::shared_ptr<Store>& store,
+    const CompactIncompleteOptions& options);
 
 } //namespace arcticdb::version_store
 
