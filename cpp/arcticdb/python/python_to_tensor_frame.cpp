@@ -71,7 +71,7 @@ std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *
         }
         const auto arr = pybind11::detail::array_proxy(*begin);
         normalization::check<ErrorCode::E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE>(arr->nd == 1, "Only one dimensional arrays are supported in columns.");
-        const auto descr = pybind11::detail::array_descriptor_proxy(arr->descr);
+        const auto descr = pybind11::detail::array_descriptor2_proxy(arr->descr);
         const ssize_t element_count = arr->dimensions[0];
         if(element_count != 0) {
             ValueType value_type = get_value_type(descr->kind);
@@ -115,7 +115,7 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
     auto& api = pybind11::detail::npy_api::get();
     util::check(api.PyArray_Check_(ptr), "Expected Python array");
     const auto arr = pybind11::detail::array_proxy(ptr);
-    const auto descr = pybind11::detail::array_descriptor_proxy(arr->descr);
+    const auto descr = pybind11::detail::array_descriptor2_proxy(arr->descr);
     auto ndim = arr->nd;
     const ssize_t size = ndim == 1 ? arr->dimensions[0] : arr->dimensions[0] * arr->dimensions[1];
     // In Pandas < 2, empty series dtype is `"float"`, but as of Pandas 2.0, empty series dtype is `"object"`
