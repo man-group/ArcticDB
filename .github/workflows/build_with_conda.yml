@@ -58,6 +58,9 @@ jobs:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
       - name: Build C++ Tests
         shell: bash -l {0}
         run: |
