@@ -42,8 +42,10 @@ def generate_bars(symbols, arctic_uri, arctic_library):
 
 from multiprocessing import Pool
 
+
 def gen_bars_m(symbols):
     return generate_bars(symbols, arctic_uri=arctic_uri, arctic_library=arctic_library_name)
+
 
 def test_gen_bars():
     pool_size = 35
@@ -53,6 +55,6 @@ def test_gen_bars():
     symbols = lib.list_symbols()
     start_time = datetime.now()
     with Pool(pool_size) as pool:
-        data = pool.map(gen_bars_m, symbols, 10)
+        data = pool.map(gen_bars_m, [[symbol] for symbol in symbols], 10)
 
     print("Read took {}".format(datetime.now() - start_time))
