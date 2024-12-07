@@ -15,14 +15,13 @@ bucket = 'user-wdealtry-dev'
 endpoint = 's3.vast.gdc.storage.dev.m'
 
 
-#arctic_uri = "s3://{}:{}?access={}&secret={}".format(endpoint, bucket, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+arctic_uri = "s3://{}:{}?access={}&secret={}".format(endpoint, bucket, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
 
-arctic_uri = "lmdb:///users/is/wdealtry/perf"
+#arctic_uri = "lmdb:///users/is/wdealtry/perf"
 
-arctic_library_name = "ticks"
-def generate_and_write_data(sec_ids, days, ticks_per_day, trading_days, adb_uri, adb_lib):
-    ac = adb.Arctic(adb_uri)
-    lib = ac.get_library(adb_lib, create_if_missing=True)
+
+arctic_library_name = "ticks2"
+def generate_and_write_data(sec_ids, days, ticks_per_day, trading_days, lib):
 
     timestamps = np.tile(trading_days, ticks_per_day)
     random_seconds = np.random.randint(0, 7 * 3600, days * ticks_per_day)
@@ -49,12 +48,15 @@ def generate_and_write_data(sec_ids, days, ticks_per_day, trading_days, adb_uri,
 
     lib.write_batch(tick_data)
 
+
 def generate_tick_data(num_symbols=4000, days=252, ticks_per_day=15000, batch_size=30, adb_uri=arctic_uri, adb_lib=arctic_library_name):
     trading_days = [datetime.now() - timedelta(days=days-i) for i in range(days)]
 
     sec_batches = [list(range(i, min(i + batch_size, num_symbols + 1))) for i in range(1, num_symbols+1, batch_size)]
+    ac = adb.Arctic(adb_uri)
+    lib = ac.get_library(adb_lib, create_if_missing=True)
 
-    args = [(batch, days, ticks_per_day, trading_days, adb_uri, adb_lib) for batch in sec_batches]
+    args = [(batch, days, ticks_per_day, trading_days, lib) for batch in sec_batches]
 
     pool_size = 5
     with Pool(pool_size) as pool:
