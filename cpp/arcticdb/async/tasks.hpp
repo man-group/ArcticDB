@@ -429,6 +429,7 @@ struct DecodeSliceTask : BaseTask {
 
     pipelines::SegmentAndSlice operator()(storage::KeySegmentPair&& key_segment_pair) {
         ARCTICDB_SAMPLE(DecodeSliceTask, 0)
+        //log::version().info("Decode into slice {}", key_segment_pair.variant_key());
         return decode_into_slice(std::move(key_segment_pair));
     }
 

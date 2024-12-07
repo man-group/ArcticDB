@@ -131,9 +131,11 @@ S3Result<Segment> S3ClientImpl::get_object(
 
 struct GetObjectAsyncHandler {
     std::shared_ptr<folly::Promise<S3Result<Segment>>> promise_;
+    timestamp start_;
 
     GetObjectAsyncHandler(std::shared_ptr<folly::Promise<S3Result<Segment>>>&& promise) :
-        promise_(std::move(promise)) {
+        promise_(std::move(promise)),
+        start_(util::SysClock::coarse_nanos_since_epoch()){
     }
 
     ARCTICDB_MOVE_COPY_DEFAULT(GetObjectAsyncHandler)
@@ -146,9 +148,13 @@ struct GetObjectAsyncHandler {
     if (outcome.IsSuccess()) {
         auto& body = const_cast<Aws::S3::Model::GetObjectOutcome&>(outcome).GetResultWithOwnership().GetBody();
         auto& stream = dynamic_cast<S3IOStream&>(body);
-        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Returning object {}", request.GetKey());
+        auto nanos = util::SysClock::coarse_nanos_since_epoch() - start_;
+        auto time_taken = double(nanos) / BILLION;
+        //log::storage().info("Returning object in {} seconds {}", time_taken, request.GetKey());
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Returning object {} in {}", request.GetKey(), time_taken);
         promise_->setValue<S3Result<Segment>>({Segment::from_buffer(stream.get_buffer())});
     } else {
+        //log::storage().warn("Got S3 Error: {}", outcome.GetError().GetMessage());
         promise_->setValue<S3Result<Segment>>({outcome.GetError()});
     }
 }
@@ -162,6 +168,7 @@ folly::Future<S3Result<Segment>> S3ClientImpl::get_object_async(
     Aws::S3::Model::GetObjectRequest request;
     request.WithBucket(bucket_name.c_str()).WithKey(s3_object_name.c_str());
     request.SetResponseStreamFactory(S3StreamFactory());
+    //log::version().info("Scheduling async read of {}", s3_object_name.c_str());
     s3_client.GetObjectAsync(request, GetObjectAsyncHandler{std::move(promise)});
     return future;
 }

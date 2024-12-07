@@ -332,6 +332,7 @@ folly::Future<std::vector<VariantKey>> batch_read_compressed(
 std::vector<folly::Future<pipelines::SegmentAndSlice>> batch_read_uncompressed(
         std::vector<pipelines::RangesAndKey>&& ranges_and_keys,
         std::shared_ptr<std::unordered_set<std::string>> columns_to_decode) override {
+        log::version().debug("Reading {} keys", ranges_and_keys.size());
     return folly::window(
         std::move(ranges_and_keys),
         [this, columns_to_decode](auto&& ranges_and_key) {
@@ -341,7 +342,7 @@ std::vector<folly::Future<pipelines::SegmentAndSlice>> batch_read_uncompressed(
                 library_,
                 storage::ReadKeyOpts{},
                 DecodeSliceTask{std::forward<decltype(ranges_and_key)>(ranges_and_key), columns_to_decode});
-        }, async::TaskScheduler::instance()->io_thread_count() * 2);
+        }, async::TaskScheduler::instance()->io_thread_count() * 4);
 }
 
 std::vector<folly::Future<bool>> batch_key_exists(

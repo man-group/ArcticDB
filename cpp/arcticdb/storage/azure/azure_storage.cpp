@@ -199,13 +199,17 @@ KeySegmentPair do_read_impl(
                                 static_cast<int>(e.StatusCode),
                                 e.ReasonPhrase);
         }
-        throw KeyNotFoundException(variant_key,
-                                   fmt::format("Failed to read azure segment with key '{}' {} {}: {}",
-                                               variant_key,
-                                               blob_name,
-                                               static_cast<int>(e.StatusCode),
-                                               e.ReasonPhrase));
+        throw KeyNotFoundException(
+           variant_key,
+           fmt::format("Failed to read azure segment with key '{}' {} {}: {}",
+                       variant_key,
+                       blob_name,
+                       static_cast<int>(e.StatusCode),
+                       e.ReasonPhrase));
+    } catch(const std::exception& ex) {
+        throw KeyNotFoundException(variant_key);
     }
+    return KeySegmentPair{};
 }
 
 namespace fg = folly::gen;

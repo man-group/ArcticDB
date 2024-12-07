@@ -14,6 +14,7 @@
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/util/buffer_pool.hpp>
 #include <arcticdb/util/type_handler.hpp>
+#include <arcticdb/util/allocation_tracing.hpp>
 
 #if defined(_MSC_VER) && defined(_DEBUG)
 #include <crtdbg.h>
@@ -23,6 +24,7 @@
 namespace arcticdb {
 
 ModuleData::~ModuleData() {
+    AllocationTracker::destroy_instance();
     BufferPool::destroy_instance();
     TracingData::destroy_instance();
     Allocator::destroy_instance();

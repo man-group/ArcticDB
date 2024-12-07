@@ -144,3 +144,17 @@ private:
 };
 
 } // namespace arcticdb
+
+namespace fmt {
+template<>
+struct formatter<arcticdb::EntityId> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::EntityId& id, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", static_cast<uint64_t>(id));
+    }
+};
+
+} //namespace fmt

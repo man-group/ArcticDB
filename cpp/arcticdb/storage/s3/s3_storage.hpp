@@ -75,14 +75,17 @@ class S3Storage final : public Storage, AsyncStorage {
         return false;
     }
 
+    void create_s3_clients(const Config &conf, const Aws::Auth::AWSCredentials& creds);
+
     std::string do_key_path(const VariantKey& key) const final { return get_key_path(key); };
 
     auto& client() { return s3_client_; }
     const std::string& bucket_name() const { return bucket_name_; }
     const std::string& root_folder() const { return root_folder_; }
 
+    S3ClientInterface& get_s3_client();
     std::shared_ptr<S3ApiInstance> s3_api_;
-    std::unique_ptr<S3ClientInterface> s3_client_;
+    std::vector<std::unique_ptr<S3ClientInterface>> s3_client_;
     std::string root_folder_;
     std::string bucket_name_;
     std::string region_;
@@ -245,12 +248,8 @@ auto get_s3_config(const ConfigType& conf) {
         client_configuration.caFile = conf.ca_cert_path();
         client_configuration.caPath = conf.ca_cert_dir();
     }
-    //client_configuration.maxConnections = conf.max_connections() == 0 ?
-    //        ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", 16) :
-    //        conf.max_connections();
 
-    client_configuration.maxConnections = 10000;
-    log::storage().info("Setting S3 max connections");
+    client_configuration.maxConnections = async::TaskScheduler::instance()->io_thread_count() * 2;
     client_configuration.connectTimeoutMs = ConfigsMap::instance()->get_int("S3Storage.ConnectTimeoutMs",
                                                 conf.connect_timeout() == 0 ? 30000 : conf.connect_timeout());
     client_configuration.httpRequestTimeoutMs = ConfigsMap::instance()->get_int("S3Storage.HttpRequestTimeoutMs", 0);

@@ -6,6 +6,7 @@
  */
 
 #include <arcticdb/storage/s3/s3_api.hpp>
+#include <arcticdb/storage/s3/http_client_factory.hpp>
 #include <aws/core/utils/memory/stl/AWSString.h>
 #include <aws/core/utils/logging/DefaultLogSystem.h>
 #include <aws/core/utils/logging/AWSLogging.h>
@@ -22,6 +23,7 @@ S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level) :
     // Use correct URI encoding rather than legacy compat one in AWS SDK. PURE S3 needs this to handle symbol names
     // that have special characters (eg ':').
     options_.httpOptions.compliantRfc3986Encoding = true;
+    options_.httpOptions.httpClientFactory_create_fn = [](){ return Aws::MakeShared<ArcticHttpClientFactory>("ARCTICDB_HTTP_CLIENT"); };
 
     if(log_level_ > Aws::Utils::Logging::LogLevel::Off) {
       Aws::Utils::Logging::InitializeAWSLogging(

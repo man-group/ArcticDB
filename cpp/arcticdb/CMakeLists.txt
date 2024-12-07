@@ -511,7 +511,7 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-        util/buffer_holder.cpp storage/async_storage.hpp)
+        util/buffer_holder.cpp storage/async_storage.hpp util/allocation_tracing.hpp util/allocation_tracing.cpp storage/s3/http_client.cpp storage/s3/http_client.hpp storage/s3/http_client_factory.hpp storage/s3/http_client_factory.cpp storage/s3/http_request.hpp storage/s3/http_request.cpp storage/s3/http_response.hpp storage/s3/http_response.cpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -662,6 +662,7 @@ set (arcticdb_core_libraries
         ${Zstd_LIBRARY}
         ${ARCTICDB_MONGO_LIBS}
         spdlog::spdlog
+        cpptrace::cpptrace
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs

@@ -441,6 +441,7 @@ size_t generate_scheduling_iterations(const std::vector<std::shared_ptr<Clause>>
 
 void remove_processed_clauses(std::vector<std::shared_ptr<Clause>>& clauses) {
     // Erase all the clauses we have already scheduled to run
+    ARCTICDB_SAMPLE_DEFAULT(RemoveProcessedClauses)
     auto it = std::next(clauses.cbegin());
     while (it != clauses.cend()) {
         auto prev_it = std::prev(it);

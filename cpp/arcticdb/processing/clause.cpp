@@ -106,6 +106,7 @@ std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) 
     }
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager_, std::move(entity_ids));
     proc.set_expression_context(expression_context_);
+    //log::version().info("Doing filter {} for entity ids {}", expression_context_->root_node_name_, entity_ids);
     auto variant_data = proc.get(expression_context_->root_node_name_);
     std::vector<EntityId> output;
     util::variant_match(variant_data,
@@ -468,6 +469,7 @@ void ResampleClause<closed_boundary>::set_processing_config(const ProcessingConf
 template<ResampleBoundary closed_boundary>
 std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_processing(
         std::vector<RangesAndKey>& ranges_and_keys) {
+    //log::version().info("ResampleClause: structure for processing 1");
     if (ranges_and_keys.empty()) {
         return {};
     }
@@ -503,6 +505,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
     if (entity_ids.empty()) {
         return {};
     }
+    //log::version().info("ResampleClause: structure for processing 2");
     auto [segments, row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
     std::vector<RangesAndEntity> ranges_and_entities;
     ranges_and_entities.reserve(entity_ids.size());
@@ -559,6 +562,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
         return {};
     }
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>, EntityFetchCount>(*component_manager_, std::move(entity_ids));
+    //log::version().info("ResampleClause: processing entities {}", entity_ids);
     auto row_slices = split_by_row_slice(std::move(proc));
     // If the entity fetch counts for the entities in the first row slice are 2, the first bucket overlapping this row
     // slice is being computed by the call to process dealing with the row slices above these. Otherwise, this call

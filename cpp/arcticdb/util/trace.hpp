@@ -14,4 +14,6 @@ namespace arcticdb {
 
 std::string get_type_name(const std::type_info& type_info);
 
-}
+std::string unwind_stack(int max_depth);
+
+}  // namespace arcticdb

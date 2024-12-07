@@ -20,6 +20,7 @@
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/container_filter_wrapper.hpp>
+#include <arcticdb/util/allocation_tracing.hpp>
 
 namespace arcticdb::version_store {
 
@@ -54,6 +55,8 @@ void LocalVersionedEngine::initialize(const std::shared_ptr<storage::Library>& l
         async::TaskScheduler::reattach_instance();
     }
     (void)async::TaskScheduler::instance();
+    (void)AllocationTracker::instance();
+    AllocationTracker::start();
 }
 
 template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<storage::Library>& library, const util::SysClock&);
@@ -1069,6 +1072,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
     std::any& handler_data) {
     py::gil_scoped_release release_gil;
     // This read option should always be set when calling batch_read
+    //log::version().info("Attempting to read {}", stream_ids);
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
