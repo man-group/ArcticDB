@@ -746,88 +746,172 @@
         "version": "80de9b1982a498c300177d02874a8626152eccb57cd0ba4228a5bb168e7608c8",
         "warmup_time": -1
     },
-    "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data": {
-        "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, cache:CachedDFGenerator, param:int):\n        print(\">>> Library:\", self.lib)\n        print(\">>> Symbol:\", self.symbol)\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache:CachedDFGenerator, param:int):\n        cachedDF = cache\n    \n        # Unfortunately there is no way to tell asv to run single time\n        # each of finalize_stage_data() tests if we do the large setup in the\n        # setup_cache() method. We can only force it to work with single execution\n        # if the symbol setup with stage data is in the setup() method\n    \n        self.ac = Arctic(f\"lmdb://{self.lib_name}{param}?map_size=40GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(0, cachedDF.TIME_UNIT) # Synchronize index frequency\n    \n        df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)\n        list_of_chunks = [10000] * param\n        self.symbol\n    \n        self.lib.write(self.symbol, data=df, prune_previous_versions=True)\n        stage_chunks(self.lib, self.symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data types\n        cachedDF = CachedDFGenerator(350000, [5])\n        return cachedDF",
-        "name": "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data",
+    "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_all": {
+        "code": "class BIBenchmarks:\n    def peakmem_query_groupby_city_count_all(self, times_bigger) -> pd.DataFrame:\n        return self.query_groupby_city_count_all(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n    \n        start_time = time.time()\n    \n        file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)\n        if (not os.path.exists(file)) :\n            dfo = download_and_process_city_to_parquet(file)\n            dff = pd.read_parquet(file)\n            pd.testing.assert_frame_equal(dfo,dff)\n        else:\n            print(\"Parquet file exists!\")\n    \n        # read data from bz.2 file\n        # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)\n        # self.df : pd.DataFrame = process_city(abs_path)\n    \n        self.df : pd.DataFrame = pd.read_parquet(file)\n    \n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        print(\"The procedure is creating N times larger dataframes\")\n        print(\"by concatenating original DF N times\")\n        print(\"Size of original Dataframe: \", self.df.shape[0])\n        for num in BIBenchmarks.params:\n            _df = pd.concat([self.df] * num)\n            print(\"DF for iterration xSize original ready: \", num)\n            self.lib.write(f\"{self.symbol}{num}\", _df)\n    \n        print(\"If pandas query produces different dataframe than arctic one stop tests!\")\n        print(\"This will mean query problem is there most likely\")\n    \n        print(\"Pre-check correctness for query_groupby_city_count_all\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_all(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_isin_filter\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_isin_filter(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_filter_two_aggregations\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_filter_two_aggregations(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"All pre-checks completed SUCCESSFULLY. Time: \", time.time() - start_time)\n    \n        del self.ac",
+        "name": "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_all",
         "param_names": [
             "param1"
         ],
         "params": [
             [
-                "100",
-                "200"
+                "1",
+                "10"
             ]
         ],
-        "setup_cache_key": "finalize_staged_data:38",
-        "timeout": 600,
+        "setup_cache_key": "bi_benchmarks:68",
+        "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "9dece3813ff661e5876028ee105ad9549ad62e7997ade7bf3ed4cb43f77854a7"
+        "version": "a6be28bf68c237bc424c84b3af930d32da53053e5ddb11b97910376560ab0918"
     },
-    "finalize_staged_data.FinalizeStagedData.time_finalize_staged_data": {
-        "code": "class FinalizeStagedData:\n    def time_finalize_staged_data(self, cache:CachedDFGenerator, param:int):\n        print(\">>> Library:\", self.lib)\n        print(\">>> Symbol:\", self.symbol)\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache:CachedDFGenerator, param:int):\n        cachedDF = cache\n    \n        # Unfortunately there is no way to tell asv to run single time\n        # each of finalize_stage_data() tests if we do the large setup in the\n        # setup_cache() method. We can only force it to work with single execution\n        # if the symbol setup with stage data is in the setup() method\n    \n        self.ac = Arctic(f\"lmdb://{self.lib_name}{param}?map_size=40GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(0, cachedDF.TIME_UNIT) # Synchronize index frequency\n    \n        df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)\n        list_of_chunks = [10000] * param\n        self.symbol\n    \n        self.lib.write(self.symbol, data=df, prune_previous_versions=True)\n        stage_chunks(self.lib, self.symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data types\n        cachedDF = CachedDFGenerator(350000, [5])\n        return cachedDF",
-        "min_run_count": 1,
-        "name": "finalize_staged_data.FinalizeStagedData.time_finalize_staged_data",
-        "number": 1,
+    "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_filter_two_aggregations": {
+        "code": "class BIBenchmarks:\n    def peakmem_query_groupby_city_count_filter_two_aggregations(self, times_bigger):\n        return self.query_groupby_city_count_filter_two_aggregations(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n    \n        start_time = time.time()\n    \n        file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)\n        if (not os.path.exists(file)) :\n            dfo = download_and_process_city_to_parquet(file)\n            dff = pd.read_parquet(file)\n            pd.testing.assert_frame_equal(dfo,dff)\n        else:\n            print(\"Parquet file exists!\")\n    \n        # read data from bz.2 file\n        # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)\n        # self.df : pd.DataFrame = process_city(abs_path)\n    \n        self.df : pd.DataFrame = pd.read_parquet(file)\n    \n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        print(\"The procedure is creating N times larger dataframes\")\n        print(\"by concatenating original DF N times\")\n        print(\"Size of original Dataframe: \", self.df.shape[0])\n        for num in BIBenchmarks.params:\n            _df = pd.concat([self.df] * num)\n            print(\"DF for iterration xSize original ready: \", num)\n            self.lib.write(f\"{self.symbol}{num}\", _df)\n    \n        print(\"If pandas query produces different dataframe than arctic one stop tests!\")\n        print(\"This will mean query problem is there most likely\")\n    \n        print(\"Pre-check correctness for query_groupby_city_count_all\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_all(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_isin_filter\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_isin_filter(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_filter_two_aggregations\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_filter_two_aggregations(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"All pre-checks completed SUCCESSFULLY. Time: \", time.time() - start_time)\n    \n        del self.ac",
+        "name": "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_filter_two_aggregations",
         "param_names": [
             "param1"
         ],
         "params": [
             [
-                "100",
-                "200"
+                "1",
+                "10"
             ]
         ],
-        "repeat": 1,
-        "rounds": 1,
+        "setup_cache_key": "bi_benchmarks:68",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "9a608927df33b903bb6dd7ec33fea2c8172dd638e0169d8fffddb5069e188e47"
+    },
+    "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_isin_filter": {
+        "code": "class BIBenchmarks:\n    def peakmem_query_groupby_city_count_isin_filter(self, times_bigger) -> pd.DataFrame:\n        return self.query_groupby_city_count_isin_filter(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n    \n        start_time = time.time()\n    \n        file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)\n        if (not os.path.exists(file)) :\n            dfo = download_and_process_city_to_parquet(file)\n            dff = pd.read_parquet(file)\n            pd.testing.assert_frame_equal(dfo,dff)\n        else:\n            print(\"Parquet file exists!\")\n    \n        # read data from bz.2 file\n        # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)\n        # self.df : pd.DataFrame = process_city(abs_path)\n    \n        self.df : pd.DataFrame = pd.read_parquet(file)\n    \n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        print(\"The procedure is creating N times larger dataframes\")\n        print(\"by concatenating original DF N times\")\n        print(\"Size of original Dataframe: \", self.df.shape[0])\n        for num in BIBenchmarks.params:\n            _df = pd.concat([self.df] * num)\n            print(\"DF for iterration xSize original ready: \", num)\n            self.lib.write(f\"{self.symbol}{num}\", _df)\n    \n        print(\"If pandas query produces different dataframe than arctic one stop tests!\")\n        print(\"This will mean query problem is there most likely\")\n    \n        print(\"Pre-check correctness for query_groupby_city_count_all\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_all(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_isin_filter\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_isin_filter(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_filter_two_aggregations\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_filter_two_aggregations(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"All pre-checks completed SUCCESSFULLY. Time: \", time.time() - start_time)\n    \n        del self.ac",
+        "name": "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_isin_filter",
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ]
+        ],
+        "setup_cache_key": "bi_benchmarks:68",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "0ae4a1c3ebcac6600a0636c80e757fb34ef285156f9f01a10285fb6c803e2bf7"
+    },
+    "bi_benchmarks.BIBenchmarks.peakmem_query_readall": {
+        "code": "class BIBenchmarks:\n    def peakmem_query_readall(self, times_bigger):\n        self.lib.read(f\"{self.symbol}{times_bigger}\")\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n    \n        start_time = time.time()\n    \n        file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)\n        if (not os.path.exists(file)) :\n            dfo = download_and_process_city_to_parquet(file)\n            dff = pd.read_parquet(file)\n            pd.testing.assert_frame_equal(dfo,dff)\n        else:\n            print(\"Parquet file exists!\")\n    \n        # read data from bz.2 file\n        # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)\n        # self.df : pd.DataFrame = process_city(abs_path)\n    \n        self.df : pd.DataFrame = pd.read_parquet(file)\n    \n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        print(\"The procedure is creating N times larger dataframes\")\n        print(\"by concatenating original DF N times\")\n        print(\"Size of original Dataframe: \", self.df.shape[0])\n        for num in BIBenchmarks.params:\n            _df = pd.concat([self.df] * num)\n            print(\"DF for iterration xSize original ready: \", num)\n            self.lib.write(f\"{self.symbol}{num}\", _df)\n    \n        print(\"If pandas query produces different dataframe than arctic one stop tests!\")\n        print(\"This will mean query problem is there most likely\")\n    \n        print(\"Pre-check correctness for query_groupby_city_count_all\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_all(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_isin_filter\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_isin_filter(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_filter_two_aggregations\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_filter_two_aggregations(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"All pre-checks completed SUCCESSFULLY. Time: \", time.time() - start_time)\n    \n        del self.ac",
+        "name": "bi_benchmarks.BIBenchmarks.peakmem_query_readall",
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ]
+        ],
+        "setup_cache_key": "bi_benchmarks:68",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "2957ec25dedc5ee645e69a28ed4a38ebd27415c53828b3bf6fb4b57f146bfa13"
+    },
+    "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_all": {
+        "code": "class BIBenchmarks:\n    def time_query_groupby_city_count_all(self, times_bigger) -> pd.DataFrame:\n        return self.query_groupby_city_count_all(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n    \n        start_time = time.time()\n    \n        file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)\n        if (not os.path.exists(file)) :\n            dfo = download_and_process_city_to_parquet(file)\n            dff = pd.read_parquet(file)\n            pd.testing.assert_frame_equal(dfo,dff)\n        else:\n            print(\"Parquet file exists!\")\n    \n        # read data from bz.2 file\n        # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)\n        # self.df : pd.DataFrame = process_city(abs_path)\n    \n        self.df : pd.DataFrame = pd.read_parquet(file)\n    \n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        print(\"The procedure is creating N times larger dataframes\")\n        print(\"by concatenating original DF N times\")\n        print(\"Size of original Dataframe: \", self.df.shape[0])\n        for num in BIBenchmarks.params:\n            _df = pd.concat([self.df] * num)\n            print(\"DF for iterration xSize original ready: \", num)\n            self.lib.write(f\"{self.symbol}{num}\", _df)\n    \n        print(\"If pandas query produces different dataframe than arctic one stop tests!\")\n        print(\"This will mean query problem is there most likely\")\n    \n        print(\"Pre-check correctness for query_groupby_city_count_all\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_all(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_isin_filter\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_isin_filter(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_filter_two_aggregations\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_filter_two_aggregations(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"All pre-checks completed SUCCESSFULLY. Time: \", time.time() - start_time)\n    \n        del self.ac",
+        "min_run_count": 2,
+        "name": "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_all",
+        "number": 2,
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "finalize_staged_data:38",
-        "timeout": 600,
+        "setup_cache_key": "bi_benchmarks:68",
+        "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "670c39a4321a96cffa7d92609c5817cd36f3cba1cce9929e9c41e246005a0b62",
+        "version": "a7307ac55b614273b8a71fff12b16beeb9a256d49c760415422b54ec023a6126",
         "warmup_time": -1
     },
-    "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.peakmem_finalize_staged_data": {
-        "code": "class FinalizeStagedDataWiderDataframeX3:\n    def peakmem_finalize_staged_data(self, cache:CachedDFGenerator, param:int):\n        if (not SLOW_TESTS):\n            raise SkipNotImplemented (\"Slow tests are skipped\")\n        super().peakmem_finalize_staged_data(cache,param)\n\n    def setup(self, cache:CachedDFGenerator, param:int):\n        if (not SLOW_TESTS):\n            raise SkipNotImplemented (\"Slow tests are skipped\")\n        super().setup(cache,param)\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data type\n        cachedDF = CachedDFGenerator(350000, [5, 25, 50]) # 3 times wider DF with bigger string columns\n        return cachedDF",
-        "name": "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.peakmem_finalize_staged_data",
+    "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_filter_two_aggregations": {
+        "code": "class BIBenchmarks:\n    def time_query_groupby_city_count_filter_two_aggregations(self, times_bigger) -> pd.DataFrame:\n        return self.query_groupby_city_count_filter_two_aggregations(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n    \n        start_time = time.time()\n    \n        file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)\n        if (not os.path.exists(file)) :\n            dfo = download_and_process_city_to_parquet(file)\n            dff = pd.read_parquet(file)\n            pd.testing.assert_frame_equal(dfo,dff)\n        else:\n            print(\"Parquet file exists!\")\n    \n        # read data from bz.2 file\n        # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)\n        # self.df : pd.DataFrame = process_city(abs_path)\n    \n        self.df : pd.DataFrame = pd.read_parquet(file)\n    \n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        print(\"The procedure is creating N times larger dataframes\")\n        print(\"by concatenating original DF N times\")\n        print(\"Size of original Dataframe: \", self.df.shape[0])\n        for num in BIBenchmarks.params:\n            _df = pd.concat([self.df] * num)\n            print(\"DF for iterration xSize original ready: \", num)\n            self.lib.write(f\"{self.symbol}{num}\", _df)\n    \n        print(\"If pandas query produces different dataframe than arctic one stop tests!\")\n        print(\"This will mean query problem is there most likely\")\n    \n        print(\"Pre-check correctness for query_groupby_city_count_all\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_all(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_isin_filter\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_isin_filter(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_filter_two_aggregations\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_filter_two_aggregations(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"All pre-checks completed SUCCESSFULLY. Time: \", time.time() - start_time)\n    \n        del self.ac",
+        "min_run_count": 2,
+        "name": "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_filter_two_aggregations",
+        "number": 2,
         "param_names": [
             "param1"
         ],
         "params": [
             [
-                "100",
-                "200"
+                "1",
+                "10"
             ]
         ],
-        "setup_cache_key": "finalize_staged_data:82",
-        "timeout": 600,
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "34e03b8d818b1f727b831791e307ca5dd4a1b434643fa5bc0c98c49a0b455523"
-    },
-    "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.time_finalize_staged_data": {
-        "code": "class FinalizeStagedDataWiderDataframeX3:\n    def time_finalize_staged_data(self, cache:CachedDFGenerator, param:int):\n        if (not SLOW_TESTS):\n            raise SkipNotImplemented (\"Slow tests are skipped\")\n        super().time_finalize_staged_data(cache,param)\n\n    def setup(self, cache:CachedDFGenerator, param:int):\n        if (not SLOW_TESTS):\n            raise SkipNotImplemented (\"Slow tests are skipped\")\n        super().setup(cache,param)\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data type\n        cachedDF = CachedDFGenerator(350000, [5, 25, 50]) # 3 times wider DF with bigger string columns\n        return cachedDF",
-        "min_run_count": 1,
-        "name": "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.time_finalize_staged_data",
-        "number": 1,
-        "param_names": [
-            "param1"
-        ],
-        "params": [
-            [
-                "100",
-                "200"
-            ]
-        ],
-        "repeat": 1,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "finalize_staged_data:82",
-        "timeout": 600,
+        "setup_cache_key": "bi_benchmarks:68",
+        "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "317bc16b3c8e30237836ae85a390b11995fe361c69b31984f0e5d32a344cd571",
+        "version": "5e4efb31734abc4f731146ae302ddef56e66ada452c319e8a0dea8ac9e3e82a4",
+        "warmup_time": -1
+    },
+    "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_isin_filter": {
+        "code": "class BIBenchmarks:\n    def time_query_groupby_city_count_isin_filter(self, times_bigger) -> pd.DataFrame:\n        return self.query_groupby_city_count_isin_filter(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n    \n        start_time = time.time()\n    \n        file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)\n        if (not os.path.exists(file)) :\n            dfo = download_and_process_city_to_parquet(file)\n            dff = pd.read_parquet(file)\n            pd.testing.assert_frame_equal(dfo,dff)\n        else:\n            print(\"Parquet file exists!\")\n    \n        # read data from bz.2 file\n        # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)\n        # self.df : pd.DataFrame = process_city(abs_path)\n    \n        self.df : pd.DataFrame = pd.read_parquet(file)\n    \n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        print(\"The procedure is creating N times larger dataframes\")\n        print(\"by concatenating original DF N times\")\n        print(\"Size of original Dataframe: \", self.df.shape[0])\n        for num in BIBenchmarks.params:\n            _df = pd.concat([self.df] * num)\n            print(\"DF for iterration xSize original ready: \", num)\n            self.lib.write(f\"{self.symbol}{num}\", _df)\n    \n        print(\"If pandas query produces different dataframe than arctic one stop tests!\")\n        print(\"This will mean query problem is there most likely\")\n    \n        print(\"Pre-check correctness for query_groupby_city_count_all\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_all(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_isin_filter\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_isin_filter(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_filter_two_aggregations\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_filter_two_aggregations(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"All pre-checks completed SUCCESSFULLY. Time: \", time.time() - start_time)\n    \n        del self.ac",
+        "min_run_count": 2,
+        "name": "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_isin_filter",
+        "number": 2,
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "bi_benchmarks:68",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "89cad46eb5100e61cfa5aecda0a0a34d755bb7e6e60434bb8979176681926006",
+        "warmup_time": -1
+    },
+    "bi_benchmarks.BIBenchmarks.time_query_readall": {
+        "code": "class BIBenchmarks:\n    def time_query_readall(self, times_bigger):\n        self.lib.read(f\"{self.symbol}{times_bigger}\")\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n    \n        start_time = time.time()\n    \n        file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)\n        if (not os.path.exists(file)) :\n            dfo = download_and_process_city_to_parquet(file)\n            dff = pd.read_parquet(file)\n            pd.testing.assert_frame_equal(dfo,dff)\n        else:\n            print(\"Parquet file exists!\")\n    \n        # read data from bz.2 file\n        # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)\n        # self.df : pd.DataFrame = process_city(abs_path)\n    \n        self.df : pd.DataFrame = pd.read_parquet(file)\n    \n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        print(\"The procedure is creating N times larger dataframes\")\n        print(\"by concatenating original DF N times\")\n        print(\"Size of original Dataframe: \", self.df.shape[0])\n        for num in BIBenchmarks.params:\n            _df = pd.concat([self.df] * num)\n            print(\"DF for iterration xSize original ready: \", num)\n            self.lib.write(f\"{self.symbol}{num}\", _df)\n    \n        print(\"If pandas query produces different dataframe than arctic one stop tests!\")\n        print(\"This will mean query problem is there most likely\")\n    \n        print(\"Pre-check correctness for query_groupby_city_count_all\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_all(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_isin_filter\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_isin_filter(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_filter_two_aggregations\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_filter_two_aggregations(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"All pre-checks completed SUCCESSFULLY. Time: \", time.time() - start_time)\n    \n        del self.ac",
+        "min_run_count": 2,
+        "name": "bi_benchmarks.BIBenchmarks.time_query_readall",
+        "number": 2,
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "bi_benchmarks:68",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "c746faf05e4dbb872efa770cbe5ae057dafe3ecc1fb8969d1026db2dee7bfd99",
         "warmup_time": -1
     },
     "list_functions.ListFunctions.peakmem_list_symbols": {

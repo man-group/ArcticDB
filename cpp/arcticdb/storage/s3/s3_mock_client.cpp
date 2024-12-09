@@ -49,6 +49,7 @@ std::optional<Aws::S3::S3Error> has_failure_trigger(const std::string& s3_object
 }
 
 const auto not_found_error = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::RESOURCE_NOT_FOUND, false));
+const auto precondition_failed_error = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::UNKNOWN, "Precondition failed", "Precondition failed", false));
 
 S3Result<std::monostate> MockS3Client::head_object(
         const std::string& s3_object_name,
@@ -83,10 +84,15 @@ S3Result<Segment> MockS3Client::get_object(
 S3Result<std::monostate> MockS3Client::put_object(
         const std::string &s3_object_name,
         Segment &&segment,
-        const std::string &bucket_name) {
+        const std::string &bucket_name,
+        PutHeader header) {
     auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::WRITE);
     if (maybe_error.has_value()) {
         return {*maybe_error};
+    }
+
+    if (header == PutHeader::IF_NONE_MATCH && s3_contents.contains({bucket_name, s3_object_name})) {
+        return {precondition_failed_error};
     }
 
     s3_contents.insert_or_assign({bucket_name, s3_object_name}, std::move(segment));

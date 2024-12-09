@@ -182,12 +182,14 @@ enum class KeyType : int {
      * Used for storing the ids of storages that failed to sync
      */
     REPLICATION_FAIL_INFO = 26,
-
     /*
      * A reference key storing many versions, used to track state within some of our background jobs.
      */
     BLOCK_VERSION_REF = 27,
-
+    /*
+     * Used for a list based reliable storage lock
+     */
+    ATOMIC_LOCK = 28,
     UNDEFINED
 };
 

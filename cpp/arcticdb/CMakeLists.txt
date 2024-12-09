@@ -367,6 +367,8 @@ set(arcticdb_srcs
         util/slab_allocator.hpp
         util/sparse_utils.hpp
         util/storage_lock.hpp
+        util/reliable_storage_lock.hpp
+        util/reliable_storage_lock-inl.hpp
         util/string_utils.hpp
         util/thread_cached_int.hpp
         util/timeouts.hpp
@@ -514,8 +516,7 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/version_map_batch_methods.cpp
-        )
+        version/version_map_batch_methods.cpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -946,6 +947,7 @@ if(${TEST})
             util/test/test_id_transformation.cpp
             util/test/test_key_utils.cpp
             util/test/test_ranges_from_future.cpp
+            util/test/test_reliable_storage_lock.cpp
             util/test/test_slab_allocator.cpp
             util/test/test_storage_lock.cpp
             util/test/test_string_pool.cpp
@@ -963,8 +965,7 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
             python/python_handlers.cpp
-            storage/test/common.hpp
-            )
+            storage/test/common.hpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
