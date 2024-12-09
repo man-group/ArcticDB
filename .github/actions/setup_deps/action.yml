@@ -4,6 +4,7 @@ runs:
   using: "composite"
   steps:
     - name: Install deps
+      id: install_deps
       shell: bash -l {0} 
       run: |
         dnf update -y
@@ -40,7 +41,6 @@ runs:
 
         which gcc
         which g++
-        echo "python_in_use=/opt/python/cp38-cp38/bin/python" >> $GITHUB_OUTPUT
+        echo "python_in_use=/opt/python/cp38-cp38/bin/python" >> "$GITHUB_OUTPUT"
 outputs:
-  python_in_use:
-    description: 'Path to the Python executable in use'
+  python_in_use: ${{ steps.install_deps.outputs.python_in_use }}
