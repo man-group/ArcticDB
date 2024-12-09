@@ -14,8 +14,11 @@ VariantData unary_boolean(const util::BitSet& bitset, OperationType operation) {
     switch(operation) {
         case OperationType::IDENTITY:
             return bitset;
-        case OperationType::NOT:
-            return ~bitset;
+        case OperationType::NOT: {
+            auto res = ~bitset;
+            res.resize(bitset.size());
+            return res;
+        }
         default:
             util::raise_rte("Unexpected operator in unary_boolean {}", int(operation));
     }
