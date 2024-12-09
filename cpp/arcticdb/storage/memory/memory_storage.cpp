@@ -44,18 +44,21 @@ void add_serialization_fields(KeySegmentPair& kv) {
             for (auto &kv : group.values()) {
                 util::variant_match(kv.variant_key(),
                                     [&](const RefKey &key) {
+                                        ARCTICDB_DEBUG(log::storage(), "Write ref key {}: {}", key.type(), key.view());
                                         if (auto it = key_vec.find(key); it != key_vec.end()) {
                                             key_vec.erase(it);
                                         }
                                         add_serialization_fields(kv);
-                                        key_vec.try_emplace(key, std::move(kv.segment()));
+                                        key_vec.try_emplace(key, kv.segment().clone());
                                     },
                                     [&](const AtomKey &key) {
+                                        ARCTICDB_DEBUG(log::storage(), "Write atom key {}: {}", key.type(), key.view());
                                         if (key_vec.find(key) != key_vec.end()) {
+                                            ARCTICDB_DEBUG(log::storage(), "Duplicate key while writing atom key {}: {}", key.type(), key.view());
                                             throw DuplicateKeyException(key);
                                         }
                                         add_serialization_fields(kv);
-                                        key_vec.try_emplace(key, std::move(kv.segment()));
+                                        key_vec.try_emplace(key, kv.segment().clone());
                                     }
                 );
             }
@@ -78,6 +81,7 @@ void add_serialization_fields(KeySegmentPair& kv) {
                     throw KeyNotFoundException(std::move(kv.variant_key()), err_message);
                 }
 
+                ARCTICDB_DEBUG(log::storage(), "Update key {}: {}", variant_key_type(kv.variant_key()), variant_key_view(kv.variant_key()));
                 if(it != key_vec.end()) {
                     key_vec.erase(it);
                 }
@@ -136,6 +140,7 @@ void add_serialization_fields(KeySegmentPair& kv) {
     }
 
     bool MemoryStorage::do_fast_delete() {
+        ARCTICDB_DEBUG(log::storage(), "Fast delete called on storage");
         foreach_key_type([&] (KeyType key_type) {
             data_[key_type].clear();
         });
