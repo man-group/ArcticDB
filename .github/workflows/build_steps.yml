@@ -89,6 +89,7 @@ jobs:
         continue-on-error: true
 
       - name: Install deps
+        id: install_deps
         if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
         uses: ./.github/actions/setup_deps
           
@@ -146,7 +147,7 @@ jobs:
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
-          configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
+          configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DPython_EXECUTABLE=${{ steps.install_deps.outputs.python_in_use }}']"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
 
       - name: Compile C++ tests
