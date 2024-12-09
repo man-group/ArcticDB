@@ -30,6 +30,7 @@
 #include <arcticdb/python/python_handlers.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/util/storage_lock.hpp>
+#include <util/gil_safe_py_none.hpp>
 
 #include <pybind11/pybind11.h>
 #include <mongocxx/exception/logic_error.hpp>
@@ -312,6 +313,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     auto programName ="__arcticdb_logger__";
     google::InitGoogleLogging(programName);
     using namespace arcticdb;
+    GilSafePyNone::instance(); // Ensure that the GIL is held when the static py::none gets allocated
 #ifndef WIN32
     // No fork() in Windows, so no need to register the handler
     pthread_atfork(nullptr, nullptr, &SingleThreadMutexHolder::reset_mutex);
