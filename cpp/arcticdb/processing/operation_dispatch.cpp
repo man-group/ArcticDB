@@ -54,7 +54,9 @@ VariantData transform_to_bitset(const VariantData& data) {
                             return input_value;
                         });
                     } else {
-                        util::raise_rte("Cannot convert column of type {} to a bitset", column_with_strings.column_->type());
+                        util::raise_rte("Cannot convert column '{}' of type {} to a bitset",
+                                        column_with_strings.column_name_,
+                                        get_user_friendly_type_string(column_with_strings.column_->type()));
                     }
                 });
                 return output_bitset;

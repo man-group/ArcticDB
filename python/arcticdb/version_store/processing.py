@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 from pandas.tseries.frequencies import to_offset
 
-from typing import Dict, NamedTuple, Optional, Tuple, Union
+from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, UserInputException
 from arcticdb.version_store._normalization import normalize_dt_range_to_ts
@@ -70,6 +70,8 @@ class ExpressionNode:
     def __init__(self):
         self.left = self.right = self.operator = None
         self.name = None
+        # Used only for ternary operator
+        self.condition = None
 
     @classmethod
     def compose(cls, left, operator, right):
@@ -206,8 +208,9 @@ class ExpressionNode:
 
     def __bool__(self):
         raise UserInputException(
-            "'and', 'or', and 'not' operators not supported in ArcticDB querying operations,"
-            " please use the bitwise equivalents '&', '|', and '~' respectively"
+            "'and', 'or', 'not', and ternary ('x if y else z') operators not supported in ArcticDB querying operations,"
+            " please use the bitwise equivalents '&', '|', and '~' for 'and', 'or', and 'not' respectively. For ternary"
+            " operations, use where(y, x, z) in the above example."
         )
 
     def isin(self, *args):
@@ -239,6 +242,8 @@ class ExpressionNode:
                 self.name = 'Column["{}"]'.format(self.left)
             elif self.operator in [_OperationType.ABS, _OperationType.NEG, _OperationType.NOT]:
                 self.name = "{}({})".format(self.operator.name, self.left)
+            elif self.operator == _OperationType.TERNARY:
+                self.name = f"{self.left} if {self.condition} else {self.right}"
             else:
                 if isinstance(self.left, ExpressionNode):
                     left = str(self.left)
@@ -250,6 +255,82 @@ class ExpressionNode:
                     right = to_string(self.right)
                 self.name = "({} {} {})".format(left, self.operator.name, right)
         return self.name
+
+
+def where(condition: Any, left: Any, right: Any):
+    """
+    Ternary operator choosing from the left expression where condition is true, and from the right expression where
+    it is false. Similar to numpy.where, of the Python statement `left if condition else right`.
+
+    Parameters
+    ----------
+    condition: Any
+        The condition on which to choose from left or right. e.g. a boolean column, or a filtering statement such as
+        df["col"] == 0.
+    left: Any
+        The expression to select where condition is true. If the return value of the where function is being used as a
+        filter, then this must be another filtering statement. If the return value is being used as a projection to
+        create a new column, then this must be either an expression producing a column, or a value. See examples below
+        for both use cases.
+    right: Any
+        See left.
+
+    Returns
+    -------
+    ExpressionNode
+        An opaque object representing a node in the Abstract Syntax Tree of the expression being computed.
+
+    Examples
+    --------
+
+    >>> df = pd.DataFrame(
+    >>>    {
+    >>>        "col1": [0, 0, 1, 0, 1],
+    >>>        "col2": [0, 1, 2, 3, 4],
+    >>>        "col3": [5, 6, 7, 8, 9],
+    >>>    }
+    >>>)
+    >>> lib.write("sym", df)
+
+    Produce a new column by selecting from functions of two other columns
+
+    >>> q = QueryBuilder()
+    >>> q.apply("new_col", where(q["col1"] == 0), 2 * q["col2"], q["col3"])
+    >>> lib.read("sym", query_builder=q).data
+            col1   col2   col3   new_col
+        0      0      0      5         0
+        1      0      1      6         2
+        2      1      2      7         7
+        3      0      3      8         6
+        4      1      4      9         9
+
+    Produce a new column by selecting from one column and one fixed value
+
+    >>> q = QueryBuilder()
+    >>> q.apply("new_col", where(q["col1"] == 0), q["col2"], 10)
+    >>> lib.read("sym", query_builder=q).data
+            col1   col2   col3   new_col
+        0      0      0      5         0
+        1      0      1      6         1
+        2      1      2      7        10
+        3      0      3      8         3
+        4      1      4      9        10
+
+    Filter based on different criteria depending on the first condition
+
+    >>> q = QueryBuilder()
+    >>> q = q[where(q["col1"] == 0, q["col2"] == 0, q["col3"] == 9)]
+    >>> lib.read("sym", query_builder=q).data
+            col1   col2   col3
+        0      0      0      5
+        1      1      4      9
+    """
+    expression_node = ExpressionNode()
+    expression_node.condition = condition
+    expression_node.left = left
+    expression_node.operator = _OperationType.TERNARY
+    expression_node.right = right
+    return expression_node
 
 
 def is_supported_sequence(obj):
@@ -992,7 +1073,9 @@ class QueryBuilder:
         else:
             # This handles the case where the filtering is on a single boolean column
             # e.g. q = q[q["col"]]
-            if isinstance(item, ExpressionNode) and item.operator == COLUMN:
+            # or a single where statement where there are two bool input columns
+            # e.g. q = q[where(q["col"] == 0, q["bool_column_1"], q["bool_column_2"])]
+            if isinstance(item, ExpressionNode) and item.operator in [COLUMN, _OperationType.TERNARY]:
                 item = ExpressionNode.compose(item, _OperationType.IDENTITY, None)
             input_columns, expression_context = visit_expression(item)
             self_copy = copy.deepcopy(self)
@@ -1150,7 +1233,12 @@ def visit_expression(expr):
             raise ArcticNativeException("Query is trivially {}".format(node))
 
         left = _visit_child(node.left)
-        if node.right is not None:
+        if node.condition is not None:
+            check(node.right is not None, "Ternary operator requires three inputs")
+            condition = _visit_child(node.condition)
+            right = _visit_child(node.right)
+            expression_node = _ExpressionNode(condition, left, right, node.operator)
+        elif node.right is not None:
             right = _visit_child(node.right)
             expression_node = _ExpressionNode(left, right, node.operator)
         else:

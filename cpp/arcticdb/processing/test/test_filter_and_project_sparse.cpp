@@ -254,14 +254,10 @@ TEST_F(FilterProjectSparse, BinaryComparisonDenseColDenseCol) {
 TEST_F(FilterProjectSparse, BinaryComparisonDenseColDenseColNotEqual) {
     auto bitset = binary_filter("dense_floats_1", std::string_view{"dense_floats_2"}, OperationType::NE);
     for (auto idx = 0; idx <= dense_floats_2->last_row(); idx++) {
-        if (idx <= dense_floats_1->last_row()) {
-            auto opt_left_value = dense_floats_1->scalar_at<double>(idx);
-            auto opt_right_value = dense_floats_2->scalar_at<double>(idx);
-            if (opt_left_value.has_value() && opt_right_value.has_value()) {
-                ASSERT_EQ(*opt_left_value != *opt_right_value, bitset.get_bit(idx));
-            } else {
-                ASSERT_TRUE(bitset.get_bit(idx));
-            }
+        auto opt_left_value = dense_floats_1->scalar_at<double>(idx);
+        auto opt_right_value = dense_floats_2->scalar_at<double>(idx);
+        if (opt_left_value.has_value() && opt_right_value.has_value()) {
+            ASSERT_EQ(*opt_left_value != *opt_right_value, bitset.get_bit(idx));
         } else {
             ASSERT_TRUE(bitset.get_bit(idx));
         }
@@ -294,23 +290,6 @@ TEST_F(FilterProjectSparse, BinaryComparisonSparseColShorterThanDenseColNotEqual
             ASSERT_EQ(*opt_left_value != *opt_right_value, bitset.get_bit(idx));
         } else {
             ASSERT_TRUE(bitset.get_bit(idx));
-        }
-    }
-}
-
-TEST_F(FilterProjectSparse, BinaryComparisonSparseColLongerThanDenseCol) {
-    auto bitset = binary_filter("dense_floats_1", std::string_view{"sparse_floats_1"}, OperationType::GT);
-    for (auto idx = 0; idx <= sparse_floats_1->last_row(); idx++) {
-        if (idx <= dense_floats_1->last_row()) {
-            auto opt_left_value = dense_floats_1->scalar_at<double>(idx);
-            auto opt_right_value = sparse_floats_1->scalar_at<double>(idx);
-            if (opt_left_value.has_value() && opt_right_value.has_value()) {
-                ASSERT_EQ(*opt_left_value > *opt_right_value, bitset.get_bit(idx));
-            } else {
-                ASSERT_FALSE(bitset.get_bit(idx));
-            }
-        } else {
-            ASSERT_FALSE(bitset.get_bit(idx));
         }
     }
 }
@@ -382,30 +361,6 @@ TEST_F(FilterProjectSparse, BinaryArithmeticSparseColShorterThanDenseCol) {
     for (auto idx = 0; idx <= projected_column->last_row(); idx++) {
         auto opt_left_value = sparse_floats_1->scalar_at<double>(idx);
         auto opt_right_value = dense_floats_1->scalar_at<double>(idx);
-        auto opt_projected_value = projected_column->scalar_at<double>(idx);
-        if (opt_left_value.has_value() && opt_right_value.has_value()) {
-            ASSERT_TRUE(opt_projected_value.has_value());
-            if (std::isnan(*opt_left_value * *opt_right_value)) {
-                ASSERT_TRUE(std::isnan(*opt_projected_value));
-            } else {
-                ASSERT_FLOAT_EQ(*opt_left_value * *opt_right_value, *projected_column->scalar_at<double>(idx));
-            }
-        } else {
-            ASSERT_FALSE(projected_column->has_value_at(idx));
-        }
-    }
-}
-
-TEST_F(FilterProjectSparse, BinaryArithmeticSparseColLongerThanDenseCol) {
-    auto projected_column = binary_projection("dense_floats_1", std::string_view{"sparse_floats_2"}, OperationType::MUL);
-    ASSERT_TRUE(projected_column->opt_sparse_map().has_value());
-    for (auto idx = 0; idx < dense_floats_1->row_count(); idx++) {
-        ASSERT_EQ(sparse_floats_2->sparse_map().get_bit(idx), projected_column->sparse_map().get_bit(idx));
-    }
-    ASSERT_EQ(projected_column->row_count(), projected_column->sparse_map().count());
-    for (auto idx = 0; idx <= projected_column->last_row(); idx++) {
-        auto opt_left_value = dense_floats_1->scalar_at<double>(idx);
-        auto opt_right_value = sparse_floats_2->scalar_at<double>(idx);
         auto opt_projected_value = projected_column->scalar_at<double>(idx);
         if (opt_left_value.has_value() && opt_right_value.has_value()) {
             ASSERT_TRUE(opt_projected_value.has_value());

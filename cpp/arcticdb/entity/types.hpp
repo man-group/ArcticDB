@@ -224,6 +224,9 @@ constexpr DataType combine_data_type(ValueType v, SizeBits b = SizeBits::UNKNOWN
 template<typename T>
 constexpr DataType data_type_from_raw_type() {
     static_assert(std::is_arithmetic_v<T>);
+    if constexpr(std::is_same_v<T, bool>) {
+        return DataType::BOOL8;
+    }
     if constexpr (std::is_floating_point_v<T>) {
         return combine_data_type(ValueType::FLOAT, get_size_bits(sizeof(T)));
     }
