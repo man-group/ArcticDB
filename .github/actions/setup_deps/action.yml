@@ -42,5 +42,3 @@ runs:
         which gcc
         which g++
         echo "python_in_use=/opt/python/cp38-cp38/bin/python" >> "$GITHUB_OUTPUT"
-  outputs:
-    python_in_use: ${{ steps.install_deps.outputs.python_in_use }}
