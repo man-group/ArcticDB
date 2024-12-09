@@ -29,7 +29,7 @@ dependencies:
   - cyrus-sasl
   - aws-sdk-cpp
   - prometheus-cpp
-  - libprotobuf <4
+  - libprotobuf
   - openssl
   - libcurl
   - bitmagic
@@ -55,9 +55,9 @@ dependencies:
   # Build dependencies for tests
   - libarrow
   # Python dependences
-  - python =3.10 # Python 3.11 requires protobuf>=4
+  - python
   - packaging
-  - numpy
+  - numpy <2
   - pandas
   - attrs
   - boto3
