@@ -52,7 +52,7 @@ jobs:
         shell: bash -el {0}
         run: |
           ls /opt/python  
-          echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
+          echo /opt/python/cp38-cp38/bin >> $GITHUB_PATH
 
 
       - name: Set persistent storage variables
