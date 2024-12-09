@@ -40,3 +40,4 @@ runs:
 
         which gcc
         which g++
+        echo "python_in_use=$(which python3.8)" >> $GITHUB_ENV
