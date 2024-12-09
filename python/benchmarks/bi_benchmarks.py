@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 
 import os
+import arcticdb.util.test as test
 import pandas as pd
 from pathlib import Path
 import time
@@ -29,10 +30,10 @@ def get_query_groupby_city_count_filter_two_aggregations(q:QueryBuilder | pd.Dat
 
 def assert_frame_equal(pandas_df:pd.DataFrame, arctic_df:pd.DataFrame):
     arctic_df.sort_index(inplace=True)
-    pd.testing.assert_frame_equal(pandas_df,
-                                    arctic_df, 
-                                    check_column_type=False, 
-                                    check_dtype=False)
+    test.assert_frame_equal(pandas_df,
+                                arctic_df, 
+                                check_column_type=False, 
+                                check_dtype=False)
 
 
 class BIBenchmarks:
@@ -90,17 +91,8 @@ class BIBenchmarks:
         print("by concatenating original DF N times")
         print("Size of original Dataframe: ", self.df.shape[0])
         for num in BIBenchmarks.params:
-            _df = self.df.copy(deep=True)
-            if (num > 1):
-                # lets create N times bigger DF
-                dfcum = self.df.copy(deep=True)
-                arr = [dfcum]
-                for i in range(1, (BIBenchmarks.params[-1])):
-                    arr.append(dfcum)
-                dfcum = pd.concat(arr)            
-                _df = dfcum
-                print("DF for iterration xSize original ready: ", num)
-                _df.info(verbose=True,memory_usage='deep')
+            _df = pd.concat([self.df] * num)
+            print("DF for iterration xSize original ready: ", num)
             self.lib.write(f"{self.symbol}{num}", _df)
 
         print("If pandas query produces different dataframe than arctic one stop tests!")
