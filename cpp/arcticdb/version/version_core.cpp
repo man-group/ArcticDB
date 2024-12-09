@@ -366,7 +366,7 @@ static void check_can_update(
     const auto index_desc = check_index_match(frame.index, index_segment_reader.tsd().index());
     util::check(index::is_timeseries_index(index_desc), "Update not supported for non-timeseries indexes");
     check_update_data_is_sorted(frame, index_segment_reader);
-    (void)check_and_mark_slices(index_segment_reader, dynamic_schema, false, std::nullopt, index_segment_reader.bucketize_dynamic());
+    (void)check_and_mark_slices(index_segment_reader, false, std::nullopt);
     fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, frame, empty_types);
 }
 
@@ -1401,12 +1401,8 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         std::any& handler_data) {
     pipeline_context->clear_vectors();
     pipeline_context->slice_and_keys_ = std::move(items);
-	std::sort(std::begin(pipeline_context->slice_and_keys_), std::end(pipeline_context->slice_and_keys_), [] (const auto& left, const auto& right) {
-		return std::tie(left.slice_.row_range, left.slice_.col_range) < std::tie(right.slice_.row_range, right.slice_.col_range);
-	});
     adjust_slice_rowcounts(pipeline_context);
-    const auto dynamic_schema = opt_false(read_options.dynamic_schema());
-    mark_index_slices(pipeline_context, dynamic_schema, pipeline_context->bucketize_dynamic_);
+    mark_index_slices(pipeline_context);
     pipeline_context->ensure_vectors();
 
     for(auto row : *pipeline_context) {
@@ -1579,13 +1575,13 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
         util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
         return read_and_process(store, pipeline_context, read_query, read_options)
-        .thenValue([store, pipeline_context, &read_options, &handler_data](std::vector<SliceAndKey>&& segs) {
+        .thenValue([store, pipeline_context, &read_options, &handler_data](auto&& segs) {
             return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
         });
     } else {
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
         util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query->row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
-        mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema()), pipeline_context->bucketize_dynamic_);
+        mark_index_slices(pipeline_context);
         const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
         auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
         util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);

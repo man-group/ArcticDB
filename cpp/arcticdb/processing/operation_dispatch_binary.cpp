@@ -12,16 +12,23 @@ namespace arcticdb {
 
 VariantData binary_boolean(const util::BitSet& left, const util::BitSet& right, OperationType operation) {
     util::check(left.size() == right.size(), "BitSets of different lengths ({} and {}) in binary comparator", left.size(), right.size());
+    util::BitSet res;
     switch(operation) {
         case OperationType::AND:
-            return left & right;
+            res = left & right;
+            break;
         case OperationType::OR:
-            return left | right;
+            res = left | right;
+            break;
         case OperationType::XOR:
-            return left ^ right;
+            res = left ^ right;
+            break;
         default:
             util::raise_rte("Unexpected operator in binary_boolean {}", int(operation));
     }
+    // Sizes of left and right are the same by check at start of function, so doesn't matter which one we use
+    res.resize(left.size());
+    return res;
 }
 
 VariantData binary_boolean(const util::BitSet& left, EmptyResult, OperationType operation) {
@@ -43,7 +50,9 @@ VariantData binary_boolean(const util::BitSet& left, FullResult, OperationType o
         case OperationType::OR:
             return FullResult{};
         case OperationType::XOR: {
-            return ~left;
+            auto res = ~left;
+            res.resize(left.size());
+            return res;
         }
         default:
             util::raise_rte("Unexpected operator in binary_boolean {}", int(operation));

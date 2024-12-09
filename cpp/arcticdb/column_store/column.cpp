@@ -70,11 +70,12 @@ void initialise_output_column(const Column& left_input_column, const Column& rig
     }
 }
 
-void initialise_output_bitset(const util::BitSet& input_bitset, bool sparse_missing_value_output, util::BitSet& output_bitset) {
+void initialise_output_bitset(const Column& input_column, bool sparse_missing_value_output, util::BitSet& output_bitset) {
     if (sparse_missing_value_output) {
-        output_bitset = input_bitset;
+        output_bitset = input_column.sparse_map();
         output_bitset.flip();
     }
+    output_bitset.resize(input_column.last_row() + 1);
 }
 
 // Column operators

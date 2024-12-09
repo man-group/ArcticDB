@@ -271,7 +271,7 @@ TEST_F(AstParsingOutputTypesTest, ProjectionAddNumericColStringCol) {
 }
 
 TEST_F(AstParsingOutputTypesTest, ProjectionAddNumericColBitset) {
-    ec.add_expression_node("bitset", std::make_shared<ExpressionNode>(ColumnName("int32"), ColumnName("uint8"), OperationType::EQ));
+    ec.add_expression_node("bitset", bitset_node());
     ec.add_expression_node("root", std::make_shared<ExpressionNode>(ColumnName("int32"), ExpressionName("bitset"), OperationType::ADD));
     ProjectClause project_clause{{"int32", "uint8"}, "root", ec};
     ASSERT_THROW(project_clause.modify_schema(initial_schema()), UserInputException);
@@ -306,4 +306,97 @@ TEST_F(AstParsingOutputTypesTest, ProjectionComplexExpression) {
     auto stream_desc = initial_schema().stream_descriptor();
     stream_desc.add_scalar_field(DataType::INT64, "root");
     ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+}
+
+TEST_F(AstParsingOutputTypesTest, TernaryValueSetCondition) {
+    std::unordered_set<uint8_t> raw_set{1, 2, 3};
+    auto value_set = std::make_shared<ValueSet>(std::make_shared<std::unordered_set<uint8_t>>(std::move(raw_set)));
+    ec.add_value_set("value_set", value_set);
+    ec.add_expression_node("root", std::make_shared<ExpressionNode>(ValueSetName("value_set"), ColumnName("uint8"), ColumnName("uint8"), OperationType::TERNARY));
+    ProjectClause project_clause{{"uint8"}, "root", ec};
+    ASSERT_THROW(project_clause.modify_schema(initial_schema()), UserInputException);
+}
+
+TEST_F(AstParsingOutputTypesTest, TernaryValueSetLeft) {
+    std::unordered_set<uint8_t> raw_set{1, 2, 3};
+    auto value_set = std::make_shared<ValueSet>(std::make_shared<std::unordered_set<uint8_t>>(std::move(raw_set)));
+    ec.add_value_set("value_set", value_set);
+    ec.add_expression_node("root", std::make_shared<ExpressionNode>(ColumnName("bool"), ValueSetName("value_set"), ColumnName("uint8"), OperationType::TERNARY));
+    ProjectClause project_clause{{"uint8"}, "root", ec};
+    ASSERT_THROW(project_clause.modify_schema(initial_schema()), UserInputException);
+}
+
+TEST_F(AstParsingOutputTypesTest, TernaryValueSetRight) {
+    std::unordered_set<uint8_t> raw_set{1, 2, 3};
+    auto value_set = std::make_shared<ValueSet>(std::make_shared<std::unordered_set<uint8_t>>(std::move(raw_set)));
+    ec.add_value_set("value_set", value_set);
+    ec.add_expression_node("root", std::make_shared<ExpressionNode>(ColumnName("bool"), ColumnName("uint8"), ValueSetName("value_set"), OperationType::TERNARY));
+    ProjectClause project_clause{{"uint8"}, "root", ec};
+    ASSERT_THROW(project_clause.modify_schema(initial_schema()), UserInputException);
+}
+
+TEST_F(AstParsingOutputTypesTest, TernaryNonBoolColCondition) {
+    ec.add_expression_node("root", std::make_shared<ExpressionNode>(ColumnName("uint8"), ColumnName("uint8"), ColumnName("uint8"), OperationType::TERNARY));
+    ProjectClause project_clause{{"uint8"}, "root", ec};
+    ASSERT_THROW(project_clause.modify_schema(initial_schema()), UserInputException);
+}
+
+TEST_F(AstParsingOutputTypesTest, TernaryBitsetCondition) {
+    ec.add_expression_node("bitset", bitset_node());
+    ec.add_expression_node("root", std::make_shared<ExpressionNode>(ExpressionName("bitset"), ColumnName("int32"), ColumnName("uint8"), OperationType::TERNARY));
+    ProjectClause project_clause{{"int32", "uint8"}, "root", ec};
+    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto stream_desc = initial_schema().stream_descriptor();
+    stream_desc.add_scalar_field(DataType::INT32, "root");
+    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+}
+
+TEST_F(AstParsingOutputTypesTest, TernaryStringColCol) {
+    ec.add_expression_node("root", std::make_shared<ExpressionNode>(ColumnName("bool"), ColumnName("string"), ColumnName("string"), OperationType::TERNARY));
+    ProjectClause project_clause{{"string"}, "root", ec};
+    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto stream_desc = initial_schema().stream_descriptor();
+    stream_desc.add_scalar_field(DataType::UTF_DYNAMIC64, "root");
+    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+}
+
+TEST_F(AstParsingOutputTypesTest, TernaryNumericColVal) {
+    auto value = std::make_shared<Value>(construct_value<uint16_t>(5));
+    ec.add_value("5", value);
+    ec.add_expression_node("root", std::make_shared<ExpressionNode>(ColumnName("bool"), ColumnName("uint8"), ValueName("5"), OperationType::TERNARY));
+    ProjectClause project_clause{{"uint8"}, "root", ec};
+    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto stream_desc = initial_schema().stream_descriptor();
+    stream_desc.add_scalar_field(DataType::UINT16, "root");
+    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+}
+
+TEST_F(AstParsingOutputTypesTest, TernaryNumericColStringCol) {
+    ec.add_expression_node("root", std::make_shared<ExpressionNode>(ColumnName("bool"), ColumnName("int32"), ColumnName("string"), OperationType::TERNARY));
+    ProjectClause project_clause{{"int32", "string"}, "root", ec};
+    ASSERT_THROW(project_clause.modify_schema(initial_schema()), UserInputException);
+}
+
+TEST_F(AstParsingOutputTypesTest, TernaryNumericColBitset) {
+    ec.add_expression_node("bitset", bitset_node());
+    ec.add_expression_node("root", std::make_shared<ExpressionNode>(ColumnName("bool"), ColumnName("int32"), ExpressionName("bitset"), OperationType::TERNARY));
+    ProjectClause project_clause{{"int32", "uint8"}, "root", ec};
+    ASSERT_THROW(project_clause.modify_schema(initial_schema()), UserInputException);
+}
+
+TEST_F(AstParsingOutputTypesTest, TernaryBitsetBoolCol) {
+    ec.add_expression_node("bitset", bitset_node());
+    ec.add_expression_node("root", std::make_shared<ExpressionNode>(ColumnName("bool"), ExpressionName("bitset"), ColumnName("bool"), OperationType::TERNARY));
+    FilterClause filter_clause{{"int32", "uint8", "bool"}, ec, {}};
+    auto output_schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+}
+
+TEST_F(AstParsingOutputTypesTest, TernaryBitsetBitset) {
+    ec.add_expression_node("bitset_1", bitset_node());
+    ec.add_expression_node("bitset_2", bitset_node());
+    ec.add_expression_node("root", std::make_shared<ExpressionNode>(ColumnName("bool"), ExpressionName("bitset_1"), ExpressionName("bitset_2"), OperationType::TERNARY));
+    FilterClause filter_clause{{"int32", "uint8", "bool"}, ec, {}};
+    auto output_schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
