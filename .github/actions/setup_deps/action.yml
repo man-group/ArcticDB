@@ -40,7 +40,7 @@ runs:
 
         which gcc
         which g++
-        echo "python_in_use=$(which python3.8)" >> $GITHUB_ENV
+        echo "python_in_use=/opt/python/cp38-cp38/bin/python" >> $GITHUB_ENV
 outputs:
   python_in_use:
     description: 'Path to the Python executable in use'
