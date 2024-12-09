@@ -258,6 +258,7 @@ set(arcticdb_srcs
         processing/component_manager.hpp
         processing/operation_dispatch.hpp
         processing/operation_dispatch_binary.hpp
+        processing/operation_dispatch_ternary.hpp
         processing/operation_dispatch_unary.hpp
         processing/operation_types.hpp
         processing/signed_unsigned_comparison.hpp
@@ -471,6 +472,7 @@ set(arcticdb_srcs
         processing/operation_dispatch_binary_operator_minus.cpp
         processing/operation_dispatch_binary_operator_times.cpp
         processing/operation_dispatch_binary_operator_divide.cpp
+        processing/operation_dispatch_ternary.cpp
         processing/query_planner.cpp
         processing/sorted_aggregation.cpp
         processing/unsorted_aggregation.cpp

@@ -12,6 +12,7 @@
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/processing/operation_dispatch_binary.hpp>
+#include <arcticdb/processing/operation_dispatch_ternary.hpp>
 #include <arcticdb/processing/operation_dispatch_unary.hpp>
 
 namespace arcticdb {
@@ -49,21 +50,31 @@ namespace arcticdb {
     return std::nullopt;
 }
 
+ExpressionNode::ExpressionNode(VariantNode condition, VariantNode left, VariantNode right, OperationType op) :
+        condition_(std::move(condition)),
+        left_(std::move(left)),
+        right_(std::move(right)),
+        operation_type_(op) {
+    util::check(is_ternary_operation(op), "Non-ternary expression provided with three arguments");
+}
+
 ExpressionNode::ExpressionNode(VariantNode left, VariantNode right, OperationType op) :
     left_(std::move(left)),
     right_(std::move(right)),
     operation_type_(op) {
-    util::check(is_binary_operation(op), "Left and right expressions supplied to non-binary operator");
+    util::check(is_binary_operation(op), "Non-binary expression provided with two arguments");
 }
 
 ExpressionNode::ExpressionNode(VariantNode left, OperationType op) :
     left_(std::move(left)),
     operation_type_(op) {
-    util::check(!is_binary_operation(op), "Binary expression expects both left and right children");
+    util::check(is_unary_operation(op), "Non-unary expression provided with single argument");
 }
 
 VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
-    if (is_binary_operation(operation_type_)) {
+    if (is_ternary_operation(operation_type_)) {
+        return dispatch_ternary(seg.get(condition_), seg.get(left_), seg.get(right_), operation_type_);
+    } else if (is_binary_operation(operation_type_)) {
         return dispatch_binary(seg.get(left_), seg.get(right_), operation_type_);
     } else {
         return dispatch_unary(seg.get(left_), operation_type_);

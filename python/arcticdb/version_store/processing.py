@@ -68,6 +68,8 @@ class ExpressionNode:
     def __init__(self):
         self.left = self.right = self.operator = None
         self.name = None
+        # Used only for ternary operator
+        self.condition = None
 
     @classmethod
     def compose(cls, left, operator, right):
@@ -204,8 +206,9 @@ class ExpressionNode:
 
     def __bool__(self):
         raise UserInputException(
-            "'and', 'or', and 'not' operators not supported in ArcticDB querying operations,"
-            " please use the bitwise equivalents '&', '|', and '~' respectively"
+            "'and', 'or', 'not', and ternary ('x if y else z') operators not supported in ArcticDB querying operations,"
+            " please use the bitwise equivalents '&', '|', and '~' for 'and', 'or', and 'not' respectively. For ternary"
+            " operations, use where(y, x, z) in the above example."
         )
 
     def isin(self, *args):
@@ -237,6 +240,8 @@ class ExpressionNode:
                 self.name = 'Column["{}"]'.format(self.left)
             elif self.operator in [_OperationType.ABS, _OperationType.NEG, _OperationType.NOT]:
                 self.name = "{}({})".format(self.operator.name, self.left)
+            elif self.operator == _OperationType.TERNARY:
+                self.name = f"{self.left} if {self.condition} else {self.right}"
             else:
                 if isinstance(self.left, ExpressionNode):
                     left = str(self.left)
@@ -248,6 +253,15 @@ class ExpressionNode:
                     right = to_string(self.right)
                 self.name = "({} {} {})".format(left, self.operator.name, right)
         return self.name
+
+
+def where(condition, left, right):
+    expression_node = ExpressionNode()
+    expression_node.condition = condition
+    expression_node.left = left
+    expression_node.operator = _OperationType.TERNARY
+    expression_node.right = right
+    return expression_node
 
 
 def is_supported_sequence(obj):
@@ -1074,7 +1088,12 @@ def visit_expression(expr):
             raise ArcticNativeException("Query is trivially {}".format(node))
 
         left = _visit_child(node.left)
-        if node.right is not None:
+        if node.condition is not None:
+            check(node.right is not None, "Ternary operator requires three inputs")
+            condition = _visit_child(node.condition)
+            right = _visit_child(node.right)
+            expression_node = _ExpressionNode(condition, left, right, node.operator)
+        elif node.right is not None:
             right = _visit_child(node.right)
             expression_node = _ExpressionNode(left, right, node.operator)
         else:

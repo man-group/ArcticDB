@@ -219,6 +219,9 @@ struct ProjectClause {
     OutputSchema modify_schema(OutputSchema&& output_schema) const;
 
     [[nodiscard]] std::string to_string() const;
+
+private:
+    void add_column(ProcessingUnit& proc, const ColumnWithStrings &col) const;
 };
 
 template<typename GrouperType, typename BucketizerType>
