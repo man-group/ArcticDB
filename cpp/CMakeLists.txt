@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.21) # TARGET_RUNTIME_DLLS
 
 # Make the `project` command handle the version of the project.
 cmake_policy(SET CMP0048 NEW)
+cmake_policy(SET CMP0148 NEW)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
