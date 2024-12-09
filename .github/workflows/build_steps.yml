@@ -146,7 +146,7 @@ jobs:
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
-          configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', 'Python_EXECUTABLE=/opt/python/cp38-cp38/bin/python']"
+          configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DPython_EXECUTABLE=/opt/python/cp38-cp38/bin/python']"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
 
       - name: Compile C++ tests
