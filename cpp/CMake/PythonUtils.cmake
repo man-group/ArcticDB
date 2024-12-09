@@ -156,9 +156,12 @@ else()
     endif()
 
     set(PYBIND11_FINDPYTHON OFF)
-    # After find_package calls for Python
-    set(PYTHONLIBS_FOUND TRUE)  # Manually setting to TRUE
-    set(PYTHON_MODULE_EXTENSION ${Python_EXTENSION_MODULE_SUFFIX})
-    message("Using Python_EXECUTABLE=${PYTHON_EXECUTABLE} and Python_INCLUDE_DIRS=${Python_INCLUDE_DIRS}")
 endif()
+
+# After find_package calls for Python
+set(PYTHONLIBS_FOUND TRUE)  # Manually setting to TRUE
+set(PYTHON_MODULE_EXTENSION ${Python_EXTENSION_MODULE_SUFFIX})
+message(AUTHOR_WARNING "Python_MODULE_EXTENSION=${PYTHON_MODULE_EXTENSION}")
+message(AUTHOR_WARNING "Python_EXECUTABLE=${PYTHON_EXECUTABLE}")
+message(AUTHOR_WARNING "PYTHONLIBS_FOUND=${PYTHONLIBS_FOUND}")
 
