@@ -9,15 +9,6 @@ os.environ['ARCTICDB_schedule_loglevel'] = 'DEBUG'
 set_config_int("VersionStore.NumCPUThreads", 64)
 set_config_int("VersionStore.NumIOThreads", 120)
 
-AWS_ACCESS_KEY_ID = 'MZEDTTRBRIG0TDWQ4F8M'
-AWS_SECRET_ACCESS_KEY = 'SDQMvXWrpBu+jHECovLJcoqpmqa8sn+wTQvggBYs'
-user = 'MZEDTTRBRIG0TDWQ4F8M'
-secret = 'SDQMvXWrpBu+jHECovLJcoqpmqa8sn+wTQvggBYs'
-bucket = 'user-wdealtry-dev'
-endpoint = 's3.vast.gdc.storage.dev.m'
-
-arctic_uri = "s3://{}:{}?access={}&secret={}".format(endpoint, bucket, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
-arctic_library_name = "ticks"
 
 
 def _query() -> adb.QueryBuilder:
