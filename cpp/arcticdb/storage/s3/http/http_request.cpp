@@ -1,5 +1,5 @@
-#include <arcticdb/storage/s3/http_request.hpp>
-#include <arcticdb/log/log.hpp>
+#include "http_request.hpp"
+#include "arcticdb/log/log.hpp"
 
 #include <aws/core/http/standard/StandardHttpRequest.h>
 #include <aws/core/utils/logging/LogMacros.h>

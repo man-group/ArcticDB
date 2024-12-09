@@ -4,9 +4,9 @@
 #include <aws/core/http/URI.h>
 #include <aws/core/http/standard/StandardHttpRequest.h>
 
-#include <arcticdb/storage/s3/http_client.hpp>
-#include <arcticdb/storage/s3/http_request.hpp>
-#include <arcticdb/log/log.hpp>
+#include "http_client.hpp"
+#include "http_request.hpp"
+#include "arcticdb/log/log.hpp"
 #include <csignal>
 
 namespace arcticdb {

@@ -28,7 +28,8 @@ namespace arcticdb::storage::s3 {
 class S3ClientImpl : public S3ClientInterface {
 public:
     template<typename ...Args>
-    S3ClientImpl(Args&& ...args):s3_client(std::forward<Args>(args)...) {};
+    S3ClientImpl(Args&& ...args) :
+        s3_client(std::forward<Args>(args)...) {};
 
     S3Result<std::monostate> head_object(
         const std::string& s3_object_name,

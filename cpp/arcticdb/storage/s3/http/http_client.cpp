@@ -2,7 +2,7 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
-#include <arcticdb/storage/s3/http_client.hpp>
+#include "http_client.hpp"
 #include <aws/core/http/HttpRequest.h>
 #include <aws/core/http/standard/StandardHttpResponse.h>
 #include <aws/core/utils/StringUtils.h>
@@ -14,11 +14,11 @@
 #include <aws/core/utils/Outcome.h>
 #include <cassert>
 
-#include <arcticdb/log/log.hpp>
-#include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/storage/s3/http_request.hpp>
-#include <arcticdb/storage/s3/http_response.hpp>
-#include <arcticdb/util/timer.hpp>
+#include "arcticdb/log/log.hpp"
+#include "arcticdb/util/configs_map.hpp"
+#include "http_request.hpp"
+#include "http_response.hpp"
+#include "arcticdb/util/timer.hpp"
 
 #include <algorithm>
 

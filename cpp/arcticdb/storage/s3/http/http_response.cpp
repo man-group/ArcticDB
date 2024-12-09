@@ -3,13 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
-#include <arcticdb/storage/s3/http_response.hpp>
+#include "http_response.hpp"
 
 #include <aws/core/utils/StringUtils.h>
 #include <aws/core/utils/logging/LogMacros.h>
 #include <aws/core/utils/memory/AWSMemory.h>
 
-#include <arcticdb/log/log.hpp>
+#include "arcticdb/log/log.hpp"
 
 #include <istream>
 
