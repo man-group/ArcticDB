@@ -170,7 +170,11 @@ if(ARCTICDB_FIND_PYTHON_DEV_MODE)
 else()
     set(ARCTICDB_PYTHON_PREFIX PYTHON)
     python_utils_check_include_dirs("supplied")
-    _python_utils_check_vars(Python Python3 PYTHON)
+    _python_utils_check_vars(Python Python3)
+
+    if(NOT PYTHON_EXECUTABLE)
+        find_program(PYTHON_EXECUTABLE python HINTS ${Python_ROOT_DIR} PATH_SUFFIXES bin NO_CMAKE_SYSTEM_PATH)
+    endif()
 
     set(PYBIND11_FINDPYTHON OFF)
 endif()
