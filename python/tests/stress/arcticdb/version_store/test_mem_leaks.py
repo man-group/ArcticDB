@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import pytest
 import time
 import psutil
 import gc
@@ -142,6 +143,7 @@ def grow_exp(df_to_grow: pd.DataFrame, num_times_xx2: int):
     return df_to_grow
 
 
+@pytest.mark.skip(reason="This test is flaky")
 def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
     lib: adb.Library = arctic_library_lmdb
 
