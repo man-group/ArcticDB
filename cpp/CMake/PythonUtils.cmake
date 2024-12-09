@@ -1,4 +1,3 @@
-
 # Helpers
 function(_python_utils_dump_vars_targets _target _props)
     if(TARGET ${_target})
@@ -9,20 +8,6 @@ function(_python_utils_dump_vars_targets _target _props)
                 message("${_target} ${prop}=${val}")
             endif()
         endforeach()
-    elseif("${_target}" STREQUAL "PythonInterp" OR "${_target}" STREQUAL "PythonLibs")
-        # FindPythonInterp and FindPythonLibs don't create targets, they set variables
-        foreach(var PYTHON_EXECUTABLE PYTHON_VERSION_STRING PYTHON_VERSION_MAJOR PYTHON_VERSION_MINOR)
-            if(DEFINED ${var})
-                message("${_target} ${var}=${${var}}")
-            endif()
-        endforeach()
-        if("${_target}" STREQUAL "PythonLibs")
-            foreach(var PYTHON_LIBRARIES PYTHON_INCLUDE_PATH PYTHON_INCLUDE_DIRS)
-                if(DEFINED ${var})
-                    message("${_target} ${var}=${${var}}")
-                endif()
-            endforeach()
-        endif()
     endif()
 endfunction()
 
@@ -59,7 +44,7 @@ endfunction()
 
 # Checks
 function(python_utils_check_include_dirs _var_source)
-    set(var_name "PYTHON_INCLUDE_DIRS")
+    set(var_name "${ARCTICDB_PYTHON_PREFIX}_INCLUDE_DIRS")
     if(DEFINED CACHE{${var_name}})
         foreach(header_name Python.h pyconfig.h)
             find_file(valid_python_dir ${header_name} PATHS ${${var_name}} NO_DEFAULT_PATH)
@@ -103,19 +88,13 @@ function(_python_utils_check_vars) # Arguments are the bad prefixes
 endfunction()
 
 function(python_utils_check_version_is_as_expected)
+    # Then check
     if(${BUILD_PYTHON_VERSION})
-        if(DEFINED PYTHON_VERSION_STRING)
-            string(REGEX MATCH "^([0-9]+)\\.([0-9]+)" version_match "${PYTHON_VERSION_STRING}")
-            if(version_match)
-                set(found_version "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}")
-                if(NOT "${BUILD_PYTHON_VERSION}" VERSION_EQUAL "${found_version}")
-                    message(FATAL_ERROR "You specified BUILD_PYTHON_VERSION=${BUILD_PYTHON_VERSION}, but FindPythonInterp found ${PYTHON_VERSION_STRING}. Use Python_EXECUTABLE to properly override the default Python.")
-                endif()
-            endif()
-        elseif(DEFINED Python_VERSION_MAJOR AND DEFINED Python_VERSION_MINOR)
-            if(NOT "${BUILD_PYTHON_VERSION}" VERSION_EQUAL "${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}")
-                message(FATAL_ERROR "You specified BUILD_PYTHON_VERSION=${BUILD_PYTHON_VERSION}, but FindPython found ${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}. Use Python_ROOT_DIR and Python_EXECUTABLE hints to properly override the default Python.")
-            endif()
+        if(NOT "${BUILD_PYTHON_VERSION}" VERSION_EQUAL
+                "${${ARCTICDB_PYTHON_PREFIX}_VERSION_MAJOR}.${${ARCTICDB_PYTHON_PREFIX}_VERSION_MINOR}")
+            message(FATAL_ERROR "You specified BUILD_PYTHON_VERSION=${BUILD_PYTHON_VERSION}, but FindPython found \
+${${ARCTICDB_PYTHON_PREFIX}_VERSION}. Use the official Python_ROOT_DIR and Python_EXECUTABLE hints to properly override\
+the default Python, or run cmake from within a virtualenv.")
         endif()
     endif()
 endfunction()
@@ -177,8 +156,9 @@ else()
     endif()
 
     set(PYBIND11_FINDPYTHON OFF)
+    # After find_package calls for Python
+    set(PYTHONLIBS_FOUND TRUE)  # Manually setting to TRUE
+    set(PYTHON_MODULE_EXTENSION ${Python_EXTENSION_MODULE_SUFFIX})
+    message("Using Python_EXECUTABLE=${PYTHON_EXECUTABLE} and Python_INCLUDE_DIRS=${Python_INCLUDE_DIRS}")
 endif()
 
-# After find_package calls for Python
-set(PYTHONLIBS_FOUND TRUE)  # Manually setting to TRUE
-set(PYTHON_MODULE_EXTENSION ${Python_EXTENSION_MODULE_SUFFIX})
