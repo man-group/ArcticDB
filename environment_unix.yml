@@ -84,5 +84,5 @@ dependencies:
   - entt
   - psutil
   - memray
-  - pytest-memray
+  - pytest-memray; python_version >= '3.8'
 

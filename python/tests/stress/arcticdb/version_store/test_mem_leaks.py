@@ -19,15 +19,21 @@ import arcticdb as adb
 import gc
 import random
 import time
-from typing import Generator, Tuple
 import pandas as pd
-from pytest_memray import Stack
 
+if sys.version_info >= (3.8): 
+    ##
+    ## PYTEST-MEMRAY integration is available only from ver 3.8 on 
+    ##
+    from pytest_memray import Stack
+
+from typing import Generator, Tuple
 from arcticdb.util.test import get_sample_dataframe, random_string
 from arcticdb.version_store.library import Library, ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore
 
+#region HELPER functions for non-memray tests
 
 def nice_bytes_str(bytes):
     return f" {bytes / (1024 * 1024):.2f}MB/[{bytes}] "
@@ -161,6 +167,10 @@ def generate_big_dataframe(rows:int=1000000):
     print("Generation took :", time.time() - st)
     return df
 
+#endregion
+
+#region HELPER functions for memray tests
+
 def is_relevant(stack: Stack) -> bool:
     """
     function to decide what to filter out and not to count specific stackframes
@@ -288,6 +298,9 @@ def gen_random_date(start:pd.Timestamp, end: pd.Timestamp):
     date_range = pd.date_range(start=start, end=end, freq='s') 
     return random.choice(date_range)
 
+#endregion
+
+#region TESTS non-memray type - "guessing" memory leak through series of repetitions
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Not enough storage on Windows runners")
 @pytest.mark.skipif(sys.platform == "darwin", reason="Problem on MacOs")
@@ -398,6 +411,12 @@ def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
 
     check_process_memory_leaks(proc_to_examine, 20, max_mem_bytes, 80.0)
 
+#endregion
+
+#region TESTS pytest-memray type for memory limit and leaks
+
+## NOTE: Currently tests can be executed on Python >= 3.8 only
+
 
 symbol = "test"
 
@@ -466,87 +485,94 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:
     time.sleep(10)
 
 
-@pytest.mark.limit_leaks(location_limit="25 KB", filter_fn=is_relevant)
-def test_mem_leak_querybuilder_read_memray(library_with_symbol):
-    """
-        Test to capture memory leaks >= of specified number
+if sys.version_info >= (3.8): 
+    ##
+    ## PYTEST-MEMRAY integration is available only from ver 3.8 on 
+    ##
 
-        NOTE: we could filter out not meaningful for us stackframes
-        in future if something outside of us start to leak using
-        the argument "filter_fn" - just add to the filter function
-        what we must exclude from calculation
-    """
-    (lib, df) = library_with_symbol
-    mem_query(lib, df)
+    @pytest.mark.limit_leaks(location_limit="25 KB", filter_fn=is_relevant)
+    def test_mem_leak_querybuilder_read_memray(library_with_symbol):
+        """
+            Test to capture memory leaks >= of specified number
 
-
-@pytest.mark.limit_leaks(location_limit="20 KB", filter_fn=is_relevant)
-def test_mem_leak_querybuilder_read_batch_memray(library_with_symbol):
-    """
-        Test to capture memory leaks >= of specified number
-
-        NOTE: we could filter out not meaningful for us stackframes
-        in future if something outside of us start to leak using
-        the argument "filter_fn" - just add to the filter function
-        what we must exclude from calculation
-    """
-    (lib, df) = library_with_symbol
-    mem_query(lib, df, read_batch=True)
+            NOTE: we could filter out not meaningful for us stackframes
+            in future if something outside of us start to leak using
+            the argument "filter_fn" - just add to the filter function
+            what we must exclude from calculation
+        """
+        (lib, df) = library_with_symbol
+        mem_query(lib, df)
 
 
-@pytest.mark.limit_memory("490 MB")
-def test_mem_limit_querybuilder_read_memray(library_with_symbol):
-    """
-        The fact that we do not leak memory does not mean that we
-        are efficient on memory usage. This test captures the memory usage
-        and limits it, so that we do not go over it (unless fro good reason)
-        Thus if the test fails then perhaps we are using now more memory than
-        in the past
-    """
-    (lib, df) = library_with_symbol
-    mem_query(lib, df)
+    @pytest.mark.limit_leaks(location_limit="20 KB", filter_fn=is_relevant)
+    def test_mem_leak_querybuilder_read_batch_memray(library_with_symbol):
+        """
+            Test to capture memory leaks >= of specified number
 
-@pytest.mark.limit_memory("490 MB")
-def test_mem_limit_querybuilder_read_batch_memray(library_with_symbol):
-    """
-        The fact that we do not leak memory does not mean that we
-        are efficient on memory usage. This test captures the memory usage
-        and limits it, so that we do not go over it (unless fro good reason)
-        Thus if the test fails then perhaps we are using now more memory than
-        in the past
-    """
-    (lib, df) = library_with_symbol
-    mem_query(lib, df, True)
+            NOTE: we could filter out not meaningful for us stackframes
+            in future if something outside of us start to leak using
+            the argument "filter_fn" - just add to the filter function
+            what we must exclude from calculation
+        """
+        (lib, df) = library_with_symbol
+        mem_query(lib, df, read_batch=True)
 
 
-@pytest.fixture
-def library_with_big_symbol(arctic_library_lmdb) -> Generator[Library, None, None]:
-    """
-        As memray instruments memory, we need to take out 
-        everything not relevant from mem leak measurement out of 
-        test, so it works as less as possible
-    """
-    lib: Library = arctic_library_lmdb
-    df = generate_big_dataframe(300000)
-    lib.write(symbol, df)
-    del df
-    yield lib
+    @pytest.mark.limit_memory("490 MB")
+    def test_mem_limit_querybuilder_read_memray(library_with_symbol):
+        """
+            The fact that we do not leak memory does not mean that we
+            are efficient on memory usage. This test captures the memory usage
+            and limits it, so that we do not go over it (unless fro good reason)
+            Thus if the test fails then perhaps we are using now more memory than
+            in the past
+        """
+        (lib, df) = library_with_symbol
+        mem_query(lib, df)
+
+    @pytest.mark.limit_memory("490 MB")
+    def test_mem_limit_querybuilder_read_batch_memray(library_with_symbol):
+        """
+            The fact that we do not leak memory does not mean that we
+            are efficient on memory usage. This test captures the memory usage
+            and limits it, so that we do not go over it (unless fro good reason)
+            Thus if the test fails then perhaps we are using now more memory than
+            in the past
+        """
+        (lib, df) = library_with_symbol
+        mem_query(lib, df, True)
 
 
-@pytest.mark.limit_leaks(location_limit="30 KB", filter_fn=is_relevant)
-def test_mem_leak_read_all_arctic_lib_memray(library_with_big_symbol):
-    """
-        This is a new version of the initial test that reads the whole
-        big dataframe in memory
-    """
+    @pytest.fixture
+    def library_with_big_symbol(arctic_library_lmdb) -> Generator[Library, None, None]:
+        """
+            As memray instruments memory, we need to take out 
+            everything not relevant from mem leak measurement out of 
+            test, so it works as less as possible
+        """
+        lib: Library = arctic_library_lmdb
+        df = generate_big_dataframe(300000)
+        lib.write(symbol, df)
+        del df
+        yield lib
 
-    print("Test starting")
-    st = time.time()
-    lib: Library = library_with_big_symbol
-    data = lib.read(symbol).data
-    del data
-    print("Test took :", time.time() - st)
 
-    print("Sleeping for 10 secs")
-    gc.collect()
-    time.sleep(10)
+    @pytest.mark.limit_leaks(location_limit="30 KB", filter_fn=is_relevant)
+    def test_mem_leak_read_all_arctic_lib_memray(library_with_big_symbol):
+        """
+            This is a new version of the initial test that reads the whole
+            big dataframe in memory
+        """
+
+        print("Test starting")
+        st = time.time()
+        lib: Library = library_with_big_symbol
+        data = lib.read(symbol).data
+        del data
+        print("Test took :", time.time() - st)
+
+        print("Sleeping for 10 secs")
+        gc.collect()
+        time.sleep(10)
+
+#endregion
