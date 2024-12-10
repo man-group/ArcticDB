@@ -21,7 +21,7 @@ import random
 import time
 import pandas as pd
 
-if sys.version_info >= (3.8): 
+if sys.version_info >= (3, 8): 
     ##
     ## PYTEST-MEMRAY integration is available only from ver 3.8 on 
     ##
@@ -485,7 +485,7 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:
     time.sleep(10)
 
 
-if sys.version_info >= (3.8): 
+if sys.version_info >= (3, 8): 
     ##
     ## PYTEST-MEMRAY integration is available only from ver 3.8 on 
     ##
