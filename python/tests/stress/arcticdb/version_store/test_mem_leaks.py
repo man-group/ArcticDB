@@ -101,7 +101,7 @@ def check_process_memory_leaks(
 
         print("Starting watched code ...........")
         process_func()
-        lets_collect_some_garbage()
+        lets_collect_some_garbage(9)
 
         p_iter_mem_end: np.int64 = p.memory_info().rss
         process_growth: np.int64 = p.memory_info().rss - process_initial_memory
@@ -145,13 +145,24 @@ def grow_exp(df_to_grow: pd.DataFrame, num_times_xx2: int):
         df_to_grow = pd.concat([df_to_grow, df_prev])
     return df_to_grow
 
+<<<<<<< Updated upstream
 @pytest.mark.skipif(sys.platform == "win32", reason="Not enough storage on Windows runners")
 @pytest.mark.skipif(sys.platform == "darwin", reason="Problem on MacOs")
+=======
+def generate_big_dataframe(rows:int=1000000):
+    print("Generating big dataframe")
+    st = time.time()
+    df = get_sample_dataframe(rows)
+    df = grow_exp(df, 5)
+    print("Generation took :", time.time() - st)
+    return df
+
+@pytest.mark.limit_leaks(location_limit="30 KB")
+>>>>>>> Stashed changes
 def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
     lib: adb.Library = arctic_library_lmdb
 
-    df = get_sample_dataframe(size=1000000)
-    df = grow_exp(df, 5)
+    df = generate_big_dataframe()
 
     symbol = "test"
     lib.write(symbol, df)
@@ -189,8 +200,7 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
 def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     lib: NativeVersionStore = lmdb_version_store_very_big_map
 
-    df = get_sample_dataframe(size=1000000)
-    df = grow_exp(df, 5)
+    df = generate_big_dataframe()
 
     symbol = "test"
     lib.write(symbol, df)
