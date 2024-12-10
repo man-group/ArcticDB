@@ -33,8 +33,8 @@ auto read_and_continue(const VariantKey& key, std::shared_ptr<storage::Library> 
     return async::submit_io_task(ReadCompressedTask{key, library, opts, std::forward<decltype(c)>(c)})
         .via(&async::cpu_executor())
         .thenValue([](auto &&result) mutable {
-            auto&& [key_seg, continuation] = std::forward<decltype(result)>(result);
-            return continuation(std::move(key_seg));
+            auto&& [key_seg_fut, continuation] = std::forward<decltype(result)>(result);
+            return std::move(key_seg_fut).thenValue([continuation=std::move(continuation)] (auto&& key_seg) mutable { return continuation(std::move(key_seg)); });
         }
     );
 }
@@ -169,7 +169,7 @@ folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair ks) override
 }
 
 void write_compressed_sync(storage::KeySegmentPair ks) override {
-    library_->write(Composite<storage::KeySegmentPair>(std::move(ks)));
+    library_->write(std::move(ks));
 }
 
 folly::Future<entity::VariantKey> update(const entity::VariantKey &key,
@@ -226,9 +226,8 @@ folly::Future<std::pair<entity::VariantKey, SegmentInMemory>> read(
     return read_and_continue(key, library_, opts, DecodeSegmentTask{});
 }
 
-std::pair<entity::VariantKey, SegmentInMemory> read_sync(const entity::VariantKey &key,
-                                                         storage::ReadKeyOpts opts) override {
-    return DecodeSegmentTask{}(read_dispatch(key, library_, opts));
+std::pair<entity::VariantKey, SegmentInMemory> read_sync(const entity::VariantKey& key, storage::ReadKeyOpts opts) override {
+    return DecodeSegmentTask{}(read_sync_dispatch(key, library_, opts));
 }
 
 folly::Future<storage::KeySegmentPair> read_compressed(
@@ -237,11 +236,8 @@ folly::Future<storage::KeySegmentPair> read_compressed(
     return read_and_continue(key, library_, opts, PassThroughTask{});
 }
 
-storage::KeySegmentPair read_compressed_sync(
-        const entity::VariantKey& key,
-        storage::ReadKeyOpts opts
-        ) override {
-        return read_dispatch( key, library_, opts );
+storage::KeySegmentPair read_compressed_sync(const entity::VariantKey& key, storage::ReadKeyOpts opts) override {
+        return read_sync_dispatch(key, library_, opts);
 }
 
 folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> read_metadata(const entity::VariantKey &key, storage::ReadKeyOpts opts) override {
@@ -256,7 +252,7 @@ folly::Future<std::tuple<VariantKey, std::optional<google::protobuf::Any>, Strea
 
 folly::Future<std::pair<VariantKey, TimeseriesDescriptor>> read_timeseries_descriptor(
         const entity::VariantKey &key,
-        storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) override {
+        storage::ReadKeyOpts opts) override {
     return read_and_continue(key, library_, opts, DecodeTimeseriesDescriptorTask{});
 }
 
@@ -349,12 +345,17 @@ folly::Future<std::vector<VariantKey>> batch_read_compressed(
 std::vector<folly::Future<pipelines::SegmentAndSlice>> batch_read_uncompressed(
         std::vector<pipelines::RangesAndKey>&& ranges_and_keys,
         std::shared_ptr<std::unordered_set<std::string>> columns_to_decode) override {
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Reading {} keys", ranges_and_keys.size());
     return folly::window(
         std::move(ranges_and_keys),
         [this, columns_to_decode](auto&& ranges_and_key) {
             const auto key = ranges_and_key.key_;
-            return read_and_continue(key, library_, storage::ReadKeyOpts{}, DecodeSliceTask{std::move(ranges_and_key), columns_to_decode});
-        }, async::TaskScheduler::instance()->io_thread_count() * 2);
+            return read_and_continue(
+                key,
+                library_,
+                storage::ReadKeyOpts{},
+                DecodeSliceTask{std::forward<decltype(ranges_and_key)>(ranges_and_key), columns_to_decode});
+        }, async::TaskScheduler::instance()->io_thread_count() * 4);
 }
 
 std::vector<folly::Future<bool>> batch_key_exists(
@@ -390,8 +391,7 @@ folly::Future<SliceAndKey> async_write(
         .thenValue([lib=library_](auto &&item) {
             auto [key_opt_segment, slice] = std::forward<decltype(item)>(item);
             if (key_opt_segment.second)
-                lib->write(Composite<storage::KeySegmentPair>({VariantKey{key_opt_segment.first},
-                                                               std::move(*key_opt_segment.second)}));
+                lib->write({VariantKey{key_opt_segment.first}, std::move(*key_opt_segment.second)});
 
             return SliceAndKey{slice, to_atom(key_opt_segment.first)};
         });

@@ -26,6 +26,7 @@ option(ARCTICDB_USING_ADDRESS_SANITIZER "Enable address sanitizer." OFF)
 option(ARCTICDB_USING_THREAD_SANITIZER "Enable thread sanitizer." OFF)
 option(ARCTICDB_USING_UB_SANITIZER "Enable undefined behavior sanitizer." OFF)
 option(ARCTICDB_LOG_PERFORMANCE "Whether to log performance timings." OFF)
+option(ARCTICDB_COUNT_ALLOCATION "Override new and delete to count allocations." OFF)
 
 set(ARCTICDB_SANITIZER_FLAGS)
 if(${ARCTICDB_USING_ADDRESS_SANITIZER})
@@ -45,6 +46,17 @@ endif()
 
 if(${ARCTICDB_LOG_PERFORMANCE})
     add_compile_definitions(ARCTICDB_LOG_PERFORMANCE)
+endif()
+
+if(${ARCTICDB_COUNT_ALLOCATIONS})
+    add_compile_definitions(ARCTICDB_COUNT_ALLOCATIONS)
+    include(FetchContent)
+    FetchContent_Declare(
+            cpptrace
+            GIT_REPOSITORY https://github.com/jeremy-rifkin/cpptrace.git
+            GIT_TAG        v0.7.3 # <HASH or TAG>
+    )
+    FetchContent_MakeAvailable(cpptrace)
 endif()
 
 if(ARCTICDB_SANITIZER_FLAGS)

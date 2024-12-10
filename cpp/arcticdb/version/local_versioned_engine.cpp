@@ -20,6 +20,7 @@
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/container_filter_wrapper.hpp>
+#include <arcticdb/util/allocation_tracing.hpp>
 
 namespace arcticdb::version_store {
 
@@ -54,6 +55,10 @@ void LocalVersionedEngine::initialize(const std::shared_ptr<storage::Library>& l
         async::TaskScheduler::reattach_instance();
     }
     (void)async::TaskScheduler::instance();
+#ifdef ARCTICDB_COUNT_ALLOCATIONS
+    (void)AllocationTracker::instance();
+    AllocationTracker::start();
+#endif
 }
 
 template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<storage::Library>& library, const util::SysClock&);

@@ -245,6 +245,13 @@ std::vector<LibraryPath> LibraryManager::get_library_paths() const {
 }
 
 bool LibraryManager::has_library(const LibraryPath& path) const {
+    {
+        std::lock_guard<std::mutex> lock{open_libraries_mutex_};
+        if (auto cached = open_libraries_.get(path); cached) {
+           return true;
+        }
+    }
+
     return store_->key_exists_sync(RefKey{StreamId(path.to_delim_path()), entity::KeyType::LIBRARY_CONFIG});
 }
 

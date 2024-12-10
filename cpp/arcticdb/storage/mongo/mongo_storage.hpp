@@ -9,7 +9,7 @@
 
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
-#include <arcticdb/storage/mongo/mongo_client_wrapper.hpp>
+#include <arcticdb/storage/mongo/mongo_client_interface.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/pb_util.hpp>
@@ -29,17 +29,21 @@ class MongoStorage final : public Storage {
     std::string name() const final;
 
   private:
-    void do_write(Composite<KeySegmentPair>&& kvs) final;
+    void do_write(KeySegmentPair&& key_seg) final;
 
     void do_write_if_none(KeySegmentPair&& kv [[maybe_unused]]) final {
         storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>("Atomic operations are only supported for s3 backend");
     };
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
+    void do_update(KeySegmentPair&& key_seg, UpdateOpts opts) final;
 
-    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
+    void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
+    KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts) final;
+
+    void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
+
+    void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) final;
 
     bool do_key_exists(const VariantKey& key) final;
 

@@ -19,11 +19,9 @@
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/util/composite.hpp>
-
 #include <aws/s3/model/DeleteObjectRequest.h>
-#include <arcticdb/storage/s3/s3_real_client.hpp>
-#include <arcticdb/storage/s3/s3_mock_client.hpp>
+#include <arcticdb/storage/s3/s3_client_impl.hpp>
+#include <arcticdb/storage/mock/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
 
 #undef GetMessage
@@ -33,8 +31,6 @@ namespace arcticdb::storage {
 using namespace object_store_utils;
 
 namespace s3 {
-
-namespace fg = folly::gen;
 
 std::string S3Storage::name() const {
     return fmt::format("s3_storage-{}/{}/{}", region_, bucket_name_, root_folder_);
@@ -48,24 +44,43 @@ std::string S3Storage::get_key_path(const VariantKey& key) const {
     // to most of them
 }
 
-void S3Storage::do_write(Composite<KeySegmentPair>&& kvs) {
-    detail::do_write_impl(std::move(kvs), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
+void S3Storage::do_write(KeySegmentPair&& key_seg) {
+    detail::do_write_impl(std::move(key_seg), root_folder_, bucket_name_, client(), FlatBucketizer{});
 }
 
 void S3Storage::do_write_if_none(KeySegmentPair&& kv) {
     detail::do_write_if_none_impl(std::move(kv), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
 }
 
-void S3Storage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
-    detail::do_update_impl(std::move(kvs), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
+void S3Storage::do_update(KeySegmentPair&& key_seg, UpdateOpts) {
+    detail::do_update_impl(std::move(key_seg), root_folder_, bucket_name_, client(), FlatBucketizer{});
 }
 
-void S3Storage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
-    detail::do_read_impl(std::move(ks), visitor, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{}, opts);
+void S3Storage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
+    detail::do_read_impl(std::move(variant_key), visitor, root_folder_, bucket_name_, client(), FlatBucketizer{}, opts);
 }
 
-void S3Storage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
-    detail::do_remove_impl(std::move(ks), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
+KeySegmentPair S3Storage::do_read(VariantKey&& variant_key, ReadKeyOpts opts) {
+    return detail::do_read_impl(std::move(variant_key), root_folder_, bucket_name_, client(), FlatBucketizer{}, opts);
+}
+
+folly::Future<folly::Unit> S3Storage::do_async_read(entity::VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
+    return detail::do_async_read_impl(std::move(variant_key), root_folder_, bucket_name_, client(), FlatBucketizer{}, opts).thenValue([&visitor] (auto&& key_seg) {
+        visitor(key_seg.variant_key(), std::move(key_seg.segment()));
+        return folly::Unit{};
+    });
+}
+
+folly::Future<KeySegmentPair> S3Storage::do_async_read(entity::VariantKey&& variant_key, ReadKeyOpts opts) {
+    return detail::do_async_read_impl(std::move(variant_key), root_folder_, bucket_name_, client(), FlatBucketizer{}, opts);
+}
+
+void S3Storage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts) {
+    detail::do_remove_impl(variant_keys, root_folder_, bucket_name_, client(), FlatBucketizer{});
+}
+
+void S3Storage::do_remove(VariantKey&& variant_key, RemoveOpts) {
+    detail::do_remove_impl(std::move(variant_key), root_folder_, bucket_name_, client(), FlatBucketizer{});
 }
 
 bool S3Storage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix) {
@@ -73,18 +88,38 @@ bool S3Storage::do_iterate_type_until_match(KeyType key_type, const IterateTypeP
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };
 
-    return detail::do_iterate_type_impl(key_type, visitor, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
+    return detail::do_iterate_type_impl(key_type, visitor, root_folder_, bucket_name_, client(), FlatBucketizer{}, std::move(prefix_handler), prefix);
 }
 
 bool S3Storage::do_key_exists(const VariantKey& key) {
-    return detail::do_key_exists_impl(key, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
+    return detail::do_key_exists_impl(key, root_folder_, bucket_name_, client(), FlatBucketizer{});
 }
 
 } // namespace s3
 } // namespace arcticdb::storage
 
-
 namespace arcticdb::storage::s3 {
+
+void S3Storage::create_s3_client(const S3Settings &conf, const Aws::Auth::AWSCredentials& creds) {
+    if (conf.use_mock_storage_for_testing()) {
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock S3 storage");
+        s3_client_ = std::make_unique<MockS3Client>();
+    } else if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN
+        && creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN) {
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms");
+        s3_client_ = std::make_unique<S3ClientImpl>(
+            get_s3_config(conf),
+            Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+            conf.use_virtual_addressing());
+    } else {
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using provided auth credentials");
+        s3_client_ = std::make_unique<S3ClientImpl>(
+            creds,
+            get_s3_config(conf),
+            Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+            conf.use_virtual_addressing());
+    }
+}
 
 S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const S3Settings &conf) :
     Storage(library_path, mode),
@@ -94,26 +129,7 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const S3Set
     region_(conf.region()) {
     auto creds = get_aws_credentials(conf);
 
-    if (conf.use_mock_storage_for_testing()){
-        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock S3 storage");
-        s3_client_ = std::make_unique<MockS3Client>();
-    }
-    else if (conf.aws_auth() == AWSAuthMethod::STS_PROFILE_CREDENTIALS_PROVIDER){
-        Aws::Config::ReloadCachedConfigFile(); // config files loaded in Aws::InitAPI; It runs once at first S3Storage object construct; reload to get latest
-        auto cred_provider = Aws::MakeShared<Aws::Auth::STSProfileCredentialsProvider>(
-                                "DefaultAWSCredentialsProviderChain", 
-                                conf.aws_profile(), 
-                                std::chrono::minutes(static_cast<size_t>(ConfigsMap::instance()->get_int("S3Storage.STSTokenExpiryMin", 60)))
-                            );
-        s3_client_ = std::make_unique<RealS3Client>(cred_provider, get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
-    }
-    else if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN && creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN){
-        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms");
-        s3_client_ = std::make_unique<RealS3Client>(get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
-    } else {
-        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using provided auth credentials");
-        s3_client_ = std::make_unique<RealS3Client>(creds, get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
-    }
+    create_s3_client(conf, creds);
 
     if (conf.prefix().empty()) {
         ARCTICDB_DEBUG(log::version(), "prefix not found, will use {}", root_folder_);

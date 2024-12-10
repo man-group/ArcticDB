@@ -9,8 +9,8 @@
 
 #include <aws/s3/S3Client.h>
 
-#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
-#include <arcticdb/storage/storage_mock_client.hpp>
+#include <arcticdb/storage/s3/s3_client_interface.hpp>
+#include <arcticdb/storage/mock/storage_mock_client.hpp>
 
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/pb_util.hpp>
@@ -35,12 +35,12 @@ struct S3Key {
     }
 };
 
-// A mock S3ClientWrapper which can simulate failures.
+// A mock S3ClientInterface which can simulate failures.
 // The MockS3Client stores the segments in memory to simulate regular S3 behavior for unit tests.
 // The MockS3Client can simulate storage failures by using the get_failure_trigger for s3_object_names.
-class MockS3Client : public S3ClientWrapper {
+class MockS3Client : public S3ClientInterface {
 public:
-    MockS3Client(){}
+    MockS3Client() {}
 
     // Can be used to trigger a simulated failure inside MockS3Client. For example:
     // auto object_to_trigger_put_failure = get_failure_trigger("test", StorageOperation::WRITE, Aws::S3::S3Errors::NETWORK_FAILURE, false);
@@ -49,29 +49,37 @@ public:
     // The returned name looks like "{s3_object_name}#Failure_{operation_to_fail}_{error_to_fail_with}_{retryable}".
     // For example: "symbol_1#Failure_Delete_99_1" will trigger a delete failure with code 99 which is retryable.
     static std::string get_failure_trigger(
-            const std::string& s3_object_name,
-            StorageOperation operation_to_fail,
-            Aws::S3::S3Errors error_to_fail_with,
-            bool retryable=true);
+        const std::string& s3_object_name,
+        StorageOperation operation_to_fail,
+        Aws::S3::S3Errors error_to_fail_with,
+        bool retryable = true);
 
-    S3Result<std::monostate> head_object(const std::string& s3_object_name, const std::string& bucket_name) const override;
+    [[nodiscard]] S3Result<std::monostate> head_object(
+        const std::string& s3_object_name,
+        const std::string& bucket_name) const override;
 
-    S3Result<Segment> get_object(const std::string& s3_object_name, const std::string& bucket_name) const override;
+    [[nodiscard]] S3Result<Segment> get_object(
+        const std::string& s3_object_name,
+        const std::string& bucket_name) const override;
+
+    [[nodiscard]] folly::Future<S3Result<Segment>> get_object_async(
+        const std::string& s3_object_name,
+        const std::string& bucket_name) const override;
 
     S3Result<std::monostate> put_object(
-            const std::string& s3_object_name,
-            Segment&& segment,
-            const std::string& bucket_name,
-            PutHeader header = PutHeader::NONE) override;
+        const std::string& s3_object_name,
+        Segment&& segment,
+        const std::string& bucket_name,
+        PutHeader header = PutHeader::NONE) override;
 
     S3Result<DeleteOutput> delete_objects(
-            const std::vector<std::string>& s3_object_names,
-            const std::string& bucket_name) override;
+        const std::vector<std::string>& s3_object_names,
+        const std::string& bucket_name) override;
 
     S3Result<ListObjectsOutput> list_objects(
-            const std::string& prefix,
-            const std::string& bucket_name,
-            const std::optional<std::string> continuation_token) const override;
+        const std::string& prefix,
+        const std::string& bucket_name,
+        const std::optional<std::string>& continuation_token) const override;
 
 private:
     std::map<S3Key, Segment> s3_contents;
