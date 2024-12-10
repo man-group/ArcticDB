@@ -43,3 +43,8 @@ exclude = '''
   | static
 )/
 '''
+
+[tool.pytest.ini_options]
+markers = [
+    "pipeline",
+]

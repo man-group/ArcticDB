@@ -62,7 +62,7 @@ else()
     add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
 
     SET(HIDE_LINKED_SYMBOLS OFF)
-
+    
     find_package(pybind11 REQUIRED)
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
@@ -108,7 +108,11 @@ endif ()
 find_path(BITMAGIC_INCLUDE_DIRS "bitmagic/bm.h")
 
 set(FIND_LIBRARY_USE_LIB64_PATHS ON)
+include(PythonUtils) # Must be called before Pybind (third_party) to override its finding mechanism
 
+python_utils_dump_vars_if_enabled("After Pybind")
+python_utils_check_include_dirs("accepted by pybind")
+python_utils_check_version_is_as_expected()
 ################################################################################
 ##            Interlibrary dependencies
 ################################################################################
@@ -377,6 +381,7 @@ set(arcticdb_srcs
         util/lazy.hpp
         util/type_traits.hpp
         util/variant.hpp
+        util/gil_safe_py_none.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
         version/schema_checks.hpp
@@ -509,6 +514,7 @@ set(arcticdb_srcs
         util/type_handler.cpp
         version/key_block.hpp
         version/key_block.cpp
+        util/gil_safe_py_none.cpp
         version/local_versioned_engine.cpp
         version/op_log.cpp
         version/snapshot.cpp
@@ -975,6 +981,9 @@ if(${TEST})
                 DESTINATION .
                 PERMISSIONS ${EXECUTABLE_PERMS}
                 COMPONENT Tests)
+                
+    target_compile_definitions(test_unit_arcticdb PRIVATE PYBIND11_NO_ASSERT_GIL_HELD_INCREF_DECREF)
+
 
     if (WIN32)
         target_link_libraries(

@@ -1711,7 +1711,7 @@ def test_dataframe_with_NaN_in_timestamp_column(basic_store):
 
 
 def test_dataframe_with_nan_and_nat_in_timestamp_column(basic_store):
-    df_with_NaN_mixed_in_ts = pd.DataFrame({"col": [pd.Timestamp("now"), pd.NaT, np.NaN]})
+    df_with_NaN_mixed_in_ts = pd.DataFrame({"col": [pd.Timestamp("now"), pd.NaT, np.nan]})
     basic_store.write("mixed_nan", df_with_NaN_mixed_in_ts)
     returned_df = basic_store.read("mixed_nan").data
     # NaN will now be converted to NaT
@@ -1719,16 +1719,16 @@ def test_dataframe_with_nan_and_nat_in_timestamp_column(basic_store):
 
 
 def test_dataframe_with_nan_and_nat_only(basic_store):
-    df_with_nan_and_nat_only = pd.DataFrame({"col": [pd.NaT, pd.NaT, np.NaN]})  # Sample will be pd.NaT
+    df_with_nan_and_nat_only = pd.DataFrame({"col": [pd.NaT, pd.NaT, np.nan]})  # Sample will be pd.NaT
     basic_store.write("nan_nat", df_with_nan_and_nat_only)
     assert_equal(basic_store.read("nan_nat").data, pd.DataFrame({"col": [pd.NaT, pd.NaT, pd.NaT]}))
 
 
 def test_coercion_to_float(basic_store):
     lib = basic_store
-    df = pd.DataFrame({"col": [np.NaN, "1", np.NaN]})
+    df = pd.DataFrame({"col": [np.nan, "1", np.nan]})
     # col is now an Object column with all NaNs
-    df["col"][1] = np.NaN
+    df["col"][1] = np.nan
 
     assert df["col"].dtype == np.object_
 
