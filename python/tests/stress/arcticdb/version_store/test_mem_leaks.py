@@ -165,7 +165,7 @@ def generate_big_dataframe(rows:int=1000000):
 
 #region HELPER functions for memray tests
 
-if sys.version_info >= (3, 8) and sys.platform.system() in ('Linux', 'Darwin'): 
+if sys.version_info >= (3, 8) and sys.platform.lower() in ('linux', 'darwin'): 
     ##
     ## PYTEST-MEMRAY integration is available only from ver 3.8 on 
     ##
