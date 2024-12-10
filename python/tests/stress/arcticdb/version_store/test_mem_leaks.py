@@ -24,7 +24,7 @@ import pandas as pd
 from pytest_memray import Stack
 
 from arcticdb.util.test import get_sample_dataframe, random_string
-from arcticdb.version_store.library import Library
+from arcticdb.version_store.library import Library, ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore
 
@@ -414,7 +414,7 @@ def library_with_symbol(arctic_library_lmdb) -> Generator[Tuple[Library, pd.Data
     lib.write(symbol, df)
     yield (lib, df)
 
-def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1):
+def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:bool=False):
     """
         This is the function where we test different types
         of queries against a large dataframe. Later this
@@ -440,11 +440,25 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1):
                 query_date_range(start_date, end_date)]
     
     for rep in range(num_repetitions):
-        for q in queries:
-            data: pd.DataFrame = lib.read(symbol, query_builder=q).data
-            lib.read_batch
-            print_info(data, q)
-            del data
+            if (read_batch):
+                print ("RUN read_batch() tests")
+                read_requests = [ReadRequest(symbol=symbol, 
+                                             query_builder=query
+                                            ) for query in queries]
+                results_read = lib.read_batch(read_requests)
+                cnt = 0
+                for result in results_read:
+                    assert not result.data is None
+                    print_info(result.data, queries[cnt])
+                    cnt += 1
+                del read_requests, results_read
+            else:
+                print ("RUN read_batch() tests")
+                for q in queries:
+                    data: pd.DataFrame = lib.read(symbol, query_builder=q).data
+                    lib.read_batch
+                    print_info(data, q)
+                del data
             gc.collect()
 
     del lib, queries
@@ -453,11 +467,11 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1):
 
 
 @pytest.mark.limit_leaks(location_limit="25 KB", filter_fn=is_relevant)
-def test_mem_leak_querybuilder_memray(library_with_symbol):
+def test_mem_leak_querybuilder_read_memray(library_with_symbol):
     """
         Test to capture memory leaks >= of specified number
 
-        NOTE: wec could filter out not meaningful for us stackframes
+        NOTE: we could filter out not meaningful for us stackframes
         in future if something outside of us start to leak using
         the argument "filter_fn" - just add to the filter function
         what we must exclude from calculation
@@ -466,8 +480,22 @@ def test_mem_leak_querybuilder_memray(library_with_symbol):
     mem_query(lib, df)
 
 
+@pytest.mark.limit_leaks(location_limit="20 KB", filter_fn=is_relevant)
+def test_mem_leak_querybuilder_read_batch_memray(library_with_symbol):
+    """
+        Test to capture memory leaks >= of specified number
+
+        NOTE: we could filter out not meaningful for us stackframes
+        in future if something outside of us start to leak using
+        the argument "filter_fn" - just add to the filter function
+        what we must exclude from calculation
+    """
+    (lib, df) = library_with_symbol
+    mem_query(lib, df, read_batch=True)
+
+
 @pytest.mark.limit_memory("490 MB")
-def test_mem_limit_querybuilder_memray(library_with_symbol):
+def test_mem_limit_querybuilder_read_memray(library_with_symbol):
     """
         The fact that we do not leak memory does not mean that we
         are efficient on memory usage. This test captures the memory usage
@@ -477,6 +505,19 @@ def test_mem_limit_querybuilder_memray(library_with_symbol):
     """
     (lib, df) = library_with_symbol
     mem_query(lib, df)
+
+@pytest.mark.limit_memory("490 MB")
+def test_mem_limit_querybuilder_read_batch_memray(library_with_symbol):
+    """
+        The fact that we do not leak memory does not mean that we
+        are efficient on memory usage. This test captures the memory usage
+        and limits it, so that we do not go over it (unless fro good reason)
+        Thus if the test fails then perhaps we are using now more memory than
+        in the past
+    """
+    (lib, df) = library_with_symbol
+    mem_query(lib, df, True)
+
 
 @pytest.fixture
 def library_with_big_symbol(arctic_library_lmdb) -> Generator[Library, None, None]:
