@@ -83,6 +83,6 @@ dependencies:
   - trustme
   - entt
   - psutil
-  - memray; python_version >= '3.7'
-  - pytest-memray; python_version >= '3.8'
+  - memray; python_version >= '3.7' and (platform_system == 'Linux' or platform_system == 'Darwin')
+  - pytest-memray; python_version >= '3.8' and (platform_system == 'Linux' or platform_system == 'Darwin')
 
