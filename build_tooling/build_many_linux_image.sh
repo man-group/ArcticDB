@@ -7,7 +7,7 @@ if [[ -z "$manylinux_image" ]] ; then
         v${cibuildwheel_ver:?'Must set either manylinux_image or cibuildwheel_ver environment variable'}
 
     url="https://github.com/pypa/cibuildwheel/raw/v${cibuildwheel_ver}/cibuildwheel/resources/pinned_docker_images.cfg"
-    manylinux_image=$(curl -sL "$url" | awk "/${image_grep:-manylinux2014_x86_64}/ { print \$3 ; exit }" )
+    manylinux_image=$(curl -sL "$url" | awk "/${image_grep:-manylinux_2_28_x86_64}/ { print \$3 ; exit }" )
     if [[ -z "$manylinux_image" ]] ; then
         echo "Failed to parse source image from cibuildwheel repo: ${url}" >&2
         exit 1
@@ -37,17 +37,24 @@ chmod 555 sccache
 
 echo "
 FROM $manylinux_image
-RUN rpmkeys --import 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF' && \
-    curl https://download.mono-project.com/repo/centos7-stable.repo > /etc/yum.repos.d/mono-centos7-stable.repo && \
-    sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://olcentgbl.trafficmanager.net|' /etc/yum.repos.d/CentOS-Base.repo && \
-    sed -ir 's/socket_timeout=3/socket_timeout=1/ ; s/maxhostfileage.*/maxhostfileage=1/ ;\
-            s/#?exclude.*/exclude=.edu/' /etc/yum/pluginconf.d/fastestmirror.conf
+
+RUN dnf update -y
+RUN dnf install -y python3.11 python3.11-devel python3.11-pip curl wget zip unzip tar perl-IPC-Cmd \
+flex krb5-devel cyrus-sasl-devel epel-release libcurl-devel
+
+RUN rpm --import https://download.mono-project.com/repo/xamarin.gpg
+RUN dnf config-manager --add-repo https://download.mono-project.com/repo/centos8-stable.repo
+RUN dnf install -y mono-complete
+
+RUN dnf clean all
+
+RUN export CMAKE_C_COMPILER=/opt/rh/gcc-toolset-12/root/bin/gcc
+RUN export CMAKE_CXX_COMPILER=/opt/rh/gcc-toolset-12/root/bin/g++
+RUN export LD_LIBRARY_PATH=/opt/rh/gcc-toolset-12/root/usr/lib64:/opt/rh/gcc-toolset-12/root/usr/lib:/opt/rh/gcc-toolset-12/root/usr/lib64/dyninst:${LD_LIBRARY_PATH}
+RUN export PATH=/opt/rh/gcc-toolset-12/root/usr/bin:${PATH}
+
 ADD sccache /usr/local/bin/
-RUN yum update -y && \
-    yum install -y zip jq less devtoolset-11-gdb perl-IPC-Cmd \
-      openssl-devel cyrus-sasl-devel devtoolset-10-libatomic-devel libcurl-devel python3-devel flex && \
-    rpm -Uvh --nodeps \$(repoquery --location mono-{core,web,devel,data,wcf,winfx}) && \
-    yum clean all && touch /etc/arcticdb_deps_installed
+
 LABEL io.arcticdb.cibw_ver=\"${cibuildwheel_ver}\" io.arcticdb.base=\"${manylinux_image}\"
 " > Dockerfile
 

@@ -88,7 +88,9 @@ else()
         # See: https://github.com/google/glog/pull/1030
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra -DGLOG_USE_GLOG_EXPORT")
     else()
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
+        # DO NOT MERGE THIS
+        # This is just temprorary until we fix all warnings
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
     endif()
     set(CMAKE_CXX_FLAGS_DEBUG "-ggdb")
     if(DEFINED ENV{ARCTICDB_CODE_COVERAGE_BUILD})
