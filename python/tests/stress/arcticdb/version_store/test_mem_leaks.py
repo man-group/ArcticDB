@@ -165,7 +165,7 @@ def generate_big_dataframe(rows:int=1000000):
 
 #region HELPER functions for memray tests
 
-if sys.version_info >= (3, 8): 
+if sys.version_info >= (3, 8) and sys.platform.system() in ('Linux', 'Darwin'): 
     ##
     ## PYTEST-MEMRAY integration is available only from ver 3.8 on 
     ##
@@ -490,6 +490,7 @@ if sys.version_info >= (3, 8):
     ## PYTEST-MEMRAY integration is available only from ver 3.8 on 
     ##
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows not supported for memray")
     @pytest.mark.limit_leaks(location_limit="25 KB", filter_fn=is_relevant)
     def test_mem_leak_querybuilder_read_memray(library_with_symbol):
         """
@@ -504,6 +505,7 @@ if sys.version_info >= (3, 8):
         mem_query(lib, df)
 
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows not supported for memray")
     @pytest.mark.limit_leaks(location_limit="20 KB", filter_fn=is_relevant)
     def test_mem_leak_querybuilder_read_batch_memray(library_with_symbol):
         """
@@ -518,6 +520,7 @@ if sys.version_info >= (3, 8):
         mem_query(lib, df, read_batch=True)
 
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows not supported for memray")
     @pytest.mark.limit_memory("490 MB")
     def test_mem_limit_querybuilder_read_memray(library_with_symbol):
         """
@@ -530,6 +533,7 @@ if sys.version_info >= (3, 8):
         (lib, df) = library_with_symbol
         mem_query(lib, df)
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows not supported for memray")
     @pytest.mark.limit_memory("490 MB")
     def test_mem_limit_querybuilder_read_batch_memray(library_with_symbol):
         """
@@ -557,6 +561,7 @@ if sys.version_info >= (3, 8):
         yield lib
 
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows not supported for memray")
     @pytest.mark.limit_leaks(location_limit="30 KB", filter_fn=is_relevant)
     def test_mem_leak_read_all_arctic_lib_memray(library_with_big_symbol):
         """
