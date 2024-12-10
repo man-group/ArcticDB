@@ -21,12 +21,6 @@ import random
 import time
 import pandas as pd
 
-if sys.version_info >= (3, 8): 
-    ##
-    ## PYTEST-MEMRAY integration is available only from ver 3.8 on 
-    ##
-    from pytest_memray import Stack
-
 from typing import Generator, Tuple
 from arcticdb.util.test import get_sample_dataframe, random_string
 from arcticdb.version_store.library import Library, ReadRequest
@@ -171,27 +165,33 @@ def generate_big_dataframe(rows:int=1000000):
 
 #region HELPER functions for memray tests
 
-def is_relevant(stack: Stack) -> bool:
-    """
-    function to decide what to filter out and not to count specific stackframes
+if sys.version_info >= (3, 8): 
+    ##
+    ## PYTEST-MEMRAY integration is available only from ver 3.8 on 
+    ##
+    from pytest_memray import Stack
 
-    Stack class variables:
+    def is_relevant(stack: Stack) -> bool:
+        """
+        function to decide what to filter out and not to count specific stackframes
 
-    filename: str
-        The source file being executed, or "???" if unknown.
+        Stack class variables:
 
-    function: str
-        The function being executed, or "???" if unknown.
+        filename: str
+            The source file being executed, or "???" if unknown.
 
-    lineno: int
-        The line number of the executing line, or 0 if unknown.
-    """
-    for frame in stack.frames:
-        # do something to check if we need this to be added
-        # as mem leak
-        # print(f"SAMPLE >>> {frame.filename}:{frame.function}[{frame.lineno}]")
-        pass
-    return True
+        function: str
+            The function being executed, or "???" if unknown.
+
+        lineno: int
+            The line number of the executing line, or 0 if unknown.
+        """
+        for frame in stack.frames:
+            # do something to check if we need this to be added
+            # as mem leak
+            # print(f"SAMPLE >>> {frame.filename}:{frame.function}[{frame.lineno}]")
+            pass
+        return True
 
 
 def construct_df_querybuilder_tests(size: int) -> pd.DataFrame:
