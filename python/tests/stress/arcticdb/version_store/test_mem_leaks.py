@@ -329,7 +329,9 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
 
     check_process_memory_leaks(proc_to_examine, 20, max_mem_bytes, 80.0)
 
-def test_mem_leak_query_standard(arctic_library_lmdb):
+@pytest.mark.skipif(sys.platform == "win32", reason="Not enough storage on Windows runners")
+@pytest.mark.skipif(sys.platform == "darwin", reason="Problem on MacOs")
+def test_mem_leak_querybuilder_standard(arctic_library_lmdb):
     """
         This test uses old approach with iterations.
         It is created for comparison with the new approach
