@@ -137,7 +137,7 @@ def verify_library(ac):
 
 
 def is_strategy_branch_valid_format(input_string):
-    pattern = r"^(linux|windows)_cp3(6|7|8|9|10|11|12).*$"
+    pattern = r"^(linux|windows)_cp3(7|8|9|10|11|12).*$"
     match = re.match(pattern, input_string)
     return bool(match)
 
