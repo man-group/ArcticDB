@@ -118,12 +118,12 @@ def lmdb_storage(tmp_path) -> Iterator[LmdbStorageFixture]:
 
 
 @pytest.fixture
-def lmdb_library(lmdb_storage, lib_name):
+def lmdb_library(lmdb_storage, lib_name) -> Library:
     return lmdb_storage.create_arctic().create_library(lib_name)
 
 
 @pytest.fixture
-def lmdb_library_dynamic_schema(lmdb_storage, lib_name):
+def lmdb_library_dynamic_schema(lmdb_storage, lib_name) -> Library:
     return lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(dynamic_schema=True))
 
 
@@ -380,11 +380,22 @@ def basic_arctic_client(request, encoding_version) -> Arctic:
     assert not ac.list_libraries()
     return ac
 
+@pytest.fixture
+def arctic_client_lmdb_map_size_100gb(lmdb_storage) -> Arctic:
+    storage_fixture: LmdbStorageFixture = lmdb_storage
+    storage_fixture.arctic_uri = storage_fixture.arctic_uri + "?map_size=100GB"
+    ac = storage_fixture.create_arctic(encoding_version=EncodingVersion.V2)
+    assert not ac.list_libraries()
+    return ac
 
 @pytest.fixture
-def basic_arctic_library(basic_arctic_client, lib_name) -> Arctic:
-    return basic_arctic_client.create_library(lib_name)
+def arctic_library_lmdb(arctic_client_lmdb_map_size_100gb, lib_name) -> Library:
+    return arctic_client_lmdb_map_size_100gb.create_library(lib_name)
 
+
+@pytest.fixture
+def basic_arctic_library(basic_arctic_client, lib_name) -> Library:
+    return basic_arctic_client.create_library(lib_name)
 
 # endregion
 # region ============================ `NativeVersionStore` Fixture Factories ============================
@@ -815,7 +826,7 @@ def basic_store_dynamic_schema_v2(basic_store_factory, lib_name) -> NativeVersio
 
 
 @pytest.fixture
-def basic_store_dynamic_schema(basic_store_dynamic_schema_v1, basic_store_dynamic_schema_v2, encoding_version):
+def basic_store_dynamic_schema(basic_store_dynamic_schema_v1, basic_store_dynamic_schema_v2, encoding_version) -> NativeVersionStore:
     if encoding_version == EncodingVersion.V1:
         return basic_store_dynamic_schema_v1
     elif encoding_version == EncodingVersion.V2:
