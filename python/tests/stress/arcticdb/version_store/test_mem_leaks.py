@@ -27,6 +27,8 @@ from arcticdb.version_store.library import Library, ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore
 
+MEMRAY_SUPPORTED = sys.version_info >= (3, 8) and sys.platform.lower() in ('linux', 'darwin')
+
 #region HELPER functions for non-memray tests
 
 def nice_bytes_str(bytes):
@@ -165,7 +167,7 @@ def generate_big_dataframe(rows:int=1000000):
 
 #region HELPER functions for memray tests
 
-if sys.version_info >= (3, 8) and sys.platform.lower() in ('linux', 'darwin'): 
+if MEMRAY_SUPPORTED: 
     ##
     ## PYTEST-MEMRAY integration is available only from ver 3.8 on 
     ##
@@ -485,7 +487,7 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:
     time.sleep(10)
 
 
-if sys.version_info >= (3, 8): 
+if MEMRAY_SUPPORTED: 
     ##
     ## PYTEST-MEMRAY integration is available only from ver 3.8 on 
     ##
