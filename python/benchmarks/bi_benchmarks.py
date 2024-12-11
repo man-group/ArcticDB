@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 
 import os
+from typing import Union
 import arcticdb.util.test as test
 import pandas as pd
 from pathlib import Path
@@ -16,16 +17,19 @@ from arcticdb import Arctic
 from arcticdb.version_store.processing import QueryBuilder
 from benchmarks.common import download_and_process_city_to_parquet
 
-def get_query_groupby_city_count_all(q:QueryBuilder | pd.DataFrame) -> QueryBuilder | pd.DataFrame:
+def get_query_groupby_city_count_all(
+        q:Union[QueryBuilder, pd.DataFrame]) -> Union[QueryBuilder, pd.DataFrame]:
     return q.groupby("City").agg({"Keyword": "count"})
 
 
-def get_query_groupby_city_count_isin_filter(q:QueryBuilder | pd.DataFrame) -> QueryBuilder | pd.DataFrame:
-    return q[q["Keyword"].isin(["bimbo", "twat", "faggot"])].groupby("City").agg({"Keyword": "count"})
+def get_query_groupby_city_count_isin_filter(
+        q:Union[QueryBuilder, pd.DataFrame]) -> Union[QueryBuilder, pd.DataFrame]:
+    return q[q["Keyword"].isin(["kimbo", "tato", "maggot"])].groupby("City").agg({"Keyword": "count"})
 
 
-def get_query_groupby_city_count_filter_two_aggregations(q:QueryBuilder | pd.DataFrame) -> QueryBuilder | pd.DataFrame:
-    return q[q["Keyword"] == "faggot" ].groupby("City").agg({"Keyword": "count", "Number of Records" : "sum"})  
+def get_query_groupby_city_count_filter_two_aggregations(
+        q:Union[QueryBuilder, pd.DataFrame]) -> Union[QueryBuilder, pd.DataFrame]:
+    return q[q["Keyword"] == "maggot" ].groupby("City").agg({"Keyword": "count", "Number of Records" : "sum"})  
 
 
 def assert_frame_equal(pandas_df:pd.DataFrame, arctic_df:pd.DataFrame):
