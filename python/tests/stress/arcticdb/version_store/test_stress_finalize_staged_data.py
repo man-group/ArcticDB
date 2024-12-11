@@ -20,7 +20,7 @@ from arcticdb.config import set_log_level
 from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
 
 
-from tests.util.mark import SLOW_TESTS_MARK
+from tests.util.mark import SKIP_CONDA_MARK, SLOW_TESTS_MARK
 
 # Uncomment for logging
 # set_log_level(default_level="DEBUG", console_output=False, file_output_path="/tmp/arcticdb.log")
@@ -41,6 +41,7 @@ class Results:
         return f"Options: {self.options}\nIteration: {self.iteration}\n# staged chunks: {self.number_staged_chunks}\ntotal rows finalized: {self.total_rows_finalized}\ntime for finalization (s): {self.finalization_time}"    
 
 @SLOW_TESTS_MARK
+@SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
 @pytest.mark.skipif(sys.platform == "win32", reason="Not enough storage on Windows runners")
 def test_finalize_monotonic_unique_chunks(basic_arctic_library):
     """
