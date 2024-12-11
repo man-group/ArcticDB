@@ -24,6 +24,11 @@ concurrency:
   group: ${{github.ref}}
   cancel-in-progress: true
 jobs:
+  fail-quickly:
+    steps:
+    - name: Fail
+      run: exit 1
+
   cibw_docker_image:
     uses: ./.github/workflows/cibw_docker_image.yml
     permissions: {packages: write}
