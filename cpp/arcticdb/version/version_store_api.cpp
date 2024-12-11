@@ -1166,5 +1166,6 @@ ReadResult read_dataframe_from_file(
 void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {
     version_map()->delete_all_versions(store(), stream_id);
     delete_all_for_stream(store(), stream_id, true);
+    version_map()->flush();
 }
 } //namespace arcticdb::version_store
