@@ -13,6 +13,9 @@ from datetime import date
 from numpy import datetime64
 from copy import deepcopy
 
+MACOS=sys.platform.lower().startswith('darwin')
+LINUX=sys.platform.lower().startswith('linux')
+WINDOWS=sys.platform.lower().startswith('win32')
 
 # TODO: Some tests are either segfaulting or failing on MacOS with conda builds.
 # This is meant to be used as a temporary flag to skip/xfail those tests.
@@ -54,7 +57,7 @@ TODO: https://github.com/man-group/ArcticDB/issues/1394"""
 SSL_TEST_SUPPORTED = sys.platform == "linux"
 
 ## MEMRAY supports linux and macos and python 3.8 and above
-MEMRAY_SUPPORTED = sys.version_info >= (3, 8) and sys.platform.lower() in ('linux', 'darwin')
+MEMRAY_SUPPORTED = (sys.version_info >= (3, 8)) and (MACOS or LINUX)
 MEMRAY_TESTS_MARK = pytest.mark.skipif(
     not MEMRAY_SUPPORTED, 
     reason="MEMRAY supports linux and macos and python 3.8 and above")

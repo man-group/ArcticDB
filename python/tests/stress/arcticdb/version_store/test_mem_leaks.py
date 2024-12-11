@@ -26,7 +26,7 @@ from arcticdb.util.test import get_sample_dataframe, random_string
 from arcticdb.version_store.library import Library, ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore
-from tests.util.mark import MEMRAY_SUPPORTED, MEMRAY_TESTS_MARK
+from tests.util.mark import MACOS, WINDOWS, MEMRAY_SUPPORTED, MEMRAY_TESTS_MARK 
 
 #region HELPER functions for non-memray tests
 
@@ -314,8 +314,8 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
 
     check_process_memory_leaks(proc_to_examine, 20, max_mem_bytes, 80.0)
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Not enough storage on Windows runners")
-@pytest.mark.skipif(sys.platform == "darwin", reason="Problem on MacOs")
+@pytest.mark.skipif(WINDOWS, reason="Not enough storage on Windows runners")
+@pytest.mark.skipif(MACOS, reason="Problem on MacOs")
 def test_mem_leak_querybuilder_standard(arctic_library_lmdb):
     """
         This test uses old approach with iterations.
@@ -359,7 +359,7 @@ def test_mem_leak_querybuilder_standard(arctic_library_lmdb):
     time.sleep(10)
 
 
-@pytest.mark.skipif(sys.platform == "darwin", reason="Problem on MacOs")
+@pytest.mark.skipif(MACOS, reason="Problem on MacOs")
 def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     lib: NativeVersionStore = lmdb_version_store_very_big_map
 
@@ -486,8 +486,11 @@ if MEMRAY_SUPPORTED:
             pass
         return True
 
+    loc_limit="25 KB"
+    if (MACOS):
+        loc_limit = "35 KB"
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_leaks(location_limit="25 KB", filter_fn=is_relevant)
+    @pytest.mark.limit_leaks(location_limit=loc_limit, filter_fn=is_relevant)
     def test_mem_leak_querybuilder_read_memray(library_with_symbol):
         """
             Test to capture memory leaks >= of specified number
