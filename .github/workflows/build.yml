@@ -25,6 +25,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   fail-quickly:
+    runs-on: ubuntu-22.04
     steps:
     - name: Fail
       run: exit 1
