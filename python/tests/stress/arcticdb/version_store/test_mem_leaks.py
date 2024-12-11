@@ -26,9 +26,7 @@ from arcticdb.util.test import get_sample_dataframe, random_string
 from arcticdb.version_store.library import Library, ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore
-
-## MEMRAY supports linux and macos and python 3.8 and above
-MEMRAY_SUPPORTED = sys.version_info >= (3, 8) and sys.platform.lower() in ('linux', 'darwin')
+from tests.util.mark import MEMRAY_SUPPORTED, MEMRAY_TESTS_MARK
 
 #region HELPER functions for non-memray tests
 
@@ -167,35 +165,6 @@ def generate_big_dataframe(rows:int=1000000):
 #endregion
 
 #region HELPER functions for memray tests
-
-if MEMRAY_SUPPORTED: 
-    ##
-    ## PYTEST-MEMRAY integration is available only from ver 3.8 on 
-    ##
-    from pytest_memray import Stack
-
-    def is_relevant(stack: Stack) -> bool:
-        """
-        function to decide what to filter out and not to count specific stackframes
-
-        Stack class variables:
-
-        filename: str
-            The source file being executed, or "???" if unknown.
-
-        function: str
-            The function being executed, or "???" if unknown.
-
-        lineno: int
-            The line number of the executing line, or 0 if unknown.
-        """
-        for frame in stack.frames:
-            # do something to check if we need this to be added
-            # as mem leak
-            # print(f"SAMPLE >>> {frame.filename}:{frame.function}[{frame.lineno}]")
-            pass
-        return True
-
 
 def construct_df_querybuilder_tests(size: int) -> pd.DataFrame:
     df = get_sample_dataframe(size)
@@ -493,7 +462,31 @@ if MEMRAY_SUPPORTED:
     ## PYTEST-MEMRAY integration is available only from ver 3.8 on 
     ##
 
-    @pytest.mark.skipif(sys.platform == "win32", reason="Windows not supported for memray")
+    from pytest_memray import Stack
+
+    def is_relevant(stack: Stack) -> bool:
+        """
+        function to decide what to filter out and not to count specific stackframes
+
+        Stack class variables:
+
+        filename: str
+            The source file being executed, or "???" if unknown.
+
+        function: str
+            The function being executed, or "???" if unknown.
+
+        lineno: int
+            The line number of the executing line, or 0 if unknown.
+        """
+        for frame in stack.frames:
+            # do something to check if we need this to be added
+            # as mem leak
+            # print(f"SAMPLE >>> {frame.filename}:{frame.function}[{frame.lineno}]")
+            pass
+        return True
+
+    @MEMRAY_TESTS_MARK
     @pytest.mark.limit_leaks(location_limit="25 KB", filter_fn=is_relevant)
     def test_mem_leak_querybuilder_read_memray(library_with_symbol):
         """
@@ -508,7 +501,7 @@ if MEMRAY_SUPPORTED:
         mem_query(lib, df)
 
 
-    @pytest.mark.skipif(sys.platform == "win32", reason="Windows not supported for memray")
+    @MEMRAY_TESTS_MARK
     @pytest.mark.limit_leaks(location_limit="25 KB", filter_fn=is_relevant)
     def test_mem_leak_querybuilder_read_batch_memray(library_with_symbol):
         """
@@ -523,7 +516,7 @@ if MEMRAY_SUPPORTED:
         mem_query(lib, df, read_batch=True)
 
 
-    @pytest.mark.skipif(sys.platform == "win32", reason="Windows not supported for memray")
+    @MEMRAY_TESTS_MARK
     @pytest.mark.limit_memory("490 MB")
     def test_mem_limit_querybuilder_read_memray(library_with_symbol):
         """
@@ -536,7 +529,7 @@ if MEMRAY_SUPPORTED:
         (lib, df) = library_with_symbol
         mem_query(lib, df)
 
-    @pytest.mark.skipif(sys.platform == "win32", reason="Windows not supported for memray")
+    @MEMRAY_TESTS_MARK
     @pytest.mark.limit_memory("490 MB")
     def test_mem_limit_querybuilder_read_batch_memray(library_with_symbol):
         """
@@ -564,7 +557,7 @@ if MEMRAY_SUPPORTED:
         yield lib
 
 
-    @pytest.mark.skipif(sys.platform == "win32", reason="Windows not supported for memray")
+    @MEMRAY_TESTS_MARK
     @pytest.mark.limit_leaks(location_limit="30 KB", filter_fn=is_relevant)
     def test_mem_leak_read_all_arctic_lib_memray(library_with_big_symbol):
         """

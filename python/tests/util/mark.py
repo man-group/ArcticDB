@@ -53,6 +53,11 @@ Currently controlled by the ARCTICDB_PERSISTENT_STORAGE_TESTS and ARCTICDB_FAST_
 TODO: https://github.com/man-group/ArcticDB/issues/1394"""
 SSL_TEST_SUPPORTED = sys.platform == "linux"
 
+## MEMRAY supports linux and macos and python 3.8 and above
+MEMRAY_SUPPORTED = sys.version_info >= (3, 8) and sys.platform.lower() in ('linux', 'darwin')
+MEMRAY_TESTS_MARK = pytest.mark.skipif(
+    not MEMRAY_SUPPORTED, 
+    reason="MEMRAY supports linux and macos and python 3.8 and above")
 
 SSL_TESTS_MARK = pytest.mark.skipif(
     not SSL_TEST_SUPPORTED,
