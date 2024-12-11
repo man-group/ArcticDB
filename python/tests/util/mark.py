@@ -23,6 +23,11 @@ _MACOS_CONDA_BUILD_SKIP_REASON = (
     "on the CI or because there's problem with Azure SDK for C++ in this configuration."
 )
 
+SKIP_CONDA_MARK = pytest.mark.skipif(
+    ARCTICDB_USING_CONDA,
+    reason="Those tests are skipped on conda",
+)
+
 # These two should become pytest marks as opposed to variables feeding into skipif
 PERSISTENT_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS") == "1"
 FAST_TESTS_ONLY = os.getenv("ARCTICDB_FAST_TESTS_ONLY") == "1"
