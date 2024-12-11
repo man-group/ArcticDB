@@ -3,7 +3,7 @@ on:
   workflow_run:
     workflows: ["Build and Test", "Build with conda", "Coverity Static Analysis"]
     types: [completed]
-    branches: [master]
+    branches: [slack-test-branch]
 
 jobs:
   on-failure:
