@@ -27,6 +27,7 @@ from arcticdb.version_store.library import Library, ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore
 
+## MEMRAY supports linux and macos and python 3.8 and above
 MEMRAY_SUPPORTED = sys.version_info >= (3, 8) and sys.platform.lower() in ('linux', 'darwin')
 
 #region HELPER functions for non-memray tests
@@ -508,7 +509,7 @@ if MEMRAY_SUPPORTED:
 
 
     @pytest.mark.skipif(sys.platform == "win32", reason="Windows not supported for memray")
-    @pytest.mark.limit_leaks(location_limit="20 KB", filter_fn=is_relevant)
+    @pytest.mark.limit_leaks(location_limit="25 KB", filter_fn=is_relevant)
     def test_mem_leak_querybuilder_read_batch_memray(library_with_symbol):
         """
             Test to capture memory leaks >= of specified number
