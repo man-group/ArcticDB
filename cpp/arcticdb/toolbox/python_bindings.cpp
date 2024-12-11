@@ -69,7 +69,6 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
              .def("inspect_env_variable", &LibraryTool::inspect_env_variable)
              .def_static("read_unaltered_lib_cfg", &LibraryTool::read_unaltered_lib_cfg);
 
-<<<<<<< HEAD
     // Reliable storage lock exposed for integration testing. It is intended for use in C++
     using namespace arcticdb::lock;
 
