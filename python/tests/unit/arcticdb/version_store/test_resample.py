@@ -13,7 +13,7 @@ import pytest
 
 from arcticdb import QueryBuilder
 from arcticdb.exceptions import ArcticDbNotYetImplemented, SchemaException, UserInputException
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, generic_resample_test
 from packaging.version import Version
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
 import itertools
@@ -42,37 +42,6 @@ def generic_resample_test_with_empty_buckets(lib, sym, rule, aggregations, date_
     
     q = QueryBuilder()
     q = q.resample(rule).agg(aggregations)
-    received = lib.read(sym, date_range=date_range, query_builder=q).data
-    received = received.reindex(columns=sorted(received.columns))
-
-    assert_frame_equal(expected, received, check_dtype=False)
-
-def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=None, label=None, offset=None, origin=None, drop_empty_buckets_for=None):
-    # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
-    expected = lib.read(sym, date_range=date_range).data
-    # Pandas 1.X needs None as the first argument to agg with named aggregators
-
-    pandas_aggregations = {**aggregations, "_bucket_size_": (drop_empty_buckets_for, "count")} if drop_empty_buckets_for else aggregations
-    resample_args = {}
-    if origin:
-        resample_args['origin'] = origin
-    if offset:
-        resample_args['offset'] = offset
-
-    if PANDAS_VERSION >= Version("1.1.0"):
-        expected = expected.resample(rule, closed=closed, label=label, **resample_args).agg(None, **pandas_aggregations)
-    else:
-        expected = expected.resample(rule, closed=closed, label=label).agg(None, **pandas_aggregations)
-    if drop_empty_buckets_for:
-        expected = expected[expected["_bucket_size_"] > 0]
-        expected.drop(columns=["_bucket_size_"], inplace=True)
-    expected = expected.reindex(columns=sorted(expected.columns))
-
-    q = QueryBuilder()
-    if origin:
-        q = q.resample(rule, closed=closed, label=label, offset=offset, origin=origin).agg(aggregations)
-    else:
-        q = q.resample(rule, closed=closed, label=label, offset=offset).agg(aggregations)
     received = lib.read(sym, date_range=date_range, query_builder=q).data
     received = received.reindex(columns=sorted(received.columns))
 

@@ -35,6 +35,7 @@ from arcticc.pb2.storage_pb2 import LibraryDescriptor, VersionStoreConfig
 from arcticdb.version_store.helper import ArcticFileConfig
 from arcticdb.config import _DEFAULT_ENVS_PATH
 from arcticdb_ext import set_config_int, get_config_int, unset_config_int
+from packaging.version import Version
 
 from arcticdb import log
 
@@ -756,3 +757,64 @@ def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
             f"""\nPandas result:\n{expected}\n"ArcticDB result:\n{received}"""
         )
         raise e
+
+def drop_inf_and_nan(df: pd.DataFrame) -> pd.DataFrame:
+    return df[~df.isin([np.nan, np.inf, -np.inf]).any(axis=1)]
+
+
+def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
+    """
+    Checks if integer columns are exactly the same. For float columns checks if they are approximately the same.
+    We can't guarantee the same order of operations for the floats thus numerical errors might appear.
+    """
+    assert left.shape == right.shape
+    assert left.columns.equals(right.columns)
+    # To avoid checking the freq member of the index as arctic does not fill it in
+    assert left.index.equals(right.index)
+
+    # Drop NaN an inf values because. Pandas uses Kahan summation algorithm to improve numerical stability.
+    # Thus they don't consistently overflow to infinity. Discussion: https://github.com/pandas-dev/pandas/issues/60303
+    left_no_inf_and_nan = drop_inf_and_nan(left)
+    right_no_inf_and_nan = drop_inf_and_nan(right)
+
+    for col in left_no_inf_and_nan.columns:
+        if pd.api.types.is_integer_dtype(left_no_inf_and_nan[col].dtype) and pd.api.types.is_integer_dtype(right_no_inf_and_nan[col].dtype):
+            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], check_freq=False, check_flags=False, check_dtype=False)
+        else:
+            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], atol=1e-8, check_freq=False, check_flags=False, check_dtype=False)
+
+
+def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=None, label=None, offset=None, origin=None, drop_empty_buckets_for=None):
+    # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
+    expected = lib.read(sym, date_range=date_range).data
+    # Pandas 1.X needs None as the first argument to agg with named aggregators
+
+    pandas_aggregations = {**aggregations, "_bucket_size_": (drop_empty_buckets_for, "count")} if drop_empty_buckets_for else aggregations
+    resample_args = {}
+    if origin:
+        resample_args['origin'] = origin
+    if offset:
+        resample_args['offset'] = offset
+
+    if PANDAS_VERSION >= Version("1.1.0"):
+        expected = expected.resample(rule, closed=closed, label=label, **resample_args).agg(None, **pandas_aggregations)
+    else:
+        expected = expected.resample(rule, closed=closed, label=label).agg(None, **pandas_aggregations)
+    if drop_empty_buckets_for:
+        expected = expected[expected["_bucket_size_"] > 0]
+        expected.drop(columns=["_bucket_size_"], inplace=True)
+    expected = expected.reindex(columns=sorted(expected.columns))
+
+    q = QueryBuilder()
+    if origin:
+        q = q.resample(rule, closed=closed, label=label, offset=offset, origin=origin).agg(aggregations)
+    else:
+        q = q.resample(rule, closed=closed, label=label, offset=offset).agg(aggregations)
+    received = lib.read(sym, date_range=date_range, query_builder=q).data
+    received = received.reindex(columns=sorted(received.columns))
+
+    has_float_column = any(pd.api.types.is_float_dtype(col_type) for col_type in list(expected.dtypes))
+    if has_float_column:
+        assert_dfs_approximate(expected, received)
+    else:
+        assert_frame_equal(expected, received, check_dtype=False)
