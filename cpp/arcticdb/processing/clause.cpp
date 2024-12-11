@@ -21,10 +21,11 @@
 #include <ankerl/unordered_dense.h>
 #include <ranges>
 
-namespace rng = std::ranges;
+
 
 namespace arcticdb {
 
+namespace ranges = std::ranges;
 using namespace pipelines;
 
 class GroupingMap {
@@ -471,7 +472,7 @@ void ResampleClause<closed_boundary>::set_date_range(timestamp date_range_start,
     constexpr static std::array unsupported_origin{ "start", "end", "start_day", "end_day" };
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
         util::variant_match(origin_,
-            [&](const std::string& origin) { return rng::none_of(unsupported_origin, [&](std::string_view el) { return el == origin; }); },
+            [&](const std::string& origin) { return ranges::none_of(unsupported_origin, [&](std::string_view el) { return el == origin; }); },
             [](const auto&) { return true;}
         ),
         "Resampling origins {} are not supported in conjunction with date range", unsupported_origin
@@ -541,7 +542,7 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
     if (bucket_boundaries_.size() < 2) {
         return {};
     }
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(rng::is_sorted(bucket_boundaries_),
+    debug::check<ErrorCode::E_ASSERTION_FAILURE>(ranges::is_sorted(bucket_boundaries_),
                                                  "Resampling expects provided bucket boundaries to be strictly monotonically increasing");
     return structure_by_time_bucket<closed_boundary>(ranges_and_keys, bucket_boundaries_);
 }
@@ -570,7 +571,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
     if (bucket_boundaries_.size() < 2) {
         return {};
     }
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(rng::is_sorted(bucket_boundaries_),
+    debug::check<ErrorCode::E_ASSERTION_FAILURE>(ranges::is_sorted(bucket_boundaries_),
                                                  "Resampling expects provided bucket boundaries to be strictly monotonically increasing");
 
     auto new_structure_offsets = structure_by_time_bucket<closed_boundary>(ranges_and_entities, bucket_boundaries_);
@@ -585,7 +586,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
         }
     }
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            rng::all_of(expected_fetch_counts, [](EntityFetchCount fetch_count) {
+            ranges::all_of(expected_fetch_counts, [](EntityFetchCount fetch_count) {
                 return fetch_count == 1 || fetch_count == 2;
             }),
             "ResampleClause::structure_for_processing: invalid expected entity fetch count (should be 1 or 2)"

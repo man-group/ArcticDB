@@ -639,7 +639,7 @@ class QueryBuilder:
         offset: Optional[Union[str, pd.Timedelta]] default=None
             Offset the start of each bucket. Supported strings are the same as in `pd.Timedelta`. If offset is larger than
             rule then `offset` modulo `rule` is used as an offset.
-        origin: Optional[Union[str, pd.Timestamp]] default='start_day'
+        origin: Optional[Union[str, pd.Timestamp]] default='epoch'
             The timestamp on which to adjust the grouping. Supported string are:
 
             * epoch: origin is 1970-01-01
@@ -757,7 +757,7 @@ class QueryBuilder:
         else:
             offset_ns = 0
 
-        if not (type(origin) is pd.Timestamp or origin in ["start", "end", "start_day", "end_day", "epoch"]):
+        if not (isinstance(origin, pd.Timestamp) or origin in ["start", "end", "start_day", "end_day", "epoch"]):
             raise UserInputException(f'Argument origin must be either of type pd.Timestamp or one of ["start", "end", "start_day", "end_day", "epoch"]. Got {offset} instead')
         if type(origin) is pd.Timestamp:
             origin = origin.value

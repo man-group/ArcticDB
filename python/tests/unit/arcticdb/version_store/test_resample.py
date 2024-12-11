@@ -652,10 +652,9 @@ class TestResamplingOffset:
 
 @pytest.mark.skipif(PANDAS_VERSION < Version("1.1.0"), reason="Pandas < 1.1.0 do not have offset param")
 @pytest.mark.parametrize("closed", ["left", "right"])
-@pytest.mark.parametrize("label", ["left", "right"])
 class TestResamplingOrigin:
 
-    # Timestamps: pre start, between start and end, post end
+    # Timestamps: pre start, between start and end, post end, first date in the index, last date in the index
     @pytest.mark.parametrize(
         "origin",
         [
@@ -666,10 +665,12 @@ class TestResamplingOrigin:
             "epoch",
             pd.Timestamp("2024-01-01"),
             pd.Timestamp("2025-01-01 15:00:00"),
-            pd.Timestamp("2025-01-03 15:00:00")
+            pd.Timestamp("2025-01-03 15:00:00"),
+            pd.Timestamp("2025-01-01 10:00:33"),
+            pd.Timestamp("2025-01-02 12:00:13")
         ]
     )
-    def test_origin(self, lmdb_version_store_v1, closed, origin, label):
+    def test_origin(self, lmdb_version_store_v1, closed, origin):
         lib = lmdb_version_store_v1
         sym = "test_origin_special_values"
         # Start and end are picked so that #bins * rule + start != end on purpose to test
@@ -686,8 +687,7 @@ class TestResamplingOrigin:
             "2min",
             all_aggregations_dict("col"),
             closed=closed,
-            origin=origin,
-            label=label
+            origin=origin
         )
 
     @pytest.mark.parametrize("origin", [
@@ -701,7 +701,7 @@ class TestResamplingOrigin:
         (pd.Timestamp("2025-01-01 10:00:00"), pd.Timestamp("2025-01-02 12:00:03")), # start is multiple of rule
         (pd.Timestamp("2025-01-01 10:00:03"), pd.Timestamp("2025-01-02 12:00:00")) # end is multiple of rule
     ])
-    def test_origin_is_multiple_of_freq(self, lmdb_version_store_v1, closed, origin, label, date_range):
+    def test_origin_is_multiple_of_freq(self, lmdb_version_store_v1, closed, origin, date_range):
         lib = lmdb_version_store_v1
         sym = "test_origin_special_values"
         start, end = date_range
@@ -716,8 +716,7 @@ class TestResamplingOrigin:
             all_aggregations_dict("col"),
             closed=closed,
             origin=origin,
-            drop_empty_buckets_for="col",
-            label=label
+            drop_empty_buckets_for="col"
         )
 
     @pytest.mark.parametrize("origin", [
@@ -727,7 +726,7 @@ class TestResamplingOrigin:
         pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
         "epoch"
     ])
-    def test_pre_epoch_data(self, lmdb_version_store_v1, closed, origin, label):
+    def test_pre_epoch_data(self, lmdb_version_store_v1, closed, origin):
         lib = lmdb_version_store_v1
         sym = "test_origin_special_values"
         start = pd.Timestamp("1800-01-01 10:00:00")
@@ -743,8 +742,7 @@ class TestResamplingOrigin:
             all_aggregations_dict("col"),
             closed=closed,
             origin=origin,
-            drop_empty_buckets_for="col",
-            label=label
+            drop_empty_buckets_for="col"
         )
 
     @pytest.mark.parametrize("origin", [
@@ -755,10 +753,10 @@ class TestResamplingOrigin:
     ])
     @pytest.mark.parametrize("date_range",
         list(itertools.product(
-            [pd.Timestamp("2024-01-01") - pd.Timedelta(1), pd.Timestamp("2024-01-01") - pd.Timedelta(1)],
-            [pd.Timestamp("2024-01-02") - pd.Timedelta(1), pd.Timestamp("2024-01-02") - pd.Timedelta(1)]))
+            [pd.Timestamp("2024-01-01") - pd.Timedelta(1), pd.Timestamp("2024-01-01") + pd.Timedelta(1)],
+            [pd.Timestamp("2024-01-02") - pd.Timedelta(1), pd.Timestamp("2024-01-02") + pd.Timedelta(1)]))
     )
-    def test_origin_off_by_one_on_boundary(self, lmdb_version_store_v1, closed, origin, label, date_range):
+    def test_origin_off_by_one_on_boundary(self, lmdb_version_store_v1, closed, origin, date_range):
         lib = lmdb_version_store_v1
         sym = "test_origin_special_values"
         start, end = date_range
@@ -773,8 +771,7 @@ class TestResamplingOrigin:
             all_aggregations_dict("col"),
             closed=closed,
             origin=origin,
-            drop_empty_buckets_for="col",
-            label=label
+            drop_empty_buckets_for="col"
         )
 
     @pytest.mark.parametrize("origin", [
@@ -783,19 +780,19 @@ class TestResamplingOrigin:
         pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
         pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported"))
     ])
-    def test_origin_start_throws_with_daterange(self, lmdb_version_store_v1, origin, label, closed):
+    def test_non_epoch_origin_throws_with_daterange(self, lmdb_version_store_v1, origin, closed):
         lib = lmdb_version_store_v1
         sym = "test_origin_start_throws_with_daterange"
 
         lib.write(sym, pd.DataFrame({"col": [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")])))
         q = QueryBuilder()
-        q = q.resample('1min', origin=origin, label=label, closed=closed).agg({"col_min":("col", "min")})
+        q = q.resample('1min', origin=origin, closed=closed).agg({"col_min":("col", "min")})
         with pytest.raises(UserInputException) as exception_info:
             lib.read(sym, query_builder=q, date_range=(pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")))
         assert all(w in str(exception_info.value) for w in [origin, "origin"])
 
     @pytest.mark.parametrize("origin", ["epoch", pd.Timestamp("2025-01-03 12:00:00")])
-    def test_epoch_and_ts_origin_works_with_date_range(self, lmdb_version_store_v1, closed, origin, label):
+    def test_epoch_and_ts_origin_works_with_date_range(self, lmdb_version_store_v1, closed, origin):
         lib = lmdb_version_store_v1
         sym = "test_origin_special_values"
         # Start and end are picked so that #bins * rule + start != end on purpose to test
@@ -813,7 +810,6 @@ class TestResamplingOrigin:
             all_aggregations_dict("col"),
             closed=closed,
             origin=origin,
-            label=label,
             date_range=(pd.Timestamp("2025-01-02 00:00:00"), pd.Timestamp("2025-01-03 00:00:00"))
         )
 

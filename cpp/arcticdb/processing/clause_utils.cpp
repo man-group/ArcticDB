@@ -8,10 +8,10 @@
 #include <arcticdb/processing/clause_utils.hpp>
 #include <ranges>
 
-namespace rng = std::ranges;
+
 
 namespace arcticdb {
-
+namespace ranges = std::ranges;
 using namespace pipelines;
 
 std::vector<std::vector<EntityId>> structure_by_row_slice(ComponentManager& component_manager, std::vector<std::vector<EntityId>>&& entity_ids_vec) {
@@ -104,7 +104,7 @@ std::shared_ptr<std::vector<EntityFetchCount>> generate_segment_fetch_counts(
         }
     }
     debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-            rng::none_of(*res, [](size_t val) { return val == 0; }),
+            ranges::none_of(*res, [](size_t val) { return val == 0; }),
             "All segments should be needed by at least one ProcessingUnit");
     return res;
 }
