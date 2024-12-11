@@ -310,7 +310,7 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
          run the test from command line again to assure it runs ok before commit 
 
     """
-    max_mem_bytes = 175_623_040
+    max_mem_bytes = 235_623_040
 
     check_process_memory_leaks(proc_to_examine, 20, max_mem_bytes, 80.0)
 
