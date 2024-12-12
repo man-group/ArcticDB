@@ -20,8 +20,12 @@ markdown_extensions:
 theme:
   name: material
   custom_dir: overrides
-  logo: images/FullWithBorder.png
-  favicon: images/FullWithBorder.png
+  font:
+    text: Aspekta
+    code: Geist Mono
+
+  logo: images/ArcticDB Logo.svg
+  favicon: images/ArcticDB Logo.svg
   palette:
     scheme: arcticdb
   features:
