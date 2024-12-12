@@ -524,7 +524,9 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
     if (ranges_and_keys.empty()) {
         return {};
     }
-    
+
+    // Iterate over ranges_and_keys and create a pair with first element equal to the smallest start time and second
+    // element equal to the largest end time.
     const TimestampRange index_range = std::accumulate(
         std::next(ranges_and_keys.begin()),
         ranges_and_keys.end(),

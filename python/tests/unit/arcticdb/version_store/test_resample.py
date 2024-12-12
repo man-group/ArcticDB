@@ -34,12 +34,20 @@ def round(t, freq):
     return pd.Timestamp((t.value // td.value) * td.value)
 
 def generic_resample_test_with_empty_buckets(lib, sym, rule, aggregations, date_range=None):
+    """
+    Perform a resampling in ArcticDB and compare it against the same query in Pandas.
+
+    This will remove all empty buckets mirroring ArcticDB's behavior. It cannot take additional parameters such as
+    orign and offset. In case such parameters are needed arcticdb.util.test.generic_resample_test can be used.
+
+    This can drop buckets even all columns are of float type while generic_resample_test needs at least one non-float
+    column.
+    """
     # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
     expected = lib.read(sym, date_range=date_range).data
     # Pandas 1.X needs None as the first argument to agg with named aggregators
     expected = expected.groupby(partial(round, freq=rule)).agg(None, **aggregations)
     expected = expected.reindex(columns=sorted(expected.columns))
-    
     q = QueryBuilder()
     q = q.resample(rule).agg(aggregations)
     received = lib.read(sym, date_range=date_range, query_builder=q).data

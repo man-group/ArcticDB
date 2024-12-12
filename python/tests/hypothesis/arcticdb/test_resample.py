@@ -98,6 +98,7 @@ def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
                     offset=offset,
                     closed=closed,
                     label=label,
+                    # Must be int or uint column otherwise dropping of empty buckets will not work
                     drop_empty_buckets_for="col_uint")
             except ValueError as pandas_error:
                 # This is to avoid a bug in pandas related to how end an end_day work. It's possible that when end/end_day are used

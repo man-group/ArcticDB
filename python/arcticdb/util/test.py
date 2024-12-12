@@ -785,6 +785,15 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
 
 
 def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=None, label=None, offset=None, origin=None, drop_empty_buckets_for=None):
+    """
+    Perform a resampling in ArcticDB and compare it against the same query in Pandas.
+
+    :param drop_empty_buckets_for: Will add additional aggregation column using the count aggregator. At the end of the
+    aggregation query will remove all rows for which this newly added count aggregation is 0. Works only for int/uint
+    columns. There is similar function generic_resample_test_with_empty_buckets in
+    python/tests/unit/arcticdb/version_store/test_resample.py which can drop empty buckets for all types of columns,
+    but it cannot take parameters such as origin and offset.
+    """
     # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
     expected = lib.read(sym, date_range=date_range).data
     # Pandas 1.X needs None as the first argument to agg with named aggregators
