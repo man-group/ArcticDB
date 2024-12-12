@@ -182,7 +182,8 @@ class Storages {
     OpenMode mode_;
 };
 
-inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path, OpenMode mode, const decltype(std::declval<arcticc::pb2::storage_pb2::LibraryConfig>().storage_by_id())& storage_configs, const NativeVariantStorage& native_storage_config) {
+inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path, OpenMode mode, decltype(std::declval<arcticc::pb2::storage_pb2::LibraryConfig>().storage_by_id())& storage_configs, const NativeVariantStorage& native_storage_config) {
+    static_assert(std::is_const_v<std::remove_reference_t<decltype(storage_configs)>>);
     Storages::StorageVector storages;
     for (const auto& [storage_id, storage_config]: storage_configs) {
         util::variant_match(native_storage_config.variant(),
