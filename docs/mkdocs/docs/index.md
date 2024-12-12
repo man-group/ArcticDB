@@ -1,4 +1,4 @@
-<img src="images/FullWithBorder.png" alt="logo" width="400"/>
+<img src="images/ArcticDB Logo Purple Stacked.png" alt="logo" width="400"/>
 
 
 ## What is ArcticDB?
