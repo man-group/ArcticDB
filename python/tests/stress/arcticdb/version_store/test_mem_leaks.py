@@ -26,7 +26,7 @@ from arcticdb.util.test import get_sample_dataframe, random_string
 from arcticdb.version_store.library import Library, ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore
-from tests.util.mark import MACOS, WINDOWS, MEMRAY_SUPPORTED, MEMRAY_TESTS_MARK 
+from tests.util.mark import MACOS, WINDOWS, MEMRAY_SUPPORTED, MEMRAY_TESTS_MARK, SKIP_CONDA_MARK 
 
 #region HELPER functions for non-memray tests
 
@@ -274,8 +274,8 @@ def gen_random_date(start:pd.Timestamp, end: pd.Timestamp):
 
 #region TESTS non-memray type - "guessing" memory leak through series of repetitions
 
+@SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
 @pytest.mark.skipif(sys.platform == "win32", reason="Not enough storage on Windows runners")
-@pytest.mark.skipif(sys.platform == "darwin", reason="Problem on MacOs")
 def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
     lib: adb.Library = arctic_library_lmdb
 
@@ -316,6 +316,7 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
 
 @pytest.mark.skipif(WINDOWS, reason="Not enough storage on Windows runners")
 @pytest.mark.skipif(MACOS, reason="Problem on MacOs")
+@SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
 def test_mem_leak_querybuilder_standard(arctic_library_lmdb):
     """
         This test uses old approach with iterations.
@@ -359,7 +360,7 @@ def test_mem_leak_querybuilder_standard(arctic_library_lmdb):
     time.sleep(10)
 
 
-@pytest.mark.skipif(MACOS, reason="Problem on MacOs")
+@SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
 def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     lib: NativeVersionStore = lmdb_version_store_very_big_map
 
