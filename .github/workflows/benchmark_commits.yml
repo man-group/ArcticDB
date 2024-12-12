@@ -46,14 +46,15 @@ jobs:
       - name: Install deps
         uses: ./.github/actions/setup_deps
 
-      # We are changing the python here because we want to use the default python to build (it is devel version)
-      # and this python for the rest of the testing
-      - name: Select Python (Linux)
-        shell: bash -el {0}
+      - name: Extra envs
+        shell: bash -l {0}
         run: |
-          ls /opt/python  
-          echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
-
+          . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
+          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
+          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
