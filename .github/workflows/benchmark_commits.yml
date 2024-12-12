@@ -46,15 +46,6 @@ jobs:
       - name: Install deps
         uses: ./.github/actions/setup_deps
 
-      # We are changing the python here because we want to use the default python to build (it is devel version)
-      # and this python for the rest of the testing
-      - name: Select Python (Linux)
-        shell: bash -el {0}
-        run: |
-          ls /opt/python  
-          echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
-
-
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
