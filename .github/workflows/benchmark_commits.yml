@@ -33,6 +33,7 @@ jobs:
     steps:  
       - uses: actions/checkout@v3.3.0
         with:
+          lfs: 'true'
           fetch-depth: 0
           submodules: recursive
           token: ${{ secrets.ARCTICDB_TEST_PAT }}
