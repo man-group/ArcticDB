@@ -93,7 +93,7 @@ VersionedItem update_impl(
     const UpdateInfo& update_info,
     const UpdateQuery & query,
     const std::shared_ptr<InputTensorFrame>& frame,
-    const WriteOptions&& options,
+    WriteOptions&& options,
     bool dynamic_schema,
     bool empty_types);
 

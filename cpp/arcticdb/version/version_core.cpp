@@ -304,7 +304,7 @@ void check_update_data_is_sorted(InputTensorFrame& frame, const index::IndexSegm
         "When calling update, the existing data must be sorted.");
 }
 
-VersionedItem update_impl(
+folly::Future<AtomKey> async_update_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
     const UpdateQuery& query,
@@ -313,7 +313,7 @@ VersionedItem update_impl(
     bool dynamic_schema,
     bool empty_types) {
     util::check(update_info.previous_index_key_.has_value(), "Cannot update as there is no previous index key to update into");
-    const StreamId stream_id = frame->desc.id();
+    const StreamId& stream_id = frame->desc.id();
     ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", stream_id, update_info.previous_index_key_->version_id());
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot update pickled data");
@@ -323,14 +323,13 @@ VersionedItem update_impl(
         "Update not supported for non-timeseries indexes"
     );
     check_update_data_is_sorted(*frame, index_segment_reader);
-    bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
+    const bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     (void)check_and_mark_slices(index_segment_reader, dynamic_schema, false, std::nullopt, bucketize_dynamic);
     fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, *frame, empty_types);
 
     std::vector<FilterQuery<index::IndexSegmentReader>> queries =
         build_update_query_filters<index::IndexSegmentReader>(query.row_filter, frame->index, frame->index_range, dynamic_schema, index_segment_reader.bucketize_dynamic());
-    auto combined = combine_filter_functions(queries);
-    auto affected_keys = filter_index(index_segment_reader, std::move(combined));
+    auto affected_keys = filter_index(index_segment_reader, combine_filter_functions(queries));
     std::vector<SliceAndKey> unaffected_keys;
     std::set_difference(std::begin(index_segment_reader),
                         std::end(index_segment_reader),
@@ -342,7 +341,7 @@ VersionedItem update_impl(
                 affected_keys.size(), unaffected_keys.size(), index_segment_reader.size());
 
     frame->set_bucketize_dynamic(bucketize_dynamic);
-    auto slicing_arg = get_slicing_policy(options, *frame);
+    const auto slicing_arg = get_slicing_policy(options, *frame);
 
     auto new_slice_and_keys = slice_and_write(frame, slicing_arg, IndexPartialKey{stream_id, update_info.next_version_id_}, store).wait().value();
     std::sort(std::begin(new_slice_and_keys), std::end(new_slice_and_keys));
@@ -386,9 +385,21 @@ VersionedItem update_impl(
 
     std::sort(std::begin(flattened_slice_and_keys), std::end(flattened_slice_and_keys));
     auto tsd = index::get_merged_tsd(row_count, dynamic_schema, index_segment_reader.tsd(), frame);
-    auto version_key_fut = index::write_index(stream::index_type_from_descriptor(tsd.as_stream_descriptor()), std::move(tsd), std::move(flattened_slice_and_keys), IndexPartialKey{stream_id, update_info.next_version_id_}, store);
+    return index::write_index(index_type_from_descriptor(tsd.as_stream_descriptor()), std::move(tsd), std::move(flattened_slice_and_keys), IndexPartialKey{stream_id, update_info.next_version_id_}, store);
+}
+
+VersionedItem update_impl(
+    const std::shared_ptr<Store>& store,
+    const UpdateInfo& update_info,
+    const UpdateQuery& query,
+    const std::shared_ptr<InputTensorFrame>& frame,
+    WriteOptions&& options,
+    bool dynamic_schema,
+    bool empty_types) {
+    auto version_key_fut = async_update_impl(store, update_info, query, frame, std::move(options), dynamic_schema, empty_types);
     auto version_key = std::move(version_key_fut).get();
     auto versioned_item = VersionedItem(to_atom(std::move(version_key)));
+    const StreamId& stream_id = frame->desc.id();
     ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
     return versioned_item;
 }

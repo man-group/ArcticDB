@@ -61,8 +61,7 @@ void foreach_active_bit(const util::BitSet &bs, C &&visitor) {
     }
 }
 
-template<typename ContainerType>
-std::vector<SliceAndKey> filter_index(const ContainerType &container, std::optional<CombinedQuery<ContainerType>> &&query) {
+inline std::vector<SliceAndKey> filter_index(const index::IndexSegmentReader& container, std::optional<CombinedQuery<index::IndexSegmentReader>> &&query) {
     ARCTICDB_SAMPLE_DEFAULT(FilterIndex)
     std::vector<SliceAndKey> output{};
     if (container.size()> 0) {
