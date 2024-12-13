@@ -231,6 +231,7 @@ class ModificationFunctions:
     rounds = 1
     number = 1 # We do a single run between setup and teardown because we e.g. can't delete a symbol twice
     repeat = 3
+    warmup_time=0
     timeout = 6000
     ARCTIC_DIR = "modification_functions"
     ARCTIC_DIR_ORIGINAL = "modification_functions_original"
