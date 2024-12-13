@@ -31,6 +31,12 @@ jobs:
     defaults:
       run: {shell: bash}
     steps:  
+      - name: Initialize LFS
+        shell: bash -l {0}
+        run: |
+          curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash
+          dnf install -y install git-lfs
+
       - uses: actions/checkout@v3.3.0
         with:
           lfs: 'true'
