@@ -349,11 +349,11 @@ class ModificationFunctions:
         self.lib.append(f"sym", self.df_append_single)
 
     def time_append_large(self, lad: LargeAppendDataModify, rows):
-        large: pd.DataFrame = lad.df_append_large[rows].pop()
+        large: pd.DataFrame = lad.df_append_large[rows].pop(0)
         self.lib.append(f"sym", large)
 
     def time_append_short_wide(self, lad: LargeAppendDataModify, rows):
-        large: pd.DataFrame = lad.df_append_short_wide[rows].pop()
+        large: pd.DataFrame = lad.df_append_short_wide[rows].pop(0)
         self.lib_short_wide.append("short_wide_sym", large)
 
     def time_delete(self, lad: LargeAppendDataModify, rows):
