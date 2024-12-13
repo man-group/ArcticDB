@@ -7,11 +7,11 @@ from tests.stress.arcticdb.version_store.test_stress_finalize_stage_data import 
 from arcticdb.util.utils import TimestampNumber
 """
 
+import sys
 from arcticdb.arctic import Arctic
 from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
 from arcticdb.version_store.library import Library, StagedDataFinalizeMethod
 from .common import *
-from asv_runner.benchmarks.mark import SkipNotImplemented
 
 class FinalizeStagedData:
     '''
@@ -74,32 +74,36 @@ class FinalizeStagedData:
     def teardown(self, cache:CachedDFGenerator, param:int):
         self.ac.delete_library(self.lib_name)
 
-class FinalizeStagedDataWiderDataframeX3(FinalizeStagedData):
-    '''
-        The test is meant to be executed with 3 times wider dataframe than the base test
-    '''
+if sys.version_info >= (3, 8):
+    ## asv 0.6.0 or later is required for skipping (Python > 3.6)
+    from asv_runner.benchmarks.mark import SkipNotImplemented
 
-    def setup_cache(self):
-        # Generating dataframe with all kind of supported data type
-        cachedDF = CachedDFGenerator(350000, [5, 25, 50]) # 3 times wider DF with bigger string columns
-        return cachedDF
-    
-    def setup(self, cache:CachedDFGenerator, param:int):
-        if (not SLOW_TESTS):
-            raise SkipNotImplemented ("Slow tests are skipped")
-        super().setup(cache,param)
+    class FinalizeStagedDataWiderDataframeX3(FinalizeStagedData):
+        '''
+            The test is meant to be executed with 3 times wider dataframe than the base test
+        '''
 
-    def time_finalize_staged_data(self, cache:CachedDFGenerator, param:int):
-        if (not SLOW_TESTS):
-            raise SkipNotImplemented ("Slow tests are skipped")
-        super().time_finalize_staged_data(cache,param)
+        def setup_cache(self):
+            # Generating dataframe with all kind of supported data type
+            cachedDF = CachedDFGenerator(350000, [5, 25, 50]) # 3 times wider DF with bigger string columns
+            return cachedDF
+        
+        def setup(self, cache:CachedDFGenerator, param:int):
+            if (not SLOW_TESTS):
+                raise SkipNotImplemented ("Slow tests are skipped")
+            super().setup(cache,param)
 
-    def peakmem_finalize_staged_data(self, cache:CachedDFGenerator, param:int):
-        if (not SLOW_TESTS):
-            raise SkipNotImplemented ("Slow tests are skipped")
-        super().peakmem_finalize_staged_data(cache,param)
+        def time_finalize_staged_data(self, cache:CachedDFGenerator, param:int):
+            if (not SLOW_TESTS):
+                raise SkipNotImplemented ("Slow tests are skipped")
+            super().time_finalize_staged_data(cache,param)
 
-    def teardown(self, cache:CachedDFGenerator, param:int):
-        if (SLOW_TESTS):
-            # Run only on slow tests
-            self.ac.delete_library(self.lib_name)
+        def peakmem_finalize_staged_data(self, cache:CachedDFGenerator, param:int):
+            if (not SLOW_TESTS):
+                raise SkipNotImplemented ("Slow tests are skipped")
+            super().peakmem_finalize_staged_data(cache,param)
+
+        def teardown(self, cache:CachedDFGenerator, param:int):
+            if (SLOW_TESTS):
+                # Run only on slow tests
+                self.ac.delete_library(self.lib_name)
