@@ -1,5 +1,7 @@
 # docs-pages branch
 
+[![Netlify Status](https://api.netlify.com/api/v1/badges/37112dbd-bb1e-4d2e-b90a-5f13572ffd42/deploy-status)](https://app.netlify.com/sites/arcticdb-docs/deploys)
+
 This branch contains the built docs site.
 
 ## Serve locally
