@@ -47,6 +47,8 @@ extra_css:
 plugins:
   - search
   - autorefs
+  - mike:
+      alias_type: copy
   - mkdocs-jupyter:
       ignore_h1_titles: True
       include_source: True
