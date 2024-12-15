@@ -1,2 +1,3 @@
 /api /latest/api 301
 /api/ /latest/api/ 301
+/* /latest/404.html 404
