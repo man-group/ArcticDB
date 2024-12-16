@@ -185,7 +185,3 @@ class BIBenchmarks:
 
     def peakmem_query_groupby_city_count_filter_two_aggregations(self, times_bigger):
         return self.query_groupby_city_count_filter_two_aggregations(times_bigger)
-        
-
-
-

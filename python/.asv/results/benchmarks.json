@@ -11,7 +11,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -29,7 +29,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -47,7 +47,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -65,7 +65,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -83,7 +83,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -101,7 +101,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -119,7 +119,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -142,7 +142,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -166,7 +166,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -190,7 +190,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -214,7 +214,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -238,7 +238,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -262,7 +262,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -286,7 +286,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -310,7 +310,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -333,7 +333,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -356,7 +356,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -379,7 +379,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -407,7 +407,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -436,7 +436,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -465,7 +465,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -494,7 +494,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -523,7 +523,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -531,7 +531,7 @@
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_append_large": {
-        "code": "class ModificationFunctions:\n    def time_append_large(self, rows):\n        self.lib.append(f\"sym\", self.df_append_large)\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_append_large(self, lad: LargeAppendDataModify, rows):\n        large: pd.DataFrame = lad.df_append_large[rows].pop()\n        self.lib.append(f\"sym\", large)\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_append_large",
         "number": 1,
@@ -544,18 +544,18 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "be3be12028b2f1a949589e618252e94a88e5f35b5aa90f5815fd8aaa324c8550",
+        "version": "b817d86d1bf76649691197bfaf1261a96a1a34c9a25f053d66f6dfcf14c6f279",
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_append_short_wide": {
-        "code": "class ModificationFunctions:\n    def time_append_short_wide(self, rows):\n        self.lib_short_wide.append(\"short_wide_sym\", self.df_append_short_wide)\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_append_short_wide(self, lad: LargeAppendDataModify, rows):\n        large: pd.DataFrame = lad.df_append_short_wide[rows].pop()\n        self.lib_short_wide.append(\"short_wide_sym\", large)\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_append_short_wide",
         "number": 1,
@@ -568,18 +568,18 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "3a2e1e7a4dc518468ba388f560231ac1a1366b212dbd3309e3e877606c5630e8",
+        "version": "3678115ad2d40bf19062212095071431ff63cedc159661ee3056be7cbf109f98",
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_append_single": {
-        "code": "class ModificationFunctions:\n    def time_append_single(self, rows):\n        self.lib.append(f\"sym\", self.df_append_single)\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_append_single(self, lad: LargeAppendDataModify, rows):\n        self.lib.append(f\"sym\", self.df_append_single)\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_append_single",
         "number": 1,
@@ -592,18 +592,18 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "c7f13a15b9074ab9bdb6f3e47ab97d75708938f005021b7a8fde82fe6902041d",
+        "version": "8f398155deb342c70fe4c65e8da636b1f18c9296632b4649aab8dae306aa8453",
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_delete": {
-        "code": "class ModificationFunctions:\n    def time_delete(self, rows):\n        self.lib.delete(f\"sym\")\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_delete(self, lad: LargeAppendDataModify, rows):\n        self.lib.delete(f\"sym\")\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_delete",
         "number": 1,
@@ -616,18 +616,18 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "da4c95139bc0ae404ed6585b9e3398af8ed7e421cefcbeb9ff9ea6a77b85915a",
+        "version": "6d8afae2414e0f842495a7962f5950472814bde20e99eebc474db6953d8e1ae3",
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_delete_short_wide": {
-        "code": "class ModificationFunctions:\n    def time_delete_short_wide(self, rows):\n        self.lib_short_wide.delete(\"short_wide_sym\")\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_delete_short_wide(self, lad: LargeAppendDataModify, rows):\n        self.lib_short_wide.delete(\"short_wide_sym\")\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_delete_short_wide",
         "number": 1,
@@ -640,18 +640,18 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "12254786f4a42e8bd488f48075cb70eddf4d87c8581271e2e2b526b7940123b9",
+        "version": "f867fc9cac4d0706b01166662af37434100460706d4f6118de0bc2e0e3087bae",
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_update_half": {
-        "code": "class ModificationFunctions:\n    def time_update_half(self, rows):\n        self.lib.update(f\"sym\", self.df_update_half)\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_update_half(self, lad: LargeAppendDataModify, rows):\n        self.lib.update(f\"sym\", self.df_update_half)\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_update_half",
         "number": 1,
@@ -664,18 +664,18 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "f56b8677f5b90b49568e6865c0656b734b9b2a8054baa71b78eaed8f53cb3176",
+        "version": "6a011f58b79c483849a70576915c2d56deed1227d38489a21140341ca860ce33",
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_update_short_wide": {
-        "code": "class ModificationFunctions:\n    def time_update_short_wide(self, rows):\n        self.lib_short_wide.update(\"short_wide_sym\", self.df_update_short_wide)\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_update_short_wide(self, lad: LargeAppendDataModify, rows):\n        self.lib_short_wide.update(\"short_wide_sym\", self.df_update_short_wide)\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_update_short_wide",
         "number": 1,
@@ -688,18 +688,18 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "5db16777228d8de1ab4af9943d1ed0541c0b02c4dbcd888cfa3e26f37eb0215b",
+        "version": "111496c5bd4a4c498df28819d3cbcd9d699c4d3363ad3969f102a1d2076b3086",
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_update_single": {
-        "code": "class ModificationFunctions:\n    def time_update_single(self, rows):\n        self.lib.update(f\"sym\", self.df_update_single)\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_update_single(self, lad: LargeAppendDataModify, rows):\n        self.lib.update(f\"sym\", self.df_update_single)\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_update_single",
         "number": 1,
@@ -712,18 +712,18 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "cf62fa8a658e2f2ab16d286992423dd8d69334415ab61600906c6e9dc0185597",
+        "version": "c45c168d5713f3028a9a5b97959d52116c8d228870ad580be06d86336d2476c6",
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_update_upsert": {
-        "code": "class ModificationFunctions:\n    def time_update_upsert(self, rows):\n        self.lib.update(f\"sym\", self.df_update_upsert, upsert=True)\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_update_upsert(self, lad: LargeAppendDataModify, rows):\n        self.lib.update(f\"sym\", self.df_update_upsert, upsert=True)\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_update_upsert",
         "number": 1,
@@ -736,14 +736,14 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "80de9b1982a498c300177d02874a8626152eccb57cd0ba4228a5bb168e7608c8",
+        "version": "7f139bf03457104abe937914aa3572503ed52330b3a271d82112696060331d8f",
         "warmup_time": -1
     },
     "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_all": {
