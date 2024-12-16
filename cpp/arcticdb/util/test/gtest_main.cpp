@@ -8,10 +8,12 @@
 #include <gtest/gtest.h>
 #include <arcticdb/util/global_lifetimes.hpp>
 #include <pybind11/pybind11.h>  // Must not directly include Python.h on Windows
+#include <util/gil_safe_py_none.hpp>
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
     Py_Initialize();
+    arcticdb::GilSafePyNone::instance(); // Ensure that the GIL is held when the static py::none gets allocated
     auto res = RUN_ALL_TESTS();
     arcticdb::shutdown_globals();
     Py_Finalize();
