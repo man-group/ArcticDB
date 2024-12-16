@@ -700,6 +700,20 @@ void SegmentInMemoryImpl::reset_timeseries_descriptor() {
     tsd_.reset();
 }
 
+void SegmentInMemoryImpl::calculate_statistics() {
+    for(auto& column : columns_) {
+        if(column->type().dimension() == Dimension::Dim0) {
+            const auto type = column->type();
+            if(is_numeric_type(type.data_type()) || is_sequence_type(type.data_type())) {
+                type.visit_tag([&column] (auto tdt) {
+                    using TagType = std::decay_t<decltype(tdt)>;
+                    column->set_statistics(generate_column_statistics<TagType>(column->data()));
+                });
+            }
+        }
+    }
+}
+
 void SegmentInMemoryImpl::reset_metadata() {
     metadata_.reset();
 }

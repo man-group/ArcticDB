@@ -29,18 +29,6 @@ inline arcticdb::proto::descriptors::SortedValue sorted_value_to_proto(SortedVal
     }
 }
 
-inline SortedValue sorted_value_from_proto(arcticdb::proto::descriptors::SortedValue sorted_proto) {
-    switch (sorted_proto) {
-    case arcticdb::proto::descriptors::SortedValue::UNSORTED:
-        return SortedValue::UNSORTED;
-    case arcticdb::proto::descriptors::SortedValue::DESCENDING:
-        return SortedValue::DESCENDING;
-    case arcticdb::proto::descriptors::SortedValue::ASCENDING:
-        return SortedValue::ASCENDING;
-    default:
-        return SortedValue::UNKNOWN;
-    }
-}
 
 // The type enum needs to be kept in sync with the protobuf one, which should not be changed
 [[nodiscard]] arcticdb::proto::descriptors::IndexDescriptor index_descriptor_to_proto(const IndexDescriptorImpl& index_descriptor) {
@@ -99,7 +87,7 @@ AtomKey key_from_proto(const arcticdb::proto::descriptors::AtomKey& input) {
 void copy_stream_descriptor_to_proto(const StreamDescriptor& desc, arcticdb::proto::descriptors::StreamDescriptor& proto) {
     proto.set_in_bytes(desc.uncompressed_bytes());
     proto.set_out_bytes(desc.compressed_bytes());
-    proto.set_sorted(arcticdb::proto::descriptors::SortedValue(desc.sorted()));
+    proto.set_sorted(sorted_value_to_proto(desc.sorted()));
     // The index descriptor enum must be kept in sync with the protobuf
     *proto.mutable_index() = index_descriptor_to_proto(desc.index());
     util::variant_match(desc.id(),

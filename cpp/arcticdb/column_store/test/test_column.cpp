@@ -284,3 +284,136 @@ TEST(ColumnData, LowerBound) {
     ASSERT_EQ(*it, 6);
     ASSERT_EQ(std::distance(column.begin<TDT>(), it), 3);
 }
+
+FieldStatsImpl generate_stats_from_column(const Column& column) {
+    return column.type().visit_tag([&column](auto tdt) {
+        using TagType = std::decay_t<decltype(tdt)>;
+        return generate_column_statistics<TagType>(column.data());
+    });
+}
+
+TEST(ColumnStats, IntegerColumn) {
+    Column int_col(make_scalar_type(DataType::INT64));
+    int_col.set_scalar<int64_t>(0, 10);
+    int_col.set_scalar<int64_t>(1, 5);
+    int_col.set_scalar<int64_t>(2, 20);
+    int_col.set_scalar<int64_t>(3, 5);
+    int_col.set_scalar<int64_t>(4, 15);
+
+    FieldStatsImpl stats = generate_stats_from_column(int_col);
+
+    EXPECT_TRUE(stats.has_min());
+    EXPECT_TRUE(stats.has_max());
+    EXPECT_TRUE(stats.has_unique());
+
+    EXPECT_EQ(stats.get_min<int64_t>(), 5);
+    EXPECT_EQ(stats.get_max<int64_t>(), 20);
+    EXPECT_EQ(stats.unique_count_, 4);
+    EXPECT_EQ(stats.unique_count_precision_, UniqueCountType::PRECISE);
+}
+
+TEST(ColumnStats, FloatColumn) {
+    Column float_col(make_scalar_type(DataType::FLOAT32));
+    float_col.set_scalar<float>(0, 10.5f);
+    float_col.set_scalar<float>(1, 5.5f);
+    float_col.set_scalar<float>(2, 20.5f);
+    float_col.set_scalar<float>(3, 5.5f);
+    float_col.set_scalar<float>(4, 15.5f);
+
+    FieldStatsImpl stats = generate_stats_from_column(float_col);
+
+    EXPECT_TRUE(stats.has_min());
+    EXPECT_TRUE(stats.has_max());
+    EXPECT_TRUE(stats.has_unique());
+
+    EXPECT_FLOAT_EQ(stats.get_min<float>(), 5.5f);
+    EXPECT_FLOAT_EQ(stats.get_max<float>(), 20.5f);
+    EXPECT_EQ(stats.unique_count_, 4);
+    EXPECT_EQ(stats.unique_count_precision_, UniqueCountType::PRECISE);
+}
+
+TEST(ColumnStats, EmptyColumn) {
+    Column empty_col(make_scalar_type(DataType::FLOAT32));
+    FieldStatsImpl stats = generate_stats_from_column(empty_col);
+
+    EXPECT_FALSE(stats.has_min());
+    EXPECT_FALSE(stats.has_max());
+    EXPECT_FALSE(stats.has_unique());
+    EXPECT_EQ(stats.unique_count_, 0);
+    EXPECT_EQ(stats.unique_count_precision_, UniqueCountType::PRECISE);
+}
+
+TEST(ColumnStats, SingleValueColumn) {
+    Column single_col(make_scalar_type(DataType::INT32));
+    single_col.set_scalar<int32_t>(0, 42);
+
+    FieldStatsImpl stats = generate_stats_from_column(single_col);
+
+    EXPECT_TRUE(stats.has_min());
+    EXPECT_TRUE(stats.has_max());
+    EXPECT_TRUE(stats.has_unique());
+
+    EXPECT_EQ(stats.get_min<int32_t>(), 42);
+    EXPECT_EQ(stats.get_max<int32_t>(), 42);
+    EXPECT_EQ(stats.unique_count_, 1);
+    EXPECT_EQ(stats.unique_count_precision_, UniqueCountType::PRECISE);
+}
+
+TEST(ColumnStats, NegativeNumbers) {
+    Column neg_col(make_scalar_type(DataType::INT64));
+    neg_col.set_scalar<int64_t>(0, -10);
+    neg_col.set_scalar<int64_t>(1, -5);
+    neg_col.set_scalar<int64_t>(2, -20);
+    neg_col.set_scalar<int64_t>(3, -15);
+
+    FieldStatsImpl stats = generate_stats_from_column(neg_col);
+
+    EXPECT_TRUE(stats.has_min());
+    EXPECT_TRUE(stats.has_max());
+    EXPECT_TRUE(stats.has_unique());
+
+    EXPECT_EQ(stats.get_min<int64_t>(), -20);
+    EXPECT_EQ(stats.get_max<int64_t>(), -5);
+    EXPECT_EQ(stats.unique_count_, 4);
+    EXPECT_EQ(stats.unique_count_precision_, UniqueCountType::PRECISE);
+}
+
+TEST(ColumnStats, DoubleColumn) {
+    Column double_col(make_scalar_type(DataType::FLOAT64));
+    double_col.set_scalar<double>(0, 10.5);
+    double_col.set_scalar<double>(1, 5.5);
+    double_col.set_scalar<double>(2, 20.5);
+    double_col.set_scalar<double>(3, 5.5);
+    double_col.set_scalar<double>(4, 15.5);
+
+    FieldStatsImpl stats = generate_stats_from_column(double_col);
+
+    EXPECT_TRUE(stats.has_min());
+    EXPECT_TRUE(stats.has_max());
+    EXPECT_TRUE(stats.has_unique());
+
+    EXPECT_DOUBLE_EQ(stats.get_min<double>(), 5.5);
+    EXPECT_DOUBLE_EQ(stats.get_max<double>(), 20.5);
+    EXPECT_EQ(stats.unique_count_, 4);
+    EXPECT_EQ(stats.unique_count_precision_, UniqueCountType::PRECISE);
+}
+
+TEST(ColumnStats, MultipleBlocks) {
+    Column single_col(make_scalar_type(DataType::UINT64));
+
+    for(auto i = 0UL; i < 1'000'000UL; ++i)
+        single_col.set_scalar<int64_t>(i, i);
+
+    FieldStatsImpl stats = generate_stats_from_column(single_col);
+
+    EXPECT_TRUE(stats.has_min());
+    EXPECT_TRUE(stats.has_max());
+    EXPECT_TRUE(stats.has_unique());
+
+    EXPECT_EQ(single_col.buffer().num_blocks(), 2017);
+
+    EXPECT_EQ(stats.get_min<uint64_t>(), 0);
+    EXPECT_EQ(stats.get_max<int32_t>(), 999'999);
+    EXPECT_EQ(stats.unique_count_, 1'000'000);
+    EXPECT_EQ(stats.unique_count_precision_, UniqueCountType::PRECISE);
+}

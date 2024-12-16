@@ -163,7 +163,8 @@ struct EncodedFieldImpl : public EncodedField {
             sizeof(values_count_) +
             sizeof(sparse_map_bytes_) +
             sizeof(items_count_) +
-            sizeof(format_);
+            sizeof(format_) +
+            sizeof(stats_);
 
     EncodedFieldImpl() = default;
 
@@ -364,6 +365,14 @@ struct EncodedFieldImpl : public EncodedField {
 
     void set_sparse_map_bytes(uint32_t bytes) {
         sparse_map_bytes_ = bytes;
+    }
+
+    void set_statistics(FieldStats stats) {
+        stats_ = stats;
+    }
+
+    FieldStats get_statistics() const {
+        return stats_;
     }
 
     EncodedBlock *add_values(EncodingVersion encoding_version) {
