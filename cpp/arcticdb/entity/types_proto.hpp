@@ -21,17 +21,11 @@ using FieldProto = arcticdb::proto::descriptors::StreamDescriptor_FieldDescripto
 bool operator==(const FieldProto &left, const FieldProto &right);
 bool operator<(const FieldProto &left, const FieldProto &right);
 
-arcticdb::proto::descriptors::SortedValue sorted_value_to_proto(SortedValue sorted);
-
-SortedValue sorted_value_from_proto(arcticdb::proto::descriptors::SortedValue sorted_proto);
-
 void set_data_type(DataType data_type, arcticdb::proto::descriptors::TypeDescriptor &type_desc);
 
 DataType get_data_type(const arcticdb::proto::descriptors::TypeDescriptor &type_desc);
 
 TypeDescriptor type_desc_from_proto(const arcticdb::proto::descriptors::TypeDescriptor &type_desc);
-
-DataType data_type_from_proto(const arcticdb::proto::descriptors::TypeDescriptor &type_desc);
 
 [[nodiscard]] arcticdb::proto::descriptors::TypeDescriptor type_descriptor_to_proto(const TypeDescriptor& desc);
 
@@ -49,10 +43,6 @@ arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor field_proto(
     DataType dt,
     Dimension dim,
     std::string_view name);
-
-    DataType get_data_type(const arcticdb::proto::descriptors::TypeDescriptor& type_desc);
-
-    DataType data_type_from_proto(const arcticdb::proto::descriptors::TypeDescriptor& type_desc);
 
     arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor field_proto(DataType dt, Dimension dim, std::string_view name);
 

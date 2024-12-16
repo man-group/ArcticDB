@@ -57,13 +57,6 @@ void set_data_type(DataType data_type, arcticdb::proto::descriptors::TypeDescrip
     return output;
 }
 
-DataType get_data_type(const arcticdb::proto::descriptors::TypeDescriptor& type_desc) {
-    return combine_data_type(
-        static_cast<ValueType>(static_cast<uint8_t>(type_desc.value_type())),
-        static_cast<SizeBits>(static_cast<uint8_t>(type_desc.size_bits()))
-    );
-}
-
 TypeDescriptor type_desc_from_proto(const arcticdb::proto::descriptors::TypeDescriptor& type_desc) {
     return {
         combine_data_type(
@@ -72,10 +65,6 @@ TypeDescriptor type_desc_from_proto(const arcticdb::proto::descriptors::TypeDesc
         ),
         static_cast<Dimension>(static_cast<uint8_t>(type_desc.dimension()))
     };
-}
-
-DataType data_type_from_proto(const arcticdb::proto::descriptors::TypeDescriptor& type_desc) {
-    return type_desc_from_proto(type_desc).data_type();
 }
 
 arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor field_proto(DataType dt, Dimension dim, std::string_view name) {

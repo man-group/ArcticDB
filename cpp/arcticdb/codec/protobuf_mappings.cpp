@@ -10,6 +10,7 @@
 #include "arcticdb/storage/memory_layout.hpp"
 #include <arcticdb/codec/segment_header.hpp>
 #include <arcticdb/codec/protobuf_mappings.hpp>
+#include <arcticdb/stream/protobuf_mappings.hpp>
 #include <folly/container/Enumerate.h>
 
 namespace arcticdb {
@@ -78,6 +79,8 @@ void encoded_field_from_proto(const arcticdb::proto::encoding::EncodedField& inp
         auto* value_block = output_ndarray->add_values(EncodingVersion::V1);
         block_from_proto(input_ndarray.values(i), *value_block, false);
     }
+
+    output.set_statistics(create_from_proto(input.stats()));
 }
 
 void copy_encoded_field_to_proto(const EncodedFieldImpl& input, arcticdb::proto::encoding::EncodedField& output) {
@@ -97,6 +100,8 @@ void copy_encoded_field_to_proto(const EncodedFieldImpl& input, arcticdb::proto:
         auto* value_block = output_ndarray->add_values();
         proto_from_block(input_ndarray.values(i), *value_block);
     }
+
+    field_stats_to_proto(input.get_statistics(), *output.mutable_stats());
 }
 
 size_t num_blocks(const arcticdb::proto::encoding::EncodedField& field) {

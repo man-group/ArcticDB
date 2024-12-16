@@ -763,6 +763,8 @@ public:
 
     void reset_timeseries_descriptor();
 
+    void calculate_statistics();
+
     bool has_user_metadata() {
         return tsd_.has_value() && !tsd_->proto_is_null() && tsd_->proto().has_user_meta();
     }
