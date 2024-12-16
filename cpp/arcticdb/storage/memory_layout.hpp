@@ -95,6 +95,16 @@ enum class BitmapFormat : uint8_t {
     BITMAGIC
 };
 
+struct FieldStats {
+    uint64_t min_ = 0UL;
+    uint64_t max_ = 0UL;
+    uint32_t unique_count_ = 0U:;
+    bool unique_count_exact_ = false;
+    bool sorted_ = false;
+    bool set_ = false;
+    bool unused_ = false;
+};
+
 // Each encoded field will have zero or one shapes blocks,
 // a potentially large number of values (data) blocks, and
 // an optional sparse bitmap. The block array serves as a
@@ -106,6 +116,7 @@ struct EncodedField {
     uint32_t sparse_map_bytes_ = 0u;
     uint32_t items_count_ = 0u;
     BitmapFormat format_ = BitmapFormat::UNKNOWN;
+    FieldStats stats_;
     std::array<Block, 1> blocks_;
 };
 

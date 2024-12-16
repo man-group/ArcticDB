@@ -251,6 +251,18 @@ public:
 
     bool sparse_permitted() const;
 
+    void set_statistics(FieldStats stats) {
+        stats_ = stats;
+    }
+
+    bool has_statistics() const {
+        return stats_.set_;
+    };
+
+    FieldStats get_statistics() const  {
+        return stats_;
+    }
+
     void backfill_sparse_map(ssize_t to_row) {
         ARCTICDB_TRACE(log::version(), "Backfilling sparse map to position {}", to_row);
         // Initialise the optional to an empty bitset if it has not been created yet
@@ -936,6 +948,7 @@ private:
     Sparsity allow_sparse_ = Sparsity::NOT_PERMITTED;
 
     std::optional<util::BitMagic> sparse_map_;
+    FieldStats stats_;
     util::MagicNum<'D', 'C', 'o', 'l'> magic_;
 };
 
