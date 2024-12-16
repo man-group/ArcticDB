@@ -14,11 +14,11 @@
         <link rel="prev" href="../library/">
       
       
-        <link rel="next" href="../query_builder/">
+        <link rel="next" href="../processing/">
       
       
-      <link rel="icon" href="../../images/FullWithBorder.png">
-      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.32">
+      <link rel="icon" href="../../images/ArcticDB Logo.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.49">
     
     
       
@@ -26,7 +26,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.3cba04c6.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.6f8fc17f.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
@@ -43,8 +43,8 @@
         
         
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
-        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Aspekta:300,300i,400,400i,700,700i%7CGeist+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Aspekta";--md-code-font:"Geist Mono"}</style>
       
     
     
@@ -56,7 +56,7 @@
     
       <link rel="stylesheet" href="../../stylesheets/mkdocstrings-python.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -112,12 +112,12 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="../.." title="ArcticDB" class="md-header__button md-logo" aria-label="ArcticDB" data-md-component="logo">
       
-  <img src="../../images/FullWithBorder.png" alt="logo">
+  <img src="../../images/ArcticDB Logo.svg" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
       
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
     </label>
     <div class="md-header__title" data-md-component="header-title">
       <div class="md-header__ellipsis">
@@ -143,7 +143,7 @@
     
       <label class="md-header__button md-icon" for="__search">
         
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
       </label>
       <div class="md-search" data-md-component="search" role="dialog">
   <label class="md-search__overlay" for="__search"></label>
@@ -152,15 +152,15 @@
       <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
       <label class="md-search__icon md-icon" for="__search">
         
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
         
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
       </label>
       <nav class="md-search__options" aria-label="Search">
         
         <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
           
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
         </button>
       </nav>
       
@@ -183,7 +183,7 @@
         <a href="https://github.com/man-group/ArcticDB" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.6.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
   </div>
   <div class="md-source__repository">
     man-group/ArcticDB
@@ -308,11 +308,13 @@
   
 
 
-<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
     <a href="../.." title="ArcticDB" class="md-nav__button md-logo" aria-label="ArcticDB" data-md-component="logo">
       
-  <img src="../../images/FullWithBorder.png" alt="logo">
+  <img src="../../images/ArcticDB Logo.svg" alt="logo">
 
     </a>
     ArcticDB
@@ -322,7 +324,7 @@
       <a href="https://github.com/man-group/ArcticDB" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.6.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
   </div>
   <div class="md-source__repository">
     man-group/ArcticDB
@@ -1106,6 +1108,27 @@
   
   
     <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_lazydataframe/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LazyDataFrame Notebook
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../notebooks/ArcticDB_demo_querybuilder/" class="md-nav__link">
         
   
@@ -1476,6 +1499,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#arcticdb.version_store.library.StagedDataFinalizeMethod" class="md-nav__link">
+    <span class="md-ellipsis">
+      StagedDataFinalizeMethod
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#arcticdb.VersionedItem" class="md-nav__link">
     <span class="md-ellipsis">
       VersionedItem
@@ -1533,11 +1565,11 @@
   
   
     <li class="md-nav__item">
-      <a href="../query_builder/" class="md-nav__link">
+      <a href="../processing/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
-    Query Builder
+    DataFrame Processing Operations API
   </span>
   
 
@@ -1582,117 +1614,6 @@
               </div>
             
             
-              
-              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
-                <div class="md-sidebar__scrollwrap">
-                  <div class="md-sidebar__inner">
-                    
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#arcticdb.version_store.library.NormalizableType" class="md-nav__link">
-    <span class="md-ellipsis">
-      NormalizableType
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#arcticdb.ReadInfoRequest" class="md-nav__link">
-    <span class="md-ellipsis">
-      ReadInfoRequest
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#arcticdb.ReadRequest" class="md-nav__link">
-    <span class="md-ellipsis">
-      ReadRequest
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#arcticdb.version_store.library.SymbolDescription" class="md-nav__link">
-    <span class="md-ellipsis">
-      SymbolDescription
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#arcticdb.version_store.library.SymbolVersion" class="md-nav__link">
-    <span class="md-ellipsis">
-      SymbolVersion
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#arcticdb.VersionedItem" class="md-nav__link">
-    <span class="md-ellipsis">
-      VersionedItem
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#arcticdb.version_store.library.VersionInfo" class="md-nav__link">
-    <span class="md-ellipsis">
-      VersionInfo
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#arcticdb.WritePayload" class="md-nav__link">
-    <span class="md-ellipsis">
-      WritePayload
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="WritePayload">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#arcticdb.WritePayload.__init__" class="md-nav__link">
-    <span class="md-ellipsis">
-      __init__
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-                  </div>
-                </div>
-              </div>
-            
           
           
             <div class="md-content" data-md-component="content">
@@ -1727,7 +1648,7 @@
 
     <div class="doc doc-contents first">
 
-      <p>Types that can be normalised into Arctic's internal storage structure.</p>
+        <p>Types that can be normalised into Arctic's internal storage structure.</p>
 
 
 <details class="see-also" open>
@@ -1753,7 +1674,7 @@
               Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
 
 
-      <p>ReadInfoRequest is useful for batch methods like read_metadata_batch and get_description_batch, where we
+        <p>ReadInfoRequest is useful for batch methods like read_metadata_batch and get_description_batch, where we
 only need to specify the symbol and the version information. Therefore, construction of this object is
 only required for these batch operations.</p>
 
@@ -1805,6 +1726,15 @@ only required for these batch operations.</p>
 
 
 
+
+
+
+
+
+
+
+
+
   <div class="doc doc-children">
 
 
@@ -1839,7 +1769,7 @@ only required for these batch operations.</p>
               Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
 
 
-      <p>ReadRequest is designed to enable batching of read operations with an API that mirrors the singular <code>read</code> API.
+        <p>ReadRequest is designed to enable batching of read operations with an API that mirrors the singular <code>read</code> API.
 Therefore, construction of this object is only required for batch read operations.</p>
 
 
@@ -1946,6 +1876,15 @@ Therefore, construction of this object is only required for batch read operation
 
 
 
+
+
+
+
+
+
+
+
+
   <div class="doc doc-children">
 
 
@@ -1980,7 +1919,7 @@ Therefore, construction of this object is only required for batch read operation
               Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
 
 
-      <p>A named tuple. Descriptive information about the data stored under a particular symbol.</p>
+        <p>A named tuple. Descriptive information about the data stored under a particular symbol.</p>
 
 
 <table>
@@ -2014,7 +1953,7 @@ Therefore, construction of this object is only required for batch read operation
               <p>
                   <span class="doc-attribute-annotation">
                     <b>TYPE:</b>
-                      <code><span title="arcticdb.version_store.library.NameWithDType">NameWithDType</span></code>
+                      <code><span title="typing.Tuple">Tuple</span>[<span title="arcticdb.version_store.library.NameWithDType">NameWithDType</span>]</code>
                   </span>
               </p>
             </td>
@@ -2037,12 +1976,12 @@ Therefore, construction of this object is only required for batch read operation
             <td><code><span title="arcticdb.version_store.library.SymbolDescription.row_count">row_count</span></code></td>
             <td class="doc-attribute-details">
               <div class="doc-md-description">
-                <p>Number of rows.</p>
+                <p>Number of rows, or None if the symbol is pickled.</p>
               </div>
               <p>
                   <span class="doc-attribute-annotation">
                     <b>TYPE:</b>
-                      <code>int</code>
+                      <code><span title="typing.Optional">Optional</span>[int]</code>
                   </span>
               </p>
             </td>
@@ -2065,14 +2004,14 @@ Therefore, construction of this object is only required for batch read operation
             <td><code><span title="arcticdb.version_store.library.SymbolDescription.date_range">date_range</span></code></td>
             <td class="doc-attribute-details">
               <div class="doc-md-description">
-                <p>The values of the index column in the first and last rows of this symbol in UTC. Both values will be NaT if:
+                <p>The values of the index column in the first and last row of this symbol. Both values will be NaT if:
 - the symbol is not timestamp indexed
 - the symbol is timestamp indexed, but the sorted field of this class is UNSORTED (see below)</p>
               </div>
               <p>
                   <span class="doc-attribute-annotation">
                     <b>TYPE:</b>
-                      <code><span title="typing.Tuple">Tuple</span>[<span title="typing.Union">Union</span>[<span title="datetime.datetime">datetime</span>, <span title="numpy.datetime64">datetime64</span>], <span title="typing.Union">Union</span>[<span title="datetime.datetime">datetime</span>, <span title="numpy.datetime64">datetime64</span>]]</code>
+                      <code><span title="typing.Tuple">Tuple</span>[<span title="typing.Union">Union</span>[<span title="pandas.Timestamp">Timestamp</span>], <span title="typing.Union">Union</span>[<span title="pandas.Timestamp">Timestamp</span>]]</code>
                   </span>
               </p>
             </td>
@@ -2102,6 +2041,15 @@ UNKNOWN - Either the data does not have a timestamp index, or the data does have
           </tr>
       </tbody>
     </table>
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2140,7 +2088,7 @@ UNKNOWN - Either the data does not have a timestamp index, or the data does have
               Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
 
 
-      <p>A named tuple. A symbol name - version pair.</p>
+        <p>A named tuple. A symbol name - version pair.</p>
 
 
 <table>
@@ -2185,6 +2133,61 @@ UNKNOWN - Either the data does not have a timestamp index, or the data does have
 
 
 
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="arcticdb.version_store.library.StagedDataFinalizeMethod" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">arcticdb.version_store.library.StagedDataFinalizeMethod</span>
+
+
+<a href="#arcticdb.version_store.library.StagedDataFinalizeMethod" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="enum.Enum">Enum</span></code></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   <div class="doc doc-children">
 
 
@@ -2217,7 +2220,7 @@ UNKNOWN - Either the data does not have a timestamp index, or the data does have
     <div class="doc doc-contents first">
 
 
-      <p>Return value for many operations that captures the result and associated information.</p>
+        <p>Return value for many operations that captures the result and associated information.</p>
 
 
 <table>
@@ -2275,7 +2278,9 @@ For data modification operations, the value might not be populated.</p>
             <td><code><span title="arcticdb.VersionedItem.version">version</span></code></td>
             <td class="doc-attribute-details">
               <div class="doc-md-description">
-                <p>For data retrieval operations, the version the <code>as_of</code> argument resolved to.
+                <p>For data retrieval operations, the version the <code>as_of</code> argument resolved to. In the special case where no
+versions have been written yet, but data is being read exclusively from incomplete segments, this will be
+2^64-1.
 For data modification operations, the version the data has been written under.</p>
               </div>
               <p>
@@ -2315,8 +2320,32 @@ Availability depends on the method used and may be different from that of <code>
               </p>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.VersionedItem.timestamp">timestamp</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>The time in nanoseconds since epoch that this version was written. In the special case where no versions have
+been written yet, but data is being read exclusively from incomplete segments, this will be 0.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Optional">Optional</span>[int]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
       </tbody>
     </table>
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2355,7 +2384,7 @@ Availability depends on the method used and may be different from that of <code>
               Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
 
 
-      <p>A named tuple. Descriptive information about a particular version of a symbol.</p>
+        <p>A named tuple. Descriptive information about a particular version of a symbol.</p>
 
 
 <table>
@@ -2414,6 +2443,15 @@ Availability depends on the method used and may be different from that of <code>
 
 
 
+
+
+
+
+
+
+
+
+
   <div class="doc doc-children">
 
 
@@ -2446,10 +2484,39 @@ Availability depends on the method used and may be different from that of <code>
     <div class="doc doc-contents first">
 
 
-      <p>WritePayload is designed to enable batching of multiple operations with an API that mirrors the singular
+        <p>WritePayload is designed to enable batching of multiple operations with an API that mirrors the singular
 <code>write</code> API.</p>
 <p>Construction of <code>WritePayload</code> objects is only required for batch write operations.</p>
 <p>One instance of <code>WritePayload</code> refers to one unit that can be written through to ArcticDB.</p>
+
+
+
+
+
+
+
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">METHOD</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="arcticdb.WritePayload.__init__" href="#arcticdb.WritePayload.__init__">__init__</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>Constructor.</p>
+                </div>
+              </td>
+            </tr>
+      </tbody>
+    </table>
+
+
 
 
 
@@ -2481,7 +2548,7 @@ Availability depends on the method used and may be different from that of <code>
 
     <div class="doc doc-contents ">
 
-      <p>Constructor.</p>
+        <p>Constructor.</p>
 
 
 <table>
@@ -2493,7 +2560,9 @@ Availability depends on the method used and may be different from that of <code>
       </thead>
       <tbody>
           <tr class="doc-section-item">
-            <td><code>symbol</code></td>
+            <td>
+                <code>symbol</code>
+            </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>Symbol name. Limited to 255 characters. The following characters are not supported in symbols:
@@ -2508,7 +2577,9 @@ Availability depends on the method used and may be different from that of <code>
             </td>
           </tr>
           <tr class="doc-section-item">
-            <td><code>data</code></td>
+            <td>
+                <code>data</code>
+            </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>Data to be written. If data is not of NormalizableType then it will be pickled.</p>
@@ -2522,7 +2593,9 @@ Availability depends on the method used and may be different from that of <code>
             </td>
           </tr>
           <tr class="doc-section-item">
-            <td><code>metadata</code></td>
+            <td>
+                <code>metadata</code>
+            </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>Optional metadata to persist along with the symbol.</p>
@@ -2605,10 +2678,10 @@ Availability depends on the method used and may be different from that of <code>
     </div>
     
     
-    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.6ce7567c.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.471ce7a9.min.js"></script>
+      <script src="../../assets/javascripts/bundle.88dd0f4e.min.js"></script>
       
     
   </body>

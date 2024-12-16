@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/dev/api/query_builder/">
+        <link rel="canonical" href="https://docs.arcticdb.io/dev/api/processing/">
       
       
         <link rel="prev" href="../library_types/">
@@ -17,16 +17,16 @@
         <link rel="next" href="../exceptions/">
       
       
-      <link rel="icon" href="../../images/FullWithBorder.png">
-      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.32">
+      <link rel="icon" href="../../images/ArcticDB Logo.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.49">
     
     
       
-        <title>Query Builder - ArcticDB</title>
+        <title>DataFrame Processing Operations API - ArcticDB</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.3cba04c6.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.6f8fc17f.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
@@ -43,8 +43,8 @@
         
         
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
-        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Aspekta:300,300i,400,400i,700,700i%7CGeist+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Aspekta";--md-code-font:"Geist Mono"}</style>
       
     
     
@@ -56,7 +56,7 @@
     
       <link rel="stylesheet" href="../../stylesheets/mkdocstrings-python.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#query-builder-api" class="md-skip">
+        <a href="#dataframe-processing-operations-api" class="md-skip">
           Skip to content
         </a>
       
@@ -112,12 +112,12 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="../.." title="ArcticDB" class="md-header__button md-logo" aria-label="ArcticDB" data-md-component="logo">
       
-  <img src="../../images/FullWithBorder.png" alt="logo">
+  <img src="../../images/ArcticDB Logo.svg" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
       
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
     </label>
     <div class="md-header__title" data-md-component="header-title">
       <div class="md-header__ellipsis">
@@ -129,7 +129,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Query Builder
+              DataFrame Processing Operations API
             
           </span>
         </div>
@@ -143,7 +143,7 @@
     
       <label class="md-header__button md-icon" for="__search">
         
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
       </label>
       <div class="md-search" data-md-component="search" role="dialog">
   <label class="md-search__overlay" for="__search"></label>
@@ -152,15 +152,15 @@
       <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
       <label class="md-search__icon md-icon" for="__search">
         
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
         
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
       </label>
       <nav class="md-search__options" aria-label="Search">
         
         <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
           
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
         </button>
       </nav>
       
@@ -183,7 +183,7 @@
         <a href="https://github.com/man-group/ArcticDB" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.6.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
   </div>
   <div class="md-source__repository">
     man-group/ArcticDB
@@ -308,11 +308,13 @@
   
 
 
-<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
     <a href="../.." title="ArcticDB" class="md-nav__button md-logo" aria-label="ArcticDB" data-md-component="logo">
       
-  <img src="../../images/FullWithBorder.png" alt="logo">
+  <img src="../../images/ArcticDB Logo.svg" alt="logo">
 
     </a>
     ArcticDB
@@ -322,7 +324,7 @@
       <a href="https://github.com/man-group/ArcticDB" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.6.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
   </div>
   <div class="md-source__repository">
     man-group/ArcticDB
@@ -1106,6 +1108,27 @@
   
   
     <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_lazydataframe/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LazyDataFrame Notebook
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../notebooks/ArcticDB_demo_querybuilder/" class="md-nav__link">
         
   
@@ -1423,7 +1446,7 @@
           
   
   <span class="md-ellipsis">
-    Query Builder
+    DataFrame Processing Operations API
   </span>
   
 
@@ -1434,7 +1457,7 @@
         
   
   <span class="md-ellipsis">
-    Query Builder
+    DataFrame Processing Operations API
   </span>
   
 
@@ -1454,6 +1477,72 @@
       Table of contents
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#arcticdb.LazyDataFrame" class="md-nav__link">
+    <span class="md-ellipsis">
+      LazyDataFrame
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="LazyDataFrame">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#arcticdb.LazyDataFrame.collect" class="md-nav__link">
+    <span class="md-ellipsis">
+      collect
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arcticdb.LazyDataFrameCollection" class="md-nav__link">
+    <span class="md-ellipsis">
+      LazyDataFrameCollection
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="LazyDataFrameCollection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#arcticdb.LazyDataFrameCollection.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      __init__
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arcticdb.LazyDataFrameCollection.collect" class="md-nav__link">
+    <span class="md-ellipsis">
+      collect
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arcticdb.LazyDataFrameCollection.split" class="md-nav__link">
+    <span class="md-ellipsis">
+      split
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
   <a href="#arcticdb.QueryBuilder" class="md-nav__link">
@@ -1520,6 +1609,15 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#arcticdb.QueryBuilder.head" class="md-nav__link">
+    <span class="md-ellipsis">
+      head
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#arcticdb.QueryBuilder.optimise_for_memory" class="md-nav__link">
     <span class="md-ellipsis">
       optimise_for_memory
@@ -1550,6 +1648,24 @@
   <a href="#arcticdb.QueryBuilder.resample" class="md-nav__link">
     <span class="md-ellipsis">
       resample
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arcticdb.QueryBuilder.row_range" class="md-nav__link">
+    <span class="md-ellipsis">
+      row_range
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arcticdb.QueryBuilder.tail" class="md-nav__link">
+    <span class="md-ellipsis">
+      tail
     </span>
   </a>
   
@@ -1613,146 +1729,6 @@
               </div>
             
             
-              
-              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
-                <div class="md-sidebar__scrollwrap">
-                  <div class="md-sidebar__inner">
-                    
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#arcticdb.QueryBuilder" class="md-nav__link">
-    <span class="md-ellipsis">
-      QueryBuilder
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="QueryBuilder">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#arcticdb.QueryBuilder--timestamp-filtering" class="md-nav__link">
-    <span class="md-ellipsis">
-      Timestamp filtering
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#arcticdb.QueryBuilder--restrictions" class="md-nav__link">
-    <span class="md-ellipsis">
-      Restrictions
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#arcticdb.QueryBuilder--exceptions" class="md-nav__link">
-    <span class="md-ellipsis">
-      Exceptions
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#arcticdb.QueryBuilder.apply" class="md-nav__link">
-    <span class="md-ellipsis">
-      apply
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#arcticdb.QueryBuilder.date_range" class="md-nav__link">
-    <span class="md-ellipsis">
-      date_range
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#arcticdb.QueryBuilder.groupby" class="md-nav__link">
-    <span class="md-ellipsis">
-      groupby
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#arcticdb.QueryBuilder.optimise_for_memory" class="md-nav__link">
-    <span class="md-ellipsis">
-      optimise_for_memory
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#arcticdb.QueryBuilder.optimise_for_speed" class="md-nav__link">
-    <span class="md-ellipsis">
-      optimise_for_speed
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#arcticdb.QueryBuilder.prepend" class="md-nav__link">
-    <span class="md-ellipsis">
-      prepend
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#arcticdb.QueryBuilder.resample" class="md-nav__link">
-    <span class="md-ellipsis">
-      resample
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#arcticdb.QueryBuilder.then" class="md-nav__link">
-    <span class="md-ellipsis">
-      then
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-                  </div>
-                </div>
-              </div>
-            
           
           
             <div class="md-content" data-md-component="content">
@@ -1767,8 +1743,381 @@
   
 
 
-<h1 id="query-builder-api">Query Builder API<a class="headerlink" href="#query-builder-api" title="Permanent link">&para;</a></h1>
+<h1 id="dataframe-processing-operations-api">DataFrame Processing Operations API<a class="headerlink" href="#dataframe-processing-operations-api" title="Permanent link">&para;</a></h1>
 
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="arcticdb.LazyDataFrame" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">arcticdb.LazyDataFrame</span>
+
+
+<a href="#arcticdb.LazyDataFrame" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="#arcticdb.QueryBuilder">QueryBuilder</a></code></p>
+
+
+        <p>Lazy dataframe implementation, allowing chains of queries to be added before the read is actually executed.
+Returned by <code>Library.read</code>, <code>Library.head</code>, and <code>Library.tail</code> calls when <code>lazy=True</code>.</p>
+
+
+<details class="see-also" open>
+  <summary>See Also</summary>
+  <p>QueryBuilder for supported querying operations.</p>
+</details>
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt;</span>
+<span class="go"># Specify that we want version 0 of &quot;test&quot; symbol, and to only return the &quot;new_column&quot; column in the output</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;test&quot;</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;new_column&quot;</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="go"># Perform a filtering operation</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df</span> <span class="o">=</span> <span class="n">lazy_df</span><span class="p">[</span><span class="n">lazy_df</span><span class="p">[</span><span class="s2">&quot;col1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">9</span><span class="p">)]</span>
+<span class="go"># Create a new column through a projection operation</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df</span><span class="p">[</span><span class="s2">&quot;new_col&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">lazy_df</span><span class="p">[</span><span class="s2">&quot;col1&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">lazy_df</span><span class="p">[</span><span class="s2">&quot;col2&quot;</span><span class="p">]</span>
+<span class="go"># Actual read and processing happens here</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">lazy_df</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">METHOD</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="arcticdb.LazyDataFrame.collect" href="#arcticdb.LazyDataFrame.collect">collect</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>Read the data and execute any queries applied to this object since the read call.</p>
+                </div>
+              </td>
+            </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="arcticdb.LazyDataFrame.collect" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">collect</span>
+
+
+<a href="#arcticdb.LazyDataFrame.collect" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">collect</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Read the data and execute any queries applied to this object since the read call.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>Object that contains a .data and .metadata element.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="arcticdb.LazyDataFrameCollection" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">arcticdb.LazyDataFrameCollection</span>
+
+
+<a href="#arcticdb.LazyDataFrameCollection" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="#arcticdb.QueryBuilder">QueryBuilder</a></code></p>
+
+
+        <p>Lazy dataframe implementation for batch operations. Allows the application of chains of queries to be added before
+the actual reads are performed. Queries applied to this object will be applied to all  the symbols being read.
+If per-symbol queries are required, split can be used to break this class into a list of <code>LazyDataFrame</code> objects.
+Returned by <code>Library.read_batch</code> calls when <code>lazy=True</code>.</p>
+
+
+<details class="see-also" open>
+  <summary>See Also</summary>
+  <p>QueryBuilder for supported querying operations.</p>
+</details>
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt;</span>
+<span class="go"># Specify that we want the latest version of &quot;test_0&quot; symbol, and version 0 of &quot;test_1&quot; symbol</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">&quot;test_0&quot;</span><span class="p">,</span> <span class="n">ReadRequest</span><span class="p">(</span><span class="s2">&quot;test_1&quot;</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="mi">0</span><span class="p">)],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="go"># Perform a filtering operation on both the &quot;test_0&quot; and &quot;test_1&quot; symbols</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lazy_dfs</span><span class="p">[</span><span class="n">lazy_dfs</span><span class="p">[</span><span class="s2">&quot;col1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">9</span><span class="p">)]</span>
+<span class="go"># Perform a different projection operation on each symbol</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lazy_dfs</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">&quot;new_col&quot;</span><span class="p">,</span> <span class="n">lazy_dfs</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;col1&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">&quot;new_col&quot;</span><span class="p">,</span> <span class="n">lazy_dfs</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;col1&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="mi">2</span><span class="p">)</span>
+<span class="go"># Bring together again and perform the same filter on both symbols</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">LazyDataFrameCollection</span><span class="p">(</span><span class="n">lazy_dfs</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lazy_dfs</span><span class="p">[</span><span class="n">lazy_dfs</span><span class="p">[</span><span class="s2">&quot;new_col&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span>
+<span class="go"># Actual read and processing happens here</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">res</span> <span class="o">=</span> <span class="n">lazy_dfs</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">METHOD</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="arcticdb.LazyDataFrameCollection.__init__" href="#arcticdb.LazyDataFrameCollection.__init__">__init__</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>Gather a list of <code>LazyDataFrame</code>s into a single object that can be collected together.</p>
+                </div>
+              </td>
+            </tr>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="arcticdb.LazyDataFrameCollection.collect" href="#arcticdb.LazyDataFrameCollection.collect">collect</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>Read the data and execute any queries applied to this object since the read_batch call.</p>
+                </div>
+              </td>
+            </tr>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="arcticdb.LazyDataFrameCollection.split" href="#arcticdb.LazyDataFrameCollection.split">split</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>Separate the collection into a list of LazyDataFrames, including any queries already applied to this object.</p>
+                </div>
+              </td>
+            </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="arcticdb.LazyDataFrameCollection.__init__" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">__init__</span>
+
+
+<a href="#arcticdb.LazyDataFrameCollection.__init__" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="fm">__init__</span><span class="p">(</span><span class="nf">lazy_dataframes</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.LazyDataFrame" href="#arcticdb.LazyDataFrame">LazyDataFrame</a></span><span class="p">])</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Gather a list of <code>LazyDataFrame</code>s into a single object that can be collected together.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>lazy_dataframes</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Collection of <code>LazyDataFrames</code>s to gather together.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="arcticdb.version_store.library.LazyDataFrame" href="#arcticdb.LazyDataFrame">LazyDataFrame</a>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="arcticdb.LazyDataFrameCollection.collect" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">collect</span>
+
+
+<a href="#arcticdb.LazyDataFrameCollection.collect" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">collect</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a></span><span class="p">]]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Read the data and execute any queries applied to this object since the read_batch call.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a>, <a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a>]]</code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>See documentation on <code>Library.read_batch</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="arcticdb.LazyDataFrameCollection.split" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">split</span>
+
+
+<a href="#arcticdb.LazyDataFrameCollection.split" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">split</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.LazyDataFrame" href="#arcticdb.LazyDataFrame">LazyDataFrame</a></span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Separate the collection into a list of LazyDataFrames, including any queries already applied to this object.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="arcticdb.version_store.library.LazyDataFrame" href="#arcticdb.LazyDataFrame">LazyDataFrame</a>]</code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-class">
 
@@ -1784,7 +2133,7 @@
     <div class="doc doc-contents first">
 
 
-      <p>Build a query to process read results with. Syntax is designed to be similar to Pandas:</p>
+        <p>Build a query to process read results with. Syntax is designed to be similar to Pandas:</p>
 <pre><code>q = adb.QueryBuilder()
 q = q[q["a"] &lt; 5] (equivalent to q = q[q.a &lt; 5] provided the column name is also a valid Python variable name)
 dataframe = lib.read(symbol, query_builder=q).data
@@ -1851,6 +2200,115 @@ Query involves arithmetic with a column containing strings</p>
 
 
 
+
+
+
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">METHOD</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="arcticdb.QueryBuilder.apply" href="#arcticdb.QueryBuilder.apply">apply</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>Apply enables new columns to be created using supported QueryBuilder numeric operations. See the documentation for the</p>
+                </div>
+              </td>
+            </tr>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="arcticdb.QueryBuilder.date_range" href="#arcticdb.QueryBuilder.date_range">date_range</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>DateRange to read data for.  Applicable only for Pandas data with a DateTime index. Returns only the part</p>
+                </div>
+              </td>
+            </tr>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="arcticdb.QueryBuilder.groupby" href="#arcticdb.QueryBuilder.groupby">groupby</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following five aggregation</p>
+                </div>
+              </td>
+            </tr>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="arcticdb.QueryBuilder.head" href="#arcticdb.QueryBuilder.head">head</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>Filter out all but the first n rows of data. If n is negative, return all rows except the last n rows.</p>
+                </div>
+              </td>
+            </tr>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="arcticdb.QueryBuilder.optimise_for_memory" href="#arcticdb.QueryBuilder.optimise_for_memory">optimise_for_memory</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>Reduce peak memory usage during the query, at the expense of some performance.</p>
+                </div>
+              </td>
+            </tr>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="arcticdb.QueryBuilder.optimise_for_speed" href="#arcticdb.QueryBuilder.optimise_for_speed">optimise_for_speed</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>Process query as fast as possible (the default behaviour)</p>
+                </div>
+              </td>
+            </tr>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="arcticdb.QueryBuilder.prepend" href="#arcticdb.QueryBuilder.prepend">prepend</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>Applies processing specified in other before any processing already defined for this QueryBuilder.</p>
+                </div>
+              </td>
+            </tr>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="arcticdb.QueryBuilder.resample" href="#arcticdb.QueryBuilder.resample">resample</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>Resample a symbol on the index. The symbol must be datetime indexed. Resample operations must be followed by</p>
+                </div>
+              </td>
+            </tr>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="arcticdb.QueryBuilder.row_range" href="#arcticdb.QueryBuilder.row_range">row_range</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.</p>
+                </div>
+              </td>
+            </tr>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="arcticdb.QueryBuilder.tail" href="#arcticdb.QueryBuilder.tail">tail</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>Filter out all but the last n rows of data. If n is negative, return all rows except the first n rows.</p>
+                </div>
+              </td>
+            </tr>
+            <tr class="doc-section-item">
+              <td><code><a class="autorefs autorefs-internal" title="arcticdb.QueryBuilder.then" href="#arcticdb.QueryBuilder.then">then</a></code></td>
+              <td class="doc-function-details">
+                <div class="doc-md-description">
+                  <p>Applies processing specified in other after any processing already defined for this QueryBuilder.</p>
+                </div>
+              </td>
+            </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
   <div class="doc doc-children">
 
 
@@ -1874,7 +2332,7 @@ Query involves arithmetic with a column containing strings</p>
 
     <div class="doc doc-contents ">
 
-      <p>Apply enables new columns to be created using supported QueryBuilder numeric operations. See the documentation for the
+        <p>Apply enables new columns to be created using supported QueryBuilder numeric operations. See the documentation for the
 QueryBuilder class for more information on supported expressions - any expression valid in a filter is valid when using
 <code>apply</code>.</p>
 
@@ -1888,7 +2346,9 @@ QueryBuilder class for more information on supported expressions - any expressio
       </thead>
       <tbody>
           <tr class="doc-section-item">
-            <td><code>name</code></td>
+            <td>
+                <code>name</code>
+            </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>Name of the column to be created</p>
@@ -1898,7 +2358,9 @@ QueryBuilder class for more information on supported expressions - any expressio
             </td>
           </tr>
           <tr class="doc-section-item">
-            <td><code>expr</code></td>
+            <td>
+                <code>expr</code>
+            </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>Expression</p>
@@ -1978,10 +2440,10 @@ QueryBuilder class for more information on supported expressions - any expressio
 
     <div class="doc doc-contents ">
 
-      <p>DateRange to read data for.  Applicable only for Pandas data with a DateTime index. Returns only the part
-of the data that falls within the given range. The returned data object will use less memory than passing
-date_range directly as an argument to the read method, at the cost of being slightly slower.
-Must be the first clause in the QueryBuilder object.</p>
+        <p>DateRange to read data for.  Applicable only for Pandas data with a DateTime index. Returns only the part
+of the data that falls within the given range. If this is the only processing clause being applied, then the
+returned data object will use less memory than passing date_range directly as an argument to the read method, at
+ the cost of possibly being slightly slower.</p>
 
 
 <table>
@@ -1993,7 +2455,9 @@ Must be the first clause in the QueryBuilder object.</p>
       </thead>
       <tbody>
           <tr class="doc-section-item">
-            <td><code>date_range</code></td>
+            <td>
+                <code>date_range</code>
+            </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>A date range in the same format as accepted by the read method.</p>
@@ -2056,7 +2520,7 @@ Must be the first clause in the QueryBuilder object.</p>
 
     <div class="doc doc-contents ">
 
-      <p>Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following five aggregation
+        <p>Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following five aggregation
 operators are supported:</p>
 <ul>
 <li>"mean" - compute the mean of the group</li>
@@ -2077,7 +2541,9 @@ operators are supported:</p>
       </thead>
       <tbody>
           <tr class="doc-section-item">
-            <td><code>name</code></td>
+            <td>
+                <code>name</code>
+            </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>Name of the column to group on. Note that currently GroupBy only supports single-column groupings.</p>
@@ -2196,6 +2662,81 @@ group_2          4          5       2.2
 <div class="doc doc-object doc-function">
 
 
+<h3 id="arcticdb.QueryBuilder.head" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">head</span>
+
+
+<a href="#arcticdb.QueryBuilder.head" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">head</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="n">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Filter out all but the first n rows of data. If n is negative, return all rows except the last n rows.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>n</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Number of rows to select if non-negative, otherwise number of rows to exclude.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>int</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>5</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="#arcticdb.QueryBuilder">QueryBuilder</a></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>Modified QueryBuilder object.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="arcticdb.QueryBuilder.optimise_for_memory" class="doc doc-heading">
             <span class="doc doc-object-name doc-function-name">optimise_for_memory</span>
 
@@ -2206,7 +2747,7 @@ group_2          4          5       2.2
 
     <div class="doc doc-contents ">
 
-      <p>Reduce peak memory usage during the query, at the expense of some performance.</p>
+        <p>Reduce peak memory usage during the query, at the expense of some performance.</p>
 <p>Optimisations applied:</p>
 <ul>
 <li>Memory used by strings that are present in segments read from storage, but are not required in the final dataframe that will be presented back to the user, is reclaimed earlier in the processing pipeline.</li>
@@ -2229,7 +2770,7 @@ group_2          4          5       2.2
 
     <div class="doc doc-contents ">
 
-      <p>Process query as fast as possible (the default behaviour)</p>
+        <p>Process query as fast as possible (the default behaviour)</p>
 
     </div>
 
@@ -2248,7 +2789,7 @@ group_2          4          5       2.2
 
     <div class="doc doc-contents ">
 
-      <p>Applies processing specified in other before any processing already defined for this QueryBuilder.</p>
+        <p>Applies processing specified in other before any processing already defined for this QueryBuilder.</p>
 
 
 <table>
@@ -2260,7 +2801,9 @@ group_2          4          5       2.2
       </thead>
       <tbody>
           <tr class="doc-section-item">
-            <td><code>other</code></td>
+            <td>
+                <code>other</code>
+            </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>QueryBuilder to apply before this one in the processing pipeline.</p>
@@ -2318,7 +2861,7 @@ group_2          4          5       2.2
 
     <div class="doc doc-contents ">
 
-      <p>Resample a symbol on the index. The symbol must be datetime indexed. Resample operations must be followed by
+        <p>Resample a symbol on the index. The symbol must be datetime indexed. Resample operations must be followed by
 an aggregation operator. Currently, the following 7 aggregation operators are supported:</p>
 <ul>
 <li>"mean" - compute the mean of the group</li>
@@ -2357,7 +2900,9 @@ will change the results in cases where the rule is not a multiple of 24 hours.</
       </thead>
       <tbody>
           <tr class="doc-section-item">
-            <td><code>rule</code></td>
+            <td>
+                <code>rule</code>
+            </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>The frequency at which to resample the data. Supported rule strings are ns, us, ms, s, min, h, and D, and
@@ -2373,7 +2918,9 @@ set are also accepted.</p>
             </td>
           </tr>
           <tr class="doc-section-item">
-            <td><code>closed</code></td>
+            <td>
+                <code>closed</code>
+            </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>Which boundary of each time-bucket is closed. Must be one of 'left' or 'right'. If not provided, the default
@@ -2392,7 +2939,9 @@ is left for all currently supported frequencies.</p>
             </td>
           </tr>
           <tr class="doc-section-item">
-            <td><code>label</code></td>
+            <td>
+                <code>label</code>
+            </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>Which boundary of each time-bucket is used as the index value in the returned DataFrame. Must be one of
@@ -2411,7 +2960,9 @@ is left for all currently supported frequencies.</p>
             </td>
           </tr>
           <tr class="doc-section-item">
-            <td><code>offset</code></td>
+            <td>
+                <code>offset</code>
+            </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>Offset the start of each bucket. Supported strings are the same as in <code>pd.Timedelta</code>. If offset is larger than
@@ -2581,17 +3132,18 @@ the output by the right boundary:</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="arcticdb.QueryBuilder.then" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">then</span>
+<h3 id="arcticdb.QueryBuilder.row_range" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">row_range</span>
 
 
-<a href="#arcticdb.QueryBuilder.then" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><span class="nf">then</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+<a href="#arcticdb.QueryBuilder.row_range" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">row_range</span><span class="p">(</span><span class="n">row_range</span><span class="p">:</span> <span class="n"><span title="typing.Tuple">Tuple</span></span><span class="p">[</span><span class="n">int</span><span class="p">,</span> <span class="n">int</span><span class="p">])</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
 
-      <p>Applies processing specified in other after any processing already defined for this QueryBuilder.</p>
+        <p>Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
+Should behave the same as df.iloc[start:end], including in the handling of negative start/end values.</p>
 
 
 <table>
@@ -2603,7 +3155,155 @@ the output by the right boundary:</p>
       </thead>
       <tbody>
           <tr class="doc-section-item">
-            <td><code>other</code></td>
+            <td>
+                <code>row_range</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Tuple">Tuple</span>[int, int]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="#arcticdb.QueryBuilder">QueryBuilder</a></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>Modified QueryBuilder object.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="arcticdb.QueryBuilder.tail" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">tail</span>
+
+
+<a href="#arcticdb.QueryBuilder.tail" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">tail</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="n">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Filter out all but the last n rows of data. If n is negative, return all rows except the first n rows.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>n</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Number of rows to select if non-negative, otherwise number of rows to exclude.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>int</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>5</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="#arcticdb.QueryBuilder">QueryBuilder</a></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>Modified QueryBuilder object.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="arcticdb.QueryBuilder.then" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">then</span>
+
+
+<a href="#arcticdb.QueryBuilder.then" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">then</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Applies processing specified in other after any processing already defined for this QueryBuilder.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>other</code>
+            </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>QueryBuilder to apply after this one in the processing pipeline.</p>
@@ -2697,10 +3397,10 @@ the output by the right boundary:</p>
     </div>
     
     
-    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.6ce7567c.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.471ce7a9.min.js"></script>
+      <script src="../../assets/javascripts/bundle.88dd0f4e.min.js"></script>
       
     
   </body>
