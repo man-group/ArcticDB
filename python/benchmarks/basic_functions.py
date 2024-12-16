@@ -5,6 +5,10 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+<<<<<<< HEAD
+=======
+
+>>>>>>> 3d148970 (Fix asv problems (#2065))
 import time
 from typing import List
 from arcticdb import Arctic
@@ -18,7 +22,7 @@ from .common import *
 WIDE_DF_ROWS = 5_000
 WIDE_DF_COLS = 30_000
 # We use larger dataframes for non-batch methods
-PARAMS = ([1_000_000, 1_500_000])
+PARAMS = [1_000_000, 1_500_000]
 PARAM_NAMES = ["rows"]
 BATCH_PARAMS = ([25_000, 50_000], [500, 1000])
 BATCH_PARAM_NAMES = ["rows", "num_symbols"]
@@ -39,7 +43,9 @@ class BasicFunctions:
         self.ac = Arctic(BasicFunctions.CONNECTION_STRING)
         rows_values = BasicFunctions.params
 
-        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}
+        self.dfs = {
+            rows: generate_pseudo_random_dataframe(rows) for rows in rows_values
+        }
         for rows in rows_values:
             lib = get_prewritten_lib_name(rows)
             self.ac.delete_library(lib)
@@ -136,11 +142,14 @@ class BatchBasicFunctions:
     DATE_RANGE = DATE_RANGE
     params = BATCH_PARAMS
     param_names = BATCH_PARAM_NAMES
+
     def setup_cache(self):
         self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)
         rows_values, num_symbols_values = BatchBasicFunctions.params
 
-        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}
+        self.dfs = {
+            rows: generate_pseudo_random_dataframe(rows) for rows in rows_values
+        }
         for rows in rows_values:
             lib = get_prewritten_lib_name(rows)
             self.ac.delete_library(lib)
@@ -187,7 +196,11 @@ class BatchBasicFunctions:
     def peakmem_read_batch(self, rows, num_symbols):
         read_reqs = [ReadRequest(f"{sym}_sym") for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> 3d148970 (Fix asv problems (#2065))
     def time_read_batch_with_columns(self, rows, num_symbols):
         COLS = ["value"]
         read_reqs = [
@@ -201,7 +214,6 @@ class BatchBasicFunctions:
             ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)
         ]
         self.lib.read_batch(read_reqs)
-
 
     def time_read_batch_with_date_ranges(self, rows, num_symbols):
         read_reqs = [
@@ -222,7 +234,15 @@ def get_time_at_fraction_of_df(fraction, rows):
     time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))
     return end_time + time_delta
 
+def get_time_at_fraction_of_df(fraction, rows):
+    end_time = pd.Timestamp("1/1/2023")
+    time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction - 1)))
+    return end_time + time_delta
+
+
 from shutil import copytree, rmtree
+
+
 class ModificationFunctions:
     """
     Modification functions (update, append, delete) need a different setup/teardown process, thus we place them in a
@@ -282,7 +302,9 @@ class ModificationFunctions:
         self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)
         rows_values = ModificationFunctions.params
 
-        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}
+        self.init_dfs = {
+            rows: generate_pseudo_random_dataframe(rows) for rows in rows_values
+        }
         for rows in rows_values:
             lib_name = get_prewritten_lib_name(rows)
             self.ac.delete_library(lib_name)
@@ -303,7 +325,9 @@ class ModificationFunctions:
 
         # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.
         # Then on each teardown we restore the initial state by overwriting the modified with the original.
-        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)
+        copytree(
+            ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL
+        )
 
         number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds
 
@@ -324,8 +348,9 @@ class ModificationFunctions:
 
         self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)
         self.lib = self.ac[get_prewritten_lib_name(rows)]
-        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]
-
+        self.lib_short_wide = self.ac[
+            get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)
+        ]
 
     def teardown(self, lad: LargeAppendDataModify, rows):
         # After the modification functions clean up the changes by replacing the modified ARCTIC_DIR with the original ARCTIC_DIR_ORIGINAL

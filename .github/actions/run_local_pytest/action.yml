@@ -11,12 +11,13 @@ runs:
     - name: Run local pytests
       shell: bash
       run: |
-        yum install nodejs npm -y
+        dnf install -y nodejs npm
         npm config set strict-ssl false
         npm install -g azurite
         
         cd python
-        ln -s ../cpp/out/linux-${{ inputs.build_type }}-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
+        ls ../cpp/out/linux-${{ inputs.build_type }}-build/arcticdb
+        ln -s ../cpp/out/linux-${{ inputs.build_type }}-build/arcticdb/arcticdb_ext.cpython-311-x86_64-linux-gnu.so
         export ARCTICDB_RAND_SEED=$RANDOM
         python ${{inputs.other_params}} -m pytest --timeout=3600 -n ${{ inputs.threads }} tests
       env:
