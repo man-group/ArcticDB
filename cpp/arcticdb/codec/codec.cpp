@@ -467,6 +467,8 @@ void decode_v2(const Segment& segment,
                 auto& col = res.column(static_cast<position_t>(*col_index));
 
                 data += decode_field(res.field(*col_index).type(), *encoded_field, data, col, col.opt_sparse_map(), hdr.encoding_version());
+                col.set_statistics(encoded_field->get_statistics());
+
                 seg_row_count = std::max(seg_row_count, calculate_last_row(col));
             } else {
                 data += encoding_sizes::field_compressed_size(*encoded_field) + sizeof(ColumnMagic);
@@ -533,6 +535,7 @@ void decode_v1(const Segment& segment,
                     hdr.encoding_version()
                 );
                 seg_row_count = std::max(seg_row_count, calculate_last_row(col));
+                col.set_statistics(field.get_statistics());
                 ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", i, data - begin);
             } else {
                 data += encoding_sizes::field_compressed_size(field);
