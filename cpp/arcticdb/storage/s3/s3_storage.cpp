@@ -10,6 +10,7 @@
 #include <locale>
 
 #include <aws/identity-management/auth/STSProfileCredentialsProvider.h>
+#include <aws/sts/STSEndpointProvider.h>
 
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
@@ -100,12 +101,20 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const S3Set
     }
     else if (conf.aws_auth() == AWSAuthMethod::STS_PROFILE_CREDENTIALS_PROVIDER){
         Aws::Config::ReloadCachedConfigFile(); // config files loaded in Aws::InitAPI; It runs once at first S3Storage object construct; reload to get latest
+        auto client_config = get_s3_config(conf);
+        auto sts_client_factory = [&](const Aws::Auth::AWSCredentials& creds) { // Get default allocation tag
+            auto sts_config = get_proxy_config(conf.https() ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP);
+            auto allocation_tag = Aws::STS::STSClient::GetAllocationTag();
+            sts_client_ = std::make_unique<Aws::STS::STSClient>(creds, Aws::MakeShared<Aws::STS::Endpoint::STSEndpointProvider>(allocation_tag), sts_config);
+            return sts_client_.get();
+        };
         auto cred_provider = Aws::MakeShared<Aws::Auth::STSProfileCredentialsProvider>(
                                 "DefaultAWSCredentialsProviderChain", 
                                 conf.aws_profile(), 
-                                std::chrono::minutes(static_cast<size_t>(ConfigsMap::instance()->get_int("S3Storage.STSTokenExpiryMin", 60)))
+                                std::chrono::minutes(static_cast<size_t>(ConfigsMap::instance()->get_int("S3Storage.STSTokenExpiryMin", 60))),
+                                sts_client_factory
                             );
-        s3_client_ = std::make_unique<RealS3Client>(cred_provider, get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
+        s3_client_ = std::make_unique<RealS3Client>(cred_provider, client_config, Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
     }
     else if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN && creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN){
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms");

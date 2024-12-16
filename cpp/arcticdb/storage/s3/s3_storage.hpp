@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <aws/sts/STSClient.h>
+
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
 #include <aws/core/Aws.h>
@@ -79,6 +81,10 @@ class S3Storage final : public Storage {
 
     std::shared_ptr<S3ApiInstance> s3_api_;
     std::unique_ptr<S3ClientWrapper> s3_client_;
+    //aws sdk annoyingly requires raw pointer being passed in the sts client factory to the s3 client
+    //thus sts_client_ should have same life span as s3_client_
+    std::unique_ptr<Aws::STS::STSClient> sts_client_;
+    
     std::string root_folder_;
     std::string bucket_name_;
     std::string region_;
