@@ -356,8 +356,12 @@ static void encode_encoded_fields(
         ARCTICDB_TRACE(log::codec(), "Encoding fields");
         for (std::size_t column_index = 0; column_index < in_mem_seg.num_columns(); ++column_index) {
             write_magic<ColumnMagic>(*out_buffer, pos);
-            auto column_data = in_mem_seg.column_data(column_index);
+            const auto& column = in_mem_seg.column(column_index);
+            auto column_data = column.data();
             auto* column_field = encoded_fields.add_field(column_data.num_blocks());
+            if(column.has_statistics())
+                column_field->set_statistics(column.get_statistics());
+
             ARCTICDB_TRACE(log::codec(),"Beginning encoding of column {}: ({}) to position {}", column_index, in_mem_seg.descriptor().field(column_index).name(), pos);
 
             if(column_data.num_blocks() > 0) {

@@ -235,6 +235,10 @@ public:
         impl_->reset_timeseries_descriptor();
     }
 
+    void calculate_statistics() {
+        impl_->calculate_statistics();
+    }
+
     [[nodiscard]] size_t num_columns() const { return impl_->num_columns(); }
 
     [[nodiscard]] size_t row_count() const { return impl_->row_count(); }

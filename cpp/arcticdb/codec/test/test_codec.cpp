@@ -512,6 +512,86 @@ TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV2) {
     ASSERT_EQ(decoded, copy);
 }
 
+TEST(Segment, RoundtripStatisticsV1) {
+    ScopedConfig reload_interval("Statistics.GenerateOnWrite", 1);
+    const auto stream_desc = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
+        scalar_field(DataType::UINT8, "int8"),
+        scalar_field(DataType::FLOAT64, "doubles")
+    });
+
+    SegmentInMemory in_mem_seg{stream_desc.clone()};
+    constexpr size_t num_rows = 10;
+    for(auto i = 0UL; i < num_rows; ++i) {
+        in_mem_seg.set_scalar<uint8_t>(0, static_cast<uint8_t>(i));
+        in_mem_seg.set_scalar<double>(1, static_cast<double>(i * 2));
+        in_mem_seg.end_row();
+    }
+    in_mem_seg.calculate_statistics();
+    auto copy = in_mem_seg.clone();
+    auto seg = encode_v1(std::move(in_mem_seg), codec::default_lz4_codec());
+    std::vector<uint8_t> vec;
+    const auto bytes = seg.calculate_size();
+    vec.resize(bytes);
+    seg.write_to(vec.data());
+    auto unserialized = Segment::from_bytes(vec.data(), bytes);
+    SegmentInMemory decoded{stream_desc.clone()};
+    decode_v1(unserialized, unserialized.header(), decoded, unserialized.descriptor());
+    auto col1_stats = decoded.column(0).get_statistics();
+    ASSERT_TRUE(col1_stats.has_max());
+    ASSERT_EQ(col1_stats.get_max<uint8_t>(), 9);
+    ASSERT_TRUE(col1_stats.has_max());
+    ASSERT_EQ(col1_stats.get_min<uint8_t>(), 0);
+    ASSERT_TRUE(col1_stats.has_unique());
+    ASSERT_EQ(col1_stats.get_unique_count(), 10);
+    auto col2_stats = decoded.column(1).get_statistics();
+    ASSERT_TRUE(col2_stats.has_max());
+    ASSERT_EQ(col2_stats.get_max<double>(), 18.0);
+    ASSERT_TRUE(col2_stats.has_max());
+    ASSERT_EQ(col2_stats.get_min<uint8_t>(), 0);
+    ASSERT_TRUE(col2_stats.has_unique());
+    ASSERT_EQ(col2_stats.get_unique_count(), 10);
+}
+
+TEST(Segment, RoundtripStatisticsV2) {
+    ScopedConfig reload_interval("Statistics.GenerateOnWrite", 1);
+    const auto stream_desc = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
+        scalar_field(DataType::UINT8, "int8"),
+        scalar_field(DataType::FLOAT64, "doubles")
+    });
+
+    SegmentInMemory in_mem_seg{stream_desc.clone()};
+    constexpr size_t num_rows = 10;
+    for(auto i = 0UL; i < num_rows; ++i) {
+        in_mem_seg.set_scalar<uint8_t>(0, static_cast<uint8_t>(i));
+        in_mem_seg.set_scalar<double>(1, static_cast<double>(i * 2));
+        in_mem_seg.end_row();
+    }
+    in_mem_seg.calculate_statistics();
+    auto copy = in_mem_seg.clone();
+    auto seg = encode_v2(std::move(in_mem_seg), codec::default_lz4_codec());
+    std::vector<uint8_t> vec;
+    const auto bytes = seg.calculate_size();
+    vec.resize(bytes);
+    seg.write_to(vec.data());
+    auto unserialized = Segment::from_bytes(vec.data(), bytes);
+    SegmentInMemory decoded{stream_desc.clone()};
+    decode_v2(unserialized, unserialized.header(), decoded, unserialized.descriptor());
+    auto col1_stats = decoded.column(0).get_statistics();
+    ASSERT_TRUE(col1_stats.has_max());
+    ASSERT_EQ(col1_stats.get_max<uint8_t>(), 9);
+    ASSERT_TRUE(col1_stats.has_max());
+    ASSERT_EQ(col1_stats.get_min<uint8_t>(), 0);
+    ASSERT_TRUE(col1_stats.has_unique());
+    ASSERT_EQ(col1_stats.get_unique_count(), 10);
+    auto col2_stats = decoded.column(1).get_statistics();
+    ASSERT_TRUE(col2_stats.has_max());
+    ASSERT_EQ(col2_stats.get_max<double>(), 18.0);
+    ASSERT_TRUE(col2_stats.has_max());
+    ASSERT_EQ(col2_stats.get_min<uint8_t>(), 0);
+    ASSERT_TRUE(col2_stats.has_unique());
+    ASSERT_EQ(col2_stats.get_unique_count(), 10);
+}
+
 TEST(Segment, ColumnNamesProduceDifferentHashes) {
     const auto stream_desc_1 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
         scalar_field(DataType::UINT8, "ints1"),
