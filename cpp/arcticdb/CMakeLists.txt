@@ -961,6 +961,7 @@ if(${TEST})
             stream/test/stream_test_common.cpp
             stream/test/test_aggregator.cpp
             stream/test/test_incompletes.cpp
+            stream/test/test_append_map.cpp
             stream/test/test_protobuf_mappings.cpp
             stream/test/test_row_builder.cpp
             stream/test/test_segment_aggregator.cpp
@@ -997,8 +998,7 @@ if(${TEST})
             version/test/test_version_map_batch.cpp
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
-            python/python_handlers.cpp
-)
+            python/python_handlers.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

@@ -6,7 +6,6 @@
  */
 
 #include <gtest/gtest.h>
-#include <cstdint>
 #include <limits>
 
 #include <arcticdb/column_store/memory_segment.hpp>
