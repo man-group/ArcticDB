@@ -256,7 +256,7 @@ def query_resample() -> QueryBuilder:
         )
 
 
-def query_row_range(size:int) -> QueryBuilder:
+def query_row_range(size: int) -> QueryBuilder:
     """
     Row range query for QueryBuilder memory tests
     Pass size of dataframe and it will generate random row range
