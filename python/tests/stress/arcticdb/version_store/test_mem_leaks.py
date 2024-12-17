@@ -448,11 +448,10 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:
     end_date = df.index[-1]
 
     symbol = "test"
+    queries = []
     lib.write(symbol, df)
     del df
     gc.collect()
-
-    queries = []
 
     queries = [query_groupby_with_aggregations(), 
                 query_group_with_aggregations_bigger_result(), 
