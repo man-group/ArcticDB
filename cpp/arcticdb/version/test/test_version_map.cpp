@@ -669,8 +669,12 @@ TEST(VersionMap, FollowingVersionChainWithCaching){
 
     // LATEST should still be cached, but the cached entry now needs to have no undeleted keys
     check_loads_versions(LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, 2, 0);
+    EXPECT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(-1)}));
     // FROM_TIME UNDELETED_ONLY should no longer be cached even though we used the same request before because the undeleted key it went to got deleted. So it will load the entire version chain
     check_loads_versions(LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(10)}, 3, 0);
+    // We have the full version chain loaded, so has_cached_entry should always return true (even when requesting timestamp before earliest version)
+    EXPECT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(-1)}));
+    EXPECT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(-1)}));
 
     // We add a new undeleted key
     auto key4 = atom_key_with_version(id, 3, 5);
@@ -979,8 +983,8 @@ TEST(VersionMap, TombstoneAllFromEntry) {
     ASSERT_EQ(version_id, 0);
 
 
-    // With cached entry from the write ops  
-    // Tombstone all should succeed as we are not relying on the ref key      
+    // With cached entry from the write ops
+    // Tombstone all should succeed as we are not relying on the ref key
     version_map->tombstone_from_key_or_all(store, id, dummy_key, entry);
 
     auto [maybe_prev_cached_entry, deleted_cached_entry] = get_latest_version(store, version_map, id);
