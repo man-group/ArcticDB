@@ -7,7 +7,9 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import pandas as pd
-from numpy import inf
+
+# Importing inf and nan so they can be evaluated correctly during extraction
+from numpy import inf, nan
 from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables
 import json
 from pathlib import Path
