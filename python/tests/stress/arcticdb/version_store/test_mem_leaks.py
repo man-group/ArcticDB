@@ -27,7 +27,7 @@ from arcticdb.util.test import get_sample_dataframe, random_string
 from arcticdb.version_store.library import Library, ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore
-from tests.util.mark import MACOS, WINDOWS, MEMRAY_SUPPORTED, MEMRAY_TESTS_MARK, SKIP_CONDA_MARK 
+from tests.util.mark import MACOS, SLOW_TESTS_MARK, WINDOWS, MEMRAY_SUPPORTED, MEMRAY_TESTS_MARK, SKIP_CONDA_MARK 
 
 
 logging.basicConfig(level=logging.INFO)
@@ -550,9 +550,11 @@ if MEMRAY_SUPPORTED:
         (lib, df, symbol) = library_with_symbol
         mem_query(lib, df)
 
+    @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_leaks(location_limit = "25 KB" if not MACOS else "35 KB", 
                              filter_fn = is_relevant)
+    @pytest.mark.xfail(reason = "read() memory leaks Monday#8067881190")
     def test_mem_leak_querybuilder_read_manyrepeats_memray(library_with_tiny_symbol):
         """
             Test to capture memory leaks >= of specified number
@@ -563,7 +565,24 @@ if MEMRAY_SUPPORTED:
             what we must exclude from calculation
         """
         (lib, df, symbol) = library_with_tiny_symbol
-        mem_query(lib, df, 125)        
+        mem_query(lib, df, num_repetitions=125)         
+
+    @SLOW_TESTS_MARK
+    @MEMRAY_TESTS_MARK
+    @pytest.mark.xfail(reason = "read() memory leaks Monday#8067881190")
+    @pytest.mark.limit_leaks(location_limit = "25 KB" if not MACOS else "35 KB", 
+                             filter_fn = is_relevant)
+    def test_mem_leak_querybuilder_read_batch_manyrepeats_memray(library_with_tiny_symbol):
+        """
+            Test to capture memory leaks >= of specified number
+
+            NOTE: we could filter out not meaningful for us stackframes
+            in future if something outside of us start to leak using
+            the argument "filter_fn" - just add to the filter function
+            what we must exclude from calculation
+        """
+        (lib, df, symbol) = library_with_tiny_symbol
+        mem_query(lib, df, num_repetitions=125, read_batch=True)        
 
 
     @MEMRAY_TESTS_MARK
