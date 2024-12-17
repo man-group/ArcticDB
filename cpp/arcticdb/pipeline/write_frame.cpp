@@ -16,7 +16,6 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/variant.hpp>
-#include <arcticdb/python/python_types.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/stream/append_map.hpp>
@@ -252,41 +251,52 @@ static RowRange partial_rewrite_row_range(
     }
 }
 
+folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
+        const SliceAndKey& existing,
+        const IndexRange& index_range,
+        VersionId version_id,
+        AffectedSegmentPart affected_part,
+        const std::shared_ptr<Store>& store) {
+    return store->read(existing.key()).thenValue([=](std::pair<VariantKey, SegmentInMemory>&& key_segment) {
+        const auto& key = existing.key();
+        const SegmentInMemory& segment = key_segment.second;
+        const RowRange affected_row_range = partial_rewrite_row_range(segment, index_range, affected_part);
+        const int64_t num_rows = affected_row_range.end() - affected_row_range.start();
+        if (num_rows <= 0) {
+            return folly::Future<std::optional<SliceAndKey>>{std::nullopt};
+        }
+        SegmentInMemory output = segment.truncate(affected_row_range.start(), affected_row_range.end(), true);
+        const IndexValue start_ts = TimeseriesIndex::start_value_for_segment(output);
+        // +1 as in the key we store one nanosecond greater than the last index value in the segment
+        const IndexValue end_ts = std::get<NumericIndex>(TimeseriesIndex::end_value_for_segment(output)) + 1;
+        FrameSlice new_slice{
+            std::make_shared<StreamDescriptor>(output.descriptor()),
+            existing.slice_.col_range,
+            RowRange{0, num_rows},
+            existing.slice_.hash_bucket(),
+            existing.slice_.num_buckets()};
+       return store->write(
+             key.type(),
+             version_id,
+             key.id(),
+             start_ts,
+             end_ts,
+             std::move(output)
+       ).thenValue([new_slice=std::move(new_slice)](VariantKey&& k) -> folly::Future<std::optional<SliceAndKey>> {
+          return std::make_optional<SliceAndKey>(std::move(new_slice), std::get<AtomKey>(std::move(k)));
+       });
+    });
+}
+
 std::optional<SliceAndKey> rewrite_partial_segment(
         const SliceAndKey& existing,
         const IndexRange& index_range,
         VersionId version_id,
         AffectedSegmentPart affected_part,
         const std::shared_ptr<Store>& store) {
-    const auto& key = existing.key();
-    auto kv = store->read(key).get();
-    const SegmentInMemory& segment = kv.second;
-    const RowRange affected_row_range = partial_rewrite_row_range(segment, index_range, affected_part);
-    const int64_t num_rows = affected_row_range.end() - affected_row_range.start();
-    if (num_rows <= 0) {
-        return std::nullopt;
-    }
-    SegmentInMemory output = segment.truncate(affected_row_range.start(), affected_row_range.end(), true);
-    const IndexValue start_ts = TimeseriesIndex::start_value_for_segment(output);
-    // +1 as in the key we store one nanosecond greater than the last index value in the segment
-    const IndexValue end_ts = std::get<NumericIndex>(TimeseriesIndex::end_value_for_segment(output)) + 1;
-    FrameSlice new_slice{
-        std::make_shared<StreamDescriptor>(output.descriptor()),
-        existing.slice_.col_range,
-        RowRange{0, num_rows},
-        existing.slice_.hash_bucket(),
-        existing.slice_.num_buckets()};
-
-    auto fut_key = store->write(
-        key.type(),
-        version_id,
-        key.id(),
-        start_ts,
-        end_ts,
-        std::move(output)
-    );
-    return SliceAndKey{std::move(new_slice), std::get<AtomKey>(std::move(fut_key).get())};
+    return async_rewrite_partial_segment(existing, index_range, version_id, affected_part, store).get();
 }
+
 
 std::vector<SliceAndKey> flatten_and_fix_rows(const std::array<std::vector<SliceAndKey>, 5>& groups, size_t& global_count) {
     std::vector<SliceAndKey> output;

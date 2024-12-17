@@ -8,11 +8,8 @@
 #pragma once
 
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <arcticdb/codec/segment.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>
-#include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/async/batch_read_args.hpp>
 #include <arcticdb/processing/clause.hpp>
 

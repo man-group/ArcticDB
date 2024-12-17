@@ -190,7 +190,7 @@ template <class KeyContainer>
     }
 }
 
-inline std::pair<std::vector<SliceAndKey>, std::vector<SliceAndKey>> intersecting_segments(
+[[nodiscard]] std::pair<std::vector<SliceAndKey>, std::vector<SliceAndKey>> intersecting_segments(
     const std::vector<SliceAndKey>& affected_keys,
     const IndexRange& front_range,
     const IndexRange& back_range,
