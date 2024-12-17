@@ -6,10 +6,11 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import datetime
+import inspect
 import itertools
 import sys
 from collections import namedtuple
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 import numpy as np
 import pandas as pd
 import dateutil as du
@@ -714,3 +715,38 @@ def test_series_zero_name(lmdb_version_store, sym):
     lib.write(sym, series)
     vit = lib.read(sym)
     assert vit.data.equals(series)
+
+@pytest.mark.parametrize(
+    "returns_expected",
+    [
+        {"returns": ArcticDbNotYetImplemented(), "expected": ArcticDbNotYetImplemented},
+        {"returns": Exception(), "expected": ArcticNativeException},
+        {"returns": (MagicMock(), None), "expected": ArcticNativeException}
+    ]
+)
+@pytest.mark.parametrize(
+    "method_to_test",
+    [
+        "write", "update", "stage", "append"
+    ]
+)
+def test_throws_correct_exceptions(returns_expected, method_to_test, lmdb_version_store):
+    mock_normalizer = MagicMock(name="mock_normalizer")
+    returns = returns_expected["returns"]
+    expected = returns_expected["expected"]
+    normalize_method_mock = mock_normalizer.normalize
+    if isinstance(returns, Exception):
+        normalize_method_mock.side_effect = returns
+    else:
+        normalize_method_mock.return_value = returns
+    lib = lmdb_version_store
+    lib._normalizer = mock_normalizer
+
+    method_to_test = getattr(lib, method_to_test)
+    non_default_arg_count = sum(
+        1 for param in inspect.signature(method_to_test).parameters.values()
+        if param.default is param.empty
+    ) - 1
+    args = [MagicMock()] * non_default_arg_count
+    with pytest.raises(expected):
+        method_to_test(*args)
