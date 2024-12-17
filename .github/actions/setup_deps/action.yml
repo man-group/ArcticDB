@@ -7,7 +7,7 @@ runs:
       shell: bash -l {0} 
       run: |
         dnf update -y
-        dnf remove -y 'gcc-toolset-13-*'
+        dnf remove -y 'gcc-toolset-*'
         dnf install -y zip flex bison gcc-toolset-10 gcc-toolset-10-gdb gcc-toolset-10-libatomic-devel krb5-devel cyrus-sasl-devel openssl-devel \
         unzip tar epel-release jq wget libcurl-devel \
         python3.11-devel python3.11-pip perl-IPC-Cmd
