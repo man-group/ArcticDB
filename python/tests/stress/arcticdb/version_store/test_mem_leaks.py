@@ -436,6 +436,21 @@ def library_with_symbol(arctic_library_lmdb) -> Generator[Tuple[Library, pd.Data
     lib.write(symbol, df)
     yield (lib, df, symbol)
 
+@pytest.fixture
+def library_with_tiny_symbol(arctic_library_lmdb) -> Generator[Tuple[Library, pd.DataFrame, str], None, None]:
+    """
+    As memray instruments memory, we need to take out 
+    everything not relevant from mem leak measurement out of 
+    test, and place it in setup of the test - in other words in the fixture 
+    Otherwise, memray instruments that code and it results in much slower execution
+    as well as mixing results of memory leaks 
+    """
+    lib: Library = arctic_library_lmdb
+    symbol = "test"
+    df = construct_df_querybuilder_tests(size=300)
+    lib.write(symbol, df)
+    yield (lib, df, symbol)
+
 def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:bool=False):
     """
         This is the function where we test different types
@@ -461,6 +476,7 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:
                 query_date_range(start_date, end_date)]
     
     for rep in range(num_repetitions):
+            logger.info(f"REPETITION : {rep}")
             if (read_batch):
                 logger.info("RUN read_batch() tests")
                 read_requests = [ReadRequest(symbol=symbol, 
@@ -470,7 +486,8 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:
                 cnt = 0
                 for result in results_read:
                     assert not result.data is None
-                    print_info(result.data, queries[cnt])
+                    if (num_repetitions < 20): 
+                        print_info(result.data, queries[cnt])
                     cnt += 1
                 del read_requests, results_read
             else:
@@ -478,7 +495,8 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:
                 for q in queries:
                     data: pd.DataFrame = lib.read(symbol, query_builder=q).data
                     lib.read_batch
-                    print_info(data, q)
+                    if (num_repetitions < 20): 
+                        print_info(data, q)
                 del data
             gc.collect()
 
@@ -531,6 +549,21 @@ if MEMRAY_SUPPORTED:
         """
         (lib, df, symbol) = library_with_symbol
         mem_query(lib, df)
+
+    @MEMRAY_TESTS_MARK
+    @pytest.mark.limit_leaks(location_limit = "25 KB" if not MACOS else "35 KB", 
+                             filter_fn = is_relevant)
+    def test_mem_leak_querybuilder_read_manyrepeats_memray(library_with_tiny_symbol):
+        """
+            Test to capture memory leaks >= of specified number
+
+            NOTE: we could filter out not meaningful for us stackframes
+            in future if something outside of us start to leak using
+            the argument "filter_fn" - just add to the filter function
+            what we must exclude from calculation
+        """
+        (lib, df, symbol) = library_with_tiny_symbol
+        mem_query(lib, df, 125)        
 
 
     @MEMRAY_TESTS_MARK
