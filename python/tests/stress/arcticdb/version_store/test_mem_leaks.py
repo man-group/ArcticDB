@@ -116,7 +116,7 @@ def check_process_memory_leaks(
 
         print("Starting watched code ...........")
         process_func()
-        lets_collect_some_garbage(9)
+        lets_collect_some_garbage(10)
 
         p_iter_mem_end: np.int64 = p.memory_info().rss
         process_growth: np.int64 = p.memory_info().rss - process_initial_memory
@@ -183,8 +183,7 @@ def generate_big_dataframe(rows:int=1000000, num_exp_time_growth:int=5) -> pd.Da
 
 def construct_df_querybuilder_tests(size: int) -> pd.DataFrame:
     df = get_sample_dataframe(size)
-    date_range = pd.date_range(start="2000-1-1", periods=size, freq="s")
-    df.index = pd.Index(date_range)
+    df.index = pd.date_range(start="2000-1-1", periods=size, freq="s")
     df.index.name = "timestamp"
     return df
 
@@ -225,7 +224,7 @@ def query_group_with_aggregations_bigger_result() -> QueryBuilder:
     )
 
 
-def query_apply(strng:str) -> QueryBuilder:
+def query_apply(strng: str) -> QueryBuilder:
     """
     Apply query for QueryBuilder memory tests.
     This version of apply does couple of nested operations
@@ -271,7 +270,7 @@ def query_row_range(size: int) -> QueryBuilder:
     return q.row_range( (a, b) )
 
 
-def query_date_range(start:pd.Timestamp, end: pd.Timestamp) -> QueryBuilder:
+def query_date_range(start: pd.Timestamp, end: pd.Timestamp) -> QueryBuilder:
     """
     Date range query for QueryBuilder memory tests
     Will generate random date range that will return 
@@ -294,7 +293,7 @@ def print_info(data: pd.DataFrame, q: QueryBuilder):
     logger.info(f"Size of DF returned by arctic:{data.shape[0]} columns: {data.shape[1]}")
 
 
-def gen_random_date(start:pd.Timestamp, end: pd.Timestamp):
+def gen_random_date(start: pd.Timestamp, end: pd.Timestamp):
     """
     Returns random timestamp from specified period
     """
@@ -361,15 +360,13 @@ def test_mem_leak_querybuilder_standard(arctic_library_lmdb):
 
     df = construct_df_querybuilder_tests(size=2000000)
     size = df.shape[0]
-    start_date = df.iloc[0].name
-    end_date = df.iloc[size-1].name
+    start_date = df.index[0]
+    end_date = df.index[-1]
 
     symbol = "test"
     lib.write(symbol, df)
     del df
     gc.collect()
-
-    queries = [query_groupby_with_aggregations(), query_group_with_aggregations_bigger_result(), query_apply(random_string(10)), query_resample()]
 
     def proc_to_examine():
         queries = [query_groupby_with_aggregations(), 
@@ -423,11 +420,8 @@ def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
 ## NOTE: Currently tests can be executed on Python >= 3.8 only
 
 
-symbol = "test"
-
-
 @pytest.fixture
-def library_with_symbol(arctic_library_lmdb) -> Generator[Tuple[Library, pd.DataFrame], None, None]:
+def library_with_symbol(arctic_library_lmdb) -> Generator[Tuple[Library, pd.DataFrame, str], None, None]:
     """
     As memray instruments memory, we need to take out 
     everything not relevant from mem leak measurement out of 
@@ -437,9 +431,10 @@ def library_with_symbol(arctic_library_lmdb) -> Generator[Tuple[Library, pd.Data
     read() or in construct_df_querybuilder_tests() ? or in other code?
     """
     lib: Library = arctic_library_lmdb
+    symbol = "test"
     df = construct_df_querybuilder_tests(size=2000000)
     lib.write(symbol, df)
-    yield (lib, df)
+    yield (lib, df, symbol)
 
 def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:bool=False):
     """
@@ -449,8 +444,8 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:
         tests
     """
     size = df.shape[0]
-    start_date = df.iloc[0].name
-    end_date = df.iloc[size-1].name
+    start_date = df.index[0]
+    end_date = df.index[-1]
 
     symbol = "test"
     lib.write(symbol, df)
@@ -480,7 +475,7 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:
                     cnt += 1
                 del read_requests, results_read
             else:
-                logger.info("RUN read_batch() tests")
+                logger.info("RUN read() tests")
                 for q in queries:
                     data: pd.DataFrame = lib.read(symbol, query_builder=q).data
                     lib.read_batch
@@ -523,15 +518,9 @@ if MEMRAY_SUPPORTED:
         return True
 
 
-    loc_limit="25 KB"
-
-
-    if (MACOS):
-        loc_limit = "35 KB"
-
-        
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_leaks(location_limit=loc_limit, filter_fn=is_relevant)
+    @pytest.mark.limit_leaks(location_limit = "25 KB" if not MACOS else "35 KB", 
+                             filter_fn = is_relevant)
     def test_mem_leak_querybuilder_read_memray(library_with_symbol):
         """
             Test to capture memory leaks >= of specified number
@@ -541,12 +530,12 @@ if MEMRAY_SUPPORTED:
             the argument "filter_fn" - just add to the filter function
             what we must exclude from calculation
         """
-        (lib, df) = library_with_symbol
+        (lib, df, symbol) = library_with_symbol
         mem_query(lib, df)
 
 
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_leaks(location_limit="25 KB", filter_fn=is_relevant)
+    @pytest.mark.limit_leaks(location_limit = "25 KB", filter_fn = is_relevant)
     def test_mem_leak_querybuilder_read_batch_memray(library_with_symbol):
         """
             Test to capture memory leaks >= of specified number
@@ -556,7 +545,7 @@ if MEMRAY_SUPPORTED:
             the argument "filter_fn" - just add to the filter function
             what we must exclude from calculation
         """
-        (lib, df) = library_with_symbol
+        (lib, df, symbol) = library_with_symbol
         mem_query(lib, df, read_batch=True)
 
 
@@ -570,7 +559,7 @@ if MEMRAY_SUPPORTED:
             Thus if the test fails then perhaps we are using now more memory than
             in the past
         """
-        (lib, df) = library_with_symbol
+        (lib, df, symbol) = library_with_symbol
         mem_query(lib, df)
 
     @MEMRAY_TESTS_MARK
@@ -583,35 +572,36 @@ if MEMRAY_SUPPORTED:
             Thus if the test fails then perhaps we are using now more memory than
             in the past
         """
-        (lib, df) = library_with_symbol
+        (lib, df, symbol) = library_with_symbol
         mem_query(lib, df, True)
 
 
     @pytest.fixture
-    def library_with_big_symbol(arctic_library_lmdb) -> Generator[Library, None, None]:
+    def library_with_big_symbol_(arctic_library_lmdb) -> Generator[Tuple[Library,str], None, None]:
         """
             As memray instruments memory, we need to take out 
             everything not relevant from mem leak measurement out of 
             test, so it works as less as possible
         """
         lib: Library = arctic_library_lmdb
+        symbol = "symbol"
         df: pd.DataFrame = generate_big_dataframe(300000)
         lib.write(symbol, df)
         del df
-        yield lib
+        yield (lib, symbol)
 
 
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_leaks(location_limit="30 KB", filter_fn=is_relevant)
-    def test_mem_leak_read_all_arctic_lib_memray(library_with_big_symbol):
+    @pytest.mark.limit_leaks(location_limit = "30 KB", filter_fn = is_relevant)
+    def test_mem_leak_read_all_arctic_lib_memray(library_with_big_symbol_):
         """
             This is a new version of the initial test that reads the whole
             big dataframe in memory
         """
-
+        lib: Library = None
+        (lib, symbol) = library_with_big_symbol_
         logger.info("Test starting")
         st = time.time()
-        lib: Library = library_with_big_symbol
         data : pd.DataFrame = lib.read(symbol).data
         del data
         logger.info(f"Test took : {time.time() - st}")
