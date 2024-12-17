@@ -161,11 +161,19 @@ def grow_exp(df_to_grow: pd.DataFrame, num_times_xx2: int):
     return df_to_grow
 
 
-def generate_big_dataframe(rows:int=1000000):
+def generate_big_dataframe(rows:int=1000000, num_exp_time_growth:int=5) -> pd.DataFrame:
+    """
+    A quick and time efficient wat to generate very large dataframe.
+    The first parameter will be passed to get_sample_dataframe() so that a dataframe
+    of that number of rows is generated. Later this df will be used to grow exponentially (power of 2)
+    the number of rows on the final dataframe by concatenating N times the result dataframe to itself
+    That process if >6-8 times more time efficient. The down side is that you have N**2 repetitions of
+    same original table. But for many usages size is what we need not uniqueness
+    """
     logger.info("Generating big dataframe")
     st = time.time()
     df = get_sample_dataframe(rows)
-    df = grow_exp(df, 5)
+    df = grow_exp(df, num_exp_time_growth)
     logger.info(f"Generation took : {time.time() - st}")
     return df
 
@@ -219,9 +227,9 @@ def query_group_with_aggregations_bigger_result() -> QueryBuilder:
 
 def query_apply(strng:str) -> QueryBuilder:
     """
-        Apply query for QueryBuilder memory tests.
-        This version of apply does couple of nested operations
-        with columns that were just added
+    Apply query for QueryBuilder memory tests.
+    This version of apply does couple of nested operations
+    with columns that were just added
     """
     q = QueryBuilder()
     q = q[q["strings"] != strng].apply("NEW 1", q["uint32"] * q["int32"] / q["float32"])
@@ -250,25 +258,35 @@ def query_resample() -> QueryBuilder:
 
 def query_row_range(size:int) -> QueryBuilder:
     """
-        Row range query for QueryBuilder memory tests
-        Pass size of dataframe and it will generate random row range
+    Row range query for QueryBuilder memory tests
+    Pass size of dataframe and it will generate random row range
     """
+    percentage_rows_returned = 0.57
+    start_percentage = random.uniform(0.01, 1.0 - percentage_rows_returned - 0.01)
+    result_size_rows = int(0.57 * size)
     q = QueryBuilder()
-    a = random.randint(0,size-1)
-    b = random.randint(0,size-1)
-    return q.row_range( (min(a,b), max(a,b)) )
+    a = random.randint(0,int((size-1) * start_percentage))
+    b = a + result_size_rows
+    logger.info(f" GENERATED ROW RANGE {a} - {b}")
+    return q.row_range( (a, b) )
 
 
 def query_date_range(start:pd.Timestamp, end: pd.Timestamp) -> QueryBuilder:
     """
-        Date range query for QueryBuilder memory tests
-        Will generate random date range query based on given
-        start and end timestamps/dates
+    Date range query for QueryBuilder memory tests
+    Will generate random date range that will return 
+    always the specified percentage rows
     """
+    percentage_rows_returned = 0.57
+    start_percentage = random.uniform(0.01, 1.0 - (percentage_rows_returned + 0.01))
     q = QueryBuilder()
-    a = gen_random_date(start,end)
-    b = gen_random_date(start,end)
-    return q.date_range( (min(a,b), max(a,b)) )
+    total_duration = end - start
+    percent_duration = total_duration * start_percentage
+    a = start + percent_duration
+    percent_duration = total_duration * percentage_rows_returned
+    b = a + percent_duration
+    logger.info(f" GENERATED DATE RANGE {a} - {b}")
+    return q.date_range( (a,b)) 
 
 
 def print_info(data: pd.DataFrame, q: QueryBuilder):
@@ -278,7 +296,7 @@ def print_info(data: pd.DataFrame, q: QueryBuilder):
 
 def gen_random_date(start:pd.Timestamp, end: pd.Timestamp):
     """
-        Returns random timestamp from specified period
+    Returns random timestamp from specified period
     """
     date_range = pd.date_range(start=start, end=end, freq='s') 
     return random.choice(date_range)
@@ -288,7 +306,9 @@ def gen_random_date(start:pd.Timestamp, end: pd.Timestamp):
 #region TESTS non-memray type - "guessing" memory leak through series of repetitions
 
 @SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
-@pytest.mark.skipif(sys.platform == "win32", reason="Not enough storage on Windows runners")
+@pytest.mark.skipif(WINDOWS, 
+                    reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem")
+@pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
 def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
     lib: adb.Library = arctic_library_lmdb
 
@@ -326,8 +346,9 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
 
     check_process_memory_leaks(proc_to_examine, 20, max_mem_bytes, 80.0)
 
-@pytest.mark.skipif(WINDOWS, reason="Not enough storage on Windows runners")
-@pytest.mark.skipif(MACOS, reason="Problem on MacOs")
+@pytest.mark.skipif(WINDOWS, 
+                    reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem")
+@pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
 @SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
 def test_mem_leak_querybuilder_standard(arctic_library_lmdb):
     """
@@ -341,7 +362,7 @@ def test_mem_leak_querybuilder_standard(arctic_library_lmdb):
     df = construct_df_querybuilder_tests(size=2000000)
     size = df.shape[0]
     start_date = df.iloc[0].name
-    end_date = df.iloc[0].name
+    end_date = df.iloc[size-1].name
 
     symbol = "test"
     lib.write(symbol, df)
@@ -429,7 +450,7 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:
     """
     size = df.shape[0]
     start_date = df.iloc[0].name
-    end_date = df.iloc[0].name
+    end_date = df.iloc[size-1].name
 
     symbol = "test"
     lib.write(symbol, df)
@@ -501,9 +522,14 @@ if MEMRAY_SUPPORTED:
             pass
         return True
 
+
     loc_limit="25 KB"
+
+
     if (MACOS):
         loc_limit = "35 KB"
+
+        
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_leaks(location_limit=loc_limit, filter_fn=is_relevant)
     def test_mem_leak_querybuilder_read_memray(library_with_symbol):
@@ -593,4 +619,6 @@ if MEMRAY_SUPPORTED:
         logger.info("Sleeping for 10 secs")
         gc.collect()
         time.sleep(10)
+
+
 
