@@ -20,8 +20,12 @@ markdown_extensions:
 theme:
   name: material
   custom_dir: overrides
-  logo: images/FullWithBorder.png
-  favicon: images/FullWithBorder.png
+  font:
+    text: Aspekta
+    code: Geist Mono
+
+  logo: images/ArcticDB Logo.svg
+  favicon: images/ArcticDB Logo.svg
   palette:
     scheme: arcticdb
   features:
@@ -43,6 +47,8 @@ extra_css:
 plugins:
   - search
   - autorefs
+  - mike:
+      alias_type: copy
   - mkdocs-jupyter:
       ignore_h1_titles: True
       include_source: True
