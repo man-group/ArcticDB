@@ -190,45 +190,64 @@ template <class KeyContainer>
     }
 }
 
-[[nodiscard]] std::pair<std::vector<SliceAndKey>, std::vector<SliceAndKey>> intersecting_segments(
+std::vector<SliceAndKey> filter_existing(std::vector<std::optional<SliceAndKey>>&& maybe_slices) {
+    std::vector<SliceAndKey> result;
+    for (auto& maybe_slice : maybe_slices) {
+        if (maybe_slice.has_value()) {
+            result.push_back(std::move(*maybe_slice));
+        }
+    }
+    return result;
+}
+
+[[nodiscard]] folly::Future<std::tuple<std::vector<SliceAndKey>, std::vector<SliceAndKey>>> async_intersecting_segments(
     const std::vector<SliceAndKey>& affected_keys,
     const IndexRange& front_range,
     const IndexRange& back_range,
     VersionId version_id,
     const std::shared_ptr<Store>& store
 ) {
-    std::vector<SliceAndKey> intersect_before;
-    std::vector<SliceAndKey> intersect_after;
+    std::vector<folly::Future<std::optional<SliceAndKey>>> maybe_intersect_before_fut;
+    std::vector<folly::Future<std::optional<SliceAndKey>>> maybe_intersect_after_fut;
 
     for (const auto& affected_slice_and_key : affected_keys) {
         const auto& affected_range = affected_slice_and_key.key().index_range();
         if (intersects(affected_range, front_range) && !overlaps(affected_range, front_range) &&
             is_before(affected_range, front_range)) {
-            auto front_overlap_key = rewrite_partial_segment(
+            maybe_intersect_before_fut.emplace_back(async_rewrite_partial_segment(
                 affected_slice_and_key,
                 front_range,
                 version_id,
                 AffectedSegmentPart::START,
                 store
-            );
-            if (front_overlap_key)
-                intersect_before.push_back(*front_overlap_key);
+            ));
         }
 
         if (intersects(affected_range, back_range) && !overlaps(affected_range, back_range) &&
             is_after(affected_range, back_range)) {
-            auto back_overlap_key = rewrite_partial_segment(
+            maybe_intersect_after_fut.emplace_back(rewrite_partial_segment(
                 affected_slice_and_key,
                 back_range,
                 version_id,
                 AffectedSegmentPart::END,
                 store
-            );
-            if (back_overlap_key)
-                intersect_after.push_back(*back_overlap_key);
+            ));
         }
     }
-    return std::make_pair(std::move(intersect_before), std::move(intersect_after));
+    return collect(
+        collect(maybe_intersect_before_fut).via(&async::io_executor()).thenValue(filter_existing),
+        collect(maybe_intersect_after_fut).via(&async::io_executor()).thenValue(filter_existing)
+    ).via(&async::io_executor());
+}
+
+[[nodiscard]] std::tuple<std::vector<SliceAndKey>, std::vector<SliceAndKey>> intersecting_segments(
+    const std::vector<SliceAndKey>& affected_keys,
+    const IndexRange& front_range,
+    const IndexRange& back_range,
+    VersionId version_id,
+    const std::shared_ptr<Store>& store
+) {
+    return async_intersecting_segments(affected_keys, front_range, back_range, version_id, store).get();
 }
 
 } // namespace
@@ -353,7 +372,7 @@ folly::Future<AtomKey> async_update_impl(
                             orig_filter_range = frame->index_range;
                             if (new_slice_and_keys.empty()) {
                                 // If there are no new keys, then we can't intersect with the existing data.
-                                return std::make_pair(std::vector<SliceAndKey>{}, std::vector<SliceAndKey>{});
+                                return std::make_tuple(std::vector<SliceAndKey>{}, std::vector<SliceAndKey>{});
                             }
                             auto front_range = new_slice_and_keys.begin()->key().index_range();
                             auto back_range = new_slice_and_keys.rbegin()->key().index_range();
@@ -364,7 +383,7 @@ folly::Future<AtomKey> async_update_impl(
                             orig_filter_range = idx_range;
                             return intersecting_segments(affected_keys, idx_range, idx_range, update_info.next_version_id_, store);
                         },
-                        [](const RowRange&)-> std::pair<std::vector<SliceAndKey>, std::vector<SliceAndKey>> {
+                        [](const RowRange&) -> std::tuple<std::vector<SliceAndKey>, std::vector<SliceAndKey>> {
                             util::raise_rte("Unexpected row_range in update query");
                         }
     );

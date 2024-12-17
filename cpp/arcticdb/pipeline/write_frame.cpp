@@ -23,12 +23,14 @@
 #include <arcticdb/util/format_date.hpp>
 #include <vector>
 #include <array>
+#include <ranges>
 
 
 namespace arcticdb::pipelines {
 
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
+namespace ranges = std::ranges;
 
 WriteToSegmentTask::WriteToSegmentTask(
     std::shared_ptr<InputTensorFrame> frame,
@@ -311,10 +313,9 @@ std::vector<SliceAndKey> flatten_and_fix_rows(const std::array<std::vector<Slice
             return std::max(a, sk.slice_.row_range.second);
         });
 
-        std::transform(std::begin(group), std::end(group), std::back_inserter(output), [&](SliceAndKey sk) {
+        ranges::transform(group, std::back_inserter(output), [&](SliceAndKey sk) {
             auto range_start = global_count + (sk.slice_.row_range.first - group_start);
-            auto new_range = RowRange{range_start, range_start + (sk.slice_.row_range.diff())};
-            sk.slice_.row_range = new_range;
+            sk.slice_.row_range = RowRange{range_start, range_start + (sk.slice_.row_range.diff())};
             return sk;
         });
 
