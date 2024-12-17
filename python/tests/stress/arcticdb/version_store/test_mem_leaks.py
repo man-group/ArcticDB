@@ -380,14 +380,12 @@ def test_mem_leak_querybuilder_standard(arctic_library_lmdb):
             print_info(data, q)
             del data
             gc.collect()
+        del queries
+        gc.collect()
 
     max_mem_bytes = 550_623_040
 
     check_process_memory_leaks(proc_to_examine, 10, max_mem_bytes, 80.0)
-
-    del lib, queries
-    gc.collect()
-    time.sleep(10)
 
 
 @SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
@@ -502,8 +500,6 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:
 
     del lib, queries
     gc.collect()
-    time.sleep(10)
-
 
 if MEMRAY_SUPPORTED: 
     ##
@@ -657,9 +653,6 @@ if MEMRAY_SUPPORTED:
         del data
         logger.info(f"Test took : {time.time() - st}")
 
-        logger.info("Sleeping for 10 secs")
         gc.collect()
-        time.sleep(10)
-
 
 
