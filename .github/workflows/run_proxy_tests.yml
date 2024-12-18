@@ -30,6 +30,13 @@ jobs:
         with:
           python-version: "3.${{inputs.python3}}"
 
+      - name: Install wheel
+        shell: bash
+        run: |
+          echo ${{env.python_impl_name}}
+          ls ${{env.python_impl_name}}
+          python -m pip install --force-reinstall  $(ls arcticdb*.whl)[Testing]
+
       - name: Install deps
         shell: bash
         run: |
@@ -51,13 +58,6 @@ jobs:
 
           export http_proxy="http://127.0.0.1:3128"
           export https_proxy="http://127.0.0.1:3128"
-
-      - name: Install wheel
-        shell: bash
-        run: |
-          echo ${{env.python_impl_name}}
-          ls ${{env.python_impl_name}}
-          python -m pip install --force-reinstall  $(ls arcticdb*.whl)[Testing]
 
       - name: Run proxy test
         shell: bash
