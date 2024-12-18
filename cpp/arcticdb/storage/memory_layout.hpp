@@ -15,6 +15,13 @@ namespace arcticdb {
 #pragma pack(push)
 #pragma pack(1)
 
+enum class SortedValue : uint8_t {
+    UNKNOWN = 0,
+    UNSORTED = 1,
+    ASCENDING = 2,
+    DESCENDING = 3,
+};
+
 constexpr size_t encoding_size = 6;
 // And extendable list of codecs supported by ArcticDB
 // N.B. this list is likely to change
@@ -95,15 +102,26 @@ enum class BitmapFormat : uint8_t {
     BITMAGIC
 };
 
+enum class UniqueCountType : uint8_t {
+    NONE,
+    PRECISE,
+    HYPERLOGLOG
+};
+
 struct FieldStats {
+
+    FieldStats() = default;
+
     uint64_t min_ = 0UL;
     uint64_t max_ = 0UL;
-    uint32_t unique_count_ = 0U:;
-    bool unique_count_exact_ = false;
-    bool sorted_ = false;
+    uint32_t unique_count_ = 0UL;
+    UniqueCountType unique_count_precision_ = UniqueCountType::NONE;
+    SortedValue sorted_ = SortedValue::UNKNOWN;
     bool set_ = false;
     bool unused_ = false;
 };
+
+static_assert(sizeof(FieldStats) == 24);
 
 // Each encoded field will have zero or one shapes blocks,
 // a potentially large number of values (data) blocks, and
@@ -120,7 +138,7 @@ struct EncodedField {
     std::array<Block, 1> blocks_;
 };
 
-static_assert(sizeof(EncodedField) == 60);
+static_assert(sizeof(EncodedField) == 84);
 
 enum class EncodingVersion : uint16_t {
     V1 = 0,
@@ -168,13 +186,6 @@ struct HeaderData { ;
     FieldBuffer field_buffer_;
 };
 
-// Indicates the sortedness of this segment
-enum class SortedValue : uint8_t {
-    UNKNOWN = 0,
-    UNSORTED = 1,
-    ASCENDING = 2,
-    DESCENDING = 3,
-};
 
 // Dynamic schema frames can change their schema over time,
 // adding and removing columns and changing types. A dynamic

@@ -163,7 +163,8 @@ struct EncodedFieldImpl : public EncodedField {
             sizeof(values_count_) +
             sizeof(sparse_map_bytes_) +
             sizeof(items_count_) +
-            sizeof(format_);
+            sizeof(format_) +
+            sizeof(stats_);
 
     EncodedFieldImpl() = default;
 

@@ -102,11 +102,10 @@ std::optional<convert::StringEncodingError> set_sequence_type(
         size_t slice_num,
         size_t regular_slice_size) {
     constexpr auto dt = TagType::DataTypeTag::data_type;
-
-
     const auto c_style = util::is_cstyle_array<RawType>(tensor);
     std::optional<ChunkedBuffer> flattened_buffer;
-    ARCTICDB_SUBSAMPLE_AGG(SetDataString)
+
+    ARCTICDB_SAMPLE_DEFAULT(SetDataString)
     if (is_fixed_string_type(dt)) {
         // deduplicate the strings
         auto str_stride = tensor.strides(0);
@@ -161,6 +160,7 @@ std::optional<convert::StringEncodingError> set_sequence_type(
             }
         }
     }
+    return std::optional<convert::StringEncodingError>{};
 }
 
 template <typename AggregatorType, typename TagType, typename RawType>
@@ -184,10 +184,10 @@ void set_integral_scalar_type(
     } else {
         const auto c_style = util::is_cstyle_array<RawType>(tensor);
         if (c_style) {
-            ARCTICDB_SUBSAMPLE_AGG(SetDataZeroCopy)
+            ARCTICDB_SAMPLE_DEFAULT(SetDataZeroCopy)
             agg.set_external_block(col, ptr, rows_to_write);
         } else {
-            ARCTICDB_SUBSAMPLE_AGG(SetDataFlatten)
+            ARCTICDB_SAMPLE_DEFAULT(SetDataFlatten)
             ARCTICDB_DEBUG(log::version(),
                            "Data contains non-contiguous columns, writing will be inefficient, consider coercing to c_style ndarray (shape={}, data_size={})",
                            tensor.strides(0),
@@ -208,10 +208,8 @@ void set_bool_object_type(
         size_t row,
         size_t slice_num,
         size_t regular_slice_size) {
-    constexpr auto dt = TagType::DataTypeTag::data_type;
     const auto c_style = util::is_cstyle_array<RawType>(tensor);
     std::optional<ChunkedBuffer> flattened_buffer;
-
 
     auto data = const_cast<void *>(tensor.data());
     auto ptr_data = reinterpret_cast<PyObject **>(data);
@@ -308,19 +306,20 @@ std::optional<convert::StringEncodingError> set_array_type(
     }
     arr_col.set_type(TypeDescriptor{secondary_type.data_type(), column_type_descriptor.dimension()});
     agg.set_sparse_block(col, arr_col.release_buffer(), arr_col.release_shapes(), std::move(values_bitset));
+    return std::optional<convert::StringEncodingError>{};
 }
 
 template<typename Aggregator>
 std::optional<convert::StringEncodingError> aggregator_set_data(
-    const TypeDescriptor& type_desc,
-    const entity::NativeTensor& tensor,
-    Aggregator& agg,
-    size_t col,
-    size_t rows_to_write,
-    size_t row,
-    size_t slice_num,
-    size_t regular_slice_size,
-    bool sparsify_floats) {
+        const TypeDescriptor& type_desc,
+        const entity::NativeTensor& tensor,
+        Aggregator& agg,
+        size_t col,
+        size_t rows_to_write,
+        size_t row,
+        size_t slice_num,
+        size_t regular_slice_size,
+        bool sparsify_floats) {
     return type_desc.visit_tag([&](auto tag) {
         using TagType = std::decay_t<decltype(tag)>;
         using RawType = typename TagType::DataTypeTag::raw_type;
@@ -340,7 +339,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
             normalization::check<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(tag.dimension() == Dimension::Dim0, "Multidimensional nullable booleans are not supported");
             set_bool_object_type<Aggregator, TagType, RawType>(agg, tensor, col, rows_to_write, row, slice_num, regular_slice_size);
         } else if constexpr(is_array_type(TypeDescriptor(tag))) {
-            auto maybe_error = set_array_type<Aggregator, TagType, RawType>(type_desc, agg, tensor, col, rows_to_write, row, slice_num, regular_slice_size);
+            auto maybe_error = set_array_type<Aggregator, TagType, RawType>(type_desc, agg, tensor, col, rows_to_write, row);
             if(maybe_error)
                 return maybe_error;
         } else if constexpr(tag.dimension() == Dimension::Dim2) {

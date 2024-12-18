@@ -34,6 +34,16 @@ message SegmentHeader {
     uint32 encoding_version = 13;
 }
 
+message FieldStats {
+    uint64 min = 1;
+    uint64 max = 2;
+    uint32 unique_count = 3;
+    bool unique_count_exact = 4;
+    bool sorted = 5;
+    bool set = 6;
+    bool unused = 7;
+};
+
 message EncodedField {
     /* Captures the variant field encoding */
     oneof encoding {
@@ -42,6 +52,7 @@ message EncodedField {
     }
     uint32 offset = 4;
     uint32 num_elements = 5;
+    FieldStats stats = 6;
 }
 
 message VariantCodec {
