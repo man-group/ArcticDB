@@ -200,6 +200,7 @@ jobs:
           cd cpp/out/linux-debug-build/
           python -m pip install gcovr
           mkdir coverage
+          find . | grep gcno
           python -m gcovr --txt --html-details coverage/index.html -e vcpkg_installed/ -e proto/ -e ../../third_party -e ../../arcticdb/util/test/ -r ../.. --exclude-throw-branches --exclude-unreachable-branches -u --exclude-function-lines | tee output.txt
           zip -r coverage.zip coverage/
 
