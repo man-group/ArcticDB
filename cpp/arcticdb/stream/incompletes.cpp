@@ -6,7 +6,7 @@
  */
 
 #include <arcticdb/codec/codec.hpp>
-#include <arcticdb/stream/append_map.hpp>
+#include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/stream/index.hpp>
@@ -14,6 +14,9 @@
 #include <util/key_utils.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <iterator>
+#include <arcticdb/pipeline/slicing.hpp>
+#include <arcticdb/pipeline/write_frame.hpp>
+#include <arcticdb/stream/segment_aggregator.hpp>
 
 namespace arcticdb {
 
@@ -150,6 +153,7 @@ SegmentInMemory incomplete_segment_from_frame(
     auto field_tensors = std::move(frame->field_tensors);
     auto output = std::visit([&](const auto& idx) {
         using IdxType = std::decay_t<decltype(idx)>;
+        // TODO aseaton would a simpler change be to just change the policy here?
         using SingleSegmentAggregator = Aggregator<IdxType, FixedSchema, NeverSegmentPolicy>;
         auto copy_prev_key = prev_key;
         auto timeseries_desc = index_descriptor_from_frame(frame, existing_rows, std::move(prev_key));
@@ -214,72 +218,195 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
         mutable_seg.sort(sort_columns);
 }
 
-folly::Future<arcticdb::entity::VariantKey> write_incomplete_frame(
+folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame_with_sorting(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
-    bool validate_index,
-    bool sort_on_index,
-    std::optional<AtomKey>&& next_key,
-    const std::optional<std::vector<std::string>>& sort_columns)  {
+    const WriteIncompleteOptions& options) {
+    ARCTICDB_SAMPLE(WriteIncompleteFrameWithSorting, 0)
+    log::version().debug("Command: write_incomplete_frame_with_sorting {}", stream_id);
+
+    using namespace arcticdb::pipelines;
+
+    auto index_range = frame->index_range;
+    const auto index = std::move(frame->index);
+
+    WriteOptions write_options = options.write_options;
+    write_options.column_group_size = std::numeric_limits<size_t>::max(); // column slicing not supported yet (makes it hard
+    // to infer the schema we want after compaction)
+    bool sparsify_floats{false};
+
+    auto next_key = std::nullopt;
+    auto segment = incomplete_segment_from_frame(frame, 0, next_key, sparsify_floats);
+    if (options.sort_on_index) {
+        util::check(frame->has_index(), "Sort requested on index but no index supplied");
+        std::vector<std::string> cols;
+        for (auto i = 0UL; i < frame->desc.index().field_count(); ++i) {
+            cols.emplace_back(frame->desc.fields(i).name());
+        }
+        if (options.sort_columns) {
+            for (auto& extra_sort_col : *options.sort_columns) {
+                if (std::find(std::begin(cols), std::end(cols), extra_sort_col) == std::end(cols))
+                    cols.emplace_back(extra_sort_col);
+            }
+        }
+        do_sort(segment, cols);
+    } else {
+        do_sort(segment, *options.sort_columns);
+    }
+
+    if (options.sort_on_index || (options.sort_columns && options.sort_columns->at(0) == segment.descriptor().field(0).name())) {
+        segment.descriptor().set_sorted(SortedValue::ASCENDING);
+    }
+
+    std::vector<folly::Future<AtomKey>> fut_vec;
+    std::visit([segment=std::move(segment), &frame, &index, &fut_vec, &store, &stream_id, &write_options](auto&& idx) mutable {
+        using IdxType = std::decay_t<decltype(idx)>;
+        using RowCountAggregator = SegmentAggregator<IdxType, FixedSchema, RowCountSegmentPolicy>;
+
+        auto descriptor = frame->desc;
+        RowCountAggregator agg{
+            [](FrameSlice&&){},
+            FixedSchema{descriptor, index},
+            [&](SegmentInMemory&& segment) {
+                auto timeseries_desc = index_descriptor_from_frame(frame, 0, std::nullopt);
+                auto norm_meta = timeseries_desc.proto().normalization();
+                auto tsd = pack_timeseries_descriptor(descriptor, frame->num_rows, std::nullopt, std::move(norm_meta));
+                segment.set_timeseries_descriptor(tsd);
+                const auto local_index_start = IdxType::start_value_for_segment(segment);
+                const auto local_index_end = IdxType::end_value_for_segment(segment);
+                stream::StreamSink::PartialKey pk{KeyType::APPEND_DATA, 0, stream_id, local_index_start, local_index_end};
+                auto fut = store->write(pk, std::move(segment))
+                    .thenValueInline([](VariantKey&& res) {
+                        return to_atom(std::move(res));
+                    });
+                fut_vec.emplace_back(std::move(fut));
+            }, RowCountSegmentPolicy(write_options.segment_row_size)};
+
+        bool convert_int_to_float{false};
+        FrameSlice slice = FrameSlice(segment);
+        agg.add_segment(std::move(segment), slice, convert_int_to_float);
+        agg.commit();
+    }, index);
+
+    return folly::collect(fut_vec).via(&async::io_executor());
+}
+
+folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
+    const std::shared_ptr<Store>& store,
+    const StreamId& stream_id,
+    const std::shared_ptr<InputTensorFrame>& frame,
+    const WriteIncompleteOptions& options) {
+    ARCTICDB_SAMPLE(WriteIncompleteFrame, 0)
+    log::version().debug("Command: write_incomplete_frame {}", stream_id);
+
     using namespace arcticdb::pipelines;
 
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
-            !validate_index || sort_columns || sort_on_index || index_is_not_timeseries_or_is_sorted_ascending(*frame),
-            "When writing/appending staged data in parallel, with no sort columns supplied, input data must be sorted.");
+        !options.validate_index || options.sort_columns || options.sort_on_index || index_is_not_timeseries_or_is_sorted_ascending(*frame),
+        "When writing/appending staged data in parallel, with no sort columns supplied, input data must be sorted.");
 
     auto index_range = frame->index_range;
-    auto segment = incomplete_segment_from_frame(frame, 0, std::move(next_key), false);
+    const auto index = std::move(frame->index);
 
+    WriteOptions write_options = options.write_options;
+    write_options.column_group_size = std::numeric_limits<size_t>::max(); // column slicing not supported yet (makes it hard
+    // to infer the schema we want after compaction)
 
-    if(sort_on_index || (sort_columns && !sort_columns->empty())) {
-        auto mutable_seg = segment.clone();
-        if(sort_on_index) {
-            util::check(frame->has_index(), "Sort requested on index but no index supplied");
-            std::vector<std::string> cols;
-            for(auto i = 0UL; i < frame->desc.index().field_count(); ++i) {
-                cols.emplace_back(frame->desc.fields(i).name());
-            }
-            if(sort_columns) {
-                for(auto& extra_sort_col : *sort_columns) {
-                    if(std::find(std::begin(cols), std::end(cols), extra_sort_col) == std::end(cols))
-                        cols.emplace_back(extra_sort_col);
-                }
-            }
-            do_sort(mutable_seg, cols);
-        } else {
-            do_sort(mutable_seg, *sort_columns);
-        }
+    auto slicing_policy = get_slicing_policy(write_options, *frame);
+    auto slices = slice(*frame, slicing_policy);
 
-        if(sort_on_index || (sort_columns && sort_columns->at(0) == mutable_seg.descriptor().field(0).name()))
-            mutable_seg.descriptor().set_sorted(SortedValue::ASCENDING);
-
+    if (slices.empty()) {
+        // We still write in this case because a user might only stage empty segments. After the user finalizes
+        // they will just get an empty dataframe.
+        size_t existing_rows = 0;
+        auto timeseries_desc = index_descriptor_from_frame(frame, existing_rows, std::nullopt);
+        util::check(!timeseries_desc.fields().empty(), "Expected fields not to be empty in incomplete segment");
+        auto norm_meta = timeseries_desc.proto().normalization();
+        auto descriptor = timeseries_desc.as_stream_descriptor();
+        SegmentInMemory output{FixedSchema{descriptor, index}.default_descriptor(), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED};
+        output.set_timeseries_descriptor(pack_timeseries_descriptor(descriptor, existing_rows, std::nullopt, std::move(norm_meta)));
         return store->write(
             KeyType::APPEND_DATA,
             VersionId(0),
             stream_id,
             index_range.start_,
             index_range.end_,
-            std::move(mutable_seg));
-    } else {
-        return store->write(
-            KeyType::APPEND_DATA,
-            VersionId(0),
-            stream_id,
-            index_range.start_,
-            index_range.end_,
-            std::move(segment));
+            std::move(output))
+            .thenValueInline([](VariantKey&& res) {
+                return std::vector<AtomKey>{to_atom(std::move(res))};
+            });
     }
+
+    util::check(!slices.empty(), "Unexpected empty slice in write_incomplete_frame");
+    auto slice_and_rowcount = get_slice_and_rowcount(slices);
+
+    const auto write_window = ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow",
+                                                              2 * async::TaskScheduler::instance()->io_thread_count());
+    IndexPartialKey key{stream_id, VersionId(0)};
+    auto de_dup_map = std::make_shared<DeDupMap>();
+
+    auto desc = frame->desc;
+    arcticdb::proto::descriptors::NormalizationMetadata norm_meta = frame->norm_meta;
+    auto user_meta = frame->user_meta;
+    auto bucketize_dynamic = frame->bucketize_dynamic;
+    bool sparsify_floats{false};
+
+    TypedStreamVersion typed_stream_version{stream_id, VersionId{0}, KeyType::APPEND_DATA};
+    return folly::collect(folly::window(std::move(slice_and_rowcount),
+        [frame, slicing_policy, key = std::move(key),
+         store, sparsify_floats, typed_stream_version = std::move(typed_stream_version),
+            bucketize_dynamic, de_dup_map, desc, norm_meta, user_meta](
+            auto&& slice) {
+            auto typed_stream_version_copy = typed_stream_version;
+            return async::submit_cpu_task(WriteToSegmentTask(
+                frame,
+                slice.first,
+                slicing_policy,
+                get_partial_key_gen(frame, std::move(typed_stream_version_copy)),
+                slice.second,
+                frame->index,
+                sparsify_floats))
+                .thenValue([store, de_dup_map, bucketize_dynamic, desc, norm_meta, user_meta](
+                    std::tuple<stream::StreamSink::PartialKey,
+                               SegmentInMemory,
+                               pipelines::FrameSlice> &&ks) {
+                    auto &seg = std::get<SegmentInMemory>(ks);
+                    auto norm_meta_copy = norm_meta;
+                    auto prev_key = std::nullopt;
+                    auto next_key = std::nullopt;
+                    TimeseriesDescriptor tsd = make_timeseries_descriptor(
+                        seg.row_count(),
+                        desc,
+                        std::move(norm_meta_copy),
+                        user_meta,
+                        prev_key,
+                        next_key,
+                        bucketize_dynamic
+                    );
+                    seg.set_timeseries_descriptor(tsd);
+                    return std::move(ks);
+                })
+                .thenValue([store, de_dup_map](auto&& ks) {
+                    return store->async_write(ks, de_dup_map);
+                })
+                .thenValueInline([](SliceAndKey&& sk) {
+                    return sk.key();
+                });
+        },
+        write_window)).via(&async::io_executor());
 }
 
 void write_parallel_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
-    bool validate_index,
-    bool sort_on_index,
-    const std::optional<std::vector<std::string>>& sort_columns) {
-    (void)write_incomplete_frame(store, stream_id, frame, validate_index, sort_on_index, std::nullopt, sort_columns).get();
+    const WriteIncompleteOptions& options) {
+    write_incomplete_frame(store,
+                           stream_id,
+                           frame,
+                           options
+                           ).get();
 }
 
 std::vector<SliceAndKey> get_incomplete(
@@ -299,7 +426,7 @@ std::vector<SliceAndKey> get_incomplete(
                         },
                         [&entries](const IndexRange &index_range) {
                             entries.erase(
-                                std::remove_if(std::begin(entries), std::end(entries), [&] (const auto& entry) {
+                                std::remove_if(std::begin(entries), std::end(entries), [&](const auto &entry) {
                                     return !intersects(index_range, entry.slice_and_key_.key().index_range());
                                 }),
                                 std::end(entries));
@@ -312,7 +439,7 @@ std::vector<SliceAndKey> get_incomplete(
     fix_slice_rowcounts(entries, last_row);
     std::vector<SliceAndKey> output;
     output.reserve(entries.size());
-    for(const auto& entry : entries)
+    for (const auto& entry : entries)
         output.push_back(entry.slice_and_key_);
 
     return output;
@@ -409,8 +536,9 @@ AppendMapEntry entry_from_key(const std::shared_ptr<StreamSource>& store, const 
     auto desc = std::make_shared<StreamDescriptor>(tsd.as_stream_descriptor());
     auto index_field_count = desc->index().field_count();
     auto field_count = desc->fields().size();
-    if(seg)
+    if (seg) {
         seg->attach_descriptor(desc);
+    }
 
     auto frame_slice = FrameSlice{desc, ColRange{index_field_count, field_count}, RowRange{0, entry.total_rows_}};
     entry.slice_and_key_ = SliceAndKey{std::move(frame_slice), key, std::move(seg)};
@@ -418,24 +546,41 @@ AppendMapEntry entry_from_key(const std::shared_ptr<StreamSource>& store, const 
 }
 
 void append_incomplete(
-        const std::shared_ptr<Store>& store,
-        const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame,
-        bool validate_index,
-        bool sort_on_index) {
+    const std::shared_ptr<Store>& store,
+    const StreamId& stream_id,
+    const std::shared_ptr<InputTensorFrame>& frame,
+    bool validate_index) {
     using namespace arcticdb::proto::descriptors;
     using namespace arcticdb::stream;
     ARCTICDB_SAMPLE_DEFAULT(AppendIncomplete)
     ARCTICDB_DEBUG(log::version(), "Writing incomplete frame for stream {}", stream_id);
 
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(
+        !validate_index || index_is_not_timeseries_or_is_sorted_ascending(*frame),
+        "When appending staged data input data must be sorted.");
+
     auto [next_key, total_rows] = read_head(store, stream_id);
     const auto num_rows = frame->num_rows;
     total_rows += num_rows;
     auto desc = frame->desc.clone();
-    auto new_key = write_incomplete_frame(store, stream_id, frame, validate_index, sort_on_index, std::move(next_key), std::nullopt).get();
 
+    auto index_range = frame->index_range;
+    auto segment = incomplete_segment_from_frame(frame, 0, std::move(next_key), false);
 
-    ARCTICDB_DEBUG(log::version(), "Wrote incomplete frame for stream {}, {} rows, total rows {}", stream_id, num_rows, total_rows);
+    auto new_key = store->write(
+                KeyType::APPEND_DATA,
+                VersionId(0),
+                stream_id,
+                index_range.start_,
+                index_range.end_,
+                std::move(segment)).get();
+
+    ARCTICDB_DEBUG(log::version(),
+                   "Wrote incomplete frame for stream {}, {} rows, {} total rows",
+                   stream_id,
+                   num_rows,
+                   total_rows);
+
     write_head(store, to_atom(new_key), total_rows);
 }
 
@@ -467,7 +612,7 @@ void append_incomplete_segment(
             std::move(seg)).get();
 
     total_rows += seg_row_count;
-    ARCTICDB_DEBUG(log::version(), "Wrote incomplete frame for stream {}, {} rows, total rows {}", stream_id, seg_row_count, total_rows);
+    ARCTICDB_DEBUG(log::version(), "Wrote incomplete frame for stream {}, {} rows, {} total rows", stream_id, seg_row_count, total_rows);
     write_head(store, to_atom(std::move(new_key)), total_rows);
 }
 

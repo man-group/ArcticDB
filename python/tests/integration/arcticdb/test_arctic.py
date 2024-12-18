@@ -17,7 +17,7 @@ from typing import List
 from enum import Enum
 
 from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
-from arcticdb_ext.storage import NoDataFoundException
+from arcticdb_ext.storage import NoDataFoundException, KeyType
 from arcticdb_ext.version_store import SortedValue
 from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions, StreamDescriptorMismatch, SchemaException
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter

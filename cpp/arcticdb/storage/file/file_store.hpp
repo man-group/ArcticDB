@@ -57,7 +57,7 @@ void write_dataframe_to_file_internal(
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_dataframe_to_file");
     frame->set_bucketize_dynamic(options.bucketize_dynamic);
     auto slicing = get_slicing_policy(options, *frame);
-    auto partial_key = pipelines::IndexPartialKey{frame->desc.id(), VersionId{0}};
+    auto partial_key = pipelines::TypedStreamVersion{frame->desc.id(), VersionId{0}, KeyType::TABLE_DATA};
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceFrame)
     auto slices = slice(*frame, slicing);
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)

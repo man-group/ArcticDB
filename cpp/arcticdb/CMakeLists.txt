@@ -62,7 +62,7 @@ else()
     add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
 
     SET(HIDE_LINKED_SYMBOLS OFF)
-    
+
     find_package(pybind11 REQUIRED)
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
@@ -312,7 +312,7 @@ set(arcticdb_srcs
         storage/storage_utils.hpp
         stream/aggregator.hpp
         stream/aggregator-inl.hpp
-        stream/append_map.hpp
+        stream/incompletes.hpp
         stream/merge_utils.hpp
         stream/piloted_clock.hpp
         stream/index_aggregator.hpp
@@ -494,7 +494,7 @@ set(arcticdb_srcs
         storage/storage_factory.cpp
         storage/storage_utils.cpp
         stream/aggregator.cpp
-        stream/append_map.cpp
+        stream/incompletes.cpp
         stream/index.cpp
         stream/piloted_clock.cpp
         stream/protobuf_mappings.cpp
@@ -947,7 +947,7 @@ if(${TEST})
             storage/test/test_storage_operations.cpp
             stream/test/stream_test_common.cpp
             stream/test/test_aggregator.cpp
-            stream/test/test_append_map.cpp
+            stream/test/test_incompletes.cpp
             stream/test/test_protobuf_mappings.cpp
             stream/test/test_row_builder.cpp
             stream/test/test_segment_aggregator.cpp

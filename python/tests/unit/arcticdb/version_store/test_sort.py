@@ -4,6 +4,8 @@ import arcticdb as adb
 import random
 import string
 
+from arcticdb_ext.storage import KeyType
+
 
 def test_stage_finalize(arctic_library):
     symbol = "AAPL"
@@ -167,6 +169,29 @@ def test_stage_finalize_sort_index(arctic_library):
 
     expected = pd.concat([df1, df2]).sort_values(sort_cols)
     pd.testing.assert_frame_equal(result, expected)
+
+
+def test_stage_with_sort_index_chunking(lmdb_version_store_tiny_segment):
+    symbol = "AAPL"
+    lib = lmdb_version_store_tiny_segment
+
+    df1 = pd.DataFrame({
+        "timestamp": pd.date_range("2023-01-01", periods=50, freq="H"),
+        "col1": np.arange(1, 51),
+        "col2": [f"a{i:02d}" for i in range(1, 51)],
+        "col3": np.arange(1, 51)
+    }).set_index("timestamp")
+    df1_shuffled = df1.sample(frac=1)
+
+    lib.stage(symbol, df1_shuffled, validate_index=False, sort_on_index=True, sort_columns=None)
+
+    lib_tool = lib.library_tool()
+    data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
+    # We don't apply column slicing when staging incompletes, do apply row slicing
+    assert len(data_keys) == 25
+
+    ref_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, symbol)
+    assert not ref_keys
 
 
 def test_stage_finalize_index_and_additional(arctic_library):
