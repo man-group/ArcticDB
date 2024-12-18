@@ -9,7 +9,7 @@
 
 #include <aws/s3/S3Client.h>
 
-#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/s3/s3_client_interface.hpp>
 
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/pb_util.hpp>
@@ -23,17 +23,25 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/composite.hpp>
 
-namespace arcticdb::storage::s3{
+namespace arcticdb::storage::s3 {
 
-// A real S3ClientWrapper around Aws::S3::Client, which executes actual requests to S3 storage.
-class RealS3Client : public S3ClientWrapper {
+class S3ClientImpl : public S3ClientInterface {
 public:
     template<typename ...Args>
-    RealS3Client(Args && ...args):s3_client(std::forward<Args>(args)...){};
+    S3ClientImpl(Args&& ...args) :
+        s3_client(std::forward<Args>(args)...) {};
 
-    S3Result<std::monostate> head_object(const std::string& s3_object_name, const std::string& bucket_name) const override;
+    S3Result<std::monostate> head_object(
+        const std::string& s3_object_name,
+        const std::string& bucket_name) const override;
 
-    S3Result<Segment> get_object(const std::string& s3_object_name, const std::string& bucket_name) const override;
+    S3Result<Segment> get_object(
+        const std::string& s3_object_name,
+        const std::string& bucket_name) const override;
+
+    folly::Future<S3Result<Segment>> get_object_async(
+        const std::string& s3_object_name,
+        const std::string& bucket_name) const override;
 
     S3Result<std::monostate> put_object(
             const std::string& s3_object_name,
@@ -42,13 +50,13 @@ public:
             PutHeader header = PutHeader::NONE) override;
 
     S3Result<DeleteOutput> delete_objects(
-            const std::vector<std::string>& s3_object_names,
-            const std::string& bucket_name) override;
+        const std::vector<std::string>& s3_object_names,
+        const std::string& bucket_name) override;
 
     S3Result<ListObjectsOutput> list_objects(
-            const std::string& prefix,
-            const std::string& bucket_name,
-            const std::optional<std::string> continuation_token) const override;
+        const std::string& prefix,
+        const std::string& bucket_name,
+        const std::optional<std::string>& continuation_token) const override;
 private:
     Aws::S3::S3Client s3_client;
 };

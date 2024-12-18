@@ -144,6 +144,10 @@ TEST(Clause, ScheduleClauseProcessingStress) {
         processing_unit_indexes.emplace_back(std::vector<size_t>{idx});
     }
 
+    // Map from index in segment_and_slice_future_splitters to the number of calls to process in the first clause that
+    // will require that segment
+    auto segment_fetch_counts = generate_segment_fetch_counts(processing_unit_indexes, num_segments);
+
     auto processed_entity_ids_fut = schedule_clause_processing(component_manager,
                                                                std::move(segment_and_slice_futures),
                                                                std::move(processing_unit_indexes),
