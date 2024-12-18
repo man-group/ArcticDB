@@ -36,13 +36,6 @@ jobs:
         with:
           python-version: "3.${{inputs.python3}}"
 
-      - name: Setup softlink for SSL
-        shell: bash -el {0}
-        run: |
-            mkdir -p /etc/pki/tls
-            ln -s /usr/lib/ssl/certs /etc/pki/tls/certs
-            ln -s /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt
-
       - name: Install deps
         shell: bash
         run: |
@@ -69,6 +62,13 @@ jobs:
 
           export http_proxy="http://127.0.0.1:3128"
           export https_proxy="http://127.0.0.1:3128"
+
+      - name: Setup softlink for SSL
+        shell: bash -el {0}
+        run: |
+            mkdir -p /etc/pki/tls
+            ln -s /usr/lib/ssl/certs /etc/pki/tls/certs
+            ln -s /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt
 
       - name: Run proxy test
         shell: bash
