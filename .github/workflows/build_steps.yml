@@ -73,7 +73,10 @@ jobs:
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
         run: |
           echo ${{fromJSON(inputs.matrix)[0]}}
-          
+          echo ${{fromJSON(inputs.matrix)[0]}}.os
+          echo ${{fromJSON(inputs.matrix)}}
+          echo ${{fromJSON(inputs.matrix)[0].os}}
+
       - name: Checkout
         uses: actions/checkout@v3.3.0
         with:
