@@ -180,7 +180,7 @@ jobs:
         uses: ./.github/actions/run_local_pytest
         with:
           build_type: debug
-          threads: auto
+          threads: 1
           fast_tests_only: 1
           other_params: '-m coverage run '
 

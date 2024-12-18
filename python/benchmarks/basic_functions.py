@@ -5,10 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-<<<<<<< HEAD
-=======
 
->>>>>>> 3d148970 (Fix asv problems (#2065))
 import time
 from typing import List
 from arcticdb import Arctic
@@ -196,11 +193,7 @@ class BatchBasicFunctions:
     def peakmem_read_batch(self, rows, num_symbols):
         read_reqs = [ReadRequest(f"{sym}_sym") for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
-<<<<<<< HEAD
-        
-=======
 
->>>>>>> 3d148970 (Fix asv problems (#2065))
     def time_read_batch_with_columns(self, rows, num_symbols):
         COLS = ["value"]
         read_reqs = [
@@ -229,10 +222,12 @@ class BatchBasicFunctions:
         ]
         self.lib.read_batch(read_reqs)
 
+
 def get_time_at_fraction_of_df(fraction, rows):
     end_time = pd.Timestamp("1/1/2023")
-    time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))
+    time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction - 1)))
     return end_time + time_delta
+
 
 def get_time_at_fraction_of_df(fraction, rows):
     end_time = pd.Timestamp("1/1/2023")
@@ -248,11 +243,12 @@ class ModificationFunctions:
     Modification functions (update, append, delete) need a different setup/teardown process, thus we place them in a
     separate group.
     """
+
     rounds = 1
-    number = 1 # We do a single run between setup and teardown because we e.g. can't delete a symbol twice
+    number = 1  # We do a single run between setup and teardown because we e.g. can't delete a symbol twice
     repeat = 3
-    warmup_time=0
-    
+    warmup_time = 0
+
     timeout = 6000
     ARCTIC_DIR = "modification_functions"
     ARCTIC_DIR_ORIGINAL = "modification_functions_original"
@@ -265,13 +261,13 @@ class ModificationFunctions:
 
     class LargeAppendDataModify:
         """
-            This class will hold a cache of append large dataframes
-            The purpose of this cache is to create dataframes
-            which timestamps are sequenced over time so that 
-            overlap does not occur
+        This class will hold a cache of append large dataframes
+        The purpose of this cache is to create dataframes
+        which timestamps are sequenced over time so that
+        overlap does not occur
         """
 
-        def __init__(self, num_rows_list:List[int], number_elements:int):
+        def __init__(self, num_rows_list: List[int], number_elements: int):
             self.df_append_large = {}
             self.df_append_short_wide = {}
             start_time = time.time()
@@ -279,26 +275,35 @@ class ModificationFunctions:
                 print("Generating dataframe with rows: ", rows)
                 lst = list()
                 lst_saw = list()
-                for n in range(number_elements+1):
+                for n in range(number_elements + 1):
                     print("Generating dataframe no: ", n)
-                    
-                    df = generate_pseudo_random_dataframe(rows, "s", get_time_at_fraction_of_df(2*(n+1), rows))
+
+                    df = generate_pseudo_random_dataframe(
+                        rows, "s", get_time_at_fraction_of_df(2 * (n + 1), rows)
+                    )
                     df_saw = generate_random_floats_dataframe_with_index(
-                        ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, "s", 
-                        get_time_at_fraction_of_df(2*(n+1), rows=ModificationFunctions.WIDE_DF_ROWS)
+                        ModificationFunctions.WIDE_DF_ROWS,
+                        ModificationFunctions.WIDE_DF_COLS,
+                        "s",
+                        get_time_at_fraction_of_df(
+                            2 * (n + 1), rows=ModificationFunctions.WIDE_DF_ROWS
+                        ),
                     )
 
                     lst.append(df)
                     lst_saw.append(df_saw)
-                    print(f"STANDARD     Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}")
-                    print(f"SHORT_n_WIDE Index {df_saw.iloc[0].name} - {df_saw.iloc[df_saw.shape[0] - 1].name}")
+                    print(
+                        f"STANDARD     Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}"
+                    )
+                    print(
+                        f"SHORT_n_WIDE Index {df_saw.iloc[0].name} - {df_saw.iloc[df_saw.shape[0] - 1].name}"
+                    )
                 print("Add dataframes: ", len(lst))
                 self.df_append_large[rows] = lst
                 self.df_append_short_wide[rows] = lst_saw
             print("APPEND LARGE cache generation took (s) :", time.time() - start_time)
 
     def setup_cache(self):
-
         self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)
         rows_values = ModificationFunctions.params
 
@@ -311,7 +316,9 @@ class ModificationFunctions:
             lib = self.ac.create_library(lib_name)
             df = self.init_dfs[rows]
             lib.write("sym", df)
-            print(f"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}")
+            print(
+                f"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}"
+            )
 
         lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)
         self.ac.delete_library(lib_name)
@@ -329,18 +336,31 @@ class ModificationFunctions:
             ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL
         )
 
-        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds
+        number_iteration = (
+            ModificationFunctions.repeat
+            * ModificationFunctions.number
+            * ModificationFunctions.rounds
+        )
 
-        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)
+        lad = ModificationFunctions.LargeAppendDataModify(
+            ModificationFunctions.params, number_iteration
+        )
 
         return lad
 
     def setup(self, lad: LargeAppendDataModify, rows):
-
-        self.df_update_single = generate_pseudo_random_dataframe(1, "s", get_time_at_fraction_of_df(0.5, rows))
-        self.df_update_half = generate_pseudo_random_dataframe(rows//2, "s", get_time_at_fraction_of_df(0.75, rows))
-        self.df_update_upsert = generate_pseudo_random_dataframe(rows, "s", get_time_at_fraction_of_df(1.5, rows))
-        self.df_append_single = generate_pseudo_random_dataframe(1, "s", get_time_at_fraction_of_df(1.1, rows))
+        self.df_update_single = generate_pseudo_random_dataframe(
+            1, "s", get_time_at_fraction_of_df(0.5, rows)
+        )
+        self.df_update_half = generate_pseudo_random_dataframe(
+            rows // 2, "s", get_time_at_fraction_of_df(0.75, rows)
+        )
+        self.df_update_upsert = generate_pseudo_random_dataframe(
+            rows, "s", get_time_at_fraction_of_df(1.5, rows)
+        )
+        self.df_append_single = generate_pseudo_random_dataframe(
+            1, "s", get_time_at_fraction_of_df(1.1, rows)
+        )
 
         self.df_update_short_wide = generate_random_floats_dataframe_with_index(
             ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS
@@ -356,7 +376,9 @@ class ModificationFunctions:
         # After the modification functions clean up the changes by replacing the modified ARCTIC_DIR with the original ARCTIC_DIR_ORIGINAL
         # TODO: We can use dirs_exist_ok=True on copytree instead of removing first if we run with python version >=3.8
         rmtree(ModificationFunctions.ARCTIC_DIR)
-        copytree(ModificationFunctions.ARCTIC_DIR_ORIGINAL, ModificationFunctions.ARCTIC_DIR)
+        copytree(
+            ModificationFunctions.ARCTIC_DIR_ORIGINAL, ModificationFunctions.ARCTIC_DIR
+        )
 
         del self.ac
 
