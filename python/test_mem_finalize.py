@@ -1,6 +1,10 @@
 import os
 import resource
 from arcticdb import Arctic, StagedDataFinalizeMethod
+from arcticdb.config import set_log_level
+
+set_log_level(specific_log_levels={"version": "DEBUG"})
+
 print(f"PID={os.getpid()}")
 #ac = Arctic("lmdb:///home/alex/big_disk/part/lmdb_one?map_size=100GB")
 ac = Arctic("s3://172.17.0.2:9000:aseaton?access=3SePAqKdc1O7JgeDIJob&secret=zhtHzQtQt7UZJVUHk3QtpShSeRYZozwEl0pVeq8A")

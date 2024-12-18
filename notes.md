@@ -386,7 +386,9 @@ Ideas so far:
 Plan
 - Script to see if Vasil's idea about the symbol counts is correct
   Interrupted during cleanup of the data keys. See if ranges in the data keys are in the symbols.
-  Advice for BBG about how to clean them up.
+  Advice for BBG about how to clean them up. (/)
+- Profile repeated finalizations (/) (all fine)
+- Instructions to profile with memray (/)
 - Chunk up the incompletes based on the library row size setting rather than writing them in the size that the user
   had them in memory
 - Experiment with simulating very slow IO tasks and, separately, very slow CPU tasks to see effect on memory growth
@@ -405,3 +407,52 @@ Step 1: Memory use after finalize 911.796MB
 Step 29: Memory use after finalize 951.684MB
 Step 30: Finalizing symbol staged-3
 ```
+
+1M rows per incomplete
+
+
+- Debug build works well with Memray, release build does not
+- Debug build CI run - https://github.com/man-group/ArcticDB/actions/runs/12391751526 - test the wheel it makes with memray
+
+- Diagnostic debug logging - work on this - new logger? Binary with the allocations logger?
+
+arcticdb_ext.so is 49M without symbols
+
+- Perhaps they have very large existing symbols?
+  Test with existing >>> appending
+  Do I have logging for this case?
+
+
+## Debugging steps
+
+From a venv with the debug ArcticDB wheel installed and also memray,
+
+```
+pip install memray
+```
+
+Then launch a repro script showing growing memory use:
+
+`memray run --native your_script.py`
+
+Then share the result file with me.
+
+memray slows things down - you don't need to run until you OOM crash. You just need an example where you have a process
+finalizing staged data where you can observe growing memory use.
+
+Also set up ArcticDB debug logging by putting,
+
+```
+from arcticdb.config import set_log_level
+set_log_level(specific_log_levels={"version": "DEBUG"})
+```
+
+at the top of your repro script. This will log debug info to stderr. Share that with me too.
+
+## Summary
+
+- How big are the incompletes?
+- Do the symbols already exist? How big?
+- Finalize staged data or sort and finalize?
+- I'll prepare a debug build with extra logging
+  - Do you have a repro with growing memory use that doesn't OOM or that executes a bit faster?
