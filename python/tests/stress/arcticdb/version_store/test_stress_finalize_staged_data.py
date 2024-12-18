@@ -39,9 +39,9 @@ class Results:
 
 
 num_rows_initially = int(1e7)
-num_chunks = 10
-num_rows_per_chunk = int(1e5)
-num_symbols = 10
+num_chunks = 100
+num_rows_per_chunk = int(4e6)
+num_symbols = 1
 cachedDF = CachedDFGenerator(num_rows_initially + 1, size_string_flds_array=[10])
 
 
@@ -69,7 +69,7 @@ def get_chunks(chunk_sizes, start_times):
 def stage_chunks(lib, symbol, chunk_sizes, start_times):
     chunks = get_chunks(chunk_sizes, start_times)
     inp = zip(itertools.repeat(lib), itertools.repeat(symbol), chunks)
-    with multiprocessing.Pool(10) as p:
+    with multiprocessing.Pool(30) as p:
         p.starmap(stage_chunk, inp)
 
 
@@ -110,7 +110,7 @@ def test_finalize_monotonic_unique_chunks():
 
     for i in range(num_symbols):
         symbol = f"staged-{i}"
-        lib.write(symbol, data=df, prune_previous_versions=True)
+        #lib.write(symbol, data=df, prune_previous_versions=True)
 
         start_times = np.cumsum(chunk_list)
         start_times = np.roll(start_times, 1)
@@ -118,4 +118,4 @@ def test_finalize_monotonic_unique_chunks():
         start_times += num_rows_initially
         print(f"chunk_list={chunk_list} start_times={start_times}")
         stage_chunks(lib, symbol, chunk_list, start_times)
-        print(f"SYMBOL ACTUAL ROWS before finalization - {lib._nvs.get_num_rows(symbol)} ")
+        print(f"staging complete")

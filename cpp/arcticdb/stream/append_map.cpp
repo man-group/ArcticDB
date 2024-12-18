@@ -14,6 +14,8 @@
 #include <util/key_utils.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <iterator>
+#include "pipeline/slicing.hpp"
+#include "pipeline/write_frame.hpp"
 
 namespace arcticdb {
 
@@ -150,6 +152,7 @@ SegmentInMemory incomplete_segment_from_frame(
     auto field_tensors = std::move(frame->field_tensors);
     auto output = std::visit([&](const auto& idx) {
         using IdxType = std::decay_t<decltype(idx)>;
+        // TODO aseaton would a simpler change be to just change the policy here?
         using SingleSegmentAggregator = Aggregator<IdxType, FixedSchema, NeverSegmentPolicy>;
         auto copy_prev_key = prev_key;
         auto timeseries_desc = index_descriptor_from_frame(frame, existing_rows, std::move(prev_key));
@@ -214,14 +217,22 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
         mutable_seg.sort(sort_columns);
 }
 
-folly::Future<arcticdb::entity::VariantKey> write_incomplete_frame(
+folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
     bool validate_index,
     bool sort_on_index,
-    std::optional<AtomKey>&& next_key,
+    [[maybe_unused]] std::optional<AtomKey>&& next_key,
     const std::optional<std::vector<std::string>>& sort_columns)  {
+    // TODO the next_key stuff needs care for tick collectors - split out to a separate thing?
+    // Tick collectors can (and should) handle their own slicing too - and never have any of the sorting stuff
+    // TODO? Release the GIL?
+    ARCTICDB_SAMPLE(WriteIncompleteFrame, 0)
+    log::version().debug("Command: write_incomplete_frame {}", stream_id);
+
+    // TODO aseaton compare with old logic incomplete_segment_from_frame
+    // and segmenting logic write_versioned_dataframe_internal
     using namespace arcticdb::pipelines;
 
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
@@ -229,47 +240,108 @@ folly::Future<arcticdb::entity::VariantKey> write_incomplete_frame(
             "When writing/appending staged data in parallel, with no sort columns supplied, input data must be sorted.");
 
     auto index_range = frame->index_range;
-    auto segment = incomplete_segment_from_frame(frame, 0, std::move(next_key), false);
+    WriteOptions options; // TODO aseaton set the options properly
+    // TODO aseaton we don't want to do the column slicing!
+    auto slicing_policy = get_slicing_policy(options, *frame);
+    auto slices = slice(*frame, slicing_policy);
+    util::check(!slices.empty(), "Unexpected empty slice in write_incomplete_frame");
+    auto slice_and_rowcount = get_slice_and_rowcount(slices);
 
+    const auto write_window = ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow", 2 * async::TaskScheduler::instance()->io_thread_count());
+    IndexPartialKey key{stream_id, VersionId(0)};
+    auto de_dup_map = std::make_shared<DeDupMap>();
+    bool sparsify_floats{false}; // TODO aseaton tick collector support
 
-    if(sort_on_index || (sort_columns && !sort_columns->empty())) {
-        auto mutable_seg = segment.clone();
-        if(sort_on_index) {
-            util::check(frame->has_index(), "Sort requested on index but no index supplied");
-            std::vector<std::string> cols;
-            for(auto i = 0UL; i < frame->desc.index().field_count(); ++i) {
-                cols.emplace_back(frame->desc.fields(i).name());
-            }
-            if(sort_columns) {
-                for(auto& extra_sort_col : *sort_columns) {
-                    if(std::find(std::begin(cols), std::end(cols), extra_sort_col) == std::end(cols))
-                        cols.emplace_back(extra_sort_col);
-                }
-            }
-            do_sort(mutable_seg, cols);
-        } else {
-            do_sort(mutable_seg, *sort_columns);
-        }
+    auto append_partial_key_gen = [stream_id, &frame](const FrameSlice& frame_slice) {
+//        auto& idx = frame->index_tensor.value();
+//        auto start = *idx.ptr_cast<timestamp>(slice_begin_pos(frame_slice, *frame));
+//        auto end = *idx.ptr_cast<timestamp>(slice_end_pos(frame_slice, *frame));
+        // TODO aseaton this logic doesn't handle strides correctly compared with the index based logic above
+        auto start = static_cast<timestamp>(slice_begin_pos(frame_slice, *frame));
+        auto end = static_cast<timestamp>(slice_end_pos(frame_slice, *frame));
+        return stream::StreamSink::PartialKey{
+            KeyType::APPEND_DATA, VersionId(0), stream_id, start, end_index_generator(end)
+        };
+    };
 
-        if(sort_on_index || (sort_columns && sort_columns->at(0) == mutable_seg.descriptor().field(0).name()))
-            mutable_seg.descriptor().set_sorted(SortedValue::ASCENDING);
+    const auto index = std::move(frame->index);
+    size_t existing_rows = 0;
+    auto timeseries_desc = index_descriptor_from_frame(frame, existing_rows, std::nullopt /*std::move(prev_key) */);
+    //auto norm_meta_copy = norm_meta;
+    //auto tsd = pack_timeseries_descriptor(descriptor, existing_rows + num_rows, std::nullopt /*std::move(copy_prev_key)*/, std::move(norm_meta_copy));
+    util::check(!timeseries_desc.fields().empty(), "Expected fields not to be empty in incomplete segment");
 
-        return store->write(
-            KeyType::APPEND_DATA,
-            VersionId(0),
-            stream_id,
-            index_range.start_,
-            index_range.end_,
-            std::move(mutable_seg));
-    } else {
-        return store->write(
-            KeyType::APPEND_DATA,
-            VersionId(0),
-            stream_id,
-            index_range.start_,
-            index_range.end_,
-            std::move(segment));
-    }
+    // TODO aseaton we might want to write the chunks in serial to avoid cases where later chunks get compacted before earlier chunks
+    return folly::collect(folly::window(std::move(slice_and_rowcount), [frame, slicing_policy, key=std::move(key), store, sparsify_floats,
+                                                                        de_dup_map, &append_partial_key_gen, timeseries_desc](auto&& slice) {
+        return async::submit_cpu_task(WriteToSegmentTask(
+            frame,
+            slice.first,
+            slicing_policy,
+            append_partial_key_gen,
+            slice.second,
+            frame->index,
+            sparsify_floats))
+            .thenValue([store, de_dup_map, timeseries_desc] (std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, pipelines::FrameSlice>&& ks) {
+                std::get<SegmentInMemory>(ks).set_timeseries_descriptor(timeseries_desc);
+                return std::move(ks);
+            })
+            .thenValue([store, de_dup_map] (auto&& ks) {
+                return store->async_write(ks, de_dup_map);
+            })
+            .thenValueInline([](SliceAndKey&& sk) {
+                return sk.key();
+            })
+            ;
+    }, write_window)).via(&async::io_executor());
+
+//    return store->write(
+//        KeyType::APPEND_DATA,
+//        VersionId(0),
+//        stream_id,
+//        index_range.start_,
+//        index_range.end_,
+//        std::move(segment));
+//
+//    if(sort_on_index || (sort_columns && !sort_columns->empty())) {
+//        // TODO - ignore this sorting stuff for now
+//        auto mutable_seg = segment.clone();
+//        if(sort_on_index) {
+//            util::check(frame->has_index(), "Sort requested on index but no index supplied");
+//            std::vector<std::string> cols;
+//            for(auto i = 0UL; i < frame->desc.index().field_count(); ++i) {
+//                cols.emplace_back(frame->desc.fields(i).name());
+//            }
+//            if(sort_columns) {
+//                for(auto& extra_sort_col : *sort_columns) {
+//                    if(std::find(std::begin(cols), std::end(cols), extra_sort_col) == std::end(cols))
+//                        cols.emplace_back(extra_sort_col);
+//                }
+//            }
+//            do_sort(mutable_seg, cols);
+//        } else {
+//            do_sort(mutable_seg, *sort_columns);
+//        }
+//
+//        if(sort_on_index || (sort_columns && sort_columns->at(0) == mutable_seg.descriptor().field(0).name()))
+//            mutable_seg.descriptor().set_sorted(SortedValue::ASCENDING);
+//
+//        return store->write(
+//            KeyType::APPEND_DATA,
+//            VersionId(0),
+//            stream_id,
+//            index_range.start_,
+//            index_range.end_,
+//            std::move(mutable_seg));
+//    } else {
+//        return store->write(
+//            KeyType::APPEND_DATA,
+//            VersionId(0),
+//            stream_id,
+//            index_range.start_,
+//            index_range.end_,
+//            std::move(segment));
+//    }
 }
 
 void write_parallel_impl(
@@ -279,7 +351,7 @@ void write_parallel_impl(
     bool validate_index,
     bool sort_on_index,
     const std::optional<std::vector<std::string>>& sort_columns) {
-    (void)write_incomplete_frame(store, stream_id, frame, validate_index, sort_on_index, std::nullopt, sort_columns).get();
+    folly::collect(write_incomplete_frame(store, stream_id, frame, validate_index, sort_on_index, std::nullopt, sort_columns)).get();
 }
 
 std::vector<SliceAndKey> get_incomplete(
@@ -432,11 +504,10 @@ void append_incomplete(
     const auto num_rows = frame->num_rows;
     total_rows += num_rows;
     auto desc = frame->desc.clone();
-    auto new_key = write_incomplete_frame(store, stream_id, frame, validate_index, sort_on_index, std::move(next_key), std::nullopt).get();
+    auto new_keys = write_incomplete_frame(store, stream_id, frame, validate_index, sort_on_index, std::move(next_key), std::nullopt).get();
 
-
-    ARCTICDB_DEBUG(log::version(), "Wrote incomplete frame for stream {}, {} rows, total rows {}", stream_id, num_rows, total_rows);
-    write_head(store, to_atom(new_key), total_rows);
+    ARCTICDB_DEBUG(log::version(), "Wrote incomplete frame for stream {}, {} rows, {} total rows", stream_id, num_rows, total_rows);
+    write_head(store, new_keys.at(0), total_rows);
 }
 
 void append_incomplete_segment(
@@ -467,7 +538,7 @@ void append_incomplete_segment(
             std::move(seg)).get();
 
     total_rows += seg_row_count;
-    ARCTICDB_DEBUG(log::version(), "Wrote incomplete frame for stream {}, {} rows, total rows {}", stream_id, seg_row_count, total_rows);
+    ARCTICDB_DEBUG(log::version(), "Wrote incomplete frame for stream {}, {} rows, {} total rows", stream_id, seg_row_count, total_rows);
     write_head(store, to_atom(std::move(new_key)), total_rows);
 }
 
