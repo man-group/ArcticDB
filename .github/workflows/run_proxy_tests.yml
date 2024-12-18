@@ -36,11 +36,6 @@ jobs:
         with:
           python-version: "3.${{inputs.python3}}"
 
-      - name: Install wheel
-        shell: bash
-        run: |
-          pip install --force-reinstall arcticdb*.whl[Testing]
-
       - name: Setup softlink for SSL
         shell: bash -el {0}
         run: |
@@ -51,12 +46,14 @@ jobs:
       - name: Install deps
         shell: bash
         run: |
-          pip install grpcio
           python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
 
           apt update
           apt install -y software-properties-common iptables squid
           add-apt-repository ppa:deadsnakes/ppa -y
+
+          pip install --force-reinstall arcticdb*.whl[Testing]
+          pip install grpcio
 
           echo "
           acl localnet src 127.0.0.1/32
