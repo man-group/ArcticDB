@@ -909,7 +909,9 @@ bool read_incompletes_to_pipeline(
     // If all segments are empty we will proceed as if were appending/writing and empty dataframe.
     debug::check<ErrorCode::E_ASSERTION_FAILURE>(!incomplete_segments.empty(), "Incomplete segments must be non-empty");
     const auto first_non_empty_seg = std::find_if(incomplete_segments.begin(), incomplete_segments.end(), [&](auto& slice){
-        return slice.segment(store).row_count() > 0;
+        auto res = slice.segment(store).row_count() > 0;
+        log::storage().info("Testing for non-empty seg {} res={}", slice.key(), res);
+        return res;
     });
     const auto& seg =
         first_non_empty_seg != incomplete_segments.end() ? first_non_empty_seg->segment(store) : incomplete_segments.begin()->segment(store);

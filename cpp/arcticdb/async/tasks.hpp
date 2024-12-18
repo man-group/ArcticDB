@@ -180,6 +180,10 @@ struct WriteSegmentTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(WriteSegmentTask)
 
     VariantKey operator()(storage::KeySegmentPair &&key_seg) const {
+        int64_t sleep_ms = ConfigsMap::instance()->get_int("Simulation.WriteSleepMs", 0);
+        log::storage().info("Simulating {}ms sleep writing key_seg {}", sleep_ms, key_seg.variant_key());
+        std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
+
         ARCTICDB_SAMPLE(WriteSegmentTask, 0)
         auto k = key_seg.variant_key();
         lib_->write(Composite<storage::KeySegmentPair>(std::move(key_seg)));
