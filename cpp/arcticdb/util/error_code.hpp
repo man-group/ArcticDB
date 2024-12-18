@@ -103,7 +103,8 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(9001, E_UNKNOWN_CODEC) \
     ERROR_CODE(9002, E_ZSDT_ENCODING) \
     ERROR_CODE(9003, E_LZ4_ENCODING)  \
-    ERROR_CODE(9004, E_INPUT_TOO_LARGE)
+    ERROR_CODE(9004, E_INPUT_TOO_LARGE) \
+    ERROR_CODE(9005, E_ENCODING_VERSION_MISMATCH)
 
 enum class ErrorCode : detail::BaseType {
 #define ERROR_CODE(code, Name, ...) Name = code,

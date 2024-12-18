@@ -19,6 +19,7 @@ import arcticdb as adb
 
 from arcticdb.util.test import get_sample_dataframe
 from arcticdb.version_store._store import NativeVersionStore
+from tests.util.mark import SKIP_CONDA_MARK
 
 
 def nice_bytes_str(bytes):
@@ -145,8 +146,8 @@ def grow_exp(df_to_grow: pd.DataFrame, num_times_xx2: int):
         df_to_grow = pd.concat([df_to_grow, df_prev])
     return df_to_grow
 
+@SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
 @pytest.mark.skipif(sys.platform == "win32", reason="Not enough storage on Windows runners")
-@pytest.mark.skipif(sys.platform == "darwin", reason="Problem on MacOs")
 def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
     lib: adb.Library = arctic_library_lmdb
 
@@ -185,7 +186,7 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
 
     check_process_memory_leaks(proc_to_examine, 25, max_mem_bytes, 80.0)
 
-@pytest.mark.skipif(sys.platform == "darwin", reason="Problem on MacOs")
+@SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
 def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     lib: NativeVersionStore = lmdb_version_store_very_big_map
 
