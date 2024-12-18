@@ -183,6 +183,7 @@ struct WriteSegmentTask : BaseTask {
         ARCTICDB_SAMPLE(WriteSegmentTask, 0)
         auto k = key_seg.variant_key();
         lib_->write(Composite<storage::KeySegmentPair>(std::move(key_seg)));
+        ARCTICDB_DEBUG(log::version(), "Finished write task key {}", variant_key_view(k));
         return k;
     }
 };

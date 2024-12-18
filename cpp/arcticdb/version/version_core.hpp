@@ -294,6 +294,7 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
         segment_size.has_value() ? SegmentationPolicy{*segment_size} : SegmentationPolicy{}
     };
 
+    size_t count = 0;
     for (auto it = to_compact_start; it != to_compact_end; ++it) {
         auto sk = [&it]() {
             if constexpr (std::is_same_v<IteratorType, pipelines::PipelineContext::iterator>)
@@ -306,6 +307,8 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
         }
 
         const SegmentInMemory& segment = sk.segment(store);
+        ARCTICDB_DEBUG(log::version(), "do_compact Symbol {} Segment {}: Segment has rows {} columns {} uncompressed bytes {}",
+                       pipeline_context->stream_id_, count++, segment.row_count(), segment.columns().size(), segment.descriptor().uncompressed_bytes());
 
         if(validate_index && is_segment_unsorted(segment)) {
             auto written_keys = folly::collect(write_futures).get();
@@ -336,6 +339,27 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
 
 CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const StreamDescriptor& pipeline_context);
 
+}
+
+namespace fmt {
+template<>
+struct formatter<arcticdb::version_store::CompactIncompleteOptions> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::version_store::CompactIncompleteOptions &opts, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "CompactIncompleteOptions append={} convert_int_to_float={}, deleted_staged_data_on_failure={}, "
+                                  "prune_previous_versions={}, sparsify={}, validate_index={}, via_iteration={}",
+                       opts.append_,
+                       opts.convert_int_to_float_,
+                       opts.delete_staged_data_on_failure_,
+                       opts.prune_previous_versions_,
+                       opts.sparsify_,
+                       opts.validate_index_,
+                       opts.via_iteration_);
+    }
+};
 }
 
 #define ARCTICDB_VERSION_CORE_H_
