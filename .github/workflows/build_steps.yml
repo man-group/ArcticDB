@@ -69,6 +69,11 @@ jobs:
     defaults:
       run: {shell: bash}
     steps:
+      - name: Extra envs
+        # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
+        run: |
+          echo ${{fromJSON(inputs.matrix)[0]}}
+          
       - name: Checkout
         uses: actions/checkout@v3.3.0
         with:
@@ -279,7 +284,7 @@ jobs:
             - os: 0
         include:
             - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only     
-    if: ${{fromJSON(inputs.matrix)[0]}}.os== 'linux' && inputs.job_type == 'build-python-wheels'
+    if: ${{fromJSON(inputs.matrix)[0]}}.os == 'linux' && inputs.job_type == 'build-python-wheels'
     with:
       python3: ${{inputs.python3}}
       wheel: wheel-${{needs.compile.outputs.cibw_build}}
