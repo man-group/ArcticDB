@@ -38,7 +38,7 @@ class Results:
         return f"Options: {self.options}\nIteration: {self.iteration}\n# staged chunks: {self.number_staged_chunks}\ntotal rows finalized: {self.total_rows_finalized}\ntime for finalization (s): {self.finalization_time}"
 
 
-num_rows_initially = int(1e7)
+num_rows_initially = int(1e8)
 num_chunks = 10
 num_rows_per_chunk = int(1e5)
 num_symbols = 10
