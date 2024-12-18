@@ -30,6 +30,10 @@ jobs:
           apt install -y software-properties-common iptables squid
           add-apt-repository ppa:deadsnakes/ppa -y
 
+          # select-python no longer supports python3.6
+          apt install -y python3.${{inputs.python3}}" python3.${{inputs.python3}}"-venv python3-pip
+          python3.${{inputs.python3}}" -m venv /root/pyenvs/venv38
+
           sh -c 'echo "
           acl localnet src 127.0.0.1/32
           http_access allow localnet
@@ -44,11 +48,6 @@ jobs:
 
           export http_proxy="http://127.0.0.1:3128"
           export https_proxy="http://127.0.0.1:3128"
-      
-      - name: Select Python (Windows)
-        uses: actions/setup-python@v4.7.1
-        with:
-          python-version: "3.${{inputs.python3}}"
 
       - name: Install wheel
         shell: bash
