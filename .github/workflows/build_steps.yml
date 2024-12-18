@@ -76,6 +76,7 @@ jobs:
           echo ${{fromJSON(inputs.matrix)[0]}}.os
           echo ${{fromJSON(inputs.matrix)}}
           echo ${{fromJSON(inputs.matrix)[0].os}}
+          echo ${{matrix.os}}
           echo ${{inputs.job_type}}
           echo ${{inputs}}
 
