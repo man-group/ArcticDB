@@ -210,4 +210,7 @@ def arctic_uri(request):
 @pytest.fixture()
 def old_venv_and_arctic_uri(old_venv, arctic_uri):
     # TODO: Once #1979 is understood and fixed reenable mongo, lmdb and azure for versions which have the fix.
+    if arctic_uri.startswith("mongo") and "1.6.2" in old_venv.version:
+        pytest.skip("Mongo storage backend is not supported in 1.6.2")
+
     return old_venv, arctic_uri
