@@ -24,6 +24,11 @@ jobs:
         uses: actions/download-artifact@v3.0.2
         with:
           name: ${{inputs.wheel}}
+      
+      - name: Select Python
+        uses: actions/setup-python@v4.7.1
+        with:
+          python-version: "3.${{inputs.python3}}"
 
       - name: Install deps
         shell: bash
@@ -32,13 +37,13 @@ jobs:
           apt install -y software-properties-common iptables squid
           add-apt-repository ppa:deadsnakes/ppa -y
 
-          sh -c 'echo "
+          echo "
           acl localnet src 127.0.0.1/32
           http_access allow localnet
           http_access deny all
 
           http_port 3128
-          " >> /etc/squid/squid.conf'
+          " >> /etc/squid/squid.conf
 
           service squid restart
           iptables-legacy -A OUTPUT -p tcp --dport 80 -m owner ! --uid-owner proxy -j REJECT
@@ -46,18 +51,13 @@ jobs:
 
           export http_proxy="http://127.0.0.1:3128"
           export https_proxy="http://127.0.0.1:3128"
-      
-      - name: Select Python (Windows)
-        uses: actions/setup-python@v4.7.1
-        with:
-          python-version: "3.${{inputs.python3}}"
 
       - name: Install wheel
         shell: bash
         run: |
           echo ${{env.python_impl_name}}
           ls ${{env.python_impl_name}}
-          python -m pip install --force-reinstall  ${{inputs.wheel}}[Testing]
+          python -m pip install --force-reinstall  $(ls arcticdb*.whl)[Testing]
 
       - name: Run proxy test
         shell: bash
