@@ -1,0 +1,32 @@
+name: Run specific tests
+on:
+  workflow_dispatch:
+    inputs:
+      # python3:
+      #   type: string
+      #   description: 'List of python versions to test against (comma separated)'
+      #   default: "[9, 10]"
+      os:
+        type: string
+        description: 'List of operating systems to test against (comma separated)'
+        default: '["linux", "windows"]'
+      test_suite:
+        type: string
+        description: 'List of test suites to run (comma separated)'
+        default: '["tests/unit", "tests/integration"]'
+
+  push:
+
+jobs:
+  run_tests:
+    strategy:
+      fail-fast: false
+      matrix: 
+        os: ${{ fromJson(github.event.inputs.os || '["linux", "windows"]') }}
+        test_suite: ${{ fromJson(github.event.inputs.test_suite || '["tests/unit", "tests/integration"]') }}
+    name: Run tests on python 3.11 and ${{ matrix.os }} with ${{ matrix.test_suite }} test suite
+    uses: ./.github/workflows/run_specific_tests_on_matrix.yml
+    secrets: inherit
+    with:
+      os: ${{ matrix.os }}
+      test_suite: ${{ matrix.test_suite }}
