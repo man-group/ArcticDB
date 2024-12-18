@@ -205,6 +205,22 @@ def query_filter_then_groupby_with_aggregations() -> QueryBuilder:
               "int16": "max"})
     )
 
+def query_no_filter_only_groupby_with_aggregations() -> QueryBuilder:
+    """
+    groupby composite aggregation query for QueryBuilder memory tests.
+    The query basically will do aggregation of half of dataframe
+    """
+    q = QueryBuilder()
+    return (
+        q.groupby("uint8")
+        .agg({"uint32": "mean", 
+              "int32": "sum", 
+              "strings": "count", 
+              "float64": "sum", 
+              "float32": "min", 
+              "int16": "max"})
+    )
+
 
 def query_filter_impossible_cond_groupby_with_aggregations_for_whole_frame() -> QueryBuilder:
     """
@@ -270,7 +286,7 @@ def query_row_range_57percent(size: int) -> QueryBuilder:
     return q.row_range( (a, b) )
 
 
-def query_date_range__57percent(start: pd.Timestamp, end: pd.Timestamp) -> QueryBuilder:
+def query_date_range_57percent(start: pd.Timestamp, end: pd.Timestamp) -> QueryBuilder:
     """
     Date range query for QueryBuilder memory tests
     Will generate random date range that will return 
@@ -371,10 +387,11 @@ def test_mem_leak_querybuilder_standard(arctic_library_lmdb):
     def proc_to_examine():
         queries = [query_filter_then_groupby_with_aggregations(), 
                     query_filter_impossible_cond_groupby_with_aggregations_for_whole_frame(), 
+                    query_no_filter_only_groupby_with_aggregations(),
                     query_apply_clause_only(random_string(10)), 
                     query_resample_minutes(),
                     query_row_range_57percent(size),
-                    query_date_range__57percent(start_date, end_date)]
+                    query_date_range_57percent(start_date, end_date)]
         for q in queries:
             data: pd.DataFrame = lib.read(symbol, query_builder=q).data
             print_info(data, q)
@@ -466,11 +483,12 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:
     gc.collect()
 
     queries = [query_filter_then_groupby_with_aggregations(), 
+                query_no_filter_only_groupby_with_aggregations(),
                 query_filter_impossible_cond_groupby_with_aggregations_for_whole_frame(), 
                 query_apply_clause_only(random_string(10)), 
                 query_resample_minutes(),
                 query_row_range_57percent(size),
-                query_date_range__57percent(start_date, end_date)]
+                query_date_range_57percent(start_date, end_date)]
     
     for rep in range(num_repetitions):
             logger.info(f"REPETITION : {rep}")
@@ -499,6 +517,53 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:
 
     del lib, queries
     gc.collect()
+
+def test_queries_correctness_precheck(library_with_tiny_symbol):
+    """
+    This test does precheck to confirm queries work more or less
+    If it fails then perhaps there was a problem with 
+    QueryBuilder functionality.
+    All checks are based on size of expected dataframe returned by
+    a queryno equality checks
+    """
+
+    df: pd.DataFrame = None
+    lib: Library = None
+    (lib, df, symbol) = library_with_tiny_symbol
+
+    size = df.shape[0]
+    start_date = df.index[0]
+    end_date = df.index[-1]
+
+    lib.write(symbol, df)
+
+    data: pd.DataFrame = lib.read(symbol, 
+                                  query_builder=query_filter_impossible_cond_groupby_with_aggregations_for_whole_frame()
+                                  ).data
+    assert df.shape[0] == data.shape[0]
+    
+    data: pd.DataFrame = lib.read(symbol, 
+                                  query_builder=query_row_range_57percent(size)
+                                  ).data
+    assert df.shape[0] < data.shape[0] * 2
+    
+    data: pd.DataFrame = lib.read(symbol, 
+                                  query_builder=query_date_range_57percent(start_date, end_date)
+                                  ).data
+    assert df.shape[0] < data.shape[0] * 2
+
+    data: pd.DataFrame = lib.read(symbol, 
+                                  query_builder=query_apply_clause_only(random_string(10))
+                                  ).data
+    assert len(df.columns.to_list()) <= data.shape[0] * 2
+    assert 200 < data.shape[0]
+
+    data: pd.DataFrame = lib.read(symbol, 
+                                  query_builder=query_no_filter_only_groupby_with_aggregations()
+                                  ).data
+    # groupby column becomes index
+    assert sorted(list(df["uint8"].unique())) == sorted(list(data.index.unique()))
+
 
 if MEMRAY_SUPPORTED: 
     ##
