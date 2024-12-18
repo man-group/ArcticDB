@@ -308,6 +308,7 @@ set(arcticdb_srcs
         storage/storage.hpp
         storage/storage_override.hpp
         storage/store.hpp
+        storage/storage_utils.hpp
         stream/aggregator.hpp
         stream/aggregator-inl.hpp
         stream/append_map.hpp
@@ -328,6 +329,7 @@ set(arcticdb_srcs
         stream/stream_utils.hpp
         stream/stream_writer.hpp
         toolbox/library_tool.hpp
+        toolbox/storage_mover.hpp
         util/allocator.hpp
         util/bitset.hpp
         util/buffer.hpp
@@ -486,6 +488,7 @@ set(arcticdb_srcs
         storage/s3/s3_storage.cpp
         storage/s3/s3_storage_tool.cpp
         storage/storage_factory.cpp
+        storage/storage_utils.cpp
         stream/aggregator.cpp
         stream/append_map.cpp
         stream/index.cpp

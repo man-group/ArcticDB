@@ -11,7 +11,6 @@
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/util/timer.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/util/ranges_from_future.hpp>
@@ -1167,5 +1166,6 @@ ReadResult read_dataframe_from_file(
 void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {
     version_map()->delete_all_versions(store(), stream_id);
     delete_all_for_stream(store(), stream_id, true);
+    version_map()->flush();
 }
 } //namespace arcticdb::version_store
