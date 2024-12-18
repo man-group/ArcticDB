@@ -290,10 +290,11 @@ jobs:
             - os: 0
         include:
             - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only     
-    if: ${{fromJSON(inputs.matrix)[0].os}} == 'linux' && inputs.job_type == 'build-python-wheels'
+    if: inputs.job_type == 'build-python-wheels'
     with:
       python3: ${{inputs.python3}}
       wheel: wheel-${{needs.compile.outputs.cibw_build}}
+      os: ${{matrix.os}}
 
   stop-ec2-runner:
     needs: [start_ec2_runner, compile]

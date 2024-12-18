@@ -3,9 +3,12 @@ on:
   workflow_call:
     inputs:
       wheel:             {required: true, type: string, description: The name of the wheel artifact to test }
+      os:                {required: true, type: string, description: The operating system to run the tests on }
       python3:           {default: '7', type: string, description: Specifies the version of python for testing }
 jobs:
-  run_test:
+  run_test:   
+    # Only run on Linux
+    if: inputs.os == 'linux' 
     runs-on: ubuntu-22.04
     container:
       image: ubuntu:22.04
