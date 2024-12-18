@@ -8,7 +8,10 @@ on:
 jobs:
   run_proxy_tests:   
     # Only run on Linux
-    if: inputs.os == 'linux' 
+    # select python support python > 3.6. Since we are dropping 3.6 support anyway, we can skip it
+    if: |
+      inputs.os == 'linux' &&
+      inputs.python3 != '6' 
     runs-on: ubuntu-22.04
     container:
       image: ubuntu:22.04
@@ -21,7 +24,6 @@ jobs:
         uses: actions/download-artifact@v3.0.2
         with:
           name: ${{inputs.wheel}}
-          path: ${{runner.temp}}
 
       - name: Install deps
         shell: bash
@@ -29,10 +31,6 @@ jobs:
           apt update
           apt install -y software-properties-common iptables squid
           add-apt-repository ppa:deadsnakes/ppa -y
-
-          # select-python no longer supports python3.6
-          apt install -y python3.${{inputs.python3}}" python3.${{inputs.python3}}"-venv python3-pip
-          python3.${{inputs.python3}}" -m venv /root/pyenvs/venv38
 
           sh -c 'echo "
           acl localnet src 127.0.0.1/32
@@ -48,13 +46,18 @@ jobs:
 
           export http_proxy="http://127.0.0.1:3128"
           export https_proxy="http://127.0.0.1:3128"
+      
+      - name: Select Python (Windows)
+        uses: actions/setup-python@v4.7.1
+        with:
+          python-version: "3.${{inputs.python3}}"
 
       - name: Install wheel
         shell: bash
         run: |
           echo ${{env.python_impl_name}}
           ls ${{env.python_impl_name}}
-          python -m pip install --force-reinstall  ${{runner.temp}}/${{inputs.wheel}}[Testing]
+          python -m pip install --force-reinstall  ${{inputs.wheel}}[Testing]
 
       - name: Run proxy test
         shell: bash
