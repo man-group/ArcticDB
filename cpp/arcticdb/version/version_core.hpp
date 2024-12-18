@@ -294,7 +294,7 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
         segment_size.has_value() ? SegmentationPolicy{*segment_size} : SegmentationPolicy{}
     };
 
-    size_t count = 0;
+    [[maybe_unused]] size_t count = 0;
     for (auto it = to_compact_start; it != to_compact_end; ++it) {
         auto sk = [&it]() {
             if constexpr (std::is_same_v<IteratorType, pipelines::PipelineContext::iterator>)

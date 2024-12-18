@@ -1566,7 +1566,7 @@ VersionedItem sort_merge_impl(
                     fut_vec.emplace_back(store->write(pk, std::move(segment)));
                 }};
 
-            size_t count = 0;
+            [[maybe_unused]] size_t count = 0;
             for(auto& sk : segments) {
                 SegmentInMemory segment = sk.release_segment(store);
 
