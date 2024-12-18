@@ -777,11 +777,16 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
     left_no_inf_and_nan = drop_inf_and_nan(left)
     right_no_inf_and_nan = drop_inf_and_nan(right)
 
+    check_equals_flags = {"check_dtype": False}
+    if PANDAS_VERSION >= Version("1.1"):
+        check_equals_flags["check_freq"] = False
+    if PANDAS_VERSION >= Version("1.2"):
+        check_equals_flags["check_flags"] = False
     for col in left_no_inf_and_nan.columns:
         if pd.api.types.is_integer_dtype(left_no_inf_and_nan[col].dtype) and pd.api.types.is_integer_dtype(right_no_inf_and_nan[col].dtype):
-            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], check_freq=False, check_flags=False, check_dtype=False)
+            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
         else:
-            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], atol=1e-8, check_freq=False, check_flags=False, check_dtype=False)
+            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], atol=1e-8, **check_equals_flags)
 
 
 def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=None, label=None, offset=None, origin=None, drop_empty_buckets_for=None):
