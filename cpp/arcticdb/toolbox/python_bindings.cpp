@@ -15,6 +15,8 @@
 #include <arcticdb/version/symbol_list.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/util/storage_lock.hpp>
+#include <arcticdb/toolbox/storage_mover.hpp>
+
 
 namespace arcticdb::toolbox::apy {
 
@@ -66,6 +68,34 @@ void register_bindings(py::module &m) {
              "Read the most recent dataframe from the store")
              .def("inspect_env_variable", &LibraryTool::inspect_env_variable)
              .def_static("read_unaltered_lib_cfg", &LibraryTool::read_unaltered_lib_cfg);
+
+
+    py::class_<StorageMover>(tools, "StorageMover")
+    .def(py::init<std::shared_ptr<storage::Library>, std::shared_ptr<storage::Library>>())
+    .def("go",
+    &StorageMover::go,
+    "start the storage mover copy",
+    py::arg("batch_size") = 100)
+    .def("get_keys_in_source_only",
+    &StorageMover::get_keys_in_source_only)
+    .def("get_all_source_keys",
+    &StorageMover::get_all_source_keys,
+    "get_all_source_keys")
+    .def("incremental_copy",
+    &StorageMover::incremental_copy,
+    "incrementally copy keys")
+    .def("write_keys_from_source_to_target",
+    &StorageMover::write_keys_from_source_to_target,
+    "write_keys_from_source_to_target")
+    .def("write_symbol_trees_from_source_to_target",
+    &StorageMover::write_symbol_trees_from_source_to_target,
+    "write_symbol_trees_from_source_to_target")
+    .def("clone_all_keys_for_symbol",
+    &StorageMover::clone_all_keys_for_symbol,
+    "Clone all the keys that have this symbol as id to the dest library.")
+    .def("clone_all_keys_for_symbol_for_type",
+    &StorageMover::clone_all_keys_for_symbol_for_type,
+    "Clone all the keys that have this symbol and type to the dest library.");
 
     // S3 Storage tool
     using namespace arcticdb::storage::s3;

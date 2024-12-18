@@ -1639,7 +1639,7 @@ std::unordered_map<KeyType, KeySizesInfo> LocalVersionedEngine::scan_object_size
             auto& sizes_info = sizes[key_type];
             ++sizes_info.count;
             key_size_calculators.emplace_back(std::forward<const VariantKey>(k), [&sizes_info] (auto&& ks) {
-                auto key_seg = std::move(ks);
+                auto key_seg = std::forward<decltype(ks)>(ks);
                 sizes_info.compressed_size += key_seg.segment().size();
                 const auto& desc = key_seg.segment().descriptor();
                 sizes_info.uncompressed_size += desc.uncompressed_bytes();
@@ -1670,7 +1670,7 @@ std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> LocalVer
 
         store->iterate_type(key_type, [&keys, &mutex, &sizes, key_type](const VariantKey&& k){
             keys.emplace_back(std::forward<const VariantKey>(k), [key_type, &sizes, &mutex] (auto&& ks) {
-                auto key_seg = std::move(ks);
+                auto key_seg = std::forward<decltype(ks)>(ks);
                 auto variant_key = key_seg.variant_key();
                 auto stream_id = variant_key_id(variant_key);
                 auto compressed_size = key_seg.segment().size();

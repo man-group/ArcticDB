@@ -300,13 +300,13 @@ inline auto& io_executor() {
 }
 
 template <typename Task>
-inline auto submit_cpu_task(Task&& task) {
+auto submit_cpu_task(Task&& task) {
     return TaskScheduler::instance()->submit_cpu_task(std::forward<decltype(task)>(task));
 }
 
 
 template <typename Task>
-inline auto submit_io_task(Task&& task) {
+auto submit_io_task(Task&& task) {
     return TaskScheduler::instance()->submit_io_task(std::forward<decltype(task)>(task));
 }
 
