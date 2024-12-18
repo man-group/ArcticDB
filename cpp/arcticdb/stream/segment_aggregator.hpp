@@ -65,7 +65,7 @@ public:
         if(convert_int_to_float)
             convert_column_types(segment);
 
-        ARCTICDB_DEBUG(log::version(), "Adding segment with descriptor {}", segment.descriptor());
+        ARCTICDB_DEBUG(log::version(), "Adding segment with descriptor {} uncompressed_bytes {}", segment.descriptor(), segment.descriptor().uncompressed_bytes());
         segments_.push_back(segment);
         slices_.push_back(slice);
         if (AggregatorType::segmenting_policy()(AggregatorType::stats())) {
