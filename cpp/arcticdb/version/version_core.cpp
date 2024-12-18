@@ -1657,7 +1657,7 @@ VersionedItem compact_incomplete_impl(
     });
 
     return util::variant_match(std::move(result),
-                        [&slices, &pipeline_context, &store, &options, &user_meta](CompactionWrittenKeys& written_keys) -> VersionedItem {
+                        [&slices, &pipeline_context, &store, &user_meta](CompactionWrittenKeys& written_keys) -> VersionedItem {
                             auto vit = collate_and_write(
                                 store,
                                 pipeline_context,
