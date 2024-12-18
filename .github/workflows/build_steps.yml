@@ -76,6 +76,8 @@ jobs:
           echo ${{fromJSON(inputs.matrix)[0]}}.os
           echo ${{fromJSON(inputs.matrix)}}
           echo ${{fromJSON(inputs.matrix)[0].os}}
+          echo ${{inputs.job_type}}
+          echo ${{inputs}}
 
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -287,7 +289,7 @@ jobs:
             - os: 0
         include:
             - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only     
-    if: ${{fromJSON(inputs.matrix)[0]}}.os == 'linux' && inputs.job_type == 'build-python-wheels'
+    if: ${{fromJSON(inputs.matrix)[0].os}} == 'linux' && inputs.job_type == 'build-python-wheels'
     with:
       python3: ${{inputs.python3}}
       wheel: wheel-${{needs.compile.outputs.cibw_build}}
