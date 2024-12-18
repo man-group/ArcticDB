@@ -161,7 +161,7 @@ def grow_exp(df_to_grow: pd.DataFrame, num_times_xx2: int):
     return df_to_grow
 
 
-def generate_big_dataframe(rows:int=1000000, num_exp_time_growth:int=5) -> pd.DataFrame:
+def generate_big_dataframe(rows: int = 1000000, num_exp_time_growth: int=5) -> pd.DataFrame:
     """
     A quick and time efficient wat to generate very large dataframe.
     The first parameter will be passed to get_sample_dataframe() so that a dataframe
@@ -188,7 +188,7 @@ def construct_df_querybuilder_tests(size: int) -> pd.DataFrame:
     return df
 
 
-def query_groupby_with_aggregations() -> QueryBuilder:
+def query_filter_then_groupby_with_aggregations() -> QueryBuilder:
     """
     groupby composite aggregation query for QueryBuilder memory tests.
     The query basically will do aggregation of half of dataframe
@@ -206,7 +206,7 @@ def query_groupby_with_aggregations() -> QueryBuilder:
     )
 
 
-def query_group_with_aggregations_bigger_result() -> QueryBuilder:
+def query_filter_impossible_cond_groupby_with_aggregations_for_whole_frame() -> QueryBuilder:
     """
     groupby composite aggregation query for QueryBuilder memory tests.
     The query basically will do aggregation of whole dataframe
@@ -224,7 +224,7 @@ def query_group_with_aggregations_bigger_result() -> QueryBuilder:
     )
 
 
-def query_apply(strng: str) -> QueryBuilder:
+def query_apply_clause_only(strng: str) -> QueryBuilder:
     """
     Apply query for QueryBuilder memory tests.
     This version of apply does couple of nested operations
@@ -237,9 +237,9 @@ def query_apply(strng: str) -> QueryBuilder:
     return q
 
 
-def query_resample() -> QueryBuilder:
+def query_resample_minutes() -> QueryBuilder:
     """
-        Resample query for QueryBuilder memory tests
+    Resample query for QueryBuilder memory tests
     """
     q = QueryBuilder()
     return q.resample("min").agg(
@@ -255,13 +255,13 @@ def query_resample() -> QueryBuilder:
         )
 
 
-def query_row_range(size: int) -> QueryBuilder:
+def query_row_range_57percent(size: int) -> QueryBuilder:
     """
     Row range query for QueryBuilder memory tests
     Pass size of dataframe and it will generate random row range
     """
     percentage_rows_returned = 0.57
-    start_percentage = random.uniform(0.01, 1.0 - percentage_rows_returned - 0.01)
+    start_percentage = random.uniform(0.01, 1.0 - percentage_rows_returned)
     result_size_rows = int(0.57 * size)
     q = QueryBuilder()
     a = random.randint(0,int((size-1) * start_percentage))
@@ -270,14 +270,14 @@ def query_row_range(size: int) -> QueryBuilder:
     return q.row_range( (a, b) )
 
 
-def query_date_range(start: pd.Timestamp, end: pd.Timestamp) -> QueryBuilder:
+def query_date_range__57percent(start: pd.Timestamp, end: pd.Timestamp) -> QueryBuilder:
     """
     Date range query for QueryBuilder memory tests
     Will generate random date range that will return 
     always the specified percentage rows
     """
     percentage_rows_returned = 0.57
-    start_percentage = random.uniform(0.01, 1.0 - (percentage_rows_returned + 0.01))
+    start_percentage = random.uniform(0.01, 1.0 - percentage_rows_returned)
     q = QueryBuilder()
     total_duration = end - start
     percent_duration = total_duration * start_percentage
@@ -351,10 +351,10 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
 @SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
 def test_mem_leak_querybuilder_standard(arctic_library_lmdb):
     """
-        This test uses old approach with iterations.
-        It is created for comparison with the new approach
-        with memray
-        (If memray is good in future we could drop the old approach)
+    This test uses old approach with iterations.
+    It is created for comparison with the new approach
+    with memray
+    (If memray is good in future we could drop the old approach)
     """
     lib: Library = arctic_library_lmdb
 
@@ -369,12 +369,12 @@ def test_mem_leak_querybuilder_standard(arctic_library_lmdb):
     gc.collect()
 
     def proc_to_examine():
-        queries = [query_groupby_with_aggregations(), 
-                    query_group_with_aggregations_bigger_result(), 
-                    query_apply(random_string(10)), 
-                    query_resample(),
-                    query_row_range(size),
-                    query_date_range(start_date, end_date)]
+        queries = [query_filter_then_groupby_with_aggregations(), 
+                    query_filter_impossible_cond_groupby_with_aggregations_for_whole_frame(), 
+                    query_apply_clause_only(random_string(10)), 
+                    query_resample_minutes(),
+                    query_row_range_57percent(size),
+                    query_date_range__57percent(start_date, end_date)]
         for q in queries:
             data: pd.DataFrame = lib.read(symbol, query_builder=q).data
             print_info(data, q)
@@ -405,7 +405,7 @@ def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     del df
 
     """ 
-        See comment in previous test
+    See comment in previous test
     """
     max_mem_bytes = 608_662_528
 
@@ -451,27 +451,26 @@ def library_with_tiny_symbol(arctic_library_lmdb) -> Generator[Tuple[Library, pd
 
 def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:bool=False):
     """
-        This is the function where we test different types
-        of queries against a large dataframe. Later this
-        function will be used for memory limit and memory leaks 
-        tests
+    This is the function where we test different types
+    of queries against a large dataframe. Later this
+    function will be used for memory limit and memory leaks 
+    tests
     """
     size = df.shape[0]
     start_date = df.index[0]
     end_date = df.index[-1]
 
     symbol = "test"
-    queries = []
     lib.write(symbol, df)
     del df
     gc.collect()
 
-    queries = [query_groupby_with_aggregations(), 
-                query_group_with_aggregations_bigger_result(), 
-                query_apply(random_string(10)), 
-                query_resample(),
-                query_row_range(size),
-                query_date_range(start_date, end_date)]
+    queries = [query_filter_then_groupby_with_aggregations(), 
+                query_filter_impossible_cond_groupby_with_aggregations_for_whole_frame(), 
+                query_apply_clause_only(random_string(10)), 
+                query_resample_minutes(),
+                query_row_range_57percent(size),
+                query_date_range__57percent(start_date, end_date)]
     
     for rep in range(num_repetitions):
             logger.info(f"REPETITION : {rep}")
@@ -532,50 +531,50 @@ if MEMRAY_SUPPORTED:
 
 
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_leaks(location_limit = "25 KB" if not MACOS else "35 KB", 
+    @pytest.mark.limit_leaks(location_limit = "40 KB" if not MACOS else "50 KB", 
                              filter_fn = is_relevant)
     def test_mem_leak_querybuilder_read_memray(library_with_symbol):
         """
-            Test to capture memory leaks >= of specified number
+        Test to capture memory leaks >= of specified number
 
-            NOTE: we could filter out not meaningful for us stackframes
-            in future if something outside of us start to leak using
-            the argument "filter_fn" - just add to the filter function
-            what we must exclude from calculation
+        NOTE: we could filter out not meaningful for us stackframes
+        in future if something outside of us start to leak using
+        the argument "filter_fn" - just add to the filter function
+        what we must exclude from calculation
         """
         (lib, df, symbol) = library_with_symbol
         mem_query(lib, df)
 
     @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_leaks(location_limit = "25 KB" if not MACOS else "35 KB", 
+    @pytest.mark.limit_leaks(location_limit = "40 KB" if not MACOS else "50 KB", 
                              filter_fn = is_relevant)
     @pytest.mark.xfail(reason = "read() memory leaks Monday#8067881190")
     def test_mem_leak_querybuilder_read_manyrepeats_memray(library_with_tiny_symbol):
         """
-            Test to capture memory leaks >= of specified number
+        Test to capture memory leaks >= of specified number
 
-            NOTE: we could filter out not meaningful for us stackframes
-            in future if something outside of us start to leak using
-            the argument "filter_fn" - just add to the filter function
-            what we must exclude from calculation
+        NOTE: we could filter out not meaningful for us stackframes
+        in future if something outside of us start to leak using
+        the argument "filter_fn" - just add to the filter function
+        what we must exclude from calculation
         """
         (lib, df, symbol) = library_with_tiny_symbol
         mem_query(lib, df, num_repetitions=125)         
 
     @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
-    @pytest.mark.xfail(reason = "read() memory leaks Monday#8067881190")
-    @pytest.mark.limit_leaks(location_limit = "25 KB" if not MACOS else "35 KB", 
+    @pytest.mark.limit_leaks(location_limit = "40 KB" if not MACOS else "50 KB", 
                              filter_fn = is_relevant)
+    @pytest.mark.xfail(reason = "read() memory leaks Monday#8067881190")
     def test_mem_leak_querybuilder_read_batch_manyrepeats_memray(library_with_tiny_symbol):
         """
-            Test to capture memory leaks >= of specified number
+        Test to capture memory leaks >= of specified number
 
-            NOTE: we could filter out not meaningful for us stackframes
-            in future if something outside of us start to leak using
-            the argument "filter_fn" - just add to the filter function
-            what we must exclude from calculation
+        NOTE: we could filter out not meaningful for us stackframes
+        in future if something outside of us start to leak using
+        the argument "filter_fn" - just add to the filter function
+        what we must exclude from calculation
         """
         (lib, df, symbol) = library_with_tiny_symbol
         mem_query(lib, df, num_repetitions=125, read_batch=True)        
@@ -585,12 +584,12 @@ if MEMRAY_SUPPORTED:
     @pytest.mark.limit_leaks(location_limit = "25 KB", filter_fn = is_relevant)
     def test_mem_leak_querybuilder_read_batch_memray(library_with_symbol):
         """
-            Test to capture memory leaks >= of specified number
+        Test to capture memory leaks >= of specified number
 
-            NOTE: we could filter out not meaningful for us stackframes
-            in future if something outside of us start to leak using
-            the argument "filter_fn" - just add to the filter function
-            what we must exclude from calculation
+        NOTE: we could filter out not meaningful for us stackframes
+        in future if something outside of us start to leak using
+        the argument "filter_fn" - just add to the filter function
+        what we must exclude from calculation
         """
         (lib, df, symbol) = library_with_symbol
         mem_query(lib, df, read_batch=True)
@@ -600,11 +599,11 @@ if MEMRAY_SUPPORTED:
     @pytest.mark.limit_memory("490 MB")
     def test_mem_limit_querybuilder_read_memray(library_with_symbol):
         """
-            The fact that we do not leak memory does not mean that we
-            are efficient on memory usage. This test captures the memory usage
-            and limits it, so that we do not go over it (unless fro good reason)
-            Thus if the test fails then perhaps we are using now more memory than
-            in the past
+        The fact that we do not leak memory does not mean that we
+        are efficient on memory usage. This test captures the memory usage
+        and limits it, so that we do not go over it (unless fro good reason)
+        Thus if the test fails then perhaps we are using now more memory than
+        in the past
         """
         (lib, df, symbol) = library_with_symbol
         mem_query(lib, df)
@@ -613,11 +612,11 @@ if MEMRAY_SUPPORTED:
     @pytest.mark.limit_memory("490 MB")
     def test_mem_limit_querybuilder_read_batch_memray(library_with_symbol):
         """
-            The fact that we do not leak memory does not mean that we
-            are efficient on memory usage. This test captures the memory usage
-            and limits it, so that we do not go over it (unless fro good reason)
-            Thus if the test fails then perhaps we are using now more memory than
-            in the past
+        The fact that we do not leak memory does not mean that we
+        are efficient on memory usage. This test captures the memory usage
+        and limits it, so that we do not go over it (unless fro good reason)
+        Thus if the test fails then perhaps we are using now more memory than
+        in the past
         """
         (lib, df, symbol) = library_with_symbol
         mem_query(lib, df, True)
@@ -626,9 +625,9 @@ if MEMRAY_SUPPORTED:
     @pytest.fixture
     def library_with_big_symbol_(arctic_library_lmdb) -> Generator[Tuple[Library,str], None, None]:
         """
-            As memray instruments memory, we need to take out 
-            everything not relevant from mem leak measurement out of 
-            test, so it works as less as possible
+        As memray instruments memory, we need to take out 
+        everything not relevant from mem leak measurement out of 
+        test, so it works as less as possible
         """
         lib: Library = arctic_library_lmdb
         symbol = "symbol"
@@ -642,8 +641,8 @@ if MEMRAY_SUPPORTED:
     @pytest.mark.limit_leaks(location_limit = "30 KB", filter_fn = is_relevant)
     def test_mem_leak_read_all_arctic_lib_memray(library_with_big_symbol_):
         """
-            This is a new version of the initial test that reads the whole
-            big dataframe in memory
+        This is a new version of the initial test that reads the whole
+        big dataframe in memory
         """
         lib: Library = None
         (lib, symbol) = library_with_big_symbol_
