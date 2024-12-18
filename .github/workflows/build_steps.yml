@@ -270,8 +270,13 @@ jobs:
       cibw_build: ${{env.CIBW_BUILD}}
 
   proxy_test:
-    uses: ./.github/workflows/run_proxy_tests.yml
+    if: |
+      always() &&
+      !failure() &&
+      !cancelled() &&
+      inputs.job_type == 'build-python-wheels'
     needs: [compile]
+    uses: ./.github/workflows/run_proxy_tests.yml
     strategy:
       matrix:
         # Declaring the dummy fields here to aid the Github Actions linting in VSCode and to provide documentation
@@ -289,8 +294,7 @@ jobs:
         exclude:
             - os: 0
         include:
-            - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only     
-    if: inputs.job_type == 'build-python-wheels'
+            - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only
     with:
       python3: ${{inputs.python3}}
       wheel: wheel-${{needs.compile.outputs.cibw_build}}
