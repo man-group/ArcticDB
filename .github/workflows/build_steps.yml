@@ -259,7 +259,7 @@ jobs:
       cibw_build: ${{env.CIBW_BUILD}}
 
   proxy_test:
-    uses: ./.github/actions/run_proxy_test/action.yml
+    uses: ./.github/workflows/run_proxy_tests.yml
     needs: [compile]
     strategy:
       matrix:

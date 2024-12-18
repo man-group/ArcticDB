@@ -1,0 +1,60 @@
+name: 'Run proxy tests'
+on:
+  workflow_call:
+    inputs:
+      wheel:             {required: true, type: string, description: The name of the wheel artifact to test }
+      python3:           {default: '7', type: string, description: Specifies the version of python for testing }
+jobs:
+  run_test:
+    runs-on: ubuntu-22.04
+    container:
+      image: ubuntu:22.04
+      options: --security-opt seccomp=unconfined
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3.3.0
+
+      - name: Get wheel artifact
+        uses: actions/download-artifact@v3.0.2
+        with:
+          name: ${{inputs.wheel}}
+          path: ${{runner.temp}}
+
+      - name: Install deps
+        shell: bash
+        run: |
+          apt update
+          apt install -y software-properties-common iptables squid
+          add-apt-repository ppa:deadsnakes/ppa -y
+
+          sh -c 'echo "
+          acl localnet src 127.0.0.1/32
+          http_access allow localnet
+          http_access deny all
+
+          http_port 3128
+          " >> /etc/squid/squid.conf'
+
+          service squid restart
+          iptables-nft -A OUTPUT -p tcp --dport 80 -m owner ! --uid-owner proxy -j REJECT
+          iptables-nft -A OUTPUT -p tcp --dport 443 -m owner ! --uid-owner proxy -j REJECT
+
+          export http_proxy="http://127.0.0.1:3128"
+          export https_proxy="http://127.0.0.1:3128"
+      
+      - name: Select Python (Windows)
+        uses: actions/setup-python@v4.7.1
+        with:
+          python-version: "3.${{inputs.python3}}"
+
+      - name: Install wheel
+        shell: bash
+        run: |
+          echo ${{env.python_impl_name}}
+          ls ${{env.python_impl_name}}
+          python -m pip install --force-reinstall  ${{runner.temp}}/${{inputs.wheel}}[Testing]
+
+      - name: Run proxy test
+        shell: bash
+        run: |
+          python -m pytest --timeout=3600 python/tests/integration/arcticdb/test_arctic.py::test_s3_sts_auth
