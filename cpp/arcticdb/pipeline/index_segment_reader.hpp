@@ -135,6 +135,10 @@ index::IndexSegmentReader get_index_reader(
     const AtomKey &prev_index,
     const std::shared_ptr<Store> &store);
 
+folly::Future<IndexSegmentReader> async_get_index_reader(
+    const AtomKey &prev_index,
+    const std::shared_ptr<Store> &store);
+
 IndexRange get_index_segment_range(
     const AtomKey &prev_index,
     const std::shared_ptr<Store> &store);

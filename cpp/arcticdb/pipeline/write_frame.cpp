@@ -290,16 +290,6 @@ folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
     });
 }
 
-std::optional<SliceAndKey> rewrite_partial_segment(
-        const SliceAndKey& existing,
-        const IndexRange& index_range,
-        VersionId version_id,
-        AffectedSegmentPart affected_part,
-        const std::shared_ptr<Store>& store) {
-    return async_rewrite_partial_segment(existing, index_range, version_id, affected_part, store).get();
-}
-
-
 std::vector<SliceAndKey> flatten_and_fix_rows(const std::array<std::vector<SliceAndKey>, 5>& groups, size_t& global_count) {
     std::vector<SliceAndKey> output;
     output.reserve(groups.size());

@@ -95,13 +95,6 @@ folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
         AffectedSegmentPart affected_part,
         const std::shared_ptr<Store>& store);
 
-std::optional<SliceAndKey> rewrite_partial_segment(
-        const SliceAndKey& existing,
-        const IndexRange& index_range,
-        VersionId version_id,
-        AffectedSegmentPart affected_part,
-        const std::shared_ptr<Store>& store);
-
 
 /// Used, when updating a segment, to convert all 5 affected groups into a single list of slices
 /// The 5 groups are:

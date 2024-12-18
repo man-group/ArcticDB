@@ -225,7 +225,7 @@ std::vector<SliceAndKey> filter_existing(std::vector<std::optional<SliceAndKey>>
 
         if (intersects(affected_range, back_range) && !overlaps(affected_range, back_range) &&
             is_after(affected_range, back_range)) {
-            maybe_intersect_after_fut.emplace_back(rewrite_partial_segment(
+            maybe_intersect_after_fut.emplace_back(async_rewrite_partial_segment(
                 affected_slice_and_key,
                 back_range,
                 version_id,
@@ -328,12 +328,102 @@ folly::Future<AtomKey> async_update_impl(
     const UpdateInfo& update_info,
     const UpdateQuery& query,
     const std::shared_ptr<InputTensorFrame>& frame,
-    const WriteOptions&& options,
+    WriteOptions&& options,
     bool dynamic_schema,
     bool empty_types) {
-    util::check(update_info.previous_index_key_.has_value(), "Cannot update as there is no previous index key to update into");
-    const StreamId& stream_id = frame->desc.id();
-    ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", stream_id, update_info.previous_index_key_->version_id());
+    index::async_get_index_reader(*(update_info.previous_index_key_), store).thenValue([=](index::IndexSegmentReader&& index_segment_reader) {
+        util::check(update_info.previous_index_key_.has_value(), "Cannot update as there is no previous index key to update into");
+        const StreamId& stream_id = frame->desc.id();
+        ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", stream_id, update_info.previous_index_key_->version_id());
+        util::check_rte(!index_segment_reader.is_pickled(), "Cannot update pickled data");
+        auto index_desc = check_index_match(frame->index, index_segment_reader.tsd().index());
+        util::check(
+            index_desc.type() == IndexDescriptor::Type::TIMESTAMP || index_desc.type() == IndexDescriptor::Type::EMPTY,
+            "Update not supported for non-timeseries indexes"
+        );
+        check_update_data_is_sorted(*frame, index_segment_reader);
+        const bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
+        (void)check_and_mark_slices(index_segment_reader, dynamic_schema, false, std::nullopt, bucketize_dynamic);
+        fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, *frame, empty_types);
+
+        frame->set_bucketize_dynamic(bucketize_dynamic);
+        const auto slicing_arg = get_slicing_policy(options, *frame);
+
+        return std::make_pair(
+            std::move(index_segment_reader),
+            slice_and_write(frame, slicing_arg, IndexPartialKey{stream_id, update_info.next_version_id_}, store));
+    }).thenValue([=](std::pair<index::IndexSegmentReader, std::vector<SliceAndKey>>&& isr_slice) {
+        std::vector<SliceAndKey> new_slice_and_keys = std::move(isr_slice.second);
+        index::IndexSegmentReader index_segment_reader = std::move(isr_slice.first);
+        std::sort(std::begin(new_slice_and_keys), std::end(new_slice_and_keys));
+        std::vector<FilterQuery<index::IndexSegmentReader>> queries =
+        build_update_query_filters<index::IndexSegmentReader>(
+            query.row_filter,
+            frame->index,
+            frame->index_range,
+            dynamic_schema,
+            index_segment_reader.bucketize_dynamic());
+        auto affected_keys = filter_index(index_segment_reader, combine_filter_functions(queries));
+        std::vector<SliceAndKey> unaffected_keys;
+        std::set_difference(std::begin(index_segment_reader),
+                    std::end(index_segment_reader),
+                    std::begin(affected_keys),
+                    std::end(affected_keys),
+                    std::back_inserter(unaffected_keys));
+
+        util::check(affected_keys.size() + unaffected_keys.size() == index_segment_reader.size(), "Unaffected vs affected keys split was inconsistent {} + {} != {}",
+        affected_keys.size(), unaffected_keys.size(), index_segment_reader.size());
+        IndexRange orig_filter_range;
+        auto[intersect_before, intersect_after] = util::variant_match(query.row_filter,
+                            [&](std::monostate) {
+                                util::check(
+                                    std::holds_alternative<TimeseriesIndex>(frame->index),
+                                    "Update with row count index is not permitted");
+                                orig_filter_range = frame->index_range;
+                                if (new_slice_and_keys.empty()) {
+                                    // If there are no new keys, then we can't intersect with the existing data.
+                                    return std::make_tuple(std::vector<SliceAndKey>{}, std::vector<SliceAndKey>{});
+                                }
+                                auto front_range = new_slice_and_keys.begin()->key().index_range();
+                                auto back_range = new_slice_and_keys.rbegin()->key().index_range();
+                                back_range.adjust_open_closed_interval();
+                                return intersecting_segments(affected_keys, front_range, back_range, update_info.next_version_id_, store);
+                            },
+                            [&](const IndexRange& idx_range) {
+                                orig_filter_range = idx_range;
+                                return intersecting_segments(affected_keys, idx_range, idx_range, update_info.next_version_id_, store);
+                            },
+                            [](const RowRange&) -> std::tuple<std::vector<SliceAndKey>, std::vector<SliceAndKey>> {
+                                util::raise_rte("Unexpected row_range in update query");
+                            }
+        );
+
+        size_t row_count = 0;
+        const size_t new_keys_size = new_slice_and_keys.size();
+        const std::array<std::vector<SliceAndKey>, 5> groups{
+            strictly_before(orig_filter_range, unaffected_keys),
+            std::move(intersect_before),
+            std::move(new_slice_and_keys),
+            std::move(intersect_after),
+            strictly_after(orig_filter_range, unaffected_keys)};
+        auto flattened_slice_and_keys = flatten_and_fix_rows(groups, row_count);
+
+        util::check(unaffected_keys.size() + new_keys_size + (affected_keys.size() * 2) >= flattened_slice_and_keys.size(),
+                    "Output size mismatch: {} + {} + (2 * {}) < {}",
+                    unaffected_keys.size(), new_keys_size, affected_keys.size(), flattened_slice_and_keys.size());
+
+        std::sort(std::begin(flattened_slice_and_keys), std::end(flattened_slice_and_keys));
+        auto tsd = index::get_merged_tsd(row_count, dynamic_schema, index_segment_reader.tsd(), frame);
+        return index::write_index(index_type_from_descriptor(tsd.as_stream_descriptor()), std::move(tsd), std::move(flattened_slice_and_keys), IndexPartialKey{stream_id, update_info.next_version_id_}, store);
+    });
+
+
+
+
+
+
+
+
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot update pickled data");
     auto index_desc = check_index_match(frame->index, index_segment_reader.tsd().index());

@@ -20,8 +20,13 @@ using namespace arcticdb::proto::descriptors;
 namespace arcticdb::pipelines::index {
 
 IndexSegmentReader get_index_reader(const AtomKey &prev_index, const std::shared_ptr<Store> &store) {
-    auto [key, seg] = store->read_sync(prev_index);
-    return index::IndexSegmentReader{std::move(seg)};
+    return async_get_index_reader(prev_index, store).get();
+}
+
+folly::Future<IndexSegmentReader> async_get_index_reader(const AtomKey &prev_index, const std::shared_ptr<Store> &store) {
+    return store->read(prev_index).thenValue([](std::pair<VariantKey, SegmentInMemory>&& key_seg) {
+        return IndexSegmentReader{std::move(key_seg.second)};
+    });
 }
 
 IndexSegmentReader::IndexSegmentReader(SegmentInMemory&& s) :
