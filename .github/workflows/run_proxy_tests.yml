@@ -41,9 +41,9 @@ jobs:
         run: |
           apt update
           apt install -y software-properties-common iptables squid
-          add-apt-repository ppa:deadsnakes/ppa -y
-
-          pip install --force-reinstall arcticdb*.whl[Testing]
+          echo "whl"
+          pip install --force-reinstall $(ls arcticdb*.whl)[Testing]
+          echo "grpcio"
           pip install grpcio
 
           echo "
@@ -54,13 +54,14 @@ jobs:
           http_port 3128
           " >> /etc/squid/squid.conf
 
+          echo "squid.conf"
           service squid restart
           iptables-legacy -A OUTPUT -p tcp --dport 80 -m owner ! --uid-owner proxy -j REJECT
           iptables-legacy -A OUTPUT -p tcp --dport 443 -m owner ! --uid-owner proxy -j REJECT
 
           export http_proxy="http://127.0.0.1:3128"
           export https_proxy="http://127.0.0.1:3128"
-          
+
           python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
 
 
