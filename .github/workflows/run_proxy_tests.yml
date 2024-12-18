@@ -39,6 +39,8 @@ jobs:
       - name: Install deps
         shell: bash
         run: |
+          ls arcticdb*.whl
+          ls -al
           apt update
           apt install -y software-properties-common iptables squid
           echo "whl"
