@@ -5,6 +5,7 @@ on:
       run_all_benchmarks: {required: true, type: boolean, description: Run all benchmarks or just the one for the given commit}
       commit:             {required: true, type: string, description: commit hash that will be benchmarked}
       run_on_pr_head:     {required: false, default: false, type: boolean, description: Specifies if the benchmark should run on PR head branch}
+      dev_image_tag:      {required: false, default: 'latest', type: string, description: Tag of the ArcticDB development image}
 jobs:
   start_ec2_runner:
     uses: ./.github/workflows/ec2_runner_jobs.yml
@@ -19,7 +20,7 @@ jobs:
       always() &&
       !cancelled()
     runs-on: ${{ needs.start_ec2_runner.outputs.label }}
-    container: quay.io/pypa/manylinux_2_28_x86_64:latest
+    container: ghcr.io/man-group/arcticdb-dev:${{ inputs.dev_image_tag }}
     env:
       # this is potentially overflowing the cache, so should be looked into after we address issue #1057
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
@@ -31,11 +32,6 @@ jobs:
     defaults:
       run: {shell: bash}
     steps:  
-      - name: Initialize LFS
-        shell: bash -l {0}
-        run: |
-          dnf install -y git-lfs
-
       - uses: actions/checkout@v3.3.0
         with:
           lfs: 'true'
@@ -48,9 +44,6 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.3
         with:
           version: "v0.4.0"
-        
-      - name: Install deps
-        uses: ./.github/actions/setup_deps
 
       - name: Extra envs
         shell: bash -l {0}
