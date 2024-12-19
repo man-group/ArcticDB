@@ -37,7 +37,7 @@ jobs:
           docker push $image_name:$image_ver
 
       - name: Publish Docker image to GHCR as latest
-        if: startsWith(github.ref, 'refs/tags') || github.ref == 'refs/heads/master'
+        if: github.ref == 'refs/heads/master'
         run: |
           docker tag $image_name $image_name:latest
           docker push $image_name:latest
