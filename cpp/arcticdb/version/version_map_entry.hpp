@@ -16,6 +16,8 @@
 #include <deque>
 #include <vector>
 
+#include "async/tasks.hpp"
+
 namespace arcticdb {
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
@@ -264,7 +266,7 @@ struct VersionMapEntry {
     // Below four functions used to return optional<AtomKey> of the tombstone, but copying keys is expensive and only
     // one function was actually interested in the key, so they now return bool. See get_tombstone().
     bool has_individual_tombstone(VersionId version_id) const {
-        return tombstones_.count(version_id) != 0;
+        return tombstones_.contains(version_id);
     }
 
     bool is_tombstoned_via_tombstone_all(VersionId version_id) const {
