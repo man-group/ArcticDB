@@ -1,0 +1,94 @@
+name: 'Run proxy tests'
+on:
+  workflow_call:
+    inputs:
+      wheel:             {required: true, type: string, description: The name of the wheel artifact to test }
+      os:                {required: true, type: string, description: The operating system to run the tests on }
+      python3:           {default: '7', type: string, description: Specifies the version of python for testing }
+jobs:
+  run_proxy_tests:   
+    # Only run on Linux
+    # select python support python > 3.6. Since we are dropping 3.6 support anyway, we can skip it
+    if: |
+      inputs.os == 'linux' &&
+      inputs.python3 != '6' 
+    runs-on: ubuntu-22.04
+    container:
+      image: ubuntu:22.04
+      options: --cap-add=NET_ADMIN
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3.3.0
+
+      - name: Set persistent storage variables
+        uses: ./.github/actions/set_persistent_storage_env_vars
+        with:
+          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+
+      - name: Get wheel artifact
+        uses: actions/download-artifact@v3.0.2
+        with:
+          name: ${{inputs.wheel}}
+      
+      - name: Select Python
+        uses: actions/setup-python@v4.7.1
+        with:
+          python-version: "3.${{inputs.python3}}"
+
+      - name: Install deps
+        shell: bash
+        run: |
+          ls arcticdb*.whl
+          ls -al
+          apt update
+          apt install -y software-properties-common iptables squid
+          apt install -y curl
+          echo "whl"
+          python -m pip install --force-reinstall $(ls arcticdb*.whl)[Testing]
+          echo "grpcio"
+          python -m pip install grpcio grpcio-tools
+
+          echo "
+          acl localnet src 127.0.0.1/32
+          http_access allow localnet
+          http_access deny all
+
+          http_port 3128
+          " >> /etc/squid/squid.conf
+
+          echo "squid.conf"
+          service squid restart
+          iptables-legacy -A OUTPUT -p tcp --dport 80 -m owner ! --uid-owner proxy -j REJECT
+          iptables-legacy -A OUTPUT -p tcp --dport 443 -m owner ! --uid-owner proxy -j REJECT
+
+          python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
+          
+          echo "http_proxy=http://127.0.0.1:3128" >> $GITHUB_ENV
+          echo "https_proxy=http://127.0.0.1:3128" >> $GITHUB_ENV
+
+
+      - name: Setup softlink for SSL
+        shell: bash -el {0}
+        run: |
+            mkdir -p /etc/pki/tls
+            ln -s /usr/lib/ssl/certs /etc/pki/tls/certs
+            ln -s /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt
+
+      - name: Run proxy test
+        shell: bash
+        run: |
+          echo ${http_proxy}
+          echo ${https_proxy}
+          curl google.com
+          python -m pytest --timeout=3600 python/tests/integration/arcticdb/test_arctic.py::test_s3_sts_auth
+
+      # Fallback if the clean up at test fixutre tear down fails due to crash or etc
+      - name: Remove AWS testing account and credentials
+        if: always()
+        run: |
+          python -c "
+          from arcticdb.storage_fixtures.s3 import real_s3_sts_clean_up
+          real_s3_sts_clean_up('${ARCTICDB_REAL_S3_STS_TEST_USERNAME}', '${ARCTICDB_REAL_S3_STS_TEST_ROLE}', '${ARCTICDB_REAL_S3_STS_TEST_POLICY_NAME}')
+          "
+        continue-on-error: true
