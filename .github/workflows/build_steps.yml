@@ -277,6 +277,7 @@ jobs:
       inputs.job_type == 'build-python-wheels'
     needs: [compile]
     uses: ./.github/workflows/run_proxy_tests.yml
+    secrets: inherit
     strategy:
       matrix:
         # Declaring the dummy fields here to aid the Github Actions linting in VSCode and to provide documentation
