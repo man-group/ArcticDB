@@ -34,3 +34,6 @@ jobs:
           docker login ghcr.io -u token -p "${{secrets.GITHUB_TOKEN}}"
           docker tag $image_name $image_name:$image_ver
           docker push $image_name:$image_ver
+          
+          docker tag $image_name $image_name:latest
+          docker push $image_name:latest
