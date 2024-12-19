@@ -109,7 +109,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: macos-12
+          - os: macos-13
 
       fail-fast: false
     runs-on: ${{ inputs.run_on_arm_mac == true && 'macos-13-xlarge' || matrix.os }}
