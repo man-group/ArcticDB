@@ -19,6 +19,10 @@ on:
         description: Override CMAKE preset type
         type: choice
         options: ["-", debug, release]
+      dev_image_tag:
+        description: Tag of the ArcticCB development image to use for the Linux C++ tests build
+        type: string
+        default: latest
 run-name: Building ${{github.ref_name}} on ${{github.event_name}} by ${{github.actor}}
 concurrency:
   group: ${{github.ref}}
@@ -52,7 +56,7 @@ jobs:
                   mongodb:
                     image: "mongo:4.4"
                 container:
-                  image: ghcr.io/man-group/arcticdb-dev:latest
+                  image: ghcr.io/man-group/arcticdb-dev:${{inputs.dev_image_tag}}
                   volumes:
                     - /:/mnt
             windows_matrix:
