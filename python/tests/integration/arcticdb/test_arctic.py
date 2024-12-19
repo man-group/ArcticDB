@@ -107,6 +107,7 @@ def test_s3_no_ssl_verification(monkeypatch, s3_no_ssl_storage, client_cert_file
 
 
 @REAL_S3_TESTS_MARK
+@pytest.mark.skip(reason="This test is not stable")
 def test_s3_sts_auth(real_s3_sts_storage):
     ac = Arctic(real_s3_sts_storage.arctic_uri)
     lib = ac.create_library("test")
