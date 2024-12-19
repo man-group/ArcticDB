@@ -88,7 +88,7 @@ enum class AffectedSegmentPart {
     END
 };
 
-std::optional<SliceAndKey> rewrite_partial_segment(
+folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
         const SliceAndKey& existing,
         const IndexRange& index_range,
         VersionId version_id,
