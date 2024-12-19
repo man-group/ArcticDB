@@ -61,9 +61,6 @@ jobs:
           iptables-legacy -A OUTPUT -p tcp --dport 80 -m owner ! --uid-owner proxy -j REJECT
           iptables-legacy -A OUTPUT -p tcp --dport 443 -m owner ! --uid-owner proxy -j REJECT
 
-          export http_proxy="http://127.0.0.1:3128"
-          export https_proxy="http://127.0.0.1:3128"
-
           python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
 
 
@@ -77,6 +74,8 @@ jobs:
       - name: Run proxy test
         shell: bash
         run: |
+          export http_proxy="http://127.0.0.1:3128"
+          export https_proxy="http://127.0.0.1:3128"
           python -m pytest --timeout=3600 python/tests/integration/arcticdb/test_arctic.py::test_s3_sts_auth
 
       # Fallback if the clean up at test fixutre tear down fails due to crash or etc
