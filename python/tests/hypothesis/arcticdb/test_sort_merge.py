@@ -38,7 +38,7 @@ def generate_single_dataframe(draw, column_list, min_size=0, allow_nat_in_index=
     if not IS_PANDAS_TWO:
         # Due to https://github.com/man-group/ArcticDB/blob/7479c0b0caa8121bc2ca71a73e29769bbc41c66a/python/arcticdb/version_store/_normalization.py#L184
         # we change the dtype of empty float columns. This makes hypothesis tests extremely hard to write as we must
-        # keep addional state about is there a mix of empty/non-empty float columns in the staging area, did we write
+        # keep additional state about is there a mix of empty/non-empty float columns in the staging area, did we write
         # empty float column (if so it's type would be object). These edge cases are covered in the unit tests.
         index = hs_pd.indexes(dtype="datetime64[ns]", min_size=1 if min_size <= 0 else min_size).filter(lambda x: allow_nat_in_index or not pd.NaT in x)
     else:
