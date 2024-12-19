@@ -63,6 +63,9 @@ jobs:
           iptables-legacy -A OUTPUT -p tcp --dport 443 -m owner ! --uid-owner proxy -j REJECT
 
           python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
+          
+          echo "http_proxy=http://127.0.0.1:3128" >> $GITHUB_ENV
+          echo "https_proxy=http://127.0.0.1:3128" >> $GITHUB_ENV
 
 
       - name: Setup softlink for SSL
@@ -75,8 +78,6 @@ jobs:
       - name: Run proxy test
         shell: bash
         run: |
-          echo "http_proxy=http://127.0.0.1:3128" >> $GITHUB_ENV
-          echo "https_proxy=http://127.0.0.1:3128" >> $GITHUB_ENV
           echo ${http_proxy}
           echo ${https_proxy}
           curl google.com
