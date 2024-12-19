@@ -43,6 +43,7 @@ jobs:
           ls -al
           apt update
           apt install -y software-properties-common iptables squid
+          apt install -y curl
           echo "whl"
           python -m pip install --force-reinstall $(ls arcticdb*.whl)[Testing]
           echo "grpcio"
@@ -76,6 +77,9 @@ jobs:
         run: |
           echo "http_proxy=http://127.0.0.1:3128" >> $GITHUB_ENV
           echo "https_proxy=http://127.0.0.1:3128" >> $GITHUB_ENV
+          echo ${http_proxy}
+          echo ${https_proxy}
+          curl google.com
           python -m pytest --timeout=3600 python/tests/integration/arcticdb/test_arctic.py::test_s3_sts_auth
 
       # Fallback if the clean up at test fixutre tear down fails due to crash or etc
