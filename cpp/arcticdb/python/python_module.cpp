@@ -30,7 +30,7 @@
 #include <arcticdb/python/python_handlers.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/util/storage_lock.hpp>
-#include <util/gil_safe_py_none.hpp>
+#include <arcticdb/util/gil_safe_py_none.hpp>
 
 #include <pybind11/pybind11.h>
 #include <mongocxx/exception/logic_error.hpp>

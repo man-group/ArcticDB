@@ -124,7 +124,7 @@ if(ARCTICDB_FIND_PYTHON_DEV_MODE)
     if(NOT Python_EXECUTABLE AND NOT Python_ROOT_DIR AND NOT Python_LIBRARY)
         # FindPython searches the PATH environment last, but that's arguably the only correct place it should look
         find_program(Python_EXECUTABLE NAMES python3 python NAMES_PER_DIR REQUIRED NO_CMAKE_SYSTEM_PATH)
-        set(PYTHON_EXECUTABLE ${Python_EXECUTABLE} CACHE FILEPATH "Python executable found by FindPython")
+        set(PYTHON_EXECUTABLE ${Python_EXECUTABLE} "Python executable found by FindPython in PythonUtils.cmake")
     else()
         set(Python_FIND_STRATEGY LOCATION)
     endif()
