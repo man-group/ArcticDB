@@ -246,8 +246,8 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
         }
     }
     return collect(
-        collect(maybe_intersect_before_fut).via(&async::io_executor()).thenValue(filter_existing_slices),
-        collect(maybe_intersect_after_fut).via(&async::io_executor()).thenValue(filter_existing_slices)
+        collect(maybe_intersect_before_fut).via(&async::io_executor()).thenValueInline(filter_existing_slices),
+        collect(maybe_intersect_after_fut).via(&async::io_executor()).thenValueInline(filter_existing_slices)
     ).via(&async::io_executor());
 }
 
