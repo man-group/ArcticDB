@@ -24,7 +24,7 @@ IndexSegmentReader get_index_reader(const AtomKey &prev_index, const std::shared
 }
 
 folly::Future<IndexSegmentReader> async_get_index_reader(const AtomKey &prev_index, const std::shared_ptr<Store> &store) {
-    return store->read(prev_index).thenValue([](std::pair<VariantKey, SegmentInMemory>&& key_seg) {
+    return store->read(prev_index).thenValueInline([](std::pair<VariantKey, SegmentInMemory>&& key_seg) {
         return IndexSegmentReader{std::move(key_seg.second)};
     });
 }
