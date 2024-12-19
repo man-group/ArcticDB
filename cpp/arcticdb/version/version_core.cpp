@@ -350,10 +350,9 @@ folly::Future<AtomKey> async_update_impl(
         (void)check_and_mark_slices(index_segment_reader, dynamic_schema, false, std::nullopt, bucketize_dynamic);
         fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, *frame, empty_types);
         frame->set_bucketize_dynamic(bucketize_dynamic);
-        const auto slicing_arg = get_slicing_policy(options, *frame);
         return slice_and_write(
             frame,
-            slicing_arg,
+            get_slicing_policy(options, *frame),
             IndexPartialKey{stream_id, update_info.next_version_id_}, store
         ).thenValue([
             store,
