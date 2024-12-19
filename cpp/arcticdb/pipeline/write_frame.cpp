@@ -284,7 +284,7 @@ folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
              start_ts,
              end_ts,
              std::move(output)
-       ).thenValue([new_slice=std::move(new_slice)](VariantKey&& k) -> folly::Future<std::optional<SliceAndKey>> {
+       ).thenValueInline([new_slice=std::move(new_slice)](VariantKey&& k) {
           return std::make_optional<SliceAndKey>(std::move(new_slice), std::get<AtomKey>(std::move(k)));
        });
     });
