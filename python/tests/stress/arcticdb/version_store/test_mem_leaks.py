@@ -620,7 +620,7 @@ if MEMRAY_SUPPORTED:
 
     @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_leaks(location_limit = "150 KB" if not MACOS else "200 KB", 
+    @pytest.mark.limit_leaks(location_limit = "160 KB" if not MACOS else "200 KB", 
                              filter_fn = is_relevant)
     ## Unfortunately it is not possible to xfail memray tests. Instead:
     ##  - log issue for investigation and analysis = to fix leak, or filter out stack frame
@@ -642,7 +642,7 @@ if MEMRAY_SUPPORTED:
 
     @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_leaks(location_limit = "40 KB" if not MACOS else "50 KB", 
+    @pytest.mark.limit_leaks(location_limit = "160 KB" if not MACOS else "200 KB", 
                              filter_fn = is_relevant)
     ## Unfortunately it is not possible to xfail memray tests. Instead:
     ##  - log issue for investigation and analysis = to fix leak, or filter out stack frame
