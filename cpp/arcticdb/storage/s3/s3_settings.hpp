@@ -44,6 +44,7 @@ public:
         aws_auth_(aws_auth),
         aws_profile_(aws_profile) {
     }
+
     explicit S3Settings(const arcticc::pb2::s3_storage_pb2::Config& config) {
         update(config);
     }

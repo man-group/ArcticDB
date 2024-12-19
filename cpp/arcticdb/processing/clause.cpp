@@ -103,11 +103,13 @@ std::vector<EntityId> PassthroughClause::process(std::vector<EntityId>&& entity_
 }
 
 std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) const {
+    ARCTICDB_SAMPLE(FilterClause, 0)
     if (entity_ids.empty()) {
         return {};
     }
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager_, std::move(entity_ids));
     proc.set_expression_context(expression_context_);
+    ARCTICDB_RUNTIME_DEBUG(log::memory(), "Doing filter {} for entity ids {}", expression_context_->root_node_name_, entity_ids);
     auto variant_data = proc.get(expression_context_->root_node_name_);
     std::vector<EntityId> output;
     util::variant_match(variant_data,
@@ -116,11 +118,11 @@ std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) 
                                 proc.apply_filter(std::move(bitset), optimisation_);
                                 output = push_entities(*component_manager_, std::move(proc));
                             } else {
-                                log::version().debug("Filter returned empty result");
+                                log::memory().debug("Filter returned empty result");
                             }
                         },
                         [](EmptyResult) {
-                            log::version().debug("Filter returned empty result");
+                            log::memory().debug("Filter returned empty result");
                         },
                         [&output, &proc, this](FullResult) {
                             output = push_entities(*component_manager_, std::move(proc));
@@ -240,6 +242,7 @@ std::vector<std::vector<EntityId>> AggregationClause::structure_for_processing(s
 
 std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_ids) const {
     ARCTICDB_DEBUG_THROW(5)
+    ARCTICDB_SAMPLE(AggregationClause, 0)
     if (entity_ids.empty()) {
         return {};
     }
@@ -521,6 +524,7 @@ void ResampleClause<closed_boundary>::set_processing_config(const ProcessingConf
 template<ResampleBoundary closed_boundary>
 std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_processing(
         std::vector<RangesAndKey>& ranges_and_keys) {
+    ARCTICDB_RUNTIME_DEBUG(log::memory(), "ResampleClause: structure for processing 1");
     if (ranges_and_keys.empty()) {
         return {};
     }
@@ -555,6 +559,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
     if (entity_ids.empty()) {
         return {};
     }
+    ARCTICDB_RUNTIME_DEBUG(log::memory(), "ResampleClause: structure for processing 2");
     auto [segments, row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
     std::vector<RangesAndEntity> ranges_and_entities;
     ranges_and_entities.reserve(entity_ids.size());
@@ -605,10 +610,12 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
 
 template<ResampleBoundary closed_boundary>
 std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<EntityId>&& entity_ids) const {
+    ARCTICDB_SAMPLE(ResampleClause, 0)
     if (entity_ids.empty()) {
         return {};
     }
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>, EntityFetchCount>(*component_manager_, std::move(entity_ids));
+    ARCTICDB_RUNTIME_DEBUG(log::memory(), "ResampleClause: processing entities {}", entity_ids);
     auto row_slices = split_by_row_slice(std::move(proc));
     // If the entity fetch counts for the entities in the first row slice are 2, the first bucket overlapping this row
     // slice is being computed by the call to process dealing with the row slices above these. Otherwise, this call

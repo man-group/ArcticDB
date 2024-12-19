@@ -34,20 +34,4 @@ inline std::string operation_to_string(StorageOperation operation) {
     util::raise_rte("Invalid Storage operation provided for mock client");
 }
 
-template<typename Output, typename Error>
-struct StorageResult {
-    std::variant<Output, Error> result;
-
-    [[nodiscard]] bool is_success() const {
-        return std::holds_alternative<Output>(result);
-    }
-
-    Error& get_error() {
-        return std::get<Error>(result);
-    }
-    Output& get_output() {
-        return std::get<Output>(result);
-    }
-};
-
 }
