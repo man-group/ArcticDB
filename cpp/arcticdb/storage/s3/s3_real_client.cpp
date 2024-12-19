@@ -132,7 +132,7 @@ S3Result<Segment> RealS3Client::get_object(
 
 S3Result<std::monostate> RealS3Client::put_object(
         const std::string &s3_object_name,
-        Segment &&segment,
+        Segment &segment,
         const std::string &bucket_name,
         PutHeader header) {
 

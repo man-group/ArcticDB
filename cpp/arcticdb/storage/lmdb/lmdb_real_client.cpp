@@ -39,7 +39,7 @@ std::optional<Segment> RealLmdbClient::read(const std::string&, std::string& pat
     return segment;
 }
 
-void RealLmdbClient::write(const std::string&, std::string& path, arcticdb::Segment&& seg,
+void RealLmdbClient::write(const std::string&, std::string& path, arcticdb::Segment& seg,
                            ::lmdb::txn& txn, ::lmdb::dbi& dbi, int64_t overwrite_flag) {
     MDB_val mdb_key{path.size(), path.data()};
 

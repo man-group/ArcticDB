@@ -81,14 +81,14 @@ folly::Future<SegmentInMemory> fetch_data(
 void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
-    Segment &&seg,
+    Segment &seg,
     const DecodePathData& shared_data,
     std::any& handler_data);
 
 void decode_into_frame_dynamic(
     SegmentInMemory &frame,
     PipelineContextRow &context,
-    Segment &&seg,
+    Segment &seg,
     const DecodePathData& shared_data,
     std::any& handler_data);
 

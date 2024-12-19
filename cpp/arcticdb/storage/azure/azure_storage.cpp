@@ -124,10 +124,9 @@ void do_write_impl(
                 for (auto& kv : group.values()) {
                     auto& k = kv.variant_key();
                     auto blob_name = object_path(b.bucketize(key_type_dir, k), k);
-                    auto& seg = kv.segment();
 
                     try {
-                        azure_client.write_blob(blob_name, std::move(seg), upload_option, request_timeout);
+                        azure_client.write_blob(blob_name, *kv.segment_ptr(), upload_option, request_timeout);
                     }
                     catch (const Azure::Core::RequestFailedException& e) {
                         raise_azure_exception(e, blob_name);

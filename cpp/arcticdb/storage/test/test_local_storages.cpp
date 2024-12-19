@@ -55,8 +55,8 @@ TEST_P(LocalStorageTestSuite, CoreFunctions) {
   as::KeySegmentPair res;
   storage->read(k, [&](auto &&k, auto &&seg) {
     res.set_key(k);
-    res.segment() = std::move(seg);
-    res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
+    res.set_segment(std::move(seg));
+    res.segment_ptr()->force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
   }, storage::ReadKeyOpts{});
 
   res = storage->read(k, as::ReadKeyOpts{});
@@ -79,8 +79,8 @@ TEST_P(LocalStorageTestSuite, CoreFunctions) {
   as::KeySegmentPair update_res;
   storage->read(k, [&](auto &&k, auto &&seg) {
     update_res.set_key(k);
-    update_res.segment() = std::move(seg);
-    update_res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
+    update_res.set_segment(std::move(seg));
+    update_res.segment_ptr()->force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
   }, as::ReadKeyOpts{});
 
   update_res = storage->read(k, as::ReadKeyOpts{});
@@ -136,11 +136,11 @@ TEST_P(LocalStorageTestSuite, Strings) {
   as::KeySegmentPair res;
   storage->read(save_k, [&](auto &&k, auto &&seg) {
     res.set_key(k);
-    res.segment() = std::move(seg);
-    res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
+    res.set_segment(std::move(seg));
+    res.segment_ptr()->force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
   }, as::ReadKeyOpts{});
 
-  SegmentInMemory res_mem = decode_segment(std::move(res.segment()));
+  SegmentInMemory res_mem = decode_segment(*res.segment_ptr());
   ASSERT_EQ(s.string_at(0, 1), res_mem.string_at(0, 1));
   ASSERT_EQ(std::string("happy"), res_mem.string_at(0, 1));
   ASSERT_EQ(s.string_at(1, 3), res_mem.string_at(1, 3));
