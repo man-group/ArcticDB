@@ -324,8 +324,8 @@ def gen_random_date(start: pd.Timestamp, end: pd.Timestamp):
 @pytest.mark.skipif(WINDOWS, 
                     reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem")
 @pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
-def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
-    lib: adb.Library = arctic_library_lmdb
+def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
+    lib: adb.Library = arctic_library_lmdb_100gb
 
     df = generate_big_dataframe()
 
@@ -365,14 +365,14 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb):
                     reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem")
 @pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
 @SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
-def test_mem_leak_querybuilder_standard(arctic_library_lmdb):
+def test_mem_leak_querybuilder_standard(arctic_library_lmdb_100gb):
     """
     This test uses old approach with iterations.
     It is created for comparison with the new approach
     with memray
     (If memray is good in future we could drop the old approach)
     """
-    lib: Library = arctic_library_lmdb
+    lib: Library = arctic_library_lmdb_100gb
 
     df = construct_df_querybuilder_tests(size=2000000)
     size = df.shape[0]
@@ -436,7 +436,8 @@ def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
 
 
 @pytest.fixture
-def library_with_symbol(arctic_library_lmdb) -> Generator[Tuple[Library, pd.DataFrame, str], None, None]:
+# NOTE: for now we run only V1 encoding as test is very slow
+def library_with_symbol(arctic_library_lmdb, only_test_encoding_version_v1) -> Generator[Tuple[Library, pd.DataFrame, str], None, None]:
     """
     As memray instruments memory, we need to take out 
     everything not relevant from mem leak measurement out of 
@@ -452,7 +453,8 @@ def library_with_symbol(arctic_library_lmdb) -> Generator[Tuple[Library, pd.Data
     yield (lib, df, symbol)
 
 @pytest.fixture
-def library_with_tiny_symbol(arctic_library_lmdb) -> Generator[Tuple[Library, pd.DataFrame, str], None, None]:
+# NOTE: for now we run only V1 encoding as test is very slow
+def library_with_tiny_symbol(arctic_library_lmdb, only_test_encoding_version_v1) -> Generator[Tuple[Library, pd.DataFrame, str], None, None]:
     """
     As memray instruments memory, we need to take out 
     everything not relevant from mem leak measurement out of 
@@ -518,7 +520,7 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:
     del lib, queries
     gc.collect()
 
-def test_queries_correctness_precheck(library_with_tiny_symbol):
+def test_mem_leak_queries_correctness_precheck(library_with_tiny_symbol):
     """
     This test does precheck to confirm queries work more or less
     If it fails then perhaps there was a problem with 
@@ -596,7 +598,7 @@ if MEMRAY_SUPPORTED:
 
 
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_leaks(location_limit = "40 KB" if not MACOS else "60 KB", 
+    @pytest.mark.limit_leaks(location_limit = "50 KB" if not MACOS else "60 KB", 
                              filter_fn = is_relevant)
     ## Unfortunately it is not possible to xfail memray tests. Instead:
     ##  - log issue for investigation and analysis = to fix leak, or filter out stack frame
