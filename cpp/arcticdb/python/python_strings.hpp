@@ -16,7 +16,7 @@
 #include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
-#include <util/gil_safe_py_none.hpp>
+#include <arcticdb/util/gil_safe_py_none.hpp>
 
 namespace arcticdb {
 

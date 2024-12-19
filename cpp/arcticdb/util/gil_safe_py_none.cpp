@@ -6,7 +6,7 @@
  */
 
 
-#include <util/gil_safe_py_none.hpp>
+#include <arcticdb/util/gil_safe_py_none.hpp>
 #include <arcticdb/python/gil_lock.hpp>
 
 using namespace arcticdb;

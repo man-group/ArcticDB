@@ -22,8 +22,8 @@
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/entity/type_utils.hpp>
-#include <util/flatten_utils.hpp>
-#include <util/gil_safe_py_none.hpp>
+#include <arcticdb/util/flatten_utils.hpp>
+#include <arcticdb/util/gil_safe_py_none.hpp>
 
 namespace arcticdb {
 
