@@ -8,13 +8,9 @@
 #pragma once
 
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
-
-#include <boost/noncopyable.hpp>
-
-#include <cstdint>
+#include <folly/futures/Future.h>
 
 namespace arcticdb {
 class Store;
