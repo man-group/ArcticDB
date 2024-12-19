@@ -12,15 +12,19 @@ import datetime as dt
 import pytest
 
 from arcticdb import QueryBuilder
-from arcticdb.exceptions import ArcticDbNotYetImplemented, SchemaException
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.exceptions import ArcticDbNotYetImplemented, SchemaException, UserInputException
+from arcticdb.util.test import assert_frame_equal, generic_resample_test
 from packaging.version import Version
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
+import itertools
 
 pytestmark = pytest.mark.pipeline
 
 
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
+
+def all_aggregations_dict(col):
+    return {f"to_{agg}": (col, agg) for agg in ALL_AGGREGATIONS}
 
 # Pandas recommended way to resample and exclude buckets with no index values, which is our behaviour
 # See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#sparse-resampling
@@ -30,31 +34,22 @@ def round(t, freq):
     return pd.Timestamp((t.value // td.value) * td.value)
 
 def generic_resample_test_with_empty_buckets(lib, sym, rule, aggregations, date_range=None):
+    """
+    Perform a resampling in ArcticDB and compare it against the same query in Pandas.
+
+    This will remove all empty buckets mirroring ArcticDB's behavior. It cannot take additional parameters such as
+    orign and offset. In case such parameters are needed arcticdb.util.test.generic_resample_test can be used.
+
+    This can drop buckets even all columns are of float type while generic_resample_test needs at least one non-float
+    column.
+    """
     # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
     expected = lib.read(sym, date_range=date_range).data
     # Pandas 1.X needs None as the first argument to agg with named aggregators
     expected = expected.groupby(partial(round, freq=rule)).agg(None, **aggregations)
     expected = expected.reindex(columns=sorted(expected.columns))
-    
     q = QueryBuilder()
     q = q.resample(rule).agg(aggregations)
-    received = lib.read(sym, date_range=date_range, query_builder=q).data
-    received = received.reindex(columns=sorted(received.columns))
-
-    assert_frame_equal(expected, received, check_dtype=False)
-
-def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=None, label=None, offset=None):
-    # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
-    expected = lib.read(sym, date_range=date_range).data
-    # Pandas 1.X needs None as the first argument to agg with named aggregators
-    if PANDAS_VERSION >= Version("1.1.0"):
-        expected = expected.resample(rule, closed=closed, label=label, offset=offset).agg(None, **aggregations)
-    else:
-        expected = expected.resample(rule, closed=closed, label=label).agg(None, **aggregations)
-    expected = expected.reindex(columns=sorted(expected.columns))
-
-    q = QueryBuilder()
-    q = q.resample(rule, closed=closed, label=label, offset=offset).agg(aggregations)
     received = lib.read(sym, date_range=date_range, query_builder=q).data
     received = received.reindex(columns=sorted(received.columns))
 
@@ -548,10 +543,6 @@ def test_resampling_empty_type_column(lmdb_version_store_empty_types_v1):
 @pytest.mark.parametrize("closed", ["left", "right"])
 class TestResamplingOffset:
 
-    @staticmethod
-    def all_aggregations_dict(col):
-        return {f"to_{agg}": (col, agg) for agg in ALL_AGGREGATIONS}
-
     @pytest.mark.parametrize("offset", ("30s", pd.Timedelta(seconds=30)))
     def test_offset_smaller_than_freq(self, lmdb_version_store_v1, closed, offset):
         lib = lmdb_version_store_v1
@@ -564,7 +555,7 @@ class TestResamplingOffset:
             lib,
             sym,
             "2min",
-            self.all_aggregations_dict("col"),
+            all_aggregations_dict("col"),
             closed=closed,
             offset="30s"
         )
@@ -581,7 +572,7 @@ class TestResamplingOffset:
             lib,
             sym,
             "2min",
-            self.all_aggregations_dict("col"),
+            all_aggregations_dict("col"),
             closed=closed,
             offset=offset
         )
@@ -603,7 +594,7 @@ class TestResamplingOffset:
             lib,
             sym,
             "2min",
-            self.all_aggregations_dict("col"),
+            all_aggregations_dict("col"),
             closed=closed,
             offset=offset
         )
@@ -630,8 +621,226 @@ class TestResamplingOffset:
             lib,
             sym,
             "2min",
-            self.all_aggregations_dict("col"),
+            all_aggregations_dict("col"),
             closed=closed,
             offset=offset,
             date_range=date_range
         )
+
+@pytest.mark.skipif(PANDAS_VERSION < Version("1.1.0"), reason="Pandas < 1.1.0 do not have offset param")
+@pytest.mark.parametrize("closed", ["left", "right"])
+class TestResamplingOrigin:
+
+    # Timestamps: pre start, between start and end, post end, first date in the index, last date in the index
+    @pytest.mark.parametrize(
+        "origin",
+        [
+            "start",
+            "start_day",
+            pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+            pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+            "epoch",
+            pd.Timestamp("2024-01-01"),
+            pd.Timestamp("2025-01-01 15:00:00"),
+            pd.Timestamp("2025-01-03 15:00:00"),
+            pd.Timestamp("2025-01-01 10:00:33"),
+            pd.Timestamp("2025-01-02 12:00:13")
+        ]
+    )
+    def test_origin(self, lmdb_version_store_v1, closed, origin):
+        lib = lmdb_version_store_v1
+        sym = "test_origin_special_values"
+        # Start and end are picked so that #bins * rule + start != end on purpose to test
+        # the bin generation in case of end and end_day
+        start = pd.Timestamp("2025-01-01 10:00:33")
+        end = pd.Timestamp("2025-01-02 12:00:20")
+        idx = pd.date_range(start, end, freq='10s')
+        rng = np.random.default_rng()
+        df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
+        lib.write(sym, df)
+        generic_resample_test(
+            lib,
+            sym,
+            "2min",
+            all_aggregations_dict("col"),
+            closed=closed,
+            origin=origin
+        )
+
+    @pytest.mark.parametrize("origin", [
+        "start",
+        "start_day",
+        pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+        pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported"))
+    ])
+    @pytest.mark.parametrize("date_range", [
+        (pd.Timestamp("2025-01-01 10:00:00"), pd.Timestamp("2025-01-02 12:00:00")), # start and end are multiples of rule
+        (pd.Timestamp("2025-01-01 10:00:00"), pd.Timestamp("2025-01-02 12:00:03")), # start is multiple of rule
+        (pd.Timestamp("2025-01-01 10:00:03"), pd.Timestamp("2025-01-02 12:00:00")) # end is multiple of rule
+    ])
+    def test_origin_is_multiple_of_freq(self, lmdb_version_store_v1, closed, origin, date_range):
+        lib = lmdb_version_store_v1
+        sym = "test_origin_special_values"
+        start, end = date_range
+        idx = pd.date_range(start, end, freq='10s')
+        rng = np.random.default_rng()
+        df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
+        lib.write(sym, df)
+        generic_resample_test(
+            lib,
+            sym,
+            "2min",
+            all_aggregations_dict("col"),
+            closed=closed,
+            origin=origin,
+            drop_empty_buckets_for="col"
+        )
+
+    @pytest.mark.parametrize("origin", [
+        "start",
+        "start_day",
+        pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+        pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+        "epoch"
+    ])
+    def test_pre_epoch_data(self, lmdb_version_store_v1, closed, origin):
+        lib = lmdb_version_store_v1
+        sym = "test_origin_special_values"
+        start = pd.Timestamp("1800-01-01 10:00:00")
+        end = pd.Timestamp("1800-01-02 10:00:00")
+        idx = pd.date_range(start, end, freq='30s')
+        rng = np.random.default_rng()
+        df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
+        lib.write(sym, df)
+        generic_resample_test(
+            lib,
+            sym,
+            "2min",
+            all_aggregations_dict("col"),
+            closed=closed,
+            origin=origin,
+            drop_empty_buckets_for="col"
+        )
+
+    @pytest.mark.parametrize("origin", [
+        "start",
+        "start_day",
+        pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+        pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+    ])
+    @pytest.mark.parametrize("date_range",
+        list(itertools.product(
+            [pd.Timestamp("2024-01-01") - pd.Timedelta(1), pd.Timestamp("2024-01-01") + pd.Timedelta(1)],
+            [pd.Timestamp("2024-01-02") - pd.Timedelta(1), pd.Timestamp("2024-01-02") + pd.Timedelta(1)]))
+    )
+    def test_origin_off_by_one_on_boundary(self, lmdb_version_store_v1, closed, origin, date_range):
+        lib = lmdb_version_store_v1
+        sym = "test_origin_special_values"
+        start, end = date_range
+        idx = pd.date_range(start, end, freq='10s')
+        rng = np.random.default_rng()
+        df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
+        lib.write(sym, df)
+        generic_resample_test(
+            lib,
+            sym,
+            "2min",
+            all_aggregations_dict("col"),
+            closed=closed,
+            origin=origin,
+            drop_empty_buckets_for="col"
+        )
+
+    @pytest.mark.parametrize("origin", [
+        "start_day",
+        "start",
+        pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+        pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported"))
+    ])
+    def test_non_epoch_origin_throws_with_daterange(self, lmdb_version_store_v1, origin, closed):
+        lib = lmdb_version_store_v1
+        sym = "test_origin_start_throws_with_daterange"
+
+        lib.write(sym, pd.DataFrame({"col": [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")])))
+        q = QueryBuilder()
+        q = q.resample('1min', origin=origin, closed=closed).agg({"col_min":("col", "min")})
+        with pytest.raises(UserInputException) as exception_info:
+            lib.read(sym, query_builder=q, date_range=(pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")))
+        assert all(w in str(exception_info.value) for w in [origin, "origin"])
+
+    @pytest.mark.parametrize("origin", ["epoch", pd.Timestamp("2025-01-03 12:00:00")])
+    def test_epoch_and_ts_origin_works_with_date_range(self, lmdb_version_store_v1, closed, origin):
+        lib = lmdb_version_store_v1
+        sym = "test_origin_special_values"
+        # Start and end are picked so that #bins * rule + start != end on purpose to test
+        # the bin generation in case of end and end_day
+        start = pd.Timestamp("2025-01-01 00:00:00")
+        end = pd.Timestamp("2025-01-04 00:00:00")
+        idx = pd.date_range(start, end, freq='3s')
+        rng = np.random.default_rng()
+        df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
+        lib.write(sym, df)
+        generic_resample_test(
+            lib,
+            sym,
+            "2min",
+            all_aggregations_dict("col"),
+            closed=closed,
+            origin=origin,
+            date_range=(pd.Timestamp("2025-01-02 00:00:00"), pd.Timestamp("2025-01-03 00:00:00"))
+        )
+
+@pytest.mark.skipif(PANDAS_VERSION < Version("1.1.0"), reason="Pandas < 1.1.0 do not have offset param")
+@pytest.mark.parametrize("closed", ["left", "right"])
+@pytest.mark.parametrize("label", ["left", "right"])
+@pytest.mark.parametrize("origin",[
+    "start",
+    "start_day",
+    pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+    pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+    "epoch",
+    pd.Timestamp("2024-01-01"),
+    pd.Timestamp("2025-01-01 15:00:00"),
+    pd.Timestamp("2025-01-03 15:00:00")
+])
+@pytest.mark.parametrize("offset", ['10s', '13s', '2min'])
+def test_origin_offset_combined(lmdb_version_store_v1, closed, origin, label, offset):
+    lib = lmdb_version_store_v1
+    sym = "test_origin_special_values"
+    # Start and end are picked so that #bins * rule + start != end on purpose to test
+    # the bin generation in case of end and end_day
+    start = pd.Timestamp("2025-01-01 10:00:33")
+    end = pd.Timestamp("2025-01-02 12:00:20")
+    idx = pd.date_range(start, end, freq='10s')
+    rng = np.random.default_rng()
+    df = pd.DataFrame({"col": range(len(idx))}, index=idx)
+    lib.write(sym, df)
+    generic_resample_test(
+        lib,
+        sym,
+        "2min",
+        all_aggregations_dict("col"),
+        closed=closed,
+        origin=origin,
+        drop_empty_buckets_for="col",
+        label=label,
+        offset=offset
+    )
+
+def test_max_with_one_infinity_element(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_max_with_one_infinity_element"
+
+    lib.write(sym, pd.DataFrame({"col": [np.inf]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
+    q = QueryBuilder()
+    q = q.resample('1min').agg({"col_max":("col", "max")})
+    assert np.isinf(lib.read(sym, query_builder=q).data['col_max'][0])
+
+def test_min_with_one_infinity_element(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_min_with_one_infinity_element"
+
+    lib.write(sym, pd.DataFrame({"col": [-np.inf]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
+    q = QueryBuilder()
+    q = q.resample('1min').agg({"col_min":("col", "min")})
+    assert np.isneginf(lib.read(sym, query_builder=q).data['col_min'][0])

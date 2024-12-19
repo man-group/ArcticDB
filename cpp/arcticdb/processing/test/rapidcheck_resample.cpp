@@ -17,7 +17,7 @@
 using namespace arcticdb;
 
 auto generate_bucket_boundaries(std::vector<timestamp>&& bucket_boundaries) {
-    return [bucket_boundaries = std::move(bucket_boundaries)](timestamp, timestamp, std::string_view, ResampleBoundary, timestamp) mutable {
+    return [bucket_boundaries = std::move(bucket_boundaries)](timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, ResampleOrigin) mutable {
         return bucket_boundaries;
     };
 }
@@ -113,11 +113,11 @@ RC_GTEST_PROP(Resample, StructureForProcessing, ()) {
     }
 
     if (left_boundary_closed) {
-        ResampleClause<ResampleBoundary::LEFT> resample_clause{"dummy", ResampleBoundary::LEFT, generate_bucket_boundaries(std::move(bucket_boundaries)), 0};
+        ResampleClause<ResampleBoundary::LEFT> resample_clause{"dummy", ResampleBoundary::LEFT, generate_bucket_boundaries(std::move(bucket_boundaries)), 0, 0};
         auto result = resample_clause.structure_for_processing(ranges_and_keys);
         RC_ASSERT(expected_result == result);
     } else {
-        ResampleClause<ResampleBoundary::RIGHT> resample_clause{"dummy", ResampleBoundary::RIGHT, generate_bucket_boundaries(std::move(bucket_boundaries)), 0};
+        ResampleClause<ResampleBoundary::RIGHT> resample_clause{"dummy", ResampleBoundary::RIGHT, generate_bucket_boundaries(std::move(bucket_boundaries)), 0, 0};
         auto result = resample_clause.structure_for_processing(ranges_and_keys);
         RC_ASSERT(expected_result == result);
     }
