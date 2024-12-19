@@ -44,9 +44,9 @@ jobs:
           apt update
           apt install -y software-properties-common iptables squid
           echo "whl"
-          pip install --force-reinstall $(ls arcticdb*.whl)[Testing]
+          python -m pip install --force-reinstall $(ls arcticdb*.whl)[Testing]
           echo "grpcio"
-          pip install grpcio
+          python -m pip install grpcio
 
           echo "
           acl localnet src 127.0.0.1/32
