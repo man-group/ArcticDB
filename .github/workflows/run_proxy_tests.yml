@@ -74,8 +74,8 @@ jobs:
       - name: Run proxy test
         shell: bash
         run: |
-          export http_proxy="http://127.0.0.1:3128"
-          export https_proxy="http://127.0.0.1:3128"
+          echo "http_proxy=http://127.0.0.1:3128" >> $GITHUB_ENV
+          echo "https_proxy=http://127.0.0.1:3128" >> $GITHUB_ENV
           python -m pytest --timeout=3600 python/tests/integration/arcticdb/test_arctic.py::test_s3_sts_auth
 
       # Fallback if the clean up at test fixutre tear down fails due to crash or etc
