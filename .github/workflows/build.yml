@@ -56,7 +56,7 @@ jobs:
                   mongodb:
                     image: "mongo:4.4"
                 container:
-                  image: ghcr.io/man-group/arcticdb-dev:${{inputs.dev_image_tag}}
+                  image: ghcr.io/man-group/arcticdb-dev:${{inputs.dev_image_tag || 'latest'}}
                   volumes:
                     - /:/mnt
             windows_matrix:
