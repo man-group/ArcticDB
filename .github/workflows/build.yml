@@ -104,7 +104,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[7, 8, 9, 10, 11]')}}
+        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[6, 7, 8, 9, 10, 11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
