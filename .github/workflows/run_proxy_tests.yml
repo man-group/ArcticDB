@@ -46,7 +46,7 @@ jobs:
           echo "whl"
           python -m pip install --force-reinstall $(ls arcticdb*.whl)[Testing]
           echo "grpcio"
-          python -m pip install grpcio
+          python -m pip install grpcio grpcio-tools
 
           echo "
           acl localnet src 127.0.0.1/32
