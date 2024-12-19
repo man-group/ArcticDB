@@ -3,7 +3,7 @@ FROM quay.io/pypa/manylinux_2_28_x86_64
 RUN dnf update -y
 RUN dnf remove -y 'gcc-toolset-*'
 RUN dnf install -y zip flex bison gcc-toolset-10 gcc-toolset-10-gdb gcc-toolset-10-libatomic-devel krb5-devel cyrus-sasl-devel openssl-devel \
-unzip tar epel-release jq wget libcurl-devel \
+unzip tar epel-release jq wget libcurl-devel git-lfs \
 python3.11-devel python3.11-pip perl-IPC-Cmd
 
 RUN dnf groupinstall -y 'Development Tools'

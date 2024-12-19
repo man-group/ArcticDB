@@ -19,7 +19,7 @@ jobs:
       always() &&
       !cancelled()
     runs-on: ${{ needs.start_ec2_runner.outputs.label }}
-    container: quay.io/pypa/manylinux_2_28_x86_64:latest
+    container: ghcr.io/man-group/arcticdb-dev:latest
     env:
       # this is potentially overflowing the cache, so should be looked into after we address issue #1057
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
@@ -48,9 +48,6 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.3
         with:
           version: "v0.4.0"
-        
-      - name: Install deps
-        uses: ./.github/actions/setup_deps
 
       - name: Extra envs
         shell: bash -l {0}
