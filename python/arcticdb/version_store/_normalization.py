@@ -260,15 +260,16 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
             f"'{type(sample)}', but only strings, unicode, and Timestamps are supported. "
             f"Do you have mixed dtypes in your column?"
         )
+    
 
-    # Pick any unwanted data conversions (e.g. np.NaN to 'nan') or None to the string 'None'
+    # Pick any unwanted data conversions (e.g. np.nan to 'nan') or None to the string 'None'
     if np.array_equal(arr, casted_arr):
         return casted_arr
     else:
         if None in arr:
             raise ArcticDbNotYetImplemented(
                 "You have a None object in the numpy array at positions={} Column type={} for column={} "
-                "which cannot be normalized.".format(np.where(arr is None)[0], arr.dtype, arr_name)
+                "which cannot be normalized.".format(np.where(arr == None), arr.dtype, arr_name)
             )
         else:
             raise ArcticDbNotYetImplemented(
