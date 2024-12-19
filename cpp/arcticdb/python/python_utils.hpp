@@ -8,7 +8,6 @@
 #pragma once
 
 #include <pybind11/pybind11.h>
-#include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/read_result.hpp>
