@@ -105,54 +105,110 @@ struct BlockCodecImpl : public BlockCodec {
 };
 
 struct EncodedBlock : Block {
+    std::optional<uint32_t> initial_out_bytes_;
+    
     explicit EncodedBlock(bool is_shape) {
         is_shape_ = is_shape;
+        if (initial_out_bytes_.has_value()) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(*initial_out_bytes_ == out_bytes_, "alex 1");
+        }
     }
 
     EncodedBlock() = default;
 
     [[nodiscard]] bool has_codec() const {
-        return codecs_[0].codec_ != Codec::PASS;
+        auto res = codecs_[0].codec_ != Codec::PASS;
+        if (initial_out_bytes_.has_value()) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(*initial_out_bytes_ == out_bytes_, "alex 2");
+        }
+        return res;
+//        return codecs_[0].codec_ != Codec::PASS;
     }
 
     [[nodiscard]] auto encoder_version() const {
-        return encoder_version_;
+        auto res = encoder_version_;
+        if (initial_out_bytes_.has_value()) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(*initial_out_bytes_ == out_bytes_, "alex 3");
+        }
+        return res;
+//        return encoder_version_;
     }
 
     [[nodiscard]] auto codec() const {
-        return *reinterpret_cast<const BlockCodecImpl*>(&codecs_[0]);
+        auto res = *reinterpret_cast<const BlockCodecImpl*>(&codecs_[0]);
+        if (initial_out_bytes_.has_value()) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(*initial_out_bytes_ == out_bytes_, "alex 4");
+        }
+        return res;
+//        return *reinterpret_cast<const BlockCodecImpl*>(&codecs_[0]);
     }
 
     void set_in_bytes(uint32_t bytes) {
         in_bytes_ = bytes;
+        if (initial_out_bytes_.has_value()) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(*initial_out_bytes_ == out_bytes_, "alex 5");
+        }
     }
 
     void set_encoder_version(uint16_t version) {
         encoder_version_ = version;
+        if (initial_out_bytes_.has_value()) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(*initial_out_bytes_ == out_bytes_, "alex 6");
+        }
     }
 
     void set_out_bytes(uint32_t bytes) {
+        if (initial_out_bytes_.has_value()) {
+            log::codec().warn("set_out_bytes called second time. First value: {}. Second value: {}.",
+                              *initial_out_bytes_, bytes);
+        }
+        initial_out_bytes_ = bytes;
         out_bytes_ = bytes;
     }
 
     void set_hash(uint64_t hash) {
+        if (initial_out_bytes_.has_value()) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(*initial_out_bytes_ == out_bytes_, "alex 7");
+        }
         hash_ = hash;
     }
 
     [[nodiscard]] uint64_t hash() const {
-        return hash_;
+        auto res = hash_;
+        if (initial_out_bytes_.has_value()) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(*initial_out_bytes_ == out_bytes_, "alex 8");
+        }
+        return res;
+//        return hash_;
     }
 
     [[nodiscard]] uint32_t out_bytes() const {
-        return out_bytes_;
+        auto res = out_bytes_;
+        if (initial_out_bytes_.has_value()) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(*initial_out_bytes_ == out_bytes_, "alex 9");
+        } else {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(*initial_out_bytes_ == out_bytes_, "alex 10");
+        }
+        return res;
+//        return out_bytes_;
     }
 
     [[nodiscard]] uint32_t in_bytes() const {
-        return in_bytes_;
+        auto res = in_bytes_;
+        if (initial_out_bytes_.has_value()) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(*initial_out_bytes_ == out_bytes_, "alex 8");
+        }
+        return res;
+//        return in_bytes_;
     }
 
     BlockCodecImpl *mutable_codec() {
-        return reinterpret_cast<BlockCodecImpl*>(&codecs_[0]);
+        auto res = reinterpret_cast<BlockCodecImpl*>(&codecs_[0]);
+        if (initial_out_bytes_.has_value()) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(*initial_out_bytes_ == out_bytes_, "alex 8");
+        }
+        return res;
+//        return reinterpret_cast<BlockCodecImpl*>(&codecs_[0]);
     }
 };
 
@@ -350,6 +406,8 @@ struct EncodedFieldImpl : public EncodedField {
 
     EncodedBlock *add_shapes() {
         auto block = new(blocks() + (shapes_count_ * 2)) EncodedBlock{true};
+//        internal::check<ErrorCode::E_ASSERTION_FAILURE>(shapes_count_ != std::numeric_limits<uint16_t>::max(),
+//                                                        "DING DING DING DING DING DING!");
         ++shapes_count_;
         return block;
     }
@@ -409,7 +467,7 @@ struct EncodedFieldImpl : public EncodedField {
     }
 };
 
-static_assert(EncodedFieldImpl::Size == sizeof(EncodedFieldImpl) - sizeof(EncodedBlock));
+//static_assert(EncodedFieldImpl::Size == sizeof(EncodedFieldImpl) - sizeof(EncodedBlock));
 
 inline size_t calc_field_bytes(size_t num_blocks) {
     return EncodedFieldImpl::Size + (sizeof(EncodedBlock) * num_blocks);

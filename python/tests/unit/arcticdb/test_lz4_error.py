@@ -5,4 +5,4 @@ from ahl.mongo.mongoose import NativeMongoose
 
 lib = NativeMongoose('research')["aowens.read_batch_profiling_pure"]
 
-lib.list_symbols()
+print(len(lib.list_symbols()))

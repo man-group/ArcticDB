@@ -24,10 +24,14 @@
 namespace arcticdb {
 
 template<typename T, typename BlockType>
-void decode_block(const BlockType &block, const std::uint8_t *input, T *output) {
+void decode_block(const BlockType &block, const std::uint8_t *input, T *output, bool instrument = false) {
     ARCTICDB_SUBSAMPLE_AGG(DecodeBlock)
     std::size_t size_to_decode = block.out_bytes();
     std::size_t decoded_size = block.in_bytes();
+
+    if (instrument) {
+        log::codec().warn("decode_block block.out_bytes(), block.in_bytes(): {}, {}", block.out_bytes(), block.in_bytes());
+    }
 
     if (!block.has_codec()) {
         arcticdb::detail::PassthroughDecoder::decode_block<T>(input, size_to_decode, output, decoded_size);
@@ -60,12 +64,20 @@ inline void read_shapes(
     DataSink& data_sink,
     uint8_t const *& data_in,
     int shapes_block,
-    shape_t*& shapes_out
+    shape_t*& shapes_out,
+    bool instrument = false
 ) {
     const auto& shape = encoded_field.shapes(shapes_block);
-    decode_block<shape_t>(shape, data_in, shapes_out);
+    if (instrument) {
+        log::codec().warn("read_shapes: calling decode_block for shapes_block: {}", shapes_block);
+    }
+    decode_block<shape_t>(shape, data_in, shapes_out, instrument);
     data_in += shape.out_bytes();
     shapes_out += shape.in_bytes() / sizeof(shape_t);
+    if (instrument) {
+        log::codec().warn("read_shapes: shape.out_bytes(), shape.in_bytes(), sizeof(shape_t): {}, {}, {}",
+                          shape.out_bytes(), shape.in_bytes(), sizeof(shape_t));
+    }
     data_sink.advance_shapes(shape.in_bytes());
 }
 
@@ -76,9 +88,16 @@ std::size_t decode_ndarray(
     const std::uint8_t* input,
     DataSink& data_sink,
     std::optional<util::BitMagic>& bv,
-    EncodingVersion encoding_version
+    EncodingVersion encoding_version,
+    bool instrument = false
 ) {
     ARCTICDB_SUBSAMPLE_AGG(DecodeNdArray)
+    if (instrument) {
+        log::codec().warn("TypeDescriptor: {}", td);
+        log::codec().warn("*input: {}", *input);
+        log::codec().warn("bv.has_value(): {}", bv.has_value());
+        log::codec().warn("encoding_version: {}", encoding_version);
+    }
 
     std::size_t read_bytes = 0;
     td.visit_tag([&](auto type_desc_tag) {
@@ -86,6 +105,9 @@ std::size_t decode_ndarray(
         using T = typename TD::DataTypeTag::raw_type;
 
         const auto data_size = encoding_sizes::data_uncompressed_size(field);
+        if (instrument) {
+            log::codec().warn("data_uncompressed_size: {}", data_size);
+        }
         const bool is_empty_array = (data_size == 0) && type_desc_tag.dimension() > Dimension::Dim0;
         // Empty array types will not contain actual data, however, its sparse map should be loaded
         // so that we can distinguish None from []
@@ -103,11 +125,18 @@ std::size_t decode_ndarray(
         auto data_in = input;
         auto num_blocks = field.values_size();
 
+        if (instrument) {
+            log::codec().warn("num_blocks: {}", num_blocks);
+        }
+
         ARCTICDB_TRACE(log::codec(), "Decoding ndarray with type {}, uncompressing {} ({}) bytes in {} blocks",
             td, data_size, encoding_sizes::ndarray_field_compressed_size(field), num_blocks);
         shape_t *shapes_out = nullptr;
         if constexpr(TD::DimensionTag::value != Dimension::Dim0) {
             const auto shape_size = encoding_sizes::shape_uncompressed_size(field);
+            if (instrument) {
+                log::codec().warn("shape_size: {}", shape_size);
+            }
             if(shape_size > 0) {
                 shapes_out = data_sink.allocate_shapes(shape_size);
                 if(encoding_version == EncodingVersion::V2)
@@ -115,18 +144,24 @@ std::size_t decode_ndarray(
             }
         }
         for (auto block_num = 0; block_num < num_blocks; ++block_num) {
+            if (instrument) {
+                log::codec().warn("block_num: {}", block_num);
+            }
             if constexpr(TD::DimensionTag::value != Dimension::Dim0) {
                 // In V1 encoding each block of values is preceded by a block of shapes.
                 // In V2 encoding all shapes are put in a single block placed at the beginning of the block chain.
                 if(encoding_version == EncodingVersion::V1) {
-                    read_shapes(field, data_sink, data_in, block_num, shapes_out);
+                    read_shapes(field, data_sink, data_in, block_num, shapes_out, instrument);
                 }
             }
 
             const auto& block_info = field.values(block_num);
             ARCTICDB_TRACE(log::codec(), "Decoding block {} at pos {}", block_num, data_in - input);
             size_t block_inflated_size;
-            decode_block<T>(block_info, data_in, reinterpret_cast<T *>(data_out));
+            if (instrument) {
+                log::codec().warn("decode_ndarray: calling decode_block for block_num: {}", block_num);
+            }
+            decode_block<T>(block_info, data_in, reinterpret_cast<T *>(data_out), instrument);
             block_inflated_size = block_info.in_bytes();
             data_out += block_inflated_size;
             data_sink.advance_data(block_inflated_size);

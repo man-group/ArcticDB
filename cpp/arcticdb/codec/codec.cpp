@@ -397,7 +397,8 @@ void decode_string_pool(
                        data,
                        res.string_pool(),
                        bv,
-                       hdr.encoding_version());
+                       hdr.encoding_version(),
+                       false);
 
         ARCTICDB_TRACE(log::codec(), "Decoded string pool to position {}", data-begin);
     }

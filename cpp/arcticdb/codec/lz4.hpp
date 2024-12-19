@@ -77,11 +77,13 @@ struct Lz4Decoder {
             int(in_bytes),
             int(out_bytes)
         );
-        util::check_arg(decompressed_size >= 0,
-            "Error while decoding with lz4 at address {:x} with size {}. Code {}",
-            uintptr_t(in),
-            in_bytes,
-            decompressed_size);
+        if (decompressed_size < 0) {
+            util::check_arg(decompressed_size >= 0,
+                            "Error while decoding with lz4 at address {:x} with size {}. Code {}",
+                            uintptr_t(in),
+                            in_bytes,
+                            decompressed_size);
+        }
 
         util::check_arg(std::size_t(decompressed_size) == out_bytes,
             "expected out_bytes == lz4 decompressed bytes, actual {} != {}",
