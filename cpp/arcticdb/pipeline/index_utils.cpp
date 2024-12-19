@@ -129,7 +129,7 @@ TimeseriesDescriptor get_merged_tsd(
     );
 }
 
-bool is_timeseries_index(IndexDescriptorImpl index_desc) {
+bool is_timeseries_index(const IndexDescriptorImpl& index_desc) {
     return index_desc.type() == IndexDescriptor::Type::TIMESTAMP || index_desc.type() == IndexDescriptor::Type::EMPTY;
 }
 

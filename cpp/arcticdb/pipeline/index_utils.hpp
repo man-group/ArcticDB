@@ -138,6 +138,6 @@ TimeseriesDescriptor get_merged_tsd(
     const TimeseriesDescriptor& existing_tsd,
     const std::shared_ptr<pipelines::InputTensorFrame>& new_frame);
 
-bool is_timeseries_index(IndexDescriptorImpl index_desc);
+[[nodiscard]] bool is_timeseries_index(const IndexDescriptorImpl& index_desc);
 
 } //namespace arcticdb::pipelines::index
