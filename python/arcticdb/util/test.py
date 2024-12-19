@@ -351,8 +351,11 @@ def random_integers(size, dtype):
     platform_int_info = np.iinfo("int_")
     iinfo = np.iinfo(dtype)
     return np.random.randint(
-        max(iinfo.min, platform_int_info.min), min(iinfo.max, platform_int_info.max), size=size
-    ).astype(dtype)
+        max(iinfo.min, platform_int_info.min),
+        min(iinfo.max, platform_int_info.max),
+        size=size,
+        dtype=dtype
+    )
 
 
 def get_wide_dataframe(size=10000, seed=0):

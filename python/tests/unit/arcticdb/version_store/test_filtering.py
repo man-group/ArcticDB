@@ -32,7 +32,7 @@ from arcticdb.util.test import (
     generic_filter_test_strings,
     generic_filter_test_nans,
 )
-from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
+from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION, IS_NUMPY_TWO
 
 
 pytestmark = pytest.mark.pipeline
@@ -1185,7 +1185,7 @@ def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1)
     lib.write(symbol, df)
     vit = lib.read(symbol, query_builder=q)
 
-    if IS_PANDAS_TWO and sys.platform.startswith("win32"):
+    if (not IS_NUMPY_TWO) and (IS_PANDAS_TWO and sys.platform.startswith("win32")):
         # Pandas 2.0.0 changed the behavior of Index creation from numpy arrays:
         # "Previously, all indexes created from numpy numeric arrays were forced to 64-bit.
         # Now, for example, Index(np.array([1, 2, 3])) will be int32 on 32-bit systems,

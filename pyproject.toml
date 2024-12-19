@@ -25,6 +25,9 @@ build = "cp*-win_amd64"
 before-all = "bash {project}/build_tooling/prep_cpp_build.sh"
 before-build = "set"
 
+[tool.ruff]
+line-length = 120
+
 [tool.black]
 line-length = 120
 target_version = ['py36', 'py37', 'py38', 'py39', 'py310', 'py311']
@@ -43,3 +46,8 @@ exclude = '''
   | static
 )/
 '''
+
+[tool.pytest.ini_options]
+markers = [
+    "pipeline",
+]

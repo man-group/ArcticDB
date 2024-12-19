@@ -20,9 +20,10 @@
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/util/offset_string.hpp>
-#include <util/flatten_utils.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/entity/type_utils.hpp>
+#include <util/flatten_utils.hpp>
+#include <util/gil_safe_py_none.hpp>
 
 namespace arcticdb {
 
@@ -135,7 +136,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                 if (!c_style)
                     ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
 
-                auto none = py::none{};
+                auto none = GilSafePyNone::instance();
                 std::variant<convert::StringEncodingError, convert::PyStringWrapper> wrapper_or_error;
                 // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
                 // In this case a PyObject will be allocated by convert::py_unicode_to_buffer
@@ -147,7 +148,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                 auto out_ptr = reinterpret_cast<entity::position_t*>(column.buffer().data());
                 auto& string_pool = agg.segment().string_pool();
                 for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
-                    if (*ptr_data == none.ptr()) {
+                    if (*ptr_data == none->ptr()) {
                         *out_ptr++ = not_a_string();
                     } else if(is_py_nan(*ptr_data)){
                         *out_ptr++ = nan_placeholder();
