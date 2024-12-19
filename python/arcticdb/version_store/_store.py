@@ -2190,8 +2190,8 @@ class NativeVersionStore:
         prefix : `Optional[str]`, default=None
             filter symbols by the given prefix. Only supported by S3 backend for now.
         use_symbol_list: `Optional[bool]`, default=None
-            If True, ignore the symbol list and get all symbols using iteration.
-            ignored if all_symbols=True
+            If False, ignore the symbol list cache and get all symbols using iteration.
+            ignored if all_symbols=True. If None, uses the library config (which is True by default)
 
         Examples
         --------
