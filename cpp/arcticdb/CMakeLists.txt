@@ -519,7 +519,10 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/version_map_batch_methods.cpp)
+        version/version_map_batch_methods.cpp
+
+        #================ REMOVE ME ==============
+        file_with_deliberate_errors.cpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
