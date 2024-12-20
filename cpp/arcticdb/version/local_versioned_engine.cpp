@@ -560,9 +560,7 @@ VersionedItem LocalVersionedEngine::update_internal(
     bool prune_previous_versions) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: update");
     py::gil_scoped_release release_gil;
-    auto update_info = get_latest_undeleted_version_and_next_version_id(store(),
-                                                                        version_map(),
-                                                                        stream_id);
+    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     if (update_info.previous_index_key_.has_value()) {
         if (frame->empty()) {
             ARCTICDB_DEBUG(log::version(), "Updating existing data with an empty item has no effect. \n"
