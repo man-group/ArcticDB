@@ -372,10 +372,10 @@ folly::Future<AtomKey> async_update_impl(
                 index_segment_reader.bucketize_dynamic());
             auto affected_keys = filter_index(index_segment_reader, combine_filter_functions(queries));
             std::vector<SliceAndKey> unaffected_keys;
-            std::set_difference(std::begin(index_segment_reader),
-                std::end(index_segment_reader),
-                std::begin(affected_keys),
-                std::end(affected_keys),
+            std::set_difference(index_segment_reader.begin(),
+                index_segment_reader.end(),
+                affected_keys.begin(),
+                affected_keys.end(),
                 std::back_inserter(unaffected_keys));
             util::check(
                 affected_keys.size() + unaffected_keys.size() == index_segment_reader.size(),
@@ -388,9 +388,11 @@ folly::Future<AtomKey> async_update_impl(
                         // If there are no new keys, then we can't intersect with the existing data.
                         return UpdateRanges{{}, {}, frame->index_range};
                     }
+                    IndexRange back_range =new_slice_and_keys.back().key().index_range();
+                    back_range.adjust_open_closed_interval();
                     return UpdateRanges{
-                        new_slice_and_keys.begin()->key().index_range(),
-                        new_slice_and_keys.rbegin()->key().index_range(),
+                        new_slice_and_keys.front().key().index_range(),
+                        std::move(back_range),
                         frame->index_range};
                 },
                 [&](const IndexRange& idx_range) {
@@ -450,8 +452,7 @@ VersionedItem update_impl(
     WriteOptions&& options,
     bool dynamic_schema,
     bool empty_types) {
-    auto version_key_fut = async_update_impl(store, update_info, query, frame, std::move(options), dynamic_schema, empty_types);
-    auto version_key = std::move(version_key_fut).get();
+    auto version_key = async_update_impl(store, update_info, query, frame, std::move(options), dynamic_schema, empty_types).get();
     auto versioned_item = VersionedItem(to_atom(std::move(version_key)));
     const StreamId& stream_id = frame->desc.id();
     ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);

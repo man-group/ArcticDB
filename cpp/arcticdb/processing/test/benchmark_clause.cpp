@@ -21,9 +21,7 @@ using namespace arcticdb;
 
 SegmentInMemory get_segment_for_merge(const StreamId &id, size_t num_rows, size_t start, size_t step){
     auto segment = SegmentInMemory{
-        get_test_descriptor<stream::TimeseriesIndex>(id, {
-            scalar_field(DataType::UINT8, "column")
-        }),
+        get_test_descriptor<stream::TimeseriesIndex>(id, std::array{scalar_field(DataType::UINT8, "column")}),
         num_rows
     };
     auto& index_col = segment.column(0);

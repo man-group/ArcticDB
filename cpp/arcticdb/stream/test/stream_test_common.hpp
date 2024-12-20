@@ -173,10 +173,10 @@ NativeTensor test_string_column(ContainerType &vec, DTT, shape_t num_rows) {
     return NativeTensor{bytes, 1, &strides, &shapes, dt, elsize, vec.data(), 1};
 }
 
-inline std::vector<entity::FieldRef> get_test_timeseries_fields() {
+inline auto get_test_timeseries_fields() {
     using namespace arcticdb::entity;
 
-    return {
+    return std::array {
         scalar_field(DataType::UINT8, "smallints"),
         scalar_field(DataType::INT64, "bigints"),
         scalar_field(DataType::FLOAT64, "floats"),
@@ -184,10 +184,10 @@ inline std::vector<entity::FieldRef> get_test_timeseries_fields() {
     };
 }
 
-inline std::vector<entity::FieldRef> get_test_simple_fields() {
+inline auto get_test_simple_fields() {
     using namespace arcticdb::entity;
 
-    return {
+    return std::array {
         scalar_field(DataType::UINT32, "index"),
         scalar_field(DataType::FLOAT64,  "floats"),
     };
@@ -254,13 +254,13 @@ inline void fill_test_frame(SegmentInMemory &segment,
 }
 
 template<typename IndexType>
-StreamDescriptor get_test_descriptor(const StreamId &id, const std::vector<FieldRef> &fields) {
+StreamDescriptor get_test_descriptor(const StreamId &id, std::span<const FieldRef> fields) {
     return IndexType::default_index().create_stream_descriptor(id, folly::Range(fields.begin(), fields.end()));
 }
 
 template<typename IndexType>
 TestTensorFrame get_test_frame(const StreamId &id,
-                               const std::vector<FieldRef> &fields,
+                               std::span<const FieldRef> fields,
                                size_t num_rows,
                                size_t start_val,
                                size_t opt_row_offset = 0) {
