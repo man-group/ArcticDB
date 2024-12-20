@@ -435,7 +435,7 @@ void append_incomplete(
     auto new_key = write_incomplete_frame(store, stream_id, frame, validate_index, sort_on_index, std::move(next_key), std::nullopt).get();
 
 
-    ARCTICDB_DEBUG(log::version(), "Wrote incomplete frame for stream {}, {} rows, total rows {}", stream_id, num_rows, total_rows);
+    ARCTICDB_DEBUG(log::version(), "Wrote incomplete frame for stream {}, {} rows, {} total rows", stream_id, num_rows, total_rows);
     write_head(store, to_atom(new_key), total_rows);
 }
 
