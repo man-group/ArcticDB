@@ -454,8 +454,7 @@ VersionedItem update_impl(
     bool empty_types) {
     auto version_key = async_update_impl(store, update_info, query, frame, std::move(options), dynamic_schema, empty_types).get();
     auto versioned_item = VersionedItem(to_atom(std::move(version_key)));
-    const StreamId& stream_id = frame->desc.id();
-    ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
+    ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", frame->desc.id(), update_info.next_version_id_);
     return versioned_item;
 }
 
