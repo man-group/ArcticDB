@@ -7,17 +7,9 @@
 
 #pragma once
 
-#include <string>
 #include <arcticdb/util/test/gtest.hpp>
 #include <arcticdb/stream/aggregator.hpp>
-#include <arcticdb/stream/stream_reader.hpp>
 #include <arcticdb/stream/stream_writer.hpp>
-#include <arcticdb/storage/store.hpp>
-
-#include <arcticdb/entity/atom_key.hpp>
-#include <folly/gen/Base.h>
-#include <folly/futures/Future.h>
-#include <arcticdb/util/variant.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/storage/library.hpp>
@@ -27,7 +19,12 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/stream/piloted_clock.hpp>
 
+#include <folly/gen/Base.h>
+#include <folly/futures/Future.h>
+
 #include <filesystem>
+#include <span>
+#include <string>
 
 namespace fg = folly::gen;
 
