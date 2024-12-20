@@ -32,14 +32,50 @@
     },
     "mongo-cxx-driver",
     {
-      "name": "aws-c-io",
-      "$version reason": "To pick up https://github.com/awslabs/aws-c-io/pull/515"
+      "name": "aws-sdk-cpp",
+      "$version reason": "Version which contains atomic put operations",
+      "default-features": false,
+      "features": [ "s3", "identity-management" ]
     },
     {
-      "name": "aws-sdk-cpp",
-      "$version reason": "Minimum version in the baseline that works with aws-c-io above.",
-      "default-features": false,
-      "features": [ "s3" ]
+      "name":  "aws-crt-cpp",
+      "version>=": "0.28.3"
+    },
+    {
+      "name": "aws-c-s3",
+      "version>=": "0.6.6"
+    },
+    {
+      "name": "aws-c-io",
+      "version>=": "0.14.18"
+    },
+    {
+      "name": "aws-c-common",
+      "version>=": "0.9.28"
+    },
+    {
+      "name": "aws-c-auth",
+      "version>=": "0.7.31"
+    },
+    {
+      "name": "aws-c-cal",
+      "version>=": "0.7.4"
+    },
+    {
+      "name": "aws-c-http",
+      "version>=": "0.8.10"
+    },
+    {
+      "name": "aws-c-sdkutils",
+      "version>=": "0.1.19"
+    },
+    {
+      "name": "aws-c-event-stream",
+      "version>=": "0.4.3"
+    },
+    {
+      "name": "aws-checksums",
+      "version>=": "0.1.20"
     },
     "boost-dynamic-bitset",
     "boost-interprocess",
@@ -68,9 +104,8 @@
   ],
   "overrides": [
     { "name": "openssl", "version-string": "3.3.0" },
-    { "name": "aws-sdk-cpp", "version": "1.11.201" },
+    { "name": "aws-sdk-cpp", "version": "1.11.405" },
     { "name": "azure-core-cpp", "version": "1.12.0" },
-    { "name": "aws-c-s3", "version": "0.3.24" },
     { "name": "benchmark", "version": "1.9.0" },
     { "name": "bitmagic", "version": "7.12.3" },
     { "name": "boost-algorithm", "version": "1.84.0" },

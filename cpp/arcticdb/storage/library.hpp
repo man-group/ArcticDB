@@ -90,6 +90,14 @@ class Library {
         storages_->write(std::move(kvs));
     }
 
+    void write_if_none(KeySegmentPair&& kv) {
+        if (open_mode() < OpenMode::WRITE) {
+            throw LibraryPermissionException(library_path_, open_mode(), "write");
+        }
+
+        storages_->write_if_none(std::move(kv));
+    }
+
     void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(LibraryUpdate, 0)
         if (open_mode() < OpenMode::WRITE)
@@ -155,6 +163,8 @@ class Library {
 
     bool supports_prefix_matching() const { return storages_->supports_prefix_matching(); }
 
+    bool supports_atomic_writes() const { return storages_->supports_atomic_writes(); }
+
     const LibraryPath &library_path() const { return library_path_; }
 
     OpenMode open_mode() const { return storages_->open_mode(); }
@@ -177,6 +187,7 @@ class Library {
     bool storage_fallthrough_ = false;
 };
 
+// for testing only
 inline std::shared_ptr<Library> create_library(const LibraryPath& library_path, OpenMode mode, const std::vector<arcticdb::proto::storage::VariantStorage>& storage_configs) {
     return std::make_shared<Library>(library_path, create_storages(library_path, mode, storage_configs));
 }

@@ -8,11 +8,11 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import os
 from contextlib import contextmanager
-from typing import Mapping, Any, Optional, Iterable, NamedTuple, List, AnyStr, Sequence
+from typing import Mapping, Any, Optional, NamedTuple, List, AnyStr, Union
 import numpy as np
 import pandas as pd
 from pandas.core.series import Series
-from pandas import Index
+from pandas import DateOffset, Index, Timedelta
 from pandas._typing import Scalar
 import datetime as dt
 import string
@@ -35,6 +35,7 @@ from arcticc.pb2.storage_pb2 import LibraryDescriptor, VersionStoreConfig
 from arcticdb.version_store.helper import ArcticFileConfig
 from arcticdb.config import _DEFAULT_ENVS_PATH
 from arcticdb_ext import set_config_int, get_config_int, unset_config_int
+from packaging.version import Version
 
 from arcticdb import log
 
@@ -46,6 +47,7 @@ def create_df(start=0, columns=1) -> pd.DataFrame:
 
     index = np.arange(start, start + 10, dtype=np.int64)
     return pd.DataFrame(data, index=index)
+ 
 
 def create_df_index_rownum(num_columns: int, start_index: int, end_index : int) -> pd.DataFrame:
     """
@@ -91,6 +93,18 @@ def create_df_index_rownum(num_columns: int, start_index: int, end_index : int) 
     df.index = np.arange(start_index, end_index, 1)
     return df
 
+def create_datetime_index(df: pd.DataFrame, name_col:str, freq:Union[str , dt.timedelta , Timedelta , DateOffset], 
+        start_time: pd.Timestamp = pd.Timestamp(0)):
+    """
+        creates a datetime index to a dataframe. The index will start at specified timestamp
+        and will be generated using specified frequency having same number of periods as the rows
+        in the table
+    """
+    periods = len(df)
+    index = pd.date_range(start=start_time, periods=periods, freq=freq, name=name_col)
+    df.index = index
+
+
 def create_df_index_datetime(num_columns: int, start_hour: int, end_hour : int) -> pd.DataFrame:
     """
         Creates data frame with specified number of columns 
@@ -117,6 +131,7 @@ def create_df_index_datetime(num_columns: int, start_hour: int, end_hour : int) 
     df.index = dr
     return df
 
+
 def dataframe_dump_to_log(label_for_df, df: pd.DataFrame):
     """
         Useful for printing in log content and data types of columns of
@@ -130,6 +145,7 @@ def dataframe_dump_to_log(label_for_df, df: pd.DataFrame):
     print("column definitions : ")
     print(df.dtypes)
     print("-" * 80)
+
 
 def dataframe_simulate_arcticdb_update_static(existing_df: pd.DataFrame, update_df:  pd.DataFrame) ->  pd.DataFrame:
     """
@@ -155,6 +171,7 @@ def dataframe_simulate_arcticdb_update_static(existing_df: pd.DataFrame, update_
     result_df = pd.concat(chunks)
     return result_df
 
+
 def dataframe_single_column_string(length=1000, column_label='string_short', seed=0, string_len=1):
     """
         creates a dataframe with one column, which label can be changed, containing string
@@ -162,6 +179,7 @@ def dataframe_single_column_string(length=1000, column_label='string_short', see
     """
     np.random.seed(seed)
     return pd.DataFrame({ column_label : [random_string(string_len) for _ in range(length)] })
+
 
 def dataframe_filter_with_datetime_index(df: pd.DataFrame, start_timestamp:Scalar, end_timestamp:Scalar, inclusive='both') -> pd.DataFrame:
     """
@@ -174,6 +192,7 @@ def dataframe_filter_with_datetime_index(df: pd.DataFrame, start_timestamp:Scala
         df.index.to_series()
         .between(start_timestamp, end_timestamp, inclusive='both')
         ]
+
 
 def maybe_not_check_freq(f):
     """Ignore frequency when pandas is newer as starts to check frequency which it did not previously do."""
@@ -215,16 +234,17 @@ def assert_frame_equal_rebuild_index_first(expected : pd.DataFrame, actual : pd.
     actual.reset_index(inplace = True, drop = True)
     assert_frame_equal(left=expected, right=actual)
 
+
 def random_string(length: int):
     return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
 
 
-def get_sample_dataframe(size=1000, seed=0):
+def get_sample_dataframe(size=1000, seed=0, str_size=10):
     np.random.seed(seed)
     df = pd.DataFrame(
         {
             "uint8": random_integers(size, np.uint8),
-            "strings": [random_string(10) for _ in range(size)],
+            "strings": [random_string(str_size) for _ in range(size)],
             "uint16": random_integers(size, np.uint16),
             "uint32": random_integers(size, np.uint32),
             "uint64": random_integers(size, np.uint64),
@@ -737,3 +757,80 @@ def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
             f"""\nPandas result:\n{expected}\n"ArcticDB result:\n{received}"""
         )
         raise e
+
+def drop_inf_and_nan(df: pd.DataFrame) -> pd.DataFrame:
+    return df[~df.isin([np.nan, np.inf, -np.inf]).any(axis=1)]
+
+
+def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
+    """
+    Checks if integer columns are exactly the same. For float columns checks if they are approximately the same.
+    We can't guarantee the same order of operations for the floats thus numerical errors might appear.
+    """
+    assert left.shape == right.shape
+    assert left.columns.equals(right.columns)
+    # To avoid checking the freq member of the index as arctic does not fill it in
+    assert left.index.equals(right.index)
+
+    # Drop NaN an inf values because. Pandas uses Kahan summation algorithm to improve numerical stability.
+    # Thus they don't consistently overflow to infinity. Discussion: https://github.com/pandas-dev/pandas/issues/60303
+    left_no_inf_and_nan = drop_inf_and_nan(left)
+    right_no_inf_and_nan = drop_inf_and_nan(right)
+
+    check_equals_flags = {"check_dtype": False}
+    if PANDAS_VERSION >= Version("1.1"):
+        check_equals_flags["check_freq"] = False
+    if PANDAS_VERSION >= Version("1.2"):
+        check_equals_flags["check_flags"] = False
+    for col in left_no_inf_and_nan.columns:
+        if pd.api.types.is_integer_dtype(left_no_inf_and_nan[col].dtype) and pd.api.types.is_integer_dtype(right_no_inf_and_nan[col].dtype):
+            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
+        else:
+            if PANDAS_VERSION >= Version("1.1"):
+                check_equals_flags["atol"] = 1e-8
+            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
+
+
+def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=None, label=None, offset=None, origin=None, drop_empty_buckets_for=None):
+    """
+    Perform a resampling in ArcticDB and compare it against the same query in Pandas.
+
+    :param drop_empty_buckets_for: Will add additional aggregation column using the count aggregator. At the end of the
+    aggregation query will remove all rows for which this newly added count aggregation is 0. Works only for int/uint
+    columns. There is similar function generic_resample_test_with_empty_buckets in
+    python/tests/unit/arcticdb/version_store/test_resample.py which can drop empty buckets for all types of columns,
+    but it cannot take parameters such as origin and offset.
+    """
+    # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
+    expected = lib.read(sym, date_range=date_range).data
+    # Pandas 1.X needs None as the first argument to agg with named aggregators
+
+    pandas_aggregations = {**aggregations, "_bucket_size_": (drop_empty_buckets_for, "count")} if drop_empty_buckets_for else aggregations
+    resample_args = {}
+    if origin:
+        resample_args['origin'] = origin
+    if offset:
+        resample_args['offset'] = offset
+
+    if PANDAS_VERSION >= Version("1.1.0"):
+        expected = expected.resample(rule, closed=closed, label=label, **resample_args).agg(None, **pandas_aggregations)
+    else:
+        expected = expected.resample(rule, closed=closed, label=label).agg(None, **pandas_aggregations)
+    if drop_empty_buckets_for:
+        expected = expected[expected["_bucket_size_"] > 0]
+        expected.drop(columns=["_bucket_size_"], inplace=True)
+    expected = expected.reindex(columns=sorted(expected.columns))
+
+    q = QueryBuilder()
+    if origin:
+        q = q.resample(rule, closed=closed, label=label, offset=offset, origin=origin).agg(aggregations)
+    else:
+        q = q.resample(rule, closed=closed, label=label, offset=offset).agg(aggregations)
+    received = lib.read(sym, date_range=date_range, query_builder=q).data
+    received = received.reindex(columns=sorted(received.columns))
+
+    has_float_column = any(pd.api.types.is_float_dtype(col_type) for col_type in list(expected.dtypes))
+    if has_float_column:
+        assert_dfs_approximate(expected, received)
+    else:
+        assert_frame_equal(expected, received, check_dtype=False)

@@ -31,6 +31,8 @@ class ArcticUriFields(Enum):
     CA_PATH = "CA_PATH"
     PATH_PREFIX = "PATH_PREFIX"
     SSL = "SSL"
+    AWS_AUTH = "AWS_AUTH"
+    AWS_PROFILE = "AWS_PROFILE"
 
     def __str__(self):
         return self.value
@@ -87,12 +89,13 @@ class StorageFixture(_SaferContextManager):
         if name == "_unique_":
             name = name + str(len(libs_from_factory))
         assert (name not in libs_from_factory) or reuse_name, f"{name} is already in use"
-        cfg = create_cfg(name)
-        lib = cfg.env_by_id[Defaults.ENV].lib_by_path[name]
+        cfgs = create_cfg(name)
+        protobuf_cfg, native_cfg = NativeVersionStore.get_environment_cfg_and_native_cfg_from_tuple(cfgs)
+        lib = protobuf_cfg.env_by_id[Defaults.ENV].lib_by_path[name]
         # Use symbol list by default (can still be overridden by kwargs)
         lib.version.symbol_list = True
         apply_lib_cfg(lib, kwargs)
-        out = ArcticMemoryConfig(cfg, Defaults.ENV)[name]
+        out = ArcticMemoryConfig(protobuf_cfg, Defaults.ENV, native_cfg)[name]
         suffix = 0
         while f"{name}{suffix or ''}" in libs_from_factory:
             suffix += 1

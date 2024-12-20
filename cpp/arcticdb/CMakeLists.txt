@@ -14,7 +14,7 @@ cmake_policy(PUSH)
     if (EXISTS "/usr/local/lib64/aws-c-cal/cmake/modules/FindLibCrypto.cmake") # Workaround old AWS SDK bug
         cmake_policy(SET CMP0045 OLD)
     endif()
-    find_package(AWSSDK REQUIRED COMPONENTS s3)
+    find_package(AWSSDK REQUIRED COMPONENTS s3 identity-management)
 cmake_policy(POP)
 
 find_package(Boost REQUIRED)
@@ -32,7 +32,9 @@ if(NOT WIN32 AND ${SSL_LINK})
     find_package(Kerberos REQUIRED)
 endif()
 
-find_package(Protobuf REQUIRED)
+# Required to allow protobuf to use the correct version of absl:
+# https://github.com/protocolbuffers/protobuf/issues/12292#issuecomment-1529680040
+find_package(protobuf REQUIRED CONFIG)
 find_package(mongocxx REQUIRED)
 find_package(bsoncxx REQUIRED)
 find_package(xxHash REQUIRED)
@@ -300,11 +302,13 @@ set(arcticdb_srcs
         storage/s3/nfs_backed_storage.hpp
         storage/s3/s3_client_wrapper.hpp
         storage/s3/s3_storage_tool.hpp
+        storage/s3/s3_settings.hpp
         storage/storage_factory.hpp
         storage/storage_options.hpp
         storage/storage.hpp
         storage/storage_override.hpp
         storage/store.hpp
+        storage/storage_utils.hpp
         stream/aggregator.hpp
         stream/aggregator-inl.hpp
         stream/append_map.hpp
@@ -325,6 +329,7 @@ set(arcticdb_srcs
         stream/stream_utils.hpp
         stream/stream_writer.hpp
         toolbox/library_tool.hpp
+        toolbox/storage_mover.hpp
         util/allocator.hpp
         util/bitset.hpp
         util/buffer.hpp
@@ -364,6 +369,8 @@ set(arcticdb_srcs
         util/slab_allocator.hpp
         util/sparse_utils.hpp
         util/storage_lock.hpp
+        util/reliable_storage_lock.hpp
+        util/reliable_storage_lock-inl.hpp
         util/string_utils.hpp
         util/thread_cached_int.hpp
         util/timeouts.hpp
@@ -481,6 +488,7 @@ set(arcticdb_srcs
         storage/s3/s3_storage.cpp
         storage/s3/s3_storage_tool.cpp
         storage/storage_factory.cpp
+        storage/storage_utils.cpp
         stream/aggregator.cpp
         stream/append_map.cpp
         stream/index.cpp
@@ -511,8 +519,7 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/version_map_batch_methods.cpp
-        )
+        version/version_map_batch_methods.cpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -931,6 +938,7 @@ if(${TEST})
             stream/test/test_types.cpp
             util/memory_tracing.hpp
             util/test/gtest_main.cpp
+            util/test/random_throw.hpp
             util/test/test_bitmagic.cpp
             util/test/test_buffer_pool.cpp
             util/test/test_composite.cpp
@@ -942,6 +950,7 @@ if(${TEST})
             util/test/test_id_transformation.cpp
             util/test/test_key_utils.cpp
             util/test/test_ranges_from_future.cpp
+            util/test/test_reliable_storage_lock.cpp
             util/test/test_slab_allocator.cpp
             util/test/test_storage_lock.cpp
             util/test/test_string_pool.cpp
@@ -959,8 +968,7 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
             python/python_handlers.cpp
-            storage/test/common.hpp
-    )
+            storage/test/common.hpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

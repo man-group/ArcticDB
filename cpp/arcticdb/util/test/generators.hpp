@@ -362,7 +362,7 @@ inline SegmentInMemory get_sparse_timeseries_segment_floats(const std::string& n
 inline auto get_test_config_data() {
     using namespace arcticdb::storage;
     LibraryPath path{"test", "store"};
-    auto storages = create_storages(path, OpenMode::DELETE, memory::pack_config());
+    auto storages = create_storages(path, OpenMode::DELETE, {memory::pack_config()});
     return std::make_tuple(path, std::move(storages));
 }
 

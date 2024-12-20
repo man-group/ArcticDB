@@ -22,10 +22,12 @@ Available options for S3:
 | access                | S3 access key                                                                                                                                                   |
 | secret                | S3 secret access key                                                                                                                                            |
 | path_prefix           | Path within S3 bucket to use for data storage                                                                                                                   |
-| aws_auth              | If true, authentication to endpoint will be computed via AWS environment vars/config files. If no options are provided `aws_auth` will be assumed to be true.   |
+| aws_auth              | AWS authentication method. If setting is `default` (or `true` for backward compatibility), authentication to endpoint will be computed via [AWS default credential provider chain](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/credproviders.html). If setting is `sts`, AWS Security Token Service (STS) will be the authentication method used. If no options are provided AWS authentication will not be used and you should specify access and secret in the URI. More info is provided below |
+| aws_profile           | Only when `aws_auth` is set to be `sts`. AWS profile to be used with AWS Security Token Service (STS). More info is provided below |
 
 Note: When connecting to AWS, `region` can be automatically deduced from the endpoint if the given endpoint
 specifies the region and `region` is not set.
+
 
 ## Azure
 

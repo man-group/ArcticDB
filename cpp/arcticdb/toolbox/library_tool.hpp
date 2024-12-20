@@ -12,7 +12,6 @@
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/variant_key.hpp>
-#include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/library_manager.hpp>
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/entity/read_result.hpp>
@@ -53,7 +52,7 @@ public:
 
     void remove(VariantKey key);
 
-    std::vector<VariantKey> find_keys(arcticdb::entity::KeyType);
+    std::vector<VariantKey> find_keys(entity::KeyType);
 
     bool key_exists(const VariantKey& key);
 

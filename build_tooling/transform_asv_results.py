@@ -5,7 +5,11 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pandas as pd
+
+# Importing inf and nan so they can be evaluated correctly during extraction
+from numpy import inf, nan
 from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables
 import json
 from pathlib import Path

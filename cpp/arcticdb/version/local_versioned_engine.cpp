@@ -1012,10 +1012,18 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     log::version().debug("Compacting incomplete symbol {}", stream_id);
 
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
-    auto versioned_item = compact_incomplete_impl(store_, stream_id, user_meta, update_info, options, get_write_options());
+    auto pipeline_context = std::make_shared<PipelineContext>();
+    pipeline_context->stream_id_ = stream_id;
+    pipeline_context->version_id_ = update_info.next_version_id_;
+    auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), options);
+
+    auto versioned_item = compact_incomplete_impl(store_, stream_id, user_meta, update_info, options, get_write_options(), pipeline_context);
 
     write_version_and_prune_previous(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
     add_to_symbol_list_on_compaction(stream_id, options, update_info);
+    if (delete_keys_on_failure)
+        delete_keys_on_failure->release();
+    delete_incomplete_keys(*pipeline_context, *store());
 
     return versioned_item;
 }
@@ -1573,17 +1581,24 @@ std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> Local
     return get_metadata(std::move(key)).get();
 }
 
-
 VersionedItem LocalVersionedEngine::sort_merge_internal(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
     const CompactIncompleteOptions& options) {
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
-    const WriteOptions& write_opts = get_write_options();
-    auto versioned_item =
-        sort_merge_impl(store_, stream_id, user_meta, update_info, options, write_opts);
+    auto pipeline_context = std::make_shared<PipelineContext>();
+    pipeline_context->stream_id_ = stream_id;
+    pipeline_context->version_id_ = update_info.next_version_id_;
+    auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), options);
+
+    auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, update_info, options, get_write_options(), pipeline_context);
+
     write_version_and_prune_previous(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
     add_to_symbol_list_on_compaction(stream_id, options, update_info);
+    if (delete_keys_on_failure)
+        delete_keys_on_failure->release();
+    delete_incomplete_keys(*pipeline_context, *store());
+
     return versioned_item;
 }
 
@@ -1639,7 +1654,7 @@ std::unordered_map<KeyType, KeySizesInfo> LocalVersionedEngine::scan_object_size
             auto& sizes_info = sizes[key_type];
             ++sizes_info.count;
             key_size_calculators.emplace_back(std::forward<const VariantKey>(k), [&sizes_info] (auto&& ks) {
-                auto key_seg = std::move(ks);
+                auto key_seg = std::forward<decltype(ks)>(ks);
                 sizes_info.compressed_size += key_seg.segment().size();
                 const auto& desc = key_seg.segment().descriptor();
                 sizes_info.uncompressed_size += desc.uncompressed_bytes();
@@ -1670,7 +1685,7 @@ std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> LocalVer
 
         store->iterate_type(key_type, [&keys, &mutex, &sizes, key_type](const VariantKey&& k){
             keys.emplace_back(std::forward<const VariantKey>(k), [key_type, &sizes, &mutex] (auto&& ks) {
-                auto key_seg = std::move(ks);
+                auto key_seg = std::forward<decltype(ks)>(ks);
                 auto variant_key = key_seg.variant_key();
                 auto stream_id = variant_key_id(variant_key);
                 auto compressed_size = key_seg.segment().size();

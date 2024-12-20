@@ -60,6 +60,10 @@ class FlatIndexingPolicy {
         segment_.set_timeseries_descriptor(timeseries_descriptor);
     }
 
+    void set_metadata(google::protobuf::Any&& metadata) {
+        segment_.set_metadata(std::move(metadata));
+    }
+
   private:
     Callback callback_;
     FixedSchema schema_;
@@ -87,6 +91,10 @@ class IndexAggregator {
 
     void set_timeseries_descriptor(const TimeseriesDescriptor& timeseries_descriptor) {
         indexing_policy_.set_timeseries_descriptor(timeseries_descriptor);
+    }
+
+    void set_metadata(google::protobuf::Any&& metadata) {
+        indexing_policy_.set_metadata(std::move(metadata));
     }
 
   private:

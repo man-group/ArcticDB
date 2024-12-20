@@ -11,7 +11,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -29,7 +29,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -47,7 +47,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -65,7 +65,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -83,7 +83,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -101,7 +101,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -119,7 +119,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -142,7 +142,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -166,7 +166,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -190,7 +190,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -214,7 +214,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -238,7 +238,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -262,7 +262,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -286,7 +286,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:36",
+        "setup_cache_key": "basic_functions:38",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -310,7 +310,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -333,7 +333,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -356,7 +356,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -379,7 +379,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -407,7 +407,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -436,7 +436,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -465,7 +465,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -494,7 +494,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -523,7 +523,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:137",
+        "setup_cache_key": "basic_functions:139",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -531,7 +531,7 @@
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_append_large": {
-        "code": "class ModificationFunctions:\n    def time_append_large(self, rows):\n        self.lib.append(f\"sym\", self.df_append_large)\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_append_large(self, lad: LargeAppendDataModify, rows):\n        large: pd.DataFrame = lad.df_append_large[rows].pop()\n        self.lib.append(f\"sym\", large)\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_append_large",
         "number": 1,
@@ -544,18 +544,18 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "be3be12028b2f1a949589e618252e94a88e5f35b5aa90f5815fd8aaa324c8550",
+        "version": "b817d86d1bf76649691197bfaf1261a96a1a34c9a25f053d66f6dfcf14c6f279",
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_append_short_wide": {
-        "code": "class ModificationFunctions:\n    def time_append_short_wide(self, rows):\n        self.lib_short_wide.append(\"short_wide_sym\", self.df_append_short_wide)\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_append_short_wide(self, lad: LargeAppendDataModify, rows):\n        large: pd.DataFrame = lad.df_append_short_wide[rows].pop()\n        self.lib_short_wide.append(\"short_wide_sym\", large)\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_append_short_wide",
         "number": 1,
@@ -568,18 +568,18 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "3a2e1e7a4dc518468ba388f560231ac1a1366b212dbd3309e3e877606c5630e8",
+        "version": "3678115ad2d40bf19062212095071431ff63cedc159661ee3056be7cbf109f98",
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_append_single": {
-        "code": "class ModificationFunctions:\n    def time_append_single(self, rows):\n        self.lib.append(f\"sym\", self.df_append_single)\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_append_single(self, lad: LargeAppendDataModify, rows):\n        self.lib.append(f\"sym\", self.df_append_single)\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_append_single",
         "number": 1,
@@ -592,18 +592,18 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "c7f13a15b9074ab9bdb6f3e47ab97d75708938f005021b7a8fde82fe6902041d",
+        "version": "8f398155deb342c70fe4c65e8da636b1f18c9296632b4649aab8dae306aa8453",
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_delete": {
-        "code": "class ModificationFunctions:\n    def time_delete(self, rows):\n        self.lib.delete(f\"sym\")\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_delete(self, lad: LargeAppendDataModify, rows):\n        self.lib.delete(f\"sym\")\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_delete",
         "number": 1,
@@ -616,18 +616,18 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "da4c95139bc0ae404ed6585b9e3398af8ed7e421cefcbeb9ff9ea6a77b85915a",
+        "version": "6d8afae2414e0f842495a7962f5950472814bde20e99eebc474db6953d8e1ae3",
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_delete_short_wide": {
-        "code": "class ModificationFunctions:\n    def time_delete_short_wide(self, rows):\n        self.lib_short_wide.delete(\"short_wide_sym\")\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_delete_short_wide(self, lad: LargeAppendDataModify, rows):\n        self.lib_short_wide.delete(\"short_wide_sym\")\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_delete_short_wide",
         "number": 1,
@@ -640,18 +640,18 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "12254786f4a42e8bd488f48075cb70eddf4d87c8581271e2e2b526b7940123b9",
+        "version": "f867fc9cac4d0706b01166662af37434100460706d4f6118de0bc2e0e3087bae",
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_update_half": {
-        "code": "class ModificationFunctions:\n    def time_update_half(self, rows):\n        self.lib.update(f\"sym\", self.df_update_half)\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_update_half(self, lad: LargeAppendDataModify, rows):\n        self.lib.update(f\"sym\", self.df_update_half)\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_update_half",
         "number": 1,
@@ -664,18 +664,18 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "f56b8677f5b90b49568e6865c0656b734b9b2a8054baa71b78eaed8f53cb3176",
+        "version": "6a011f58b79c483849a70576915c2d56deed1227d38489a21140341ca860ce33",
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_update_short_wide": {
-        "code": "class ModificationFunctions:\n    def time_update_short_wide(self, rows):\n        self.lib_short_wide.update(\"short_wide_sym\", self.df_update_short_wide)\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_update_short_wide(self, lad: LargeAppendDataModify, rows):\n        self.lib_short_wide.update(\"short_wide_sym\", self.df_update_short_wide)\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_update_short_wide",
         "number": 1,
@@ -688,18 +688,18 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "5db16777228d8de1ab4af9943d1ed0541c0b02c4dbcd888cfa3e26f37eb0215b",
+        "version": "111496c5bd4a4c498df28819d3cbcd9d699c4d3363ad3969f102a1d2076b3086",
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_update_single": {
-        "code": "class ModificationFunctions:\n    def time_update_single(self, rows):\n        self.lib.update(f\"sym\", self.df_update_single)\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_update_single(self, lad: LargeAppendDataModify, rows):\n        self.lib.update(f\"sym\", self.df_update_single)\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_update_single",
         "number": 1,
@@ -712,18 +712,18 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "cf62fa8a658e2f2ab16d286992423dd8d69334415ab61600906c6e9dc0185597",
+        "version": "c45c168d5713f3028a9a5b97959d52116c8d228870ad580be06d86336d2476c6",
         "warmup_time": -1
     },
     "basic_functions.ModificationFunctions.time_update_upsert": {
-        "code": "class ModificationFunctions:\n    def time_update_upsert(self, rows):\n        self.lib.update(f\"sym\", self.df_update_upsert, upsert=True)\n\n    def setup(self, rows):\n        def get_time_at_fraction_of_df(fraction, rows=rows):\n            end_time = pd.Timestamp(\"1/1/2023\")\n            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))\n            return end_time + time_delta\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1))\n        self.df_append_large = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(2))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n        self.df_append_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, \"s\", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            lib.write(\"sym\", self.init_dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)",
+        "code": "class ModificationFunctions:\n    def time_update_upsert(self, lad: LargeAppendDataModify, rows):\n        self.lib.update(f\"sym\", self.df_update_upsert, upsert=True)\n\n    def setup(self, lad: LargeAppendDataModify, rows):\n    \n        self.df_update_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(0.5, rows))\n        self.df_update_half = generate_pseudo_random_dataframe(rows//2, \"s\", get_time_at_fraction_of_df(0.75, rows))\n        self.df_update_upsert = generate_pseudo_random_dataframe(rows, \"s\", get_time_at_fraction_of_df(1.5, rows))\n        self.df_append_single = generate_pseudo_random_dataframe(1, \"s\", get_time_at_fraction_of_df(1.1, rows))\n    \n        self.df_update_short_wide = generate_random_floats_dataframe_with_index(\n            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n        )\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]\n\n    def setup_cache(self):\n    \n        self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)\n        rows_values = ModificationFunctions.params\n    \n        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib_name = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib_name)\n            lib = self.ac.create_library(lib_name)\n            df = self.init_dfs[rows]\n            lib.write(\"sym\", df)\n            print(f\"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}\")\n    \n        lib_name = get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe_with_index(\n                ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS\n            ),\n        )\n    \n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)\n    \n        number_iteration = ModificationFunctions.repeat * ModificationFunctions.number * ModificationFunctions.rounds\n    \n        lad = ModificationFunctions.LargeAppendDataModify(ModificationFunctions.params, number_iteration)\n    \n        return lad",
         "min_run_count": 2,
         "name": "basic_functions.ModificationFunctions.time_update_upsert",
         "number": 1,
@@ -736,14 +736,266 @@
                 "1500000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:235",
+        "setup_cache_key": "basic_functions:278",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "80de9b1982a498c300177d02874a8626152eccb57cd0ba4228a5bb168e7608c8",
+        "version": "7f139bf03457104abe937914aa3572503ed52330b3a271d82112696060331d8f",
+        "warmup_time": -1
+    },
+    "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_all": {
+        "code": "class BIBenchmarks:\n    def peakmem_query_groupby_city_count_all(self, times_bigger) -> pd.DataFrame:\n        return self.query_groupby_city_count_all(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n    \n        start_time = time.time()\n    \n        file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)\n        if (not os.path.exists(file)) :\n            dfo = download_and_process_city_to_parquet(file)\n            dff = pd.read_parquet(file)\n            pd.testing.assert_frame_equal(dfo,dff)\n        else:\n            print(\"Parquet file exists!\")\n    \n        # read data from bz.2 file\n        # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)\n        # self.df : pd.DataFrame = process_city(abs_path)\n    \n        self.df : pd.DataFrame = pd.read_parquet(file)\n    \n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        print(\"The procedure is creating N times larger dataframes\")\n        print(\"by concatenating original DF N times\")\n        print(\"Size of original Dataframe: \", self.df.shape[0])\n        for num in BIBenchmarks.params:\n            _df = pd.concat([self.df] * num)\n            print(\"DF for iterration xSize original ready: \", num)\n            self.lib.write(f\"{self.symbol}{num}\", _df)\n    \n        print(\"If pandas query produces different dataframe than arctic one stop tests!\")\n        print(\"This will mean query problem is there most likely\")\n    \n        print(\"Pre-check correctness for query_groupby_city_count_all\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_all(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_isin_filter\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_isin_filter(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_filter_two_aggregations\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_filter_two_aggregations(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"All pre-checks completed SUCCESSFULLY. Time: \", time.time() - start_time)\n    \n        del self.ac",
+        "name": "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_all",
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ]
+        ],
+        "setup_cache_key": "bi_benchmarks:68",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "a6be28bf68c237bc424c84b3af930d32da53053e5ddb11b97910376560ab0918"
+    },
+    "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_filter_two_aggregations": {
+        "code": "class BIBenchmarks:\n    def peakmem_query_groupby_city_count_filter_two_aggregations(self, times_bigger):\n        return self.query_groupby_city_count_filter_two_aggregations(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n    \n        start_time = time.time()\n    \n        file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)\n        if (not os.path.exists(file)) :\n            dfo = download_and_process_city_to_parquet(file)\n            dff = pd.read_parquet(file)\n            pd.testing.assert_frame_equal(dfo,dff)\n        else:\n            print(\"Parquet file exists!\")\n    \n        # read data from bz.2 file\n        # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)\n        # self.df : pd.DataFrame = process_city(abs_path)\n    \n        self.df : pd.DataFrame = pd.read_parquet(file)\n    \n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        print(\"The procedure is creating N times larger dataframes\")\n        print(\"by concatenating original DF N times\")\n        print(\"Size of original Dataframe: \", self.df.shape[0])\n        for num in BIBenchmarks.params:\n            _df = pd.concat([self.df] * num)\n            print(\"DF for iterration xSize original ready: \", num)\n            self.lib.write(f\"{self.symbol}{num}\", _df)\n    \n        print(\"If pandas query produces different dataframe than arctic one stop tests!\")\n        print(\"This will mean query problem is there most likely\")\n    \n        print(\"Pre-check correctness for query_groupby_city_count_all\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_all(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_isin_filter\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_isin_filter(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_filter_two_aggregations\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_filter_two_aggregations(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"All pre-checks completed SUCCESSFULLY. Time: \", time.time() - start_time)\n    \n        del self.ac",
+        "name": "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_filter_two_aggregations",
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ]
+        ],
+        "setup_cache_key": "bi_benchmarks:68",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "9a608927df33b903bb6dd7ec33fea2c8172dd638e0169d8fffddb5069e188e47"
+    },
+    "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_isin_filter": {
+        "code": "class BIBenchmarks:\n    def peakmem_query_groupby_city_count_isin_filter(self, times_bigger) -> pd.DataFrame:\n        return self.query_groupby_city_count_isin_filter(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n    \n        start_time = time.time()\n    \n        file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)\n        if (not os.path.exists(file)) :\n            dfo = download_and_process_city_to_parquet(file)\n            dff = pd.read_parquet(file)\n            pd.testing.assert_frame_equal(dfo,dff)\n        else:\n            print(\"Parquet file exists!\")\n    \n        # read data from bz.2 file\n        # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)\n        # self.df : pd.DataFrame = process_city(abs_path)\n    \n        self.df : pd.DataFrame = pd.read_parquet(file)\n    \n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        print(\"The procedure is creating N times larger dataframes\")\n        print(\"by concatenating original DF N times\")\n        print(\"Size of original Dataframe: \", self.df.shape[0])\n        for num in BIBenchmarks.params:\n            _df = pd.concat([self.df] * num)\n            print(\"DF for iterration xSize original ready: \", num)\n            self.lib.write(f\"{self.symbol}{num}\", _df)\n    \n        print(\"If pandas query produces different dataframe than arctic one stop tests!\")\n        print(\"This will mean query problem is there most likely\")\n    \n        print(\"Pre-check correctness for query_groupby_city_count_all\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_all(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_isin_filter\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_isin_filter(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_filter_two_aggregations\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_filter_two_aggregations(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"All pre-checks completed SUCCESSFULLY. Time: \", time.time() - start_time)\n    \n        del self.ac",
+        "name": "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_isin_filter",
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ]
+        ],
+        "setup_cache_key": "bi_benchmarks:68",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "0ae4a1c3ebcac6600a0636c80e757fb34ef285156f9f01a10285fb6c803e2bf7"
+    },
+    "bi_benchmarks.BIBenchmarks.peakmem_query_readall": {
+        "code": "class BIBenchmarks:\n    def peakmem_query_readall(self, times_bigger):\n        self.lib.read(f\"{self.symbol}{times_bigger}\")\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n    \n        start_time = time.time()\n    \n        file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)\n        if (not os.path.exists(file)) :\n            dfo = download_and_process_city_to_parquet(file)\n            dff = pd.read_parquet(file)\n            pd.testing.assert_frame_equal(dfo,dff)\n        else:\n            print(\"Parquet file exists!\")\n    \n        # read data from bz.2 file\n        # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)\n        # self.df : pd.DataFrame = process_city(abs_path)\n    \n        self.df : pd.DataFrame = pd.read_parquet(file)\n    \n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        print(\"The procedure is creating N times larger dataframes\")\n        print(\"by concatenating original DF N times\")\n        print(\"Size of original Dataframe: \", self.df.shape[0])\n        for num in BIBenchmarks.params:\n            _df = pd.concat([self.df] * num)\n            print(\"DF for iterration xSize original ready: \", num)\n            self.lib.write(f\"{self.symbol}{num}\", _df)\n    \n        print(\"If pandas query produces different dataframe than arctic one stop tests!\")\n        print(\"This will mean query problem is there most likely\")\n    \n        print(\"Pre-check correctness for query_groupby_city_count_all\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_all(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_isin_filter\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_isin_filter(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_filter_two_aggregations\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_filter_two_aggregations(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"All pre-checks completed SUCCESSFULLY. Time: \", time.time() - start_time)\n    \n        del self.ac",
+        "name": "bi_benchmarks.BIBenchmarks.peakmem_query_readall",
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ]
+        ],
+        "setup_cache_key": "bi_benchmarks:68",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "2957ec25dedc5ee645e69a28ed4a38ebd27415c53828b3bf6fb4b57f146bfa13"
+    },
+    "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_all": {
+        "code": "class BIBenchmarks:\n    def time_query_groupby_city_count_all(self, times_bigger) -> pd.DataFrame:\n        return self.query_groupby_city_count_all(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n    \n        start_time = time.time()\n    \n        file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)\n        if (not os.path.exists(file)) :\n            dfo = download_and_process_city_to_parquet(file)\n            dff = pd.read_parquet(file)\n            pd.testing.assert_frame_equal(dfo,dff)\n        else:\n            print(\"Parquet file exists!\")\n    \n        # read data from bz.2 file\n        # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)\n        # self.df : pd.DataFrame = process_city(abs_path)\n    \n        self.df : pd.DataFrame = pd.read_parquet(file)\n    \n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        print(\"The procedure is creating N times larger dataframes\")\n        print(\"by concatenating original DF N times\")\n        print(\"Size of original Dataframe: \", self.df.shape[0])\n        for num in BIBenchmarks.params:\n            _df = pd.concat([self.df] * num)\n            print(\"DF for iterration xSize original ready: \", num)\n            self.lib.write(f\"{self.symbol}{num}\", _df)\n    \n        print(\"If pandas query produces different dataframe than arctic one stop tests!\")\n        print(\"This will mean query problem is there most likely\")\n    \n        print(\"Pre-check correctness for query_groupby_city_count_all\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_all(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_isin_filter\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_isin_filter(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_filter_two_aggregations\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_filter_two_aggregations(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"All pre-checks completed SUCCESSFULLY. Time: \", time.time() - start_time)\n    \n        del self.ac",
+        "min_run_count": 2,
+        "name": "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_all",
+        "number": 2,
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "bi_benchmarks:68",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "a7307ac55b614273b8a71fff12b16beeb9a256d49c760415422b54ec023a6126",
+        "warmup_time": -1
+    },
+    "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_filter_two_aggregations": {
+        "code": "class BIBenchmarks:\n    def time_query_groupby_city_count_filter_two_aggregations(self, times_bigger) -> pd.DataFrame:\n        return self.query_groupby_city_count_filter_two_aggregations(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n    \n        start_time = time.time()\n    \n        file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)\n        if (not os.path.exists(file)) :\n            dfo = download_and_process_city_to_parquet(file)\n            dff = pd.read_parquet(file)\n            pd.testing.assert_frame_equal(dfo,dff)\n        else:\n            print(\"Parquet file exists!\")\n    \n        # read data from bz.2 file\n        # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)\n        # self.df : pd.DataFrame = process_city(abs_path)\n    \n        self.df : pd.DataFrame = pd.read_parquet(file)\n    \n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        print(\"The procedure is creating N times larger dataframes\")\n        print(\"by concatenating original DF N times\")\n        print(\"Size of original Dataframe: \", self.df.shape[0])\n        for num in BIBenchmarks.params:\n            _df = pd.concat([self.df] * num)\n            print(\"DF for iterration xSize original ready: \", num)\n            self.lib.write(f\"{self.symbol}{num}\", _df)\n    \n        print(\"If pandas query produces different dataframe than arctic one stop tests!\")\n        print(\"This will mean query problem is there most likely\")\n    \n        print(\"Pre-check correctness for query_groupby_city_count_all\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_all(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_isin_filter\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_isin_filter(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_filter_two_aggregations\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_filter_two_aggregations(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"All pre-checks completed SUCCESSFULLY. Time: \", time.time() - start_time)\n    \n        del self.ac",
+        "min_run_count": 2,
+        "name": "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_filter_two_aggregations",
+        "number": 2,
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "bi_benchmarks:68",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "5e4efb31734abc4f731146ae302ddef56e66ada452c319e8a0dea8ac9e3e82a4",
+        "warmup_time": -1
+    },
+    "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_isin_filter": {
+        "code": "class BIBenchmarks:\n    def time_query_groupby_city_count_isin_filter(self, times_bigger) -> pd.DataFrame:\n        return self.query_groupby_city_count_isin_filter(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n    \n        start_time = time.time()\n    \n        file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)\n        if (not os.path.exists(file)) :\n            dfo = download_and_process_city_to_parquet(file)\n            dff = pd.read_parquet(file)\n            pd.testing.assert_frame_equal(dfo,dff)\n        else:\n            print(\"Parquet file exists!\")\n    \n        # read data from bz.2 file\n        # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)\n        # self.df : pd.DataFrame = process_city(abs_path)\n    \n        self.df : pd.DataFrame = pd.read_parquet(file)\n    \n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        print(\"The procedure is creating N times larger dataframes\")\n        print(\"by concatenating original DF N times\")\n        print(\"Size of original Dataframe: \", self.df.shape[0])\n        for num in BIBenchmarks.params:\n            _df = pd.concat([self.df] * num)\n            print(\"DF for iterration xSize original ready: \", num)\n            self.lib.write(f\"{self.symbol}{num}\", _df)\n    \n        print(\"If pandas query produces different dataframe than arctic one stop tests!\")\n        print(\"This will mean query problem is there most likely\")\n    \n        print(\"Pre-check correctness for query_groupby_city_count_all\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_all(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_isin_filter\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_isin_filter(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_filter_two_aggregations\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_filter_two_aggregations(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"All pre-checks completed SUCCESSFULLY. Time: \", time.time() - start_time)\n    \n        del self.ac",
+        "min_run_count": 2,
+        "name": "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_isin_filter",
+        "number": 2,
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "bi_benchmarks:68",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "89cad46eb5100e61cfa5aecda0a0a34d755bb7e6e60434bb8979176681926006",
+        "warmup_time": -1
+    },
+    "bi_benchmarks.BIBenchmarks.time_query_readall": {
+        "code": "class BIBenchmarks:\n    def time_query_readall(self, times_bigger):\n        self.lib.read(f\"{self.symbol}{times_bigger}\")\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n    \n        start_time = time.time()\n    \n        file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)\n        if (not os.path.exists(file)) :\n            dfo = download_and_process_city_to_parquet(file)\n            dff = pd.read_parquet(file)\n            pd.testing.assert_frame_equal(dfo,dff)\n        else:\n            print(\"Parquet file exists!\")\n    \n        # read data from bz.2 file\n        # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)\n        # self.df : pd.DataFrame = process_city(abs_path)\n    \n        self.df : pd.DataFrame = pd.read_parquet(file)\n    \n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        print(\"The procedure is creating N times larger dataframes\")\n        print(\"by concatenating original DF N times\")\n        print(\"Size of original Dataframe: \", self.df.shape[0])\n        for num in BIBenchmarks.params:\n            _df = pd.concat([self.df] * num)\n            print(\"DF for iterration xSize original ready: \", num)\n            self.lib.write(f\"{self.symbol}{num}\", _df)\n    \n        print(\"If pandas query produces different dataframe than arctic one stop tests!\")\n        print(\"This will mean query problem is there most likely\")\n    \n        print(\"Pre-check correctness for query_groupby_city_count_all\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_all(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_all(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_isin_filter\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_isin_filter(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_isin_filter(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"Pre-check correctness for query_groupby_city_count_filter_two_aggregations\")\n        _df = self.df.copy(deep=True)\n        arctic_df = self.time_query_groupby_city_count_filter_two_aggregations(BIBenchmarks.params[0])\n        _df = get_query_groupby_city_count_filter_two_aggregations(_df)\n        assert_frame_equal(_df, arctic_df)\n    \n        print(\"All pre-checks completed SUCCESSFULLY. Time: \", time.time() - start_time)\n    \n        del self.ac",
+        "min_run_count": 2,
+        "name": "bi_benchmarks.BIBenchmarks.time_query_readall",
+        "number": 2,
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "bi_benchmarks:68",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "c746faf05e4dbb872efa770cbe5ae057dafe3ecc1fb8969d1026db2dee7bfd99",
+        "warmup_time": -1
+    },
+    "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data": {
+        "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, cache:CachedDFGenerator, param:int):\n        print(\">>> Library:\", self.lib)\n        print(\">>> Symbol:\", self.symbol)\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache:CachedDFGenerator, param:int):\n        cachedDF = cache\n    \n        # Unfortunately there is no way to tell asv to run single time\n        # each of finalize_stage_data() tests if we do the large setup in the\n        # setup_cache() method. We can only force it to work with single execution\n        # if the symbol setup with stage data is in the setup() method\n    \n        self.ac = Arctic(f\"lmdb://{self.lib_name}{param}?map_size=40GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(0, cachedDF.TIME_UNIT) # Synchronize index frequency\n    \n        df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)\n        list_of_chunks = [10000] * param\n        self.symbol\n    \n        self.lib.write(self.symbol, data=df, prune_previous_versions=True)\n        stage_chunks(self.lib, self.symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data types\n        cachedDF = CachedDFGenerator(350000, [5])\n        return cachedDF",
+        "name": "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data",
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1000",
+                "2000"
+            ]
+        ],
+        "setup_cache_key": "finalize_staged_data:38",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "9dece3813ff661e5876028ee105ad9549ad62e7997ade7bf3ed4cb43f77854a7"
+    },
+    "finalize_staged_data.FinalizeStagedData.time_finalize_staged_data": {
+        "code": "class FinalizeStagedData:\n    def time_finalize_staged_data(self, cache:CachedDFGenerator, param:int):\n        print(\">>> Library:\", self.lib)\n        print(\">>> Symbol:\", self.symbol)\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache:CachedDFGenerator, param:int):\n        cachedDF = cache\n    \n        # Unfortunately there is no way to tell asv to run single time\n        # each of finalize_stage_data() tests if we do the large setup in the\n        # setup_cache() method. We can only force it to work with single execution\n        # if the symbol setup with stage data is in the setup() method\n    \n        self.ac = Arctic(f\"lmdb://{self.lib_name}{param}?map_size=40GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(0, cachedDF.TIME_UNIT) # Synchronize index frequency\n    \n        df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)\n        list_of_chunks = [10000] * param\n        self.symbol\n    \n        self.lib.write(self.symbol, data=df, prune_previous_versions=True)\n        stage_chunks(self.lib, self.symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data types\n        cachedDF = CachedDFGenerator(350000, [5])\n        return cachedDF",
+        "min_run_count": 1,
+        "name": "finalize_staged_data.FinalizeStagedData.time_finalize_staged_data",
+        "number": 1,
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1000",
+                "2000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "finalize_staged_data:38",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "670c39a4321a96cffa7d92609c5817cd36f3cba1cce9929e9c41e246005a0b62",
+        "warmup_time": -1
+    },
+    "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.peakmem_finalize_staged_data": {
+        "code": "class FinalizeStagedDataWiderDataframeX3:\n    def peakmem_finalize_staged_data(self, cache:CachedDFGenerator, param:int):\n        if (not SLOW_TESTS):\n            raise SkipNotImplemented (\"Slow tests are skipped\")\n        super().peakmem_finalize_staged_data(cache,param)\n\n    def setup(self, cache:CachedDFGenerator, param:int):\n        if (not SLOW_TESTS):\n            raise SkipNotImplemented (\"Slow tests are skipped\")\n        super().setup(cache,param)\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data type\n        cachedDF = CachedDFGenerator(350000, [5, 25, 50]) # 3 times wider DF with bigger string columns\n        return cachedDF",
+        "name": "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.peakmem_finalize_staged_data",
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1000",
+                "2000"
+            ]
+        ],
+        "setup_cache_key": "finalize_staged_data:82",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "34e03b8d818b1f727b831791e307ca5dd4a1b434643fa5bc0c98c49a0b455523"
+    },
+    "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.time_finalize_staged_data": {
+        "code": "class FinalizeStagedDataWiderDataframeX3:\n    def time_finalize_staged_data(self, cache:CachedDFGenerator, param:int):\n        if (not SLOW_TESTS):\n            raise SkipNotImplemented (\"Slow tests are skipped\")\n        super().time_finalize_staged_data(cache,param)\n\n    def setup(self, cache:CachedDFGenerator, param:int):\n        if (not SLOW_TESTS):\n            raise SkipNotImplemented (\"Slow tests are skipped\")\n        super().setup(cache,param)\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data type\n        cachedDF = CachedDFGenerator(350000, [5, 25, 50]) # 3 times wider DF with bigger string columns\n        return cachedDF",
+        "min_run_count": 1,
+        "name": "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.time_finalize_staged_data",
+        "number": 1,
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "1000",
+                "2000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "finalize_staged_data:82",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "317bc16b3c8e30237836ae85a390b11995fe361c69b31984f0e5d32a344cd571",
         "warmup_time": -1
     },
     "list_functions.ListFunctions.peakmem_list_symbols": {
@@ -1245,7 +1497,7 @@
         "warmup_time": -1
     },
     "resample.Resample.peakmem_resample": {
-        "code": "class Resample:\n    def peakmem_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        if col_type == \"datetime\" and aggregation == \"sum\" or col_type == \"str\" and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]:\n            raise SkipNotImplemented(f\"{aggregation} not supported on columns of type {col_type}\")\n        else:\n            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        ac = Arctic(self.CONNECTION_STRING)\n        ac.delete_library(self.LIB_NAME)\n        lib = ac.create_library(self.LIB_NAME)\n        rng = np.random.default_rng()\n        col_types = self.params[2]\n        rows = max(self.params[0])\n        for col_type in col_types:\n            if col_type == \"str\":\n                num_unique_strings = 100\n                unique_strings = random_strings_of_length(num_unique_strings, 10, True)\n            sym = col_type\n            num_segments = rows // self.ROWS_PER_SEGMENT\n            for idx in range(num_segments):\n                index = pd.date_range(pd.Timestamp(idx * self.ROWS_PER_SEGMENT, unit=\"us\"), freq=\"us\", periods=self.ROWS_PER_SEGMENT)\n                if col_type == \"int\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                elif col_type == \"bool\":\n                    col_data = rng.integers(0, 2, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(bool)\n                elif col_type == \"float\":\n                    col_data = 100_000 * rng.random(self.ROWS_PER_SEGMENT)\n                elif col_type == \"datetime\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(\"datetime64[s]\")\n                elif col_type == \"str\":\n                    col_data = np.random.choice(unique_strings, self.ROWS_PER_SEGMENT)\n                df = pd.DataFrame({\"col\": col_data}, index=index)\n                lib.append(sym, df)",
+        "code": "class Resample:\n    def peakmem_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        if col_type == \"datetime\" and aggregation == \"sum\" or col_type == \"str\" and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]:\n            pass\n            # Use this when upgrading to ASV 0.6.0 or later\n            # raise SkipNotImplemented(f\"{aggregation} not supported on columns of type {col_type}\")\n        else:\n            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        ac = Arctic(self.CONNECTION_STRING)\n        ac.delete_library(self.LIB_NAME)\n        lib = ac.create_library(self.LIB_NAME)\n        rng = np.random.default_rng()\n        col_types = self.params[2]\n        rows = max(self.params[0])\n        for col_type in col_types:\n            if col_type == \"str\":\n                num_unique_strings = 100\n                unique_strings = random_strings_of_length(num_unique_strings, 10, True)\n            sym = col_type\n            num_segments = rows // self.ROWS_PER_SEGMENT\n            for idx in range(num_segments):\n                index = pd.date_range(pd.Timestamp(idx * self.ROWS_PER_SEGMENT, unit=\"us\"), freq=\"us\", periods=self.ROWS_PER_SEGMENT)\n                if col_type == \"int\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                elif col_type == \"bool\":\n                    col_data = rng.integers(0, 2, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(bool)\n                elif col_type == \"float\":\n                    col_data = 100_000 * rng.random(self.ROWS_PER_SEGMENT)\n                elif col_type == \"datetime\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(\"datetime64[s]\")\n                elif col_type == \"str\":\n                    col_data = np.random.choice(unique_strings, self.ROWS_PER_SEGMENT)\n                df = pd.DataFrame({\"col\": col_data}, index=index)\n                lib.append(sym, df)",
         "name": "resample.Resample.peakmem_resample",
         "param_names": [
             "num_rows",
@@ -1280,13 +1532,13 @@
                 "'count'"
             ]
         ],
-        "setup_cache_key": "resample:38",
+        "setup_cache_key": "resample:37",
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "e64300ebb5bd625e1a0f3774aadd035e5738b41295ec2a8ce082d2e9add9b580"
+        "version": "760c9d62e17a5467f1e93abb258d89057e8fdf9ee67d98ceb376e731157a4d2e"
     },
     "resample.Resample.time_resample": {
-        "code": "class Resample:\n    def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        if col_type == \"datetime\" and aggregation == \"sum\" or col_type == \"str\" and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]:\n            raise SkipNotImplemented(f\"{aggregation} not supported on columns of type {col_type}\")\n        else:\n            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        ac = Arctic(self.CONNECTION_STRING)\n        ac.delete_library(self.LIB_NAME)\n        lib = ac.create_library(self.LIB_NAME)\n        rng = np.random.default_rng()\n        col_types = self.params[2]\n        rows = max(self.params[0])\n        for col_type in col_types:\n            if col_type == \"str\":\n                num_unique_strings = 100\n                unique_strings = random_strings_of_length(num_unique_strings, 10, True)\n            sym = col_type\n            num_segments = rows // self.ROWS_PER_SEGMENT\n            for idx in range(num_segments):\n                index = pd.date_range(pd.Timestamp(idx * self.ROWS_PER_SEGMENT, unit=\"us\"), freq=\"us\", periods=self.ROWS_PER_SEGMENT)\n                if col_type == \"int\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                elif col_type == \"bool\":\n                    col_data = rng.integers(0, 2, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(bool)\n                elif col_type == \"float\":\n                    col_data = 100_000 * rng.random(self.ROWS_PER_SEGMENT)\n                elif col_type == \"datetime\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(\"datetime64[s]\")\n                elif col_type == \"str\":\n                    col_data = np.random.choice(unique_strings, self.ROWS_PER_SEGMENT)\n                df = pd.DataFrame({\"col\": col_data}, index=index)\n                lib.append(sym, df)",
+        "code": "class Resample:\n    def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        if col_type == \"datetime\" and aggregation == \"sum\" or col_type == \"str\" and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]:\n            pass\n            # Use this when upgrading to ASV 0.6.0 or later\n            # raise SkipNotImplemented(f\"{aggregation} not supported on columns of type {col_type}\")\n        else:\n            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        ac = Arctic(self.CONNECTION_STRING)\n        ac.delete_library(self.LIB_NAME)\n        lib = ac.create_library(self.LIB_NAME)\n        rng = np.random.default_rng()\n        col_types = self.params[2]\n        rows = max(self.params[0])\n        for col_type in col_types:\n            if col_type == \"str\":\n                num_unique_strings = 100\n                unique_strings = random_strings_of_length(num_unique_strings, 10, True)\n            sym = col_type\n            num_segments = rows // self.ROWS_PER_SEGMENT\n            for idx in range(num_segments):\n                index = pd.date_range(pd.Timestamp(idx * self.ROWS_PER_SEGMENT, unit=\"us\"), freq=\"us\", periods=self.ROWS_PER_SEGMENT)\n                if col_type == \"int\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                elif col_type == \"bool\":\n                    col_data = rng.integers(0, 2, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(bool)\n                elif col_type == \"float\":\n                    col_data = 100_000 * rng.random(self.ROWS_PER_SEGMENT)\n                elif col_type == \"datetime\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(\"datetime64[s]\")\n                elif col_type == \"str\":\n                    col_data = np.random.choice(unique_strings, self.ROWS_PER_SEGMENT)\n                df = pd.DataFrame({\"col\": col_data}, index=index)\n                lib.append(sym, df)",
         "min_run_count": 2,
         "name": "resample.Resample.time_resample",
         "number": 5,
@@ -1326,10 +1578,36 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "resample:38",
+        "setup_cache_key": "resample:37",
         "type": "time",
         "unit": "seconds",
-        "version": "2d10a27f3668632f382e90783829b4bb08cabb656c02754c00d5953ee42f3794",
+        "version": "1381d2db90e66cb5cd04febf62398827a3ac9928795eaced908daec35d5c0c31",
+        "warmup_time": -1
+    },
+    "resample.ResampleWide.peakmem_resample_wide": {
+        "code": "class ResampleWide:\n    def peakmem_resample_wide(self):\n        self.lib.read(self.SYM, query_builder=self.query_builder)\n\n    def setup(self):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        aggs = dict()\n        for col in self.COLS:\n            aggs[col] = \"last\"\n        self.query_builder = QueryBuilder().resample(\"30us\").agg(aggs)\n\n    def setup_cache(self):\n        ac = Arctic(self.CONNECTION_STRING)\n        ac.delete_library(self.LIB_NAME)\n        lib = ac.create_library(self.LIB_NAME)\n        rng = np.random.default_rng()\n        num_rows = 3000\n        index = pd.date_range(pd.Timestamp(0, unit=\"us\"), freq=\"us\", periods=num_rows)\n        data = dict()\n        for col in self.COLS:\n            data[col] = 100 * rng.random(num_rows, dtype=np.float64)\n        df = pd.DataFrame(data, index=index)\n        lib.write(self.SYM, df)",
+        "name": "resample.ResampleWide.peakmem_resample_wide",
+        "param_names": [],
+        "params": [],
+        "setup_cache_key": "resample:103",
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "53f042192048c92d282637c1bbcee9e52dacec9086c534782de30d7ff67e77eb"
+    },
+    "resample.ResampleWide.time_resample_wide": {
+        "code": "class ResampleWide:\n    def time_resample_wide(self):\n        self.lib.read(self.SYM, query_builder=self.query_builder)\n\n    def setup(self):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        aggs = dict()\n        for col in self.COLS:\n            aggs[col] = \"last\"\n        self.query_builder = QueryBuilder().resample(\"30us\").agg(aggs)\n\n    def setup_cache(self):\n        ac = Arctic(self.CONNECTION_STRING)\n        ac.delete_library(self.LIB_NAME)\n        lib = ac.create_library(self.LIB_NAME)\n        rng = np.random.default_rng()\n        num_rows = 3000\n        index = pd.date_range(pd.Timestamp(0, unit=\"us\"), freq=\"us\", periods=num_rows)\n        data = dict()\n        for col in self.COLS:\n            data[col] = 100 * rng.random(num_rows, dtype=np.float64)\n        df = pd.DataFrame(data, index=index)\n        lib.write(self.SYM, df)",
+        "min_run_count": 2,
+        "name": "resample.ResampleWide.time_resample_wide",
+        "number": 5,
+        "param_names": [],
+        "params": [],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "resample:103",
+        "type": "time",
+        "unit": "seconds",
+        "version": "ece714f981e8de31ee8296644624bf8f5fb895e6bf48d64a6ae2a9c50c5db7a2",
         "warmup_time": -1
     },
     "version": 2,

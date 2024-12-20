@@ -84,7 +84,9 @@ if(WIN32)
     endif()
 else()
     if(${ARCTICDB_USING_CONDA})
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
+        # Required to be able to include headers from glog since glog 0.7
+        # See: https://github.com/google/glog/pull/1030
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra -DGLOG_USE_GLOG_EXPORT")
     else()
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
     endif()

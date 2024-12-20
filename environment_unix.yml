@@ -11,6 +11,7 @@ dependencies:
   - benchmark
   - doxygen
   - libboost-devel
+  - liblzma-devel
   - grpcio
   - grpcio-tools
   - protobuf
@@ -27,9 +28,9 @@ dependencies:
   - pybind11 <2.11
   - pcre
   - cyrus-sasl
-  - aws-sdk-cpp
+  - aws-sdk-cpp >=1.11.405
   - prometheus-cpp
-  - libprotobuf <4
+  - libprotobuf
   - openssl
   - libcurl
   - bitmagic
@@ -55,9 +56,9 @@ dependencies:
   # Build dependencies for tests
   - libarrow
   # Python dependences
-  - python =3.10 # Python 3.11 requires protobuf>=4
+  - python
   - packaging
-  - numpy
+  - numpy <2
   - pandas
   - attrs
   - boto3
@@ -81,3 +82,4 @@ dependencies:
   - pytest
   - trustme
   - entt
+  - psutil

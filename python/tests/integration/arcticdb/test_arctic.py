@@ -106,6 +106,30 @@ def test_s3_no_ssl_verification(monkeypatch, s3_no_ssl_storage, client_cert_file
     lib.write("sym", pd.DataFrame())
 
 
+@REAL_S3_TESTS_MARK
+def test_s3_sts_auth(real_s3_sts_storage):
+    ac = Arctic(real_s3_sts_storage.arctic_uri)
+    lib = ac.create_library("test")
+    df = pd.DataFrame({'a': [1, 2, 3]})
+    lib.write("sym", df)
+    assert_frame_equal(lib.read("sym").data, df)
+    lib = ac.get_library("test")
+    assert_frame_equal(lib.read("sym").data, df)
+
+    # Reload for testing a different codepath
+    ac = Arctic(real_s3_sts_storage.arctic_uri)
+    lib = ac.get_library("test")
+    assert_frame_equal(lib.read("sym").data, df)
+
+
+@REAL_S3_TESTS_MARK
+def test_s3_sts_auth_store(real_s3_sts_version_store):
+    lib = real_s3_sts_version_store
+    df = pd.DataFrame({'a': [1, 2, 3]})
+    lib.write("sym", df)
+    assert_frame_equal(lib.read("sym").data, df)
+
+
 @AZURE_TESTS_MARK
 @pytest.mark.parametrize('client_cert_file', no_ssl_parameter_display_status)
 @pytest.mark.parametrize('client_cert_dir', no_ssl_parameter_display_status)

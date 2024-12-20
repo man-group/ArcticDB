@@ -51,11 +51,11 @@ class AsyncStore : public Store {
 public:
     AsyncStore(
         std::shared_ptr<storage::Library> library,
-        const arcticdb::proto::encoding::VariantCodec &codec,
+        const proto::encoding::VariantCodec &codec,
         EncodingVersion encoding_version
     ) :
         library_(std::move(library)),
-        codec_(std::make_shared<arcticdb::proto::encoding::VariantCodec>(codec)),
+        codec_(std::make_shared<proto::encoding::VariantCodec>(codec)),
         encoding_version_(encoding_version) {
     }
 
@@ -149,6 +149,15 @@ entity::VariantKey write_sync(
     util::check(is_ref_key_class(key_type), "Expected ref key type got  {}", key_type);
     auto encoded = EncodeRefTask{key_type, stream_id, std::move(segment), codec_, encoding_version_}();
     return WriteSegmentTask{library_}(std::move(encoded));
+}
+
+entity::VariantKey write_if_none_sync(
+        KeyType key_type,
+        const StreamId &stream_id,
+        SegmentInMemory &&segment) override {
+    util::check(is_ref_key_class(key_type), "Expected ref key type got  {}", key_type);
+    auto encoded = EncodeRefTask{key_type, stream_id, std::move(segment), codec_, encoding_version_}();
+    return WriteIfNoneTask{library_}(std::move(encoded));
 }
 
 bool is_path_valid(const std::string_view path) const override {
@@ -269,6 +278,10 @@ bool key_exists_sync(entity::VariantKey &&key) {
 
 bool supports_prefix_matching() const override {
     return library_->supports_prefix_matching();
+}
+
+bool supports_atomic_writes() const override {
+    return library_->supports_atomic_writes();
 }
 
 std::string key_path(const VariantKey& key) const {

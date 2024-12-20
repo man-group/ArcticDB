@@ -60,6 +60,7 @@ KeyData get_key_data(KeyType key_type) {
     STRING_REF(KeyType::APPEND_REF, aref, 'a')
     STRING_KEY(KeyType::MULTI_KEY, mref, 'm')
     STRING_REF(KeyType::LOCK, lref, 'x')
+    STRING_REF(KeyType::ATOMIC_LOCK, alref, 'A')
     STRING_REF(KeyType::SNAPSHOT_TOMBSTONE, ttomb, 'X')
     STRING_KEY(KeyType::APPEND_DATA, app, 'b')
     STRING_REF(KeyType::BLOCK_VERSION_REF, bvref, 'R')
@@ -87,6 +88,10 @@ VariantType variant_type_from_key_type(KeyType key_type) {
 
 KeyClass key_class_from_key_type(KeyType key_type) {
     return get_key_data(key_type).key_class_;
+}
+
+const char* get_key_description(KeyType key_type) {
+    return get_key_data(key_type).description_;
 }
 
 bool is_string_key_type(KeyType key_type){

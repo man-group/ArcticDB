@@ -80,13 +80,16 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(5002, E_SYMBOL_NOT_FOUND) \
     ERROR_CODE(5003, E_PERMISSION)    \
     ERROR_CODE(5004, E_RESOURCE_NOT_FOUND) \
+    ERROR_CODE(5005, E_UNSUPPORTED_ATOMIC_OPERATION) \
     ERROR_CODE(5010, E_LMDB_MAP_FULL) \
     ERROR_CODE(5011, E_UNEXPECTED_LMDB_ERROR) \
     ERROR_CODE(5020, E_UNEXPECTED_S3_ERROR) \
     ERROR_CODE(5021, E_S3_RETRYABLE) \
+    ERROR_CODE(5022, E_ATOMIC_OPERATION_FAILED) \
     ERROR_CODE(5030, E_UNEXPECTED_AZURE_ERROR) \
     ERROR_CODE(5050, E_MONGO_BULK_OP_NO_REPLY) \
     ERROR_CODE(5051, E_UNEXPECTED_MONGO_ERROR) \
+    ERROR_CODE(5090, E_NON_INCREASING_INDEX_VERSION) \
     ERROR_CODE(6000, E_UNSORTED_DATA) \
     ERROR_CODE(7000, E_INVALID_USER_ARGUMENT) \
     ERROR_CODE(7001, E_INVALID_DECIMAL_STRING)   \
@@ -100,7 +103,8 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(9001, E_UNKNOWN_CODEC) \
     ERROR_CODE(9002, E_ZSDT_ENCODING) \
     ERROR_CODE(9003, E_LZ4_ENCODING)  \
-    ERROR_CODE(9004, E_INPUT_TOO_LARGE)
+    ERROR_CODE(9004, E_INPUT_TOO_LARGE) \
+    ERROR_CODE(9005, E_ENCODING_VERSION_MISMATCH)
 
 enum class ErrorCode : detail::BaseType {
 #define ERROR_CODE(code, Name, ...) Name = code,
@@ -171,6 +175,7 @@ using S3RetryableException = ArcticSpecificException<ErrorCode::E_S3_RETRYABLE>;
 using UnexpectedAzureException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_AZURE_ERROR>;
 using MongoOperationNoReplyException = ArcticSpecificException<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>;
 using UnexpectedMongoException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_MONGO_ERROR>;
+using NonIncreasingIndexVersionException = ArcticSpecificException<ErrorCode::E_NON_INCREASING_INDEX_VERSION>;
 using SortingException = ArcticCategorizedException<ErrorCategory::SORTING>;
 using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;
 using UserInputException = ArcticCategorizedException<ErrorCategory::USER_INPUT>;
@@ -220,6 +225,11 @@ template<>
 template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_UNEXPECTED_MONGO_ERROR>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_UNEXPECTED_MONGO_ERROR>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_NON_INCREASING_INDEX_VERSION>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_NON_INCREASING_INDEX_VERSION>(msg);
 }
 
 template<>

@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <aws/sts/STSClient.h>
+
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
 #include <aws/core/Aws.h>
@@ -15,6 +17,7 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/s3/s3_settings.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
@@ -30,9 +33,8 @@ const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
 
 class S3Storage final : public Storage {
   public:
-    using Config = arcticdb::proto::s3_storage::Config;
 
-    S3Storage(const LibraryPath &lib, OpenMode mode, const Config &conf);
+    S3Storage(const LibraryPath &lib, OpenMode mode, const S3Settings &conf);
 
     /**
      * Full object path in S3 bucket.
@@ -43,6 +45,8 @@ class S3Storage final : public Storage {
 
   private:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
+
+    void do_write_if_none(KeySegmentPair&& kv) final;
 
     void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
 
@@ -58,6 +62,13 @@ class S3Storage final : public Storage {
         return true;
     }
 
+    bool do_supports_atomic_writes() const final {
+        // There is no way to differentiate whether an s3 backed supports atomic writes. As of Nov 2024 S3 and MinIO
+        // support atomic If-None-Match and If-Match put operations. Unfortunately if we're running on VAST or PURE
+        // these would just work like regular PUTs with no way to know.
+        return true;
+    };
+
     bool do_fast_delete() final {
         return false;
     }
@@ -70,6 +81,10 @@ class S3Storage final : public Storage {
 
     std::shared_ptr<S3ApiInstance> s3_api_;
     std::unique_ptr<S3ClientWrapper> s3_client_;
+    //aws sdk annoyingly requires raw pointer being passed in the sts client factory to the s3 client
+    //thus sts_client_ should have same life span as s3_client_
+    std::unique_ptr<Aws::STS::STSClient> sts_client_;
+    
     std::string root_folder_;
     std::string bucket_name_;
     std::string region_;

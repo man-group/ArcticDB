@@ -1,0 +1,2 @@
+*.gzip filter=lfs diff=lfs merge=lfs -text
+*.parquet filter=lfs diff=lfs merge=lfs -text

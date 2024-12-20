@@ -8,19 +8,12 @@
 #pragma once
 
 #include <pybind11/pybind11.h>
-#include <pybind11/stl_bind.h>
-
-#include <arcticdb/entity/key.hpp>
-#include <arcticdb/storage/open_mode.hpp>
-
-#include <string>
-#include <memory>
 
 namespace arcticdb::toolbox::apy {
 
 namespace py = pybind11;
 
-void register_bindings(py::module &m);
+void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& base_exception);
 
 } // namespace arcticdb::toolbox::apy
 

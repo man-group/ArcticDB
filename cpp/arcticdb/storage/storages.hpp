@@ -46,6 +46,10 @@ class Storages {
         primary().write(std::move(kvs));
     }
 
+    void write_if_none(KeySegmentPair&& kv) {
+        primary().write_if_none(std::move(kv));
+    }
+
     void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(StoragesUpdate, 0)
         primary().update(std::move(kvs), opts);
@@ -53,6 +57,10 @@ class Storages {
 
     bool supports_prefix_matching() const {
         return primary().supports_prefix_matching();
+    }
+
+    bool supports_atomic_writes() const {
+        return primary().supports_atomic_writes();
     }
 
     bool fast_delete() {
@@ -174,10 +182,21 @@ class Storages {
     OpenMode mode_;
 };
 
-inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path, OpenMode mode, const arcticdb::proto::storage::VariantStorage &storage_config) {
+inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path, OpenMode mode, decltype(std::declval<arcticc::pb2::storage_pb2::LibraryConfig>().storage_by_id())& storage_configs, const NativeVariantStorage& native_storage_config) {
     Storages::StorageVector storages;
-    storages.push_back(create_storage(library_path, mode, storage_config));
-
+    for (const auto& [storage_id, storage_config]: storage_configs) {
+        util::variant_match(native_storage_config.variant(),
+            [&storage_config, &storages, &library_path, mode] (const s3::S3Settings& settings) {
+                util::check(storage_config.config().Is<arcticdb::proto::s3_storage::Config>(), "Only support S3 native settings");
+                arcticdb::proto::s3_storage::Config s3_storage;
+                storage_config.config().UnpackTo(&s3_storage);
+                storages.push_back(create_storage(library_path, mode, s3::S3Settings(settings).update(s3_storage)));
+            },
+            [&storage_config, &storages, &library_path, mode](const auto &) {
+                storages.push_back(create_storage(library_path, mode, storage_config));
+            }
+        );
+    }
     return std::make_shared<Storages>(std::move(storages), mode);
 }
 

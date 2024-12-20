@@ -507,8 +507,8 @@ public:
         if (validate_)
             entry->validate();
 
-        util::check(key.type() != KeyType::TABLE_INDEX || !entry->head_.has_value() || key.version_id() > entry->head_->version_id(),
-                    "Trying to write a non-increasing TABLE_INDEX key. New version: {}, Last version: {}",
+        storage::check<ErrorCode::E_NON_INCREASING_INDEX_VERSION>(key.type() != KeyType::TABLE_INDEX || !entry->head_.has_value() || key.version_id() > entry->head_->version_id(),
+                    "Trying to write TABLE_INDEX key with a non-increasing version. New version: {}, Last version: {}. This is most likely due to parallel writes to the same symbol, which is not supported.",
                     key.version_id(), entry->head_ ? entry->head_->version_id() : VariantId{""});
         auto journal_key = to_atom(std::move(journal_single_key(store, key, entry->head_)));
         write_to_entry(entry, key, journal_key);
