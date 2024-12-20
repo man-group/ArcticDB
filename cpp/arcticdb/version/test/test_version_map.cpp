@@ -767,11 +767,6 @@ TEST(VersionMap, CacheInvalidation) {
         }
     };
 
-    const auto load_all_param = LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED};
-    const auto load_all_undeleted_param = LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY};
-    check_caching(load_all_param, load_all_undeleted_param, true);
-    check_caching(load_all_undeleted_param, load_all_param, false);
-
     constexpr auto num_versions = 4u;
     std::vector<LoadStrategy> should_load_to_v[num_versions] = {
         // Different parameters which should all load to v0
@@ -779,6 +774,7 @@ TEST(VersionMap, CacheInvalidation) {
             LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)},
             LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-4)},
             LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(0)},
+            LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}
         },
 
         // Different parameters which should all load to v1
@@ -786,6 +782,7 @@ TEST(VersionMap, CacheInvalidation) {
             LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(1)},
             LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-3)},
             LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(1)},
+            LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}
         },
 
         // Different parameters which should all load to v2
@@ -811,14 +808,6 @@ TEST(VersionMap, CacheInvalidation) {
             // For every two versions we check that all load params for earlier versions cache load params for later versions:
             check_all_caching(should_load_to_v[i], should_load_to_v[j], i<=j);
         }
-
-        // LOAD_ALL loads to version 0
-        check_all_caching({load_all_param}, should_load_to_v[i], true);
-        // Load_all_undeleted loads to version 1 because of the tombstone_all in ver 1
-        check_all_caching({load_all_undeleted_param}, should_load_to_v[i], i != 0);
-
-        // If we have loaded to version 0 all load requests are true
-        check_all_caching(should_load_to_v[i], {load_all_param, load_all_undeleted_param}, i == 0);
     }
 }
 
