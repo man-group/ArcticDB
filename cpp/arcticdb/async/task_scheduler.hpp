@@ -174,11 +174,6 @@ inline auto get_default_num_cpus([[maybe_unused]] const std::string& cgroup_fold
  * 3/ Priority: How to assign priorities to task in order to treat the most pressing first.
  * 4/ Throttling: (similar to priority) how to absorb work spikes and apply memory backpressure
  */
-
-inline int64_t default_io_thread_count(uint64_t cpu_count) {
-    return std::min(int64_t(100L), static_cast<int64_t>(static_cast<double>(cpu_count) * 1.5));
-}
-
 class TaskScheduler {
   public:
     using CPUSchedulerType = folly::FutureExecutor<folly::CPUThreadPoolExecutor>;
@@ -199,7 +194,7 @@ class TaskScheduler {
         auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only supports Task derived from BaseTask");
         ARCTICDB_DEBUG(log::schedule(), "{} Submitting CPU task {}: {} of {}", uintptr_t(this), typeid(task).name(), cpu_exec_.getTaskQueueSize(), cpu_exec_.kDefaultMaxQueueSize);
-        std::lock_guard lock{cpu_mutex_};
+        //std::lock_guard lock{cpu_mutex_};
         return cpu_exec_.addFuture(std::move(task));
     }
 
@@ -208,7 +203,7 @@ class TaskScheduler {
         auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only support Tasks derived from BaseTask");
         ARCTICDB_DEBUG(log::schedule(), "{} Submitting IO task {}: {}", uintptr_t(this), typeid(task).name(), io_exec_.getPendingTaskCount());
-        std::lock_guard lock{io_mutex_};
+        //std::lock_guard lock{io_mutex_};
         return io_exec_.addFuture(std::move(task));
     }
 

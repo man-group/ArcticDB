@@ -27,6 +27,7 @@ void ComponentManager::decrement_entity_fetch_count(EntityId id) {
         // shared_mutex, so just decrement the ref count of the only sizeable component, so that when the shared pointer
         // goes out of scope in the calling function, the memory is freed
         registry_.get<std::shared_ptr<SegmentInMemory>>(id).reset();
+        ARCTICDB_DEBUG(log::memory(), "Releasing entity {}", id);
         debug::check<ErrorCode::E_ASSERTION_FAILURE>(!registry_.get<std::shared_ptr<SegmentInMemory>>(id),
                                                      "SegmentInMemory memory retained in ComponentManager");
     }

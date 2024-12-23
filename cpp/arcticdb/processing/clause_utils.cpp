@@ -84,12 +84,18 @@ std::vector<EntityId> flatten_entities(std::vector<std::vector<EntityId>>&& enti
     return res;
 }
 
-std::vector<folly::FutureSplitter<pipelines::SegmentAndSlice>> split_futures(
-        std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures) {
-    std::vector<folly::FutureSplitter<pipelines::SegmentAndSlice>> res;
+using SegmentAndSlice = pipelines::SegmentAndSlice;
+
+std::vector<FutureOrSplitter> split_futures(
+        std::vector<folly::Future<SegmentAndSlice>>&& segment_and_slice_futures,
+        std::vector<EntityFetchCount>& segment_fetch_counts) {
+    std::vector<FutureOrSplitter> res;
     res.reserve(segment_and_slice_futures.size());
-    for (auto&& future: segment_and_slice_futures) {
-        res.emplace_back(folly::splitFuture(std::move(future)));
+    for (auto&& [index, future]: folly::enumerate(segment_and_slice_futures)) {
+        if(segment_fetch_counts[index] > 1)
+            res.emplace_back(folly::splitFuture(std::move(future)));
+        else
+            res.emplace_back(std::move(future));
     }
     return res;
 }

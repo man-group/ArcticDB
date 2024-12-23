@@ -72,24 +72,24 @@ struct FrameSlice {
 
     FrameSlice(
         std::shared_ptr<entity::StreamDescriptor> desc,
-        const ColRange& col_range,
-        const RowRange& row_range,
+        ColRange col_range,
+        RowRange row_range,
         std::optional<uint64_t> hash = std::nullopt,
         std::optional<uint64_t> num_buckets = std::nullopt,
         std::optional<std::vector<size_t>> indices = std::nullopt) :
-            col_range(col_range),
-            row_range(row_range),
+            col_range(std::move(col_range)),
+            row_range(std::move(row_range)),
             desc_(std::move(desc)),
             hash_bucket_(hash),
             num_buckets_(num_buckets),
             indices_(std::move(indices)) {
     }
 
-    FrameSlice(const ColRange& col_range, const RowRange& row_range,
+    FrameSlice(ColRange col_range, RowRange row_range,
                std::optional<size_t> hash_bucket = std::nullopt,
                std::optional<uint64_t> num_buckets = std::nullopt) :
-        col_range(col_range),
-        row_range(row_range),
+        col_range(std::move(col_range)),
+        row_range(std::move(row_range)),
         hash_bucket_(hash_bucket),
         num_buckets_(num_buckets) {
     }
@@ -174,16 +174,16 @@ private:
 // Collection of these objects is the input to batch_read_uncompressed
 struct RangesAndKey {
     explicit RangesAndKey(const FrameSlice& frame_slice, entity::AtomKey&& key, bool is_incomplete):
-    row_range_(frame_slice.rows()),
-    col_range_(frame_slice.columns()),
-    key_(std::move(key)),
-    is_incomplete_(is_incomplete) {
+        row_range_(frame_slice.rows()),
+        col_range_(frame_slice.columns()),
+        key_(std::move(key)),
+        is_incomplete_(is_incomplete) {
     }
 
-    explicit RangesAndKey(const RowRange& row_range, const ColRange& col_range, const entity::AtomKey& key):
-            row_range_(row_range),
-            col_range_(col_range),
-            key_(key) {
+    explicit RangesAndKey(RowRange row_range, ColRange col_range, entity::AtomKey key):
+        row_range_(std::move(row_range)),
+        col_range_(std::move(col_range)),
+        key_(std::move(key)) {
     }
     RangesAndKey() = delete;
     ARCTICDB_MOVE_COPY_DEFAULT(RangesAndKey)
