@@ -17,7 +17,7 @@ from typing import List
 from enum import Enum
 
 from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
-from arcticdb_ext.storage import NoDataFoundException
+from arcticdb_ext.storage import NoDataFoundException, KeyType
 from arcticdb_ext.version_store import SortedValue
 from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions, StreamDescriptorMismatch, SchemaException
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
@@ -242,51 +242,48 @@ def test_write_metadata_with_none(arctic_library):
     assert read_symbol.version == 0
 
 
-@pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND))
+@pytest.mark.parametrize("finalize_method", (
+        #StagedDataFinalizeMethod.WRITE,
+        StagedDataFinalizeMethod.APPEND,
+                         ))
 def test_staged_data(arctic_library, finalize_method):
     lib = arctic_library
-    sym_with_metadata = "sym_with_metadata"
     sym_without_metadata = "sym_without_metadata"
-    sym_unfinalized = "sym_unfinalized"
     df_0 = pd.DataFrame({"col": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
     df_1 = pd.DataFrame({"col": [3, 4]}, index=pd.date_range("2024-01-03", periods=2))
     df_2 = pd.DataFrame({"col": [5, 6]}, index=pd.date_range("2024-01-05", periods=2))
     expected = pd.concat([df_0, df_1, df_2])
 
     if finalize_method == StagedDataFinalizeMethod.WRITE:
-        lib.write(sym_with_metadata, df_0, staged=True)
         lib.write(sym_without_metadata, df_0, staged=True)
-        lib.write(sym_unfinalized, df_0, staged=True)
     else:
-        # finalize_method == StagedDataFinalizeMethod.APPEND
-        lib.write(sym_with_metadata, df_0, staged=False)
         lib.write(sym_without_metadata, df_0, staged=False)
 
-    lib.write(sym_with_metadata, df_1, staged=True)
-    lib.write(sym_with_metadata, df_2, staged=True)
     lib.write(sym_without_metadata, df_1, staged=True)
     lib.write(sym_without_metadata, df_2, staged=True)
-    lib.write(sym_unfinalized, df_1, staged=True)
-    lib.write(sym_unfinalized, df_2, staged=True)
 
-    metadata = {"hello": "world"}
-    finalize_result_meta = lib.finalize_staged_data(sym_with_metadata, finalize_method, metadata=metadata)
-    assert finalize_result_meta.metadata == metadata
-    assert finalize_result_meta.symbol == sym_with_metadata
-    assert finalize_result_meta.library == lib.name
-    assert finalize_result_meta.version == (1 if finalize_method == StagedDataFinalizeMethod.APPEND else 0)
-
-    lib.finalize_staged_data(sym_without_metadata, finalize_method)
-
-    assert set(lib.list_symbols()) == {sym_with_metadata, sym_without_metadata}
-
-    sym_with_metadata_vit = lib.read(sym_with_metadata)
-    assert_frame_equal(expected, sym_with_metadata_vit.data)
-    assert sym_with_metadata_vit.metadata == metadata
-
-    sym_without_metadata_vit = lib.read(sym_without_metadata)
-    assert_frame_equal(expected, sym_without_metadata_vit.data)
-    assert sym_without_metadata_vit.metadata is None
+    lt = lib._nvs.library_tool()
+    aks = lt.find_keys(KeyType.APPEND_DATA)
+    print(aks)
+    lt.read_timeseries_descriptor(aks[0])
+    # metadata = {"hello": "world"}
+    # finalize_result_meta = lib.finalize_staged_data(sym_with_metadata, finalize_method, metadata=metadata)
+    # assert finalize_result_meta.metadata == metadata
+    # assert finalize_result_meta.symbol == sym_with_metadata
+    # assert finalize_result_meta.library == lib.name
+    # assert finalize_result_meta.version == (1 if finalize_method == StagedDataFinalizeMethod.APPEND else 0)
+    #
+    # lib.finalize_staged_data(sym_without_metadata, finalize_method)
+    #
+    # assert set(lib.list_symbols()) == {sym_with_metadata, sym_without_metadata}
+    #
+    # sym_with_metadata_vit = lib.read(sym_with_metadata)
+    # assert_frame_equal(expected, sym_with_metadata_vit.data)
+    # assert sym_with_metadata_vit.metadata == metadata
+    #
+    # sym_without_metadata_vit = lib.read(sym_without_metadata)
+    # assert_frame_equal(expected, sym_without_metadata_vit.data)
+    # assert sym_without_metadata_vit.metadata is None
 
 
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))

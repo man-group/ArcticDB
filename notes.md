@@ -449,6 +449,20 @@ set_log_level(specific_log_levels={"version": "DEBUG"})
 
 at the top of your repro script. This will log debug info to stderr. Share that with me too.
 
+## For screen share
+
+How big is each incomplete?
+
+```
+from arcticdb_ext.storage import KeyType
+lt = lib._dev_tools.library_tool()
+aks = lt.find_keys(KeyType.APPEND_DATA)
+k = aks[0]
+
+print(lt.read_to_dataframe(k).shape)
+print(lt.read_to_dataframe(k).dtypes)
+```
+
 ## Summary
 
 - How big are the incompletes?
@@ -456,3 +470,93 @@ at the top of your repro script. This will log debug info to stderr. Share that 
 - Finalize staged data or sort and finalize?
 - I'll prepare a debug build with extra logging
   - Do you have a repro with growing memory use that doesn't OOM or that executes a bit faster?
+
+### Experiments
+
+BBG will have at least 300 chunks per symbol? One chunk per day?
+We know that they have about 4000 symbols
+How many rows for each chunk?
+TODO run this experiment next
+
+
+## Small chunks, small number of chunks, 2000 symbols
+
+massif 274809
+
+```
+num_rows_initially = int(1e5)
+num_chunks = 5
+num_rows_per_chunk = int(1e3)
+num_symbols = 2000
+cachedDF = CachedDFGenerator(num_rows_initially + 1, size_string_flds_array=[10])
+```
+
+Result: Nothing surprising
+
+## No existing data, 200 1M row chunks for each of 7 symbols
+
+```
+num_rows_initially = int(1e6) ## not used
+num_chunks = 200
+num_rows_per_chunk = int(1e6)
+num_symbols = 7
+cachedDF = CachedDFGenerator(num_rows_initially + 1, size_string_flds_array=[10])
+```
+
+massif 384206
+
+Also try memray? Massif seems to under-report a bit?
+
+## No existing data, 200 1M row chunks for 1 symbol
+
+```
+num_rows_initially = int(1e7)
+num_chunks = 200
+num_rows_per_chunk = int(1e6)
+num_symbols = 1
+cachedDF = CachedDFGenerator(num_rows_initially + 1, size_string_flds_array=[10])
+```
+
+massif 403471
+memray 
+
+348.2MiB
+
+## No existing data, 20 1M row chunks for 1 symbol
+
+```
+num_rows_initially = int(1e7)
+num_chunks = 20
+num_rows_per_chunk = int(1e6)
+num_symbols = 1
+cachedDF = CachedDFGenerator(num_rows_initially + 1, size_string_flds_array=[10])
+```
+
+347.1MiB
+
+It's completely a function of the size of the chunk...
+
+I think same memory use as the experiment above shows this is OK?
+
+## Trial fixes
+
+- Release segment properly
+  version_core.hpp:309
+  Try just releasing it and see what happens (unlikely to help but try it...)
+
+```
+num_rows_initially = int(1e7)
+num_chunks = 10
+num_rows_per_chunk = int(1e6)
+num_symbols = 1
+cachedDF = CachedDFGenerator(num_rows_initially + 1, size_string_flds_array=[10])
+```
+
+- Chunk up the incompletes when they are written
+- Finish my KeySegmentPair refactor?
+
+Breaking up...
+`write_incomplete_frame`
+- The chaining with `next_key` for the tick collectors - separate code path?
+- The weird sorting stuff, ignore that for now?
+  I don't understand why we have the sorting stuff at all. Do in Pandas?
