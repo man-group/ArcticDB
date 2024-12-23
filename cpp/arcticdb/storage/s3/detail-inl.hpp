@@ -168,6 +168,7 @@ namespace s3 {
         template<class KeyBucketizer>
         void do_read_impl(Composite<VariantKey> &&ks,
                           const ReadVisitor &visitor,
+                          folly::Function<VariantKey(VariantKey&&)> key_decoder,
                           const std::string &root_folder,
                           const std::string &bucket_name,
                           const S3ClientWrapper &s3_client,
@@ -179,7 +180,7 @@ namespace s3 {
 
             (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
                     [&s3_client, &bucket_name, &root_folder, b = std::move(bucketizer), &visitor, &keys_not_found,
-                            opts = opts](auto &&group) {
+                            &key_decoder, opts = opts](auto &&group) {
 
                         for (auto &k: group.values()) {
                             auto key_type_dir = key_type_folder(root_folder, variant_key_type(k));
@@ -189,13 +190,14 @@ namespace s3 {
                                     s3_object_name,
                                     bucket_name);
 
+                            auto unencoded_key = key_decoder(std::move(k));
                             if (get_object_result.is_success()) {
                                 ARCTICDB_SUBSAMPLE(S3StorageVisitSegment, 0)
 
-                                visitor(k, std::move(get_object_result.get_output()));
+                                visitor(unencoded_key, std::move(get_object_result.get_output()));
 
-                                ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(k),
-                                               variant_key_view(k));
+                                ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(unencoded_key),
+                                               variant_key_view(unencoded_key));
                             } else {
                                 auto &error = get_object_result.get_error();
                                 raise_if_unexpected_error(error, s3_object_name);
@@ -203,11 +205,11 @@ namespace s3 {
                                 log::storage().log(
                                     opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
                                     "Failed to find segment for key '{}' {}: {}",
-                                    variant_key_view(k),
+                                    variant_key_view(unencoded_key),
                                     error.GetExceptionName().c_str(),
                                     error.GetMessage().c_str());
 
-                                keys_not_found.push_back(k);
+                                keys_not_found.push_back(unencoded_key);
                             }
                         }
                     });

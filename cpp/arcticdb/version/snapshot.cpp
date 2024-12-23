@@ -107,7 +107,9 @@ void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void
             visitor(vk);
         } catch (storage::KeyNotFoundException& e) {
             e.keys().broadcast([&vk, &e](const VariantKey& key) {
-                if (key != vk) throw storage::KeyNotFoundException(std::move(e.keys()));
+                if (key != vk) {
+                    throw storage::KeyNotFoundException(std::move(e.keys()));
+                }
             });
             ARCTICDB_DEBUG(log::version(), "Ignored exception due to {} being deleted during iterate_snapshots().");
         }
