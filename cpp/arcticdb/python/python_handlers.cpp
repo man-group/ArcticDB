@@ -25,19 +25,18 @@ namespace arcticdb {
 
 
 static inline PyObject** fill_with_none(PyObject** ptr_dest, size_t count, SpinLock& spin_lock) {
-    auto none = py::none();
+    auto none = GilSafePyNone::instance();
     for(auto i = 0U; i < count; ++i)
-        *ptr_dest++ = none.ptr();
+        *ptr_dest++ = none->ptr();
 
     spin_lock.lock();
     for(auto i = 0U; i < count; ++i)
-        none.inc_ref();
+        Py_INCREF(none->ptr());
     spin_lock.unlock();
     return ptr_dest;
 }
 
 static inline PyObject** fill_with_none(ChunkedBuffer& buffer, size_t offset, size_t count, SpinLock& spin_lock) {
-    auto none = py::none();
     auto dest = buffer.ptr_cast<PyObject*>(offset, count * sizeof(PyObject*));
     return fill_with_none(dest, count, spin_lock);
 }

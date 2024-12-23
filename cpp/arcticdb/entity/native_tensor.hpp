@@ -119,14 +119,16 @@ struct NativeTensor {
     [[nodiscard]] auto expanded_dim() const { return expanded_dim_; }
     template<typename T>
     const T *ptr_cast(size_t pos) const {
+        util::check(ptr != nullptr, "Unexpected null ptr in NativeTensor");
         const bool dimension_condition = ndim() == 1;
         const bool elsize_condition = elsize_ != 0;
-        const bool strides_condition = strides_[0] % elsize_ == 0;
+        const bool strides_condition = (elsize_condition) && (strides_[0] % elsize_ == 0);
         util::warn(dimension_condition, "Cannot safely ptr_cast matrices in NativeTensor");
         util::warn(elsize_condition, "Cannot safely ptr_cast when elsize_ is zero in NativeTensor");
         util::warn(strides_condition,
                    "Cannot safely ptr_cast to type of size {} when strides ({}) is not a multiple of elsize ({}) in NativeTensor with dtype {}",
                    sizeof(T), strides_[0], elsize_, data_type());
+
         int64_t signed_pos = pos;
         if (dimension_condition && elsize_condition && strides_condition) {
             signed_pos *= strides_[0] / elsize_;

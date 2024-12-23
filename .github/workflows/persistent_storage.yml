@@ -40,6 +40,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3.3.0
 
+      # The latest version of arcticdb will no longer publish wheels for Python 3.6
+      # So we skip the seed if we are testing the latest version with Python 3.6
+      - name: Skip if unsupported
+        if: inputs.arcticdb_version == 'latest' && inputs.python3 == '6'
+        run: exit 0
+
       - name: Select Python (Linux)
         if: matrix.os == 'linux'
         run: echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH
