@@ -87,10 +87,6 @@ jobs:
           maximum-size: 6GB
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
-
-      - name: Install deps
-        if: matrix.os == 'linux' && inputs.job_type != 'build-python-wheels'
-        uses: ./.github/actions/setup_deps
           
       - name: Extra envs
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
