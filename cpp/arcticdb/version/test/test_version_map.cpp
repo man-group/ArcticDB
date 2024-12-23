@@ -547,35 +547,44 @@ TEST(VersionMap, StorageLogging) {
     ASSERT_EQ(tomb_keys, 3u);
 }
 
+struct VersionChainOperation {
+    enum class Type {
+        WRITE,
+        TOMBSTONE,
+        TOMBSTONE_ALL
+    } type {Type::WRITE};
+
+    VersionId version_id { 0 };
+};
+
 std::shared_ptr<VersionMapEntry> write_versions(
     const std::shared_ptr<InMemoryStore>& store,
     const std::shared_ptr<VersionMap>& version_map,
     const StreamId& id,
-    size_t number_of_versions,
-    std::vector<VersionId> tombstones_versions = {},
-    const std::optional<VersionId>& tombstone_all_version = std::nullopt) {
+    const std::vector<VersionChainOperation>& operations) {
     auto entry = version_map->check_reload(
             store,
             id,
             LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED},
             __FUNCTION__);
 
-    std::sort(tombstones_versions.begin(), tombstones_versions.end());
-    size_t j = 0;
-    for (size_t i = 0; i < number_of_versions; i++) {
-        auto key = atom_key_with_version(id, i, i);
-        version_map->do_write(store, key, entry);
-        write_symbol_ref(store, key, std::nullopt, entry->head_.value());
-
-        if (tombstone_all_version.has_value() && *tombstone_all_version == i) {
-            version_map->delete_all_versions(store, id);
+    for (const auto& [type, version_id]: operations) {
+        switch (type) {
+            case VersionChainOperation::Type::WRITE: {
+                auto key = atom_key_with_version(id, version_id, version_id);
+                version_map->do_write(store, key, entry);
+                write_symbol_ref(store, key, std::nullopt, entry->head_.value());
+                break;
+            }
+            case VersionChainOperation::Type::TOMBSTONE: {
+                version_map->write_tombstone(store, version_id, id, entry);
+                break;
+            }
+            case VersionChainOperation::Type::TOMBSTONE_ALL: {
+                version_map->delete_all_versions(store, id);
+                break;
+            }
         }
-
-        if (j < tombstones_versions.size() && tombstones_versions[j] == i) {
-            version_map->write_tombstone(store, VersionId{i}, id, entry);
-            j+=1;
-        }
-
     }
 
     return entry;
@@ -583,33 +592,20 @@ std::shared_ptr<VersionMapEntry> write_versions(
 
 // Produces the following version chain: v0 <- tombstone_all <- v1 <- v2 <- tombstone
 void write_alternating_deleted_undeleted(std::shared_ptr<InMemoryStore> store, std::shared_ptr<VersionMap> version_map, StreamId id) {
-    auto entry = version_map->check_reload(
-            store,
-            id,
-            LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED},
-            __FUNCTION__);
+    using Type = VersionChainOperation::Type;
+    write_versions(store, version_map, id, {{Type::WRITE, 0},
+                                                         {Type::TOMBSTONE_ALL},
+                                                         {Type::WRITE, 1},
+                                                         {Type::WRITE, 2},
+                                                         {Type::TOMBSTONE, 2}});
+}
 
-    auto key1 = atom_key_with_version(id, 0, 0);
-    auto key2 = atom_key_with_version(id, 1, 1);
-    auto key3 = atom_key_with_version(id, 2, 2);
-
-    // Write version 0
-    version_map->do_write(store, key1, entry);
-    write_symbol_ref(store, key1, std::nullopt, entry->head_.value());
-
-    // Tombstone_all on version 0
-    version_map->delete_all_versions(store, id);
-
-    // Write version 1
-    version_map->do_write(store, key2, entry);
-    write_symbol_ref(store, key2, std::nullopt, entry->head_.value());
-
-    // Write version 2
-    version_map->do_write(store, key3, entry);
-    write_symbol_ref(store, key3, std::nullopt, entry->head_.value());
-
-    // Tombstone version 2
-    version_map->write_tombstone(store, VersionId{2}, id, entry, timestamp{3});
+void write_versions(std::shared_ptr<InMemoryStore> store, std::shared_ptr<VersionMap> version_map, StreamId id, int number_of_versions) {
+    std::vector<VersionChainOperation> version_chain;
+    for (int i = 0; i < number_of_versions; i++) {
+        version_chain.emplace_back(VersionChainOperation::Type::WRITE, i);
+    }
+    write_versions(store, version_map, id, version_chain);
 }
 
 TEST(VersionMap, FollowingVersionChain){
@@ -617,7 +613,7 @@ TEST(VersionMap, FollowingVersionChain){
     auto store = std::make_shared<InMemoryStore>();
     auto version_map = std::make_shared<VersionMap>();
     StreamId id{"test"};
-    write_versions(store, version_map, id, 3, {2}, 0);
+    write_alternating_deleted_undeleted(store, version_map, id);
 
     auto check_strategy_loads_to = [&](LoadStrategy load_strategy, VersionId should_load_to){
         auto ref_entry = VersionMapEntry{};
@@ -653,7 +649,7 @@ TEST(VersionMap, FollowingVersionChainWithCaching){
     auto store = std::make_shared<InMemoryStore>();
     auto version_map = std::make_shared<VersionMap>();
     StreamId id{"test"};
-    write_versions(store, version_map, id, 3, {2}, 0);
+    write_alternating_deleted_undeleted(store, version_map, id);
     // We create an empty version map after populating the versions
     version_map = std::make_shared<VersionMap>();
 
@@ -743,13 +739,20 @@ TEST(VersionMap, FollowingVersionChainEndEarlyOnTombstoneAll) {
     }
 }
 
-TEST(VersionMap, CacheInvalidation) {
+TEST(VersionMap, HasCachedEntry) {
     ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
     // Set up the version chain v0 <- v1(tombstone_all) <- v2 <- v3(tombstoned)
     auto store = std::make_shared<InMemoryStore>();
     auto version_map = std::make_shared<VersionMap>();
     StreamId id{"test"};
-    write_versions(store, version_map, id, 4, {3}, 1);
+    using Type = VersionChainOperation::Type;
+    std::vector<VersionChainOperation> version_chain = {{Type::WRITE, 0},
+                         {Type::WRITE, 1},
+                            {Type::TOMBSTONE_ALL},
+                         {Type::WRITE, 2},
+                         {Type::WRITE, 3},
+                         {Type::TOMBSTONE, 3}};
+    write_versions(store, version_map, id, version_chain);
 
     auto check_caching = [&](LoadStrategy to_load, LoadStrategy to_check_if_cached, bool expected_outcome){
         auto clean_version_map = std::make_shared<VersionMap>();
