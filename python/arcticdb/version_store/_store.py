@@ -1706,8 +1706,10 @@ class NativeVersionStore:
         )
 
     def _resolve_empty_columns(self, columns, implement_read_index):
-        is_columns_empty = (isinstance(columns, list) and len(columns) == 0) or (
-            isinstance(columns, np.ndarray) and columns.size == 0
+        is_columns_empty = (
+            columns is None
+            or (isinstance(columns, list) and len(columns) == 0)
+            or (isinstance(columns, np.ndarray) and columns.size == 0)
         )
         if not implement_read_index and is_columns_empty:
             columns = None
