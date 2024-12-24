@@ -171,15 +171,11 @@ void NfsBackedStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
 }
 
 void NfsBackedStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
-    auto func = [visitor] (const VariantKey& k, Segment&& seg) mutable {
-        visitor(unencode_object_id(k), std::move(seg));
-    };
-
     auto enc = ks.transform([] (auto&& key) {
         return encode_object_id(key);
     });
 
-    s3::detail::do_read_impl(std::move(enc), func, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, opts);
+    s3::detail::do_read_impl(std::move(enc), visitor, unencode_object_id, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, opts);
 }
 
 void NfsBackedStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {

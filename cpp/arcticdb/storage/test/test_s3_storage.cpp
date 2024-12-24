@@ -11,6 +11,7 @@
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_mock_client.hpp>
+#include <arcticdb/storage/s3/nfs_backed_storage.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/variant_key.hpp>
@@ -225,7 +226,38 @@ protected:
     S3Storage store;
 };
 
-TEST_F(S3StorageFixture, test_key_exists){
+arcticdb::storage::nfs_backed::NfsBackedStorage::Config get_test_nfs_config() {
+    arcticdb::storage::nfs_backed::NfsBackedStorage::Config cfg;
+    cfg.set_use_mock_storage_for_testing(true);
+    return cfg;
+}
+
+class NfsStorageFixture : public testing::Test {
+protected:
+    NfsStorageFixture():
+        store(LibraryPath("lib", '.'), OpenMode::DELETE, get_test_nfs_config())
+    {}
+
+    arcticdb::storage::nfs_backed::NfsBackedStorage store;
+};
+
+class S3AndNfsStorageFixture : public testing::TestWithParam<std::string> {
+public:
+    std::unique_ptr<Storage> get_storage() {
+        LibraryPath lp{"lib"};
+        if (GetParam() == "nfs") {
+            return std::make_unique<arcticdb::storage::nfs_backed::NfsBackedStorage>(
+                lp, OpenMode::DELETE, get_test_nfs_config());
+        } else if (GetParam() == "s3") {
+            return std::make_unique<S3Storage>(
+                lp, OpenMode::DELETE, S3Settings(get_test_s3_config()));
+        } else {
+            util::raise_rte("Unexpected fixture type {}", GetParam());
+        }
+    }
+};
+
+TEST_F(S3StorageFixture, test_key_exists) {
     write_in_store(store, "symbol");
 
     ASSERT_TRUE(exists_in_store(store, "symbol"));
@@ -244,6 +276,23 @@ TEST_F(S3StorageFixture, test_read){
         read_in_store(store, MockS3Client::get_failure_trigger("symbol", StorageOperation::READ, Aws::S3::S3Errors::THROTTLING, false)),
         UnexpectedS3ErrorException);
 }
+
+TEST_P(S3AndNfsStorageFixture, test_read_missing_key_in_exception){
+    auto s = get_storage();
+    auto& store = *s;
+
+    try {
+        read_in_store(store, "snap-not-present", KeyType::SNAPSHOT_REF);
+        FAIL();
+    } catch (KeyNotFoundException& e) {
+        auto keys = e.keys().as_range();
+        ASSERT_EQ(keys.size(), 1);
+        const auto& key = keys.at(0);
+        ASSERT_EQ(variant_key_id(key), StreamId{"snap-not-present"});
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(S3AndNfs, S3AndNfsStorageFixture, testing::Values("s3", "nfs"));
 
 TEST_F(S3StorageFixture, test_write){
     write_in_store(store, "symbol");
