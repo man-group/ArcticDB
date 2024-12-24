@@ -71,7 +71,7 @@ void S3Storage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
 }
 
 void S3Storage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
-    detail::do_read_impl(std::move(ks), visitor, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{}, opts);
+    detail::do_read_impl(std::move(ks), visitor, folly::identity, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{}, opts);
 }
 
 void S3Storage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
