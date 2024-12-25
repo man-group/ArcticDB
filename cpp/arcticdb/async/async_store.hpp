@@ -93,7 +93,7 @@ folly::Future<entity::VariantKey> write(
                 "Descriptor id mismatch in atom key {} != {}",
                 stream_id,
                 segment.descriptor().id());
-
+    ARCTICDB_DEBUG(log::version(), "Creating write future key_type {} stream_id {} start_index {} end_index {}");
     return async::submit_cpu_task(EncodeAtomTask{
         key_type, version_id, stream_id, start_index, end_index, creation_ts,
         std::move(segment), codec_, encoding_version_
