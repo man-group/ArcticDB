@@ -1,0 +1,73 @@
+diff --git a/src/aws-cpp-sdk-core/include/aws/core/auth/AWSCredentials.h b/src/aws-cpp-sdk-core/include/aws/core/auth/AWSCredentials.h
+index 0152d3e5a74..da777b8a0dc 100644
+--- a/src/aws-cpp-sdk-core/include/aws/core/auth/AWSCredentials.h
++++ b/src/aws-cpp-sdk-core/include/aws/core/auth/AWSCredentials.h
+@@ -8,6 +8,9 @@
+ #include <aws/core/Core_EXPORTS.h>
+ #include <aws/core/utils/memory/stl/AWSString.h>
+ #include <aws/core/utils/DateTime.h>
++#include <aws/core/utils/logging/LogMacros.h>
++#include <aws/core/utils/Outcome.h>
++#include <aws/core/utils/UUID.h>
+ namespace Aws
+ {
+     namespace Auth
+@@ -71,9 +74,9 @@ namespace Aws
+              * If credentials haven't been initialized or been initialized to empty values.
+              * Expiration date does not affect the result of this function.
+              */
+-            inline bool IsEmpty() const { return m_accessKeyId.empty() && m_secretKey.empty(); }
++            inline bool IsEmpty() const { AWS_LOGSTREAM_INFO("AWSCredentials", "IsEmpty m_accessKeyId: " << m_accessKeyId.empty() << " m_secretKey: " << m_secretKey.empty()); return m_accessKeyId.empty() && m_secretKey.empty(); }
+ 
+-            inline bool IsExpired() const { return m_expiration <= Aws::Utils::DateTime::Now(); }
++            inline bool IsExpired() const { AWS_LOGSTREAM_INFO("AWSCredentials", "IsExpired m_expiration: " << m_expiration.ToGmtStringWithMs()); return m_expiration <= Aws::Utils::DateTime::Now(); }
+ 
+             inline bool IsExpiredOrEmpty() const { return IsEmpty() || IsExpired(); }
+ 
+diff --git a/src/aws-cpp-sdk-core/source/auth/AWSCredentialsProvider.cpp b/src/aws-cpp-sdk-core/source/auth/AWSCredentialsProvider.cpp
+index d0679b350f0..8a4ee88b78e 100644
+--- a/src/aws-cpp-sdk-core/source/auth/AWSCredentialsProvider.cpp
++++ b/src/aws-cpp-sdk-core/source/auth/AWSCredentialsProvider.cpp
+@@ -57,6 +57,7 @@ bool AWSCredentialsProvider::IsTimeToRefresh(long reloadFrequency)
+ {
+     if (DateTime::Now().Millis() - m_lastLoadedMs > reloadFrequency)
+     {
++        AWS_LOGSTREAM_INFO("AWSCredentialsProvider", "IsTimeToRefresh need to refresh token m_lastLoadedMs " << m_lastLoadedMs << " ms; reloadFrequency " << reloadFrequency );
+         return true;
+     }
+     return false;
+diff --git a/src/aws-cpp-sdk-identity-management/source/auth/STSProfileCredentialsProvider.cpp b/src/aws-cpp-sdk-identity-management/source/auth/STSProfileCredentialsProvider.cpp
+index fd82b678fba..d17bf8a2329 100644
+--- a/src/aws-cpp-sdk-identity-management/source/auth/STSProfileCredentialsProvider.cpp
++++ b/src/aws-cpp-sdk-identity-management/source/auth/STSProfileCredentialsProvider.cpp
+@@ -33,6 +33,7 @@ STSProfileCredentialsProvider::STSProfileCredentialsProvider(const Aws::String&
+         m_reloadFrequency(std::chrono::minutes(std::max(int64_t(5), static_cast<int64_t>(duration.count()))) - std::chrono::minutes(5)),
+         m_stsClientFactory(stsClientFactory)
+ {
++    AWS_LOGSTREAM_INFO(CLASS_TAG, "STSProfileCredentialsProvider init with token duration " << duration.count() << " minutes; m_reloadFrequency " << m_reloadFrequency.count() << " ms" );
+ }
+ 
+ AWSCredentials STSProfileCredentialsProvider::GetAWSCredentials()
+@@ -45,16 +46,20 @@ AWSCredentials STSProfileCredentialsProvider::GetAWSCredentials()
+ void STSProfileCredentialsProvider::RefreshIfExpired()
+ {
+     Utils::Threading::ReaderLockGuard guard(m_reloadLock);
+-    if (!IsTimeToRefresh(static_cast<long>(m_reloadFrequency.count())) || !m_credentials.IsExpiredOrEmpty())
++    if (!IsTimeToRefresh(static_cast<long>(m_reloadFrequency.count())) && !m_credentials.IsExpiredOrEmpty())
+     {
++       AWS_LOGSTREAM_INFO(CLASS_TAG, "RefreshIfExpired return IsTimeToRefresh " << IsTimeToRefresh(static_cast<long>(m_reloadFrequency.count())) << " ; IsExpiredOrEmpty " << m_credentials.IsExpiredOrEmpty() );
+        return;
+     }
++    AWS_LOGSTREAM_INFO(CLASS_TAG, "RefreshIfExpired need to Reload IsTimeToRefresh " << IsTimeToRefresh(static_cast<long>(m_reloadFrequency.count())) << " ; IsExpiredOrEmpty " << m_credentials.IsExpiredOrEmpty() );
+ 
+     guard.UpgradeToWriterLock();
+-    if (!IsTimeToRefresh(static_cast<long>(m_reloadFrequency.count())) || !m_credentials.IsExpiredOrEmpty()) // double-checked lock to avoid refreshing twice
++    if (!IsTimeToRefresh(static_cast<long>(m_reloadFrequency.count())) && !m_credentials.IsExpiredOrEmpty()) // double-checked lock to avoid refreshing twice
+     {
++        AWS_LOGSTREAM_INFO(CLASS_TAG, "RefreshIfExpired return IsTimeToRefresh " << IsTimeToRefresh(static_cast<long>(m_reloadFrequency.count())) << " ; IsExpiredOrEmpty " << m_credentials.IsExpiredOrEmpty() );
+         return;
+     }
++    AWS_LOGSTREAM_INFO(CLASS_TAG, "RefreshIfExpired need to Reload IsTimeToRefresh " << IsTimeToRefresh(static_cast<long>(m_reloadFrequency.count())) << " ; IsExpiredOrEmpty " << m_credentials.IsExpiredOrEmpty() );
+ 
+     Reload();
+ }

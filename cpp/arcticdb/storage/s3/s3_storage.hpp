@@ -211,6 +211,7 @@ inline std::optional<Aws::Utils::Array<Aws::String>> parse_no_proxy_env_var(cons
  * */
 inline Aws::Client::ClientConfiguration get_proxy_config(Aws::Http::Scheme endpoint_scheme) {
     // The ordering in the vectors matter, lowercase should be checked in preference of upper case.
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Call get_proxy_config");
     const std::unordered_map<Aws::Http::Scheme, std::vector<std::string>> scheme_env_var_names {
         {Aws::Http::Scheme::HTTP, {"http_proxy", "HTTP_PROXY"}},
         {Aws::Http::Scheme::HTTPS, {"https_proxy", "HTTPS_PROXY"}}

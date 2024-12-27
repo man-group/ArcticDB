@@ -67,6 +67,7 @@ inline std::optional<AtomKey> read_segment_with_keys(
     const SegmentInMemory &seg,
     VersionMapEntry &entry,
     LoadProgress& load_progress) {
+    ARCTICDB_DEBUG(log::version(), "read_segment_with_keys");
     ssize_t row = 0;
     std::optional<AtomKey> next;
     VersionId oldest_loaded_index = std::numeric_limits<VersionId>::max();
@@ -182,11 +183,16 @@ inline void read_symbol_ref(const std::shared_ptr<StreamSource>& store, const St
     } catch (const storage::KeyNotFoundException&) {
         try {
             key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION, true});
+            log::version().warn(
+                    "read_symbol_ref KeyNotFoundException for stream_id {} retrying", stream_id);
         } catch (const storage::KeyNotFoundException&) {
+            log::version().warn(
+                    "read_symbol_ref KeyNotFoundException for stream_id {}", stream_id);
             return;
         }
     }
 
+    ARCTICDB_DEBUG(log::version(), "read_symbol_ref read_sync done for stream {}", stream_id);
     LoadProgress load_progress;
     entry.head_ = read_segment_with_keys(key_seg_pair.second, entry, load_progress);
     entry.load_progress_ = load_progress;
