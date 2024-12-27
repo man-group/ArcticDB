@@ -41,6 +41,7 @@ from arcticdb.storage_fixtures.s3 import (
 from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb_ext.storage import NativeVariantStorage
+from arcticdb_ext import set_config_int, get_config_int
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
 from arcticdb.arctic import Arctic
@@ -247,6 +248,7 @@ def real_s3_sts_storage_factory():
     role_name = os.getenv("ARCTICDB_REAL_S3_STS_TEST_ROLE", f"gh_sts_test_role_{sts_test_credentials_prefix}")
     policy_name = os.getenv("ARCTICDB_REAL_S3_STS_TEST_POLICY_NAME", f"gh_sts_test_policy_name_{sts_test_credentials_prefix}")
     profile_name = "sts_test_profile"
+    set_config_int("S3Storage.STSTokenExpiryMin", 15)
     try:
         f = real_s3_sts_from_environment_variables(
             user_name=username, 
