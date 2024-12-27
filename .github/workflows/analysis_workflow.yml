@@ -49,7 +49,7 @@ jobs:
       commit: ${{ matrix.commits }}
       run_all_benchmarks: ${{ inputs.run_all_benchmarks || false }}
       run_on_pr_head: ${{ github.event_name == 'pull_request_target' }}
-      dev_image_tag: ${{ inputs.dev_image_tag }}
+      dev_image_tag: ${{ inputs.dev_image_tag || 'latest' }}
 
   publish_benchmark_results_to_gh_pages:  
     name: Publish benchmark results to gh-pages
