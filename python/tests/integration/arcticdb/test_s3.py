@@ -6,6 +6,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import re
+import time
+from multiprocessing import Queue, Process
 
 import pytest
 import pandas as pd
@@ -76,6 +78,50 @@ def test_nfs_backed_s3_storage(lib_name, nfs_backed_s3_storage):
 
     for o in objects:
         assert re.match(bucketized_pattern, o.key), f"Object {o.key} does not match pattern {bucketized_pattern}"
+
+
+def read_repeatedly(version_store, queue: Queue):
+    while True:
+        try:
+            version_store.list_versions("tst")
+        except Exception as e:
+            queue.put(e)
+            raise
+        time.sleep(0.1)
+
+
+def write_repeatedly(version_store):
+    while True:
+        for i in range(10):
+            version_store.snapshot(f"snap-{i}")
+        for i in range(10):
+            version_store.delete_snapshot(f"snap-{i}")
+        time.sleep(0.1)
+
+
+def test_racing_list_and_delete_nfs(nfs_backed_s3_storage, lib_name):
+    """This test is for a regression with NFS where iterating snapshots raced with
+    deleting them, due to a bug in our logic to suppress the KeyNotFoundException."""
+    lib = nfs_backed_s3_storage.create_version_store_factory(lib_name)()
+    lib.write("tst", [1, 2, 3])
+
+    exceptions_in_reader = Queue()
+    reader = Process(target=read_repeatedly, args=(lib, exceptions_in_reader))
+    writer = Process(target=write_repeatedly, args=(lib,))
+
+    try:
+        reader.start()
+        writer.start()
+
+        # Run test for 2 seconds - this was enough for this regression test to reliably fail
+        # 10 times in a row.
+        reader.join(2)
+        writer.join(0.001)
+    finally:
+        writer.terminate()
+        reader.terminate()
+
+    assert exceptions_in_reader.empty()
 
 
 @pytest.fixture(scope="function", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])

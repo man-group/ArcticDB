@@ -1,0 +1,43 @@
+name: Docker Image for Development
+on:
+  # should support manual trigger and PRs to the Dockerfile
+  push:
+    paths:
+      - 'docker/**'
+      - '.github/workflows/dev_docker_image.yml'
+  workflow_dispatch:
+
+jobs:
+  build_and_push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3.3.0
+
+      - name: Choose image tag
+        run: |
+          sha=$(git rev-parse --short HEAD)
+          image_ver="$(date '+%Y%m%d')-${sha}"
+          image_name="ghcr.io/man-group/arcticdb-dev"
+          echo -e "image_ver=$image_ver\nimage_name=$image_name\noutput_tag=$image_name:$image_ver" | tee -a $GITHUB_ENV
+
+      - name: Build Docker image
+        run: |
+          docker build -t $image_name . -f docker/Dockerfile
+
+      - name: Login to GHCR
+        run: docker login ghcr.io -u token -p "${{secrets.GITHUB_TOKEN}}"
+
+      - name: Publish Docker versioned image to GHCR
+        run: |
+          docker tag $image_name $image_name:$image_ver
+          docker push $image_name:$image_ver
+
+      - name: Publish Docker image to GHCR as latest
+        if: github.ref == 'refs/heads/master'
+        run: |
+          docker tag $image_name $image_name:latest
+          docker push $image_name:latest
