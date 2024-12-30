@@ -237,7 +237,9 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
         b.slow_cleanup(failure_consequence="We will be charged unless we manually delete it. ")
 
 
-def real_s3_from_environment_variables(shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""):
+def real_s3_from_environment_variables(shared_path: bool, 
+                                       native_config: Optional[NativeVariantStorage] = None, 
+                                       additional_suffix: str = "") -> BaseS3StorageFixtureFactory:
     out = BaseS3StorageFixtureFactory(native_config=native_config)
     out.endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
     out.region = os.getenv("ARCTICDB_REAL_S3_REGION")
@@ -254,7 +256,12 @@ def real_s3_from_environment_variables(shared_path: bool, native_config: Optiona
     return out
 
 
-def real_s3_sts_from_environment_variables(user_name: str, role_name: str, policy_name: str, profile_name: str, native_config: NativeVariantStorage, additional_suffix: str):
+def real_s3_sts_from_environment_variables(user_name: str, 
+                                           role_name: str, 
+                                           policy_name: str, 
+                                           profile_name: str, 
+                                           native_config: NativeVariantStorage, 
+                                           additional_suffix: str) -> BaseS3StorageFixtureFactory:
     out = real_s3_from_environment_variables(False, native_config, additional_suffix)
     iam_client = boto3.client("iam", aws_access_key_id=out.default_key.id, aws_secret_access_key=out.default_key.secret)
     # Create IAM user
@@ -370,6 +377,7 @@ def real_s3_sts_from_environment_variables(user_name: str, role_name: str, polic
 
     try:
         access_key_response = iam_client.create_access_key(UserName=user_name)
+        logger.info(f"Response access key: {access_key_response}")
         out.sts_test_key.id = access_key_response["AccessKey"]["AccessKeyId"]
         out.sts_test_key.secret = access_key_response["AccessKey"]["SecretAccessKey"]
         logger.info("Access key created successfully.")
