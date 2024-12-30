@@ -267,13 +267,13 @@ def real_s3_sts_from_environment_variables(user_name: str,
     # Create IAM user
     try:
         iam_client.create_user(UserName=user_name)
-        out.sts_test_key = Key(id=None, secret=None, user_name=user_name)
         logger.info(f"User created successfully: {user_name}")
     except iam_client.exceptions.EntityAlreadyExistsException:
         logger.warn(f"User already exists: {user_name}")
     except Exception as e:
         logger.error(f"Error creating user: {e}")
         raise e
+    out.sts_test_key = Key(id=None, secret=None, user_name=user_name)
 
     account_id = boto3.client("sts", aws_access_key_id=out.default_key.id, aws_secret_access_key=out.default_key.secret).get_caller_identity().get("Account")
     logger.info(f"Account id: {account_id}")
