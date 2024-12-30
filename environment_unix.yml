@@ -55,7 +55,7 @@ dependencies:
   - libarrow
   # Python dependences
   # Python 3.13+ is not yet supported
-  - python <=3.12
+  - python <3.13
   - packaging
   - numpy
   - pandas
