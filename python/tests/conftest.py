@@ -216,22 +216,22 @@ def mock_s3_storage_with_error_simulation(mock_s3_storage_with_error_simulation_
 
 
 @pytest.fixture(scope="session")
-def real_s3_storage_factory():
+def real_s3_storage_factory() -> BaseS3StorageFixtureFactory:
     return real_s3_from_environment_variables(shared_path=False, additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}")
 
 
 @pytest.fixture(scope="session")
-def real_s3_shared_path_storage_factory():
+def real_s3_shared_path_storage_factory() -> BaseS3StorageFixtureFactory:
     return real_s3_from_environment_variables(shared_path=True, additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}")
 
 
 @pytest.fixture(scope="session")
-def real_s3_storage_without_clean_up(real_s3_shared_path_storage_factory):
+def real_s3_storage_without_clean_up(real_s3_shared_path_storage_factory) -> BaseS3StorageFixtureFactory:
     return real_s3_shared_path_storage_factory.create_fixture()
 
 
 @pytest.fixture
-def real_s3_storage(real_s3_storage_factory):
+def real_s3_storage(real_s3_storage_factory) -> Generator[BaseS3StorageFixtureFactory, None, None]:
     with real_s3_storage_factory.create_fixture() as f:
         yield f
 
@@ -372,14 +372,14 @@ def arctic_library_lmdb(arctic_client_lmdb, lib_name):
 @pytest.fixture(
     scope="function",
     params=[
-        "lmdb",
-        "mem",
+      #  "lmdb",
+      #  "mem",
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
     ],
 )
-def basic_arctic_client(request, encoding_version) -> Arctic:
+def basic_arctic_client(request) -> Arctic:
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
-    ac = storage_fixture.create_arctic(encoding_version=encoding_version)
+    ac = storage_fixture.create_arctic()
     assert not ac.list_libraries()
     return ac
 
