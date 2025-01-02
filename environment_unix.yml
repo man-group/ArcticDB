@@ -30,7 +30,6 @@ dependencies:
   - cyrus-sasl
   - aws-sdk-cpp >=1.11.405
   - prometheus-cpp
-  - libabseil <20240722.0
   - libprotobuf
   - openssl
   - libcurl
