@@ -8,24 +8,9 @@
 #pragma once
 
 #include <variant>
-
-#include <folly/futures/Future.h>
-#include <boost/noncopyable.hpp>
-
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/stream/index.hpp>
-#include <arcticdb/entity/protobufs.hpp>
-#include <pybind11/pybind11.h>
-
-#include <arcticdb/stream/stream_sink.hpp>
-#include <arcticdb/stream/stream_source.hpp>
-#include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
-#include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/util/bitset.hpp>
-#include <arcticdb/util/constructors.hpp>
-#include <folly/executors/FutureExecutor.h>
-#include <folly/executors/CPUThreadPoolExecutor.h>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/python_output_frame.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -61,21 +46,24 @@ void foreach_active_bit(const util::BitSet &bs, C &&visitor) {
     }
 }
 
-inline std::vector<SliceAndKey> filter_index(const index::IndexSegmentReader& container, std::optional<CombinedQuery<index::IndexSegmentReader>> &&query) {
+inline std::vector<SliceAndKey> filter_index(
+    const index::IndexSegmentReader& index_segment_reader,
+    std::optional<CombinedQuery<index::IndexSegmentReader>> &&query
+) {
     ARCTICDB_SAMPLE_DEFAULT(FilterIndex)
     std::vector<SliceAndKey> output{};
-    if (container.size()> 0) {
+    if (!index_segment_reader.empty()) {
         if(query) {
-            auto row_bitset = (*query)(container);
+            auto row_bitset = (*query)(index_segment_reader);
             ARCTICDB_DEBUG(log::version(), "Row bitset has {} bits set of {}", row_bitset->count(), row_bitset->size());
             output.reserve(row_bitset->count());
             foreach_active_bit(*row_bitset, [&](auto r) {
-                output.emplace_back(get_row(container, r));
+                output.emplace_back(get_row(index_segment_reader, r));
             });
         } else {
-            output.reserve(container.size());
-            for(auto i = 0u; i < container.size(); ++i) {
-                output.emplace_back(get_row(container, i));
+            output.reserve(index_segment_reader.size());
+            for(auto i = 0u; i < index_segment_reader.size(); ++i) {
+                output.emplace_back(get_row(index_segment_reader, i));
             }
         }
     }

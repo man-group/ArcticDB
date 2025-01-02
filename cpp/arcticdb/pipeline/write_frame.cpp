@@ -259,13 +259,18 @@ folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
         VersionId version_id,
         AffectedSegmentPart affected_part,
         const std::shared_ptr<Store>& store) {
-    return store->read(existing.key()).thenValue([=](std::pair<VariantKey, SegmentInMemory>&& key_segment) {
+    return store->read(existing.key()).thenValueInline([
+        existing,
+        index_range,
+        version_id,
+        affected_part,
+        store](std::pair<VariantKey, SegmentInMemory>&& key_segment) -> folly::Future<std::optional<SliceAndKey>> {
         const auto& key = existing.key();
         const SegmentInMemory& segment = key_segment.second;
         const RowRange affected_row_range = partial_rewrite_row_range(segment, index_range, affected_part);
         const int64_t num_rows = affected_row_range.end() - affected_row_range.start();
         if (num_rows <= 0) {
-            return folly::Future<std::optional<SliceAndKey>>{std::nullopt};
+            return std::nullopt;
         }
         SegmentInMemory output = segment.truncate(affected_row_range.start(), affected_row_range.end(), true);
         const IndexValue start_ts = TimeseriesIndex::start_value_for_segment(output);
@@ -305,7 +310,7 @@ std::vector<SliceAndKey> flatten_and_fix_rows(const std::array<std::vector<Slice
 
         ranges::transform(group, std::back_inserter(output), [&](SliceAndKey sk) {
             auto range_start = global_count + (sk.slice_.row_range.first - group_start);
-            sk.slice_.row_range = RowRange{range_start, range_start + (sk.slice_.row_range.diff())};
+            sk.slice_.row_range = RowRange{range_start, range_start + sk.slice_.row_range.diff()};
             return sk;
         });
 

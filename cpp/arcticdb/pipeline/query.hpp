@@ -10,15 +10,10 @@
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/processing/expression_context.hpp>
-#include <arcticdb/entity/versioned_item.hpp>
-#include <arcticdb/pipeline/python_output_frame.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/util/constructors.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
-#include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/util/simple_string_hash.hpp>
@@ -28,8 +23,11 @@
 #include <vector>
 #include <string>
 #include <variant>
+#include <ranges>
 
 namespace arcticdb::pipelines {
+
+namespace ranges = std::ranges;
 
 using FilterRange = std::variant<std::monostate, IndexRange, RowRange>;
 
@@ -405,20 +403,18 @@ inline FilterRange get_query_index_range(
                return RowRange{std::get<NumericIndex>(index_range.start_), std::get<NumericIndex>(index_range.end_)};
 }
 
-inline std::vector<SliceAndKey> strictly_before(const FilterRange &range, const std::vector<SliceAndKey> &input) {
+inline std::vector<SliceAndKey> strictly_before(const FilterRange &range, std::span<const SliceAndKey> input) {
     std::vector<SliceAndKey> output;
     util::variant_match(range,
                         [&](const RowRange &row_range) {
-                            std::copy_if(std::begin(input), std::end(input), std::back_inserter(output),
-                                         [&](const auto &sk) {
-                                             return sk.slice_.row_range.second < row_range.first;
-                                         });
+                            ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
+                                return sk.slice_.row_range.second < row_range.first;
+                            });
                         },
                         [&](const IndexRange &index_range) {
-                            std::copy_if(std::begin(input), std::end(input), std::back_inserter(output),
-                                         [&](const auto &sk) {
-                                             return sk.key().index_range().end_ < index_range.start_;
-                                         });
+                            ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
+                                return sk.key().index_range().end_ < index_range.start_;
+                            });
                         },
                         [&](const auto &) {
                             util::raise_rte("Expected specified range ");
@@ -426,20 +422,18 @@ inline std::vector<SliceAndKey> strictly_before(const FilterRange &range, const 
     return output;
 }
 
-inline std::vector<SliceAndKey> strictly_after(const FilterRange &range, const std::vector<SliceAndKey> &input) {
+inline std::vector<SliceAndKey> strictly_after(const FilterRange &range, std::span<const SliceAndKey> input) {
     std::vector<SliceAndKey> output;
     util::variant_match(range,
                         [&input, &output](const RowRange &row_range) {
-                            std::copy_if(std::begin(input), std::end(input), std::back_inserter(output),
-                                         [&](const auto &sk) {
-                                             return sk.slice_.row_range.first > row_range.second;
-                                         });
+                            ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
+                                return sk.slice_.row_range.first > row_range.second;
+                            });
                         },
                         [&input, &output](const IndexRange &index_range) {
-                            std::copy_if(std::begin(input), std::end(input), std::back_inserter(output),
-                                         [&](const auto &sk) {
-                                             return sk.key().index_range().start_ > index_range.end_;
-                                         });
+                            ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
+                                return sk.key().index_range().start_ > index_range.end_;
+                            });
                         },
                         [](const auto &) {
                             util::raise_rte("Expected specified range ");
