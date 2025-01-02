@@ -452,7 +452,7 @@ TEST(VersionStore, AppendRefKeyOptimisation) {
     size_t num_rows{5};
     size_t start_val{0};
 
-    std::vector<FieldRef> fields{
+    const std::array fields{
         scalar_field(DataType::UINT8, "thing1"),
         scalar_field(DataType::UINT8, "thing2"),
         scalar_field(DataType::UINT16, "thing3"),
@@ -512,24 +512,24 @@ TEST(VersionStore, UpdateWithin) {
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0);
 
     PilotedClock::reset();
-    StreamId symbol("update_schema");
+    const StreamId symbol("update_schema");
     auto version_store = get_test_engine();
-    size_t num_rows{100};
-    size_t start_val{0};
+    constexpr size_t num_rows{100};
+    constexpr size_t start_val{0};
 
-    std::vector<FieldRef> fields{
+    const std::array fields{
         scalar_field(DataType::UINT8, "thing1"),
         scalar_field(DataType::UINT8, "thing2"),
         scalar_field(DataType::UINT16, "thing3"),
         scalar_field(DataType::UINT16, "thing4")
     };
 
-    auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
+    auto test_frame =  get_test_frame<TimeseriesIndex>(symbol, fields, num_rows, start_val);
     version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
-    RowRange update_range{10, 15};
-    size_t update_val{1};
-    auto update_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
+    constexpr RowRange update_range{10, 15};
+    constexpr size_t update_val{100};
+    auto update_frame =  get_test_frame<TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     auto read_query = std::make_shared<ReadQuery>();
@@ -539,12 +539,9 @@ TEST(VersionStore, UpdateWithin) {
     const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows; ++i) {
-        auto expected = i;
-        if(update_range.contains(i))
-            expected += update_val;
-
-        auto val1 = seg.scalar_at<uint8_t>(i, 1);
-        ASSERT_EQ(val1.value(), expected);
+        const uint8_t expected = update_range.contains(i) ? i + update_val : i;
+        const auto value = seg.scalar_at<uint8_t>(i, 1).value();
+        EXPECT_EQ(expected, value);
     }
 }
 
@@ -555,12 +552,12 @@ TEST(VersionStore, UpdateBefore) {
     using namespace arcticdb::pipelines;
 
     PilotedClock::reset();
-    StreamId symbol("update_schema");
+    const StreamId symbol("update_schema");
     auto version_store = get_test_engine();
-    size_t num_rows{100};
-    size_t start_val{10};
+    constexpr size_t num_rows{100};
+    constexpr size_t start_val{10};
 
-    std::vector<FieldRef> fields{
+    const std::array fields{
         scalar_field(DataType::UINT8, "thing1"),
         scalar_field(DataType::UINT8, "thing2"),
         scalar_field(DataType::UINT16, "thing3"),
@@ -570,8 +567,8 @@ TEST(VersionStore, UpdateBefore) {
     auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
     version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
-    RowRange update_range{0, 10};
-    size_t update_val{1};
+    constexpr RowRange update_range{0, 10};
+    constexpr size_t update_val{1};
     auto update_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
@@ -582,12 +579,9 @@ TEST(VersionStore, UpdateBefore) {
     const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows + update_range.diff(); ++i) {
-        auto expected = i;
-        if(update_range.contains(i))
-            expected += update_val;
-
-        auto val1 = seg.scalar_at<uint8_t >(i, 1);
-        ASSERT_EQ(val1.value(), expected);
+        const auto expected = update_range.contains(i) ? i + update_val : i;
+        const auto value = seg.scalar_at<uint8_t >(i, 1).value();
+        ASSERT_EQ(value, expected);
     }
 }
 
@@ -598,12 +592,12 @@ TEST(VersionStore, UpdateAfter) {
     using namespace arcticdb::pipelines;
 
     PilotedClock::reset();
-    StreamId symbol("update_schema");
+    const StreamId symbol("update_schema");
     auto version_store = get_test_engine();
-    size_t num_rows{100};
-    size_t start_val{0};
+    constexpr size_t num_rows{100};
+    constexpr size_t start_val{0};
 
-    std::vector<FieldRef> fields{
+    const std::array fields{
         scalar_field(DataType::UINT8, "thing1"),
         scalar_field(DataType::UINT8, "thing2"),
         scalar_field(DataType::UINT16, "thing3"),
@@ -613,8 +607,8 @@ TEST(VersionStore, UpdateAfter) {
     auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
     version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
-    RowRange update_range{100, 110};
-    size_t update_val{1};
+    constexpr RowRange update_range{100, 110};
+    constexpr size_t update_val{1};
     auto update_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
@@ -625,12 +619,9 @@ TEST(VersionStore, UpdateAfter) {
     const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows + update_range.diff(); ++i) {
-        auto expected = i;
-        if(update_range.contains(i))
-            expected += update_val;
-
-        auto val1 = seg.scalar_at<uint8_t>(i, 1);
-        ASSERT_EQ(val1.value(), expected);
+        const auto expected = update_range.contains(i) ? i + update_val : i;
+        const auto value = seg.scalar_at<uint8_t>(i, 1).value();
+        ASSERT_EQ(value, expected);
     }
 }
 
@@ -641,12 +632,12 @@ TEST(VersionStore, UpdateIntersectBefore) {
     using namespace arcticdb::pipelines;
 
     PilotedClock::reset();
-    StreamId symbol("update_schema");
+    const StreamId symbol("update_schema");
     auto version_store = get_test_engine();
-    size_t num_rows{100};
-    size_t start_val{5};
+    constexpr size_t num_rows{100};
+    constexpr size_t start_val{5};
 
-    std::vector<FieldRef> fields{
+    const std::array fields{
         scalar_field(DataType::UINT8, "thing1"),
         scalar_field(DataType::UINT8, "thing2"),
         scalar_field(DataType::UINT16, "thing3"),
@@ -656,8 +647,8 @@ TEST(VersionStore, UpdateIntersectBefore) {
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
     version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
-    RowRange update_range{0, 10};
-    size_t update_val{1};
+    constexpr RowRange update_range{0, 10};
+    constexpr size_t update_val{1};
     auto update_frame =
         get_test_frame<stream::TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
@@ -669,12 +660,9 @@ TEST(VersionStore, UpdateIntersectBefore) {
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
-        auto expected = i;
-        if (update_range.contains(i))
-            expected += update_val;
-
-        auto val1 = seg.scalar_at<uint8_t>(i, 1);
-        ASSERT_EQ(val1.value(), expected);
+        const auto expected = update_range.contains(i) ? i + update_val : i;
+        const auto value = seg.scalar_at<uint8_t>(i, 1).value();
+        ASSERT_EQ(value, expected);
     }
 }
 
@@ -685,12 +673,12 @@ TEST(VersionStore, UpdateIntersectAfter) {
     using namespace arcticdb::pipelines;
 
     PilotedClock::reset();
-    StreamId symbol("update_schema");
+    const StreamId symbol("update_schema");
     auto version_store = get_test_engine();
-    size_t num_rows{100};
-    size_t start_val{0};
+    constexpr size_t num_rows{100};
+    constexpr size_t start_val{0};
 
-    std::vector<FieldRef> fields{
+    const std::array fields{
         scalar_field(DataType::UINT8, "thing1"),
         scalar_field(DataType::UINT8, "thing2"),
         scalar_field(DataType::UINT16, "thing3"),
@@ -700,8 +688,8 @@ TEST(VersionStore, UpdateIntersectAfter) {
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
     version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
-    RowRange update_range{95, 105};
-    size_t update_val{1};
+    constexpr RowRange update_range{95, 105};
+    constexpr size_t update_val{1};
     auto update_frame =
         get_test_frame<stream::TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
@@ -713,12 +701,9 @@ TEST(VersionStore, UpdateIntersectAfter) {
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
-        auto expected = i;
-        if (update_range.contains(i))
-            expected += update_val;
-
-        auto val1 = seg.scalar_at<uint8_t>(i, 1);
-        ASSERT_EQ(val1.value(), expected);
+        const auto expected = update_range.contains(i) ? i + update_val : i;
+        const auto value = seg.scalar_at<uint8_t>(i, 1).value();
+        ASSERT_EQ(value, expected);
     }
 }
 
@@ -729,12 +714,12 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     using namespace arcticdb::pipelines;
 
     PilotedClock::reset();
-    StreamId symbol("update_schema");
+    const StreamId symbol("update_schema");
     auto version_store = get_test_engine();
-    size_t num_rows{100};
-    size_t start_val{0};
+    constexpr size_t num_rows{100};
+    constexpr size_t start_val{0};
 
-    std::vector<FieldRef> fields{
+    const std::array fields{
         scalar_field(DataType::UINT8, "thing1"),
         scalar_field(DataType::UINT8, "thing2"),
         scalar_field(DataType::UINT16, "thing3"),
@@ -745,10 +730,10 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     version_store.
         write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
-    RowRange update_range{10, 15};
-    size_t update_val{1};
+    constexpr RowRange update_range{10, 15};
+    constexpr size_t update_val{1};
 
-    std::vector<FieldRef> update_fields{
+    const std::array update_fields{
         scalar_field(DataType::UINT8, "thing1"),
         scalar_field(DataType::UINT8, "thing2"),
         scalar_field(DataType::UINT16, "thing3"),
@@ -767,20 +752,17 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u;i < num_rows; ++i) {
-        auto expected = i;
-        if (update_range.contains(i))
-            expected += update_val;
-
-        auto val1 = seg.scalar_at<uint8_t>(i, 1);
-        check_value(val1.value(), expected);
+        auto expected = update_range.contains(i) ? i + update_val : i;
+        const auto val1 = seg.scalar_at<uint8_t>(i, 1).value();
+        check_value(val1, expected);
 
         expected = update_range.contains(i) ? 0 : i;
-        auto val2 = seg.scalar_at<uint16_t>(i, 4);
-        check_value(val2.value(), expected);
+        const auto val2 = seg.scalar_at<uint16_t>(i, 4).value();
+        check_value(val2, expected);
 
         expected = !update_range.contains(i) ? 0 : i + update_val;
-        auto val3 = seg.scalar_at<uint16_t>(i, 5);
-        check_value(val3.value(), expected);
+        const auto val3 = seg.scalar_at<uint16_t>(i, 5).value();
+        check_value(val3, expected);
     }
 }
 
@@ -791,14 +773,14 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     using namespace arcticdb::pipelines;
 
     PilotedClock::reset();
-    StreamId symbol("update_schema");
+    const StreamId symbol("update_schema");
     arcticdb::proto::storage::VersionStoreConfig version_store_cfg;
     version_store_cfg.mutable_write_options()->set_dynamic_schema(true);
     auto version_store = get_test_engine({version_store_cfg});
-    size_t num_rows{100};
-    size_t start_val{0};
+    constexpr size_t num_rows{100};
+    constexpr size_t start_val{0};
 
-    std::vector<FieldRef> fields{
+    const std::array fields{
         scalar_field(DataType::UINT8, "thing1"),
         scalar_field(DataType::UINT8, "thing2"),
         scalar_field(DataType::UINT16, "thing3"),
@@ -808,10 +790,10 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
     version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
-    RowRange update_range{10, 15};
-    size_t update_val{1};
+    constexpr RowRange update_range{10, 15};
+    constexpr size_t update_val{1};
 
-    std::vector<FieldRef> update_fields{
+    const std::array update_fields{
         scalar_field(DataType::UINT8, "thing1"),
         scalar_field(DataType::UINT16, "thing2"),
         scalar_field(DataType::UINT32, "thing3"),
@@ -830,20 +812,17 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u;i < num_rows; ++i) {
-        auto expected = i;
-        if (update_range.contains(i))
-            expected += update_val;
-
-        auto val1 = seg.scalar_at<uint8_t>(i, 1);
-        check_value(val1.value(), expected);
+        auto expected = update_range.contains(i) ? i + update_val : i;
+        const auto val1 = seg.scalar_at<uint8_t>(i, 1).value();
+        check_value(val1, expected);
 
         expected = update_range.contains(i) ? 0 : i;
-        auto val2 = seg.scalar_at<uint16_t>(i, 4);
-        check_value(val2.value(), expected);
+        const auto val2 = seg.scalar_at<uint16_t>(i, 4).value();
+        check_value(val2, expected);
 
         expected = !update_range.contains(i) ? 0 : i + update_val;
-        auto val3 = seg.scalar_at<uint32_t>(i, 5);
-        check_value(val3.value(), expected);
+        const auto val3 = seg.scalar_at<uint32_t>(i, 5).value();
+        check_value(val3, expected);
     }
 }
 
@@ -855,11 +834,11 @@ TEST(VersionStore, TestWriteAppendMapHead) {
     using namespace arcticdb::pipelines;
 
     PilotedClock::reset();
-    StreamId symbol("append");
+    const StreamId symbol("append");
     auto version_store = get_test_engine();
-    size_t num_rows{100};
+    constexpr size_t num_rows{100};
 
-    std::vector<FieldRef> fields{
+    const std::array fields{
         scalar_field(DataType::UINT8, "thing1"),
         scalar_field(DataType::UINT8, "thing2"),
         scalar_field(DataType::UINT16, "thing3"),
