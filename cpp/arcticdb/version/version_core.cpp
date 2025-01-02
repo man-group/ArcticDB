@@ -330,20 +330,20 @@ struct UpdateRanges {
     IndexRange original_index_range;
 };
 
-static UpdateRanges compute_update_ranges(const FilterRange& row_filter, const InputTensorFrame* update_frame, std::span<SliceAndKey> update_slice_and_keys) {
+static UpdateRanges compute_update_ranges(const FilterRange& row_filter, const InputTensorFrame& update_frame, std::span<SliceAndKey> update_slice_and_keys) {
     return util::variant_match(row_filter,
         [&](std::monostate) -> UpdateRanges {
-            util::check(std::holds_alternative<TimeseriesIndex>(update_frame->index), "Update with row count index is not permitted");
+            util::check(std::holds_alternative<TimeseriesIndex>(update_frame.index), "Update with row count index is not permitted");
             if (update_slice_and_keys.empty()) {
                 // If there are no new keys, then we can't intersect with the existing data.
-                return UpdateRanges{{}, {}, update_frame->index_range};
+                return UpdateRanges{{}, {}, update_frame.index_range};
             }
             IndexRange back_range = update_slice_and_keys.back().key().index_range();
             back_range.adjust_open_closed_interval();
             return UpdateRanges{
                 update_slice_and_keys.front().key().index_range(),
                 std::move(back_range),
-                update_frame->index_range};
+                update_frame.index_range};
         },
         [&](const IndexRange& idx_range) {
             return UpdateRanges{idx_range, idx_range, idx_range};
@@ -356,7 +356,7 @@ static UpdateRanges compute_update_ranges(const FilterRange& row_filter, const I
 }
 
 static void check_can_update(
-    const InputTensorFrame* frame,
+    const InputTensorFrame& frame,
     const index::IndexSegmentReader& index_segment_reader,
     const UpdateInfo& update_info,
     bool dynamic_schema,
@@ -364,23 +364,23 @@ static void check_can_update(
 ) {
     util::check(update_info.previous_index_key_.has_value(), "Cannot update as there is no previous index key to update into");
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot update pickled data");
-    const auto index_desc = check_index_match(frame->index, index_segment_reader.tsd().index());
+    const auto index_desc = check_index_match(frame.index, index_segment_reader.tsd().index());
     util::check(index::is_timeseries_index(index_desc), "Update not supported for non-timeseries indexes");
-    check_update_data_is_sorted(*frame, index_segment_reader);
+    check_update_data_is_sorted(frame, index_segment_reader);
     (void)check_and_mark_slices(index_segment_reader, dynamic_schema, false, std::nullopt, index_segment_reader.bucketize_dynamic());
-    fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, *frame, empty_types);
+    fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, frame, empty_types);
 }
 
 static std::vector<SliceAndKey> get_keys_affected_by_update(
     const index::IndexSegmentReader& index_segment_reader,
-    const InputTensorFrame* frame,
+    const InputTensorFrame& frame,
     const UpdateQuery& query,
     bool dynamic_schema
 ) {
     std::vector<FilterQuery<index::IndexSegmentReader>> queries = build_update_query_filters<index::IndexSegmentReader>(
     query.row_filter,
-    frame->index,
-    frame->index_range,
+    frame.index,
+    frame.index_range,
     dynamic_schema,
     index_segment_reader.bucketize_dynamic());
     return filter_index(index_segment_reader, combine_filter_functions(queries));
@@ -439,7 +439,7 @@ folly::Future<AtomKey> async_update_impl(
         dynamic_schema,
         empty_types
         ](index::IndexSegmentReader&& index_segment_reader) {
-        check_can_update(frame.get(), index_segment_reader, update_info, dynamic_schema, empty_types);
+        check_can_update(*frame, index_segment_reader, update_info, dynamic_schema, empty_types);
         ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", frame->desc.id(), update_info.previous_index_key_->version_id());
         frame->set_bucketize_dynamic(index_segment_reader.bucketize_dynamic());
         return slice_and_write(frame, get_slicing_policy(options, *frame), IndexPartialKey{frame->desc.id(), update_info.next_version_id_} , store
@@ -452,13 +452,13 @@ folly::Future<AtomKey> async_update_impl(
             index_segment_reader=std::move(index_segment_reader)
         ](std::vector<SliceAndKey>&& new_slice_and_keys) mutable {
             std::sort(std::begin(new_slice_and_keys), std::end(new_slice_and_keys));
-            auto affected_keys = get_keys_affected_by_update(index_segment_reader, frame.get(), query, dynamic_schema);
+            auto affected_keys = get_keys_affected_by_update(index_segment_reader, *frame, query, dynamic_schema);
             auto unaffected_keys = get_keys_not_affected_by_update(index_segment_reader, affected_keys);
             util::check(
                 affected_keys.size() + unaffected_keys.size() == index_segment_reader.size(),
                 "The sum of affected keys and unaffected keys must be equal to the total number of keys {} + {} != {}",
                 affected_keys.size(), unaffected_keys.size(), index_segment_reader.size());
-            const UpdateRanges update_ranges = compute_update_ranges(query.row_filter, frame.get(), new_slice_and_keys);
+            const UpdateRanges update_ranges = compute_update_ranges(query.row_filter, *frame, new_slice_and_keys);
             return async_intersecting_segments(
                 affected_keys,
                 update_ranges.front,
