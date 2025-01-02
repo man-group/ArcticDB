@@ -787,6 +787,19 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
     return res;
 }
 
+std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_update(
+    [[maybe_unused]] const std::vector<StreamId> &stream_ids,
+    [[maybe_unused]] const std::vector<py::tuple> &items,
+    [[maybe_unused]] const std::vector<py::object> &norms,
+    [[maybe_unused]] const std::vector<py::object> &user_metas,
+    [[maybe_unused]] bool prune_previous_versions,
+    [[maybe_unused]] bool validate_index,
+    [[maybe_unused]] bool upsert,
+    [[maybe_unused]] bool throw_on_error
+) {
+    return {};
+}
+
 void PythonVersionStore::delete_snapshot(const SnapshotId& snap_name) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_snapshot");
     auto opt_snapshot =  get_snapshot(store(), snap_name);

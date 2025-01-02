@@ -1139,6 +1139,26 @@ class Library:
             prune_previous_version=prune_previous_versions,
         )
 
+    def update_batch(
+        self,
+        update_payloads: List[WritePayload],
+        prune_previous_versions: bool = False,
+        validate_index: bool =True
+    ) -> List[Union[VersionedItem, DataError]]:
+        self._raise_if_duplicate_symbols_in_batch(update_payloads)
+        self._raise_if_unsupported_type_in_write_batch(update_payloads)
+        throw_on_error = False
+
+        batch_update_result = self._nvs.version_store.batch_update(
+            [p.symbol for p in update_payloads],
+            [p.data for p in update_payloads],
+            [p.metadata for p in update_payloads],
+            prune_previous_version=prune_previous_versions,
+            validate_index=validate_index,
+            throw_on_error=throw_on_error,
+        )
+        return batch_update_result
+
     def delete_staged_data(self, symbol: str):
         """
         Removes staged data.

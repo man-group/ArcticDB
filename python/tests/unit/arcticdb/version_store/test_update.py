@@ -18,6 +18,8 @@ from arcticdb.exceptions import InternalException, SortingException
 from tests.util.date import DateRange
 from pandas import MultiIndex
 
+from arcticdb.version_store.library import WritePayload
+
 
 def test_update_single_dates(lmdb_version_store_dynamic_schema):
     lib = lmdb_version_store_dynamic_schema
@@ -607,3 +609,39 @@ def test_update_not_sorted_range_index_exception(lmdb_version_store):
     assert df.index.is_monotonic_increasing == True
     with pytest.raises(InternalException):
         lmdb_version_store.update(symbol, df)
+
+
+class TestBatchUpdate:
+    def test_update_batch_success(self, lmdb_library):
+        lib = lmdb_library
+
+        initial_data = {
+            "symbol_1": pd.DataFrame({"a": range(20)}, index=pd.date_range("2024-01-01", "2024-01-20")),
+            "symbol_2": pd.DataFrame({"b": range(30, 60)}, index=pd.date_range("2024-02-01", periods=30)),
+            "symbol_3": pd.DataFrame({"c": range(70, 80)}, index=pd.date_range("2024-03-01", periods=10))
+        }
+        for symbol, data in initial_data.items():
+            lib.write(symbol, data)
+
+        batch_update_queries = {
+            "symbol_1": WritePayload("symbol_1", pd.DataFrame({"a": range(0, -5, -1)}, index=pd.date_range("2024-01-10", periods=5))),
+            "symbol_2": WritePayload("symbol_2", pd.DataFrame({"b": range(-10, -20, -1)}, index=pd.date_range("2024-02-05", periods=10, freq='h'))),
+        }
+
+        lib.update_batch(batch_update_queries.values())
+
+        expected = {
+            "symbol_1": pd.concat([
+                pd.DataFrame({"a": range(0, 10)}, pd.date_range("2024-01-01", periods=10)),
+                batch_update_queries["symbol_1"].data,
+                pd.DataFrame({"a": range(15, 20)}, pd.date_range("2024-01-01", periods=5)),
+            ]),
+            "symbol_2": pd.concat([
+                pd.DataFrame({"b": range(30, 34)}, pd.date_range("2024-02-01", "2024-02-04")),
+                batch_update_queries["symbol_2"].data,
+                pd.DataFrame({"b": range(36, 60)}, pd.date_range("2024-03-06", periods=24)),
+            ]),
+            "symbol_3": initial_data["symbol_3"]
+        }
+
+

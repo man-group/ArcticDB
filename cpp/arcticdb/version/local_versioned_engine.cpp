@@ -1390,6 +1390,16 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     return append_versions_or_errors;
 }
 
+std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_update_internal(
+    [[maybe_unused]] const std::vector<StreamId>& stream_ids,
+    [[maybe_unused]] std::vector<std::shared_ptr<InputTensorFrame>>&& frames,
+    [[maybe_unused]] bool prune_previous_versions,
+    [[maybe_unused]] bool validate_index,
+    [[maybe_unused]] bool upsert,
+    [[maybe_unused]] bool throw_on_error) {
+return {};
+}
+
 struct WarnVersionTypeNotHandled {
     bool warned = false;
 

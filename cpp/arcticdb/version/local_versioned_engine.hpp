@@ -22,7 +22,6 @@
 #include <arcticdb/entity/descriptor_item.hpp>
 #include <arcticdb/entity/data_error.hpp>
 
-#include <sstream>
 namespace arcticdb::version_store {
 
 /**
@@ -272,6 +271,14 @@ public:
     std::vector<std::variant<VersionedItem, DataError>> batch_append_internal(
         const std::vector<StreamId>& stream_ids,
         std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
+        bool prune_previous_versions,
+        bool validate_index,
+        bool upsert,
+        bool throw_on_error);
+
+    std::vector<std::variant<VersionedItem, DataError>> batch_update_internal(
+        const std::vector<StreamId>& stream_ids,
+        std::vector<std::shared_ptr<InputTensorFrame>>&& frames,
         bool prune_previous_versions,
         bool validate_index,
         bool upsert,
