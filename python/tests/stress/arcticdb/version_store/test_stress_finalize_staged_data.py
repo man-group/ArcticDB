@@ -20,7 +20,7 @@ from arcticdb.config import set_log_level
 from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
 
 
-from tests.util.mark import SKIP_CONDA_MARK, SLOW_TESTS_MARK
+from tests.util.mark import REAL_S3_TESTS_MARK, SKIP_CONDA_MARK, SLOW_TESTS_MARK
 
 # Uncomment for logging
 # set_log_level(default_level="DEBUG", console_output=False, file_output_path="/tmp/arcticdb.log")
@@ -148,6 +148,7 @@ def test_finalize_monotonic_unique_chunks_lmdb(lmdb_library):
 @SLOW_TESTS_MARK
 @SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
 @pytest.mark.skipif(sys.platform == "win32", reason="Not enough storage on Windows runners")
+@REAL_S3_TESTS_MARK
 def test_finalize_monotonic_unique_chunks_realS3(real_s3_library):
     finalize_monotonic_unique_chunks(real_s3_library, [50, 100, 150, 200])
 
