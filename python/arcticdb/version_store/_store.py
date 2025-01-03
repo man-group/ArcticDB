@@ -1276,7 +1276,7 @@ class NativeVersionStore:
             dynamic_strings: bool,
             pickle_on_failure: bool,
             norm_failure_msg: str,
-    ) -> Tuple[List, List, List]:
+    ) -> Tuple[List, List, List, List]:
         # metadata_vector used to be type-hinted as an Iterable, so handle this case in case anyone is relying on it
         if metadata_vector is None:
             metadata_vector = len(symbols) * [None]
@@ -1302,7 +1302,7 @@ class NativeVersionStore:
             udms.append(udm)
             items.append(item)
             norm_metas.append(norm_meta)
-        return udms, items, norm_metas
+        return udms, items, norm_metas, metadata_vector
 
     def _batch_write_internal(
         self,
@@ -1325,7 +1325,7 @@ class NativeVersionStore:
         )
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
 
-        udms, items, norm_metas = self._generate_batch_vectors_for_modifying_operations(
+        udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
             symbols, data_vector, metadata_vector, dynamic_strings, pickle_on_failure, norm_failure_options_msg)
         cxx_versioned_items = self.version_store.batch_write(
             symbols, items, norm_metas, udms, prune_previous_version, validate_index, throw_on_error
@@ -1463,7 +1463,7 @@ class NativeVersionStore:
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
-        udms, items, norm_metas = self._generate_batch_vectors_for_modifying_operations(
+        udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
             symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_append)
         write_if_missing = kwargs.get("write_if_missing", True)
         cxx_versioned_items = self.version_store.batch_append(
