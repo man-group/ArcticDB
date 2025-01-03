@@ -56,6 +56,19 @@ std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *
     return {ValueType::BYTES, 8, 1};
 }
 
+// Parse an array descriptor into type and elsize
+static std::tuple<char, int> parse_array_descriptor(PyObject* obj) {
+    if (pybind11::detail::npy_api::get().PyArray_RUNTIME_VERSION_ < 0x12) {
+        ARCTICDB_DEBUG(log::version(), "Using numpy 1 API to get array descriptor");
+        auto descr = pybind11::detail::array_descriptor1_proxy(obj);
+        return {descr->kind, descr->elsize};
+    } else {
+        ARCTICDB_DEBUG(log::version(), "Using numpy 2 API to get array descriptor");
+        auto descr = pybind11::detail::array_descriptor2_proxy(obj);
+        return {descr->kind, descr->elsize};
+    }
+}
+
 /// @brief Determine the type for column composed of arrays
 /// In case column is composed of arrays all arrays must have the same element type. This iterates until if finds the
 /// first non-empty array and returns its type.
@@ -71,12 +84,11 @@ std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *
         }
         const auto arr = pybind11::detail::array_proxy(*begin);
         normalization::check<ErrorCode::E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE>(arr->nd == 1, "Only one dimensional arrays are supported in columns.");
-        const auto descr = pybind11::detail::array_descriptor_proxy(arr->descr);
+
         const ssize_t element_count = arr->dimensions[0];
         if(element_count != 0) {
-            ValueType value_type = get_value_type(descr->kind);
-            const uint8_t value_bytes = static_cast<uint8_t>(descr->elsize);
-            return {value_type, value_bytes, 2};
+            const auto [kind, val_bytes] = parse_array_descriptor(arr->descr);
+            return {get_value_type(kind), static_cast<uint8_t>(val_bytes), 2};
         }
         begin++;
     }
@@ -115,14 +127,14 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
     auto& api = pybind11::detail::npy_api::get();
     util::check(api.PyArray_Check_(ptr), "Expected Python array");
     const auto arr = pybind11::detail::array_proxy(ptr);
-    const auto descr = pybind11::detail::array_descriptor_proxy(arr->descr);
+    const auto[kind, elsize] = parse_array_descriptor(arr->descr);
     auto ndim = arr->nd;
     const ssize_t size = ndim == 1 ? arr->dimensions[0] : arr->dimensions[0] * arr->dimensions[1];
     // In Pandas < 2, empty series dtype is `"float"`, but as of Pandas 2.0, empty series dtype is `"object"`
     // The Normalizer in Python cast empty `"float"` series to `"object"` so `EMPTY` is used here.
     // See: https://github.com/man-group/ArcticDB/pull/1049
-    auto val_type = size == 0 && empty_types ? ValueType::EMPTY : get_value_type(descr->kind);
-    auto val_bytes = static_cast<uint8_t>(descr->elsize);
+    auto val_type = size == 0 && empty_types ? ValueType::EMPTY : get_value_type(kind);
+    auto val_bytes = static_cast<uint8_t>(elsize);
     const int64_t element_count = ndim == 1 ? int64_t(arr->dimensions[0]) : int64_t(arr->dimensions[0]) * int64_t(arr->dimensions[1]);
     const auto c_style = arr->strides[0] == val_bytes;
 
@@ -173,7 +185,7 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
                 if(current_object != end)
                     sample = *current_object;
             }
-            if (empty && descr->kind == 'O') {
+            if (empty && kind == 'O') {
                 val_type = empty_types ? ValueType::EMPTY : ValueType::UTF_DYNAMIC;
             } else if(all_nans || is_unicode(sample)){
                 val_type = ValueType::UTF_DYNAMIC;
@@ -194,11 +206,11 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
     // and we can't use `val_bytes` to get this information since some dtype have another `elsize` than 8.
     const SizeBits size_bits = is_empty_type(val_type) ? SizeBits::S64 : get_size_bits(val_bytes);
     const auto dt = combine_data_type(val_type, size_bits);
-    const int64_t nbytes = element_count * descr->elsize;
+    const int64_t nbytes = element_count * elsize;
     const void* data = nbytes ? arr->data : nullptr;
     const std::array<stride_t, 2> strides = {arr->strides[0], arr->nd > 1 ? arr->strides[1] : 0};
     const std::array<shape_t, 2> shapes = {arr->dimensions[0], arr->nd > 1 ? arr->dimensions[1] : 0};
-    return {nbytes, arr->nd, strides.data(), shapes.data(), dt, descr->elsize, data, ndim};
+    return {nbytes, arr->nd, strides.data(), shapes.data(), dt, elsize, data, ndim};
 }
 
 std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
