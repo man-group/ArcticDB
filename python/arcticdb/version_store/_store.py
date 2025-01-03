@@ -896,9 +896,10 @@ class NativeVersionStore:
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
             symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_update)
-        self.version_store.batch_update(
+        cxx_versioned_items = self.version_store.batch_update(
             symbols, items, norm_metas, udms, update_queries, prune_previous_version, upsert
         )
+        return self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
 
     def create_column_stats(
         self, symbol: str, column_stats: Dict[str, Set[str]], as_of: Optional[VersionQueryInput] = None
@@ -1368,13 +1369,7 @@ class NativeVersionStore:
         cxx_versioned_items = self.version_store.batch_write(
             symbols, items, norm_metas, udms, prune_previous_version, validate_index, throw_on_error
         )
-        write_results = []
-        for idx, result in enumerate(cxx_versioned_items):
-            if isinstance(result, DataError):
-                write_results.append(result)
-            else:
-                write_results.append(self._convert_thin_cxx_item_to_python(result, metadata_vector[idx]))
-        return write_results
+        return self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
 
     def _batch_write_metadata_to_versioned_items(
         self, symbols: List[str], metadata_vector: List[Any], prune_previous_version, throw_on_error
@@ -1514,13 +1509,20 @@ class NativeVersionStore:
             write_if_missing,
             throw_on_error,
         )
-        append_results = []
+        return self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
+
+    def _convert_cxx_batch_results_to_python(
+        self,
+        cxx_versioned_items,
+        metadata_vector
+    ):
+        results = []
         for idx, result in enumerate(cxx_versioned_items):
             if isinstance(result, DataError):
-                append_results.append(result)
+                results.append(result)
             else:
-                append_results.append(self._convert_thin_cxx_item_to_python(result, metadata_vector[idx]))
-        return append_results
+                results.append(self._convert_thin_cxx_item_to_python(result, metadata_vector[idx]))
+        return results
 
     def batch_restore_version(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None, **kwargs

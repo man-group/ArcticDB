@@ -17,6 +17,7 @@ from arcticdb.util.test import random_strings_of_length, random_string, random_f
 from arcticdb.exceptions import InternalException, SortingException
 from tests.util.date import DateRange
 from pandas import MultiIndex
+from arcticdb.version_store import VersionedItem
 
 from arcticdb.version_store.library import UpdatePayload
 
@@ -628,20 +629,31 @@ class TestBatchUpdate:
             "symbol_2": UpdatePayload("symbol_2", pd.DataFrame({"b": range(-10, -20, -1)}, index=pd.date_range("2024-02-05", periods=10, freq='h'))),
         }
 
-        lib.update_batch(batch_update_queries.values())
+        result = lib.update_batch(batch_update_queries.values())
+        assert(len(result) == len(batch_update_queries))
+        for i in range(len(result)):
+            versioned_item = result[i]
+            assert (isinstance(versioned_item, VersionedItem))
+            assert versioned_item.symbol == list(batch_update_queries.keys())[i]
 
         expected = {
             "symbol_1": pd.concat([
-                pd.DataFrame({"a": range(0, 10)}, pd.date_range("2024-01-01", periods=10)),
+                pd.DataFrame({"a": range(0, 9)}, pd.date_range("2024-01-01", periods=9)),
                 batch_update_queries["symbol_1"].data,
-                pd.DataFrame({"a": range(15, 20)}, pd.date_range("2024-01-01", periods=5)),
+                pd.DataFrame({"a": range(14, 20)}, pd.date_range("2024-01-15", periods=6)),
             ]),
             "symbol_2": pd.concat([
                 pd.DataFrame({"b": range(30, 34)}, pd.date_range("2024-02-01", "2024-02-04")),
                 batch_update_queries["symbol_2"].data,
-                pd.DataFrame({"b": range(36, 60)}, pd.date_range("2024-03-06", periods=24)),
+                pd.DataFrame({"b": range(35, 60)}, pd.date_range("2024-02-06", periods=25)),
             ]),
             "symbol_3": initial_data["symbol_3"]
         }
+
+        updated = [lib.read(symbol) for symbol in expected]
+        for vit in updated:
+            if vit.symbol in batch_update_queries.values():
+                assert vit.version == 1
+            assert_frame_equal(vit.data, expected[vit.symbol])
 
 

@@ -1391,12 +1391,75 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 }
 
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_update_internal(
-    [[maybe_unused]] const std::vector<StreamId>& stream_ids,
-    [[maybe_unused]] std::vector<std::shared_ptr<InputTensorFrame>>&& frames,
-    [[maybe_unused]] const std::vector<UpdateQuery>& update_queries,
-    [[maybe_unused]] bool prune_previous_versions,
-    [[maybe_unused]] bool upsert) {
-return {};
+    const std::vector<StreamId>& stream_ids,
+    std::vector<std::shared_ptr<InputTensorFrame>>&& frames,
+    const std::vector<UpdateQuery>& update_queries,
+    bool prune_previous_versions,
+    bool upsert
+) {
+    py::gil_scoped_release release_gil;
+
+    auto stream_update_info_futures = batch_get_latest_undeleted_version_and_next_version_id_async(store(), version_map(),stream_ids);
+    std::vector<folly::Future<VersionedItem>> update_versions_futs;
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(stream_ids.size() == stream_update_info_futures.size(), "stream_ids and stream_update_info_futures must be of the same size");
+    for (const auto&& [idx, stream_update_info_fut] : enumerate(stream_update_info_futures)) {
+        update_versions_futs.push_back(
+            std::move(stream_update_info_fut)
+            .thenValue([this, frame = std::move(frames[idx]), stream_id = stream_ids[idx], update_query = update_queries[idx], upsert](auto&& update_info) {
+                auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
+                auto write_options = get_write_options();
+                if (update_info.previous_index_key_.has_value()) {
+                    const bool dynamic_schema = cfg().write_options().dynamic_schema();
+                    const bool empty_types = cfg().write_options().empty_types();
+                    index_key_fut = async_update_impl(
+                        store(),
+                        update_info,
+                        update_query,
+                        std::move(frame),
+                        std::move(write_options),
+                        dynamic_schema,
+                        empty_types);
+                } else {
+                    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(upsert, "Cannot append to non-existent symbol {}", stream_id);
+                    index_key_fut = async_write_dataframe_impl(
+                        store(),
+                        0,
+                        std::move(frame),
+                        std::move(write_options),
+                        std::make_shared<DeDupMap>(),
+                        false,
+                        true);
+                }
+                return std::move(index_key_fut).thenValueInline([update_info = std::move(update_info)](auto&& index_key) mutable {
+                    return IndexKeyAndUpdateInfo{std::move(index_key), std::move(update_info)};
+                });
+            })
+            .thenValue([this, prune_previous_versions](auto&& index_key_and_update_info) {
+                auto&& [index_key, update_info] = index_key_and_update_info;
+                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions);
+            })
+        );
+    }
+
+    auto update_versions = collectAll(update_versions_futs).get();
+    std::vector<std::variant<VersionedItem, DataError>> update_versions_or_errors;
+    update_versions_or_errors.reserve(update_versions.size());
+    for (auto&& [idx, append_version]: enumerate(update_versions)) {
+        if (append_version.hasValue()) {
+            update_versions_or_errors.emplace_back(std::move(append_version.value()));
+        } else {
+            auto exception = append_version.exception();
+            DataError data_error(stream_ids[idx], exception.what().toStdString());
+            if (exception.is_compatible_with<NoSuchVersionException>()) {
+                data_error.set_error_code(ErrorCode::E_NO_SUCH_VERSION);
+            } else if (exception.is_compatible_with<storage::KeyNotFoundException>()) {
+                data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
+            }
+            update_versions_or_errors.emplace_back(std::move(data_error));
+        }
+    }
+    return update_versions_or_errors;
+
 }
 
 struct WarnVersionTypeNotHandled {
