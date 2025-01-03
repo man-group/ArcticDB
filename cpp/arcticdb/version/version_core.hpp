@@ -13,7 +13,6 @@
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/stream/append_map.hpp>
-#include <arcticdb/pipeline/read_pipeline.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/entity/atom_key.hpp>
@@ -92,6 +91,15 @@ VersionedItem update_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
     const UpdateQuery & query,
+    const std::shared_ptr<InputTensorFrame>& frame,
+    WriteOptions&& options,
+    bool dynamic_schema,
+    bool empty_types);
+
+folly::Future<AtomKey> async_update_impl(
+    const std::shared_ptr<Store>& store,
+    const UpdateInfo& update_info,
+    const UpdateQuery& query,
     const std::shared_ptr<InputTensorFrame>& frame,
     WriteOptions&& options,
     bool dynamic_schema,
