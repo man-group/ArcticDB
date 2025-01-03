@@ -71,6 +71,22 @@ class TestsFilterPipeline:
         Filters only test functions/methods marked with specified
         pytest mark
         """
+        self.list = self.__filter_tests_pytest_marked(pytest_mark_name)
+        return self
+    
+    def exclude_tests_pytest_marked(self, pytest_mark_name: str = None) -> 'TestsFilterPipeline':
+        """
+        Exclude test functions/methods marked with specified
+        pytest mark
+        """
+        self.list = self.__exclude_tests(self.__filter_tests_pytest_marked(pytest_mark_name))
+        return self
+    
+    def __exclude_tests(self, tests_to_exclude: List[FunctionType]) -> List[FunctionType]:
+        result: List[FunctionType] = [item for item in self.list if item not in tests_to_exclude]
+        return result
+
+    def __filter_tests_pytest_marked(self, pytest_mark_name: str = None) -> List[FunctionType]:
         functions: List[FunctionType] = []
         for func in self.list:
             has_pytest_mark = hasattr(func, self.PYTEST_MARK_ATTR)
@@ -84,14 +100,28 @@ class TestsFilterPipeline:
                         if (str(pytest_mark_name).lower() in marker.name.lower()):
                             functions.append(func) 
                             break
-        self.list = functions
-        return self
+        return functions
     
     def filter_tests_pytest_marked_parameter(self, pytest_mark_parameter: str, 
                                              condition_func: Callable[[Any], bool]) -> 'TestsFilterPipeline':
         """
         Filters tests which pytest mark has parameter value that meets 'condition_func'
         """
+        self.list = self.__filter_tests_pytest_marked_parameter(pytest_mark_parameter, condition_func)
+        return self
+    
+    def exclude_tests_pytest_marked_parameter(self, pytest_mark_parameter: str, 
+                                             condition_func: Callable[[Any], bool]) -> 'TestsFilterPipeline':
+        """
+        Exclude tests which pytest mark has parameter value that meets 'condition_func'
+        """
+        self.list = self.__exclude_tests(
+            self.__filter_tests_pytest_marked_parameter(pytest_mark_parameter, condition_func)
+        )
+        return self
+
+    def __filter_tests_pytest_marked_parameter(self, pytest_mark_parameter: str, 
+                                             condition_func: Callable[[Any], bool]) -> List[FunctionType]:
         functions: List[FunctionType] = []
         for func in self.list:
             if hasattr(func, self.PYTEST_MARK_ATTR): 
@@ -101,14 +131,28 @@ class TestsFilterPipeline:
                         value = mark.kwargs.get(pytest_mark_parameter)
                         if condition_func(value): 
                             functions.append(func)
-        self.list = functions
-        return self
+        return functions
     
     def filter_tests_pytest_marked_where_argument_is(self, 
                                                      marker_argument_value: str) -> 'TestsFilterPipeline':
         """
         Filters tests which pytest mark has parameter value that meets 'condition_func'
         """
+        self.list = self.__filter_tests_pytest_marked_where_argument_is(marker_argument_value)
+        return self
+    
+    def exclude_tests_pytest_marked_where_argument_is(self, 
+                                                     marker_argument_value: str) -> 'TestsFilterPipeline':
+        """
+        Exclude tests which pytest mark has parameter value that meets 'condition_func'
+        """
+        self.list = self.__exclude_tests(
+            self.__filter_tests_pytest_marked_where_argument_is(marker_argument_value)
+        )
+        return self
+
+    def __filter_tests_pytest_marked_where_argument_is(self, 
+                                                     marker_argument_value: str) -> List[FunctionType]:
         functions: List[FunctionType] = []
         for func in self.list:
             if hasattr(func, self.PYTEST_MARK_ATTR): 
@@ -116,9 +160,7 @@ class TestsFilterPipeline:
                 for mark in markers: 
                     if marker_argument_value in mark.args: 
                         functions.append(func)
-        self.list = functions
-        return self
-
+        return functions
 
     def filter_tests_arcticdb(self, arcticdb_mark_name: str = None) -> 'TestsFilterPipeline': 
         """
@@ -327,17 +369,19 @@ if __name__ == "__main__":
                                      .get_tests())
     print_function_list(functions)
 
-    """
-    Similar to:
-      pytest -m "category and category == 'fast' and category == 'prio0'"
-    
-    """
     functions: List[FunctionType] = ( ArcticdbTestAnalysis().start_filter()
                                      .filter_tests_pytest_marked("category")
                                      .filter_tests_pytest_marked_where_argument_is("prio0")
                                      .filter_tests_pytest_marked_where_argument_is("fast")
                                      .get_tests())
     print_function_list(functions)
+
+    functions: List[FunctionType] = ( ArcticdbTestAnalysis().start_filter()
+                                     .filter_tests_pytest_marked("mymark")
+                                     .exclude_tests_pytest_marked("slow")
+                                     .get_tests())
+    print_function_list(functions)
+
 
 
     print("End")
