@@ -308,6 +308,19 @@ class ReadInfoRequest(NamedTuple):
         res += ")"
         return res
 
+class UpdatePayload(NamedTuple):
+    symbol: str
+    data: Union[Any, NormalizableType]
+    metadata: Any = None,
+    date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None
+
+    def __repr__(self):
+        return(
+            f"UpdatePayload(symbol={self.symbol}, data_id={id(self.data)}"
+            f", metadata={self.metadata}" if self.metadata is not None else "",
+            f", date_range={self.date_range if self.date_range is not None else ''})"
+        )
+
 
 class LazyDataFrame(QueryBuilder):
     """
@@ -1141,21 +1154,20 @@ class Library:
 
     def update_batch(
         self,
-        update_payloads: List[WritePayload],
+        update_payloads: List[UpdatePayload],
         prune_previous_versions: bool = False,
-        validate_index: bool =True
+        upsert: bool = False,
     ) -> List[Union[VersionedItem, DataError]]:
         self._raise_if_duplicate_symbols_in_batch(update_payloads)
         self._raise_if_unsupported_type_in_write_batch(update_payloads)
-        throw_on_error = False
 
-        batch_update_result = self._nvs.version_store.batch_update(
+        batch_update_result = self._nvs._batch_update_internal(
             [p.symbol for p in update_payloads],
             [p.data for p in update_payloads],
             [p.metadata for p in update_payloads],
+            [p.date_range for p in update_payloads],
             prune_previous_version=prune_previous_versions,
-            validate_index=validate_index,
-            throw_on_error=throw_on_error,
+            upsert=upsert,
         )
         return batch_update_result
 

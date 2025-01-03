@@ -18,7 +18,7 @@ from arcticdb.exceptions import InternalException, SortingException
 from tests.util.date import DateRange
 from pandas import MultiIndex
 
-from arcticdb.version_store.library import WritePayload
+from arcticdb.version_store.library import UpdatePayload
 
 
 def test_update_single_dates(lmdb_version_store_dynamic_schema):
@@ -624,8 +624,8 @@ class TestBatchUpdate:
             lib.write(symbol, data)
 
         batch_update_queries = {
-            "symbol_1": WritePayload("symbol_1", pd.DataFrame({"a": range(0, -5, -1)}, index=pd.date_range("2024-01-10", periods=5))),
-            "symbol_2": WritePayload("symbol_2", pd.DataFrame({"b": range(-10, -20, -1)}, index=pd.date_range("2024-02-05", periods=10, freq='h'))),
+            "symbol_1": UpdatePayload("symbol_1", pd.DataFrame({"a": range(0, -5, -1)}, index=pd.date_range("2024-01-10", periods=5))),
+            "symbol_2": UpdatePayload("symbol_2", pd.DataFrame({"b": range(-10, -20, -1)}, index=pd.date_range("2024-02-05", periods=10, freq='h'))),
         }
 
         lib.update_batch(batch_update_queries.values())

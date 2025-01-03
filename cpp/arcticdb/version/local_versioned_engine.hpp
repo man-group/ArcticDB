@@ -279,10 +279,9 @@ public:
     std::vector<std::variant<VersionedItem, DataError>> batch_update_internal(
         const std::vector<StreamId>& stream_ids,
         std::vector<std::shared_ptr<InputTensorFrame>>&& frames,
+        const std::vector<UpdateQuery>& update_queries,
         bool prune_previous_versions,
-        bool validate_index,
-        bool upsert,
-        bool throw_on_error);
+        bool upsert);
 
     std::vector<ReadVersionOutput> batch_read_keys(const std::vector<AtomKey> &keys);
 

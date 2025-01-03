@@ -788,16 +788,16 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
 }
 
 std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_update(
-    [[maybe_unused]] const std::vector<StreamId> &stream_ids,
-    [[maybe_unused]] const std::vector<py::tuple> &items,
-    [[maybe_unused]] const std::vector<py::object> &norms,
-    [[maybe_unused]] const std::vector<py::object> &user_metas,
-    [[maybe_unused]] bool prune_previous_versions,
-    [[maybe_unused]] bool validate_index,
-    [[maybe_unused]] bool upsert,
-    [[maybe_unused]] bool throw_on_error
+    const std::vector<StreamId>& stream_ids,
+    const std::vector<py::tuple>& items,
+    const std::vector<py::object>& norms,
+    const std::vector<py::object>& user_metas,
+    const std::vector<UpdateQuery>& update_qeries,
+    bool prune_previous_versions,
+    bool upsert
 ) {
-    return {};
+    auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas, cfg().write_options().empty_types());
+    return batch_update_internal(stream_ids, std::move(frames), update_qeries, prune_previous_versions, upsert);
 }
 
 void PythonVersionStore::delete_snapshot(const SnapshotId& snap_name) {

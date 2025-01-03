@@ -1393,10 +1393,9 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_update_internal(
     [[maybe_unused]] const std::vector<StreamId>& stream_ids,
     [[maybe_unused]] std::vector<std::shared_ptr<InputTensorFrame>>&& frames,
+    [[maybe_unused]] const std::vector<UpdateQuery>& update_queries,
     [[maybe_unused]] bool prune_previous_versions,
-    [[maybe_unused]] bool validate_index,
-    [[maybe_unused]] bool upsert,
-    [[maybe_unused]] bool throw_on_error) {
+    [[maybe_unused]] bool upsert) {
 return {};
 }
 
