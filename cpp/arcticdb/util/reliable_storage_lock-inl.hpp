@@ -107,13 +107,13 @@ void ReliableStorageLock<ClockType>::clear_old_locks(const std::vector<AcquiredL
 }
 
 template <class ClockType>
-std::optional<AcquiredLockId> ReliableStorageLock<ClockType>::try_take_lock() const {
+ReliableLockResult ReliableStorageLock<ClockType>::try_take_lock() const {
     auto [existing_locks, latest] = get_all_locks();
     if (latest.has_value()) {
         auto expires = get_expiration(RefKey{get_stream_id(latest.value()), KeyType::ATOMIC_LOCK});
         if (expires > ClockType::nanos_since_epoch()) {
             // An unexpired lock exists
-            return std::nullopt;
+            return LockInUse{};
         }
     }
     return try_take_next_id(existing_locks, latest);
@@ -132,24 +132,53 @@ AcquiredLockId ReliableStorageLock<ClockType>::retry_until_take_lock() const {
         return current_wait * factor;
     };
 
-    auto acquired_lock = try_take_lock();
+    std::optional<AcquiredLockId> acquired_lock;
+    auto result = try_take_lock();
+    acquired_lock = util::variant_match(
+        result,
+        [&](AcquiredLock &acquired_lock) -> std::optional<AcquiredLockId> {
+            return acquired_lock;
+        },
+        [&](LockInUse &) -> std::optional<AcquiredLockId> {
+            return std::nullopt;
+        },
+        [&](UnsupportedOperation &) -> std::optional<AcquiredLockId> {
+            log::lock().error("Unsupported operation while taking lock");
+            throw LostReliableLock();
+        }
+    );
+
     while (!acquired_lock.has_value()) {
         std::this_thread::sleep_for(jittered_wait());
         current_wait = std::min(current_wait * 2, max_wait);
-        acquired_lock = try_take_lock();
+        auto result = try_take_lock();
+        acquired_lock = util::variant_match(
+            result,
+            [&](AcquiredLock &acquired_lock) -> std::optional<AcquiredLockId> {
+                return acquired_lock;
+            },
+            [&](LockInUse &) -> std::optional<AcquiredLockId> {
+                return std::nullopt;
+            },
+            [&](UnsupportedOperation &) -> std::optional<AcquiredLockId> {
+                log::lock().error("Unsupported operation while taking lock");
+                throw LostReliableLock();
+            }
+        );
+
     }
     return acquired_lock.value();
 }
 
 template <class ClockType>
-std::optional<AcquiredLockId> ReliableStorageLock<ClockType>::try_extend_lock(AcquiredLockId acquired_lock) const {
+ReliableLockResult ReliableStorageLock<ClockType>::try_extend_lock(AcquiredLockId acquired_lock) const {
     auto [existing_locks, latest] = get_all_locks();
     util::check(latest.has_value() && latest.value() >= acquired_lock,
                 "We are trying to extend a newer lock_id than the existing one in storage. Extend lock_id: {}",
                 acquired_lock);
     if (latest.value() != acquired_lock) {
         // We have lost the lock while holding it (most likely due to timeout).
-        return std::nullopt;
+        return LockInUse{};
     }
     return try_take_next_id(existing_locks, latest);
 }
@@ -170,23 +199,26 @@ void ReliableStorageLock<ClockType>::free_lock(AcquiredLockId acquired_lock) con
 }
 
 template <class ClockType>
-std::optional<AcquiredLockId> ReliableStorageLock<ClockType>::try_take_next_id(const std::vector<AcquiredLockId>& existing_locks, std::optional<AcquiredLockId> latest) const {
+ReliableLockResult ReliableStorageLock<ClockType>::try_take_next_id(const std::vector<AcquiredLockId>& existing_locks, std::optional<AcquiredLockId> latest) const {
     AcquiredLockId lock_id = get_next_id(latest);
     auto lock_stream_id = get_stream_id(lock_id);
     auto expiration = ClockType::nanos_since_epoch() + timeout_;
     try {
         store_->write_if_none_sync(KeyType::ATOMIC_LOCK, lock_stream_id, lock_segment(lock_stream_id, expiration));
+    } catch (const NotImplementedException& e) {
+        log::lock().debug("Failed to acquire lock (storage does not support atomic writes): {}", e.what());
+        return UnsupportedOperation{};
     } catch (const StorageException& e) {
         // There is no specific Aws::S3::S3Errors for the failed atomic operation, so we catch any StorageException.
         // Either way it's safe to assume we have failed to acquire the lock in case of transient S3 error.
-        // If error persists we'll approprieately raise in the next attempt to LIST/GET the existing lock and propagate
+        // If error persists we'll appropriately raise in the next attempt to LIST/GET the existing lock and propagate
         // the transient error.
         log::lock().debug("Failed to acquire lock (likely someone acquired it before us): {}", e.what());
-        return std::nullopt;
+        return LockInUse{};
     }
-    // We clear old locks only after aquiring the lock to avoid duplicating the deletion work
+    // We clear old locks only after acquiring the lock to avoid duplicating the deletion work
     clear_old_locks(existing_locks);
-    return lock_id;
+    return AcquiredLock{lock_id};
 }
 
 inline ReliableStorageLockGuard::ReliableStorageLockGuard(const ReliableStorageLock<> &lock, AcquiredLockId acquired_lock, std::optional<folly::Func>&& on_lost_lock) :
@@ -198,11 +230,22 @@ inline ReliableStorageLockGuard::ReliableStorageLockGuard(const ReliableStorageL
     extend_lock_heartbeat_.addFunction(
         [that=this](){
             if (that->acquired_lock_.has_value()) {
-                that->acquired_lock_ = that->lock_.try_extend_lock(that->acquired_lock_.value());
-                if (!that->acquired_lock_.has_value()) {
-                    // Clean up if we have lost the lock.
-                    that->cleanup_on_lost_lock();
-                }
+                auto result = that->lock_.try_extend_lock(that->acquired_lock_.value());
+                util::variant_match(
+                    result,
+                    [&](AcquiredLock &acquired_lock) {
+                        that->acquired_lock_ = acquired_lock;
+                    },
+                    [&](LockInUse &) {
+                        // Clean up if we have lost the lock.
+                        that->cleanup_on_lost_lock();
+                    },
+                    [&](UnsupportedOperation &) {
+                        // This should never happen
+                        log::lock().error("Unsupported operation while extending lock {}", that->acquired_lock_.value());
+                        that->cleanup_on_lost_lock();
+                    }
+                );
             }
         }, hearbeat_frequency, "Extend lock", hearbeat_frequency);
     extend_lock_heartbeat_.start();

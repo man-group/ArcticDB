@@ -68,6 +68,10 @@ using Range = folly::Range<It>;
                                                    error_message_suffix));
     }
 
+    if(err.GetExceptionName().find("NotImplemented") != std::string::npos) {
+        raise<ErrorCode::E_NOT_IMPLEMENTED>(fmt::format("Operation is not implemented for storage: {}", error_message_suffix));
+    }
+
     if (err.ShouldRetry()) {
         raise<ErrorCode::E_S3_RETRYABLE>(fmt::format("Retry-able error: {}",
                                                      error_message_suffix));

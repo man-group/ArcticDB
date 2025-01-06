@@ -86,6 +86,7 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(5020, E_UNEXPECTED_S3_ERROR) \
     ERROR_CODE(5021, E_S3_RETRYABLE) \
     ERROR_CODE(5022, E_ATOMIC_OPERATION_FAILED) \
+    ERROR_CODE(5023, E_NOT_IMPLEMENTED) \
     ERROR_CODE(5030, E_UNEXPECTED_AZURE_ERROR) \
     ERROR_CODE(5050, E_MONGO_BULK_OP_NO_REPLY) \
     ERROR_CODE(5051, E_UNEXPECTED_MONGO_ERROR) \
@@ -181,6 +182,7 @@ using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA
 using UserInputException = ArcticCategorizedException<ErrorCategory::USER_INPUT>;
 using CompatibilityException = ArcticCategorizedException<ErrorCategory::COMPATIBILITY>;
 using CodecException = ArcticCategorizedException<ErrorCategory::CODEC>;
+using NotImplementedException = ArcticSpecificException<ErrorCode::E_NOT_IMPLEMENTED>;
 
 template<ErrorCode error_code>
 [[noreturn]] void throw_error(const std::string& msg) {
@@ -240,6 +242,11 @@ template<>
 template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_UNSORTED_DATA>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_NOT_IMPLEMENTED>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_NOT_IMPLEMENTED>(msg);
 }
 
 }
