@@ -16,8 +16,6 @@
 #include <deque>
 #include <vector>
 
-#include "async/tasks.hpp"
-
 namespace arcticdb {
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
