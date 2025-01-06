@@ -12,9 +12,7 @@ jobs:
   # GitHub Composite Actions cannot access secrets and Reusable Workflows cannot return artifacts, so duplicate for now:
   release_notes:
     if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
-    env:
-      SYMBOLS_ARTIFACT: /tmp/symbols.tar.zst # Use absolute path to workaround a bug in action-gh-release
+    runs-on: ubuntu-22.04
     steps:
       # Copy and pasted from the pypi job below, until GitHub adds selective artifact download
       - uses: actions/setup-node@v3.8.2
@@ -62,7 +60,12 @@ jobs:
       - id: compress
         name: Compress debug symbols
         if: steps.download.outcome == 'success'
-        run: tar -cvaf $SYMBOLS_ARTIFACT build-metadata-*
+        run: |
+          for file in build-metadata-build-python-wheels-*; do
+            identifier=$(echo "$file" | sed -E 's/build-metadata-build-python-wheels-(.*)/\1/')
+            output_file="/tmp/symbols-${identifier}.tar.zst"
+            tar --zstd -cf "$output_file" "$file"
+          done
         continue-on-error: true
 
       - name: Checkout # Needed by the release action
@@ -87,12 +90,12 @@ jobs:
 
             ---
             > The wheels are on [PyPI](https://pypi.org/project/arcticdb/). Below are for debugging:
-          files: ${{steps.compress.outcome == 'success' && env.SYMBOLS_ARTIFACT || ''}}
+          files: ${{steps.compress.outcome == 'success' && '/tmp/symbols*.tar.zst' || ''}}
 
 
   pypi:
     environment: ${{inputs.environment}}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Gather wheels from run ${{inputs.run_id}}
         if: inputs.run_id > 0
