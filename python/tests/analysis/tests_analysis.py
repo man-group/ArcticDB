@@ -47,6 +47,37 @@ def coverage(status=None, category=None):
         return func
     return decorator
 
+PROJECT_DIRECTORY = os.getcwd()
+
+class ArcrticdbTest:
+
+    def __init__(self, function: FunctionType):
+        self.func = function
+
+    def get_test(self) -> FunctionType:
+        return self.func
+
+    def as_pytest_name(self) -> str:
+        """
+        Returns the test as:
+            test/integration/../test_module.py::test
+
+        This is the notation pytest uses for test selection
+        """
+        file = self.func.__module__.replace(".", "/") + ".py"
+        return f"{file}::{self.func.__name__}"        
+
+    def is_integration(self):
+        return 'tests/integration' in self.as_pytest_name() 
+
+    def is_stress(self):
+        return 'tests/stress' in self.as_pytest_name() 
+
+    def is_unit(self):
+        return 'tests/unit' in self.as_pytest_name() 
+    
+    def __str__(self):
+        return self.as_pytest_name()
 
 class TestsFilterPipeline:
     '''
@@ -64,7 +95,16 @@ class TestsFilterPipeline:
         self.list: List[FunctionType] = list
 
     def get_tests(self) -> List[FunctionType]:
-        return self.list
+        """
+        Returns all tests
+        """
+        return [ArcrticdbTest(x) for x in self.list]
+    
+
+    def save_tests_to_file(self, file_path):
+        with open(file_path, "w") as file:
+            for test in self.get_tests():
+                file.write(f"{test}\n")
     
     def filter_tests_pytest_marked(self, pytest_mark_name: str = None) -> 'TestsFilterPipeline':
         """
@@ -212,14 +252,14 @@ class ArcticdbTestAnalysis:
         """
         return ArcticdbTestAnalysis.__modules
 
-    def get_tests(self) -> List[FunctionType]:
+    def get_test_functions(self) -> List[FunctionType]:
         """
         Returns all tests
         """
         return ArcticdbTestAnalysis.__test_functions
     
     def start_filter(self) -> TestsFilterPipeline:
-        return TestsFilterPipeline(self.get_tests(), self.verbose)
+        return TestsFilterPipeline(self.get_test_functions(), self.verbose)
 
     def __log(self, msg: str):
         if self.verbose:
@@ -237,7 +277,7 @@ class ArcticdbTestAnalysis:
     def __load_test_modules_from_project(self) -> List[ModuleType]:
         modules: List[ModuleType] = []
 
-        project_dir = os.getcwd()
+        project_dir = PROJECT_DIRECTORY
 
         python_files = f"{project_dir}/python"
         path_to_tests = f"{python_files}/tests"
@@ -277,111 +317,132 @@ class ArcticdbTestAnalysis:
 
 @arcticdb_test
 def test_me():
-    return 1
+    print("test_me")
+    assert True 
 
 def test_me_2():
-    return 1
+    print("test_2")
+    assert True 
 
 @pytest.mark.mymark
 @pytest.mark.slow
 def test_me_3():
-    return 1
+    print("test_3")
+    assert True 
 
 @coverage(status = "ABC", category = "any")
 def test_me_4():
-    return 1
+    print("test_4")
+    assert True 
 
 @pytest.mark.mymark
 @pytest.mark.slow(status = "completed")
 def test_me_5():
-    return 1
+    print("test_5")
+    assert True 
 
 @pytest.mark.mymark("first")
 def test_me_6():
-    return 1
+    print("test_6")
+    assert True 
 
 @pytest.mark.category('slow', 'prio0') 
 def test_slow_case_1(): 
+    print("test_slow_case_1")
     assert True 
     
 @pytest.mark.category('fast', 'prio0') 
 def test_fast_case_1():
+    print("test_fast_case_1")
     assert True 
 
 @pytest.mark.category('slow') 
 def test_slow_case_2():
+    print("test_slow_case_2")
     assert True 
 
 
 ## Some util functions
 ###############################
 
-def print_function_list(funs_list: List[FunctionType]):
-    for func in funs_list:
-        print(f"Function: {func} : {func.__name__}")
-    print(f"Total : {len(funs_list)}")
+def print_function_list(tests_list: List[FunctionType]):
+    for func in tests_list:
+        print(f"Function: {func}")
+    print(f"Total : {len(tests_list)}")
+
+
+def print_test_list(tests_list: List[ArcrticdbTest]):
+    for test in tests_list:
+        print(f"Pytest : {test}  ({test.func})")
+    print(f"Total : {len(tests_list)}")
 
 # Example usage
 if __name__ == "__main__":
 
     ArcticdbTestAnalysis(True) ## Just trigger logging to see what modules are loaded and what not
 
-    functions: List[FunctionType] = ArcticdbTestAnalysis().get_tests()
+    functions: List[FunctionType] = ArcticdbTestAnalysis().get_test_functions()
     print_function_list(functions)
 
-    functions: List[FunctionType] = ArcticdbTestAnalysis().start_filter().filter_tests_pytest_marked().get_tests()
-    print_function_list(functions)
+    functions: List[ArcrticdbTest] = ArcticdbTestAnalysis().start_filter().filter_tests_pytest_marked().get_tests()
+    print_test_list(functions)
 
-    functions: List[FunctionType] = ArcticdbTestAnalysis().start_filter().filter_tests_pytest_marked("slow").get_tests()
-    print_function_list(functions)
+    functions: List[ArcrticdbTest] = ArcticdbTestAnalysis().start_filter().filter_tests_pytest_marked("slow").get_tests()
+    print_test_list(functions)
 
-    functions: List[FunctionType] = ArcticdbTestAnalysis().start_filter().filter_tests_arcticdb().get_tests()
-    print_function_list(functions)
+    functions: List[ArcrticdbTest] = ArcticdbTestAnalysis().start_filter().filter_tests_arcticdb().get_tests()
+    print_test_list(functions)
 
-    functions: List[FunctionType] = ( ArcticdbTestAnalysis().start_filter()
+    functions: List[ArcrticdbTest] = ( ArcticdbTestAnalysis().start_filter()
                                      .filter_tests_pytest_marked("slow")
                                      .filter_tests_pytest_marked_parameter("status", lambda value: value == "completed")
                                      .filter_tests_pytest_marked_parameter("status", lambda value: value.startswith("com") if value else False)
                                      .get_tests())
-    print_function_list(functions)
+    print_test_list(functions)
 
-    functions: List[FunctionType] = ArcticdbTestAnalysis().start_filter().filter_tests_arcticdb("coverage").get_tests()
-    print_function_list(functions)
+    functions: List[ArcrticdbTest] = ArcticdbTestAnalysis().start_filter().filter_tests_arcticdb("coverage").get_tests()
+    print_test_list(functions)
 
-    functions: List[FunctionType] = ArcticdbTestAnalysis().start_filter().filter_tests_arcticdb("scoverages").get_tests()
-    print_function_list(functions)
+    functions: List[ArcrticdbTest] = ArcticdbTestAnalysis().start_filter().filter_tests_arcticdb("scoverages").get_tests()
+    print_test_list(functions)
 
-    functions: List[FunctionType] = ( ArcticdbTestAnalysis().start_filter()
+    functions: List[ArcrticdbTest] = ( ArcticdbTestAnalysis().start_filter()
                                      .filter_tests_pytest_marked("mymark")
                                      .filter_tests_pytest_marked_where_argument_is("first")
                                      .get_tests())
-    print_function_list(functions)
+    print_test_list(functions)
 
-    functions: List[FunctionType] = ( ArcticdbTestAnalysis().start_filter()
+    functions: List[ArcrticdbTest] = ( ArcticdbTestAnalysis().start_filter()
                                      .filter_tests_pytest_marked("category")
                                      .filter_tests_pytest_marked_where_argument_is("slow")
                                      .get_tests())
-    print_function_list(functions)
+    print_test_list(functions)
 
-    functions: List[FunctionType] = ( ArcticdbTestAnalysis().start_filter()
+    functions: List[ArcrticdbTest] = ( ArcticdbTestAnalysis().start_filter()
                                      .filter_tests_pytest_marked("category")
                                      .filter_tests_pytest_marked_where_argument_is("prio0")
                                      .get_tests())
-    print_function_list(functions)
+    print_test_list(functions)
 
-    functions: List[FunctionType] = ( ArcticdbTestAnalysis().start_filter()
+    functions: List[ArcrticdbTest] = ( ArcticdbTestAnalysis().start_filter()
                                      .filter_tests_pytest_marked("category")
                                      .filter_tests_pytest_marked_where_argument_is("prio0")
                                      .filter_tests_pytest_marked_where_argument_is("fast")
                                      .get_tests())
-    print_function_list(functions)
-
-    functions: List[FunctionType] = ( ArcticdbTestAnalysis().start_filter()
-                                     .filter_tests_pytest_marked("mymark")
-                                     .exclude_tests_pytest_marked("slow")
-                                     .get_tests())
-    print_function_list(functions)
+    print_test_list(functions)
 
 
+    """
+        With ability to save filtered tests to files we can later organize
+        test execution based on those files
+    """
+    adbt = (ArcticdbTestAnalysis().start_filter()
+            .filter_tests_pytest_marked("mymark")
+            .exclude_tests_pytest_marked("slow"))
+    functions: List[ArcrticdbTest] = adbt.get_tests()
+    print_test_list(functions)
+    adbt.save_tests_to_file("/tmp/tests.txt")
+
+    functions
 
     print("End")

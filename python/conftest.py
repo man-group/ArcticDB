@@ -44,7 +44,7 @@ from arcticdb_ext.storage import NativeVariantStorage
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
 from arcticdb.arctic import Arctic
-from .util.mark import (
+from tests.util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
     REAL_S3_TESTS_MARK,
@@ -57,6 +57,8 @@ hypothesis.settings.register_profile("ci_windows", max_examples=100)
 hypothesis.settings.register_profile("dev", max_examples=100)
 
 hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
+
+pytest_plugins = ["pytest_plugins"]
 
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
