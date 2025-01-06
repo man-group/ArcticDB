@@ -74,13 +74,6 @@ jobs:
         with:
           submodules: recursive # Just in case a dep has its own third-party deps
 
-      # See: https://github.com/actions/runner-images/issues/9680#issuecomment-2051917949
-      - name: HOTFIX Setup CMake 3.29.2
-        if: matrix.os == 'windows'
-        uses: jwlawson/actions-setup-cmake@v2
-        with:
-          cmake-version: '3.29.2'
-
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.3
         with:
@@ -94,15 +87,7 @@ jobs:
           maximum-size: 6GB
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
-
-      - name: Install VS2022 BuildTools 17.9.7
-        if: matrix.os == 'windows'
-        run: choco install -y visualstudio2022buildtools --version=117.9.7.0 --params "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --installChannelUri https://aka.ms/vs/17/release/180911598_-255012421/channel"
-
-      - name: Enable Windows compiler commands
-        if: matrix.os == 'windows'
-        uses: ilammy/msvc-dev-cmd@v1.12.1
-
+          
       - name: Extra envs
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
         run: |
@@ -115,7 +100,11 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       # ========================= Leader steps =========================
-      - name: Remove GitHub default packages # To save space
+      - name: Remove GitHub default packages (baseimage) # To save space
+        if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
+        uses: jlumbroso/free-disk-space@main
+
+      - name: Remove GitHub default packages (manylinux) # To save space
         if: inputs.job_type == 'cpp-tests' && matrix.os == 'linux'
         run: |
           du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
@@ -128,6 +117,23 @@ jobs:
       - name: Prepare C++ compilation env
         if: inputs.job_type != 'build-python-wheels'
         run: . build_tooling/prep_cpp_build.sh # Also applies to Windows
+
+        # When a GitHub Windows image gets update the MSVC compiler also can get updated. New compilers can have compilation errors in Arctic or in the VCPKG dependencies.
+        # We needd to pin a particular MSVC so that runner updates don't affect us.
+        # When the MSVC version is update custom-triplets/x64-windows-static-msvc.cmake must also be updated with the correct toolsed version.
+      - name: Install Required MSVC
+        if: matrix.os == 'windows'
+        run: |
+          choco install -y -f visualstudio2022buildtools --version=117.11.4 --params "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --installChannelUri https://aka.ms/vs/17/release/390666095_1317821361/channel"
+          choco install -y ninja
+
+      - name: Enable Windows compiler commands
+        if: matrix.os == 'windows'
+        uses: TheMrMilchmann/setup-msvc-dev@v3
+        with:
+          arch: x64
+          toolset: 14.41
+          vs-path: 'C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools'
 
       - name: CMake compile
         if: inputs.job_type != 'build-python-wheels'
@@ -147,6 +153,13 @@ jobs:
         if: inputs.job_type == 'cpp-tests'
         run: cpp/out/install/arcticdb_rapidcheck_tests
 
+      - name: Collect arcticdb_rapidcheck_tests binary on failure
+        if: failure()
+        uses: actions/upload-artifact@v3.1.3
+        with:
+          name: arcticdb_rapidcheck_tests_${{matrix.os}}
+          path: cpp/out/install/arcticdb_rapidcheck_tests*
+
       - name: C++ unit tests
         if: inputs.job_type == 'cpp-tests'
         run: |
@@ -158,6 +171,22 @@ jobs:
           [[ $(jq '.errors' test_unit_arcticdb.json) -eq 0 ]]
         env:
           ARCTICDB_memory_loglevel: INFO
+
+      - name: Collect test_unit_arcticdb binary on failure
+        if: failure()
+        uses: actions/upload-artifact@v3.1.3
+        with:
+          name: test_unit_arcticdb_${{matrix.os}}
+          path: cpp/out/install/test_unit_arcticdb*
+
+      # We don't do anything with the benchmarks automatically yet, but check that they at least compile and run.
+      - name: Compile C++ Benchmarks
+        if: inputs.job_type == 'cpp-tests'
+        run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target benchmarks -j $CMAKE_BUILD_PARALLEL_LEVEL
+
+      - name: Run C++ Benchmarks
+        if: inputs.job_type == 'cpp-tests'
+        run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks
 
       # ========================= build-python-wheels (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
@@ -183,9 +212,17 @@ jobs:
 
       - name: Discover test directory names
         if: inputs.job_type == 'build-python-wheels'
-        # There are so few nonreg tests, run them in the hypothesis runner
-        run: find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\|scripts\)' -printf '"%f",' |
+        # We only run the compat tests on for newer python versions.
+        # There are so few nonreg tests, run them in the hypothesis runner.
+        run: |
+          if [ ${{inputs.python3}} -gt 6 ]
+          then
+            find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\|scripts\)' -printf '"%f",' |
               sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
+          else
+            find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\|scripts\|compat\)' -printf '"%f",' |
+              sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
+          fi
 
       # ========================= Common =========================
       - name: Disk usage
@@ -245,7 +282,7 @@ jobs:
           ${{fromJSON(inputs.matrix)}}
     name: ${{matrix.type}}${{matrix.python_deps_id}}
     runs-on: ${{matrix.distro}}
-    container: ${{matrix.os == 'linux' && needs.compile.outputs.manylinux_image || null}}
+    container: ${{matrix.os == 'linux' &&  matrix.container || null}}
     defaults:
       run: {shell: bash}
     services: ${{matrix.test_services}}
@@ -333,6 +370,16 @@ jobs:
         with:
           name: crashdump-${{env.distinguishing_name}}
           path: ${{env.LOCALAPPDATA}}/CrashDumps/
+
+      # Fallback if the clean up at test fixutre tear down fails due to crash or etc
+      - name: Remove AWS testing account and credentials
+        if: always() && inputs.persistent_storage == 'true'
+        run: |
+          python -c "
+          from arcticdb.storage_fixtures.s3 import real_s3_sts_clean_up
+          real_s3_sts_clean_up('${ARCTICDB_REAL_S3_STS_TEST_USERNAME}', '${ARCTICDB_REAL_S3_STS_TEST_ROLE}', '${ARCTICDB_REAL_S3_STS_TEST_POLICY_NAME}')
+          "
+        continue-on-error: true
 
       - name: Disk usage
         if: always()

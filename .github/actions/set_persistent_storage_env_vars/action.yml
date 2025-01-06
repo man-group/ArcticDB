@@ -2,7 +2,7 @@ name: 'Set Persistent storages env variables'
 description: 'Set the necessary variables for Persistent storage tests'
 inputs:
   bucket:            {default: 'arcticdb-ci-test-bucket-02', type: string, description: The name of the S3 bucket that we will test against}
-  endpoint:          {default: 's3.eu-west-1.amazonaws.com', type: string, description: The address of the S3 endpoint}
+  endpoint:          {default: 'https://s3.eu-west-1.amazonaws.com', type: string, description: The address of the S3 endpoint}
   region:            {default: 'eu-west-1', type: string, description: The S3 region of the bucket}
   aws_access_key:    {required: true, type: string, description: The value for the AWS Access key}      
   aws_secret_key:    {required: true, type: string, description: The value for the AWS Secret key}
@@ -29,6 +29,11 @@ runs:
         echo "ARCTICDB_REAL_S3_CLEAR=1" >> $GITHUB_ENV
         echo "ARCTICDB_REAL_S3_ACCESS_KEY=${{ inputs.aws_access_key }}" >> $GITHUB_ENV
         echo "ARCTICDB_REAL_S3_SECRET_KEY=${{ inputs.aws_secret_key }}" >> $GITHUB_ENV
+        ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX=$(shuf -i 0-999 -n 1)_$(date -u +'%Y-%m-%dT%H_%M_%S_%6N')
+        echo "ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX=${ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX}" >> $GITHUB_ENV
+        echo "ARCTICDB_REAL_S3_STS_TEST_USERNAME=gh_sts_test_user_${ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX}" >> $GITHUB_ENV
+        echo "ARCTICDB_REAL_S3_STS_TEST_ROLE=gh_sts_test_role_${ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX}" >> $GITHUB_ENV
+        echo "ARCTICDB_REAL_S3_STS_TEST_POLICY_NAME=gh_sts_test_policy_name_${ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX}" >> $GITHUB_ENV
         # Enable all debug logs
         # echo "ARCTICDB_all_loglevel=debug" >> $GITHUB_ENV
         # echo "ARCTICDB_AWS_LogLevel_int=6" >> $GITHUB_ENV

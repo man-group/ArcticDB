@@ -18,7 +18,7 @@ jobs:
   start-runner:
     if: inputs.job_type == 'start'
     name: Start self-hosted EC2 runner
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     continue-on-error: true
     outputs:
       label: ${{ steps.start-ec2-runner.outputs.label }}
@@ -27,8 +27,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          aws-access-key-id: ${{ secrets.AWS_S3_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.AWS_S3_SECRET_KEY }}
+          aws-access-key-id: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws-secret-access-key: "${{ secrets.AWS_S3_SECRET_KEY }}"
           aws-region: "eu-west-1"
       - name: Start EC2 runner
         id: start-ec2-runner
@@ -44,14 +44,14 @@ jobs:
   stop-runner:
     name: Stop self-hosted EC2 runner
     if: inputs.job_type == 'stop'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     continue-on-error: true
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          aws-access-key-id: ${{ secrets.AWS_S3_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.AWS_S3_SECRET_KEY }}
+          aws-access-key-id: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws-secret-access-key: "${{ secrets.AWS_S3_SECRET_KEY }}"
           aws-region: "eu-west-1"
       - name: Stop EC2 runner
         uses: machulav/ec2-github-runner@v2.3.3

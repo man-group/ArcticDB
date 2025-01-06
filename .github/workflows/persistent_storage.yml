@@ -61,7 +61,7 @@ jobs:
       # Change this value, if we need to support a newer one in the future
       - name: Install oldest supported release
         run: |
-          pip install pytest arcticdb=="3.0.0" "protobuf<5"
+          pip install pytest arcticdb=="3.0.0" "protobuf<5" "numpy<2"
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
@@ -84,7 +84,7 @@ jobs:
         
   cleanup:
     if: inputs.job_type == 'cleanup'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     defaults:
       run: {shell: bash}
     steps:

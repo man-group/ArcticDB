@@ -8,7 +8,7 @@ on:
       
 jobs:
   docs_build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     environment: TestPypi
     permissions:
       contents: write
@@ -38,7 +38,7 @@ jobs:
       - id: download-wheel-artifact
         name: Download wheel artifact from last successful build
         if: ${{!inputs.version}}
-        uses: dawidd6/action-download-artifact@v2.28.0
+        uses: dawidd6/action-download-artifact@v6
         with:
           name: wheel-${{env.PY_IMPL}}-manylinux_x86_64
           workflow: build.yml
@@ -49,6 +49,17 @@ jobs:
         run: |
           set -x
           pip3 install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen mike ${{inputs.version && format('arcticdb=={0}',inputs.version) || 'arcticdb-*.whl'}}
+
+      - name: Rewrite the template so the links point to the correct version
+        if: ${{inputs.version}}
+        run: |
+          set -x
+          cd docs/mkdocs
+          sed -i "s/VERSION_PLACEHOLDER/v${{inputs.version}}/g" overrides/main.html
+          git config --global user.name "${GITHUB_ACTOR}"
+          git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
+          git add overrides/main.html
+          git commit -m "Update version placeholder to v${{inputs.version}}"
 
       - name: Stubfile generation for arcticdb_ext
         run: |
