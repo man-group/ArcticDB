@@ -15,7 +15,7 @@ def pytest_collection_modifyitems(config, items):
 
     Later from command line execute:
 
-        pytest --testlist [file_path] [--force]
+        pytest --testlist=[file_path] [--force]
     """
 
     testlist_path = config.getoption("--testlist")
