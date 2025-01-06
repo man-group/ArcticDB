@@ -18,7 +18,7 @@
 #include <arcticdb/storage/failure_simulation.hpp>
 #include <arcticdb/storage/single_file_storage.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/util/composite.hpp>
+
 
 #include <folly/Range.h>
 #include <folly/concurrency/ConcurrentHashMap.h>
@@ -81,24 +81,24 @@ class Library {
         return storages_->scan_for_matching_key(key_type, predicate);
     }
 
-    void write(Composite<KeySegmentPair>&& kvs) {
+    void write(KeySegmentPair& kvs) {
         ARCTICDB_SAMPLE(LibraryWrite, 0)
         if (open_mode() < OpenMode::WRITE) {
             throw LibraryPermissionException(library_path_, open_mode(), "write");
         }
 
-        storages_->write(std::move(kvs));
+        storages_->write(kvs);
     }
 
-    void write_if_none(KeySegmentPair&& kv) {
+    void write_if_none(KeySegmentPair& kv) {
         if (open_mode() < OpenMode::WRITE) {
             throw LibraryPermissionException(library_path_, open_mode(), "write");
         }
 
-        storages_->write_if_none(std::move(kv));
+        storages_->write_if_none(kv);
     }
 
-    void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
+    void update(KeySegmentPair&& kvs, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(LibraryUpdate, 0)
         if (open_mode() < OpenMode::WRITE)
             throw LibraryPermissionException(library_path_, open_mode(), "update");
@@ -106,18 +106,18 @@ class Library {
         storages_->update(std::move(kvs), opts);
     }
 
-    void read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
+    void read(VariantKey&& k, const ReadVisitor& visitor, ReadKeyOpts opts) {
         ARCTICDB_SAMPLE(LibraryRead, 0)
-        storages_->read(std::move(ks), visitor, opts, !storage_fallthrough_);
+        storages_->read(std::move(k), visitor, opts, !storage_fallthrough_);
     }
 
-    void remove(Composite<VariantKey>&& ks, storage::RemoveOpts opts) {
+    void remove(VariantKey&& k, storage::RemoveOpts opts) {
         if (open_mode() < arcticdb::storage::OpenMode::DELETE) {
             throw LibraryPermissionException(library_path_, open_mode(), "delete");
         }
 
         ARCTICDB_SAMPLE(LibraryRemove, 0)
-        storages_->remove(std::move(ks), opts);
+        storages_->remove(std::move(k), opts);
     }
 
     std::optional<std::shared_ptr<SingleFileStorage>> get_single_file_storage() const {
@@ -147,7 +147,7 @@ class Library {
             res.set_segment(std::move(value));
         };
 
-        read(Composite<VariantKey>(std::move(key)), visitor, opts);
+        read((std::move(key)), visitor, opts);
 
         return res;
     }

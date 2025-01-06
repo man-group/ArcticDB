@@ -10,7 +10,7 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/storage/lmdb/lmdb.hpp>
-#include <arcticdb/util/composite.hpp>
+
 #include <arcticdb/storage/lmdb/lmdb_client_wrapper.hpp>
 
 #include <filesystem>
@@ -36,17 +36,17 @@ class LmdbStorage final : public Storage {
     std::string name() const final;
 
   private:
-    void do_write(Composite<KeySegmentPair>&& kvs) final;
+    void do_write(KeySegmentPair& kvs) final;
 
-    void do_write_if_none(KeySegmentPair&& kv [[maybe_unused]]) final {
+    void do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) final {
         storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>("Atomic operations are only supported for s3 backend");
     };
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
+    void do_update(KeySegmentPair&& kvs, UpdateOpts opts) final;
 
-    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts opts) final;
+    void do_read(VariantKey&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts opts) final;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
+    void do_remove(VariantKey&& ks, RemoveOpts opts) final;
 
     bool do_supports_prefix_matching() const final {
         return false;
@@ -75,8 +75,8 @@ class LmdbStorage final : public Storage {
     void warn_if_lmdb_already_open();
 
     // _internal methods assume the write mutex is already held
-    void do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn& txn);
-    std::vector<VariantKey> do_remove_internal(Composite<VariantKey>&& ks, ::lmdb::txn& txn, RemoveOpts opts);
+    void do_write_internal(KeySegmentPair&& kvs, ::lmdb::txn& txn);
+    std::vector<VariantKey> do_remove_internal(VariantKey&& ks, ::lmdb::txn& txn, RemoveOpts opts);
     std::unique_ptr<std::mutex> write_mutex_;
     std::shared_ptr<LmdbInstance> lmdb_instance_;
 

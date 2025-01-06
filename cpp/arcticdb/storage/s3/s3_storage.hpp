@@ -18,7 +18,7 @@
 #include <arcticdb/storage/s3/s3_settings.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/util/composite.hpp>
+
 #include <arcticdb/util/configs_map.hpp>
 #include <cstdlib>
 #include <sstream>
@@ -42,15 +42,15 @@ class S3Storage final : public Storage {
     std::string name() const final;
 
   private:
-    void do_write(Composite<KeySegmentPair>&& kvs) final;
+    void do_write(KeySegmentPair& kvs) final;
 
-    void do_write_if_none(KeySegmentPair&& kv) final;
+    void do_write_if_none(KeySegmentPair& kv) final;
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
+    void do_update(KeySegmentPair&& kvs, UpdateOpts opts) final;
 
-    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
+    void do_read(VariantKey&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
+    void do_remove(VariantKey&& ks, RemoveOpts opts) final;
 
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
 

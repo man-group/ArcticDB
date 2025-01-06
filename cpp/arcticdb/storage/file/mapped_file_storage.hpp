@@ -11,7 +11,7 @@
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
-#include <arcticdb/util/composite.hpp>
+
 #include <arcticdb/util/memory_mapped_file.hpp>
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/storage/coalesced/multi_segment_header.hpp>
@@ -34,17 +34,17 @@ class MappedFileStorage final : public SingleFileStorage {
   private:
     void do_write_raw(const uint8_t* data, size_t bytes) override;
 
-    void do_write(Composite<KeySegmentPair>&& kvs) override;
+    void do_write(KeySegmentPair& kvs) override;
 
-    void do_write_if_none(KeySegmentPair&& kv [[maybe_unused]]) final {
+    void do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) final {
         storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>("Atomic operations are only supported for s3 backend");
     };
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) override;
+    void do_update(KeySegmentPair&& kvs, UpdateOpts opts) override;
 
-    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts opts) override;
+    void do_read(VariantKey&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts opts) override;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) override;
+    void do_remove(VariantKey&& ks, RemoveOpts opts) override;
 
     bool do_supports_prefix_matching() const override {
         return false;

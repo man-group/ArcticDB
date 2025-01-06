@@ -11,7 +11,7 @@
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/storage/mongo/mongo_client_wrapper.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/util/composite.hpp>
+
 #include <arcticdb/util/pb_util.hpp>
 #include <folly/Range.h>
 
@@ -29,17 +29,17 @@ class MongoStorage final : public Storage {
     std::string name() const final;
 
   private:
-    void do_write(Composite<KeySegmentPair>&& kvs) final;
+    void do_write(KeySegmentPair& kvs) final;
 
-    void do_write_if_none(KeySegmentPair&& kv [[maybe_unused]]) final {
+    void do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) final {
         storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>("Atomic operations are only supported for s3 backend");
     };
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
+    void do_update(KeySegmentPair&& kvs, UpdateOpts opts) final;
 
-    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
+    void do_read(VariantKey&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
+    void do_remove(VariantKey&& ks, RemoveOpts opts) final;
 
     bool do_key_exists(const VariantKey& key) final;
 

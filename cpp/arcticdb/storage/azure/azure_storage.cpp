@@ -24,7 +24,7 @@
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/util/composite.hpp>
+
 
 #include <azure/core.hpp>
 #include <azure/storage/blobs.hpp>
@@ -106,40 +106,32 @@ void raise_if_unexpected_error(const Azure::Core::RequestFailedException& e, con
 
 template<class KeyBucketizer>
 void do_write_impl(
-    Composite<KeySegmentPair>&& kvs,
+    KeySegmentPair&& kv,
     const std::string& root_folder,
     AzureClientWrapper& azure_client,
     KeyBucketizer&& bucketizer,
     const Azure::Storage::Blobs::UploadBlockBlobFromOptions& upload_option,
     unsigned int request_timeout) {
         ARCTICDB_SAMPLE(AzureStorageWrite, 0)
-        auto fmt_db = [](auto&& kv) { return kv.key_type(); };
 
-        (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
-            [&azure_client, &root_folder, b=std::move(bucketizer), &upload_option, &request_timeout] (auto&& group) {
-                auto key_type_dir = key_type_folder(root_folder, group.key());
-                ARCTICDB_TRACE(log::storage(), "Azure key_type_folder is {}", key_type_dir);
+        auto key_type_dir = key_type_folder(root_folder, kv.key_type());
+        ARCTICDB_TRACE(log::storage(), "Azure key_type_folder is {}", key_type_dir);
 
-                ARCTICDB_SUBSAMPLE(AzureStorageWriteValues, 0)
-                for (auto& kv : group.values()) {
-                    auto& k = kv.variant_key();
-                    auto blob_name = object_path(b.bucketize(key_type_dir, k), k);
+        ARCTICDB_SUBSAMPLE(AzureStorageWriteValues, 0)
+        auto& k = kv.variant_key();
+        auto blob_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
 
-                    try {
-                        azure_client.write_blob(blob_name, *kv.segment_ptr(), upload_option, request_timeout);
-                    }
-                    catch (const Azure::Core::RequestFailedException& e) {
-                        raise_azure_exception(e, blob_name);
-                    }
-
-                }
-            }
-        );
+        try {
+            azure_client.write_blob(blob_name, kv.segment(), upload_option, request_timeout);
+        }
+        catch (const Azure::Core::RequestFailedException& e) {
+            raise_azure_exception(e, blob_name);
+        }
 }
 
 template<class KeyBucketizer>
 void do_update_impl(
-    Composite<KeySegmentPair>&& kvs,
+    KeySegmentPair&& kvs,
     const std::string& root_folder,
     AzureClientWrapper& azure_client,
     KeyBucketizer&& bucketizer,
@@ -149,10 +141,8 @@ void do_update_impl(
         do_write_impl(std::move(kvs), root_folder, azure_client, std::move(bucketizer), upload_option, request_timeout);
 }
 
-struct UnexpectedAzureErrorException : public std::exception {};
-
 template<class KeyBucketizer>
-void do_read_impl(Composite<VariantKey> && ks,
+void do_read_impl(VariantKey&& k,
     const ReadVisitor& visitor,
     const std::string& root_folder,
     AzureClientWrapper& azure_client,
@@ -161,39 +151,29 @@ void do_read_impl(Composite<VariantKey> && ks,
     const Azure::Storage::Blobs::DownloadBlobToOptions& download_option,
     unsigned int request_timeout) {
         ARCTICDB_SAMPLE(AzureStorageRead, 0)
-        auto fmt_db = [](auto&& k) { return variant_key_type(k); };
         std::vector<VariantKey> failed_reads;
 
-        (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
-            [&azure_client, &root_folder, b=std::move(bucketizer), &visitor, &failed_reads,
-            opts=opts, &download_option, &request_timeout] (auto&& group) {
-            for (auto& k : group.values()) {
-                auto key_type_dir = key_type_folder(root_folder, variant_key_type(k));
-                auto blob_name = object_path(b.bucketize(key_type_dir, k), k);
-                try {
-                    visitor(k, azure_client.read_blob(blob_name, download_option, request_timeout));
+        auto key_type_dir = key_type_folder(root_folder, variant_key_type(k));
+        auto blob_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
+        try {
+            visitor(k, azure_client.read_blob(blob_name, download_option, request_timeout));
 
-                    ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(k), variant_key_view(k));
-                }
-                catch (const Azure::Core::RequestFailedException& e) {
-                    raise_if_unexpected_error(e, blob_name);
-                    if (!opts.dont_warn_about_missing_key) {
-                        log::storage().warn("Failed to read azure segment with key '{}' {} {}: {}",
-                                                k,
-                                                blob_name,
-                                                static_cast<int>(e.StatusCode),
-                                                e.ReasonPhrase);
-                    }
-                    failed_reads.push_back(k);
-                }
+            ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(k), variant_key_view(k));
+        } catch (const Azure::Core::RequestFailedException& e) {
+            raise_if_unexpected_error(e, blob_name);
+            if (!opts.dont_warn_about_missing_key) {
+                log::storage().warn("Failed to read azure segment with key '{}' {} {}: {}",
+                                        k,
+                                        blob_name,
+                                        static_cast<int>(e.StatusCode),
+                                        e.ReasonPhrase);
             }
-        });
-        if(!failed_reads.empty())
-            throw KeyNotFoundException(Composite<VariantKey>{std::move(failed_reads)});
+            throw KeyNotFoundException(k);
+        }
 }
 
 template<class KeyBucketizer>
-void do_remove_impl(Composite<VariantKey>&& ks,
+void do_remove_impl(VariantKey&& ks,
     const std::string& root_folder,
     AzureClientWrapper& azure_client,
     KeyBucketizer&& bucketizer,
@@ -305,19 +285,19 @@ std::string AzureStorage::name() const {
     return fmt::format("azure_storage-{}/{}", container_name_, root_folder_);
 }
 
-void AzureStorage::do_write(Composite<KeySegmentPair>&& kvs) {
+void AzureStorage::do_write(KeySegmentPair&& kvs) {
     detail::do_write_impl(std::move(kvs), root_folder_, *azure_client_, FlatBucketizer{}, upload_option_, request_timeout_);
 }
 
-void AzureStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
+void AzureStorage::do_update(KeySegmentPair&& kvs, UpdateOpts) {
     detail::do_update_impl(std::move(kvs), root_folder_, *azure_client_, FlatBucketizer{}, upload_option_, request_timeout_);
 }
 
-void AzureStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
+void AzureStorage::do_read(VariantKey&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
     detail::do_read_impl(std::move(ks), visitor, root_folder_, *azure_client_, FlatBucketizer{}, opts, download_option_, request_timeout_);
 }
 
-void AzureStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
+void AzureStorage::do_remove(VariantKey&& ks, RemoveOpts) {
     detail::do_remove_impl(std::move(ks), root_folder_, *azure_client_, FlatBucketizer{}, request_timeout_);
 }
 

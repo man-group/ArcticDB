@@ -338,7 +338,8 @@ TEST(Async, CopyCompressedInterStore) {
     ASSERT_GT(row_count, 0);
     auto segment = encode_dispatch(std::move(segment_in_memory), *codec_opt, arcticdb::EncodingVersion::V1);
     (void)segment.calculate_size();
-    source_store->write_compressed_sync(as::KeySegmentPair{key, std::move(segment)});
+    auto ks = as::KeySegmentPair{key, std::move(segment)};
+    source_store->write_compressed_sync(ks);
 
     auto targets = std::vector<std::shared_ptr<arcticdb::Store>>{
         create_store(library_path, library_index, user_auth, codec_opt),
@@ -414,7 +415,8 @@ TEST(Async, CopyCompressedInterStoreNoSuchKeyOnWrite) {
     ASSERT_GT(row_count, 0);
     auto segment = encode_dispatch(std::move(segment_in_memory), *codec_opt, arcticdb::EncodingVersion::V1);
     (void)segment.calculate_size();
-    source_store->write_compressed_sync(as::KeySegmentPair{key, std::move(segment)});
+    auto ks = as::KeySegmentPair{key, std::move(segment)};
+    source_store->write_compressed_sync(ks);
 
     // Copy the key
     CopyCompressedInterStoreTask task{

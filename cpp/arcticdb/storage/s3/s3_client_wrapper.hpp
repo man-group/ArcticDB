@@ -20,7 +20,7 @@
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/util/composite.hpp>
+
 
 namespace arcticdb::storage{
 

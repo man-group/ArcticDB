@@ -96,7 +96,7 @@ folly::Future<entity::VariantKey> write(
 
     return async::submit_cpu_task(EncodeAtomTask{
         key_type, version_id, stream_id, start_index, end_index, creation_ts,
-        std::move(segment), codec_, encoding_version_
+        segment, codec_, encoding_version_
     })
         .via(&async::io_executor())
         .thenValue(WriteSegmentTask{library_});
@@ -112,7 +112,7 @@ folly::Future<entity::VariantKey> write(
     SegmentInMemory &&segment) override {
     util::check(is_ref_key_class(key_type), "Expected ref key type got  {}", key_type);
     return async::submit_cpu_task(EncodeRefTask{
-        key_type, stream_id, std::move(segment), codec_, encoding_version_
+        key_type, stream_id, segment, codec_, encoding_version_
     })
         .via(&async::io_executor())
         .thenValue(WriteSegmentTask{library_});
@@ -135,7 +135,7 @@ entity::VariantKey write_sync(
         key_type, version_id, stream_id, start_index, end_index, current_timestamp(),
         std::move(segment), codec_, encoding_version_
     }();
-    return WriteSegmentTask{library_}(std::move(encoded));
+    return WriteSegmentTask{library_}(encoded);
 }
 
 entity::VariantKey write_sync(PartialKey pk, SegmentInMemory &&segment) override {
@@ -148,7 +148,7 @@ entity::VariantKey write_sync(
     SegmentInMemory &&segment) override {
     util::check(is_ref_key_class(key_type), "Expected ref key type got  {}", key_type);
     auto encoded = EncodeRefTask{key_type, stream_id, std::move(segment), codec_, encoding_version_}();
-    return WriteSegmentTask{library_}(std::move(encoded));
+    return WriteSegmentTask{library_}(encoded);
 }
 
 entity::VariantKey write_if_none_sync(
@@ -157,19 +157,19 @@ entity::VariantKey write_if_none_sync(
         SegmentInMemory &&segment) override {
     util::check(is_ref_key_class(key_type), "Expected ref key type got  {}", key_type);
     auto encoded = EncodeRefTask{key_type, stream_id, std::move(segment), codec_, encoding_version_}();
-    return WriteIfNoneTask{library_}(std::move(encoded));
+    return WriteIfNoneTask{library_}(encoded);
 }
 
 bool is_path_valid(const std::string_view path) const override {
     return library_->is_path_valid(path);
 }
 
-folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair ks) override {
-    return async::submit_io_task(WriteCompressedTask{std::move(ks), library_});
+folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair& ks) override {
+    return async::submit_io_task(WriteCompressedTask{ks, library_});
 }
 
-void write_compressed_sync(storage::KeySegmentPair ks) override {
-    library_->write(Composite<storage::KeySegmentPair>(std::move(ks)));
+void write_compressed_sync(storage::KeySegmentPair& ks) override {
+    library_->write(ks);
 }
 
 folly::Future<entity::VariantKey> update(const entity::VariantKey &key,
@@ -390,8 +390,7 @@ folly::Future<SliceAndKey> async_write(
         .thenValue([lib=library_](auto &&item) {
             auto [key_opt_segment, slice] = std::forward<decltype(item)>(item);
             if (key_opt_segment.second)
-                lib->write(Composite<storage::KeySegmentPair>({VariantKey{key_opt_segment.first},
-                                                               std::move(*key_opt_segment.second)}));
+                lib->write({VariantKey{key_opt_segment.first}, std::move(*key_opt_segment.second)});
 
             return SliceAndKey{slice, to_atom(key_opt_segment.first)};
         });

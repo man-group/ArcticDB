@@ -18,11 +18,11 @@
 namespace arcticdb::storage::memory {
 
 void add_serialization_fields(KeySegmentPair& kv) {
-    auto segment = kv.segment_ptr();
-    auto& hdr = segment->header();
-    (void)segment->calculate_size();
+    auto& segment = kv.segment();
+    auto& hdr = segment.header();
+    (void)segment.calculate_size();
     if(hdr.encoding_version() == EncodingVersion::V2) {
-        const auto* src = segment->buffer().data();
+        const auto* src = segment.buffer().data();
         set_body_fields(hdr, src);
     }
 }
@@ -33,62 +33,54 @@ void add_serialization_fields(KeySegmentPair& kv) {
         return "memory_storage-0";
     }
 
-    void MemoryStorage::do_write(Composite<KeySegmentPair>&& kvs) {
+    void MemoryStorage::do_write(KeySegmentPair&& kvs) {
         ARCTICDB_SAMPLE(MemoryStorageWrite, 0)
 
-        auto fmt_db = [](auto &&k) { return variant_key_type(k.variant_key()); };
+        kvs.broadcast([this](KeySegmentPair& val) {
+            auto &key_vec = data_[variant_key_type(val.variant_key())];
 
-        (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
-            auto& key_vec = data_[group.key()];
-
-            for (auto &kv : group.values()) {
-                util::variant_match(kv.variant_key(),
-                                    [&](const RefKey &key) {
-                                        if (auto it = key_vec.find(key); it != key_vec.end()) {
-                                            key_vec.erase(it);
-                                        }
-                                        add_serialization_fields(kv);
-                                        key_vec.try_emplace(key, std::move(*kv.release_segment()));
-                                    },
-                                    [&](const AtomKey &key) {
-                                        if (key_vec.find(key) != key_vec.end()) {
-                                            throw DuplicateKeyException(key);
-                                        }
-                                        add_serialization_fields(kv);
-                                        key_vec.try_emplace(key, std::move(*kv.release_segment()));
+            util::variant_match(val.variant_key(),
+                                [&](const RefKey &key) {
+                                    if (auto it = key_vec.find(key); it != key_vec.end()) {
+                                        key_vec.erase(it);
                                     }
-                );
-            }
+                                    add_serialization_fields(val);
+                                    key_vec.try_emplace(key, std::move(*val.release_segment()));
+                                },
+                                [&](const AtomKey &key) {
+                                    if (key_vec.find(key) != key_vec.end()) {
+                                        throw DuplicateKeyException(key);
+                                    }
+                                    add_serialization_fields(val);
+                                    key_vec.try_emplace(key, std::move(*val.release_segment()));
+                                }
+            );
         });
     }
 
-    void MemoryStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
+    void MemoryStorage::do_update(KeySegmentPair&& kvs, UpdateOpts opts) {
         ARCTICDB_SAMPLE(MemoryStorageUpdate, 0)
 
-        auto fmt_db = [](auto &&k) { return variant_key_type(k.variant_key()); };
+        kvs.broadcast([this, &opts](KeySegmentPair& val) {
+            auto &key_vec = data_[variant_key_type(val.variant_key())];
 
-        (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
-            auto& key_vec = data_[group.key()];
+            auto it = key_vec.find(val.variant_key());
 
-            for (auto &kv : group.values()) {
-                auto it = key_vec.find(kv.variant_key());
-
-                if (!opts.upsert_ && it == key_vec.end()) {
-                    std::string err_message = fmt::format("do_update called with upsert=false on non-existent key(s): {}", kv.variant_key());
-                    throw KeyNotFoundException(std::move(kv.variant_key()), err_message);
-                }
-
-                if(it != key_vec.end()) {
-                    key_vec.erase(it);
-                }
-
-                add_serialization_fields(kv);
-                key_vec.insert(std::make_pair(kv.variant_key(), kv.segment().clone()));
+            if (!opts.upsert_ && it == key_vec.end()) {
+                std::string err_message = fmt::format("do_update called with upsert=false on non-existent key(s): {}", val.variant_key());
+                throw KeyNotFoundException(val.variant_key(), err_message);
             }
+
+            if(it != key_vec.end()) {
+                key_vec.erase(it);
+            }
+
+            add_serialization_fields(val);
+            key_vec.insert(std::make_pair(val.variant_key(), val.segment().clone()));
         });
     }
 
-    void MemoryStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts) {
+    void MemoryStorage::do_read(VariantKey&& ks, const ReadVisitor& visitor, ReadKeyOpts) {
         ARCTICDB_SAMPLE(MemoryStorageRead, 0)
         auto fmt_db = [](auto &&k) { return variant_key_type(k); };
 
@@ -114,7 +106,7 @@ void add_serialization_fields(KeySegmentPair& kv) {
         return it != key_vec.end();
     }
 
-    void MemoryStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts)
+    void MemoryStorage::do_remove(VariantKey&& ks, RemoveOpts opts)
     {
         ARCTICDB_SAMPLE(MemoryStorageRemove, 0)
         auto fmt_db = [](auto &&k) { return variant_key_type(k); };

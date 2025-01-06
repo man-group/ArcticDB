@@ -38,12 +38,6 @@ void tombstone_snapshot(
     bool log_changes
 );
 
-void tombstone_snapshot(
-        const std::shared_ptr<stream::StreamSink>& store,
-        storage::KeySegmentPair&& key_segment_pair,
-        bool log_changes
-        );
-
 void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void(entity::VariantKey & )> visitor);
 
 std::optional<size_t> row_id_for_stream_in_snapshot_segment(

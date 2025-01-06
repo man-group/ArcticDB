@@ -8,8 +8,6 @@
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/storage/storage_options.hpp>
-#include <arcticdb/util/composite.hpp>
-#include <util/composite.hpp>
 
 namespace arcticdb::storage {
 
@@ -60,28 +58,28 @@ public:
             ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(message) {
     }
 
-    explicit KeyNotFoundException(Composite<VariantKey>&& keys) :
+    explicit KeyNotFoundException(VariantKey&& keys) :
         ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(fmt::format("Not found: {}", keys)),
-        keys_(std::make_shared<Composite<VariantKey>>(std::move(keys))) {
+        keys_(std::make_shared<VariantKey>(std::move(keys))) {
     }
 
-    explicit KeyNotFoundException(Composite<VariantKey>&& keys, std::string err_output) :
+    explicit KeyNotFoundException(VariantKey&& keys, std::string err_output) :
             ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(err_output),
-            keys_(std::make_shared<Composite<VariantKey>>(std::move(keys))) {
+            keys_(std::make_shared<VariantKey>(std::move(keys))) {
     }
 
     explicit KeyNotFoundException(const VariantKey& single_key):
-            KeyNotFoundException(Composite<VariantKey>{VariantKey{single_key}}) {}
+            KeyNotFoundException({VariantKey{single_key}}) {}
 
     explicit KeyNotFoundException(const VariantKey& single_key, std::string err_output):
-            KeyNotFoundException(Composite<VariantKey>{VariantKey{single_key}}, err_output) {}
+            KeyNotFoundException({VariantKey{single_key}}, err_output) {}
 
 
-    Composite<VariantKey>& keys() {
+    VariantKey& keys() {
         return *keys_;
     }
 private:
-    std::shared_ptr<Composite<VariantKey>> keys_;
+    std::shared_ptr<VariantKey> keys_;
     mutable std::string msg_;
 };
 
@@ -98,34 +96,20 @@ public:
     Storage(Storage&&) = default;
     Storage& operator=(Storage&&) = delete;
 
-    void write(Composite<KeySegmentPair> &&kvs) {
-        ARCTICDB_SAMPLE(StorageWrite, 0)
-        return do_write(std::move(kvs));
+    void write(KeySegmentPair &kv) {
+        return do_write(kv);
     }
 
-    void write(KeySegmentPair &&kv) {
-        return write(Composite<KeySegmentPair>{std::move(kv)});
-    }
-
-    void write_if_none(KeySegmentPair&& kv) {
-        return do_write_if_none(std::move(kv));
-    }
-
-    void update(Composite<KeySegmentPair> &&kvs, UpdateOpts opts) {
-        ARCTICDB_SAMPLE(StorageUpdate, 0)
-        return do_update(std::move(kvs), opts);
+    void write_if_none(KeySegmentPair& kv) {
+        return do_write_if_none(kv);
     }
 
     void update(KeySegmentPair &&kv, UpdateOpts opts) {
-        return update(Composite<KeySegmentPair>{std::move(kv)}, opts);
-    }
-
-    void read(Composite<VariantKey> &&ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
-        return do_read(std::move(ks), visitor, opts);
+        return do_update({std::move(kv)}, opts);
     }
 
     void read(VariantKey&& key, const ReadVisitor& visitor, ReadKeyOpts opts) {
-        return read(Composite<VariantKey>{std::move(key)}, visitor, opts);
+        return do_read(std::move(key), visitor, opts);
     }
 
     template<class KeyType>
@@ -140,12 +124,8 @@ public:
         return key_seg;
     }
 
-    void remove(Composite<VariantKey> &&ks, RemoveOpts opts) {
-        do_remove(std::move(ks), opts);
-    }
-
     void remove(VariantKey&& key, RemoveOpts opts) {
-        return remove(Composite<VariantKey>{std::move(key)}, opts);
+        return do_remove({std::move(key)}, opts);
     }
 
     bool supports_prefix_matching() const {
@@ -192,15 +172,15 @@ public:
     virtual std::string name() const = 0;
 
 private:
-    virtual void do_write(Composite<KeySegmentPair>&& kvs) = 0;
+    virtual void do_write(KeySegmentPair& kvs) = 0;
 
-    virtual void do_write_if_none(KeySegmentPair&& kv) = 0;
+    virtual void do_write_if_none(KeySegmentPair& kv) = 0;
 
-    virtual void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) = 0;
+    virtual void do_update(KeySegmentPair&& kvs, UpdateOpts opts) = 0;
 
-    virtual void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) = 0;
+    virtual void do_read(VariantKey&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) = 0;
 
-    virtual void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) = 0;
+    virtual void do_remove(VariantKey&& ks, RemoveOpts opts) = 0;
 
     virtual bool do_key_exists(const VariantKey& key) = 0;
 

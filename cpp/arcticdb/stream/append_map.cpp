@@ -383,8 +383,8 @@ std::pair<TimeseriesDescriptor, std::optional<SegmentInMemory>> get_descriptor_a
         auto seg = store->read_sync(k, opts).second;
         return std::make_pair(seg.index_descriptor(), std::make_optional<SegmentInMemory>(seg));
     } else {
-        auto seg_ptr = store->read_compressed_sync(k, opts).segment_ptr();
-        auto tsd = decode_timeseries_descriptor_for_incompletes(*seg_ptr);
+        auto& seg = store->read_compressed_sync(k, opts).segment();
+        auto tsd = decode_timeseries_descriptor_for_incompletes(seg);
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(tsd.has_value(), "Failed to decode timeseries descriptor");
         return std::make_pair(std::move(*tsd), std::nullopt);
     }

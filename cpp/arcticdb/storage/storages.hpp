@@ -10,7 +10,7 @@
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
-#include <arcticdb/util/composite.hpp>
+
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/single_file_storage.hpp>
 
@@ -41,16 +41,16 @@ class Storages {
         storages_(std::move(storages)), mode_(mode) {
     }
 
-    void write(Composite<KeySegmentPair>&& kvs) {
+    void write(KeySegmentPair& kvs) {
         ARCTICDB_SAMPLE(StoragesWrite, 0)
-        primary().write(std::move(kvs));
+        primary().write(kvs);
     }
 
-    void write_if_none(KeySegmentPair&& kv) {
-        primary().write_if_none(std::move(kv));
+    void write_if_none(KeySegmentPair& kv) {
+        primary().write_if_none(kv);
     }
 
-    void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
+    void update(KeySegmentPair&& kvs, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(StoragesUpdate, 0)
         primary().update(std::move(kvs), opts);
     }
@@ -79,14 +79,12 @@ class Storages {
         return primary().is_path_valid(path);
     }
 
-    auto read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts, bool primary_only=true) {
+    auto read(VariantKey&& ks, const ReadVisitor& visitor, ReadKeyOpts opts, bool primary_only=true) {
         ARCTICDB_RUNTIME_SAMPLE(StoragesRead, 0)
         if(primary_only)
             return primary().read(std::move(ks), visitor, opts);
 
-        if(auto rg = ks.as_range(); !std::all_of(std::begin(rg), std::end(rg), [] (const auto& vk) {
-            return variant_key_type(vk) == KeyType::TABLE_DATA;
-        })) {
+        if(variant_key_type(ks) == KeyType::TABLE_DATA) {
             return primary().read(std::move(ks), visitor, opts);
         }
 
@@ -128,7 +126,7 @@ class Storages {
         return primary().key_path(key);
     }
 
-    void remove(Composite<VariantKey>&& ks, storage::RemoveOpts opts) {
+    void remove(VariantKey&& ks, storage::RemoveOpts opts) {
         primary().remove(std::move(ks), opts);
     }
 
@@ -144,7 +142,7 @@ class Storages {
             if (to_atom(key).creation_ts() < horizon) {
                 try {
                     auto key_seg = source.read(VariantKey{key}, ReadKeyOpts{});
-                    target.write(std::move(key_seg));
+                    target.write(key_seg);
                     source.remove(std::move(key), storage::RemoveOpts{});
                 } catch (const std::exception& ex) {
                     log::storage().warn("Failed to move key to next storage: {}", ex.what());
@@ -182,7 +180,7 @@ class Storages {
     OpenMode mode_;
 };
 
-inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path, OpenMode mode, const decltype(std::declval<arcticc::pb2::storage_pb2::LibraryConfig>().storage_by_id())& storage_configs, const NativeVariantStorage& native_storage_config) {
+inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path, OpenMode mode, decltype(std::declval<arcticc::pb2::storage_pb2::LibraryConfig>().storage_by_id())& storage_configs, const NativeVariantStorage& native_storage_config) {
     Storages::StorageVector storages;
     for (const auto& [storage_id, storage_config]: storage_configs) {
         util::variant_match(native_storage_config.variant(),

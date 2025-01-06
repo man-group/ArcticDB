@@ -106,9 +106,9 @@ struct StreamSink {
             const StreamId &stream_id,
             SegmentInMemory &&segment) = 0;
 
-    [[nodiscard]] virtual folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair ks) = 0;
+    [[nodiscard]] virtual folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair& ks) = 0;
 
-    virtual void write_compressed_sync(storage::KeySegmentPair ks) = 0;
+    virtual void write_compressed_sync(storage::KeySegmentPair& ks) = 0;
 
     [[nodiscard]] virtual folly::Future<pipelines::SliceAndKey> async_write(
         folly::Future<std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>> &&input_fut,

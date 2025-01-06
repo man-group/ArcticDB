@@ -19,7 +19,7 @@
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/filter_segment.hpp>
-#include <arcticdb/util/composite.hpp>
+
 #include <arcticdb/util/string_utils.hpp>
 #include <arcticdb/util/variant.hpp>
 

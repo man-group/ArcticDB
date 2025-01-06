@@ -19,7 +19,7 @@
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/util/composite.hpp>
+
 
 #include <aws/s3/model/DeleteObjectRequest.h>
 #include <arcticdb/storage/s3/s3_real_client.hpp>
@@ -48,23 +48,23 @@ std::string S3Storage::get_key_path(const VariantKey& key) const {
     // to most of them
 }
 
-void S3Storage::do_write(Composite<KeySegmentPair>&& kvs) {
+void S3Storage::do_write(KeySegmentPair& kvs) {
     detail::do_write_impl(std::move(kvs), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
 }
 
-void S3Storage::do_write_if_none(KeySegmentPair&& kv) {
+void S3Storage::do_write_if_none(KeySegmentPair& kv) {
     detail::do_write_if_none_impl(std::move(kv), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
 }
 
-void S3Storage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
+void S3Storage::do_update(KeySegmentPair&& kvs, UpdateOpts) {
     detail::do_update_impl(std::move(kvs), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
 }
 
-void S3Storage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
+void S3Storage::do_read(VariantKey&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
     detail::do_read_impl(std::move(ks), visitor, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{}, opts);
 }
 
-void S3Storage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
+void S3Storage::do_remove(VariantKey&& ks, RemoveOpts) {
     detail::do_remove_impl(std::move(ks), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
 }
 

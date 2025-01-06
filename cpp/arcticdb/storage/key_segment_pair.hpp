@@ -24,27 +24,27 @@ namespace arcticdb::storage {
         explicit KeySegmentPair(VariantKey &&key)
           : key_(std::make_shared<VariantKey>(std::move(key))) {}
 
-        KeySegmentPair(VariantKey &&key, Segment &&segment)
-          : key_(std::make_shared<VariantKey>(std::move(key))),
-            segment_(std::make_shared<Segment>(std::move(segment))) {}
+        KeySegmentPair(VariantKey&& key, std::unique_ptr<Segment> segment)
+            : key_(std::make_shared<VariantKey>(std::move(key))),
+            segment_(std::move(segment)) {
 
-        template<typename K>
-        KeySegmentPair(K &&key, std::shared_ptr<Segment> segment)
-            : key_(std::make_shared<VariantKey>(std::forward<K>(key))),
-              segment_(std::move(segment)) {}
-
-        ARCTICDB_MOVE_COPY_DEFAULT(KeySegmentPair)
-
-        std::unique_ptr<Segment> release_segment() {
-            util::check(segment_, "Attempting to access segment_ but it has not been set");
-            auto tmp = std::make_unique<Segment>(std::move(*segment_));
-            segment_ = std::make_shared<Segment>();
-            return tmp;
         }
 
-        [[nodiscard]] std::shared_ptr<Segment> segment_ptr() const {
-          util::check(segment_, "Attempting to access segment_ptr it is empty");
-          return segment_;
+        KeySegmentPair(VariantKey &&key, Segment &&segment)
+          : KeySegmentPair(std::move(key), std::make_unique<Segment>(std::move(segment))) {
+
+        }
+
+        ARCTICDB_MOVE_ONLY_DEFAULT(KeySegmentPair)
+
+        std::unique_ptr<Segment> release_segment() {
+            util::check(static_cast<bool>(segment_), "Attempting to access segment_ but it has not been set");
+            return std::move(segment_);
+        }
+
+        [[nodiscard]] Segment& segment() const {
+          util::check(static_cast<bool>(segment_), "Attempting to access segment_ptr but it has not been set");
+          return *segment_;
         }
 
         template<typename T>
@@ -53,7 +53,7 @@ namespace arcticdb::storage {
         }
 
         void set_segment(Segment&& segment) {
-          segment_ = std::make_shared<Segment>(std::move(segment));
+          segment_ = std::make_unique<Segment>(std::move(segment));
         }
 
         [[nodiscard]] const AtomKey &atom_key() const {
@@ -71,11 +71,6 @@ namespace arcticdb::storage {
             return *key_;
         }
 
-        [[nodiscard]] const Segment &segment() const {
-            util::check(segment_, "Attempting to access segment_ (const) but it has not been set");
-            return *segment_;
-        }
-
         [[nodiscard]] bool has_segment() const {
             return !segment().is_empty();
         }
@@ -90,7 +85,7 @@ namespace arcticdb::storage {
 
     private:
         std::shared_ptr<VariantKey> key_ = std::make_shared<VariantKey>();
-        std::shared_ptr<Segment> segment_ = std::make_shared<Segment>();
+        std::unique_ptr<Segment> segment_ = std::make_unique<Segment>();
     };
 
 } //namespace arcticdb

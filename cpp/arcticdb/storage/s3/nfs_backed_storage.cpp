@@ -156,21 +156,21 @@ std::string NfsBackedStorage::name() const {
     return fmt::format("nfs_backed_storage-{}/{}/{}", region_, bucket_name_, root_folder_);
 }
 
-void NfsBackedStorage::do_write(Composite<KeySegmentPair>&& kvs) {
+void NfsBackedStorage::do_write(KeySegmentPair&& kvs) {
     auto enc = kvs.transform([] (auto&& key_seg) {
-        return KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
+        return KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.release_segment()};
     });
     s3::detail::do_write_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
-void NfsBackedStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
+void NfsBackedStorage::do_update(KeySegmentPair&& kvs, UpdateOpts) {
     auto enc = kvs.transform([] (auto&& key_seg) {
-        return KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
+        return KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.release_segment()};
     });
     s3::detail::do_update_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
-void NfsBackedStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
+void NfsBackedStorage::do_read(VariantKey&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
     auto func = [visitor] (const VariantKey& k, Segment&& seg) mutable {
         visitor(unencode_object_id(k), std::move(seg));
     };
@@ -182,7 +182,7 @@ void NfsBackedStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& vi
     s3::detail::do_read_impl(std::move(enc), func, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, opts);
 }
 
-void NfsBackedStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
+void NfsBackedStorage::do_remove(VariantKey&& ks, RemoveOpts) {
     auto enc = ks.transform([] (auto&& key) {
         return encode_object_id(key);
     });
