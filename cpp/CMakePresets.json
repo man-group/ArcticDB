@@ -61,7 +61,12 @@
       "name": "windows",
       "hidden": true,
       "generator": "Ninja",
-      "environment": {"cmakepreset_expected_host_system": "Windows"}
+      "environment": { "cmakepreset_expected_host_system": "Windows" },
+      "cacheVariables": {
+        "ARCTICDB_USE_PCH": "ON",
+        "VCPKG_OVERLAY_TRIPLETS": "custom-triplets",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-msvc"
+      }
     },
     {
       "name": "windows-cl-debug",
@@ -77,8 +82,7 @@
       },
       "cacheVariables": {
         "CMAKE_C_COMPILER": "cl",
-        "CMAKE_CXX_COMPILER": "cl",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static"
+        "CMAKE_CXX_COMPILER": "cl"
       }
     },
     {
@@ -94,7 +98,8 @@
       "installDir": "${sourceDir}/out/install",
       "cacheVariables": {
         "CMAKE_CXX_FLAGS": "/MP",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "VCPKG_OVERLAY_TRIPLETS": "custom-triplets",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-msvc",
         "ARCTICDB_PYTHON_EXPLICIT_LINK": "ON"
       }
     },
@@ -113,15 +118,6 @@
       "inherits": ["common_vcpkg", "linux"]
     },
     {
-      "name": "linux-debug-clang",
-      "inherits": ["common_vcpkg", "linux"],
-      "cacheVariables": {
-        "CMAKE_C_COMPILER": "clang",
-        "CMAKE_CXX_COMPILER": "clang++",
-        "STATIC_LINK_STD_LIB": "OFF"
-      }
-    },
-    {
       "name": "linux-conda-debug",
       "inherits":  ["common_conda", "linux"]
     },
@@ -132,8 +128,7 @@
       "hidden": true,
       "generator": "Unix Makefiles",
       "cacheVariables": {
-        "CMAKE_MAKE_PROGRAM": "make",
-        "STATIC_LINK_STD_LIB": "OFF"
+        "CMAKE_MAKE_PROGRAM": "make"
       },
       "environment": {"cmakepreset_expected_host_system": "Darwin"}
     },
@@ -155,7 +150,6 @@
     {"name": "windows-cl-conda-debug",    "configurePreset": "windows-cl-conda-debug",    "targets": "arcticdb_ext" },
     {"name": "windows-cl-conda-release",  "configurePreset": "windows-cl-conda-release",  "targets": "arcticdb_ext" },
     {"name": "linux-debug",               "configurePreset": "linux-debug",               "targets": "arcticdb_ext" },
-    {"name": "linux-debug-clang",         "configurePreset": "linux-debug-clang",         "targets": "arcticdb_ext" },
     {"name": "linux-release",             "configurePreset": "linux-release",             "targets": "arcticdb_ext" },
     {"name": "linux-conda-debug",         "configurePreset": "linux-conda-debug",         "targets": "arcticdb_ext" },
     {"name": "linux-conda-release",       "configurePreset": "linux-conda-release",       "targets": "arcticdb_ext" },
