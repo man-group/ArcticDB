@@ -135,10 +135,8 @@ class NfsS3Bucket(S3Bucket):
             is_https=self.factory.endpoint.startswith("https://"),
             region=self.factory.region,
             use_mock_storage_for_testing=self.factory.use_mock_storage_for_testing,
-            ssl=self.factory.ssl,
-            ca_cert_path=self.factory.client_cert_file,
             is_nfs_layout=True
-        )# client_cert_dir is skipped on purpose; It will be tested manually in other tests
+        )
         return cfg
 
 

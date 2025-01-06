@@ -109,7 +109,7 @@ def s3_storage_factory():
 
 @pytest.fixture(scope="session")
 def nfs_backed_s3_storage_factory():
-    with MotoNfsBackedS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=False) as f:
+    with MotoNfsBackedS3StorageFixtureFactory() as f:
         yield f
 
 
