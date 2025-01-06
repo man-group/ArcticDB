@@ -44,12 +44,6 @@ jobs:
         if: matrix.os == 'linux'
         run: echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH
 
-      - name: Select Python (Windows)
-        if: matrix.os == 'windows'
-        uses: actions/setup-python@v4.7.1
-        with:
-          python-version: "3.${{inputs.python3}}"
-
       - name: Install latest release
         if: inputs.arcticdb_version == 'latest'
         run: |
