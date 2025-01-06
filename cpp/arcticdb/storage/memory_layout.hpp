@@ -101,15 +101,15 @@ enum class BitmapFormat : uint8_t {
 // pointer to the first block
 struct EncodedField {
     EncodedFieldType type_ = EncodedFieldType::UNKNOWN;
-    uint16_t shapes_count_ = 0u;
-    uint16_t values_count_ = 0u;
+    uint32_t shapes_count_ = 0u;
+    uint32_t values_count_ = 0u;
     uint32_t sparse_map_bytes_ = 0u;
     uint32_t items_count_ = 0u;
     BitmapFormat format_ = BitmapFormat::UNKNOWN;
     std::array<Block, 1> blocks_;
 };
 
-static_assert(sizeof(EncodedField) == 60);
+static_assert(sizeof(EncodedField) == 64);
 
 enum class EncodingVersion : uint16_t {
     V1 = 0,

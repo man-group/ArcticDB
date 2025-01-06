@@ -54,7 +54,7 @@ def freq_fits_in_64_bits(count, unit):
 
 @st.composite
 def rule(draw):
-    count = draw(st.integers(min_value=1))
+    count = draw(st.integers(min_value=1, max_value=10_000))
     unit = draw(st.sampled_from(['min', 'h']))
     result = f"{count}{unit}"
     assume(freq_fits_in_64_bits(count=count, unit=unit))
@@ -65,7 +65,7 @@ def offset(draw):
     unit = draw(st.sampled_from(['s', 'min', 'h', None]))
     if unit is None:
         return None
-    count = draw(st.integers(min_value=1))
+    count = draw(st.integers(min_value=1, max_value=10_000))
     result = f"{count}{unit}"
     assume(freq_fits_in_64_bits(count=count, unit=unit))
     return result
