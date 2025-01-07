@@ -58,7 +58,7 @@ hypothesis.settings.register_profile("dev", max_examples=100)
 
 hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 
-pytest_plugins = ["pytest_plugins"]
+pytest_plugins = ["tests.pytest_plugins"]
 
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
