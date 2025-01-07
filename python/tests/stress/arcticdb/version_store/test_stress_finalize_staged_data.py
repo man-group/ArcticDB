@@ -20,7 +20,7 @@ from arcticdb.config import set_log_level
 from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
 
 
-from tests.util.mark import SKIP_CONDA_MARK, SLOW_TESTS_MARK
+from tests.util.mark import REAL_S3_TESTS_MARK, SKIP_CONDA_MARK, SLOW_TESTS_MARK
 
 # Uncomment for logging
 # set_log_level(default_level="DEBUG", console_output=False, file_output_path="/tmp/arcticdb.log")
@@ -40,10 +40,10 @@ class Results:
     def __str__(self): 
         return f"Options: {self.options}\nIteration: {self.iteration}\n# staged chunks: {self.number_staged_chunks}\ntotal rows finalized: {self.total_rows_finalized}\ntime for finalization (s): {self.finalization_time}"    
 
-@SLOW_TESTS_MARK
-@SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
-@pytest.mark.skipif(sys.platform == "win32", reason="Not enough storage on Windows runners")
-def test_finalize_monotonic_unique_chunks(basic_arctic_library):
+
+
+
+def finalize_monotonic_unique_chunks(ac_library, iterations):
     """
         The test is designed to staged thousands of chunks with variable chunk size.
         To experiment on local computer you can move up to 20k number of chunks approx 10k each
@@ -65,7 +65,7 @@ def test_finalize_monotonic_unique_chunks(basic_arctic_library):
     # Will hold the results after each iteration (instance of Results class)
     results = []
 
-    lib : Library = basic_arctic_library
+    lib : Library = ac_library
 
     total_start_time = time.time()
 
@@ -86,7 +86,7 @@ def test_finalize_monotonic_unique_chunks(basic_arctic_library):
     df = cachedDF.generate_dataframe_timestamp_indexed(num_rows_initially, total_number_rows, cachedDF.TIME_UNIT)
 
     cnt = 0
-    for iter in [500, 1000, 1500, 2000] :
+    for iter in iterations :
         res = Results()
 
         total_number_rows = INITIAL_TIMESTAMP + num_rows_initially
@@ -136,5 +136,20 @@ def test_finalize_monotonic_unique_chunks(basic_arctic_library):
 
     total_time = time.time() - total_start_time
     print("TOTAL TIME: ", total_time)
+
+
+@SLOW_TESTS_MARK
+@SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
+@pytest.mark.skipif(sys.platform == "win32", reason="Not enough storage on Windows runners")
+def test_finalize_monotonic_unique_chunks_lmdb(lmdb_library):
+    finalize_monotonic_unique_chunks(lmdb_library, [500, 1000, 1500, 2000])
+
+
+@SLOW_TESTS_MARK
+@SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
+@pytest.mark.skipif(sys.platform == "win32", reason="Not enough storage on Windows runners")
+@REAL_S3_TESTS_MARK
+def test_finalize_monotonic_unique_chunks_realS3(real_s3_library):
+    finalize_monotonic_unique_chunks(real_s3_library, [50, 100, 150, 200])
 
 
