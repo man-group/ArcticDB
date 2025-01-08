@@ -405,6 +405,18 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
                 auto result = ternary_operator(c, false, value);
                 return transform_to_placeholder(result);
             },
+            [] (const util::BitSet&, FullResult, FullResult) -> VariantData {
+                return FullResult{};
+            },
+            [] (const util::BitSet& c, FullResult, EmptyResult) -> VariantData {
+                return c;
+            },
+            [] (const util::BitSet& c, EmptyResult, FullResult) -> VariantData {
+                return ~c;
+            },
+            [] (const util::BitSet&, EmptyResult, EmptyResult) -> VariantData {
+                return EmptyResult{};
+            },
             [](const auto &, const auto&, const auto&) -> VariantData {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid input types to ternary operator");
                 return EmptyResult{};
