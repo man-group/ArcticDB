@@ -142,8 +142,8 @@ AcquiredLockId ReliableStorageLock<ClockType>::retry_until_take_lock() const {
         [&](LockInUse &) -> std::optional<AcquiredLockId> {
             return std::nullopt;
         },
-        [&](UnsupportedOperation &) -> std::optional<AcquiredLockId> {
-            log::lock().error("Unsupported operation while taking lock");
+        [&](UnsupportedOperation &err) -> std::optional<AcquiredLockId> {
+            log::lock().error("Unsupported operation while taking lock: {}", err);
             throw LostReliableLock();
         }
     );
@@ -160,8 +160,8 @@ AcquiredLockId ReliableStorageLock<ClockType>::retry_until_take_lock() const {
             [&](LockInUse &) -> std::optional<AcquiredLockId> {
                 return std::nullopt;
             },
-            [&](UnsupportedOperation &) -> std::optional<AcquiredLockId> {
-                log::lock().error("Unsupported operation while taking lock");
+            [&](UnsupportedOperation &err) -> std::optional<AcquiredLockId> {
+                log::lock().error("Unsupported operation while taking lock: {}", err);
                 throw LostReliableLock();
             }
         );
@@ -206,8 +206,9 @@ ReliableLockResult ReliableStorageLock<ClockType>::try_take_next_id(const std::v
     try {
         store_->write_if_none_sync(KeyType::ATOMIC_LOCK, lock_stream_id, lock_segment(lock_stream_id, expiration));
     } catch (const NotImplementedException& e) {
-        log::lock().debug("Failed to acquire lock (storage does not support atomic writes): {}", e.what());
-        return UnsupportedOperation{};
+        auto err = fmt::format("Failed to acquire lock (storage does not support atomic writes): {}", e.what());
+        log::lock().debug(err);
+        return UnsupportedOperation{err};
     } catch (const StorageException& e) {
         // There is no specific Aws::S3::S3Errors for the failed atomic operation, so we catch any StorageException.
         // Either way it's safe to assume we have failed to acquire the lock in case of transient S3 error.
@@ -240,9 +241,9 @@ inline ReliableStorageLockGuard::ReliableStorageLockGuard(const ReliableStorageL
                         // Clean up if we have lost the lock.
                         that->cleanup_on_lost_lock();
                     },
-                    [&](UnsupportedOperation &) {
+                    [&](UnsupportedOperation &err) {
                         // This should never happen
-                        log::lock().error("Unsupported operation while extending lock {}", that->acquired_lock_.value());
+                        log::lock().error("Unsupported operation while extending lock {}: {}", that->acquired_lock_.value(), err);
                         that->cleanup_on_lost_lock();
                     }
                 );
