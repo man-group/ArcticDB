@@ -286,6 +286,19 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& left, c
     return {ColumnWithStrings(std::move(output_column), string_pool, "some string")};
 }
 
+VariantData ternary_operator(const util::BitSet& condition, bool left, bool right) {
+    util::BitSet output_bitset;
+    output_bitset.resize(condition.size());
+    util::BitSet::bulk_insert_iterator inserter(output_bitset);
+    for (size_t idx = 0; idx < condition.size(); ++idx) {
+        if (condition[idx] ? left : right) {
+            inserter = idx;
+        }
+    }
+    inserter.flush();
+    return VariantData{std::move(output_bitset)};
+}
+
 VariantData visit_ternary_operator(const VariantData& condition, const VariantData& left, const VariantData& right) {
     auto transformed_condition = transform_to_bitset(condition);
 
@@ -366,6 +379,30 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
             },
             [] (const util::BitSet& c, const std::shared_ptr<Value>& l, const std::shared_ptr<Value>& r) -> VariantData {
                 auto result = ternary_operator(c, *l, *r);
+                return transform_to_placeholder(result);
+            },
+            [] (const util::BitSet& c, const std::shared_ptr<Value>& l, FullResult) -> VariantData {
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(l->data_type_), "Invalid input types to ternary operator");
+                auto value = l->get<bool>();
+                auto result = ternary_operator(c, value, true);
+                return transform_to_placeholder(result);
+            },
+            [] (const util::BitSet& c, FullResult, const std::shared_ptr<Value>& r) -> VariantData {
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(r->data_type_), "Invalid input types to ternary operator");
+                auto value = r->get<bool>();
+                auto result = ternary_operator(c, true, value);
+                return transform_to_placeholder(result);
+            },
+            [] (const util::BitSet& c, const std::shared_ptr<Value>& l, EmptyResult) -> VariantData {
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(l->data_type_), "Invalid input types to ternary operator");
+                auto value = l->get<bool>();
+                auto result = ternary_operator(c, value, false);
+                return transform_to_placeholder(result);
+            },
+            [] (const util::BitSet& c, EmptyResult, const std::shared_ptr<Value>& r) -> VariantData {
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(r->data_type_), "Invalid input types to ternary operator");
+                auto value = r->get<bool>();
+                auto result = ternary_operator(c, false, value);
                 return transform_to_placeholder(result);
             },
             [](const auto &, const auto&, const auto&) -> VariantData {

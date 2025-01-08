@@ -1277,6 +1277,48 @@ def test_filter_ternary_column_full_and_empty_results(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("value", [True, False])
+def test_filter_ternary_value_full_and_empty_results(lmdb_version_store_v1, value):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_ternary_value_full_and_empty_results"
+    df = pd.DataFrame(
+        {
+            "conditional": [True, False, False, True, False, True],
+            "col2": [0] * 6,
+        },
+        index=pd.date_range("2024-01-01", periods=6)
+    )
+    lib.write(symbol, df)
+
+    # Empty result as right operand
+    expected = df[np.where(df["conditional"].to_numpy(), value, (df["col2"] < 0).to_numpy())]
+    q = QueryBuilder()
+    q = q[where(q["conditional"], value, q["col2"] < 0)]
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    # Empty result as left operand
+    expected = df[np.where(df["conditional"].to_numpy(), (df["col2"] < 0).to_numpy(), value)]
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col2"] < 0, value)]
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    # Full result as right operand
+    expected = df[np.where(df["conditional"].to_numpy(), value, (~(df["col2"] < 0)).to_numpy())]
+    q = QueryBuilder()
+    q = q[where(q["conditional"], value, ~(q["col2"] < 0))]
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    # Full result as left operand
+    expected = df[np.where(df["conditional"].to_numpy(), (~(df["col2"] < 0)).to_numpy(), value)]
+    q = QueryBuilder()
+    q = q[where(q["conditional"], ~(q["col2"] < 0), value)]
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+
 ################################
 # MIXED SCHEMA TESTS FROM HERE #
 ################################
