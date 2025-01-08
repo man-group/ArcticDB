@@ -1111,9 +1111,9 @@ def test_float32_binary_comparison(lmdb_version_store_v1):
             generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_ternary_basic(lmdb_version_store_v1):
+def test_filter_ternary_bitset_bitset(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
-    symbol = "test_filter_ternary_basic"
+    symbol = "test_filter_ternary_bitset_bitset"
     df = pd.DataFrame(
         {
             "conditional": [True, False, False, True, False, True],
@@ -1131,9 +1131,9 @@ def test_filter_ternary_basic(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_filter_ternary_bitset_with_bool_column(lmdb_version_store_v1):
+def test_filter_ternary_bitset_column(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
-    symbol = "test_filter_ternary_bitset_with_bool_column"
+    symbol = "test_filter_ternary_bitset_column"
     df = pd.DataFrame(
         {
             "conditional": [True, False, False, True, False, True],
@@ -1157,9 +1157,9 @@ def test_filter_ternary_bitset_with_bool_column(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_filter_ternary_bitset_with_bool_value(lmdb_version_store_v1):
+def test_filter_ternary_bitset_value(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
-    symbol = "test_filter_ternary_bitset_with_bool_value"
+    symbol = "test_filter_ternary_bitset_value"
     df = pd.DataFrame(
         {
             "conditional": [True, False, False, True, False, True],
@@ -1194,9 +1194,9 @@ def test_filter_ternary_bitset_with_bool_value(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_filter_ternary_bitset_with_full_and_empty_results(lmdb_version_store_v1):
+def test_filter_ternary_bitset_full_and_empty_results(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
-    symbol = "test_filter_ternary_bitset_with_full_and_empty_results"
+    symbol = "test_filter_ternary_bitset_full_and_empty_results"
     df = pd.DataFrame(
         {
             "conditional": [True, False, False, True, False, True],
@@ -1231,6 +1231,48 @@ def test_filter_ternary_bitset_with_full_and_empty_results(lmdb_version_store_v1
     expected = df[np.where(df["conditional"].to_numpy(), (~(df["col1"] < 0)).to_numpy(), (df["col1"] < 4).to_numpy())]
     q = QueryBuilder()
     q = q[where(q["conditional"], ~(q["col1"] < 0), q["col1"] < 4)]
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+
+def test_filter_ternary_column_full_and_empty_results(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_ternary_column_full_and_empty_results"
+    df = pd.DataFrame(
+        {
+            "conditional": [True, False, False, True, False, True],
+            "col1": [True, False] * 3,
+            "col2": [0] * 6,
+        },
+        index=pd.date_range("2024-01-01", periods=6)
+    )
+    lib.write(symbol, df)
+
+    # Empty result as right operand
+    expected = df[np.where(df["conditional"].to_numpy(), df["col1"].to_numpy(), (df["col2"] < 0).to_numpy())]
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col1"], q["col2"] < 0)]
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    # Empty result as left operand
+    expected = df[np.where(df["conditional"].to_numpy(), (df["col2"] < 0).to_numpy(), df["col1"].to_numpy())]
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col2"] < 0, q["col1"])]
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    # Full result as right operand
+    expected = df[np.where(df["conditional"].to_numpy(), df["col1"].to_numpy(), (~(df["col2"] < 0)).to_numpy())]
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col1"], ~(q["col2"] < 0))]
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    # Full result as left operand
+    expected = df[np.where(df["conditional"].to_numpy(), (~(df["col2"] < 0)).to_numpy(), df["col1"].to_numpy())]
+    q = QueryBuilder()
+    q = q[where(q["conditional"], ~(q["col2"] < 0), q["col1"])]
     received = lib.read(symbol, query_builder=q).data
     assert_frame_equal(expected, received)
 

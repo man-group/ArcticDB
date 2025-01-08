@@ -299,6 +299,26 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
                 auto result = ternary_operator(c, *l, r);
                 return transform_to_placeholder(result);
             },
+            [] (const util::BitSet& c, const ColumnWithStrings& l, FullResult) -> VariantData {
+                auto bitset = std::get<util::BitSet>(transform_to_bitset(l));
+                auto result = ternary_operator(c, bitset, true);
+                return transform_to_placeholder(result);
+            },
+            [] (const util::BitSet& c, FullResult, const ColumnWithStrings& r) -> VariantData {
+                auto bitset = std::get<util::BitSet>(transform_to_bitset(r));
+                auto result = ternary_operator(c, true, bitset);
+                return transform_to_placeholder(result);
+            },
+            [] (const util::BitSet& c, const ColumnWithStrings& l, EmptyResult) -> VariantData {
+                auto bitset = std::get<util::BitSet>(transform_to_bitset(l));
+                auto result = ternary_operator(c, bitset, false);
+                return transform_to_placeholder(result);
+            },
+            [] (const util::BitSet& c, EmptyResult, const ColumnWithStrings& r) -> VariantData {
+                auto bitset = std::get<util::BitSet>(transform_to_bitset(r));
+                auto result = ternary_operator(c, false, bitset);
+                return transform_to_placeholder(result);
+            },
             [](const auto &, const auto&, const auto&) -> VariantData {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid input types to ternary operator");
                 return EmptyResult{};
