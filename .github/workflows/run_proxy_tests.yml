@@ -40,8 +40,7 @@ jobs:
         shell: bash -el {0}
         run: |
           apt update
-          apt install -y software-properties-common iptables squid
-          apt install -y curl
+          apt install -y software-properties-common iptables squid curl
           python -m pip install --force-reinstall $(ls arcticdb*.whl)[Testing]
           python -m pip install grpcio grpcio-tools
 
@@ -73,9 +72,6 @@ jobs:
       - name: Run proxy test
         shell: bash -el {0}
         run: |
-          echo ${http_proxy}
-          echo ${https_proxy}
-          curl google.com
           python -m pytest --timeout=3600 python/tests/integration/arcticdb/test_arctic.py::test_s3_sts_auth
 
       # Fallback if the clean up at test fixutre tear down fails due to crash or etc
