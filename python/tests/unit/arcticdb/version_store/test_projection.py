@@ -167,6 +167,44 @@ def test_project_ternary_column_value_strings(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
+def test_project_ternary_value_value_numeric(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_project_ternary_value_value_numeric"
+    df = pd.DataFrame(
+        {
+            "conditional": [True, False, False, True, False, True],
+        },
+        index=pd.date_range("2024-01-01", periods=6)
+    )
+    lib.write(symbol, df)
+
+    expected = df
+    expected["new_col"] = np.where(df["conditional"].to_numpy(), 0, 1)
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], 0, 1))
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received, check_dtype=False)
+
+
+def test_project_ternary_value_value_string(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_project_ternary_value_value_string"
+    df = pd.DataFrame(
+        {
+            "conditional": [True, False, False, True, False, True],
+        },
+        index=pd.date_range("2024-01-01", periods=6)
+    )
+    lib.write(symbol, df)
+
+    expected = df
+    expected["new_col"] = np.where(df["conditional"].to_numpy(), "hello", "goodbye")
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], "hello", "goodbye"))
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received, check_dtype=False)
+
+
 def test_docstring_example_query_builder_apply(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(

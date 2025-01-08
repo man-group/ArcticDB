@@ -241,6 +241,51 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& val, co
     return {ColumnWithStrings(std::move(output_column), string_pool, "some string")};
 }
 
+VariantData ternary_operator(const util::BitSet& condition, const Value& left, const Value& right) {
+    std::unique_ptr<Column> output_column;
+    std::shared_ptr<StringPool> string_pool;
+
+    details::visit_type(left.type().data_type(), [&](auto left_tag) {
+        using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
+        details::visit_type(right.type().data_type(), [&](auto right_tag) {
+            using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
+            if constexpr(is_sequence_type(left_type_info::data_type) && is_sequence_type(right_type_info::data_type)) {
+                if constexpr(left_type_info::data_type == right_type_info::data_type && is_dynamic_string_type(left_type_info::data_type)) {
+                    output_column = std::make_unique<Column>(make_scalar_type(left_type_info::data_type), Sparsity::PERMITTED);
+                    string_pool = std::make_shared<StringPool>();
+                    auto left_value = std::string(*left.str_data(), left.len());
+                    auto right_value = std::string(*right.str_data(), right.len());
+                    // Put both possible strings in the pool for performance, it's possible one will be redundant if condition is all true or all false
+                    auto left_offset = string_pool->get(left_value, false).offset();
+                    auto right_offset = string_pool->get(right_value, false).offset();
+                    // TODO: Use ColumnDataIterator and more efficient bitset access
+                    for (size_t idx = 0; idx < condition.size(); ++idx) {
+                        output_column->push_back(condition[idx] ? left_offset : right_offset);
+                    }
+                }
+                // TODO: Handle else?
+            } else if constexpr ((is_numeric_type(left_type_info::data_type) && is_numeric_type(right_type_info::data_type)) ||
+                                 (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type))) {
+                // TODO: Hacky to reuse type_arithmetic_promoted_type with IsInOperator, and incorrect when there is a uint64_t and an int64_t column
+                using TargetType = typename type_arithmetic_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, IsInOperator>::type;
+                constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
+                output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
+                auto left_value = static_cast<TargetType>(left.get<typename left_type_info::RawType>());
+                auto right_value = static_cast<TargetType>(right.get<typename right_type_info::RawType>());
+                // TODO: Use ColumnDataIterator and more efficient bitset access
+                for (size_t idx = 0; idx < condition.size(); ++idx) {
+                    output_column->push_back(condition[idx] ? left_value : right_value);
+                }
+            } else {
+                // TODO: Add equivalent of binary_operation_with_types_to_string for ternary
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid comparison");
+            }
+        });
+    });
+    // TODO: add equivalent of binary_operation_column_name for ternary operator
+    return {ColumnWithStrings(std::move(output_column), string_pool, "some string")};
+}
+
 VariantData visit_ternary_operator(const VariantData& condition, const VariantData& left, const VariantData& right) {
     auto transformed_condition = transform_to_bitset(condition);
 
@@ -317,6 +362,10 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
             [] (const util::BitSet& c, EmptyResult, const ColumnWithStrings& r) -> VariantData {
                 auto bitset = std::get<util::BitSet>(transform_to_bitset(r));
                 auto result = ternary_operator(c, false, bitset);
+                return transform_to_placeholder(result);
+            },
+            [] (const util::BitSet& c, const std::shared_ptr<Value>& l, const std::shared_ptr<Value>& r) -> VariantData {
+                auto result = ternary_operator(c, *l, *r);
                 return transform_to_placeholder(result);
             },
             [](const auto &, const auto&, const auto&) -> VariantData {
