@@ -170,12 +170,24 @@ jobs:
               - ${{fromJson(needs.common_config.outputs.linux_matrix)[0]}}
               - python_deps_id: -compat38
                 python_deps: requirements-compatibility-py38.txt
+          - python3: 10
+            python_deps_ids: ["", -compat310]
+            matrix_override:
+              - ${{fromJson(needs.common_config.outputs.linux_matrix)[0]}}
+              - python_deps_id: -compat310
+                python_deps: requirements-compatibility-py310.txt
           - python3: 11
             python_deps_ids: ["", -compat311]
             matrix_override:
               - ${{fromJson(needs.common_config.outputs.linux_matrix)[0]}}
               - python_deps_id: -compat311
                 python_deps: requirements-compatibility-py311.txt
+          - python3: 12
+            python_deps_ids: ["", -compat312]
+            matrix_override:
+              - ${{fromJson(needs.common_config.outputs.linux_matrix)[0]}}
+              - python_deps_id: -compat312
+                python_deps: requirements-compatibility-py312.txt
     name: 3.${{matrix.python3}} Linux
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit

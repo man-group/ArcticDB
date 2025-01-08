@@ -1,0 +1,3 @@
+# Makes sure we are able to use Numpy 2+ and Pandas 1
+numpy>=2
+pandas<2
