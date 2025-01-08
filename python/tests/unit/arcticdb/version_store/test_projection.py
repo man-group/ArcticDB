@@ -71,9 +71,9 @@ def test_project_string_unary_arithmetic(lmdb_version_store_v1):
         lib.read(symbol, query_builder=q)
 
 
-def test_project_ternary_numeric_basic(lmdb_version_store_v1):
+def test_project_ternary_column_column_numeric(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
-    symbol = "test_project_ternary_numeric_basic"
+    symbol = "test_project_ternary_column_column_numeric"
     df = pd.DataFrame(
         {
             "conditional": [True, False, False, True, False, True],
@@ -92,9 +92,9 @@ def test_project_ternary_numeric_basic(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_project_ternary_strings_basic(lmdb_version_store_v1):
+def test_project_ternary_column_column_strings(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
-    symbol = "test_project_ternary_strings_basic"
+    symbol = "test_project_ternary_column_column_strings"
     df = pd.DataFrame(
         {
             "conditional": [True, False, False, True, False, True],
@@ -109,6 +109,60 @@ def test_project_ternary_strings_basic(lmdb_version_store_v1):
     expected["new_col"] = np.where(df["conditional"].to_numpy(), df["col1"].to_numpy(), df["col2"].to_numpy())
     q = QueryBuilder()
     q = q.apply("new_col", where(q["conditional"], q["col1"], q["col2"]))
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+
+def test_project_ternary_column_value_numeric(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_project_ternary_column_value_numeric"
+    df = pd.DataFrame(
+        {
+            "conditional": [True, False, False, True, False, True],
+            "col1": np.arange(6),
+        },
+        index=pd.date_range("2024-01-01", periods=6)
+    )
+    lib.write(symbol, df)
+
+    expected = df
+    expected["new_col"] = np.where(df["conditional"].to_numpy(), df["col1"].to_numpy(), 10)
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], q["col1"], 10))
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    # Swap operands
+    expected["new_col"] = np.where(df["conditional"].to_numpy(), 10, df["col1"].to_numpy())
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], 10, q["col1"]))
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+
+def test_project_ternary_column_value_strings(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_project_ternary_column_value_strings"
+    df = pd.DataFrame(
+        {
+            "conditional": [True, False, False, True, False, True],
+            "col1": ["a", "b", "c", "d", "e", "f"],
+        },
+        index=pd.date_range("2024-01-01", periods=6)
+    )
+    lib.write(symbol, df)
+
+    expected = df
+    expected["new_col"] = np.where(df["conditional"].to_numpy(), df["col1"].to_numpy(), "h")
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], q["col1"], "h"))
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    # Swap operands
+    expected["new_col"] = np.where(df["conditional"].to_numpy(), "h", df["col1"].to_numpy())
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], "h", q["col1"]))
     received = lib.read(symbol, query_builder=q).data
     assert_frame_equal(expected, received)
 
