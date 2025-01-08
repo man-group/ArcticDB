@@ -76,7 +76,7 @@ using Range = folly::Range<It>;
         raise<ErrorCode::E_S3_RETRYABLE>(fmt::format("Retry-able error: {}",
                                                      error_message_suffix));
     }
-
+    
     // We create a more detailed error explanation in case of NETWORK_CONNECTION errors to remedy #880.
     if (type == Aws::S3::S3Errors::NETWORK_CONNECTION) {
         error_message = fmt::format("Unexpected network error: {} "

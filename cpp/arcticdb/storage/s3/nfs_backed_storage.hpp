@@ -58,7 +58,7 @@ private:
     }
 
     bool do_supports_atomic_writes() const final {
-        return true;
+        return ConfigsMap::instance()->get_int("NfsStorage.SupportsAtomicWrites", 0) == 1;
     }
 
     bool do_fast_delete() final {

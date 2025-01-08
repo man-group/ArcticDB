@@ -4,6 +4,7 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
+#pragma once
 
 #include <arcticdb/util/reliable_storage_lock.hpp>
 
@@ -119,6 +120,22 @@ ReliableLockResult ReliableStorageLock<ClockType>::try_take_lock() const {
     return try_take_next_id(existing_locks, latest);
 }
 
+inline std::optional<AcquiredLockId> parse_reliable_storage_lock_result(const ReliableLockResult& result) {
+    return util::variant_match(
+        result,
+        [&](const AcquiredLock &acquired_lock) -> std::optional<AcquiredLockId> {
+            return acquired_lock;
+        },
+        [&](const LockInUse &) -> std::optional<AcquiredLockId> {
+            return std::nullopt;
+        },
+        [&](const UnsupportedOperation &err) -> std::optional<AcquiredLockId> {
+            log::lock().error("Unsupported operation while taking lock: {}", err);
+            throw LostReliableLock();
+        }
+    );
+}
+
 template<class ClockType>
 AcquiredLockId ReliableStorageLock<ClockType>::retry_until_take_lock() const {
     // We don't use the ExponentialBackoff because we want to be able to wait indefinitely
@@ -132,40 +149,12 @@ AcquiredLockId ReliableStorageLock<ClockType>::retry_until_take_lock() const {
         return current_wait * factor;
     };
 
-    std::optional<AcquiredLockId> acquired_lock;
-    auto result = try_take_lock();
-    acquired_lock = util::variant_match(
-        result,
-        [&](AcquiredLock &acquired_lock) -> std::optional<AcquiredLockId> {
-            return acquired_lock;
-        },
-        [&](LockInUse &) -> std::optional<AcquiredLockId> {
-            return std::nullopt;
-        },
-        [&](UnsupportedOperation &err) -> std::optional<AcquiredLockId> {
-            log::lock().error("Unsupported operation while taking lock: {}", err);
-            throw LostReliableLock();
-        }
-    );
+    std::optional<AcquiredLockId> acquired_lock = parse_reliable_storage_lock_result(try_take_lock());
 
     while (!acquired_lock.has_value()) {
         std::this_thread::sleep_for(jittered_wait());
         current_wait = std::min(current_wait * 2, max_wait);
-        auto result = try_take_lock();
-        acquired_lock = util::variant_match(
-            result,
-            [&](AcquiredLock &acquired_lock) -> std::optional<AcquiredLockId> {
-                return acquired_lock;
-            },
-            [&](LockInUse &) -> std::optional<AcquiredLockId> {
-                return std::nullopt;
-            },
-            [&](UnsupportedOperation &err) -> std::optional<AcquiredLockId> {
-                log::lock().error("Unsupported operation while taking lock: {}", err);
-                throw LostReliableLock();
-            }
-        );
-
+        acquired_lock = parse_reliable_storage_lock_result(try_take_lock());
     }
     return acquired_lock.value();
 }
