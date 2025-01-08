@@ -6,6 +6,8 @@ from types import FunctionType, ModuleType
 from typing import Any, Callable, List
 import pytest
 
+from tests.analysis.adb_meta_info import Functions
+
 
 def arcticdb_test(func): 
     """
@@ -106,7 +108,7 @@ class TestsFilterPipeline:
             for test in self.get_tests():
                 file.write(f"{test}\n")
     
-    def filter_tests_pytest_marked(self, pytest_mark_name: str = None) -> 'TestsFilterPipeline':
+    def filter_pytests_marked(self, pytest_mark_name: str = None) -> 'TestsFilterPipeline':
         """
         Filters only test functions/methods marked with specified
         pytest mark
@@ -114,7 +116,7 @@ class TestsFilterPipeline:
         self.list = self.__filter_tests_pytest_marked(pytest_mark_name)
         return self
     
-    def exclude_tests_pytest_marked(self, pytest_mark_name: str = None) -> 'TestsFilterPipeline':
+    def exclude_pytests_marked(self, pytest_mark_name: str = None) -> 'TestsFilterPipeline':
         """
         Exclude test functions/methods marked with specified
         pytest mark
@@ -142,16 +144,16 @@ class TestsFilterPipeline:
                             break
         return functions
     
-    def filter_tests_pytest_marked_parameter(self, pytest_mark_parameter: str, 
-                                             condition_func: Callable[[Any], bool]) -> 'TestsFilterPipeline':
+    def filter_pytests_where_parameter(self, pytest_mark_parameter: str, 
+                                        condition_func: Callable[[Any], bool]) -> 'TestsFilterPipeline':
         """
         Filters tests which pytest mark has parameter value that meets 'condition_func'
         """
         self.list = self.__filter_tests_pytest_marked_parameter(pytest_mark_parameter, condition_func)
         return self
     
-    def exclude_tests_pytest_marked_parameter(self, pytest_mark_parameter: str, 
-                                             condition_func: Callable[[Any], bool]) -> 'TestsFilterPipeline':
+    def exclude_pytests_where_parameter(self, pytest_mark_parameter: str, 
+                                        condition_func: Callable[[Any], bool]) -> 'TestsFilterPipeline':
         """
         Exclude tests which pytest mark has parameter value that meets 'condition_func'
         """
@@ -173,16 +175,16 @@ class TestsFilterPipeline:
                             functions.append(func)
         return functions
     
-    def filter_tests_pytest_marked_where_argument_is(self, 
-                                                     marker_argument_value: str) -> 'TestsFilterPipeline':
+    def filter_pytests_where_argument_is(self, 
+                                         marker_argument_value: str) -> 'TestsFilterPipeline':
         """
         Filters tests which pytest mark has parameter value that meets 'condition_func'
         """
         self.list = self.__filter_tests_pytest_marked_where_argument_is(marker_argument_value)
         return self
     
-    def exclude_tests_pytest_marked_where_argument_is(self, 
-                                                     marker_argument_value: str) -> 'TestsFilterPipeline':
+    def exclude_pytests_where_argument_is(self, 
+                                          marker_argument_value: str) -> 'TestsFilterPipeline':
         """
         Exclude tests which pytest mark has parameter value that meets 'condition_func'
         """
@@ -384,19 +386,19 @@ if __name__ == "__main__":
     functions: List[FunctionType] = ArcticdbTestAnalysis().get_test_functions()
     print_function_list(functions)
 
-    functions: List[ArcrticdbTest] = ArcticdbTestAnalysis().start_filter().filter_tests_pytest_marked().get_tests()
+    functions: List[ArcrticdbTest] = ArcticdbTestAnalysis().start_filter().filter_pytests_marked().get_tests()
     print_test_list(functions)
 
-    functions: List[ArcrticdbTest] = ArcticdbTestAnalysis().start_filter().filter_tests_pytest_marked("slow").get_tests()
+    functions: List[ArcrticdbTest] = ArcticdbTestAnalysis().start_filter().filter_pytests_marked("slow").get_tests()
     print_test_list(functions)
 
     functions: List[ArcrticdbTest] = ArcticdbTestAnalysis().start_filter().filter_tests_arcticdb().get_tests()
     print_test_list(functions)
 
     functions: List[ArcrticdbTest] = ( ArcticdbTestAnalysis().start_filter()
-                                     .filter_tests_pytest_marked("slow")
-                                     .filter_tests_pytest_marked_parameter("status", lambda value: value == "completed")
-                                     .filter_tests_pytest_marked_parameter("status", lambda value: value.startswith("com") if value else False)
+                                     .filter_pytests_marked("slow")
+                                     .filter_pytests_where_parameter("status", lambda value: value == "completed")
+                                     .filter_pytests_where_parameter("status", lambda value: value.startswith("com") if value else False)
                                      .get_tests())
     print_test_list(functions)
 
@@ -407,27 +409,27 @@ if __name__ == "__main__":
     print_test_list(functions)
 
     functions: List[ArcrticdbTest] = ( ArcticdbTestAnalysis().start_filter()
-                                     .filter_tests_pytest_marked("mymark")
-                                     .filter_tests_pytest_marked_where_argument_is("first")
+                                     .filter_pytests_marked("mymark")
+                                     .filter_pytests_where_argument_is("first")
                                      .get_tests())
     print_test_list(functions)
 
     functions: List[ArcrticdbTest] = ( ArcticdbTestAnalysis().start_filter()
-                                     .filter_tests_pytest_marked("category")
-                                     .filter_tests_pytest_marked_where_argument_is("slow")
+                                     .filter_pytests_marked("category")
+                                     .filter_pytests_where_argument_is("slow")
                                      .get_tests())
     print_test_list(functions)
 
     functions: List[ArcrticdbTest] = ( ArcticdbTestAnalysis().start_filter()
-                                     .filter_tests_pytest_marked("category")
-                                     .filter_tests_pytest_marked_where_argument_is("prio0")
+                                     .filter_pytests_marked("category")
+                                     .filter_pytests_where_argument_is("prio0")
                                      .get_tests())
     print_test_list(functions)
 
     functions: List[ArcrticdbTest] = ( ArcticdbTestAnalysis().start_filter()
-                                     .filter_tests_pytest_marked("category")
-                                     .filter_tests_pytest_marked_where_argument_is("prio0")
-                                     .filter_tests_pytest_marked_where_argument_is("fast")
+                                     .filter_pytests_marked("category")
+                                     .filter_pytests_where_argument_is("prio0")
+                                     .filter_pytests_where_argument_is("fast")
                                      .get_tests())
     print_test_list(functions)
 
@@ -437,12 +439,17 @@ if __name__ == "__main__":
         test execution based on those files
     """
     adbt = (ArcticdbTestAnalysis().start_filter()
-            .filter_tests_pytest_marked("mymark")
-            .exclude_tests_pytest_marked("slow"))
+            .filter_pytests_marked("mymark")
+            .exclude_pytests_marked("slow"))
     functions: List[ArcrticdbTest] = adbt.get_tests()
     print_test_list(functions)
     adbt.save_tests_to_file("/tmp/tests.txt")
 
-    functions
+    functions: List[ArcrticdbTest] = ( ArcticdbTestAnalysis().start_filter()
+                                     .filter_pytests_marked("covers")
+                                     .filter_pytests_where_argument_is(Functions.ARCTIC_enc_ver)
+                                     .exclude_pytests_where_argument_is(Functions.CREATE_LIB_ent_lib_opts)
+                                     .get_tests())
+    print_test_list(functions)
 
     print("End")
