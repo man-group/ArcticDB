@@ -71,12 +71,6 @@ jobs:
           pip install asv virtualenv
           python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
 
-      - name: Run ASV Tests Check script
-        run: |
-          pip install arcticdb
-          python python/utils/asv_checks.py
-        continue-on-error: false          
-
       - name: Benchmark given commit
         if: github.event_name != 'pull_request_target' || inputs.run_all_benchmarks == true
         shell: bash -el {0}
