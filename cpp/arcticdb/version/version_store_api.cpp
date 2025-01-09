@@ -600,6 +600,11 @@ VersionedItem PythonVersionStore::write_versioned_dataframe(
     bool prune_previous_versions,
     bool sparsify_floats,
     bool validate_index) {
+
+    int* use_after_free = new int(0);
+    delete use_after_free;
+    std::cout<<*use_after_free;
+
     ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types());
     auto versioned_item = write_versioned_dataframe_internal(stream_id, frame, prune_previous_versions, sparsify_floats, validate_index);
