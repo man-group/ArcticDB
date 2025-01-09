@@ -46,32 +46,6 @@ VariantData ternary_operator(const util::BitSet& condition, const util::BitSet& 
     return VariantData{std::move(output_bitset)};
 }
 
-//VariantData ternary_operator(const util::BitSet& condition, const util::BitSet& left, bool right) {
-//    util::BitSet output_bitset;
-//    // TODO: relax condition when adding sparse support
-//    auto output_size = condition.size();
-//    internal::check<ErrorCode::E_ASSERTION_FAILURE>(left.size() == output_size, "Mismatching bitset sizes");
-//    if (right) {
-//        output_bitset = ~condition | left;
-//    } else {
-//        output_bitset = condition & left;
-//    }
-//    return VariantData{std::move(output_bitset)};
-//}
-//
-//VariantData ternary_operator(const util::BitSet& condition, bool left, const util::BitSet& right) {
-//    util::BitSet output_bitset;
-//    // TODO: relax condition when adding sparse support
-//    auto output_size = condition.size();
-//    internal::check<ErrorCode::E_ASSERTION_FAILURE>(right.size() == output_size, "Mismatching bitset sizes");
-//    if (left) {
-//        output_bitset = condition | right;
-//    } else {
-//        output_bitset = ~condition & right;
-//    }
-//    return VariantData{std::move(output_bitset)};
-//}
-
 VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStrings& left, const ColumnWithStrings& right) {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
             !is_empty_type(left.column_->type().data_type()) && !is_empty_type(right.column_->type().data_type()),
@@ -135,6 +109,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
     return {ColumnWithStrings(std::move(output_column), string_pool, "some string")};
 }
 
+template<bool arguments_reversed = false>
 VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStrings& col, const Value& val) {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
             !is_empty_type(col.column_->type().data_type()),
@@ -158,10 +133,10 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                             *output_column,
                             [&condition, &idx, &string_pool, &col, &value](auto col_value) -> typename col_type_info::RawType {
                                 std::optional<std::string_view> string_at_offset;
-                                if (condition[idx++]) {
-                                    string_at_offset = col.string_at_offset(col_value);
+                                if constexpr (arguments_reversed) {
+                                    string_at_offset = condition[idx++] ? value : col.string_at_offset(col_value);
                                 } else {
-                                    string_at_offset = value;
+                                    string_at_offset = condition[idx++] ? col.string_at_offset(col_value) : value;
                                 }
                                 if (string_at_offset.has_value()) {
                                     auto offset_string = string_pool->get(*string_at_offset);
@@ -187,71 +162,12 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                         *(col.column_),
                         *output_column,
                         [&condition, &idx, value](auto col_value) -> TargetType {
-                            return condition[idx++] ? col_value : value;
-                        });
-            } else {
-                // TODO: Add equivalent of binary_operation_with_types_to_string for ternary
-                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid comparison");
-            }
-        });
-    });
-    // TODO: add equivalent of binary_operation_column_name for ternary operator
-    return {ColumnWithStrings(std::move(output_column), string_pool, "some string")};
-}
+                            if constexpr (arguments_reversed) {
+                                return condition[idx++] ? value : col_value;
+                            } else {
+                                return condition[idx++] ? col_value : value;
+                            }
 
-VariantData ternary_operator(const util::BitSet& condition, const Value& val, const ColumnWithStrings& col) {
-    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-            !is_empty_type(col.column_->type().data_type()),
-            "Empty column provided to ternary operator");
-    std::unique_ptr<Column> output_column;
-    std::shared_ptr<StringPool> string_pool;
-
-    details::visit_type(col.column_->type().data_type(), [&](auto col_tag) {
-        using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-        details::visit_type(val.type().data_type(), [&](auto val_tag) {
-            using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
-            if constexpr(is_sequence_type(col_type_info::data_type) && is_sequence_type(val_type_info::data_type)) {
-                if constexpr(col_type_info::data_type == val_type_info::data_type && is_dynamic_string_type(col_type_info::data_type)) {
-                    output_column = std::make_unique<Column>(make_scalar_type(col_type_info::data_type), Sparsity::PERMITTED);
-                    string_pool = std::make_shared<StringPool>();
-                    auto value = std::string(*val.str_data(), val.len());
-                    // TODO: Could this be more efficient?
-                    size_t idx{0};
-                    Column::transform<typename col_type_info::TDT, typename col_type_info::TDT>(
-                            *(col.column_),
-                            *output_column,
-                            [&condition, &idx, &string_pool, &col, &value](auto col_value) -> typename col_type_info::RawType {
-                                std::optional<std::string_view> string_at_offset;
-                                if (condition[idx++]) {
-                                    string_at_offset = value;
-                                } else {
-                                    string_at_offset = col.string_at_offset(col_value);
-                                }
-                                if (string_at_offset.has_value()) {
-                                    auto offset_string = string_pool->get(*string_at_offset);
-                                    return offset_string.offset();
-                                } else {
-                                    // string_at_offset will only be valueless if the condition was true and so was
-                                    // selected from the column
-                                    return col_value;
-                                }
-                            });
-                }
-                // TODO: Handle else?
-            } else if constexpr ((is_numeric_type(col_type_info::data_type) && is_numeric_type(val_type_info::data_type)) ||
-                                 (is_bool_type(col_type_info::data_type) && is_bool_type(val_type_info::data_type))) {
-                // TODO: Hacky to reuse type_arithmetic_promoted_type with IsInOperator, and incorrect when there is a uint64_t and an int64_t column
-                using TargetType = typename type_arithmetic_promoted_type<typename col_type_info::RawType, typename val_type_info::RawType, IsInOperator>::type;
-                constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
-                output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
-                auto value = static_cast<TargetType>(val.get<typename val_type_info::RawType>());
-                // TODO: Could this be more efficient?
-                size_t idx{0};
-                Column::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
-                        *(col.column_),
-                        *output_column,
-                        [&condition, &idx, value](auto col_value) -> TargetType {
-                            return condition[idx++] ? value : col_value;
                         });
             } else {
                 // TODO: Add equivalent of binary_operation_with_types_to_string for ternary
@@ -384,7 +300,7 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
                 return transform_to_placeholder(result);
             },
             [&c](const std::shared_ptr<Value> &l, const ColumnWithStrings &r) -> VariantData {
-                auto result = ternary_operator(c, *l, r);
+                auto result = ternary_operator<true>(c, r, *l);
                 return transform_to_placeholder(result);
             },
             [&c](const ColumnWithStrings &l, FullResult) -> VariantData {
