@@ -1,0 +1,45 @@
+name: Run ASV Tests Check Python Script
+
+on:
+  push:
+	branches-ignore:
+      - 'master'
+	paths:
+	  - 'python/benchmarks/**'
+	  - 'python/.asv/results/**'
+	  - 'asv.conf.json'
+  pull_request:
+	branches-ignore:
+      - 'master'
+	paths:
+	  - 'python/benchmarks/**'
+	  - 'python/.asv/results/**'
+	  - 'asv.conf.json'
+
+jobs:
+  run-asv-check-script:
+	timeout-minutes: 30
+	runs-on: ubuntu-latest
+    container: ghcr.io/man-group/arcticdb-dev:latest
+    defaults:
+      run: {shell: bash}
+    steps:  
+    - uses: actions/checkout@v3.3.0
+      with:
+        lfs: 'true'
+        fetch-depth: 0
+        submodules: recursive
+        token: ${{ secrets.ARCTICDB_TEST_PAT }}
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: Install ASV
+      shell: bash -el {0}
+      run: |
+          git config --global --add safe.directory .
+          python -m pip install --upgrade pip
+          pip install asv 
+
+    - name: Run ASV Tests Check script
+      run: |
+         python python/utils/asv_checks.py
+      continue-on-error: false
