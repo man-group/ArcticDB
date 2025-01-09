@@ -10,7 +10,7 @@ vcpkg_from_github(
         lock-curl-http-and-tls-settings.patch
         fix_find_curl.patch
         find-dependency.patch
-        fix-refresh.patch
+        fix-refresh-sts-token-timing.patch
 )
 
 string(COMPARE EQUAL "${VCPKG_CRT_LINKAGE}" "dynamic" FORCE_SHARED_CRT)
