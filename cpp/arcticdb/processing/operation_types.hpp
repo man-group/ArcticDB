@@ -46,11 +46,21 @@ enum class OperationType : uint8_t {
     // Boolean
     AND,
     OR,
-    XOR
+    XOR,
+    // Ternary
+    TERNARY
 };
 
+constexpr bool is_unary_operation(OperationType o) {
+    return uint8_t(o) < uint8_t(OperationType::ADD);
+}
+
 constexpr bool is_binary_operation(OperationType o) {
-    return uint8_t(o) >= uint8_t(OperationType::ADD);
+    return uint8_t(o) >= uint8_t(OperationType::ADD) && uint8_t(o) < uint8_t(OperationType::TERNARY);
+}
+
+constexpr bool is_ternary_operation(OperationType o) {
+    return uint8_t(o) >= uint8_t(OperationType::TERNARY);
 }
 
 struct AbsOperator;

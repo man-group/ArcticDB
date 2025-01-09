@@ -68,6 +68,8 @@ class ExpressionNode:
     def __init__(self):
         self.left = self.right = self.operator = None
         self.name = None
+        # Used only for ternary operator
+        self.condition = None
 
     @classmethod
     def compose(cls, left, operator, right):
@@ -237,6 +239,8 @@ class ExpressionNode:
                 self.name = 'Column["{}"]'.format(self.left)
             elif self.operator in [_OperationType.ABS, _OperationType.NEG, _OperationType.NOT]:
                 self.name = "{}({})".format(self.operator.name, self.left)
+            elif self.operator == _OperationType.TERNARY:
+                self.name = f"{self.left} if {self.condition} else {self.right}"
             else:
                 if isinstance(self.left, ExpressionNode):
                     left = str(self.left)
@@ -248,6 +252,16 @@ class ExpressionNode:
                     right = to_string(self.right)
                 self.name = "({} {} {})".format(left, self.operator.name, right)
         return self.name
+
+
+# TODO: Make importable like import adb.where
+def where(condition, left, right):
+    expression_node = ExpressionNode()
+    expression_node.condition = condition
+    expression_node.left = left
+    expression_node.operator = _OperationType.TERNARY
+    expression_node.right = right
+    return expression_node
 
 
 def is_supported_sequence(obj):
@@ -1074,7 +1088,12 @@ def visit_expression(expr):
             raise ArcticNativeException("Query is trivially {}".format(node))
 
         left = _visit_child(node.left)
-        if node.right is not None:
+        if node.condition is not None:
+            check(node.right is not None, "Ternary operator requires three inputs")
+            condition = _visit_child(node.condition)
+            right = _visit_child(node.right)
+            expression_node = _ExpressionNode(condition, left, right, node.operator)
+        elif node.right is not None:
             right = _visit_child(node.right)
             expression_node = _ExpressionNode(left, right, node.operator)
         else:
