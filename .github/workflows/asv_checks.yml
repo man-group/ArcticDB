@@ -15,6 +15,7 @@ on:
       - 'python/benchmarks/**'
       - 'python/.asv/results/**'
       - 'asv.conf.json'
+  workflow_call:
 
 jobs:
   run-asv-check-script:
