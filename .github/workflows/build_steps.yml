@@ -256,6 +256,7 @@ jobs:
 
   proxy_test:
     if: |
+      always() &&
       !failure() &&
       !cancelled() &&
       inputs.job_type == 'build-python-wheels'
