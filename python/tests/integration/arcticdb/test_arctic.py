@@ -117,18 +117,21 @@ def test_s3_no_ssl_verification(monkeypatch, s3_no_ssl_storage, client_cert_file
 
 @REAL_S3_TESTS_MARK
 def test_s3_sts_auth(real_s3_sts_storage):
+    library = "test"
     ac = Arctic(real_s3_sts_storage.arctic_uri)
-    lib = ac.create_library("test")
+    ac.delete_library(library) # make sure we delete any previously existing library
+    lib = ac.create_library(library)
     df = pd.DataFrame({'a': [1, 2, 3]})
     lib.write("sym", df)
     assert_frame_equal(lib.read("sym").data, df)
-    lib = ac.get_library("test")
+    lib = ac.get_library(library)
     assert_frame_equal(lib.read("sym").data, df)
 
     # Reload for testing a different codepath
     ac = Arctic(real_s3_sts_storage.arctic_uri)
-    lib = ac.get_library("test")
+    lib = ac.get_library(library)
     assert_frame_equal(lib.read("sym").data, df)
+    ac.delete_library(library) # make sure we delete any previously existing library
 
 @SLOW_TESTS_MARK
 @REAL_S3_TESTS_MARK
@@ -140,6 +143,7 @@ def test_s3_sts_expiry_check(real_s3_sts_storage):
     has been renewed.
     """
     symbol = "sym"
+    library = "expire"
     # Precondition check
     min_exp_time_min = 15 # This is minimum expiry time, set at fixture level
     value = get_config_int("S3Storage.STSTokenExpiryMin")
@@ -149,7 +153,8 @@ def test_s3_sts_expiry_check(real_s3_sts_storage):
     assert 15 <= value 
 
     ac = Arctic(real_s3_sts_storage.arctic_uri)
-    lib = ac.create_library("test")
+    ac.delete_library(library) # make sure we delete any previously existing library
+    lib = ac.create_library(library)
     df = pd.DataFrame({'a': [1, 2, 3]})
     lib.write(symbol, df)
 
@@ -157,14 +162,17 @@ def test_s3_sts_expiry_check(real_s3_sts_storage):
     complete_at = now + timedelta(minutes=min_exp_time_min+3)
     logger.info(f"Test will complete at {complete_at}")
 
+    data: pd.DataFrame = lib.read(symbol).data
+    assert_frame_equal(df, data)
     while (datetime.now() < complete_at):
         logger.info(f"sleeping 30 sec")
         time.sleep(30)
-        data: pd.DataFrame = lib.read(symbol).data
-        assert_frame_equal(df, data)
         logger.info(f"Read successful at {datetime.now()}. Time remaining: {complete_at - datetime.now()}")
 
+    data: pd.DataFrame = lib.read(symbol).data
+    assert_frame_equal(df, data)
     logger.info(f"Connection did not expire")
+    ac.delete_library(library)
 
 @REAL_S3_TESTS_MARK
 def test_s3_sts_auth_store(real_s3_sts_version_store):

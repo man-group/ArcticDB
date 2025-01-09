@@ -242,7 +242,7 @@ def real_s3_library(real_s3_storage, lib_name) -> Library:
 
 
 @pytest.fixture(scope="session") # Config loaded at the first ArcticDB binary import, so we need to set it up before any tests
-def real_s3_sts_storage_factory():
+def real_s3_sts_storage_factory() -> Generator[BaseS3StorageFixtureFactory, None, None]:
     sts_test_credentials_prefix = os.getenv("ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX", f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}")
     username = os.getenv("ARCTICDB_REAL_S3_STS_TEST_USERNAME", f"gh_sts_test_user_{sts_test_credentials_prefix}")
     role_name = os.getenv("ARCTICDB_REAL_S3_STS_TEST_ROLE", f"gh_sts_test_role_{sts_test_credentials_prefix}")
@@ -266,7 +266,7 @@ def real_s3_sts_storage_factory():
 
 
 @pytest.fixture
-def real_s3_sts_storage(real_s3_sts_storage_factory) -> Generator[BaseS3StorageFixtureFactory, None, None]:
+def real_s3_sts_storage(real_s3_sts_storage_factory) -> Generator[S3Bucket, None, None]:
     with real_s3_sts_storage_factory.create_fixture() as f:
         yield f
 
