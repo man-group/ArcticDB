@@ -269,7 +269,7 @@ def real_s3_sts_from_environment_variables(user_name: str,
         iam_client.create_user(UserName=user_name)
         logger.info(f"User created successfully: {user_name}")
     except iam_client.exceptions.EntityAlreadyExistsException:
-        logger.warn(f"User already exists: {user_name}")
+        logger.warning(f"User already exists: {user_name}")
     except Exception as e:
         logger.error(f"Error creating user: {e}")
         raise e
