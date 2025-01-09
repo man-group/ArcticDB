@@ -5,6 +5,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import copy
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -107,17 +109,45 @@ def test_project_ternary_column_column_numeric(lmdb_version_store_v1):
     df = pd.DataFrame(
         {
             "conditional": [True, False, False, True, False, True],
-            "col1": np.arange(6),
-            "col2": np.arange(10, 16),
+            "int64_1": np.arange(6, dtype=np.int64),
+            "int64_2": np.arange(10, 16, dtype=np.int64),
+            "int8": np.arange(-6, 0, dtype=np.int8),
+            "uint8": np.arange(249, 255, dtype=np.uint8),
+            "uint64": np.arange(1000, 1006, dtype=np.uint64),
         },
         index=pd.date_range("2024-01-01", periods=6)
     )
     lib.write(symbol, df)
 
-    expected = df
-    expected["new_col"] = np.where(df["conditional"].to_numpy(), df["col1"].to_numpy(), df["col2"].to_numpy())
+    # Identical types
+    expected = copy.deepcopy(df)
+    expected["new_col"] = np.where(df["conditional"].to_numpy(), df["int64_1"].to_numpy(), df["int64_2"].to_numpy())
     q = QueryBuilder()
-    q = q.apply("new_col", where(q["conditional"], q["col1"], q["col2"]))
+    q = q.apply("new_col", where(q["conditional"], q["int64_1"], q["int64_2"]))
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    # One type a subset of the other
+    expected = copy.deepcopy(df)
+    expected["new_col"] = np.where(df["conditional"].to_numpy(), df["int64_1"].to_numpy(), df["int8"].to_numpy())
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], q["int64_1"], q["int8"]))
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    # Promotable type exists
+    expected = copy.deepcopy(df)
+    expected["new_col"] = np.where(df["conditional"].to_numpy(), df["int8"].to_numpy(), df["uint8"].to_numpy())
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], q["int8"], q["uint8"]))
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    # uint64/int64 mix
+    expected = copy.deepcopy(df)
+    expected["new_col"] = np.where(df["conditional"].to_numpy(), df["int8"].to_numpy(), df["uint64"].to_numpy())
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], q["int8"], q["uint64"]))
     received = lib.read(symbol, query_builder=q).data
     assert_frame_equal(expected, received)
 
