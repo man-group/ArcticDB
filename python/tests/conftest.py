@@ -217,12 +217,10 @@ def mock_s3_storage_with_error_simulation(mock_s3_storage_with_error_simulation_
 
 @pytest.fixture(scope="session")
 def real_s3_storage_factory() -> BaseS3StorageFixtureFactory:
-def real_s3_storage_factory() -> BaseS3StorageFixtureFactory:
     return real_s3_from_environment_variables(shared_path=False, additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}")
 
 
 @pytest.fixture(scope="session")
-def real_s3_shared_path_storage_factory() -> BaseS3StorageFixtureFactory:
 def real_s3_shared_path_storage_factory() -> BaseS3StorageFixtureFactory:
     return real_s3_from_environment_variables(shared_path=True, additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}")
 

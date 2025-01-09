@@ -155,7 +155,7 @@ def test_s3_sts_expiry_check(lib_name, real_s3_sts_storage):
     logger.info(f"S3Storage.STSTokenExpiryMin = {value}")
     logger.info(f"Current process id = {psutil.Process()}")
     logger.info(f"Minimum possible is {min_exp_time_min} minutes. Test will fail if bigger")
-    assert 15 <= value 
+    assert min_exp_time_min >= value 
 
     ac = Arctic(real_s3_sts_storage.arctic_uri)
     ac.delete_library(library) # make sure we delete any previously existing library
@@ -164,7 +164,7 @@ def test_s3_sts_expiry_check(lib_name, real_s3_sts_storage):
     lib.write(symbol, df)
 
     now = datetime.now()
-    complete_at = now + timedelta(minutes=min_exp_time_min+3)
+    complete_at = now + timedelta(minutes=min_exp_time_min+5)
     logger.info(f"Test will complete at {complete_at}")
 
     data: pd.DataFrame = lib.read(symbol).data
