@@ -10,7 +10,28 @@
 
 namespace arcticdb {
 
-// TODO: See how many of these combinations can be combined
+template<bool arguments_reversed = false>
+inline std::string ternary_operation_column_name(std::string_view left, std::string_view right) {
+    if constexpr (arguments_reversed) {
+        return fmt::format("(COND ? {} : {})", right, left);
+    } else {
+        return fmt::format("(COND ? {} : {})", left, right);
+    }
+}
+
+template<bool arguments_reversed = false>
+inline std::string ternary_operation_with_types_to_string(
+        std::string_view left,
+        const TypeDescriptor& type_left,
+        std::string_view right,
+        const TypeDescriptor& type_right) {
+    if constexpr (arguments_reversed) {
+        return fmt::format("{} ({}) : {} ({})", right, get_user_friendly_type_string(type_right), left, get_user_friendly_type_string(type_left));
+    } else {
+        return fmt::format("{} ({}) : {} ({})", left, get_user_friendly_type_string(type_left), right, get_user_friendly_type_string(type_right));
+    }
+}
+
 VariantData ternary_operator(const util::BitSet& condition, const util::BitSet& left, const util::BitSet& right) {
     util::BitSet output_bitset;
     // TODO: relax condition when adding sparse support
@@ -100,13 +121,16 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                             return condition[idx++] ? left_value : right_value;
                         });
             } else {
-                // TODO: Add equivalent of binary_operation_with_types_to_string for ternary
-                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid comparison");
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",
+                                                                      ternary_operation_with_types_to_string(
+                                                                              left.column_name_,
+                                                                              left.column_->type(),
+                                                                              right.column_name_,
+                                                                              right.column_->type()));
             }
         });
     });
-    // TODO: add equivalent of binary_operation_column_name for ternary operator
-    return {ColumnWithStrings(std::move(output_column), string_pool, "some string")};
+    return {ColumnWithStrings(std::move(output_column), string_pool, ternary_operation_column_name(left.column_name_, right.column_name_))};
 }
 
 template<bool arguments_reversed = false>
@@ -116,6 +140,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
             "Empty column provided to ternary operator");
     std::unique_ptr<Column> output_column;
     std::shared_ptr<StringPool> string_pool;
+    std::string value_string;
 
     details::visit_type(col.column_->type().data_type(), [&](auto col_tag) {
         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
@@ -125,18 +150,18 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                 if constexpr(col_type_info::data_type == val_type_info::data_type && is_dynamic_string_type(col_type_info::data_type)) {
                     output_column = std::make_unique<Column>(make_scalar_type(col_type_info::data_type), Sparsity::PERMITTED);
                     string_pool = std::make_shared<StringPool>();
-                    auto value = std::string(*val.str_data(), val.len());
+                    auto value_string = std::string(*val.str_data(), val.len());
                     // TODO: Could this be more efficient?
                     size_t idx{0};
                     Column::transform<typename col_type_info::TDT, typename col_type_info::TDT>(
                             *(col.column_),
                             *output_column,
-                            [&condition, &idx, &string_pool, &col, &value](auto col_value) -> typename col_type_info::RawType {
+                            [&condition, &idx, &string_pool, &col, &value_string](auto col_value) -> typename col_type_info::RawType {
                                 std::optional<std::string_view> string_at_offset;
                                 if constexpr (arguments_reversed) {
-                                    string_at_offset = condition[idx++] ? value : col.string_at_offset(col_value);
+                                    string_at_offset = condition[idx++] ? value_string : col.string_at_offset(col_value);
                                 } else {
-                                    string_at_offset = condition[idx++] ? col.string_at_offset(col_value) : value;
+                                    string_at_offset = condition[idx++] ? col.string_at_offset(col_value) : value_string;
                                 }
                                 if (string_at_offset.has_value()) {
                                     auto offset_string = string_pool->get(*string_at_offset);
@@ -156,6 +181,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 auto value = static_cast<TargetType>(val.get<typename val_type_info::RawType>());
+                value_string = fmt::format("{}", value);
                 // TODO: Could this be more efficient?
                 size_t idx{0};
                 Column::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
@@ -170,18 +196,23 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
 
                         });
             } else {
-                // TODO: Add equivalent of binary_operation_with_types_to_string for ternary
-                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid comparison");
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",
+                                                                      ternary_operation_with_types_to_string<arguments_reversed>(
+                                                                              col.column_name_,
+                                                                              col.column_->type(),
+                                                                              val.to_string<typename val_type_info::RawType>(),
+                                                                              val.type()));
             }
         });
     });
-    // TODO: add equivalent of binary_operation_column_name for ternary operator
-    return {ColumnWithStrings(std::move(output_column), string_pool, "some string")};
+    return {ColumnWithStrings(std::move(output_column), string_pool, ternary_operation_column_name<arguments_reversed>(col.column_name_, value_string))};
 }
 
 VariantData ternary_operator(const util::BitSet& condition, const Value& left, const Value& right) {
     std::unique_ptr<Column> output_column;
     std::shared_ptr<StringPool> string_pool;
+    std::string left_string;
+    std::string right_string;
 
     details::visit_type(left.type().data_type(), [&](auto left_tag) {
         using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
@@ -191,11 +222,11 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& left, c
                 if constexpr(left_type_info::data_type == right_type_info::data_type && is_dynamic_string_type(left_type_info::data_type)) {
                     output_column = std::make_unique<Column>(make_scalar_type(left_type_info::data_type), Sparsity::PERMITTED);
                     string_pool = std::make_shared<StringPool>();
-                    auto left_value = std::string(*left.str_data(), left.len());
-                    auto right_value = std::string(*right.str_data(), right.len());
+                    auto left_string = std::string(*left.str_data(), left.len());
+                    auto right_string = std::string(*right.str_data(), right.len());
                     // Put both possible strings in the pool for performance, it's possible one will be redundant if condition is all true or all false
-                    auto left_offset = string_pool->get(left_value, false).offset();
-                    auto right_offset = string_pool->get(right_value, false).offset();
+                    auto left_offset = string_pool->get(left_string, false).offset();
+                    auto right_offset = string_pool->get(right_string, false).offset();
                     // TODO: Use ColumnDataIterator and more efficient bitset access
                     for (size_t idx = 0; idx < condition.size(); ++idx) {
                         output_column->push_back(condition[idx] ? left_offset : right_offset);
@@ -210,18 +241,23 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& left, c
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 auto left_value = static_cast<TargetType>(left.get<typename left_type_info::RawType>());
                 auto right_value = static_cast<TargetType>(right.get<typename right_type_info::RawType>());
+                left_string = fmt::format("{}", left_value);
+                right_string = fmt::format("{}", right_value);
                 // TODO: Use ColumnDataIterator and more efficient bitset access
                 for (size_t idx = 0; idx < condition.size(); ++idx) {
                     output_column->push_back(condition[idx] ? left_value : right_value);
                 }
             } else {
-                // TODO: Add equivalent of binary_operation_with_types_to_string for ternary
-                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid comparison");
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",
+                                                                      ternary_operation_with_types_to_string(
+                                                                              left.to_string<typename right_type_info::RawType>(),
+                                                                              left.type(),
+                                                                              right.to_string<typename right_type_info::RawType>(),
+                                                                              right.type()));
             }
         });
     });
-    // TODO: add equivalent of binary_operation_column_name for ternary operator
-    return {ColumnWithStrings(std::move(output_column), string_pool, "some string")};
+    return {ColumnWithStrings(std::move(output_column), string_pool, ternary_operation_column_name(left_string, right_string))};
 }
 
 VariantData ternary_operator(const util::BitSet& condition, bool left, bool right) {
