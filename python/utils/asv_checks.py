@@ -68,6 +68,9 @@ def perform_asv_checks() -> int:
 
     path = get_project_root()
 
+    sys.path.insert(0,f"{path}/python")
+    sys.path.insert(0,f"{path}/python/tests")
+
     bencmark_config = f"{path}/python/.asv/results/benchmarks.json"
     orig_hash = compute_file_hash(bencmark_config)
 
