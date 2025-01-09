@@ -73,6 +73,7 @@ jobs:
 
       - name: Run ASV Tests Check script
         run: |
+          pip install arcticdb
           python python/utils/asv_checks.py
         continue-on-error: false          
 
