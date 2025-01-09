@@ -8,7 +8,7 @@ on:
       - 'python/benchmarks/**'
       - 'python/.asv/results/**'
       - 'asv.conf.json'
-      
+
   pull_request:
     branches-ignore:
       - 'master'
@@ -18,6 +18,10 @@ on:
       - 'asv.conf.json'
 
   workflow_dispatch:
+    inputs:
+      do_nothing:
+        type: boolean
+        default: true
 
 jobs:
   run-asv-check-script:
