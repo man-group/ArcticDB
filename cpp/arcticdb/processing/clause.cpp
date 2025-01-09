@@ -144,31 +144,30 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
     std::vector<EntityId> output;
     util::variant_match(variant_data,
                         [&proc, &output, this](ColumnWithStrings &col) {
-                            // TODO: Tidy this up
-                            const auto data_type = col.column_->type().data_type();
-                            const std::string_view name = output_column_;
-
-                            auto& last_segment = *proc.segments_->back();
-
-                            auto row_count = last_segment.row_count();
-                            auto row_range = std::make_shared<RowRange>(*proc.row_ranges_->back());
-                            auto last_col_idx = proc.col_ranges_->back()->second;
-                            auto col_range = std::make_shared<ColRange>(last_col_idx, last_col_idx + 1);
-
-                            // TODO: Set allow_sparse based on... something?
-                            proc.segments_->emplace_back(std::make_shared<SegmentInMemory>());
-                            // Add index fields
-                            proc.segments_->back()->descriptor().set_index(last_segment.descriptor().index());
-                            auto index_field_count = last_segment.descriptor().index().field_count();
-                            for (uint32_t idx=0; idx<index_field_count; ++idx) {
-                                proc.segments_->back()->add_column(last_segment.field(idx), last_segment.column_ptr(idx));
-                            }
-
-                            proc.segments_->back()->add_column(scalar_field(data_type, name), col.column_);
-                            proc.segments_->back()->set_row_data(row_count - 1);
-                            proc.segments_->back()->set_string_pool(col.string_pool_);
-                            proc.row_ranges_->emplace_back(std::move(row_range));
-                            proc.col_ranges_->emplace_back(std::move(col_range));
+//                            // TODO: Tidy this up
+//                            const auto data_type = col.column_->type().data_type();
+//
+//                            auto& last_segment = *proc.segments_->back();
+//
+//                            auto row_count = last_segment.row_count();
+//                            auto row_range = std::make_shared<RowRange>(*proc.row_ranges_->back());
+//                            auto last_col_idx = proc.col_ranges_->back()->second;
+//                            auto col_range = std::make_shared<ColRange>(last_col_idx, last_col_idx + 1);
+//
+//                            proc.segments_->emplace_back(std::make_shared<SegmentInMemory>());
+//                            // Add index fields
+//                            proc.segments_->back()->descriptor().set_index(last_segment.descriptor().index());
+//                            auto index_field_count = last_segment.descriptor().index().field_count();
+//                            for (uint32_t idx=0; idx<index_field_count; ++idx) {
+//                                proc.segments_->back()->add_column(last_segment.field(idx), last_segment.column_ptr(idx));
+//                            }
+//
+//                            proc.segments_->back()->add_column(scalar_field(data_type, output_column_), col.column_);
+//                            proc.segments_->back()->set_row_data(row_count - 1);
+//                            proc.segments_->back()->set_string_pool(col.string_pool_);
+//                            proc.row_ranges_->emplace_back(std::move(row_range));
+//                            proc.col_ranges_->emplace_back(std::move(col_range));
+                            add_column(proc, col);
                             output = push_entities(*component_manager_, std::move(proc));
                         },
                         [&proc, &output, this](const EmptyResult &) {
@@ -185,6 +184,30 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
 
 [[nodiscard]] std::string ProjectClause::to_string() const {
     return expression_context_ ? fmt::format("PROJECT Column[\"{}\"] = {}", output_column_, expression_context_->root_node_name_.value) : "";
+}
+
+void ProjectClause::add_column(ProcessingUnit& proc, const ColumnWithStrings &col) const {
+    auto& last_segment = *proc.segments_->back();
+
+    auto seg = std::make_shared<SegmentInMemory>();
+    // Add in the same index fields as the last existing segment in proc
+    seg->descriptor().set_index(last_segment.descriptor().index());
+    for (uint32_t idx = 0; idx < last_segment.descriptor().index().field_count(); ++idx) {
+        seg->add_column(last_segment.field(idx), last_segment.column_ptr(idx));
+    }
+    // Add the column with its string pool and set the segment row data
+    seg->add_column(scalar_field(col.column_->type().data_type(), output_column_), col.column_);
+    seg->set_string_pool(col.string_pool_);
+    seg->set_row_data(last_segment.row_count() - 1);
+
+    // Calculate the row range and col range for the new segment
+    auto row_range = std::make_shared<RowRange>(*proc.row_ranges_->back());
+    auto last_col_idx = proc.col_ranges_->back()->second;
+    auto col_range = std::make_shared<ColRange>(last_col_idx, last_col_idx + 1);
+
+    proc.segments_->emplace_back(std::move(seg));
+    proc.row_ranges_->emplace_back(std::move(row_range));
+    proc.col_ranges_->emplace_back(std::move(col_range));
 }
 
 AggregationClause::AggregationClause(const std::string& grouping_column,
