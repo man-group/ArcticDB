@@ -24,14 +24,11 @@ namespace arcticdb::pipelines {
 
 SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context);
 
-// TODO: Remove unused parameters from function signature
 template <typename KeySliceContainer>
 std::optional<util::BitSet> check_and_mark_slices(
     const KeySliceContainer& slice_and_keys,
-    ARCTICDB_UNUSED bool dynamic_schema,
     bool return_bitset,
-    std::optional<size_t> incompletes_after,
-    ARCTICDB_UNUSED bool has_column_groups) {
+    std::optional<size_t> incompletes_after) {
     ARCTICDB_SAMPLE_DEFAULT(MarkIndexSlices)
     std::optional<util::BitSet> output = return_bitset ? std::make_optional<util::BitSet>(0u) : std::nullopt;
     if (slice_and_keys.empty())
@@ -64,10 +61,7 @@ std::optional<util::BitSet> check_and_mark_slices(
     return output;
 }
 
-void mark_index_slices(
-    const std::shared_ptr<PipelineContext>& context,
-    bool dynamic_schema,
-    bool column_groups);
+void mark_index_slices(const std::shared_ptr<PipelineContext>& context);
 
 folly::Future<SegmentInMemory> fetch_data(
     SegmentInMemory&& frame,

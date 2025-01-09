@@ -324,7 +324,7 @@ VersionedItem update_impl(
     );
     check_update_data_is_sorted(*frame, index_segment_reader);
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    (void)check_and_mark_slices(index_segment_reader, dynamic_schema, false, std::nullopt, bucketize_dynamic);
+    (void)check_and_mark_slices(index_segment_reader, false, std::nullopt);
     fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, *frame, empty_types);
 
     std::vector<FilterQuery<index::IndexSegmentReader>> queries =
@@ -1176,7 +1176,6 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         std::vector<SliceAndKey>&& items,
         const std::shared_ptr<PipelineContext>& pipeline_context,
         const std::shared_ptr<Store>& store,
-        const ReadOptions& read_options,
         std::any& handler_data) {
     pipeline_context->clear_vectors();
     pipeline_context->slice_and_keys_ = std::move(items);
@@ -1184,8 +1183,7 @@ folly::Future<SegmentInMemory> prepare_output_frame(
 		return std::tie(left.slice_.row_range, left.slice_.col_range) < std::tie(right.slice_.row_range, right.slice_.col_range);
 	});
     adjust_slice_rowcounts(pipeline_context);
-    const auto dynamic_schema = opt_false(read_options.dynamic_schema_);
-    mark_index_slices(pipeline_context, dynamic_schema, pipeline_context->bucketize_dynamic_);
+    mark_index_slices(pipeline_context);
     pipeline_context->ensure_vectors();
 
     for(auto row : *pipeline_context) {
@@ -1358,12 +1356,12 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
         util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
         return read_and_process(store, pipeline_context, read_query, read_options)
         .thenValue([store, pipeline_context, &read_options, &handler_data](auto&& segs) {
-            return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
+            return prepare_output_frame(std::move(segs), pipeline_context, store, handler_data);
         });
     } else {
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
         util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query->row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
-        mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema_), pipeline_context->bucketize_dynamic_);
+        mark_index_slices(pipeline_context);
         auto frame = allocate_frame(pipeline_context);
         util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
         ARCTICDB_DEBUG(log::version(), "Fetching frame data");
