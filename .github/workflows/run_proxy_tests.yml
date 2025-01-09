@@ -83,3 +83,4 @@ jobs:
           real_s3_sts_clean_up('${ARCTICDB_REAL_S3_STS_TEST_USERNAME}', '${ARCTICDB_REAL_S3_STS_TEST_ROLE}', '${ARCTICDB_REAL_S3_STS_TEST_POLICY_NAME}')
           "
         continue-on-error: true
+

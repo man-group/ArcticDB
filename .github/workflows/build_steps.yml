@@ -255,7 +255,11 @@ jobs:
       cibw_build: ${{env.CIBW_BUILD}}
 
   proxy_test:
-    if: always() && !failure() && !cancelled() && inputs.job_type == 'build-python-wheels'
+    if: |
+      always() &&
+      !failure() &&
+      !cancelled() &&
+      inputs.job_type == 'build-python-wheels'
     needs: [compile]
     uses: ./.github/workflows/run_proxy_tests.yml
     secrets: inherit
