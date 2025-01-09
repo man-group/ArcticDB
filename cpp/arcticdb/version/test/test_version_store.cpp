@@ -290,6 +290,82 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     }
 }
 
+TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaSimple) {
+    using namespace arcticdb;
+    using namespace arcticdb::storage;
+    using namespace arcticdb::stream;
+    using namespace arcticdb::pipelines;
+
+    size_t count = 0;
+
+    std::vector<SegmentToInputFrameAdapter> data;
+    StreamId symbol{"compact_me_static"};
+
+    size_t num_incompletes = 3;
+    size_t num_rows_per_incomplete = 2;
+
+    for (size_t i = 0; i < num_incompletes; ++i) {
+        auto wrapper = SinkWrapper(symbol, {
+            scalar_field(DataType::UINT64, "thing1"),
+            scalar_field(DataType::UINT64, "thing2"),
+            scalar_field(DataType::UINT64, "thing3"),
+            scalar_field(DataType::UINT64, "thing4")
+        });
+
+        for(size_t j = 0; j < num_rows_per_incomplete; ++j ) {
+            wrapper.aggregator_.start_row(timestamp(count++))([&](auto &&rb) {
+                rb.set_scalar(1, j);
+                rb.set_scalar(2, i);
+                rb.set_scalar(3, i + j);
+                rb.set_scalar(4, i * j);
+            });
+        }
+
+        wrapper.aggregator_.commit();
+        data.emplace_back( std::move(wrapper.segment()));
+    }
+
+    std::mt19937 mt{42};
+    std::shuffle(data.begin(), data.end(), mt);
+
+    for(auto& frame : data) {
+        ASSERT_TRUE(frame.segment_.is_index_sorted());
+        frame.segment_.descriptor().set_sorted(SortedValue::ASCENDING);
+        test_store_->write_parallel_frame(symbol, frame.input_frame_, true, false, std::nullopt);
+    }
+
+    auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
+    auto read_query = std::make_shared<ReadQuery>();
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
+    const auto& seg = read_result.frame_data.frame();
+
+    count = 0;
+//    auto col1_pos = seg.column_index( "thing1").value();
+//    auto col2_pos = seg.column_index( "thing2").value();
+//    auto col3_pos = seg.column_index( "thing3").value();
+//    auto col4_pos = seg.column_index( "thing4").value();
+
+    for (size_t i = 0; i < num_incompletes; ++i) {
+        for(size_t j = 0; j < num_rows_per_incomplete; ++j ) {
+            auto idx = seg.scalar_at<uint64_t>(count, 0);
+            log::version().info("Index value {} count {}", idx.value(), count);
+//            ASSERT_EQ(idx.value(), count);
+//            auto v1 = seg.scalar_at<uint64_t>(count, col1_pos);
+//            ASSERT_EQ(v1.value(), j);
+//            auto v2 = seg.scalar_at<uint64_t>(count , col2_pos);
+//            ASSERT_EQ(v2.value(), i);
+//            auto v3 = seg.scalar_at<uint64_t>(count, col3_pos);
+//            ASSERT_EQ(v3.value(), i + j);
+//            auto v4 = seg.scalar_at<uint64_t>(count , col4_pos);
+//            ASSERT_EQ(v4.value(), i * j);
+            ++count;
+        }
+    }
+    FAIL();
+}
+
 TEST_F(VersionStoreTest, GetIncompleteSymbols) {
     using namespace arcticdb;
     using namespace arcticdb::storage;
