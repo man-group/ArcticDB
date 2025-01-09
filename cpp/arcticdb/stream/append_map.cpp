@@ -253,15 +253,26 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     bool sparsify_floats{false}; // TODO aseaton tick collector support
 
     auto append_partial_key_gen = [stream_id, &frame](const FrameSlice& frame_slice) {
-//        auto& idx = frame->index_tensor.value();
-//        auto start = *idx.ptr_cast<timestamp>(slice_begin_pos(frame_slice, *frame));
-//        auto end = *idx.ptr_cast<timestamp>(slice_end_pos(frame_slice, *frame));
-        // TODO aseaton this logic doesn't handle strides correctly compared with the index based logic above
-        auto start = static_cast<timestamp>(slice_begin_pos(frame_slice, *frame));
-        auto end = static_cast<timestamp>(slice_end_pos(frame_slice, *frame));
-        return stream::StreamSink::PartialKey{
-            KeyType::APPEND_DATA, VersionId(0), stream_id, start, end_index_generator(end)
-        };
+        KeyType key_type = KeyType::APPEND_DATA;
+        VersionId version_id = 0;
+        // TODO aseaton this is cut and paste from get_partial_key_gen, just generalize that function away from TABLE_DATA keys
+        if (frame->has_index()) {
+            util::check(static_cast<bool>(frame->index_tensor), "Got null index tensor in get_partial_key_gen");
+            auto& idx = frame->index_tensor.value();
+            auto start = *idx.ptr_cast<timestamp>(slice_begin_pos(frame_slice, *frame));
+            auto end = *idx.ptr_cast<timestamp>(slice_end_pos(frame_slice, *frame));
+            return stream::StreamSink::PartialKey{
+                key_type, version_id, stream_id, start, end_index_generator(end)};
+        }
+        else {
+            // TODO aseaton all the slices are going to be across the same range. Incrementing the row range across slices
+            // should be doable though. Does each FrameSlice know its "position"? All we need to do here is provide
+            // a correct ordering
+            return stream::StreamSink::PartialKey{
+                key_type, version_id, stream_id,
+                entity::safe_convert_to_numeric_index(frame_slice.row_range.first, "Rows"),
+                entity::safe_convert_to_numeric_index(frame_slice.row_range.second, "Rows")};
+        }
     };
 
     const auto index = std::move(frame->index);
@@ -521,6 +532,7 @@ void append_incomplete_segment(
 
     auto [next_key, total_rows] = read_head(store, stream_id);
 
+    // TODO aseaton inspiration to sort out the index values
     auto start_index = TimeseriesIndex::start_value_for_segment(seg);
     auto end_index = TimeseriesIndex::end_value_for_segment(seg);
     auto seg_row_count = seg.row_count();

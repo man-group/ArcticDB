@@ -342,28 +342,27 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaSimple) {
     const auto& seg = read_result.frame_data.frame();
 
     count = 0;
-//    auto col1_pos = seg.column_index( "thing1").value();
-//    auto col2_pos = seg.column_index( "thing2").value();
-//    auto col3_pos = seg.column_index( "thing3").value();
-//    auto col4_pos = seg.column_index( "thing4").value();
+    auto col1_pos = seg.column_index( "thing1").value();
+    auto col2_pos = seg.column_index( "thing2").value();
+    auto col3_pos = seg.column_index( "thing3").value();
+    auto col4_pos = seg.column_index( "thing4").value();
 
     for (size_t i = 0; i < num_incompletes; ++i) {
         for(size_t j = 0; j < num_rows_per_incomplete; ++j ) {
             auto idx = seg.scalar_at<uint64_t>(count, 0);
             log::version().info("Index value {} count {}", idx.value(), count);
-//            ASSERT_EQ(idx.value(), count);
-//            auto v1 = seg.scalar_at<uint64_t>(count, col1_pos);
-//            ASSERT_EQ(v1.value(), j);
-//            auto v2 = seg.scalar_at<uint64_t>(count , col2_pos);
-//            ASSERT_EQ(v2.value(), i);
-//            auto v3 = seg.scalar_at<uint64_t>(count, col3_pos);
-//            ASSERT_EQ(v3.value(), i + j);
-//            auto v4 = seg.scalar_at<uint64_t>(count , col4_pos);
-//            ASSERT_EQ(v4.value(), i * j);
+            ASSERT_EQ(idx.value(), count);
+            auto v1 = seg.scalar_at<uint64_t>(count, col1_pos);
+            ASSERT_EQ(v1.value(), j);
+            auto v2 = seg.scalar_at<uint64_t>(count , col2_pos);
+            ASSERT_EQ(v2.value(), i);
+            auto v3 = seg.scalar_at<uint64_t>(count, col3_pos);
+            ASSERT_EQ(v3.value(), i + j);
+            auto v4 = seg.scalar_at<uint64_t>(count , col4_pos);
+            ASSERT_EQ(v4.value(), i * j);
             ++count;
         }
     }
-    FAIL();
 }
 
 TEST_F(VersionStoreTest, GetIncompleteSymbols) {
