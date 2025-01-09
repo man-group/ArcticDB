@@ -2,16 +2,16 @@ name: Run ASV Tests Check Python Script
 
 on:
   push:
-	  branches-ignore:
+    branches-ignore:
       - 'master'
-	  paths:
+    paths:
       - 'python/benchmarks/**'
       - 'python/.asv/results/**'
       - 'asv.conf.json'
   pull_request:
-	  branches-ignore:
+    branches-ignore:
       - 'master'
-	  paths:
+    paths:
       - 'python/benchmarks/**'
       - 'python/.asv/results/**'
       - 'asv.conf.json'
