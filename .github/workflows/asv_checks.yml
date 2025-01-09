@@ -74,6 +74,5 @@ jobs:
 
       - name: Run ASV Tests Check script
         run: |
-          python -m pip install -ve .
           python python/utils/asv_checks.py
         continue-on-error: false
