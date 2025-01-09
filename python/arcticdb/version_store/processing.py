@@ -254,7 +254,6 @@ class ExpressionNode:
         return self.name
 
 
-# TODO: Make importable like import adb.where
 def where(condition, left, right):
     expression_node = ExpressionNode()
     expression_node.condition = condition

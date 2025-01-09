@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 from arcticdb_ext.exceptions import InternalException, UserInputException
-from arcticdb.version_store.processing import QueryBuilder, where
+from arcticdb import QueryBuilder, where
 from arcticdb.util.test import assert_frame_equal, make_dynamic, regularize_dataframe
 
 

@@ -18,7 +18,7 @@ import string
 import sys
 
 from arcticdb.exceptions import ArcticNativeException
-from arcticdb.version_store.processing import QueryBuilder, where
+from arcticdb import QueryBuilder, where
 from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb.util.test import (
     assert_frame_equal,

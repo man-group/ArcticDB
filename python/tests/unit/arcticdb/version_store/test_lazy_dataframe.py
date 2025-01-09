@@ -10,8 +10,7 @@ import pandas as pd
 import pickle
 import pytest
 
-from arcticdb import col, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest
-from arcticdb.version_store.processing import where
+from arcticdb import col, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest, where
 from arcticdb.util.test import assert_frame_equal
 
 
