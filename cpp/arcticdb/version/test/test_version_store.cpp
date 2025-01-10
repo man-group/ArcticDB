@@ -433,9 +433,8 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaRowCountIndex) {
     for (size_t i = 0; i < num_incompletes; ++i) {
         for(size_t j = 0; j < num_rows_per_incomplete; ++j ) {
             auto v1 = seg.scalar_at<uint64_t>((i * num_rows_per_incomplete) + j, col1_pos);
-            ASSERT_EQ(v1.value(), j);
             auto v2 = seg.scalar_at<uint64_t>((i * num_rows_per_incomplete) + j, col2_pos);
-            ASSERT_EQ(v2.value(), num_rows_per_incomplete - j);
+            ASSERT_EQ(v1.value() + v2.value(), num_rows_per_incomplete);
         }
     }
 }

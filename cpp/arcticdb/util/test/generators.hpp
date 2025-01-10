@@ -76,6 +76,8 @@ struct SinkWrapperImpl {
 
 using TestAggregator =  Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy>;
 using SinkWrapper = SinkWrapperImpl<TestAggregator>;
+using TestRowCountAggregator =  Aggregator<RowCountIndex, FixedSchema, stream::NeverSegmentPolicy>;
+using RowCountSinkWrapper = SinkWrapperImpl<TestRowCountAggregator>;
 using TestSparseAggregator = Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy, SparseColumnPolicy>;
 using SparseSinkWrapper = SinkWrapperImpl<TestSparseAggregator>;
 
