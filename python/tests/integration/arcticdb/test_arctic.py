@@ -172,7 +172,7 @@ def test_s3_sts_expiry_check(lib_name, real_s3_sts_storage):
     while (datetime.now() < complete_at):
         logger.info(f"sleeping 30 sec")
         time.sleep(30)
-        logger.info(f"Read successful at {datetime.now()}. Time remaining: {complete_at - datetime.now()}")
+        # logger.info(f"Read successful at {datetime.now()}. Time remaining: {complete_at - datetime.now()}")
         logger.info(f"Should complete at: {complete_at}")
 
     data: pd.DataFrame = lib.read(symbol).data
