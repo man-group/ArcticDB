@@ -35,9 +35,6 @@ _PermissionCapableFactory: Type["MotoS3StorageFixtureFactory"] = None  # To be s
 logging.getLogger("botocore").setLevel(logging.INFO)
 logger = logging.getLogger("S3 Storage Fixture")
 
-S3_CONFIG_PATH = os.path.expanduser(os.path.join("~", ".aws", "config"))
-S3_BACKUP_CONFIG_PATH = os.path.expanduser(os.path.join("~", ".aws", "bk_config"))
-
 
 class Key:
     def __init__(self, *, id: str, secret: str, user_name: str):
@@ -261,7 +258,8 @@ def real_s3_sts_from_environment_variables(user_name: str,
                                            policy_name: str, 
                                            profile_name: str, 
                                            native_config: NativeVariantStorage, 
-                                           additional_suffix: str) -> BaseS3StorageFixtureFactory:
+                                           additional_suffix: str,
+                                           config_file_path: str) -> BaseS3StorageFixtureFactory:
     out = real_s3_from_environment_variables(False, native_config, additional_suffix)
     iam_client = boto3.client("iam", aws_access_key_id=out.default_key.id, aws_secret_access_key=out.default_key.secret)
     # Create IAM user
@@ -387,11 +385,11 @@ def real_s3_sts_from_environment_variables(user_name: str,
     
     out.aws_auth = AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER
     out.aws_profile = profile_name
-    real_s3_sts_write_local_credentials(out)
+    real_s3_sts_write_local_credentials(out, config_file_path)
     return out
 
 
-def real_s3_sts_write_local_credentials(factory: BaseS3StorageFixtureFactory):
+def real_s3_sts_write_local_credentials(factory: BaseS3StorageFixtureFactory, config_file_path: str):
     base_profile_name = factory.aws_profile + "_base"
     aws_credentials = f"""
 [profile {factory.aws_profile}]
@@ -402,14 +400,8 @@ source_profile = {base_profile_name}
 aws_access_key_id = {factory.sts_test_key.id}
 aws_secret_access_key = {factory.sts_test_key.secret}
 """
-    aws_dir = os.path.dirname(S3_CONFIG_PATH)
-    if not os.path.exists(aws_dir):
-        os.makedirs(aws_dir)
-
-    if os.path.exists(S3_CONFIG_PATH):
-        os.rename(S3_CONFIG_PATH, S3_BACKUP_CONFIG_PATH)
-
-    with open(S3_CONFIG_PATH, "w") as config_file:
+    
+    with open(config_file_path, "w") as config_file:
         config_file.write(aws_credentials)
 
 
@@ -489,11 +481,6 @@ def real_s3_sts_clean_up(role_name: str, policy_name: str, user_name: str):
         logger.info("User deleted successfully.")
     except Exception:
         logger.error("Error deleting user") # User could be non-existent as creation of it may fail
-
-        
-    if os.path.exists(S3_CONFIG_PATH) and os.path.exists(S3_BACKUP_CONFIG_PATH):
-        os.remove(S3_CONFIG_PATH)
-        os.rename(S3_BACKUP_CONFIG_PATH, S3_CONFIG_PATH)
 
 
 def mock_s3_with_error_simulation():
