@@ -250,29 +250,8 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     auto de_dup_map = std::make_shared<DeDupMap>();
     bool sparsify_floats{false}; // TODO aseaton may as well put this sparse support back in
 
-    auto append_partial_key_gen = [stream_id, &frame](const FrameSlice& frame_slice) {
-        KeyType key_type = KeyType::APPEND_DATA;
-        VersionId version_id = 0;
-        // TODO aseaton this is cut and paste from get_partial_key_gen, just generalize that function away from TABLE_DATA keys
-        if (frame->has_index()) {
-            util::check(static_cast<bool>(frame->index_tensor), "Got null index tensor in get_partial_key_gen");
-            auto& idx = frame->index_tensor.value();
-            auto start = *idx.ptr_cast<timestamp>(slice_begin_pos(frame_slice, *frame));
-            auto end = *idx.ptr_cast<timestamp>(slice_end_pos(frame_slice, *frame));
-            return stream::StreamSink::PartialKey{
-                key_type, version_id, stream_id, start, end_index_generator(end)};
-        }
-        else {
-            // TODO aseaton all the slices are going to be across the same range. Incrementing the row range across slices
-            // should be doable though. Does each FrameSlice know its "position"? All we need to do here is provide
-            // a correct ordering
-            return stream::StreamSink::PartialKey{
-                key_type, version_id, stream_id,
-                entity::safe_convert_to_numeric_index(frame_slice.row_range.first, "Rows"),
-                entity::safe_convert_to_numeric_index(frame_slice.row_range.second, "Rows")};
-        }
-    };
-
+    TypedStreamVersion typed_stream_version{stream_id, VersionId{0}, KeyType::APPEND_DATA};
+    auto append_partial_key_gen = get_partial_key_gen(frame, typed_stream_version);
     const auto index = std::move(frame->index);
     auto desc = frame->desc;
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta = frame->norm_meta;
@@ -313,14 +292,6 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
             ;
     }, write_window)).via(&async::io_executor());
 
-//    return store->write(
-//        KeyType::APPEND_DATA,
-//        VersionId(0),
-//        stream_id,
-//        index_range.start_,
-//        index_range.end_,
-//        std::move(segment));
-//
 //    if(sort_on_index || (sort_columns && !sort_columns->empty())) {
 //        // TODO - ignore this sorting stuff for now
 //        auto mutable_seg = segment.clone();
