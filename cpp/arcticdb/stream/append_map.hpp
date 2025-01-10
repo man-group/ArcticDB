@@ -13,6 +13,7 @@
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/write_options.hpp>
 
 namespace arcticdb::pipelines {
 struct PythonOutputFrame;
@@ -50,7 +51,8 @@ void write_parallel_impl(
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
     bool validate_index,
     bool sort_on_index,
-    const std::optional<std::vector<std::string>>& sort_columns);
+    const std::optional<std::vector<std::string>>& sort_columns,
+    const WriteOptions& write_options);
 
 void write_head(
     const std::shared_ptr<Store>& store,
@@ -67,6 +69,7 @@ void append_incomplete(
     const StreamId& stream_id,
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
     bool validate_index,
+    const WriteOptions& write_options,
     bool sort_on_index = false);
 
 SegmentInMemory incomplete_segment_from_frame(
@@ -83,4 +86,5 @@ std::vector<VariantKey> read_incomplete_keys_for_symbol(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     bool via_iteration);
+
 } //namespace arcticdb

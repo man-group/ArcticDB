@@ -224,15 +224,13 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     bool validate_index,
     bool sort_on_index,
     [[maybe_unused]] std::optional<AtomKey>&& next_key,
-    const std::optional<std::vector<std::string>>& sort_columns)  {
+    const std::optional<std::vector<std::string>>& sort_columns,
+    const WriteOptions& write_options)  {
     // TODO the next_key stuff needs care for tick collectors - split out to a separate thing?
     // Tick collectors can (and should) handle their own slicing too - and never have any of the sorting stuff
-    // TODO? Release the GIL?
     ARCTICDB_SAMPLE(WriteIncompleteFrame, 0)
     log::version().debug("Command: write_incomplete_frame {}", stream_id);
 
-    // TODO aseaton compare with old logic incomplete_segment_from_frame
-    // and segmenting logic write_versioned_dataframe_internal
     using namespace arcticdb::pipelines;
 
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
@@ -240,8 +238,8 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
             "When writing/appending staged data in parallel, with no sort columns supplied, input data must be sorted.");
 
     auto index_range = frame->index_range;
-    WriteOptions options; // TODO aseaton set the options properly
-    // TODO aseaton we don't want to do the column slicing!
+    WriteOptions options = write_options;
+    options.column_group_size = std::numeric_limits<size_t>::max();  // TODO aseaton disable column slicing in more explicit way
     auto slicing_policy = get_slicing_policy(options, *frame);
     auto slices = slice(*frame, slicing_policy);
     util::check(!slices.empty(), "Unexpected empty slice in write_incomplete_frame");
@@ -250,7 +248,7 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     const auto write_window = ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow", 2 * async::TaskScheduler::instance()->io_thread_count());
     IndexPartialKey key{stream_id, VersionId(0)};
     auto de_dup_map = std::make_shared<DeDupMap>();
-    bool sparsify_floats{false}; // TODO aseaton tick collector support
+    bool sparsify_floats{false}; // TODO aseaton may as well put this sparse support back in
 
     auto append_partial_key_gen = [stream_id, &frame](const FrameSlice& frame_slice) {
         KeyType key_type = KeyType::APPEND_DATA;
@@ -276,15 +274,13 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     };
 
     const auto index = std::move(frame->index);
-    size_t existing_rows = 0;
-    auto timeseries_desc = index_descriptor_from_frame(frame, existing_rows, std::nullopt /*std::move(prev_key) */);
-    //auto norm_meta_copy = norm_meta;
-    //auto tsd = pack_timeseries_descriptor(descriptor, existing_rows + num_rows, std::nullopt /*std::move(copy_prev_key)*/, std::move(norm_meta_copy));
-    util::check(!timeseries_desc.fields().empty(), "Expected fields not to be empty in incomplete segment");
+    auto desc = frame->desc;
+    arcticdb::proto::descriptors::NormalizationMetadata norm_meta = frame->norm_meta;
+    auto user_meta = frame->user_meta;
+    auto bucketize_dynamic = frame->bucketize_dynamic;
 
-    // TODO aseaton we might want to write the chunks in serial to avoid cases where later chunks get compacted before earlier chunks
     return folly::collect(folly::window(std::move(slice_and_rowcount), [frame, slicing_policy, key=std::move(key), store, sparsify_floats,
-                                                                        de_dup_map, &append_partial_key_gen, timeseries_desc](auto&& slice) {
+                                                                        bucketize_dynamic, de_dup_map, &append_partial_key_gen, desc, norm_meta, user_meta](auto&& slice) {
         return async::submit_cpu_task(WriteToSegmentTask(
             frame,
             slice.first,
@@ -293,8 +289,19 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
             slice.second,
             frame->index,
             sparsify_floats))
-            .thenValue([store, de_dup_map, timeseries_desc] (std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, pipelines::FrameSlice>&& ks) {
-                std::get<SegmentInMemory>(ks).set_timeseries_descriptor(timeseries_desc);
+            .thenValue([store, de_dup_map, bucketize_dynamic, desc, norm_meta, user_meta] (std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, pipelines::FrameSlice>&& ks) {
+                auto& seg = std::get<SegmentInMemory>(ks);
+                auto norm_meta_copy = norm_meta;
+                TimeseriesDescriptor tsd = make_timeseries_descriptor(
+                    seg.row_count(),
+                    desc,
+                    std::move(norm_meta_copy),
+                    user_meta,
+                    std::nullopt,
+                    std::nullopt,
+                    bucketize_dynamic
+                    );
+                seg.set_timeseries_descriptor(tsd);
                 return std::move(ks);
             })
             .thenValue([store, de_dup_map] (auto&& ks) {
@@ -361,8 +368,10 @@ void write_parallel_impl(
     const std::shared_ptr<InputTensorFrame>& frame,
     bool validate_index,
     bool sort_on_index,
-    const std::optional<std::vector<std::string>>& sort_columns) {
-    folly::collect(write_incomplete_frame(store, stream_id, frame, validate_index, sort_on_index, std::nullopt, sort_columns)).get();
+    const std::optional<std::vector<std::string>>& sort_columns,
+    const WriteOptions& write_options) {
+    // TODO aseaton tidy up this signature :scream:
+    write_incomplete_frame(store, stream_id, frame, validate_index, sort_on_index, std::nullopt, sort_columns, write_options).get();
 }
 
 std::vector<SliceAndKey> get_incomplete(
@@ -505,7 +514,9 @@ void append_incomplete(
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame,
         bool validate_index,
+        const WriteOptions& write_options,
         bool sort_on_index) {
+    // TODO aseaton tidy up the signature - AppendOptions for the last 3 args?
     using namespace arcticdb::proto::descriptors;
     using namespace arcticdb::stream;
     ARCTICDB_SAMPLE_DEFAULT(AppendIncomplete)
@@ -515,7 +526,7 @@ void append_incomplete(
     const auto num_rows = frame->num_rows;
     total_rows += num_rows;
     auto desc = frame->desc.clone();
-    auto new_keys = write_incomplete_frame(store, stream_id, frame, validate_index, sort_on_index, std::move(next_key), std::nullopt).get();
+    auto new_keys = write_incomplete_frame(store, stream_id, frame, validate_index, sort_on_index, std::move(next_key), std::nullopt, write_options).get();
 
     ARCTICDB_DEBUG(log::version(), "Wrote incomplete frame for stream {}, {} rows, {} total rows", stream_id, num_rows, total_rows);
     write_head(store, new_keys.at(0), total_rows);
@@ -532,7 +543,6 @@ void append_incomplete_segment(
 
     auto [next_key, total_rows] = read_head(store, stream_id);
 
-    // TODO aseaton inspiration to sort out the index values
     auto start_index = TimeseriesIndex::start_value_for_segment(seg);
     auto end_index = TimeseriesIndex::end_value_for_segment(seg);
     auto seg_row_count = seg.row_count();

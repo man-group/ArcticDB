@@ -290,7 +290,7 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     }
 }
 
-TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaSimple) {
+TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaIndexed) {
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -302,7 +302,13 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaSimple) {
     StreamId symbol{"compact_me_static"};
 
     size_t num_incompletes = 3;
-    size_t num_rows_per_incomplete = 2;
+    size_t num_rows_per_incomplete = 10;
+    arcticdb::proto::storage::VersionStoreConfig cfg;
+    cfg.CopyFrom(test_store_->cfg());
+    cfg.mutable_write_options()->set_segment_row_size(4);  // test the logic that chunks up incompletes
+    cfg.mutable_write_options()->set_column_group_size(1);  // check that we don't break after tripping the column
+    // grouping size limit
+    test_store_->configure(std::move(cfg));
 
     for (size_t i = 0; i < num_incompletes; ++i) {
         auto wrapper = SinkWrapper(symbol, {
@@ -341,6 +347,8 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaSimple) {
     auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = read_result.frame_data.frame();
 
+    ASSERT_EQ(seg.row_count(), num_rows_per_incomplete * num_incompletes);
+
     count = 0;
     auto col1_pos = seg.column_index( "thing1").value();
     auto col2_pos = seg.column_index( "thing2").value();
@@ -361,6 +369,73 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaSimple) {
             auto v4 = seg.scalar_at<uint64_t>(count , col4_pos);
             ASSERT_EQ(v4.value(), i * j);
             ++count;
+        }
+    }
+}
+
+TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaRowCountIndex) {
+    using namespace arcticdb;
+    using namespace arcticdb::storage;
+    using namespace arcticdb::stream;
+    using namespace arcticdb::pipelines;
+
+    size_t count = 0;
+
+    std::vector<SegmentToInputFrameAdapter> data;
+    StreamId symbol{"compact_me_static"};
+
+    size_t num_incompletes = 3;
+    size_t num_rows_per_incomplete = 10;
+    arcticdb::proto::storage::VersionStoreConfig cfg;
+    cfg.CopyFrom(test_store_->cfg());
+    cfg.mutable_write_options()->set_segment_row_size(4);  // test the logic that chunks up incompletes
+    cfg.mutable_write_options()->set_column_group_size(1);  // check that we don't break after tripping the column
+    // grouping size limit
+    test_store_->configure(std::move(cfg));
+
+    for (size_t i = 0; i < num_incompletes; ++i) {
+        auto wrapper = RowCountSinkWrapper(symbol, {
+            scalar_field(DataType::UINT64, "thing1"),
+            scalar_field(DataType::UINT64, "thing2"),
+        });
+
+        for(size_t j = 0; j < num_rows_per_incomplete; ++j ) {
+            wrapper.aggregator_.start_row(timestamp(count++))([&](auto &&rb) {
+                rb.set_scalar(0, j);
+                rb.set_scalar(1, num_rows_per_incomplete - j);
+            });
+        }
+
+        wrapper.aggregator_.commit();
+        data.emplace_back( std::move(wrapper.segment()));
+    }
+
+    std::mt19937 mt{42};
+    std::shuffle(data.begin(), data.end(), mt);
+
+    for(auto& frame : data) {
+        ASSERT_TRUE(frame.segment_.is_index_sorted());
+        frame.segment_.descriptor().set_sorted(SortedValue::ASCENDING);
+        test_store_->write_parallel_frame(symbol, frame.input_frame_, true, false, std::nullopt);
+    }
+
+    auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
+    auto read_query = std::make_shared<ReadQuery>();
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
+    const auto& seg = read_result.frame_data.frame();
+    ASSERT_EQ(seg.row_count(), num_rows_per_incomplete * num_incompletes);
+
+    auto col1_pos = seg.column_index( "thing1").value();
+    auto col2_pos = seg.column_index( "thing2").value();
+
+    for (size_t i = 0; i < num_incompletes; ++i) {
+        for(size_t j = 0; j < num_rows_per_incomplete; ++j ) {
+            auto v1 = seg.scalar_at<uint64_t>((i * num_rows_per_incomplete) + j, col1_pos);
+            ASSERT_EQ(v1.value(), j);
+            auto v2 = seg.scalar_at<uint64_t>((i * num_rows_per_incomplete) + j, col2_pos);
+            ASSERT_EQ(v2.value(), num_rows_per_incomplete - j);
         }
     }
 }
