@@ -3,7 +3,7 @@ import inspect
 import importlib
 import sys
 from types import FunctionType, ModuleType
-from typing import Any, Callable, List
+from typing import Any, Callable, Dict, List
 import pytest
 
 from tests.analysis.adb_meta_info import Functions
@@ -49,7 +49,35 @@ def coverage(status=None, category=None):
         return func
     return decorator
 
+
 PROJECT_DIRECTORY = os.getcwd()
+
+
+class ArcrticdbFixture:
+
+    def __init__(self, fixture: FunctionType):
+        self.fixture = fixture
+
+    def get_fixture(self) -> FunctionType:
+        return self.fixture
+    
+    def get_fixtures(self) -> List['ArcrticdbFixture']: 
+        return ArcrticdbFixture.get_function_fixtures(self.fixture)
+
+    @classmethod
+    def get_function_fixtures(cls, func : FunctionType) -> List['ArcrticdbFixture']: 
+        list: List[ArcrticdbFixture] = []
+        # Get the function signature 
+        signature = inspect.signature(func) 
+        # Retrieve the parameters 
+        parameters = signature.parameters 
+        #  Print the parameter names and details 
+        for name, param in parameters.items(): 
+            fixture = ArcticdbTestAnalysis().get_fixture_by_name(name)
+            if not fixture is None:
+                list.append(ArcrticdbFixture(fixture))
+        return list
+
 
 class ArcrticdbTest:
 
@@ -80,6 +108,10 @@ class ArcrticdbTest:
     
     def __str__(self):
         return self.as_pytest_name()
+    
+    def get_fixtures(self) -> List[ArcrticdbFixture]: 
+        return ArcrticdbFixture.get_function_fixtures(self.func)
+
 
 class TestsFilterPipeline:
     '''
@@ -96,12 +128,11 @@ class TestsFilterPipeline:
         self.verbose = verbose
         self.list: List[FunctionType] = list
 
-    def get_tests(self) -> List[FunctionType]:
+    def get_tests(self) -> List[ArcrticdbTest]:
         """
         Returns all tests
         """
         return [ArcrticdbTest(x) for x in self.list]
-    
 
     def save_tests_to_file(self, file_path):
         with open(file_path, "w") as file:
@@ -239,6 +270,8 @@ class ArcticdbTestAnalysis:
 
     __modules: List[ModuleType] = []
     __test_functions: List[FunctionType] = []
+    __fixtures: List[FunctionType] = []
+    __fixtures_dict: Dict[str, FunctionType] = {}
 
 
     def __init__(self, verbose: bool = False):
@@ -247,6 +280,11 @@ class ArcticdbTestAnalysis:
             ArcticdbTestAnalysis.__modules = self.__load_test_modules_from_project()
         if (ArcticdbTestAnalysis.__test_functions is None) or (len(ArcticdbTestAnalysis.__test_functions) < 1):
             ArcticdbTestAnalysis.__test_functions = self.__find_test_functions()
+        if (ArcticdbTestAnalysis.__fixtures is None) or (len(ArcticdbTestAnalysis.__fixtures) < 1):
+            ArcticdbTestAnalysis.__fixtures = self.__find_pytest_fixtures()
+            for f in ArcticdbTestAnalysis.__fixtures:
+                ArcticdbTestAnalysis.__fixtures_dict[f.__name__] = f
+    
 
     def get_modules(self) -> List[ModuleType]:
         """
@@ -259,6 +297,19 @@ class ArcticdbTestAnalysis:
         Returns all tests
         """
         return ArcticdbTestAnalysis.__test_functions
+
+    def get_fixtures(self) -> List[FunctionType]:
+        """
+        Returns all fixtures
+        """
+        return ArcticdbTestAnalysis.__fixtures
+    
+    def get_fixture_by_name(self, fixture_name) -> List[FunctionType]:
+        """
+        Returns fixture by name of None is there is no such found
+        """
+        return ArcticdbTestAnalysis.__fixtures_dict.get(fixture_name, None)
+
     
     def start_filter(self) -> TestsFilterPipeline:
         return TestsFilterPipeline(self.get_test_functions(), self.verbose)
@@ -270,11 +321,18 @@ class ArcticdbTestAnalysis:
     def __find_test_functions(self) -> List[FunctionType]: 
         all_functions: List[FunctionType] = []
         for module in self.get_modules():
-            functions =  [func for name, 
-                          func in inspect.getmembers(module, inspect.isfunction) 
+            functions =  [func for name, func in inspect.getmembers(module, inspect.isfunction) 
                           if name.startswith("test_")]
             all_functions.extend(functions)
         return all_functions
+
+    def __find_pytest_fixtures(self) -> List[FunctionType]: 
+        all_functions: List[FunctionType] = []
+        for module in self.get_modules():
+            functions =  [func for name, func in inspect.getmembers(module) 
+                          if hasattr(func, '_pytestfixturefunction')]
+            all_functions.extend(functions)
+        return all_functions        
 
     def __load_test_modules_from_project(self) -> List[ModuleType]:
         modules: List[ModuleType] = []
@@ -317,6 +375,10 @@ class ArcticdbTestAnalysis:
 ## Some sample test functions
 ##########################
 
+@pytest.fixture
+def fix1(request):
+    return 1
+
 @arcticdb_test
 def test_me():
     print("test_me")
@@ -344,7 +406,7 @@ def test_me_5():
     assert True 
 
 @pytest.mark.mymark("first")
-def test_me_6():
+def test_me_6(fix1):
     print("test_6")
     assert True 
 
@@ -377,6 +439,7 @@ def print_test_list(tests_list: List[ArcrticdbTest]):
     for test in tests_list:
         print(f"Pytest : {test}  ({test.func})")
     print(f"Total : {len(tests_list)}")
+
 
 # Example usage
 if __name__ == "__main__":
@@ -433,6 +496,8 @@ if __name__ == "__main__":
                                      .get_tests())
     print_test_list(functions)
 
+    functions: List[ArcrticdbTest] = ( ArcticdbTestAnalysis().get_fixtures())
+    print_function_list(functions)
 
     """
         With ability to save filtered tests to files we can later organize
@@ -445,11 +510,23 @@ if __name__ == "__main__":
     print_test_list(functions)
     adbt.save_tests_to_file("/tmp/tests.txt")
 
-    functions: List[ArcrticdbTest] = ( ArcticdbTestAnalysis().start_filter()
-                                     .filter_pytests_marked("covers")
-                                     .filter_pytests_where_argument_is(Functions.ARCTIC_enc_ver)
-                                     .exclude_pytests_where_argument_is(Functions.CREATE_LIB_ent_lib_opts)
-                                     .get_tests())
-    print_test_list(functions)
+    fix_list = adbt.get_tests()[0].get_fixtures()
+    print(len(fix_list))
+    print(fix_list[0].get_fixture())
+    print(fix_list[0].get_fixtures())
+
+    """
+        Let's see statistics about skipif
+    """
+    adbt = ArcticdbTestAnalysis().start_filter().filter_pytests_marked("skipif")
+    for test in adbt.get_tests():
+        fix_list = test.get_fixtures()
+        if len(fix_list) < 1:
+            pass
+        else:
+            print(f"Test : {test.get_test()}")
+            for fix in fix_list:
+               print(f"  fixture - {fix.get_fixture()}")
+    print(f"SKIPIF is used at {len(adbt.get_tests())} tests")
 
     print("End")
