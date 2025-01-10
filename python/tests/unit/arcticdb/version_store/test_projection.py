@@ -265,6 +265,54 @@ def test_project_ternary_value_value_string(lmdb_version_store_v1):
     assert_frame_equal(expected, received, check_dtype=False)
 
 
+@pytest.mark.parametrize(
+    "index",
+    [
+        None,
+        pd.MultiIndex.from_arrays(
+            [3 * [pd.Timestamp(0)] + 3 * [pd.Timestamp(1)], [0, 1, 2, 0, 1, 2]],
+            names=["datetime", "level"]
+        )
+    ]
+)
+def test_project_ternary_column_sliced(lmdb_version_store_tiny_segment, index):
+    lib = lmdb_version_store_tiny_segment
+    symbol = "test_project_ternary_column_sliced_range_index"
+    # This fixture has 2 columns per slice, so the column groups will be:
+    # - ["conditional", num_1]
+    # - ["num_2", "str1"]
+    # - ["str_2"]
+    # i.e. the numeric columns and (more importantly) the string columns are in different segments from one another,
+    # testing the string pool handling
+    df = pd.DataFrame(
+        {
+            "conditional": [True, False, False, True, False, True],
+            "num_1": np.arange(0, 6),
+            "num_2": np.arange(10, 16),
+            "str_1": ["one", "two", "three", "four", "five", "six"],
+            "str_2": ["eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"],
+        },
+        index=index
+    )
+    lib.write(symbol, df)
+
+    # Numeric
+    expected = df
+    expected["new_col"] = np.where(df["conditional"].to_numpy(), df["num_1"].to_numpy(), df["num_2"].to_numpy())
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], q["num_1"], q["num_2"]))
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received, check_dtype=False)
+
+    # String
+    expected = df
+    expected["new_col"] = np.where(df["conditional"].to_numpy(), df["str_1"].to_numpy(), df["str_2"].to_numpy())
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], q["str_1"], q["str_2"]))
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received, check_dtype=False)
+
+
 # def test_docstring_example_query_builder_apply(lmdb_version_store_v1):
 #     lib = lmdb_version_store_v1
 #     df = pd.DataFrame(
