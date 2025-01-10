@@ -21,6 +21,7 @@ import time
 import requests
 from datetime import datetime
 from functools import partial
+from tempfile import mkdtemp
 
 from arcticdb import LibraryOptions
 from arcticdb.storage_fixtures.api import StorageFixture
@@ -51,6 +52,7 @@ from .util.mark import (
     REAL_S3_TESTS_MARK,
     SSL_TEST_SUPPORTED,
 )
+from arcticdb.storage_fixtures.utils import safer_rmtree
 
 # region =================================== Misc. Constants & Setup ====================================
 hypothesis.settings.register_profile("ci_linux", max_examples=100)
@@ -249,6 +251,8 @@ def real_s3_sts_storage_factory() -> Generator[BaseS3StorageFixtureFactory, None
     policy_name = os.getenv("ARCTICDB_REAL_S3_STS_TEST_POLICY_NAME", f"gh_sts_test_policy_name_{sts_test_credentials_prefix}")
     profile_name = "sts_test_profile"
     set_config_int("S3Storage.STSTokenExpiryMin", 15)
+    working_dir = mkdtemp(suffix="S3STSStorageFixtureFactory")
+    config_file_path = os.path.join(working_dir, "config")
     try:
         f = real_s3_sts_from_environment_variables(
             user_name=username, 
@@ -256,13 +260,17 @@ def real_s3_sts_storage_factory() -> Generator[BaseS3StorageFixtureFactory, None
             policy_name=policy_name, 
             profile_name=profile_name, 
             native_config=NativeVariantStorage(), # Setting here is purposely wrong to see whether it will get overridden later
-            additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+            additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+            config_file_path=config_file_path
             )
         # Check is made here as the new user gets authenticated only during being used; the check could be time consuming
         real_s3_sts_resources_ready(f) # resources created in iam may not be ready immediately in s3; Could take 10+ seconds
-        yield f
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("AWS_CONFIG_FILE", config_file_path)
+            yield f
     finally:
-        real_s3_sts_clean_up(role_name, policy_name, username)
+        real_s3_sts_clean_up(role_name, policy_name, username, working_dir)
+        safer_rmtree(None, working_dir)
 
 
 @pytest.fixture
