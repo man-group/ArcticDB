@@ -77,7 +77,6 @@ inline std::string ternary_operation_with_types_to_string(
 
 VariantData ternary_operator(const util::BitSet& condition, const util::BitSet& left, const util::BitSet& right) {
     util::BitSet output_bitset;
-    // TODO: relax condition when adding sparse support
     auto output_size = condition.size();
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(left.size() == output_size && right.size() == output_size, "Mismatching bitset sizes");
     output_bitset = right;
@@ -91,7 +90,6 @@ VariantData ternary_operator(const util::BitSet& condition, const util::BitSet& 
 template<bool arguments_reversed = false>
 VariantData ternary_operator(const util::BitSet& condition, const util::BitSet& input_bitset, bool value) {
     util::BitSet output_bitset;
-    // TODO: relax condition when adding sparse support
     auto output_size = condition.size();
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(input_bitset.size() == output_size, "Mismatching bitset sizes");
     if constexpr (arguments_reversed) {
@@ -281,8 +279,9 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& left, c
                     for (size_t idx = 0; idx < condition.size(); ++idx) {
                         output_column->push_back(condition[idx] ? left_offset : right_offset);
                     }
+                } else {
+                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexepcted fixed-width string value in ternary operator");
                 }
-                // TODO: Handle else?
             } else if constexpr ((is_numeric_type(left_type_info::data_type) && is_numeric_type(right_type_info::data_type)) ||
                                  (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type))) {
                 using TargetType = typename ternary_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType>::type;
