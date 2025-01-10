@@ -1014,6 +1014,16 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     const CompactIncompleteOptions& options) {
     log::version().debug("Compacting incomplete symbol {}", stream_id);
 
+    std::vector<int> use_after_move = {1, 2, 3};
+    std::vector<int> moved = std::move(use_after_move);
+    for (auto i : use_after_move) {
+        std::cout<<i<<std::endl;
+    }
+
+    int* use_after_free = new int(0);
+    delete use_after_free;
+    std::cout<<*use_after_free<<std::endl;
+
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = stream_id;
