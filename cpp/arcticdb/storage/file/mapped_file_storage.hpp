@@ -34,17 +34,21 @@ class MappedFileStorage final : public SingleFileStorage {
   private:
     void do_write_raw(const uint8_t* data, size_t bytes) override;
 
-    void do_write(Composite<KeySegmentPair>&& kvs) override;
+    void do_write(KeySegmentPair&& key_seg) override;
 
     void do_write_if_none(KeySegmentPair&& kv [[maybe_unused]]) final {
         storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>("Atomic operations are only supported for s3 backend");
     };
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) override;
+    void do_update(KeySegmentPair&& key_seg, UpdateOpts opts) override;
 
-    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts opts) override;
+    void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, storage::ReadKeyOpts opts) override;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) override;
+    KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts) final;
+
+    void do_remove(VariantKey&& variant_key, RemoveOpts opts) override;
+
+    void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) final;
 
     bool do_supports_prefix_matching() const override {
         return false;

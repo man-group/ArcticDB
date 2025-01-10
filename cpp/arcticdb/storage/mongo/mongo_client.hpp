@@ -9,7 +9,7 @@
 #include <fmt/format.h>
 
 #include <arcticdb/storage/storage.hpp>
-#include <arcticdb/storage/mongo/mongo_client_wrapper.hpp>
+#include <arcticdb/storage/mongo/mongo_client_interface.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 
 namespace arcticdb::storage::mongo {
@@ -30,12 +30,12 @@ class MongoClient : public MongoClientWrapper {
     bool write_segment(
         const std::string &database_name,
         const std::string &collection_name,
-        storage::KeySegmentPair&& kv) override;
+        storage::KeySegmentPair&& key_seg) override;
 
     UpdateResult update_segment(
         const std::string &database_name,
         const std::string &collection_name,
-        storage::KeySegmentPair&& kv,
+        storage::KeySegmentPair&& key_seg,
         bool upsert) override;
 
     std::optional<KeySegmentPair> read_segment(

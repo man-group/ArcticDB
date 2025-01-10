@@ -26,8 +26,6 @@
 #include <span>
 #include <string>
 
-namespace fg = folly::gen;
-
 namespace arcticdb {
 
 template<typename T, typename U>
