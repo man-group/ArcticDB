@@ -46,9 +46,6 @@ from ...util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK,
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-from arcticdb.config import set_log_level
-set_log_level(default_level="TRACE", console_output=True, file_output_path="/tmp/arcticdb.log")
-
 class ParameterDisplayStatus(Enum):
     NOT_SHOW = 1
     DISABLE = 2

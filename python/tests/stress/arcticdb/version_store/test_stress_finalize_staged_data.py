@@ -85,9 +85,6 @@ def finalize_monotonic_unique_chunks(ac_library, iterations):
     print(f"Writing to symbol initially {num_rows_initially} rows")
     df = cachedDF.generate_dataframe_timestamp_indexed(num_rows_initially, total_number_rows, cachedDF.TIME_UNIT)
 
-    iterations = [500, 1000, 1500, 2000] 
-    if ("amazonaws" in lib.arctic_instance_desc.lower()):
-        iterations = [x // 10 for x in iterations]
     cnt = 0
     for iter in iterations :
         res = Results()
