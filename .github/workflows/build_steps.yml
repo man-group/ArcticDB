@@ -256,7 +256,6 @@ jobs:
 
   proxy_test:
     if: |
-      always() &&
       !failure() &&
       !cancelled() &&
       inputs.job_type == 'build-python-wheels'
@@ -265,9 +264,10 @@ jobs:
     secrets: inherit
     strategy:
       matrix:
-        os: [0]
+        # Declaring the dummy fields here to aid the Github Actions linting in VSCode and to provide documentation
+        os: [0] # Decouples the steps from any distro version changes
         include:
-          - ${{fromJSON(inputs.matrix)[0]}}
+          - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only
     with:
       python3: ${{inputs.python3}}
       wheel: wheel-${{needs.compile.outputs.cibw_build}}
