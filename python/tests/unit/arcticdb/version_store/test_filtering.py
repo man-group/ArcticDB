@@ -1360,6 +1360,26 @@ def test_filter_ternary_full_and_empty_results_squared(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
+def test_filter_ternary_invalid_conditions(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_ternary_invalid_conditions"
+    # Non-bool column should throw if provided as condition
+    df = pd.DataFrame({"conditional": [0]})
+    lib.write(symbol, df)
+
+    # Non-bool column
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["conditional"] < 0, q["conditional"] >= 0)]
+    with pytest.raises(InternalException):
+        lib.read(symbol, query_builder=q)
+
+    # Value
+    q = QueryBuilder()
+    q = q[where(True, q["conditional"] < 0, q["conditional"] >= 0)]
+    with pytest.raises(InternalException):
+        lib.read(symbol, query_builder=q)
+
+
 ################################
 # MIXED SCHEMA TESTS FROM HERE #
 ################################
