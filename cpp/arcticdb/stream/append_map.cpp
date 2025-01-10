@@ -152,7 +152,6 @@ SegmentInMemory incomplete_segment_from_frame(
     auto field_tensors = std::move(frame->field_tensors);
     auto output = std::visit([&](const auto& idx) {
         using IdxType = std::decay_t<decltype(idx)>;
-        // TODO aseaton would a simpler change be to just change the policy here?
         using SingleSegmentAggregator = Aggregator<IdxType, FixedSchema, NeverSegmentPolicy>;
         auto copy_prev_key = prev_key;
         auto timeseries_desc = index_descriptor_from_frame(frame, existing_rows, std::move(prev_key));
@@ -226,7 +225,7 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     [[maybe_unused]] std::optional<AtomKey>&& next_key,
     const std::optional<std::vector<std::string>>& sort_columns,
     const WriteOptions& write_options)  {
-    // TODO the next_key stuff needs care for tick collectors - split out to a separate thing?
+    // TODO aseaton the next_key stuff needs care for tick collectors - split out to a separate thing?
     // Tick collectors can (and should) handle their own slicing too - and never have any of the sorting stuff
     ARCTICDB_SAMPLE(WriteIncompleteFrame, 0)
     log::version().debug("Command: write_incomplete_frame {}", stream_id);
@@ -240,6 +239,14 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     auto index_range = frame->index_range;
     WriteOptions options = write_options;
     options.column_group_size = std::numeric_limits<size_t>::max();  // TODO aseaton disable column slicing in more explicit way
+
+    // If sorting, need to sort the thing before slicing it up. So:
+    // - Turn the frame in to a Segment (incomplete_segment_from_frame ?)
+    // - Sort the segment
+    // - Chunk the segment up on write (cf sort_merge_impl)
+    // Keep sorting code path totally different from what I have here? Or always turn Frame in to Segment at the start?
+
+
     auto slicing_policy = get_slicing_policy(options, *frame);
     auto slices = slice(*frame, slicing_policy);
     util::check(!slices.empty(), "Unexpected empty slice in write_incomplete_frame");

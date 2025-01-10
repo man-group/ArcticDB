@@ -373,6 +373,63 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaIndexed) {
     }
 }
 
+TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaIndexedSorting) {
+    using namespace arcticdb;
+    using namespace arcticdb::storage;
+    using namespace arcticdb::stream;
+    using namespace arcticdb::pipelines;
+
+    std::vector<SegmentToInputFrameAdapter> data;
+    StreamId symbol{"compact_me_static"};
+
+    arcticdb::proto::storage::VersionStoreConfig cfg;
+    cfg.CopyFrom(test_store_->cfg());
+    cfg.mutable_write_options()->set_segment_row_size(1);  // test the logic that chunks up incompletes
+    cfg.mutable_write_options()->set_column_group_size(1);  // check that we don't break after tripping the column
+    // grouping size limit
+    test_store_->configure(std::move(cfg));
+
+    for (size_t i = 0; i < 2; ++i) {
+        auto wrapper = SinkWrapper(symbol, {
+            scalar_field(DataType::UINT64, "thing1")
+        });
+
+        wrapper.aggregator_.start_row(timestamp(i + 1))([&](auto&& rb) {
+            rb.set_scalar(i + 3, 0);
+        });
+        wrapper.aggregator_.start_row(timestamp(i))([&](auto&& rb) {
+            rb.set_scalar(i + 1, 0);
+        });
+
+        wrapper.aggregator_.commit();
+        data.emplace_back(std::move(wrapper.segment()));
+    }
+
+    std::mt19937 mt{42};
+    std::shuffle(data.begin(), data.end(), mt);
+
+    for(auto& frame : data) {
+        ASSERT_FALSE(frame.segment_.is_index_sorted());
+        frame.segment_.descriptor().set_sorted(SortedValue::UNSORTED);
+        test_store_->write_parallel_frame(symbol, frame.input_frame_, true, true, std::nullopt);
+    }
+
+    auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
+    auto read_query = std::make_shared<ReadQuery>();
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
+    const auto& seg = read_result.frame_data.frame();
+
+    auto col1_pos = seg.column_index( "thing1").value();
+
+    ASSERT_EQ(seg.row_count(), 4);
+    ASSERT_EQ(seg.scalar_at<uint64_t>(0, col1_pos).value(), 1);
+    ASSERT_EQ(seg.scalar_at<uint64_t>(1, col1_pos).value(), 3);
+    ASSERT_EQ(seg.scalar_at<uint64_t>(2, col1_pos).value(), 2);
+    ASSERT_EQ(seg.scalar_at<uint64_t>(3, col1_pos).value(), 4);
+}
+
 TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaRowCountIndex) {
     using namespace arcticdb;
     using namespace arcticdb::storage;
