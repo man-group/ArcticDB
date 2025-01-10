@@ -1,19 +1,25 @@
 diff --git a/src/aws-cpp-sdk-identity-management/source/auth/STSProfileCredentialsProvider.cpp b/src/aws-cpp-sdk-identity-management/source/auth/STSProfileCredentialsProvider.cpp
-index fd82b678fba..9fd0537e217 100644
+index fd82b678fba..9e27684e778 100644
 --- a/src/aws-cpp-sdk-identity-management/source/auth/STSProfileCredentialsProvider.cpp
 +++ b/src/aws-cpp-sdk-identity-management/source/auth/STSProfileCredentialsProvider.cpp
-@@ -45,13 +45,13 @@ AWSCredentials STSProfileCredentialsProvider::GetAWSCredentials()
+@@ -44,14 +44,15 @@ AWSCredentials STSProfileCredentialsProvider::GetAWSCredentials()
+ 
  void STSProfileCredentialsProvider::RefreshIfExpired()
  {
-     Utils::Threading::ReaderLockGuard guard(m_reloadLock);
+-    Utils::Threading::ReaderLockGuard guard(m_reloadLock);
 -    if (!IsTimeToRefresh(static_cast<long>(m_reloadFrequency.count())) || !m_credentials.IsExpiredOrEmpty())
-+    if (!IsTimeToRefresh(static_cast<long>(m_reloadFrequency.count())) && !m_credentials.IsExpiredOrEmpty())
      {
-        return;
+-       return;
++        Utils::Threading::ReaderLockGuard guard(m_reloadLock);
++        if (!IsTimeToRefresh(static_cast<long>(m_reloadFrequency.count())) && !m_credentials.IsExpiredOrEmpty())
++        {
++        return;
++        }
      }
- 
-     guard.UpgradeToWriterLock();
+-
+-    guard.UpgradeToWriterLock();
 -    if (!IsTimeToRefresh(static_cast<long>(m_reloadFrequency.count())) || !m_credentials.IsExpiredOrEmpty()) // double-checked lock to avoid refreshing twice
++    Aws::Utils::Threading::WriterLockGuard guard(m_reloadLock);
 +    if (!IsTimeToRefresh(static_cast<long>(m_reloadFrequency.count())) && !m_credentials.IsExpiredOrEmpty()) // double-checked lock to avoid refreshing twice
      {
          return;

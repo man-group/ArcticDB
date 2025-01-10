@@ -42,7 +42,7 @@ from arcticdb.storage_fixtures.s3 import (
 from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb_ext.storage import NativeVariantStorage
-from arcticdb_ext import set_config_int, get_config_int
+from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
 from arcticdb.arctic import Arctic
@@ -269,7 +269,8 @@ def real_s3_sts_storage_factory() -> Generator[BaseS3StorageFixtureFactory, None
             mp.setenv("AWS_CONFIG_FILE", config_file_path)
             yield f
     finally:
-        real_s3_sts_clean_up(role_name, policy_name, username, working_dir)
+        unset_config_int("S3Storage.STSTokenExpiryMin")
+        real_s3_sts_clean_up(role_name, policy_name, username)
         safer_rmtree(None, working_dir)
 
 
