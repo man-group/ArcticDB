@@ -341,13 +341,15 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
             },
             [&c](const util::BitSet &l, const std::shared_ptr<Value> &r) -> VariantData {
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(r->data_type_),
-                                                                      "Invalid input types to ternary operator");
+                                                                      "Ternary operator expected bool value, received {}",
+                                                                      get_user_friendly_type_string(r->type()));
                 auto result = ternary_operator(c, l, r->get<bool>());
                 return transform_to_placeholder(result);
             },
             [&c](const std::shared_ptr<Value> &l, const util::BitSet &r) -> VariantData {
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(l->data_type_),
-                                                                      "Invalid input types to ternary operator");
+                                                                      "Ternary operator expected bool value, received {}",
+                                                                      get_user_friendly_type_string(l->type()));
                 auto result = ternary_operator<true>(c, r, l->get<bool>());
                 return transform_to_placeholder(result);
             },

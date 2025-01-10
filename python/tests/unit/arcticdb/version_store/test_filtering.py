@@ -1380,6 +1380,59 @@ def test_filter_ternary_invalid_conditions(lmdb_version_store_v1):
         lib.read(symbol, query_builder=q)
 
 
+def test_filter_ternary_invalid_arguments(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_ternary_invalid_arguments"
+    df = pd.DataFrame(
+        {
+            "conditional": [True],
+            "col1": [0],
+            "col2": ["hello"]
+         },
+    )
+    lib.write(symbol, df)
+
+    # Non-bool column as left arg,
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col1"], q["conditional"])]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+    # Above reversed
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["conditional"], q["col1"])]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+    # Non-bool value as left arg
+    q = QueryBuilder()
+    q = q[where(q["conditional"], 0, q["col1"] == 0)]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+    # Above reversed
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col1"] == 0, 0)]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+    # Incompatible column types
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col1"], q["col2"])]
+    with pytest.raises(UserInputException) as e:
+        lib.read(symbol, query_builder=q)
+
+    # Incompatible column/value types
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col1"], "hello")]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+    # Incompatible value types
+    q = QueryBuilder()
+    q = q[where(q["conditional"], 0, "hello")]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
 ################################
 # MIXED SCHEMA TESTS FROM HERE #
 ################################
