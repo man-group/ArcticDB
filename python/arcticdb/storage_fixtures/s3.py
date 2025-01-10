@@ -237,7 +237,9 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
         b.slow_cleanup(failure_consequence="We will be charged unless we manually delete it. ")
 
 
-def real_s3_from_environment_variables(shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""):
+def real_s3_from_environment_variables(shared_path: bool, 
+                                       native_config: Optional[NativeVariantStorage] = None, 
+                                       additional_suffix: str = "") -> BaseS3StorageFixtureFactory:
     out = BaseS3StorageFixtureFactory(native_config=native_config)
     out.endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
     out.region = os.getenv("ARCTICDB_REAL_S3_REGION")
@@ -254,21 +256,27 @@ def real_s3_from_environment_variables(shared_path: bool, native_config: Optiona
     return out
 
 
-def real_s3_sts_from_environment_variables(user_name: str, role_name: str, policy_name: str, profile_name: str, native_config: NativeVariantStorage, additional_suffix: str):
+def real_s3_sts_from_environment_variables(user_name: str, 
+                                           role_name: str, 
+                                           policy_name: str, 
+                                           profile_name: str, 
+                                           native_config: NativeVariantStorage, 
+                                           additional_suffix: str) -> BaseS3StorageFixtureFactory:
     out = real_s3_from_environment_variables(False, native_config, additional_suffix)
     iam_client = boto3.client("iam", aws_access_key_id=out.default_key.id, aws_secret_access_key=out.default_key.secret)
     # Create IAM user
     try:
         iam_client.create_user(UserName=user_name)
-        out.sts_test_key = Key(id=None, secret=None, user_name=user_name)
-        logger.info("User created successfully.")
+        logger.info(f"User created successfully: {user_name}")
     except iam_client.exceptions.EntityAlreadyExistsException:
-        logger.warn("User already exists.")
+        logger.warning(f"User already exists: {user_name}")
     except Exception as e:
         logger.error(f"Error creating user: {e}")
         raise e
+    out.sts_test_key = Key(id=None, secret=None, user_name=user_name)
 
     account_id = boto3.client("sts", aws_access_key_id=out.default_key.id, aws_secret_access_key=out.default_key.secret).get_caller_identity().get("Account")
+    logger.info(f"Account id: {account_id}")
     # Create IAM role
     assume_role_policy_document = {
         "Version": "2012-10-17",
@@ -290,10 +298,10 @@ def real_s3_sts_from_environment_variables(user_name: str, role_name: str, polic
         )
         out.aws_role_arn = role_response["Role"]["Arn"]
         out.aws_role = role_name
-        logger.info("Role created successfully.")
+        logger.info(f"Role created successfully. {role_name}")
     except iam_client.exceptions.EntityAlreadyExistsException:
         out.aws_role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
-        logger.warn("Role already exists.")
+        logger.warn(f"Role already exists: {role_name}")
     except Exception as e:
         logger.error(f"Error creating role: {e}")
         raise e
@@ -321,21 +329,23 @@ def real_s3_sts_from_environment_variables(user_name: str, role_name: str, polic
             PolicyDocument=json.dumps(s3_access_policy_document)
         )
         out.aws_policy_name = policy_response["Policy"]["Arn"]
-        logger.info("Policy created successfully.")
+        logger.info(f"Policy created successfully. {policy_name}")
     except iam_client.exceptions.EntityAlreadyExistsException:
         out.aws_policy_name = f"arn:aws:iam::{account_id}:policy/{policy_name}"
-        logger.warn("Policy already exists.")
+        logger.warn(f"Policy already exists: {policy_name}")
     except Exception as e:
         logger.error(f"Error creating policy: {e}")
         raise e
 
     # Attach the policy to the role
     try:
-        iam_client.attach_role_policy(
+        response = iam_client.attach_role_policy(
             RoleName=role_name,
             PolicyArn=out.aws_policy_name
         )
         logger.info("Policy attached to role successfully.")
+        logger.info(f"Policy arn: {out.aws_policy_name}.")
+        logger.info(f"RESPONSE: {response}.")
     except Exception as e:
         logger.error(f"Error attaching policy to role: {e}")
         raise e
@@ -367,6 +377,7 @@ def real_s3_sts_from_environment_variables(user_name: str, role_name: str, polic
 
     try:
         access_key_response = iam_client.create_access_key(UserName=user_name)
+        logger.info(f"Response access key: {access_key_response}")
         out.sts_test_key.id = access_key_response["AccessKey"]["AccessKeyId"]
         out.sts_test_key.secret = access_key_response["AccessKey"]["SecretAccessKey"]
         logger.info("Access key created successfully.")

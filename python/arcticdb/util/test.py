@@ -140,10 +140,14 @@ def dataframe_dump_to_log(label_for_df, df: pd.DataFrame):
         a problems in test code or arctic
     """
     print("-" * 80)
-    print('dataframe : , ', label_for_df)
-    print(df.to_csv())
-    print("column definitions : ")
-    print(df.dtypes)
+    if isinstance(df,pd.DataFrame):
+        print('dataframe : , ', label_for_df)
+        print(df.to_csv())
+        print("column definitions : ")
+        print(df.dtypes)
+    else:
+        print(f"Not a dataframe passed : {type(df)}")
+        print(df)
     print("-" * 80)
 
 
