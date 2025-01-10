@@ -1,15 +1,19 @@
 import hashlib
 import os
+import re
 import subprocess
 import sys
 from typing import List
 
 
 def error(mes):
+    print("-" * 80)
     print(f"ERROR :{mes}", file=sys.stderr )
+    print(f"ERROR (same error printed on stdout also)): {mes}")
+    print("-" * 80)
 
 
-def run_command(command: List[str], cwd: str, ok_error: str = None) -> int:
+def run_command(command: List[str], cwd: str, ok_errors_list: List[str] = None) -> int:
     """
         executes a command in specified directory.
         if 'ok_error' passed, the string will be searched in stderr
@@ -21,19 +25,25 @@ def run_command(command: List[str], cwd: str, ok_error: str = None) -> int:
     err_output = result.stderr
     error_code = result.returncode
 
-    if error_code != 0:
-        print(f"Error Code: {error_code}") 
-
-    if not output is None:
-        print("Output:")
-        print(output)
-
     if not err_output is None:
         error(err_output)
-        if not ok_error is None:
-            if (ok_error in err_output):
-                print("Above error is ok!")
+        if error_code == 0:
+            print("ABOVE ERRORS DOES NOT AFFECT FINAL ERROR CODE = 0")
+
+    if not output is None:
+        print("Standard Output:")
+        print(output)
+
+    if error_code != 0:
+        print(f"Error Code Returned: {error_code}") 
+        if not ok_errors_list is None:
+            for ok_error in ok_errors_list:
+                err_output.replace(ok_error, "")
+                err_output = re.sub(r'\s+', '', err_output)
+            if err_output == "":
                 error_code = 0
+            else:
+                error(f"Unknown errors: {err_output}" )
 
     return error_code
 
@@ -91,7 +101,7 @@ def perform_asv_checks() -> int:
     print("\n\nCheck 2: Check that benchmarks.json has up to date latest versions of tests.")
     if run_command(command = ["asv", "run", "--bench", "just-discover", "--python=same"], 
                    cwd = path, 
-                   ok_error ="Couldn't load asv.plugins._mamba_helpers") != 0:
+                   ok_errors_list = ["Couldn't load asv.plugins._mamba_helpers"]) != 0:
         error("There was error getting latest benchmarks. See log")        
         err = 1
     else: 
