@@ -158,8 +158,8 @@ def test_project_ternary_column_column_strings(lmdb_version_store_v1):
     df = pd.DataFrame(
         {
             "conditional": [True, False, False, True, False, True],
-            "col1": ["a", "b", "c", "d", "e", "f"],
-            "col2": ["g", "h", "i", "j", "k", "l"],
+            "col1": ["a", "b", "c", None, "e", "f"],
+            "col2": ["g", "h", "i", "j", np.nan, "l"],
         },
         index=pd.date_range("2024-01-01", periods=6)
     )
