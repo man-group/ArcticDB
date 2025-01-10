@@ -1392,7 +1392,7 @@ def test_filter_ternary_invalid_arguments(lmdb_version_store_v1):
     )
     lib.write(symbol, df)
 
-    # Non-bool column as left arg,
+    # Non-bool column as left arg
     q = QueryBuilder()
     q = q[where(q["conditional"], q["col1"], q["conditional"])]
     with pytest.raises(UserInputException):
@@ -1431,6 +1431,12 @@ def test_filter_ternary_invalid_arguments(lmdb_version_store_v1):
     q = q[where(q["conditional"], 0, "hello")]
     with pytest.raises(UserInputException):
         lib.read(symbol, query_builder=q)
+
+
+def test_filter_ternary_pythonic_syntax():
+    q = QueryBuilder()
+    with pytest.raises(UserInputException):
+        q[q["col1"] if q["conditional"] else q["col2"]]
 
 
 ################################

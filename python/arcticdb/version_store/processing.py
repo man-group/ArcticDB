@@ -206,8 +206,9 @@ class ExpressionNode:
 
     def __bool__(self):
         raise UserInputException(
-            "'and', 'or', and 'not' operators not supported in ArcticDB querying operations,"
-            " please use the bitwise equivalents '&', '|', and '~' respectively"
+            "'and', 'or', 'not', and ternary ('x if y else z') operators not supported in ArcticDB querying operations,"
+            " please use the bitwise equivalents '&', '|', and '~' for 'and', 'or', and 'not' respectively. For ternary"
+            " operations, use where(y, x, z) in the above example."
         )
 
     def isin(self, *args):
