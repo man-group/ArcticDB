@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 from typing import List
 from enum import Enum
 
-from arcticdb_ext import set_config_int, get_config_int
+from arcticdb_ext import get_config_int
 from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb_ext.version_store import SortedValue
@@ -33,7 +33,6 @@ from arcticdb.storage_fixtures.mongo import MongoDatabase
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.storage_fixtures.s3 import S3Bucket
 from arcticdb.version_store.library import (
-    Library,
     WritePayload,
     ArcticUnsupportedDataTypeException,
     ReadRequest,
