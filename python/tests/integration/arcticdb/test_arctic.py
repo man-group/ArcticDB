@@ -164,7 +164,7 @@ def test_s3_sts_expiry_check(lib_name, real_s3_sts_storage):
     lib.write(symbol, df)
 
     now = datetime.now()
-    complete_at = now + timedelta(minutes=min_exp_time_min+5)
+    complete_at = now + timedelta(minutes=min_exp_time_min+2)
     logger.info(f"Test will complete at {complete_at}")
 
     data: pd.DataFrame = lib.read(symbol).data
