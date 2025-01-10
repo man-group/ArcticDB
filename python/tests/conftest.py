@@ -776,15 +776,14 @@ def lmdb_version_store_small_segment(version_store_factory) -> NativeVersionStor
     return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
 
 
-# TODO: Add new fixtures with tiny segments and dynamic strings?
 @pytest.fixture
 def lmdb_version_store_tiny_segment(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(dynamic_strings=True, column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
+    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
 def lmdb_version_store_tiny_segment_dynamic(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(dynamic_strings=True, column_group_size=2, segment_row_size=2, dynamic_schema=True)
+    return version_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
 
 
 @pytest.fixture

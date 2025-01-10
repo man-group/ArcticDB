@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from arcticdb_ext.exceptions import InternalException, UserInputException
+from arcticdb_ext.exceptions import InternalException, SchemaException, UserInputException
 from arcticdb import QueryBuilder, where
 from arcticdb.util.test import assert_frame_equal, make_dynamic, regularize_dataframe
 
@@ -152,9 +152,9 @@ def test_project_ternary_column_column_numeric(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_project_ternary_column_column_strings(lmdb_version_store_v1):
+def test_project_ternary_column_column_dynamic_strings(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
-    symbol = "test_project_ternary_column_column_strings"
+    symbol = "test_project_ternary_column_column_dynamic_strings"
     df = pd.DataFrame(
         {
             "conditional": [True, False, False, True, False, True],
@@ -171,6 +171,32 @@ def test_project_ternary_column_column_strings(lmdb_version_store_v1):
     q = q.apply("new_col", where(q["conditional"], q["col1"], q["col2"]))
     received = lib.read(symbol, query_builder=q).data
     assert_frame_equal(expected, received)
+
+
+def test_project_ternary_fixed_width_strings(version_store_factory):
+    lib = version_store_factory(dynamic_strings=False)
+    symbol = "test_project_ternary_fixed_width_strings"
+    df = pd.DataFrame(
+        {
+            "conditional": [True, False, False, True, False, True],
+            "width_1": ["a", "b", "c", "d", "e", "f"],
+            "width_2": ["g", "h", "i", "j", "k", "l"],
+        },
+        index=pd.date_range("2024-01-01", periods=6)
+    )
+    lib.write(symbol, df)
+
+    # Column/value
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], q["width_1"], "hello"))
+    with pytest.raises(SchemaException):
+        lib.read(symbol, query_builder=q)
+
+    # Column/column
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], q["width_1"], q["width_2"]))
+    with pytest.raises(SchemaException):
+        lib.read(symbol, query_builder=q)
 
 
 def test_project_ternary_column_value_numeric(lmdb_version_store_v1):
@@ -275,8 +301,10 @@ def test_project_ternary_value_value_string(lmdb_version_store_v1):
         )
     ]
 )
-def test_project_ternary_column_sliced(lmdb_version_store_tiny_segment, index):
-    lib = lmdb_version_store_tiny_segment
+def test_project_ternary_column_sliced(version_store_factory, index):
+    # Cannot use lmdb_version_store_tiny_segment as it has fixed-width strings, which are not supported with the ternary
+    # operator
+    lib = version_store_factory(dynamic_strings=True, column_group_size=2, segment_row_size=2)
     symbol = "test_project_ternary_column_sliced_range_index"
     # This fixture has 2 columns per slice, so the column groups will be:
     # - ["conditional", num_1]

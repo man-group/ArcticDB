@@ -146,8 +146,13 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                                     return condition[idx++] ? left_value : right_value;
                                 }
                             });
+                } else {
+                    // Fixed width string columns
+                    schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+                            "Ternary operator does not support fixed width string columns '{}' and '{}'",
+                            left.column_name_,
+                            right.column_name_);
                 }
-                // TODO: Handle else?
             } else if constexpr ((is_numeric_type(left_type_info::data_type) && is_numeric_type(right_type_info::data_type)) ||
                                  (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type))) {
                 using TargetType = typename ternary_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType>::type;
@@ -189,8 +194,8 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
         details::visit_type(val.type().data_type(), [&](auto val_tag) {
             using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
             if constexpr(is_sequence_type(col_type_info::data_type) && is_sequence_type(val_type_info::data_type)) {
-                if constexpr(col_type_info::data_type == val_type_info::data_type && is_dynamic_string_type(col_type_info::data_type)) {
-                    output_column = std::make_unique<Column>(make_scalar_type(col_type_info::data_type), Sparsity::PERMITTED);
+                if constexpr(is_dynamic_string_type(col_type_info::data_type)) {
+                    output_column = std::make_unique<Column>(make_scalar_type(DataType::UTF_DYNAMIC64), Sparsity::PERMITTED);
                     string_pool = std::make_shared<StringPool>();
                     auto value_string = std::string(*val.str_data(), val.len());
                     // TODO: Could this be more efficient?
@@ -214,8 +219,12 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                                     return col_value;
                                 }
                             });
+                } else {
+                    // Fixed width string column
+                    schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+                            "Ternary operator does not support fixed width string columns '{}'",
+                            col.column_name_);
                 }
-                // TODO: Handle else?
             } else if constexpr ((is_numeric_type(col_type_info::data_type) && is_numeric_type(val_type_info::data_type)) ||
                                  (is_bool_type(col_type_info::data_type) && is_bool_type(val_type_info::data_type))) {
                 using TargetType = typename ternary_promoted_type<typename col_type_info::RawType, typename val_type_info::RawType>::type;
