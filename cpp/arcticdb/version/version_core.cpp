@@ -1564,7 +1564,8 @@ VersionedItem sort_merge_impl(
                     stream::StreamSink::PartialKey
                     pk{KeyType::TABLE_DATA, pipeline_context->version_id_, pipeline_context->stream_id_, local_index_start, local_index_end};
                     fut_vec.emplace_back(store->write(pk, std::move(segment)));
-                }};
+                },
+                RowCountSegmentPolicy(write_options.segment_row_size)};
 
             size_t count = 0;
             for(auto& sk : segments) {

@@ -14,8 +14,9 @@
 #include <util/key_utils.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <iterator>
-#include "pipeline/slicing.hpp"
-#include "pipeline/write_frame.hpp"
+#include <arcticdb/pipeline/slicing.hpp>
+#include <arcticdb/pipeline/write_frame.hpp>
+#include <arcticdb/stream/segment_aggregator.hpp>
 
 namespace arcticdb {
 
@@ -235,16 +236,16 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
         "When writing/appending staged data in parallel, with no sort columns supplied, input data must be sorted.");
 
     auto index_range = frame->index_range;
+    const auto index = std::move(frame->index);
+
     WriteOptions write_options = options.write_options;
     write_options.column_group_size = std::numeric_limits<size_t>::max(); // column slicing not supported yet (makes it hard
     // to infer the schema we want after compaction)
     bool sparsify_floats{false};
 
-    // If sorting, need to sort the thing before slicing it up. So:
     // TODO aseaton Keep sorting code path totally separate
     if(options.sort_on_index || (options.sort_columns && !options.sort_columns->empty())) {
         auto segment = incomplete_segment_from_frame(frame, 0, std::move(next_key), sparsify_floats);
-        auto mutable_seg = segment.clone();
         if (options.sort_on_index) {
             util::check(frame->has_index(), "Sort requested on index but no index supplied");
             std::vector<std::string> cols;
@@ -257,32 +258,50 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
                         cols.emplace_back(extra_sort_col);
                 }
             }
-            do_sort(mutable_seg, cols);
+            do_sort(segment, cols);
         } else {
-            do_sort(mutable_seg, *options.sort_columns);
+            do_sort(segment, *options.sort_columns);
         }
 
-        if (options.sort_on_index || (options.sort_columns && options.sort_columns->at(0) == mutable_seg.descriptor().field(0).name()))
-            mutable_seg.descriptor().set_sorted(SortedValue::ASCENDING);
+        if (options.sort_on_index || (options.sort_columns && options.sort_columns->at(0) == segment.descriptor().field(0).name())) {
+            segment.descriptor().set_sorted(SortedValue::ASCENDING);
+        }
 
-        // TODO aseaton chunk the segment up, cf sort_merge_impl
+        std::vector<folly::Future<AtomKey>> fut_vec;
+        std::visit([segment=std::move(segment), &frame, &index, &options, &fut_vec, &store, &stream_id](auto&& idx) mutable {
+            using IdxType = std::decay_t<decltype(idx)>;
+            using RowCountAggregator = SegmentAggregator<IdxType, FixedSchema, RowCountSegmentPolicy>;
 
-        return store->write(
-            KeyType::APPEND_DATA,
-            VersionId(0),
-            stream_id,
-            index_range.start_,
-            index_range.end_,
-            std::move(mutable_seg))
-            .thenValueInline([](VariantKey&& res) {
-                return std::vector<AtomKey>{to_atom(std::move(res))};
-            });
+            auto descriptor = frame->desc;
+            RowCountAggregator agg{
+                [](FrameSlice&&){},
+                FixedSchema{descriptor, index},
+                [&](SegmentInMemory&& segment) {
+                auto timeseries_desc = index_descriptor_from_frame(frame, 0, std::nullopt);
+                auto norm_meta = timeseries_desc.proto().normalization();
+                auto tsd = pack_timeseries_descriptor(descriptor, frame->num_rows, std::nullopt, std::move(norm_meta));
+                segment.set_timeseries_descriptor(tsd);
+                const auto local_index_start = IdxType::start_value_for_segment(segment);
+                const auto local_index_end = IdxType::end_value_for_segment(segment);
+                stream::StreamSink::PartialKey pk{KeyType::APPEND_DATA, 0, stream_id, local_index_start, local_index_end};
+                auto fut = store->write(pk, std::move(segment))
+                    .thenValueInline([](VariantKey&& res) {
+                        return to_atom(std::move(res));
+                    });
+                fut_vec.emplace_back(std::move(fut));
+            }, RowCountSegmentPolicy(options.write_options.segment_row_size)};
+
+            bool convert_int_to_float{false};
+            FrameSlice slice = FrameSlice(segment);
+            agg.add_segment(std::move(segment), slice, convert_int_to_float);
+            agg.commit();
+        }, index);
+
+        return folly::collect(fut_vec).via(&async::io_executor());
     }
 
     auto slicing_policy = get_slicing_policy(write_options, *frame);
     auto slices = slice(*frame, slicing_policy);
-
-    const auto index = std::move(frame->index);
 
     if (slices.empty()) {
         // We still write in this case because a user might only stage empty segments. After the user finalizes
@@ -342,13 +361,15 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
                                pipelines::FrameSlice> &&ks) {
                     auto &seg = std::get<SegmentInMemory>(ks);
                     auto norm_meta_copy = norm_meta;
+                    auto prev_key = std::nullopt;
+                    auto next_key = std::nullopt;
                     TimeseriesDescriptor tsd = make_timeseries_descriptor(
                         seg.row_count(),
                         desc,
                         std::move(norm_meta_copy),
                         user_meta,
-                        std::nullopt,
-                        std::nullopt,
+                        prev_key,
+                        next_key,
                         bucketize_dynamic
                     );
                     seg.set_timeseries_descriptor(tsd);
