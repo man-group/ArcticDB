@@ -256,23 +256,24 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     auto de_dup_map = std::make_shared<DeDupMap>();
     bool sparsify_floats{false}; // TODO aseaton may as well put this sparse support back in
 
-    TypedStreamVersion typed_stream_version{stream_id, VersionId{0}, KeyType::APPEND_DATA};
-    auto append_partial_key_gen = get_partial_key_gen(frame, typed_stream_version);
     const auto index = std::move(frame->index);
     auto desc = frame->desc;
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta = frame->norm_meta;
     auto user_meta = frame->user_meta;
     auto bucketize_dynamic = frame->bucketize_dynamic;
 
+    TypedStreamVersion typed_stream_version{stream_id, VersionId{0}, KeyType::APPEND_DATA};
     return folly::collect(folly::window(std::move(slice_and_rowcount),
-                                        [frame, slicing_policy, key = std::move(key), store, sparsify_floats,
-                                            bucketize_dynamic, de_dup_map, &append_partial_key_gen, desc, norm_meta, user_meta](
+                                        [frame, slicing_policy, key = std::move(key),
+                                         store, sparsify_floats, typed_stream_version = std::move(typed_stream_version),
+                                            bucketize_dynamic, de_dup_map, desc, norm_meta, user_meta](
                                             auto&& slice) {
+                                            auto typed_stream_version_copy = typed_stream_version;
                                             return async::submit_cpu_task(WriteToSegmentTask(
                                                 frame,
                                                 slice.first,
                                                 slicing_policy,
-                                                append_partial_key_gen,
+                                                get_partial_key_gen(frame, std::move(typed_stream_version_copy)),
                                                 slice.second,
                                                 frame->index,
                                                 sparsify_floats))
