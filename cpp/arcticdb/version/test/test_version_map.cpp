@@ -557,6 +557,10 @@ struct VersionChainOperation {
     VersionId version_id { 0 };
 };
 
+/**
+ * @param operations write operations with their specified version_id in this order.
+ * TOMBSTONE_ALL operation ignores version_id as the only API available is to use it with the latest version in the chain
+ */
 std::shared_ptr<VersionMapEntry> write_versions(
     const std::shared_ptr<InMemoryStore>& store,
     const std::shared_ptr<VersionMap>& version_map,

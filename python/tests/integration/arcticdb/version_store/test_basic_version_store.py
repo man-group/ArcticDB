@@ -2704,3 +2704,71 @@ def test_missing_first_version_key_batch(basic_store):
     vits = lib.batch_read(symbols, as_ofs=write_times)
     for x in range(num_items):
         assert_equal(vits[symbols[x]].data, expected[x])
+
+@pytest.mark.parametrize("use_caching", [True, False])
+def test_version_chain_cache(basic_store, use_caching):
+    timeout = sys.maxsize if use_caching else 0
+    lib = basic_store
+    symbol = "test"
+    dataframes = [sample_dataframe()] * 10
+    timestamps = []
+    delete_versions = {3, 7, 9}
+
+    with config_context("VersionMap.ReloadInterval", timeout):
+        # Write 10 versions
+        for i in range(10):
+            with distinct_timestamps(lib) as timestamp:
+                lib.write(symbol, dataframes[i])
+            timestamps.append(timestamp)
+
+        # Validate the most recent version
+        assert_equal(lib.read(symbol).data, dataframes[-1])
+
+        # Check reading specific versions
+        for i in range(10):
+            assert_equal(lib.read(symbol, as_of=timestamps[i].after).data, dataframes[i])
+
+            if i == 0:
+                with pytest.raises(NoSuchVersionException):
+                    lib.read(symbol, as_of=timestamps[i].before)
+            else:
+                assert_equal(lib.read(symbol, as_of=timestamps[i].before).data, dataframes[i-1])
+
+            assert_equal(lib.read(symbol, as_of=i).data, dataframes[i])
+
+        # Ensure reading a non-existent version raises an exception
+        with pytest.raises(NoSuchVersionException):
+            lib.read(symbol, as_of=pd.Timestamp(0))
+
+        # Delete specific versions
+        for version in delete_versions:
+            lib.delete_version(symbol, version)
+
+        assert_equal(lib.read(symbol).data, dataframes[-2])
+        for i in range(10):
+            if i in delete_versions:
+                with pytest.raises(NoSuchVersionException):
+                    lib.read(symbol, as_of=i)
+                assert_equal(lib.read(symbol, as_of=timestamps[i].after).data, dataframes[i-1])
+            else:
+                assert_equal(lib.read(symbol, as_of=i).data, dataframes[i])
+                assert_equal(lib.read(symbol, as_of=timestamps[i].after).data, dataframes[i])
+
+            if i == 0:
+                with pytest.raises(NoSuchVersionException):
+                    lib.read(symbol, as_of=timestamps[i].before)
+            else:
+                assert_equal(lib.read(symbol, as_of=timestamps[i].before).data, dataframes[i-1])
+
+        with pytest.raises(NoSuchVersionException):
+            lib.read(symbol, as_of=pd.Timestamp(0))
+
+        # Delete all versions and ensure all versions are no longer accessible
+        lib.delete(symbol)
+        for i in range(10):
+            with pytest.raises(NoSuchVersionException):
+                lib.read(symbol, as_of=timestamps[i].after)
+            with pytest.raises(NoSuchVersionException):
+                lib.read(symbol, as_of=timestamps[i].before)
+            with pytest.raises(NoSuchVersionException):
+                lib.read(symbol, as_of=i)
