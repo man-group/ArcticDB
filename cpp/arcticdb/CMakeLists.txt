@@ -932,7 +932,7 @@ if(${TEST})
             storage/test/test_storage_operations.cpp
             stream/test/stream_test_common.cpp
             stream/test/test_aggregator.cpp
-            stream/test/test_append_map.cpp
+            stream/test/test_incompletes.cpp
             stream/test/test_row_builder.cpp
             stream/test/test_segment_aggregator.cpp
             stream/test/test_types.cpp

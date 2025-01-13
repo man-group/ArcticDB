@@ -976,8 +976,7 @@ void LocalVersionedEngine::append_incomplete_frame(
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
     bool validate_index) const {
-    AppendIncompleteOptions options{.validate_index=validate_index, .write_options=get_write_options(), .sort_on_index=false};
-    arcticdb::append_incomplete(store_, stream_id, frame, options);
+    arcticdb::append_incomplete(store_, stream_id, frame, validate_index);
 }
 
 void LocalVersionedEngine::append_incomplete_segment(

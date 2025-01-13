@@ -23,8 +23,8 @@ TEST(Append, Simple) {
     auto wrapper = get_test_simple_frame(stream_id, 10, 0);
     auto& frame = wrapper.frame_;
     auto desc = frame->desc.clone();
-    AppendIncompleteOptions options{.validate_index=true, .write_options=WriteOptions{}, .sort_on_index=false};
-    append_incomplete(store, stream_id, frame, options);
+    bool validate_index{true};
+    append_incomplete(store, stream_id, frame, validate_index);
     pipelines::FilterRange range;
     auto pipeline_context = std::make_shared<PipelineContext>(desc);
     pipeline_context->selected_columns_ = util::BitSet(2);

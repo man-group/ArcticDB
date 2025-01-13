@@ -23,12 +23,6 @@ using FilterRange = std::variant<std::monostate, IndexRange, RowRange>;
 
 namespace arcticdb {
 
-struct AppendIncompleteOptions {
-    const bool validate_index;
-    const WriteOptions write_options;
-    const bool sort_on_index;
-};
-
 struct WriteIncompleteOptions {
     const bool validate_index;
     const WriteOptions write_options;
@@ -78,7 +72,7 @@ void append_incomplete(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
-    const AppendIncompleteOptions& options);
+    bool validate_index);
 
 SegmentInMemory incomplete_segment_from_frame(
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
