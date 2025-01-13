@@ -14,6 +14,7 @@ from arcticdb.exceptions import MissingDataException
 
 @pytest.mark.parametrize("batch", (True, False))
 def test_read_incompletes_with_indexed_data(lmdb_version_store_v1, batch):
+    # TODO aseaton broken due to the next_key handling used for tick collector - introduce totally new API?
     lib = lmdb_version_store_v1
     lib_tool = lib.library_tool()
     sym = "test_read_incompletes_with_indexed_data"

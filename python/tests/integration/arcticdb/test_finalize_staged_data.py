@@ -9,7 +9,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 import time
 import pandas as pd
 import numpy as np
-from typing import List
 
 import pytest
 
@@ -240,7 +239,6 @@ def test_finalize_with_unsorted_indexes(lmdb_library_dynamic_schema, mode, valid
     df3 = sample_dataframe('2026-1-2', [4])
     df4 = sample_dataframe('2021-1-2', [4])
     df_unsorted = pd.concat([df1, df2, df3, df4])
-    df_all = pd.concat([df,df1,df2,df3,df4])
 
     lib.write(symbol=symbol,data=df)
 

@@ -222,7 +222,7 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     const std::shared_ptr<InputTensorFrame>& frame,
     std::optional<AtomKey>&& next_key,
     const WriteIncompleteOptions& options) {
-    // TODO aseaton the next_key stuff needs care for tick collectors - split out to a separate thing that basically
+    // TODO aseaton the next_key stuff needs care for tick collectors - split out to a separate thing that
     // just does a simplified version of the old code.
     // Tick collectors can (and should) handle their own slicing too - and never have any of the sorting stuff
     ARCTICDB_SAMPLE(WriteIncompleteFrame, 0)
@@ -238,12 +238,46 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     WriteOptions write_options = options.write_options;
     write_options.column_group_size = std::numeric_limits<size_t>::max(); // column slicing not supported yet (makes it hard
     // to infer the schema we want after compaction)
+    bool sparsify_floats{false};
 
     // If sorting, need to sort the thing before slicing it up. So:
-    // - Turn the frame in to a Segment (incomplete_segment_from_frame ?)
-    // - Sort the segment
-    // - Chunk the segment up on write (cf sort_merge_impl)
-    // Keep sorting code path totally different from what I have here? Or always turn Frame in to Segment at the start?
+    // TODO aseaton Keep sorting code path totally separate
+    if(options.sort_on_index || (options.sort_columns && !options.sort_columns->empty())) {
+        auto segment = incomplete_segment_from_frame(frame, 0, std::move(next_key), sparsify_floats);
+        auto mutable_seg = segment.clone();
+        if (options.sort_on_index) {
+            util::check(frame->has_index(), "Sort requested on index but no index supplied");
+            std::vector<std::string> cols;
+            for (auto i = 0UL; i < frame->desc.index().field_count(); ++i) {
+                cols.emplace_back(frame->desc.fields(i).name());
+            }
+            if (options.sort_columns) {
+                for (auto& extra_sort_col : *options.sort_columns) {
+                    if (std::find(std::begin(cols), std::end(cols), extra_sort_col) == std::end(cols))
+                        cols.emplace_back(extra_sort_col);
+                }
+            }
+            do_sort(mutable_seg, cols);
+        } else {
+            do_sort(mutable_seg, *options.sort_columns);
+        }
+
+        if (options.sort_on_index || (options.sort_columns && options.sort_columns->at(0) == mutable_seg.descriptor().field(0).name()))
+            mutable_seg.descriptor().set_sorted(SortedValue::ASCENDING);
+
+        // TODO aseaton chunk the segment up, cf sort_merge_impl
+
+        return store->write(
+            KeyType::APPEND_DATA,
+            VersionId(0),
+            stream_id,
+            index_range.start_,
+            index_range.end_,
+            std::move(mutable_seg))
+            .thenValueInline([](VariantKey&& res) {
+                return std::vector<AtomKey>{to_atom(std::move(res))};
+            });
+    }
 
     auto slicing_policy = get_slicing_policy(write_options, *frame);
     auto slices = slice(*frame, slicing_policy);
@@ -281,7 +315,6 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
                                                               2 * async::TaskScheduler::instance()->io_thread_count());
     IndexPartialKey key{stream_id, VersionId(0)};
     auto de_dup_map = std::make_shared<DeDupMap>();
-    bool sparsify_floats{false};
 
     auto desc = frame->desc;
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta = frame->norm_meta;
@@ -290,85 +323,45 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
 
     TypedStreamVersion typed_stream_version{stream_id, VersionId{0}, KeyType::APPEND_DATA};
     return folly::collect(folly::window(std::move(slice_and_rowcount),
-                                        [frame, slicing_policy, key = std::move(key),
-                                         store, sparsify_floats, typed_stream_version = std::move(typed_stream_version),
-                                            bucketize_dynamic, de_dup_map, desc, norm_meta, user_meta](
-                                            auto&& slice) {
-                                            auto typed_stream_version_copy = typed_stream_version;
-                                            return async::submit_cpu_task(WriteToSegmentTask(
-                                                frame,
-                                                slice.first,
-                                                slicing_policy,
-                                                get_partial_key_gen(frame, std::move(typed_stream_version_copy)),
-                                                slice.second,
-                                                frame->index,
-                                                sparsify_floats))
-                                                .thenValue([store, de_dup_map, bucketize_dynamic, desc, norm_meta, user_meta](
-                                                    std::tuple<stream::StreamSink::PartialKey,
-                                                               SegmentInMemory,
-                                                               pipelines::FrameSlice> &&ks) {
-                                                    auto &seg = std::get<SegmentInMemory>(ks);
-                                                    auto norm_meta_copy = norm_meta;
-                                                    TimeseriesDescriptor tsd = make_timeseries_descriptor(
-                                                        seg.row_count(),
-                                                        desc,
-                                                        std::move(norm_meta_copy),
-                                                        user_meta,
-                                                        std::nullopt,
-                                                        std::nullopt,
-                                                        bucketize_dynamic
-                                                    );
-                                                    seg.set_timeseries_descriptor(tsd);
-                                                    return std::move(ks);
-                                                })
-                                                .thenValue([store, de_dup_map](auto&& ks) {
-                                                    return store->async_write(ks, de_dup_map);
-                                                })
-                                                .thenValueInline([](SliceAndKey&& sk) {
-                                                    return sk.key();
-                                                });
-                                        },
-                                        write_window)).via(&async::io_executor());
-
-//    if(sort_on_index || (sort_columns && !sort_columns->empty())) {
-//        // TODO - ignore this sorting stuff for now
-//        auto mutable_seg = segment.clone();
-//        if(sort_on_index) {
-//            util::check(frame->has_index(), "Sort requested on index but no index supplied");
-//            std::vector<std::string> cols;
-//            for(auto i = 0UL; i < frame->desc.index().field_count(); ++i) {
-//                cols.emplace_back(frame->desc.fields(i).name());
-//            }
-//            if(sort_columns) {
-//                for(auto& extra_sort_col : *sort_columns) {
-//                    if(std::find(std::begin(cols), std::end(cols), extra_sort_col) == std::end(cols))
-//                        cols.emplace_back(extra_sort_col);
-//                }
-//            }
-//            do_sort(mutable_seg, cols);
-//        } else {
-//            do_sort(mutable_seg, *sort_columns);
-//        }
-//
-//        if(sort_on_index || (sort_columns && sort_columns->at(0) == mutable_seg.descriptor().field(0).name()))
-//            mutable_seg.descriptor().set_sorted(SortedValue::ASCENDING);
-//
-//        return store->write(
-//            KeyType::APPEND_DATA,
-//            VersionId(0),
-//            stream_id,
-//            index_range.start_,
-//            index_range.end_,
-//            std::move(mutable_seg));
-//    } else {
-//        return store->write(
-//            KeyType::APPEND_DATA,
-//            VersionId(0),
-//            stream_id,
-//            index_range.start_,
-//            index_range.end_,
-//            std::move(segment));
-//    }
+        [frame, slicing_policy, key = std::move(key),
+         store, sparsify_floats, typed_stream_version = std::move(typed_stream_version),
+            bucketize_dynamic, de_dup_map, desc, norm_meta, user_meta](
+            auto&& slice) {
+            auto typed_stream_version_copy = typed_stream_version;
+            return async::submit_cpu_task(WriteToSegmentTask(
+                frame,
+                slice.first,
+                slicing_policy,
+                get_partial_key_gen(frame, std::move(typed_stream_version_copy)),
+                slice.second,
+                frame->index,
+                sparsify_floats))
+                .thenValue([store, de_dup_map, bucketize_dynamic, desc, norm_meta, user_meta](
+                    std::tuple<stream::StreamSink::PartialKey,
+                               SegmentInMemory,
+                               pipelines::FrameSlice> &&ks) {
+                    auto &seg = std::get<SegmentInMemory>(ks);
+                    auto norm_meta_copy = norm_meta;
+                    TimeseriesDescriptor tsd = make_timeseries_descriptor(
+                        seg.row_count(),
+                        desc,
+                        std::move(norm_meta_copy),
+                        user_meta,
+                        std::nullopt,
+                        std::nullopt,
+                        bucketize_dynamic
+                    );
+                    seg.set_timeseries_descriptor(tsd);
+                    return std::move(ks);
+                })
+                .thenValue([store, de_dup_map](auto&& ks) {
+                    return store->async_write(ks, de_dup_map);
+                })
+                .thenValueInline([](SliceAndKey&& sk) {
+                    return sk.key();
+                });
+        },
+        write_window)).via(&async::io_executor());
 }
 
 void write_parallel_impl(
