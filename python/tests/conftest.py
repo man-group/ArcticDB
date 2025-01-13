@@ -269,7 +269,7 @@ def real_s3_sts_storage_factory() -> Generator[BaseS3StorageFixtureFactory, None
             mp.setenv("AWS_CONFIG_FILE", config_file_path)
             yield f
     finally:
-        real_s3_sts_clean_up(role_name, policy_name, username, working_dir)
+        real_s3_sts_clean_up(role_name, policy_name, username)
         safer_rmtree(None, working_dir)
 
 
