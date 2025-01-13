@@ -1078,6 +1078,27 @@ bool read_incompletes_to_pipeline(
         ensure_timeseries_norm_meta(*pipeline_context->norm_meta_, pipeline_context->stream_id_, sparsify);
     }
 
+    const StreamDescriptor &staged_desc = incomplete_segments[0].segment(store).descriptor();
+
+    // check that the index names of all staged segments match
+    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+        std::all_of(incomplete_segments.begin(), incomplete_segments.end(), [&](const auto& slice) {
+            return index_names_match(staged_desc, slice.segment(store).descriptor());
+        }),
+        "The index names in the staged stream descriptor {} are not identical",
+        staged_desc
+    );
+
+    // We need to check that the index names match regardless of the dynamic schema setting
+    if (pipeline_context->desc_) {
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+            index_names_match(staged_desc, *pipeline_context->desc_),
+            "The index names in the staged stream descriptor {} are not identical to that of the stream descriptor on storage {}",
+            staged_desc,
+            *pipeline_context->desc_
+        );
+    }
+
     if (dynamic_schema) {
         pipeline_context->staged_descriptor_ =
             merge_descriptors(seg.descriptor(), incomplete_segments, read_query.columns);
@@ -1089,7 +1110,6 @@ bool read_incompletes_to_pipeline(
             pipeline_context->desc_ = pipeline_context->staged_descriptor_;
         }
     } else {
-        const StreamDescriptor &staged_desc = incomplete_segments[0].segment(store).descriptor();
         if (pipeline_context->desc_) {
             schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                 columns_match(staged_desc, *pipeline_context->desc_),
@@ -2037,6 +2057,17 @@ bool is_segment_unsorted(const SegmentInMemory& segment) {
 }
 
 CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const StreamDescriptor& pipeline_desc) {
+    // We need to check that the index names match regardless of the dynamic schema setting
+    if(!index_names_match(stream_descriptor_incomplete, pipeline_desc)) {
+        return Error{
+            throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
+            fmt::format("{} All staged segments must have the same index names."
+                        "{} is different than {}",
+                        error_code_data<ErrorCode::E_DESCRIPTOR_MISMATCH>.name_,
+                        stream_descriptor_incomplete,
+                        pipeline_desc)
+        };
+    }
     if (!columns_match(stream_descriptor_incomplete, pipeline_desc)) {
         return Error{
             throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,

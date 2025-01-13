@@ -12,7 +12,12 @@ import random
 import datetime
 import pytest
 
-from arcticdb.exceptions import SortingException, SchemaException, UserInputException
+
+from arcticdb.exceptions import (
+    SortingException,
+    SchemaException,
+    UserInputException,
+)
 from arcticdb.util.test import (
     assert_frame_equal,
     random_strings_of_length,
@@ -911,11 +916,12 @@ def test_parallel_write_dynamic_schema_named_index(
     df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
     lib.write(sym, df_0, parallel=True)
     lib.write(sym, df_1, parallel=True)
-    lib.compact_incomplete(sym, False, False)
-    expected = pd.concat([df_0, df_1])
-    expected.index.name = df_0.index.name
-    received = lib.read(sym).data
-    assert_frame_equal(expected, received)
+
+    with pytest.raises(SchemaException) as exception_info:
+        lib.compact_incomplete(sym, False, False)
+
+    assert "date" in str(exception_info.value)
+    assert "E_DESCRIPTOR_MISMATCH" in str(exception_info.value)
 
 
 def test_parallel_append_dynamic_schema_named_index(
@@ -930,49 +936,11 @@ def test_parallel_append_dynamic_schema_named_index(
     df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
     lib.write(sym, df_0)
     lib.append(sym, df_1, incomplete=True)
-    lib.compact_incomplete(sym, True, False)
-    expected = pd.concat([df_0, df_1])
-    expected.index.name = df_0.index.name
-    received = lib.read(sym).data
-    assert_frame_equal(expected, received)
+    with pytest.raises(SchemaException) as exception_info:
+        lib.compact_incomplete(sym, True, False)
 
-
-# TODO: Move this out of this file
-def test_regular_append_dynamic_schema_named_index(
-    lmdb_version_store_tiny_segment_dynamic,
-):
-    lib = lmdb_version_store_tiny_segment_dynamic
-    sym = "test_parallel_append_dynamic_schema_named_index"
-    df_0 = pd.DataFrame(
-        {"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1)
-    )
-    df_0.index.name = "date"
-    df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
-    lib.write(sym, df_0)
-    lib.append(sym, df_1)
-    expected = pd.concat([df_0, df_1])
-    expected.index.name = df_0.index.name
-    received = lib.read(sym).data
-    assert_frame_equal(expected, received)
-
-
-# TODO: Move this out of this file
-def test_regular_update_dynamic_schema_named_index(
-    lmdb_version_store_tiny_segment_dynamic,
-):
-    lib = lmdb_version_store_tiny_segment_dynamic
-    sym = "test_parallel_update_dynamic_schema_named_index"
-    df_0 = pd.DataFrame(
-        {"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1)
-    )
-    df_0.index.name = "date"
-    df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
-    lib.write(sym, df_0)
-    lib.update(sym, df_1, upsert=True)
-    expected = pd.concat([df_0, df_1])
-    expected.index.name = df_0.index.name
-    received = lib.read(sym).data
-    assert_frame_equal(expected, received)
+    assert "date" in str(exception_info.value)
+    assert "E_DESCRIPTOR_MISMATCH" in str(exception_info.value)
 
 
 @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])

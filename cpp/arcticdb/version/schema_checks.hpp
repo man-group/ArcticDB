@@ -86,6 +86,27 @@ inline void check_normalization_index_match(
     }
 }
 
+inline bool index_names_match(
+    const StreamDescriptor& df_in_store_descriptor,
+    const StreamDescriptor& new_df_descriptor
+) {
+    if (df_in_store_descriptor.index().type() == IndexDescriptor::Type::EMPTY || new_df_descriptor.index().type() == IndexDescriptor::Type::EMPTY) {
+        return false;
+    }
+
+    if (df_in_store_descriptor.index().field_count() != new_df_descriptor.index().field_count()) {
+        return false;
+    }
+
+    for (auto i = 0; i < int(df_in_store_descriptor.index().field_count()); ++i) {
+        if (df_in_store_descriptor.fields(i).name() != new_df_descriptor.fields(i).name()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 inline bool columns_match(
     const StreamDescriptor& df_in_store_descriptor,
     const StreamDescriptor& new_df_descriptor
@@ -123,6 +144,15 @@ inline void fix_descriptor_mismatch_or_throw(
     check_normalization_index_match(operation, old_sd, new_frame, empty_types);
 
     fix_normalization_or_throw(operation == APPEND, existing_isr, new_frame);
+
+    // We need to check that the index names match regardless of the dynamic schema setting
+    if(!index_names_match(old_sd, new_frame.desc)) {
+        throw StreamDescriptorMismatch(
+            "The index names in the argument are not identical to that of the existing version",
+            old_sd,
+            new_frame.desc,
+            operation);
+    }
 
     if (!dynamic_schema && !columns_match(old_sd, new_frame.desc)) {
         throw StreamDescriptorMismatch(
