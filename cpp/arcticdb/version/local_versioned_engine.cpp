@@ -976,7 +976,8 @@ void LocalVersionedEngine::append_incomplete_frame(
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
     bool validate_index) const {
-    arcticdb::append_incomplete(store_, stream_id, frame, validate_index, get_write_options());
+    AppendIncompleteOptions options{.validate_index=validate_index, .write_options=get_write_options(), .sort_on_index=false};
+    arcticdb::append_incomplete(store_, stream_id, frame, options);
 }
 
 void LocalVersionedEngine::append_incomplete_segment(
@@ -991,7 +992,12 @@ void LocalVersionedEngine::write_parallel_frame(
     bool validate_index,
     bool sort_on_index,
     const std::optional<std::vector<std::string>>& sort_columns) const {
-    write_parallel_impl(store_, stream_id, frame, validate_index, sort_on_index, sort_columns, get_write_options());
+    WriteIncompleteOptions options{
+        .validate_index=validate_index,
+        .write_options=get_write_options(),
+        .sort_on_index=sort_on_index,
+        .sort_columns=sort_columns};
+    write_parallel_impl(store_, stream_id, frame, options);
 }
 
 void LocalVersionedEngine::add_to_symbol_list_on_compaction(

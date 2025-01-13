@@ -311,7 +311,7 @@ set(arcticdb_srcs
         storage/storage_utils.hpp
         stream/aggregator.hpp
         stream/aggregator-inl.hpp
-        stream/append_map.hpp
+        stream/incompletes.hpp
         stream/merge_utils.hpp
         stream/piloted_clock.hpp
         stream/index_aggregator.hpp
@@ -490,7 +490,7 @@ set(arcticdb_srcs
         storage/storage_factory.cpp
         storage/storage_utils.cpp
         stream/aggregator.cpp
-        stream/append_map.cpp
+        stream/incompletes.cpp
         stream/index.cpp
         stream/piloted_clock.cpp
         stream/protobuf_mappings.cpp

@@ -8,7 +8,7 @@
 #include <gtest/gtest.h>
 
 #include <arcticdb/stream/test/stream_test_common.hpp>
-#include <arcticdb/stream/append_map.hpp>
+#include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
@@ -23,7 +23,8 @@ TEST(Append, Simple) {
     auto wrapper = get_test_simple_frame(stream_id, 10, 0);
     auto& frame = wrapper.frame_;
     auto desc = frame->desc.clone();
-    append_incomplete(store, stream_id, frame, true, WriteOptions{});
+    AppendIncompleteOptions options{.validate_index=true, .write_options=WriteOptions{}, .sort_on_index=false};
+    append_incomplete(store, stream_id, frame, options);
     pipelines::FilterRange range;
     auto pipeline_context = std::make_shared<PipelineContext>(desc);
     pipeline_context->selected_columns_ = util::BitSet(2);

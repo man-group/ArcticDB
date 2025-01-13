@@ -23,6 +23,19 @@ using FilterRange = std::variant<std::monostate, IndexRange, RowRange>;
 
 namespace arcticdb {
 
+struct AppendIncompleteOptions {
+    const bool validate_index;
+    const WriteOptions write_options;
+    const bool sort_on_index;
+};
+
+struct WriteIncompleteOptions {
+    const bool validate_index;
+    const WriteOptions write_options;
+    const bool sort_on_index;
+    const std::optional<std::vector<std::string>> sort_columns;
+};
+
 std::pair<std::optional<entity::AtomKey>, size_t> read_head(
     const std::shared_ptr<stream::StreamSource>& store,
     StreamId stream_id);
@@ -49,10 +62,7 @@ void write_parallel_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
-    bool validate_index,
-    bool sort_on_index,
-    const std::optional<std::vector<std::string>>& sort_columns,
-    const WriteOptions& write_options);
+    const WriteIncompleteOptions& options);
 
 void write_head(
     const std::shared_ptr<Store>& store,
@@ -68,9 +78,7 @@ void append_incomplete(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
-    bool validate_index,
-    const WriteOptions& write_options,
-    bool sort_on_index = false);
+    const AppendIncompleteOptions& options);
 
 SegmentInMemory incomplete_segment_from_frame(
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
