@@ -220,7 +220,7 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
-    [[maybe_unused]] std::optional<AtomKey>&& next_key,
+    std::optional<AtomKey>&& next_key,
     const WriteIncompleteOptions& options) {
     // TODO aseaton the next_key stuff needs care for tick collectors - split out to a separate thing that basically
     // just does a simplified version of the old code.
@@ -247,6 +247,33 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
 
     auto slicing_policy = get_slicing_policy(write_options, *frame);
     auto slices = slice(*frame, slicing_policy);
+
+    const auto index = std::move(frame->index);
+
+    if (slices.empty()) {
+        // We still write in this case because a user might only stage empty segments. After the user finalizes
+        // they will just get an empty dataframe.
+        // TODO aseaton a lot of duplication here with incomplete_segment_from_frame, refactor after doing the sorting
+        size_t existing_rows = 0;
+        auto copy_next_key = next_key;
+        auto timeseries_desc = index_descriptor_from_frame(frame, existing_rows, std::move(next_key));
+        util::check(!timeseries_desc.fields().empty(), "Expected fields not to be empty in incomplete segment");
+        auto norm_meta = timeseries_desc.proto().normalization();
+        auto descriptor = timeseries_desc.as_stream_descriptor();
+        SegmentInMemory output{FixedSchema{descriptor, index}.default_descriptor(), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED};
+        output.set_timeseries_descriptor(pack_timeseries_descriptor(descriptor, existing_rows, std::move(copy_next_key), std::move(norm_meta)));
+        return store->write(
+            KeyType::APPEND_DATA,
+            VersionId(0),
+            stream_id,
+            index_range.start_,
+            index_range.end_,
+            std::move(output))
+            .thenValueInline([](VariantKey&& res) {
+                return std::vector<AtomKey>{to_atom(std::move(res))};
+            });
+    }
+
     util::check(!slices.empty(), "Unexpected empty slice in write_incomplete_frame");
     auto slice_and_rowcount = get_slice_and_rowcount(slices);
 
@@ -256,7 +283,6 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     auto de_dup_map = std::make_shared<DeDupMap>();
     bool sparsify_floats{false};
 
-    const auto index = std::move(frame->index);
     auto desc = frame->desc;
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta = frame->norm_meta;
     auto user_meta = frame->user_meta;
