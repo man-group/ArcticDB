@@ -254,7 +254,7 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
                                                               2 * async::TaskScheduler::instance()->io_thread_count());
     IndexPartialKey key{stream_id, VersionId(0)};
     auto de_dup_map = std::make_shared<DeDupMap>();
-    bool sparsify_floats{false}; // TODO aseaton may as well put this sparse support back in
+    bool sparsify_floats{false};
 
     const auto index = std::move(frame->index);
     auto desc = frame->desc;

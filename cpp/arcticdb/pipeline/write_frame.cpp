@@ -133,7 +133,6 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
         const std::shared_ptr<stream::StreamSink>& sink,
         const std::shared_ptr<DeDupMap>& de_dup_map,
         bool sparsify_floats) {
-    // TODO aseaton how has sparsify_floats become unused?
     ARCTICDB_SAMPLE(WriteSlices, 0)
 
     auto slice_and_rowcount = get_slice_and_rowcount(slices);
