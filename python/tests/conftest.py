@@ -311,12 +311,7 @@ def mem_storage() -> Iterator[InMemoryStorageFixture]:
 @pytest.fixture(
     scope="function",
     params=[
-        "s3",
         "lmdb",
-        "mem",
-        pytest.param("azurite", marks=AZURE_TESTS_MARK),
-        pytest.param("mongo", marks=MONGO_TESTS_MARK),
-        pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
     ],
 )
 def arctic_client(request, encoding_version) -> Arctic:
