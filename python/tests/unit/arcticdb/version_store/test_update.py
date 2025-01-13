@@ -22,8 +22,8 @@ from arcticdb.util.test import (
 from arcticdb.exceptions import (
     InternalException,
     SortingException,
-    StreamDescriptorMismatch,
 )
+from arcticdb_ext.version_store import StreamDescriptorMismatch
 from tests.util.date import DateRange
 from pandas import MultiIndex
 

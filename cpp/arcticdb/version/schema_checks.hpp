@@ -90,8 +90,10 @@ inline bool index_names_match(
     const StreamDescriptor& df_in_store_descriptor,
     const StreamDescriptor& new_df_descriptor
 ) {
-    if (df_in_store_descriptor.index().type() == IndexDescriptor::Type::EMPTY || new_df_descriptor.index().type() == IndexDescriptor::Type::EMPTY) {
-        return false;
+    // If either index is empty, we consider them to match
+    if ((df_in_store_descriptor.index().type() == IndexDescriptor::Type::EMPTY || new_df_descriptor.index().type() == IndexDescriptor::Type::EMPTY) ||
+        (df_in_store_descriptor.index().field_count() == 0 || new_df_descriptor.index().field_count() == 0)) {
+        return true;
     }
 
     if (df_in_store_descriptor.index().field_count() != new_df_descriptor.index().field_count()) {
