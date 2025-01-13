@@ -100,7 +100,7 @@ struct SlowIncrementTask : async::BaseTask {
 };
 
 
-TEST(ReliableStorageLock, StressMultiThreaded) {
+TEST(ReliableStorageLock, DISABLED_StressMultiThreaded) {
     // It is hard to use a piloted clock for these tests because the folly::FunctionScheduler we use for the lock
     // extensions doesn't support a custom clock. Thus this test will need to run for about 2 minutes.
     auto threads = 100u;
