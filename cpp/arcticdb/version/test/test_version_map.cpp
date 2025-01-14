@@ -874,11 +874,12 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad) {
     // never time-invalidate the cache so we can test our other cache invalidation logic
     ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
     StreamId id{"test"};
-    auto version_map = std::make_shared<VersionMap>();
-    auto store = std::make_shared<InMemoryStore>();
+    std::shared_ptr<VersionMap> version_map;
+    std::shared_ptr<InMemoryStore> store;
 
     auto validate_load_strategy = [&](const LoadStrategy& load_strategy, bool should_be_cached, int expected_cached = -1) {
         if (should_be_cached) {
+            // Store is nullptr as we shouldn't go to storage
             auto entry = version_map->check_reload(nullptr, id, load_strategy, __FUNCTION__);
             ASSERT_EQ(std::ranges::count_if(entry->keys_, [](const auto& key) { return key.type() == KeyType::TABLE_INDEX;}), expected_cached);
         }
