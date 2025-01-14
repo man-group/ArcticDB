@@ -27,14 +27,15 @@ from arcticdb.util.test import get_sample_dataframe, random_string
 from arcticdb.version_store.library import Library, ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore
-from tests.util.mark import MACOS, SLOW_TESTS_MARK, WINDOWS, MEMRAY_SUPPORTED, MEMRAY_TESTS_MARK, SKIP_CONDA_MARK 
+from tests.util.mark import MACOS, SLOW_TESTS_MARK, WINDOWS, MEMRAY_SUPPORTED, MEMRAY_TESTS_MARK, SKIP_CONDA_MARK
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Memory_tests")
 
 
-#region HELPER functions for non-memray tests
+# region HELPER functions for non-memray tests
+
 
 def nice_bytes_str(bytes):
     return f" {bytes / (1024 * 1024):.2f}MB/[{bytes}] "
@@ -135,12 +136,12 @@ def check_process_memory_leaks(
         print(f"  Maximum growth so far: {nice_bytes_str(max(mem_growth_each_iter))}")
         print(f"  Number of times there was 50% drop in memory: {count_drops(mem_growth_each_iter, 0.5)}")
 
-        assert (
-            max_total_mem_lost_threshold_bytes >= process_growth
-        ), f"Memory of the process grew more than defined threshold: {nice_bytes_str(process_growth)} (specified: {nice_bytes_str(max_total_mem_lost_threshold_bytes)} )"
-        assert (
-            max_machine_memory_percentage >= mem_per
-        ), f"Machine utilized more memory than specified threshold :{mem_per}% (specified {max_machine_memory_percentage}%)"
+        assert max_total_mem_lost_threshold_bytes >= process_growth, (
+            f"Memory of the process grew more than defined threshold: {nice_bytes_str(process_growth)} (specified: {nice_bytes_str(max_total_mem_lost_threshold_bytes)} )"
+        )
+        assert max_machine_memory_percentage >= mem_per, (
+            f"Machine utilized more memory than specified threshold :{mem_per}% (specified {max_machine_memory_percentage}%)"
+        )
 
     print(
         "The process assessment finished within expectations. Total consumed additional mem is bellow threshold: ",
@@ -161,7 +162,7 @@ def grow_exp(df_to_grow: pd.DataFrame, num_times_xx2: int):
     return df_to_grow
 
 
-def generate_big_dataframe(rows: int = 1000000, num_exp_time_growth: int=5) -> pd.DataFrame:
+def generate_big_dataframe(rows: int = 1000000, num_exp_time_growth: int = 5) -> pd.DataFrame:
     """
     A quick and time efficient wat to generate very large dataframe.
     The first parameter will be passed to get_sample_dataframe() so that a dataframe
@@ -177,9 +178,11 @@ def generate_big_dataframe(rows: int = 1000000, num_exp_time_growth: int=5) -> p
     logger.info(f"Generation took : {time.time() - st}")
     return df
 
-#endregion
 
-#region HELPER functions for memray tests
+# endregion
+
+# region HELPER functions for memray tests
+
 
 def construct_df_querybuilder_tests(size: int) -> pd.DataFrame:
     df = get_sample_dataframe(size)
@@ -197,13 +200,9 @@ def query_filter_then_groupby_with_aggregations() -> QueryBuilder:
     return (
         q[q["bool"]]
         .groupby("uint8")
-        .agg({"uint32": "mean", 
-              "int32": "sum", 
-              "strings": "count", 
-              "float64": "sum", 
-              "float32": "min", 
-              "int16": "max"})
+        .agg({"uint32": "mean", "int32": "sum", "strings": "count", "float64": "sum", "float32": "min", "int16": "max"})
     )
+
 
 def query_no_filter_only_groupby_with_aggregations() -> QueryBuilder:
     """
@@ -211,14 +210,8 @@ def query_no_filter_only_groupby_with_aggregations() -> QueryBuilder:
     The query basically will do aggregation of half of dataframe
     """
     q = QueryBuilder()
-    return (
-        q.groupby("uint8")
-        .agg({"uint32": "mean", 
-              "int32": "sum", 
-              "strings": "count", 
-              "float64": "sum", 
-              "float32": "min", 
-              "int16": "max"})
+    return q.groupby("uint8").agg(
+        {"uint32": "mean", "int32": "sum", "strings": "count", "float64": "sum", "float32": "min", "int16": "max"}
     )
 
 
@@ -231,12 +224,7 @@ def query_filter_impossible_cond_groupby_with_aggregations_for_whole_frame() -> 
     return (
         q[q["strings"] != "QASDFGH"]
         .groupby("int16")
-        .agg({"uint32": "mean", 
-              "int32": "sum", 
-              "strings": "count", 
-              "float64": "sum", 
-              "float32": "min", 
-              "int16": "max"})
+        .agg({"uint32": "mean", "int32": "sum", "strings": "count", "float64": "sum", "float32": "min", "int16": "max"})
     )
 
 
@@ -259,16 +247,18 @@ def query_resample_minutes() -> QueryBuilder:
     """
     q = QueryBuilder()
     return q.resample("min").agg(
-        {"int8" : "min",
-        "int16" : "max",
-        "int32" : "first",
-        "int64" : "last",
-        "uint64" : "sum",
-        "float32" : "mean",
-        "float64" : "sum",
-        "strings" : "count",
-        "bool" : "sum"}
-        )
+        {
+            "int8": "min",
+            "int16": "max",
+            "int32": "first",
+            "int64": "last",
+            "uint64": "sum",
+            "float32": "mean",
+            "float64": "sum",
+            "strings": "count",
+            "bool": "sum",
+        }
+    )
 
 
 def query_row_range_57percent(size: int) -> QueryBuilder:
@@ -280,16 +270,16 @@ def query_row_range_57percent(size: int) -> QueryBuilder:
     start_percentage = random.uniform(0.01, 1.0 - percentage_rows_returned)
     result_size_rows = int(0.57 * size)
     q = QueryBuilder()
-    a = random.randint(0,int((size-1) * start_percentage))
+    a = random.randint(0, int((size - 1) * start_percentage))
     b = a + result_size_rows
     logger.info(f" GENERATED ROW RANGE {a} - {b}")
-    return q.row_range( (a, b) )
+    return q.row_range((a, b))
 
 
 def query_date_range_57percent(start: pd.Timestamp, end: pd.Timestamp) -> QueryBuilder:
     """
     Date range query for QueryBuilder memory tests
-    Will generate random date range that will return 
+    Will generate random date range that will return
     always the specified percentage rows
     """
     percentage_rows_returned = 0.57
@@ -301,7 +291,7 @@ def query_date_range_57percent(start: pd.Timestamp, end: pd.Timestamp) -> QueryB
     percent_duration = total_duration * percentage_rows_returned
     b = a + percent_duration
     logger.info(f" GENERATED DATE RANGE {a} - {b}")
-    return q.date_range( (a,b)) 
+    return q.date_range((a, b))
 
 
 def print_info(data: pd.DataFrame, q: QueryBuilder):
@@ -313,16 +303,19 @@ def gen_random_date(start: pd.Timestamp, end: pd.Timestamp):
     """
     Returns random timestamp from specified period
     """
-    date_range = pd.date_range(start=start, end=end, freq='s') 
+    date_range = pd.date_range(start=start, end=end, freq="s")
     return random.choice(date_range)
 
-#endregion
 
-#region TESTS non-memray type - "guessing" memory leak through series of repetitions
+# endregion
 
-@SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
-@pytest.mark.skipif(WINDOWS, 
-                    reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem")
+# region TESTS non-memray type - "guessing" memory leak through series of repetitions
+
+
+@SKIP_CONDA_MARK  # Conda CI runner doesn't have enough storage to perform these stress tests
+@pytest.mark.skipif(
+    WINDOWS, reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem"
+)
 @pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
 def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
     lib: adb.Library = arctic_library_lmdb_100gb
@@ -361,10 +354,12 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
 
     check_process_memory_leaks(proc_to_examine, 20, max_mem_bytes, 80.0)
 
-@pytest.mark.skipif(WINDOWS, 
-                    reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem")
+
+@pytest.mark.skipif(
+    WINDOWS, reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem"
+)
 @pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
-@SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
+@SKIP_CONDA_MARK  # Conda CI runner doesn't have enough storage to perform these stress tests
 def test_mem_leak_querybuilder_standard(arctic_library_lmdb_100gb):
     """
     This test uses old approach with iterations.
@@ -385,13 +380,15 @@ def test_mem_leak_querybuilder_standard(arctic_library_lmdb_100gb):
     gc.collect()
 
     def proc_to_examine():
-        queries = [query_filter_then_groupby_with_aggregations(), 
-                    query_filter_impossible_cond_groupby_with_aggregations_for_whole_frame(), 
-                    query_no_filter_only_groupby_with_aggregations(),
-                    query_apply_clause_only(random_string(10)), 
-                    query_resample_minutes(),
-                    query_row_range_57percent(size),
-                    query_date_range_57percent(start_date, end_date)]
+        queries = [
+            query_filter_then_groupby_with_aggregations(),
+            query_filter_impossible_cond_groupby_with_aggregations_for_whole_frame(),
+            query_no_filter_only_groupby_with_aggregations(),
+            query_apply_clause_only(random_string(10)),
+            query_resample_minutes(),
+            query_row_range_57percent(size),
+            query_date_range_57percent(start_date, end_date),
+        ]
         for q in queries:
             data: pd.DataFrame = lib.read(symbol, query_builder=q).data
             print_info(data, q)
@@ -405,7 +402,7 @@ def test_mem_leak_querybuilder_standard(arctic_library_lmdb_100gb):
     check_process_memory_leaks(proc_to_examine, 10, max_mem_bytes, 80.0)
 
 
-@SKIP_CONDA_MARK # Conda CI runner doesn't have enough storage to perform these stress tests
+@SKIP_CONDA_MARK  # Conda CI runner doesn't have enough storage to perform these stress tests
 def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     lib: NativeVersionStore = lmdb_version_store_very_big_map
 
@@ -428,20 +425,23 @@ def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
 
     check_process_memory_leaks(proc_to_examine, 20, max_mem_bytes, 80.0)
 
-#endregion
 
-#region TESTS pytest-memray type for memory limit and leaks
+# endregion
+
+# region TESTS pytest-memray type for memory limit and leaks
 
 ## NOTE: Currently tests can be executed on Python >= 3.8 only
 
 
 @pytest.fixture
 # NOTE: for now we run only V1 encoding as test is very slow
-def library_with_symbol(arctic_library_lmdb, only_test_encoding_version_v1) -> Generator[Tuple[Library, pd.DataFrame, str], None, None]:
+def library_with_symbol(
+    arctic_library_lmdb, only_test_encoding_version_v1
+) -> Generator[Tuple[Library, pd.DataFrame, str], None, None]:
     """
-    As memray instruments memory, we need to take out 
-    everything not relevant from mem leak measurement out of 
-    test, and place it in setup of the test - in other words in the fixture 
+    As memray instruments memory, we need to take out
+    everything not relevant from mem leak measurement out of
+    test, and place it in setup of the test - in other words in the fixture
     Otherwise, memray instruments that code and it results in much slower execution
     as well as mixing results of memory leaks - are they in what we test - for example
     read() or in construct_df_querybuilder_tests() ? or in other code?
@@ -452,15 +452,18 @@ def library_with_symbol(arctic_library_lmdb, only_test_encoding_version_v1) -> G
     lib.write(symbol, df)
     yield (lib, df, symbol)
 
+
 @pytest.fixture
 # NOTE: for now we run only V1 encoding as test is very slow
-def library_with_tiny_symbol(arctic_library_lmdb, only_test_encoding_version_v1) -> Generator[Tuple[Library, pd.DataFrame, str], None, None]:
+def library_with_tiny_symbol(
+    arctic_library_lmdb, only_test_encoding_version_v1
+) -> Generator[Tuple[Library, pd.DataFrame, str], None, None]:
     """
-    As memray instruments memory, we need to take out 
-    everything not relevant from mem leak measurement out of 
-    test, and place it in setup of the test - in other words in the fixture 
+    As memray instruments memory, we need to take out
+    everything not relevant from mem leak measurement out of
+    test, and place it in setup of the test - in other words in the fixture
     Otherwise, memray instruments that code and it results in much slower execution
-    as well as mixing results of memory leaks 
+    as well as mixing results of memory leaks
     """
     lib: Library = arctic_library_lmdb
     symbol = "test"
@@ -468,11 +471,12 @@ def library_with_tiny_symbol(arctic_library_lmdb, only_test_encoding_version_v1)
     lib.write(symbol, df)
     yield (lib, df, symbol)
 
-def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:bool=False):
+
+def mem_query(lib: Library, df: pd.DataFrame, num_repetitions: int = 1, read_batch: bool = False):
     """
     This is the function where we test different types
     of queries against a large dataframe. Later this
-    function will be used for memory limit and memory leaks 
+    function will be used for memory limit and memory leaks
     tests
     """
     size = df.shape[0]
@@ -484,46 +488,47 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions:int=1, read_batch:
     del df
     gc.collect()
 
-    queries = [query_filter_then_groupby_with_aggregations(), 
-                query_no_filter_only_groupby_with_aggregations(),
-                query_filter_impossible_cond_groupby_with_aggregations_for_whole_frame(), 
-                query_apply_clause_only(random_string(10)), 
-                query_resample_minutes(),
-                query_row_range_57percent(size),
-                query_date_range_57percent(start_date, end_date)]
-    
+    queries = [
+        query_filter_then_groupby_with_aggregations(),
+        query_no_filter_only_groupby_with_aggregations(),
+        query_filter_impossible_cond_groupby_with_aggregations_for_whole_frame(),
+        query_apply_clause_only(random_string(10)),
+        query_resample_minutes(),
+        query_row_range_57percent(size),
+        query_date_range_57percent(start_date, end_date),
+    ]
+
     for rep in range(num_repetitions):
-            logger.info(f"REPETITION : {rep}")
-            if (read_batch):
-                logger.info("RUN read_batch() tests")
-                read_requests = [ReadRequest(symbol=symbol, 
-                                             query_builder=query
-                                            ) for query in queries]
-                results_read = lib.read_batch(read_requests)
-                cnt = 0
-                for result in results_read:
-                    assert not result.data is None
-                    if (num_repetitions < 20): 
-                        print_info(result.data, queries[cnt])
-                    cnt += 1
-                del read_requests, results_read
-            else:
-                logger.info("RUN read() tests")
-                for q in queries:
-                    data: pd.DataFrame = lib.read(symbol, query_builder=q).data
-                    lib.read_batch
-                    if (num_repetitions < 20): 
-                        print_info(data, q)
-                del data
-            gc.collect()
+        logger.info(f"REPETITION : {rep}")
+        if read_batch:
+            logger.info("RUN read_batch() tests")
+            read_requests = [ReadRequest(symbol=symbol, query_builder=query) for query in queries]
+            results_read = lib.read_batch(read_requests)
+            cnt = 0
+            for result in results_read:
+                assert not result.data is None
+                if num_repetitions < 20:
+                    print_info(result.data, queries[cnt])
+                cnt += 1
+            del read_requests, results_read
+        else:
+            logger.info("RUN read() tests")
+            for q in queries:
+                data: pd.DataFrame = lib.read(symbol, query_builder=q).data
+                lib.read_batch
+                if num_repetitions < 20:
+                    print_info(data, q)
+            del data
+        gc.collect()
 
     del lib, queries
     gc.collect()
 
+
 def test_mem_leak_queries_correctness_precheck(library_with_tiny_symbol):
     """
     This test does precheck to confirm queries work more or less
-    If it fails then perhaps there was a problem with 
+    If it fails then perhaps there was a problem with
     QueryBuilder functionality.
     All checks are based on size of expected dataframe returned by
     a queryno equality checks
@@ -539,37 +544,29 @@ def test_mem_leak_queries_correctness_precheck(library_with_tiny_symbol):
 
     lib.write(symbol, df)
 
-    data: pd.DataFrame = lib.read(symbol, 
-                                  query_builder=query_filter_impossible_cond_groupby_with_aggregations_for_whole_frame()
-                                  ).data
-    assert df.shape[0] == data.shape[0]
-    
-    data: pd.DataFrame = lib.read(symbol, 
-                                  query_builder=query_row_range_57percent(size)
-                                  ).data
-    assert df.shape[0] < data.shape[0] * 2
-    
-    data: pd.DataFrame = lib.read(symbol, 
-                                  query_builder=query_date_range_57percent(start_date, end_date)
-                                  ).data
+    data: pd.DataFrame = lib.read(
+        symbol, query_builder=query_filter_impossible_cond_groupby_with_aggregations_for_whole_frame()
+    ).data
+    assert len(df.int16.unique()) == data.shape[0]
+
+    data: pd.DataFrame = lib.read(symbol, query_builder=query_row_range_57percent(size)).data
     assert df.shape[0] < data.shape[0] * 2
 
-    data: pd.DataFrame = lib.read(symbol, 
-                                  query_builder=query_apply_clause_only(random_string(10))
-                                  ).data
+    data: pd.DataFrame = lib.read(symbol, query_builder=query_date_range_57percent(start_date, end_date)).data
+    assert df.shape[0] < data.shape[0] * 2
+
+    data: pd.DataFrame = lib.read(symbol, query_builder=query_apply_clause_only(random_string(10))).data
     assert len(df.columns.to_list()) <= data.shape[0] * 2
     assert 200 < data.shape[0]
 
-    data: pd.DataFrame = lib.read(symbol, 
-                                  query_builder=query_no_filter_only_groupby_with_aggregations()
-                                  ).data
+    data: pd.DataFrame = lib.read(symbol, query_builder=query_no_filter_only_groupby_with_aggregations()).data
     # groupby column becomes index
     assert sorted(list(df["uint8"].unique())) == sorted(list(data.index.unique()))
 
 
-if MEMRAY_SUPPORTED: 
+if MEMRAY_SUPPORTED:
     ##
-    ## PYTEST-MEMRAY integration is available only from ver 3.8 on 
+    ## PYTEST-MEMRAY integration is available only from ver 3.8 on
     ##
 
     from pytest_memray import Stack
@@ -596,16 +593,14 @@ if MEMRAY_SUPPORTED:
             pass
         return True
 
-
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_leaks(location_limit = "50 KB" if not MACOS else "60 KB", 
-                             filter_fn = is_relevant)
+    @pytest.mark.limit_leaks(location_limit="50 KB" if not MACOS else "60 KB", filter_fn=is_relevant)
     ## Unfortunately it is not possible to xfail memray tests. Instead:
     ##  - log issue for investigation and analysis = to fix leak, or filter out stack frame
     ##  - increase meantime the 'location limit' so that test continue to run and reduce risk of larger mem leaks
     ##  - leave some mark like bellow that code is subject to issue investigation with number of the issue for traceability
     ##  - https://man312219.monday.com/boards/7852509418/pulses/8078461031
-    #@pytest.mark.skip(reason = "read() memory leaks Monday#8078461031")    
+    # @pytest.mark.skip(reason = "read() memory leaks Monday#8078461031")
     def test_mem_leak_querybuilder_read_memray(library_with_symbol):
         """
         Test to capture memory leaks >= of specified number
@@ -620,14 +615,13 @@ if MEMRAY_SUPPORTED:
 
     @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_leaks(location_limit = "160 KB" if not MACOS else "200 KB", 
-                             filter_fn = is_relevant)
+    @pytest.mark.limit_leaks(location_limit="160 KB" if not MACOS else "200 KB", filter_fn=is_relevant)
     ## Unfortunately it is not possible to xfail memray tests. Instead:
     ##  - log issue for investigation and analysis = to fix leak, or filter out stack frame
     ##  - increase meantime the 'location limit' so that test continue to run and reduce risk of larger mem leaks
     ##  - leave some mark like bellow that code is subject to issue investigation with number of the issue for traceability
     ##  - https://man312219.monday.com/boards/7852509418/pulses/8067881190
-    #@pytest.mark.skip(reason = "read() memory leaks Monday#8067881190")
+    # @pytest.mark.skip(reason = "read() memory leaks Monday#8067881190")
     def test_mem_leak_querybuilder_read_manyrepeats_memray(library_with_tiny_symbol):
         """
         Test to capture memory leaks >= of specified number
@@ -638,18 +632,17 @@ if MEMRAY_SUPPORTED:
         what we must exclude from calculation
         """
         (lib, df, symbol) = library_with_tiny_symbol
-        mem_query(lib, df, num_repetitions=125)         
+        mem_query(lib, df, num_repetitions=125)
 
     @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_leaks(location_limit = "160 KB" if not MACOS else "200 KB", 
-                             filter_fn = is_relevant)
+    @pytest.mark.limit_leaks(location_limit="160 KB" if not MACOS else "200 KB", filter_fn=is_relevant)
     ## Unfortunately it is not possible to xfail memray tests. Instead:
     ##  - log issue for investigation and analysis = to fix leak, or filter out stack frame
     ##  - increase meantime the 'location limit' so that test continue to run and reduce risk of larger mem leaks
     ##  - leave some mark like bellow that code is subject to issue investigation with number of the issue for traceability
     ##  - https://man312219.monday.com/boards/7852509418/pulses/8067881190
-    #@pytest.mark.skip(reason = "read() memory leaks Monday#8067881190")
+    # @pytest.mark.skip(reason = "read() memory leaks Monday#8067881190")
     def test_mem_leak_querybuilder_read_batch_manyrepeats_memray(library_with_tiny_symbol):
         """
         Test to capture memory leaks >= of specified number
@@ -660,11 +653,10 @@ if MEMRAY_SUPPORTED:
         what we must exclude from calculation
         """
         (lib, df, symbol) = library_with_tiny_symbol
-        mem_query(lib, df, num_repetitions=125, read_batch=True)        
-
+        mem_query(lib, df, num_repetitions=125, read_batch=True)
 
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_leaks(location_limit = "25 KB", filter_fn = is_relevant)
+    @pytest.mark.limit_leaks(location_limit="25 KB", filter_fn=is_relevant)
     def test_mem_leak_querybuilder_read_batch_memray(library_with_symbol):
         """
         Test to capture memory leaks >= of specified number
@@ -676,7 +668,6 @@ if MEMRAY_SUPPORTED:
         """
         (lib, df, symbol) = library_with_symbol
         mem_query(lib, df, read_batch=True)
-
 
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_memory("490 MB")
@@ -704,12 +695,11 @@ if MEMRAY_SUPPORTED:
         (lib, df, symbol) = library_with_symbol
         mem_query(lib, df, True)
 
-
     @pytest.fixture
-    def library_with_big_symbol_(arctic_library_lmdb) -> Generator[Tuple[Library,str], None, None]:
+    def library_with_big_symbol_(arctic_library_lmdb) -> Generator[Tuple[Library, str], None, None]:
         """
-        As memray instruments memory, we need to take out 
-        everything not relevant from mem leak measurement out of 
+        As memray instruments memory, we need to take out
+        everything not relevant from mem leak measurement out of
         test, so it works as less as possible
         """
         lib: Library = arctic_library_lmdb
@@ -719,9 +709,8 @@ if MEMRAY_SUPPORTED:
         del df
         yield (lib, symbol)
 
-
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_leaks(location_limit = "30 KB", filter_fn = is_relevant)
+    @pytest.mark.limit_leaks(location_limit="30 KB", filter_fn=is_relevant)
     def test_mem_leak_read_all_arctic_lib_memray(library_with_big_symbol_):
         """
         This is a new version of the initial test that reads the whole
@@ -731,7 +720,7 @@ if MEMRAY_SUPPORTED:
         (lib, symbol) = library_with_big_symbol_
         logger.info("Test starting")
         st = time.time()
-        data : pd.DataFrame = lib.read(symbol).data
+        data: pd.DataFrame = lib.read(symbol).data
         del data
         logger.info(f"Test took : {time.time() - st}")
 

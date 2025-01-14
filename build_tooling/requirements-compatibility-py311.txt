@@ -1,0 +1,2 @@
+# Makes sure we are able to use Numpy 1
+numpy<2

@@ -18,8 +18,11 @@ else:
 
 
 @pytest.fixture(params=[pytest.param("REAL_S3", marks=REAL_S3_TESTS_MARK)])
-def shared_persistent_arctic_client(real_s3_storage_without_clean_up, encoding_version):
-    return real_s3_storage_without_clean_up.create_arctic(encoding_version=encoding_version)
+# Only test with encoding version 0 (a.k.a.) for now
+# because there is a problem when older versions try to read configs with a written encoding version
+# def shared_persistent_arctic_client(real_s3_storage_without_clean_up, encoding_version):
+def shared_persistent_arctic_client(real_s3_storage_without_clean_up):
+    return real_s3_storage_without_clean_up.create_arctic()
 
 
 # TODO: Add a check if the real storage tests are enabled
