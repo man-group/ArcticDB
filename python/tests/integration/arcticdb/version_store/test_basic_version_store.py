@@ -2763,7 +2763,7 @@ def test_version_chain_cache(basic_store, use_caching):
         with pytest.raises(NoSuchVersionException):
             lib.read(symbol, as_of=pd.Timestamp(0))
 
-        # Delete all versions and ensure all versions are no longer accessible
+        # Delete all versions
         lib.delete(symbol)
         for i in range(10):
             with pytest.raises(NoSuchVersionException):

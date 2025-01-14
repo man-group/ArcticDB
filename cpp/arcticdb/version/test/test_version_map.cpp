@@ -943,17 +943,15 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad) {
     }
 
     // Given tombstone all isn't the latest version
-    // v0 <- v1 <- tombstone_all <- v2
+    // v0 <- v1 <- v2 <- Tombstone_all(v1)
     store = std::make_shared<InMemoryStore>();
     version_map = std::make_shared<VersionMap>();
+    write_versions(store, version_map, id, 3);
 
-    using Type = VersionChainOperation::Type;
-    write_versions(store, version_map, id, {
-                   {Type::WRITE, 0},
-                   {Type::WRITE, 1},
-                   {Type::TOMBSTONE_ALL, 1},
-                   {Type::WRITE, 2},
-               });
+    auto key = atom_key_builder()
+            .version_id(1)
+            .build(id, KeyType::VERSION);
+    version_map->tombstone_from_key_or_all(store, id, key);
 
     version_map = std::make_shared<VersionMap>();
     auto entry = version_map->check_reload(
@@ -966,6 +964,8 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad) {
     validate_load_strategy(LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(2)}, true, 1);
     validate_load_strategy(LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(1)}, false);
     validate_load_strategy(LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}, false);
+    validate_load_strategy(LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(1)}, false);
+    validate_load_strategy(LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)}, false);
 }
 
 TEST(VersionMap, CompactionUpdateCache) {
