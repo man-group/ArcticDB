@@ -90,17 +90,19 @@ inline bool index_names_match(
     const StreamDescriptor& df_in_store_descriptor,
     const StreamDescriptor& new_df_descriptor
 ) {
+    auto df_in_store_index_field_count = df_in_store_descriptor.index().type() == IndexDescriptor::Type::EMPTY ? 0 : df_in_store_descriptor.index().field_count();
+    auto new_df_field_index_count = new_df_descriptor.index().type() == IndexDescriptor::Type::EMPTY ? 0 : new_df_descriptor.index().field_count();
+
     // If either index is empty, we consider them to match
-    if ((df_in_store_descriptor.index().type() == IndexDescriptor::Type::EMPTY || new_df_descriptor.index().type() == IndexDescriptor::Type::EMPTY) ||
-        (df_in_store_descriptor.index().field_count() == 0 || new_df_descriptor.index().field_count() == 0)) {
+    if (df_in_store_index_field_count == 0 || new_df_field_index_count == 0) {
         return true;
     }
 
-    if (df_in_store_descriptor.index().field_count() != new_df_descriptor.index().field_count()) {
+    if (df_in_store_index_field_count != new_df_field_index_count) {
         return false;
     }
 
-    for (auto i = 0; i < int(df_in_store_descriptor.index().field_count()); ++i) {
+    for (auto i = 0; i < int(df_in_store_index_field_count); ++i) {
         if (df_in_store_descriptor.fields(i).name() != new_df_descriptor.fields(i).name()) {
             return false;
         }
