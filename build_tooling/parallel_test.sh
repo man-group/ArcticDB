@@ -18,7 +18,16 @@ cd $PARALLEL_TEST_ROOT
 
 export ARCTICDB_RAND_SEED=$RANDOM
 
-$catch python -m pytest --timeout=3600 $PYTEST_XDIST_MODE -v --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
-    --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
-    --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
-    "$@" 2>&1 | sed -ur "s#^(tests/.*/([^/]+\.py))?#\2#"
+if [ -z "$ARCTICDB_PYTEST_ARGS" ]; then
+    $catch python -m pytest --timeout=3600 $PYTEST_XDIST_MODE -v \
+        --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
+        --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
+        --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
+        "$@" 2>&1 | sed -r "s#^(tests/.*/([^/]+\.py))?#\2#"
+else
+    $catch python -m pytest --timeout=3600 $PYTEST_XDIST_MODE -v \
+        --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
+        --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
+        --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
+        "$ARCTICDB_PYTEST_ARGS" 2>&1
+fi
