@@ -56,15 +56,16 @@ inline ReadResult create_python_read_result(
     // integer protobuf fields default to zero if they are not present on the wire, it is impossible to tell from
     // the normalization metadata alone if the data was written with an empty index, or with a very old range index.
     // We therefore patch the normalization metadata here in this case
-    auto norm_meta = std::move(result.desc_.mutable_proto().mutable_normalization());
+    auto norm_meta = result.desc_.mutable_proto().mutable_normalization();
     if (norm_meta->has_df() || norm_meta->has_series()) {
         auto common = norm_meta->has_df() ? norm_meta->mutable_df()->mutable_common() : norm_meta->mutable_series()->mutable_common();
         if (common->has_index()) {
             auto index = common->mutable_index();
-            if (!index->is_physically_stored() && index->start() == 0 && index->step() == 0) {
-                if (result.desc_.index().type() == IndexDescriptor::Type::ROWCOUNT) {
-                    index->set_step(1);
-                }
+            if (result.desc_.index().type() == IndexDescriptor::Type::ROWCOUNT &&
+                !index->is_physically_stored()
+                && index->start() == 0 &&
+                index->step() == 0) {
+                index->set_step(1);
             }
         }
     }
