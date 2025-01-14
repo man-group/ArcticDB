@@ -865,9 +865,10 @@ ReadResult PythonVersionStore::read_dataframe_version(
 ArrowReadResult PythonVersionStore::read_dataframe_version_arrow(
     const StreamId &stream_id,
     const VersionQuery& version_query,
-    ReadQuery& read_query,
+    const std::shared_ptr<ReadQuery>& read_query,
     const ReadOptions& read_options,
     std::any& handler_data) {
+    return ArrowReadResult{};
     log::version().info("Reading arrow data");
     util::check(read_options.output_format_ == OutputFormat::ARROW, "Expected arrow format in read_dataframe_version_arrow");
     auto opt_version_and_frame = read_dataframe_version_internal(stream_id, version_query, read_query, read_options, handler_data);

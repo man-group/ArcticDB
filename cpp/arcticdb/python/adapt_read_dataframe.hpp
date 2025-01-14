@@ -20,7 +20,7 @@ inline auto adapt_read_df = [](ReadResult && ret) -> py::tuple{
     return py::make_tuple(ret.item, std::move(ret.frame_data), pynorm, pyuser_meta, multi_key_meta, ret.multi_keys);
 };
 
-auto adapt_arrow_df = [](ArrowReadResult && ret) -> py::tuple{
+inline auto adapt_arrow_df = [](ArrowReadResult && ret) -> py::tuple{
     auto pyuser_meta = python_util::pb_to_python(ret.user_meta_);
     return py::make_tuple(ret.versioned_item_, std::move(ret.frame_), pyuser_meta);
 };

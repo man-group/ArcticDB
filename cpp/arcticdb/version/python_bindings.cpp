@@ -680,7 +680,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::call_guard<SingleThreadMutexHolder>(),
              "Read the specified version of the dataframe from the store")
             .def("read_dataframe_version_arrow",
-            [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, ReadQuery& read_query, const ReadOptions& read_options) {
+            [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options) {
                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
                 return adapt_arrow_df(v.read_dataframe_version_arrow(sid, version_query, read_query, read_options, handler_data));
             },

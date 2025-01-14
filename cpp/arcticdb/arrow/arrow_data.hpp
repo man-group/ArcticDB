@@ -7,6 +7,8 @@
 
 #pragma once
 
+#ifdef ARCTICDB_ARROW_SUPPORT
+
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <sparrow/arrow_interface/arrow_schema/smart_pointers.hpp>
 #include <sparrow/arrow_interface/arrow_array/smart_pointers.hpp>
@@ -28,3 +30,5 @@ struct ArrowData {
 };
 
 } // namespace arcticdb
+
+#endif
