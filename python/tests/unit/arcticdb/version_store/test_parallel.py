@@ -904,8 +904,9 @@ def test_parallel_append_dynamic_schema_missing_column(
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
 def test_parallel_write_dynamic_schema_named_index(
-    lmdb_version_store_tiny_segment_dynamic,
+    lmdb_version_store_tiny_segment_dynamic, delete_staged_data_on_failure
 ):
     lib = lmdb_version_store_tiny_segment_dynamic
     sym = "test_parallel_append_dynamic_schema_named_index"
@@ -918,14 +919,21 @@ def test_parallel_write_dynamic_schema_named_index(
     lib.write(sym, df_1, parallel=True)
 
     with pytest.raises(SchemaException) as exception_info:
-        lib.compact_incomplete(sym, False, False)
+        lib.compact_incomplete(
+            sym,
+            False,
+            False,
+            delete_staged_data_on_failure=delete_staged_data_on_failure,
+        )
 
     assert "date" in str(exception_info.value)
-    assert "E_DESCRIPTOR_MISMATCH" in str(exception_info.value)
+    expected_key_count = 0 if delete_staged_data_on_failure else 2
+    assert len(get_append_keys(lib, sym)) == expected_key_count
 
 
+@pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
 def test_parallel_append_dynamic_schema_named_index(
-    lmdb_version_store_tiny_segment_dynamic,
+    lmdb_version_store_tiny_segment_dynamic, delete_staged_data_on_failure
 ):
     lib = lmdb_version_store_tiny_segment_dynamic
     sym = "test_parallel_append_dynamic_schema_named_index"
@@ -937,10 +945,16 @@ def test_parallel_append_dynamic_schema_named_index(
     lib.write(sym, df_0)
     lib.append(sym, df_1, incomplete=True)
     with pytest.raises(SchemaException) as exception_info:
-        lib.compact_incomplete(sym, True, False)
+        lib.compact_incomplete(
+            sym,
+            True,
+            False,
+            delete_staged_data_on_failure=delete_staged_data_on_failure,
+        )
 
     assert "date" in str(exception_info.value)
-    assert "E_DESCRIPTOR_MISMATCH" in str(exception_info.value)
+    expected_key_count = 0 if delete_staged_data_on_failure else 1
+    assert len(get_append_keys(lib, sym)) == expected_key_count
 
 
 @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])

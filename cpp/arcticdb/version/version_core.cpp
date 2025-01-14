@@ -1080,16 +1080,9 @@ bool read_incompletes_to_pipeline(
 
     const StreamDescriptor &staged_desc = incomplete_segments[0].segment(store).descriptor();
 
-    // check that the index names of all staged segments match
-    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-        std::all_of(incomplete_segments.begin(), incomplete_segments.end(), [&](const auto& slice) {
-            return index_names_match(staged_desc, slice.segment(store).descriptor());
-        }),
-        "The index names in the staged stream descriptor {} are not identical",
-        staged_desc
-    );
 
     // We need to check that the index names match regardless of the dynamic schema setting
+    // A more detailed check is done later in the do_compact function
     if (pipeline_context->desc_) {
         schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
             index_names_match(staged_desc, *pipeline_context->desc_),
