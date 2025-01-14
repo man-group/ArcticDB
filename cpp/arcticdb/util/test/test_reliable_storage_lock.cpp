@@ -13,8 +13,23 @@
 #include <arcticdb/util/test/gtest_utils.hpp>
 #include <arcticdb/util/clock.hpp>
 
+#include <arcticdb/storage/common.hpp>
+#include <arcticdb/storage/config_resolvers.hpp>
+#include <arcticdb/storage/library_index.hpp>
+#include <arcticdb/storage/storage_factory.hpp>
+#include <arcticdb/util/test/config_common.hpp>
+
+#include <arcticdb/storage/s3/s3_api.hpp>
+#include <arcticdb/storage/s3/s3_storage.hpp>
+#include <arcticdb/storage/s3/detail-inl.hpp>
+#include <arcticdb/storage/mock/s3_mock_client.hpp>
+#include <arcticdb/storage/mock/storage_mock_client.hpp>
+#include <aws/core/Aws.h>
+
 using namespace arcticdb;
 using namespace lock;
+namespace aa = arcticdb::async;
+namespace as = arcticdb::storage;
 
 // These tests test the actual implementation
 
@@ -33,45 +48,45 @@ TEST(ReliableStorageLock, SingleThreaded) {
 
     // We take the first lock at 0 and it should not expire until 20
     Clock::time_ = 0;
-    ASSERT_EQ(lock1.try_take_lock(), std::optional<uint64_t>{0});
-    ASSERT_EQ(lock2.try_take_lock(), std::nullopt);
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock1.try_take_lock()), std::optional<uint64_t>{0});
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_take_lock()), std::nullopt);
     Clock::time_ = 5;
-    ASSERT_EQ(lock1.try_take_lock(), std::nullopt);
-    ASSERT_EQ(lock2.try_take_lock(), std::nullopt);
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock1.try_take_lock()), std::nullopt);
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_take_lock()), std::nullopt);
     Clock::time_ = 10;
-    ASSERT_EQ(lock1.try_take_lock(), std::nullopt);
-    ASSERT_EQ(lock2.try_take_lock(), std::nullopt);
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock1.try_take_lock()), std::nullopt);
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_take_lock()), std::nullopt);
     Clock::time_ = 19;
-    ASSERT_EQ(lock1.try_take_lock(), std::nullopt);
-    ASSERT_EQ(lock2.try_take_lock(), std::nullopt);
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock1.try_take_lock()), std::nullopt);
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_take_lock()), std::nullopt);
 
     // Once the first lock has expired we can take a new lock with lock_id=1
     Clock::time_ = 20;
-    ASSERT_EQ(lock2.try_take_lock(), std::optional<uint64_t>{1});
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_take_lock()), std::optional<uint64_t>{1});
     ASSERT_EQ(count_locks(), 2);
 
     // We can extend the lock timeout at 25 to 35 and get an lock_id=2
     Clock::time_ = 25;
-    ASSERT_EQ(lock1.try_take_lock(), std::nullopt);
-    ASSERT_EQ(lock2.try_extend_lock(1), std::optional<uint64_t>{2});
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock1.try_take_lock()), std::nullopt);
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_extend_lock(1)), std::optional<uint64_t>{2});
     ASSERT_EQ(count_locks(), 3);
     Clock::time_ = 34;
-    ASSERT_EQ(lock1.try_take_lock(), std::nullopt);
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock1.try_take_lock()), std::nullopt);
 
     // At time 35 the lock with lock_id=2 has expired and we can re-acquire the lock
     Clock::time_ = 35;
-    ASSERT_EQ(lock1.try_take_lock(), std::optional<uint64_t>{3});
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock1.try_take_lock()), std::optional<uint64_t>{3});
     ASSERT_EQ(count_locks(), 4);
-    ASSERT_EQ(lock2.try_take_lock(), std::nullopt);
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_take_lock()), std::nullopt);
 
     // And we can free the lock immediately to allow re-aquiring without waiting for timeout
     lock1.free_lock(3);
-    ASSERT_EQ(lock2.try_take_lock(), std::optional<uint64_t>{4});
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_take_lock()), std::optional<uint64_t>{4});
     ASSERT_EQ(count_locks(), 5);
 
     // But if we take a lock at 1000 all locks would have expired a 10xtimeout=100 ago, and we should clear all apart from latest lock_id=5
     Clock::time_ = 1000;
-    ASSERT_EQ(lock2.try_take_lock(), std::optional<uint64_t>{5});
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_take_lock()), std::optional<uint64_t>{5});
     ASSERT_EQ(count_locks(), 1);
 }
 
@@ -124,5 +139,41 @@ TEST(ReliableStorageLock, StressMultiThreaded) {
     ASSERT_EQ(counter, threads);
 
     // Also the lock should be free by the end (i.e. we can take a new lock)
-    ASSERT_EQ(lock.try_take_lock().has_value(), true);
+    ASSERT_EQ(parse_reliable_storage_lock_result(lock.try_take_lock()).has_value(), true);
+}
+
+
+TEST(ReliableStorageLock, NotImplementedException) {
+    using namespace arcticdb::async;
+
+    // Given
+    as::EnvironmentName environment_name{"research"};
+    as::StorageName storage_name("storage_name");
+    as::LibraryPath library_path{"a", "b"};
+    namespace ap = arcticdb::pipelines;
+
+
+    auto failed_config = proto::s3_storage::Config();
+    failed_config.set_use_mock_storage_for_testing(true);
+
+    auto failed_env_config = arcticdb::get_test_environment_config(
+        library_path, storage_name, environment_name, std::make_optional(failed_config));
+    auto failed_config_resolver = as::create_in_memory_resolver(failed_env_config);
+    as::LibraryIndex failed_library_index{environment_name, failed_config_resolver};
+
+    as::UserAuth user_auth{"abc"};
+    auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
+
+    auto lib = failed_library_index.get_library(library_path, as::OpenMode::WRITE, user_auth, storage::NativeVariantStorage());
+    auto store = std::make_shared<aa::AsyncStore<>>(aa::AsyncStore(lib, *codec_opt, EncodingVersion::V1));
+
+    std::string sym = "test_lock";
+    std::string failureSymbol = storage::s3::MockS3Client::get_failure_trigger(sym, storage::StorageOperation::WRITE, Aws::S3::S3Errors::UNKNOWN);
+    
+    ReliableStorageLock<> lock{StringId{failureSymbol}, store, ONE_SECOND};
+
+    // parse_reliable_storage_lock_result throws when we encounter an UnsupportedOperation
+    EXPECT_THROW({
+        parse_reliable_storage_lock_result(lock.try_take_lock());
+    }, LostReliableLock);
 }
