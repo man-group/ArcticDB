@@ -980,7 +980,7 @@ if(${TEST})
             version/test/test_version_map_batch.cpp
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
-            python/python_handlers.cpp util/test/test_min_max_float.cpp util/test/test_sum.cpp)
+            python/python_handlers.cpp util/test/test_min_max_float.cpp util/test/test_sum.cpp util/test/test_mean.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

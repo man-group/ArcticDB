@@ -32,15 +32,13 @@ class MeanFinder {
 
 public:
 
-    static MeanResult<double> find(const T* data, size_t n) {
+    static double find(const T* data, size_t n) {
 
-        // Use double for accumulation to avoid overflow and precision loss
         using AccumVectorType = double __attribute__((vector_size(64)));
 
         const size_t elements_per_vector = sizeof(VectorType) / sizeof(T);
         const size_t vlen = n / elements_per_vector;
 
-        // Initialize accumulators with zero
         AccumVectorType sum_vec = {0};
         AccumVectorType count_vec = {0};
         double total_sum = 0;
@@ -92,11 +90,11 @@ public:
         }
 
         double mean = valid_count > 0 ? total_sum / valid_count : 0.0;
-        return {mean, valid_count};
+        return mean;
     }
 };
 
 template<typename T>
-MeanResult<double> find_mean(const T* data, size_t n) {
+double find_mean(const T* data, size_t n) {
     return MeanFinder<T>::find(data, n);
 }
