@@ -16,7 +16,6 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/variant.hpp>
-#include <arcticdb/python/python_types.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/stream/append_map.hpp>
@@ -24,12 +23,14 @@
 #include <arcticdb/util/format_date.hpp>
 #include <vector>
 #include <array>
+#include <ranges>
 
 
 namespace arcticdb::pipelines {
 
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
+namespace ranges = std::ranges;
 
 WriteToSegmentTask::WriteToSegmentTask(
     std::shared_ptr<InputTensorFrame> frame,
@@ -252,40 +253,46 @@ static RowRange partial_rewrite_row_range(
     }
 }
 
-std::optional<SliceAndKey> rewrite_partial_segment(
+folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
         const SliceAndKey& existing,
         const IndexRange& index_range,
         VersionId version_id,
         AffectedSegmentPart affected_part,
         const std::shared_ptr<Store>& store) {
-    const auto& key = existing.key();
-    auto kv = store->read(key).get();
-    const SegmentInMemory& segment = kv.second;
-    const RowRange affected_row_range = partial_rewrite_row_range(segment, index_range, affected_part);
-    const int64_t num_rows = affected_row_range.end() - affected_row_range.start();
-    if (num_rows <= 0) {
-        return std::nullopt;
-    }
-    SegmentInMemory output = segment.truncate(affected_row_range.start(), affected_row_range.end(), true);
-    const IndexValue start_ts = TimeseriesIndex::start_value_for_segment(output);
-    // +1 as in the key we store one nanosecond greater than the last index value in the segment
-    const IndexValue end_ts = std::get<NumericIndex>(TimeseriesIndex::end_value_for_segment(output)) + 1;
-    FrameSlice new_slice{
-        std::make_shared<StreamDescriptor>(output.descriptor()),
-        existing.slice_.col_range,
-        RowRange{0, num_rows},
-        existing.slice_.hash_bucket(),
-        existing.slice_.num_buckets()};
-
-    auto fut_key = store->write(
-        key.type(),
+    return store->read(existing.key()).thenValueInline([
+        existing,
+        index_range,
         version_id,
-        key.id(),
-        start_ts,
-        end_ts,
-        std::move(output)
-    );
-    return SliceAndKey{std::move(new_slice), std::get<AtomKey>(std::move(fut_key).get())};
+        affected_part,
+        store](std::pair<VariantKey, SegmentInMemory>&& key_segment) -> folly::Future<std::optional<SliceAndKey>> {
+        const auto& key = existing.key();
+        const SegmentInMemory& segment = key_segment.second;
+        const RowRange affected_row_range = partial_rewrite_row_range(segment, index_range, affected_part);
+        const int64_t num_rows = affected_row_range.end() - affected_row_range.start();
+        if (num_rows <= 0) {
+            return std::nullopt;
+        }
+        SegmentInMemory output = segment.truncate(affected_row_range.start(), affected_row_range.end(), true);
+        const IndexValue start_ts = TimeseriesIndex::start_value_for_segment(output);
+        // +1 as in the key we store one nanosecond greater than the last index value in the segment
+        const IndexValue end_ts = std::get<NumericIndex>(TimeseriesIndex::end_value_for_segment(output)) + 1;
+        FrameSlice new_slice{
+            std::make_shared<StreamDescriptor>(output.descriptor()),
+            existing.slice_.col_range,
+            RowRange{0, num_rows},
+            existing.slice_.hash_bucket(),
+            existing.slice_.num_buckets()};
+       return store->write(
+             key.type(),
+             version_id,
+             key.id(),
+             start_ts,
+             end_ts,
+             std::move(output)
+       ).thenValueInline([new_slice=std::move(new_slice)](VariantKey&& k) {
+          return std::make_optional<SliceAndKey>(std::move(new_slice), std::get<AtomKey>(std::move(k)));
+       });
+    });
 }
 
 std::vector<SliceAndKey> flatten_and_fix_rows(const std::array<std::vector<SliceAndKey>, 5>& groups, size_t& global_count) {
@@ -301,10 +308,9 @@ std::vector<SliceAndKey> flatten_and_fix_rows(const std::array<std::vector<Slice
             return std::max(a, sk.slice_.row_range.second);
         });
 
-        std::transform(std::begin(group), std::end(group), std::back_inserter(output), [&](SliceAndKey sk) {
+        ranges::transform(group, std::back_inserter(output), [&](SliceAndKey sk) {
             auto range_start = global_count + (sk.slice_.row_range.first - group_start);
-            auto new_range = RowRange{range_start, range_start + (sk.slice_.row_range.diff())};
-            sk.slice_.row_range = new_range;
+            sk.slice_.row_range = RowRange{range_start, range_start + sk.slice_.row_range.diff()};
             return sk;
         });
 

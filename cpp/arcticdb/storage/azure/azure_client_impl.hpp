@@ -12,7 +12,7 @@
 #include <azure/storage/blobs.hpp>
 
 #include <arcticdb/storage/storage_utils.hpp>
-#include <arcticdb/storage/azure/azure_client_wrapper.hpp>
+#include <arcticdb/storage/azure/azure_client_interface.hpp>
 
 namespace arcticdb::storage::azure {
 class RealAzureClient : public AzureClientWrapper {

@@ -8,13 +8,9 @@
 #pragma once
 
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
-
-#include <boost/noncopyable.hpp>
-
-#include <cstdint>
+#include <folly/futures/Future.h>
 
 namespace arcticdb {
 class Store;
@@ -132,6 +128,10 @@ private:
 };
 
 index::IndexSegmentReader get_index_reader(
+    const AtomKey &prev_index,
+    const std::shared_ptr<Store> &store);
+
+folly::Future<IndexSegmentReader> async_get_index_reader(
     const AtomKey &prev_index,
     const std::shared_ptr<Store> &store);
 

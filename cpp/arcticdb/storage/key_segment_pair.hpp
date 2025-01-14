@@ -21,6 +21,7 @@ namespace arcticdb::storage {
 
     public:
         KeySegmentPair() = default;
+
         explicit KeySegmentPair(VariantKey &&key)
           : key_(std::make_shared<VariantKey>(std::move(key))) {}
 

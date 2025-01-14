@@ -20,6 +20,7 @@
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/container_filter_wrapper.hpp>
+#include <arcticdb/util/allocation_tracing.hpp>
 
 namespace arcticdb::version_store {
 
@@ -54,6 +55,10 @@ void LocalVersionedEngine::initialize(const std::shared_ptr<storage::Library>& l
         async::TaskScheduler::reattach_instance();
     }
     (void)async::TaskScheduler::instance();
+#ifdef ARCTICDB_COUNT_ALLOCATIONS
+    (void)AllocationTracker::instance();
+    AllocationTracker::start();
+#endif
 }
 
 template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<storage::Library>& library, const util::SysClock&);
@@ -560,9 +565,7 @@ VersionedItem LocalVersionedEngine::update_internal(
     bool prune_previous_versions) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: update");
     py::gil_scoped_release release_gil;
-    auto update_info = get_latest_undeleted_version_and_next_version_id(store(),
-                                                                        version_map(),
-                                                                        stream_id);
+    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     if (update_info.previous_index_key_.has_value()) {
         if (frame->empty()) {
             ARCTICDB_DEBUG(log::version(), "Updating existing data with an empty item has no effect. \n"
@@ -1081,9 +1084,15 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<ReadVersionOutput>> read_versions_futs;
-    for (auto&& [idx, opt_index_key_fut] : folly::enumerate(opt_index_key_futs)) {
+
+    const auto max_batch_size = ConfigsMap::instance()->get_int("BatchRead.MaxConcurrency", 50);
+    ARCTICDB_RUNTIME_DEBUG(log::inmem(), "Running batch read with a maximum concurrency of {}", max_batch_size);
+    std::vector<folly::Try<ReadVersionOutput>> all_results;
+    all_results.reserve(opt_index_key_futs.size());
+    size_t batch_count = 0UL;
+    for (auto idx = 0UL; idx < opt_index_key_futs.size(); ++idx) {
         read_versions_futs.emplace_back(
-                std::move(opt_index_key_fut).thenValue([store = store(),
+                std::move(opt_index_key_futs[idx]).thenValue([store = store(),
                                                         idx,
                                                         &stream_ids,
                                                         &version_queries,
@@ -1105,11 +1114,22 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
                     return read_frame_for_version(store, version_info, read_query, read_options, handler_data);
                 })
         );
+        if(++batch_count == static_cast<size_t>(max_batch_size)) {
+            auto read_versions = folly::collectAll(read_versions_futs).get();
+            all_results.insert(all_results.end(), std::make_move_iterator(read_versions.begin()), std::make_move_iterator(read_versions.end()));
+            read_versions_futs.clear();
+            batch_count = 0UL;
+        }
     }
-    auto read_versions = folly::collectAll(read_versions_futs).get();
+
+    if(!read_versions_futs.empty()) {
+        auto read_versions = folly::collectAll(read_versions_futs).get();
+        all_results.insert(all_results.end(), std::make_move_iterator(read_versions.begin()), std::make_move_iterator(read_versions.end()));
+    }
+
     std::vector<std::variant<ReadVersionOutput, DataError>> read_versions_or_errors;
-    read_versions_or_errors.reserve(read_versions.size());
-    for (auto&& [idx, read_version]: folly::enumerate(read_versions)) {
+    read_versions_or_errors.reserve(all_results.size());
+    for (auto&& [idx, read_version]: folly::enumerate(all_results)) {
         if (read_version.hasValue()) {
             read_versions_or_errors.emplace_back(std::move(read_version.value()));
         } else {

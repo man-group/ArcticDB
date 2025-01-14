@@ -11,7 +11,7 @@
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/storage/lmdb/lmdb.hpp>
 #include <arcticdb/util/composite.hpp>
-#include <arcticdb/storage/lmdb/lmdb_client_wrapper.hpp>
+#include <arcticdb/storage/lmdb/lmdb_client_interface.hpp>
 
 #include <filesystem>
 
@@ -36,17 +36,21 @@ class LmdbStorage final : public Storage {
     std::string name() const final;
 
   private:
-    void do_write(Composite<KeySegmentPair>&& kvs) final;
+    void do_write(KeySegmentPair&& key_seg) final;
 
     void do_write_if_none(KeySegmentPair&& kv [[maybe_unused]]) final {
         storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>("Atomic operations are only supported for s3 backend");
     };
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
+    void do_update(KeySegmentPair&& key_seg, UpdateOpts opts) final;
 
-    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts opts) final;
+    void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, storage::ReadKeyOpts opts) final;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
+    KeySegmentPair do_read(VariantKey&& variant_key, ReadKeyOpts) final;
+
+    void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
+
+    void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) final;
 
     bool do_supports_prefix_matching() const final {
         return false;
@@ -64,7 +68,7 @@ class LmdbStorage final : public Storage {
 
     bool do_key_exists(const VariantKey & key) final;
 
-    bool do_is_path_valid(const std::string_view path) const final;
+    bool do_is_path_valid(std::string_view path) const final;
 
     ::lmdb::env& env();
 
@@ -75,8 +79,8 @@ class LmdbStorage final : public Storage {
     void warn_if_lmdb_already_open();
 
     // _internal methods assume the write mutex is already held
-    void do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn& txn);
-    std::vector<VariantKey> do_remove_internal(Composite<VariantKey>&& ks, ::lmdb::txn& txn, RemoveOpts opts);
+    void do_write_internal(KeySegmentPair&& key_seg, ::lmdb::txn& txn);
+    boost::container::small_vector<VariantKey, 1> do_remove_internal(std::span<VariantKey> variant_key, ::lmdb::txn& txn, RemoveOpts opts);
     std::unique_ptr<std::mutex> write_mutex_;
     std::shared_ptr<LmdbInstance> lmdb_instance_;
 
