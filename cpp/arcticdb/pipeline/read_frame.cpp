@@ -835,7 +835,7 @@ folly::Future<folly::Unit> reduce_and_fix_columns(
     std::vector<size_t> fields_to_reduce;
     for (size_t idx=0; idx<frame.descriptor().fields().size(); ++idx) {
         const auto& frame_field = frame.field(idx);
-        if (dynamic_schema ||
+        if (read_options.dynamic_schema_ ||
             (slice_map->columns_.contains(frame_field.name()) && is_sequence_type(frame_field.type().data_type()))) {
             fields_to_reduce.emplace_back(idx);
         }
@@ -845,7 +845,7 @@ folly::Future<folly::Unit> reduce_and_fix_columns(
     static const auto batch_size = ConfigsMap::instance()->get_int("ReduceColumns.BatchSize", 100);
     return folly::collect(
             folly::window(std::move(fields_to_reduce),
-                          [context, frame, slice_map, shared_data, dynamic_schema, &handler_data] (size_t field) mutable {
+                          [context, frame, slice_map, shared_data, read_options, &handler_data] (size_t field) mutable {
                               return async::submit_cpu_task(ReduceColumnTask(frame, field, slice_map, context, shared_data, handler_data, read_options));
                           }, batch_size)).via(&async::io_executor()).unit();
 }

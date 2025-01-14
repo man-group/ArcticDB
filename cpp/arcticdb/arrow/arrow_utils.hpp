@@ -17,11 +17,13 @@ namespace arcticdb {
 
 class SegmentInMemory;
 struct ArrowData;
-class Column;
 struct FrameAndDescriptor;
 struct DecodePathData;
+class Column;
 
 struct ArrowReadResult {
+
+    ArrowReadResult() = default;
 
     ArrowReadResult(
         const VersionedItem& versioned_item,

@@ -8,8 +8,11 @@
 
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/arrow/arrow_data.hpp>
+#include <arcticdb/arrow/arrow_output_frame.hpp>
 
 #include <vector>
+
+#ifdef ARCTIDB_ARROW_SUPPORT
 
 namespace arcticdb {
 
@@ -62,3 +65,27 @@ std::vector<std::string> ArrowOutputFrame::names() const {
 }
 
 }  // namespace arcticdb
+
+#else
+
+namespace arcticdb {
+
+std::vector<std::vector<uintptr_t>> ArrowOutputFrame::arrays() {
+    return {};
+}
+
+std::vector<std::vector<uintptr_t>> ArrowOutputFrame::schemas() {
+    return {};
+}
+
+size_t ArrowOutputFrame::num_blocks() const {
+    return 0;
+}
+
+std::vector<std::string> ArrowOutputFrame::names() const {
+    return {};
+}
+
+}
+
+#endif

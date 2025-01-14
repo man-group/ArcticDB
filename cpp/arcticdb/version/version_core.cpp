@@ -19,6 +19,7 @@
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
+#include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/stream/schema.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
@@ -489,65 +490,7 @@ VersionedItem update_impl(
     return versioned_item;
 }
 
-void set_row_id_for_empty_columns_set(
-        const ReadQuery& read_query,
-        const PipelineContext& pipeline_context,
-        SegmentInMemory& frame,
-        size_t row_id) {
-    if (read_query.columns && read_query.columns->empty() &&
-        pipeline_context.descriptor().index().type() == IndexDescriptor::Type::ROWCOUNT) {
-        frame.set_row_id(row_id);
-    }
-}
-
-// This is a parallelizable direct read (no processing pipeline) that is used
-// for things that need to get multiple objects in their entirety, as with
-// recursive normalizers. Outside those specific situtations it's probably
-// not what you want
-folly::Future<version_store::ReadVersionOutput> async_read_direct_impl(
-    const std::shared_ptr<Store>& store,
-    const VariantKey& index_key,
-    SegmentInMemory&& index_segment,
-    const std::shared_ptr<ReadQuery>& read_query,
-    DecodePathData shared_data,
-    std::any& handler_data,
-    const ReadOptions& read_options) {
-    auto index_segment_reader = std::make_shared<index::IndexSegmentReader>(std::move(index_segment));
-    const auto& tsd = index_segment_reader->tsd();
-    check_column_and_date_range_filterable(*index_segment_reader, *read_query);
-    add_index_columns_to_query(*read_query, tsd);
-    read_query->convert_to_positive_row_filter(static_cast<int64_t>(tsd.total_rows()));
-
-    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{tsd.as_stream_descriptor()});
-    pipeline_context->set_selected_columns(read_query->columns);
-
-    const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
-    const bool bucketize_dynamic = index_segment_reader->bucketize_dynamic();
-
-    auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
-        *read_query,
-        pipeline_context,
-        dynamic_schema,
-        bucketize_dynamic);
-
-    pipeline_context->slice_and_keys_ = filter_index(*index_segment_reader, combine_filter_functions(queries));
-
-    generate_filtered_field_descriptors(pipeline_context, read_query->columns);
-    mark_index_slices(pipeline_context, dynamic_schema, bucketize_dynamic);
-    auto frame = allocate_frame(pipeline_context, read_options.output_format(), AllocationType::PRESIZED);
-
-    return fetch_data(frame, pipeline_context, store, *read_query, read_options, shared_data, handler_data).thenValue(
-        [pipeline_context, frame, read_options, &handler_data](auto &&) mutable {
-            reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data);
-        }).thenValue(
-        [index_segment_reader, frame, index_key, shared_data, read_query, pipeline_context](auto &&) mutable {
-            set_row_id_for_empty_columns_set(*read_query, *pipeline_context, frame, index_segment_reader->tsd().total_rows() - 1);
-            return ReadVersionOutput{VersionedItem{to_atom(index_key)},
-                                     FrameAndDescriptor{frame, std::move(index_segment_reader->mutable_tsd()), {}}};
-        });
-}
-
-FrameAndDescriptor read_multi_key(
+folly::Future<ReadVersionOutput> read_multi_key(
     const std::shared_ptr<Store>& store,
     const SegmentInMemory& index_key_seg,
     std::any& handler_data) {
@@ -565,7 +508,6 @@ FrameAndDescriptor read_multi_key(
         multi_key_desc.mutable_proto().mutable_normalization()->CopyFrom(read_version_output.frame_and_descriptor_.desc_.proto().normalization());
         read_version_output.frame_and_descriptor_.desc_ = std::move(multi_key_desc);
         read_version_output.frame_and_descriptor_.keys_ = std::move(keys);
-        read_version_output.frame_and_descriptor_.buffers_ = std::make_shared<BufferHolder>();
         return std::move(read_version_output);
     });
 }
@@ -970,32 +912,19 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
         std::make_shared<std::vector<std::shared_ptr<Clause>>>(read_query->clauses_))
     .via(&async::cpu_executor())
     .thenValue([component_manager, read_query, pipeline_context](std::vector<EntityId>&& processed_entity_ids) {
-        auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
+        auto proc = gather_entities<std::shared_ptr<SegmentInMemory>,
+                                    std::shared_ptr<RowRange>,
+                                    std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
 
-    if (std::any_of(read_query->clauses_.begin(), read_query->clauses_.end(), [](const std::shared_ptr<Clause>& clause) {
-        return clause->clause_info().modifies_output_descriptor_;
-    })) {
-        set_output_descriptors(proc, read_query->clauses_, pipeline_context);
-    }
-    return collect_segments(std::move(proc));
-}
-
-SegmentInMemory read_direct(const std::shared_ptr<Store>& store,
-                            const std::shared_ptr<PipelineContext>& pipeline_context,
-                            DecodePathData shared_data,
-                            const ReadQuery& read_query,
-                            const ReadOptions& read_options,
-                            std::any& handler_data) {
-    ARCTICDB_DEBUG(log::version(), "Allocating frame");
-    ARCTICDB_SAMPLE_DEFAULT(ReadDirect)
-    const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
-    auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
-    util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
-
-    ARCTICDB_DEBUG(log::version(), "Fetching frame data");
-    fetch_data(frame, pipeline_context, store, read_query, read_options, shared_data, handler_data).get();
-    util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
-    return frame;
+        if (std::any_of(read_query->clauses_.begin(),
+                        read_query->clauses_.end(),
+                        [](const std::shared_ptr<Clause>& clause) {
+                            return clause->clause_info().modifies_output_descriptor_;
+                        })) {
+            set_output_descriptors(proc, read_query->clauses_, pipeline_context);
+        }
+        return collect_segments(std::move(proc));
+    });
 }
 
 void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc) {
@@ -1442,7 +1371,7 @@ folly::Future<SegmentInMemory> prepare_output_frame(
 
     const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
     auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
-    return copy_segments_to_frame(store, pipeline_context, frame, handler_data).thenValue([frame](auto&&){ return frame; });
+    return copy_segments_to_frame(store, pipeline_context, frame, handler_data, read_options.output_format()).thenValue([frame](auto&&){ return frame; });
 }
 
 AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key) {
@@ -1611,7 +1540,11 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
         util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query->row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
         mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema_), pipeline_context->bucketize_dynamic_);
-        frame = read_direct(store, pipeline_context, shared_data, read_query, read_options, handler_data);
+        const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
+        auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
+        util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
+        ARCTICDB_DEBUG(log::version(), "Fetching frame data");
+        return fetch_data(std::move(frame), pipeline_context, store, *read_query, read_options, shared_data, handler_data);
     }
 }
 
@@ -2102,8 +2035,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
             return ReadVersionOutput{std::move(res_versioned_item),
                                      {frame,
                                       timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_),
-                                      {},
-                                      shared_data.buffers()}};
+                                      {}}};
         });
     });
 }

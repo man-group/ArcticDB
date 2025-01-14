@@ -15,6 +15,8 @@ namespace arcticdb {
 struct ArrowData;
 
 struct ArrowOutputFrame {
+    ArrowOutputFrame() = default;
+
     ArrowOutputFrame(
         std::vector<std::vector<ArrowData>>&& data,
         std::vector<std::string>&& names);

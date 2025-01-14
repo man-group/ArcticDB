@@ -4,10 +4,10 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
+#ifdef ARCTICDB_ARROW_SUPPORT
+
 #include <arcticdb/arrow/arrow_utils.hpp>
-#include <sparrow/array.hpp>
-#include <sparrow/arrow_interface/arrow_schema.hpp>
-#include <sparrow/arrow_interface/array_data_to_arrow_array_converters.hpp>
+#include <sparrow/sparrow.hpp>
 #include <arcticdb/arrow/arrow_data.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
@@ -114,3 +114,5 @@ ArrowReadResult create_arrow_read_result(
 }
 
 } // namespace arcticdb
+
+#endif

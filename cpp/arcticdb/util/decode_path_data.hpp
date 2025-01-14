@@ -35,11 +35,11 @@ struct DecodePathDataImpl {
 
 struct DecodePathData {
 public:
-    const std::shared_ptr<UniqueStringMapType>& unique_string_map() const {
+    [[nodiscard]] const std::shared_ptr<UniqueStringMapType>& unique_string_map() const {
         return data_->unique_string_map_.instance();
     }
 
-    bool optimize_for_memory() const {
+    [[nodiscard]] bool optimize_for_memory() const {
         return data_->optimize_for_memory_;
     }
 

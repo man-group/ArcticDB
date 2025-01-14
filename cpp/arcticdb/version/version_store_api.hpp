@@ -178,7 +178,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     ArrowReadResult read_dataframe_version_arrow(
         const StreamId &stream_id,
         const VersionQuery& version_query,
-        ReadQuery& read_query,
+        const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options,
         std::any& handler_data);
 
@@ -308,8 +308,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
-        const ReadOptions& read_options,
-        std::any& handler_data);
+        const ReadOptions& read_options);
 
     std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> batch_read_metadata(
         const std::vector<StreamId>& stream_ids,
@@ -361,7 +360,7 @@ void write_dataframe_to_file(
 ReadResult read_dataframe_from_file(
     const StreamId &stream_id,
     const std::string& path,
-    ReadQuery& read_query,
+    const std::shared_ptr<ReadQuery>& read_query,
     const ReadOptions& read_options);
 
 struct ManualClockVersionStore : PythonVersionStore {

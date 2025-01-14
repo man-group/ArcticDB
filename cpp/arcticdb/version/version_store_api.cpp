@@ -769,7 +769,7 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
     std::vector<std::shared_ptr<ReadQuery>>& read_queries,
-    const ReadOptions& read_options {
+    const ReadOptions& read_options) {
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
 
     auto read_versions_or_errors = batch_read_internal(stream_ids, version_queries, read_queries, read_options, handler_data);
@@ -847,9 +847,10 @@ ReadResult PythonVersionStore::read_dataframe_version(
 ArrowReadResult PythonVersionStore::read_dataframe_version_arrow(
     const StreamId &stream_id,
     const VersionQuery& version_query,
-    ReadQuery& read_query,
+    const std::shared_ptr<ReadQuery>& read_query,
     const ReadOptions& read_options,
     std::any& handler_data) {
+    return ArrowReadResult{};
     log::version().info("Reading arrow data");
     util::check(read_options.output_format_ == OutputFormat::ARROW, "Expected arrow format in read_dataframe_version_arrow");
     auto opt_version_and_frame = read_dataframe_version_internal(stream_id, version_query, read_query, read_options, handler_data);
@@ -1165,15 +1166,17 @@ void write_dataframe_to_file(
 ReadResult read_dataframe_from_file(
         const StreamId &stream_id,
         const std::string& path,
-        ReadQuery& read_query,
+        const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options) {
 
+    auto handler_data = get_type_handler_data(read_options.output_format());
     auto opt_version_and_frame = read_dataframe_from_file_internal(
         stream_id,
         path,
         read_query,
         read_options,
-        codec::default_lz4_codec());
+        codec::default_lz4_codec(),
+        handler_data);
 
     return create_python_read_result(opt_version_and_frame.versioned_item_, read_options.output_format(), std::move(opt_version_and_frame.frame_and_descriptor_));
 }

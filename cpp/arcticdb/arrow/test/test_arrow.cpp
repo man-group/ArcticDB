@@ -7,9 +7,13 @@
 
 #include <gtest/gtest.h>
 
+#ifdef ARCTICDB_ARROW_SUPPORT
+
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/arrow/arrow_data.hpp>
+
+
 
 TEST(Arrow, ConvertColumn) {
       using namespace arcticdb;
@@ -43,3 +47,5 @@ TEST(Arrow, ConvertSegment) {
     auto vec = segment_to_arrow_data(segment);
     ASSERT_EQ(vec.size(), 2);
 }
+
+#endif

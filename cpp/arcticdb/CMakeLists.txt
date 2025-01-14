@@ -27,6 +27,7 @@ find_package(prometheus-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(double-conversion REQUIRED)
 find_package(unordered_dense CONFIG REQUIRED)
+#find_package(sparrow REQUIRED)
 
 if(NOT WIN32 AND ${SSL_LINK})
     find_package(Kerberos REQUIRED)
@@ -42,7 +43,6 @@ find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.c
 
 find_package(azure-identity-cpp CONFIG REQUIRED)
 find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
-#find_package(sparrow REQUIRED)
 
 if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
@@ -500,7 +500,6 @@ set(arcticdb_srcs
         stream/protobuf_mappings.cpp
         toolbox/library_tool.cpp
         util/allocator.cpp
-        util/buffer_holder.cpp
         util/allocation_tracing.cpp
         util/buffer_pool.cpp
         util/configs_map.cpp
@@ -767,8 +766,8 @@ if (SSL_LINK)
     find_package(OpenSSL REQUIRED)
     list(APPEND arcticdb_core_libraries OpenSSL::SSL)
     if (NOT WIN32)
-        list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
-        list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
+        #list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
+        #list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
     endif()
 endif ()
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
