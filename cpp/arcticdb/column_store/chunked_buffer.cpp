@@ -68,7 +68,7 @@ std::vector<ChunkedBufferImpl<BlockSize>> split(const ChunkedBufferImpl<BlockSiz
 }
 
 template std::vector<ChunkedBufferImpl<64>> split(const ChunkedBufferImpl<64>& input, size_t nbytes);
-template std::vector<ChunkedBufferImpl<3968>> split(const ChunkedBufferImpl<3968>& input, size_t nbytes);
+template std::vector<ChunkedBufferImpl<4032ul>> split(const ChunkedBufferImpl<4032ul>& input, size_t nbytes);
 
 // Inclusive of start_byte, exclusive of end_byte
 template <size_t BlockSize>
@@ -112,6 +112,6 @@ ChunkedBufferImpl<BlockSize> truncate(const ChunkedBufferImpl<BlockSize>& input,
 }
 
 template ChunkedBufferImpl<64> truncate(const ChunkedBufferImpl<64>& input, size_t start_byte, size_t end_byte);
-template ChunkedBufferImpl<3968> truncate(const ChunkedBufferImpl<3968>& input, size_t start_byte, size_t end_byte);
+template ChunkedBufferImpl<4032ul> truncate(const ChunkedBufferImpl<4032ul>& input, size_t start_byte, size_t end_byte);
 
 } //namespace arcticdb
