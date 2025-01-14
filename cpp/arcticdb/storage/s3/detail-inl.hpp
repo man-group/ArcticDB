@@ -69,14 +69,14 @@ using Range = folly::Range<It>;
     }
 
     if(err.GetExceptionName().find("NotImplemented") != std::string::npos) {
-        raise<ErrorCode::E_NOT_IMPLEMENTED>(fmt::format("Operation is not implemented for storage: {}", error_message_suffix));
+        raise<ErrorCode::E_NOT_IMPLEMENTED_BY_STORAGE>(fmt::format("Operation is not implemented for storage: {}", error_message_suffix));
     }
 
     if (err.ShouldRetry()) {
         raise<ErrorCode::E_S3_RETRYABLE>(fmt::format("Retry-able error: {}",
                                                      error_message_suffix));
     }
-    
+
     // We create a more detailed error explanation in case of NETWORK_CONNECTION errors to remedy #880.
     if (type == Aws::S3::S3Errors::NETWORK_CONNECTION) {
         error_message = fmt::format("Unexpected network error: {} "

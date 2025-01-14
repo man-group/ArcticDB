@@ -36,7 +36,7 @@ private:
     void do_write(KeySegmentPair&& key_seg) final;
 
     void do_write_if_none(KeySegmentPair&& kv [[maybe_unused]]) final {
-        storage::raise<ErrorCode::E_NOT_IMPLEMENTED>("do_write_if_none not implemented for NFS backed storage");
+        storage::raise<ErrorCode::E_NOT_IMPLEMENTED_BY_STORAGE>("do_write_if_none not implemented for NFS backed storage");
     };
 
     void do_update(KeySegmentPair&& key_seg, UpdateOpts opts) final;
