@@ -554,12 +554,11 @@ struct VersionChainOperation {
         TOMBSTONE_ALL
     } type {Type::WRITE};
 
-    VersionId version_id { 0 };
+    std::optional<VersionId> version_id { std::nullopt };
 };
 
 /**
  * @param operations write operations with their specified version_id in this order.
- * TOMBSTONE_ALL operation ignores version_id as the only API available is to use it with the latest version in the chain
  */
 std::shared_ptr<VersionMapEntry> write_versions(
     const std::shared_ptr<InMemoryStore>& store,
@@ -572,20 +571,26 @@ std::shared_ptr<VersionMapEntry> write_versions(
             LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED},
             __FUNCTION__);
 
-    for (const auto& [type, version_id]: operations) {
+    for (const auto& [type, version_id_opt]: operations) {
         switch (type) {
             case VersionChainOperation::Type::WRITE: {
-                auto key = atom_key_with_version(id, version_id, version_id);
+                auto key = atom_key_with_version(id, *version_id_opt, *version_id_opt);
                 version_map->do_write(store, key, entry);
                 write_symbol_ref(store, key, std::nullopt, entry->head_.value());
                 break;
             }
             case VersionChainOperation::Type::TOMBSTONE: {
-                version_map->write_tombstone(store, version_id, id, entry);
+                version_map->write_tombstone(store, *version_id_opt, id, entry);
                 break;
             }
             case VersionChainOperation::Type::TOMBSTONE_ALL: {
-                version_map->delete_all_versions(store, id);
+                std::optional<AtomKey> key = std::nullopt;
+                if (version_id_opt.has_value()) {
+                    key = atom_key_builder()
+                           .version_id(*version_id_opt)
+                           .build(id, KeyType::VERSION);
+                }
+                version_map->tombstone_from_key_or_all(store, id, key);
                 break;
             }
         }
@@ -947,12 +952,13 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad) {
     // v0 <- v1 <- v2 <- Tombstone_all(v1)
     store = std::make_shared<InMemoryStore>();
     version_map = std::make_shared<VersionMap>();
-    write_versions(store, version_map, id, 3);
-
-    auto key = atom_key_builder()
-            .version_id(1)
-            .build(id, KeyType::VERSION);
-    version_map->tombstone_from_key_or_all(store, id, key);
+    using Type = VersionChainOperation::Type;
+    write_versions(store, version_map, id, {
+                       {Type::WRITE, 0},
+                       {Type::WRITE, 1},
+                       {Type::WRITE, 2},
+                       {Type::TOMBSTONE, 1}
+                   });
 
     version_map = std::make_shared<VersionMap>();
     auto entry = version_map->check_reload(
