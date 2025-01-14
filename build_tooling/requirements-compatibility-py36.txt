@@ -1,7 +1,0 @@
-# The oldest tested deps, for Python 3.6
-pandas~=0.22
-numpy~=1.14
-protobuf~=3.8
-attrs~=19.2
-msgpack~=0.5
-prometheus_client~=0.14

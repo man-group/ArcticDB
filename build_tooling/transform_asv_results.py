@@ -37,9 +37,7 @@ def df_to_asv_json(results_df: pd.DataFrame):
     1      basic_functions.BasicFunctions.time_read_batch  [[0.2775141046000044, 0.597266279600126, 0.379...  ...  {'<build>': 515.5997927188873, '<setup_cache b...       2
     """
     new_df = results_df.copy()
-    new_df["date"] = (pd.to_datetime(results_df["date"]).astype(int) // 1000000).astype(
-        object
-    )
+    new_df["date"] = (pd.to_datetime(results_df["date"]).astype(int) // 1000000).astype(object)
     new_df["version"] = results_df["version"].astype(object)
 
     metadata = {
@@ -71,9 +69,7 @@ def asv_json_to_df(full_path: str) -> pd.DataFrame:
 
     results_list = []
     for test_name, test_results in data["results"].items():
-        flattened_data = pd.json_normalize(
-            {"test_name": test_name, "results": str(test_results)}
-        )
+        flattened_data = pd.json_normalize({"test_name": test_name, "results": str(test_results)})
         flattened_data["commit_hash"] = data["commit_hash"]
         flattened_data["env_name"] = data["env_name"]
         flattened_data["date"] = data["date"]
