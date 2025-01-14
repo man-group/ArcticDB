@@ -21,6 +21,12 @@ namespace lock {
 
 using AcquiredLockId = uint64_t;
 
+using AcquiredLock = AcquiredLockId;
+using LockInUse = std::monostate;
+using UnsupportedOperation = std::string;
+
+using ReliableLockResult = std::variant<AcquiredLock, LockInUse, UnsupportedOperation>;
+
 // The ReliableStorageLock is a storage lock which relies on atomic If-None-Match Put and ListObject operations to
 // provide a more reliable lock than the StorageLock but it requires the backend to support atomic operations. It should
 // be completely consistent unless a process holding a lock gets paused for times comparable to the lock timeout.
@@ -36,12 +42,12 @@ public:
     ReliableStorageLock(const ReliableStorageLock<ClockType>& other) = default;
 
     AcquiredLockId retry_until_take_lock() const;
-    std::optional<AcquiredLockId> try_take_lock() const;
-    std::optional<AcquiredLockId> try_extend_lock(AcquiredLockId acquired_lock) const;
+    ReliableLockResult try_take_lock() const;
+    ReliableLockResult try_extend_lock(AcquiredLockId acquired_lock) const;
     void free_lock(AcquiredLockId acquired_lock) const;
     timestamp timeout() const;
 private:
-    std::optional<AcquiredLockId> try_take_next_id(const std::vector<AcquiredLockId>& existing_locks, std::optional<AcquiredLockId> latest) const;
+    ReliableLockResult try_take_next_id(const std::vector<AcquiredLockId>& existing_locks, std::optional<AcquiredLockId> latest) const;
     std::pair<std::vector<AcquiredLockId>, std::optional<AcquiredLockId>> get_all_locks() const;
     timestamp get_expiration(RefKey lock_key) const;
     void clear_old_locks(const std::vector<AcquiredLockId>& acquired_locks) const;
