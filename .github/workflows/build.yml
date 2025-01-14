@@ -36,7 +36,7 @@ jobs:
     uses: ./.github/workflows/cibw_docker_image.yml
     permissions: {packages: write}
     with:
-      cibuildwheel_ver: "2.12.1"
+      cibuildwheel_ver: "2.21.3"
       force_update: false
 
   common_config:
@@ -163,24 +163,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[6, 7, 8, 9, 10, 11]')}}
+        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[7, 8, 9, 10, 11, 12]')}}
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
             pytest_xdist_mode: "--dist worksteal"
-          - python3: 6
-            python_deps_ids: ["", -compat36]
-            matrix_override:
-              - ${{fromJson(needs.common_config.outputs.linux_matrix)[0]}}
-              - python_deps_id: -compat36
-                python_deps: requirements-compatibility-py36.txt
-            pytest_xdist_mode: ""  # worksteal Not supported on Python 3.6
           - python3: 8
             python_deps_ids: ["", -compat38]
             matrix_override:
               - ${{fromJson(needs.common_config.outputs.linux_matrix)[0]}}
               - python_deps_id: -compat38
                 python_deps: requirements-compatibility-py38.txt
+          - python3: 11
+            python_deps_ids: ["", -compat311]
+            matrix_override:
+              - ${{fromJson(needs.common_config.outputs.linux_matrix)[0]}}
+              - python_deps_id: -compat311
+                python_deps: requirements-compatibility-py311.txt
     name: 3.${{matrix.python3}} Linux
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -212,7 +211,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11]')}}
+        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11, 12]')}}
     name: 3.${{matrix.python3}} Windows
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit

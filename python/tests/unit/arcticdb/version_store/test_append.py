@@ -170,17 +170,6 @@ def test_append_snapshot_delete(lmdb_version_store):
     assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data, df1)
 
 
-def _random_integers(size, dtype):
-    # We do not generate integers outside the int64 range
-    platform_int_info = np.iinfo("int_")
-    iinfo = np.iinfo(dtype)
-    return np.random.randint(
-        max(iinfo.min, platform_int_info.min),
-        min(iinfo.max, platform_int_info.max),
-        size=size,
-    ).astype(dtype)
-
-
 def test_append_out_of_order_throws(lmdb_version_store):
     lib: NativeVersionStore = lmdb_version_store
     lib.write("a", pd.DataFrame({"c": [1, 2, 3]}, index=pd.date_range(0, periods=3)))
@@ -197,8 +186,8 @@ def test_append_out_of_order_and_sort(lmdb_version_store_ignore_order, prune_pre
     dtidx = pd.date_range("1970-01-01", periods=num_rows)
     test = pd.DataFrame(
         {
-            "uint8": _random_integers(num_rows, np.uint8),
-            "uint32": _random_integers(num_rows, np.uint32),
+            "uint8": random_integers(num_rows, np.uint8),
+            "uint32": random_integers(num_rows, np.uint32),
         },
         index=dtidx,
     )
@@ -268,8 +257,8 @@ def test_upsert_with_delete(lmdb_version_store_big_map):
     dtidx = pd.date_range("1970-01-01", periods=num_rows)
     test = pd.DataFrame(
         {
-            "uint8": _random_integers(num_rows, np.uint8),
-            "uint32": _random_integers(num_rows, np.uint32),
+            "uint8": random_integers(num_rows, np.uint8),
+            "uint32": random_integers(num_rows, np.uint32),
         },
         index=dtidx,
     )

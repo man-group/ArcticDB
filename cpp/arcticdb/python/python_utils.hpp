@@ -16,6 +16,7 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/stream/stream_reader.hpp>
 #include <arcticdb/util/variant.hpp>
+#include <arcticdb/util/gil_safe_py_none.hpp>
 
 namespace py = pybind11;
 
@@ -104,14 +105,14 @@ inline void prefill_with_none(
     SpinLock& spin_lock,
     IncrementRefCount inc_ref_count = IncrementRefCount::ON) {
     std::lock_guard lock(spin_lock);
-    auto none = py::none();
+    auto none = GilSafePyNone::instance();
     for (auto i = 0U; i < num_rows; ++i)
-        *ptr_dest++ = none.ptr();
+        *ptr_dest++ = none->ptr();
 
     if(inc_ref_count == IncrementRefCount::ON) {
         auto none_count = num_rows - sparse_count;
         for (auto j = 0U; j < none_count; ++j)
-            none.inc_ref();
+            Py_INCREF(none->ptr());
     }
     spin_lock.unlock();
 }
@@ -155,8 +156,13 @@ PyClass & add_repr(PyClass & py_class){
 }
 
 inline py::object &pd_Timestamp() {
-    static py::object T = py::module::import("pandas").attr("Timestamp");
-    return T;
+    PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> storage;
+    auto &imported_obj = storage // Do NOT make this `static`!
+      .call_once_and_store_result([]() {
+          return py::module_::import("pandas").attr("Timestamp");
+      })
+      .get_stored();
+    return imported_obj;
 }
 
 inline bool from_pd_timestamp(const py::object &o, timestamp &ts) {
@@ -169,8 +175,13 @@ inline bool from_pd_timestamp(const py::object &o, timestamp &ts) {
 }
 
 inline py::object &dt_datetime() {
-    static py::object T = py::module::import("datetime").attr("datetime");
-    return T;
+    PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> storage;
+    auto &imported_obj = storage // Do NOT make this `static`!
+      .call_once_and_store_result([]() {
+          return py::module_::import("datetime").attr("datetime");
+      })
+      .get_stored();
+    return imported_obj;
 }
 
 inline bool from_datetime(const py::object &o, timestamp &ts) {
@@ -182,8 +193,13 @@ inline bool from_datetime(const py::object &o, timestamp &ts) {
 }
 
 inline py::object &np_datetime64() {
-    static py::object T = py::module::import("numpy").attr("datetime64");
-    return T;
+    PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> storage;
+    auto &imported_obj = storage // Do NOT make this `static`!
+      .call_once_and_store_result([]() {
+          return py::module_::import("numpy").attr("datetime64");
+      })
+      .get_stored();
+    return imported_obj;
 }
 
 inline bool from_dt64(const py::object &o, timestamp &ts) {
@@ -271,8 +287,13 @@ inline std::vector<NamedAggregator> named_aggregators_from_dict(const std::unord
 }
 
 inline auto pd_to_offset(std::string_view rule) {
-    static py::object to_offset = py::module::import("pandas").attr("tseries").attr("frequencies").attr("to_offset");
-    return to_offset(rule).attr("nanos").cast<timestamp>();
+    PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> storage;
+    auto &imported_obj = storage // Do NOT make this `static`!
+      .call_once_and_store_result([]() {
+          return py::module_::import("pandas").attr("tseries").attr("frequencies").attr("to_offset");
+      })
+      .get_stored();
+    return imported_obj(rule).attr("nanos").cast<timestamp>();
 }
 
 } // namespace arcticdb::python_util

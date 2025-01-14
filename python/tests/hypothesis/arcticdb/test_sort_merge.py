@@ -93,7 +93,7 @@ def merge_and_sort_segment_list(segment_list, int_columns_in_df=None):
     # it will become float column and the missing values will be NaN.
     int_columns_in_df = int_columns_in_df if int_columns_in_df else []
     for col in int_columns_in_df:
-        merged[col] = merged[col].replace(np.NaN, 0)
+        merged[col] = merged[col].replace(np.nan, 0)
     merged.sort_index(inplace=True)
     return merged
 
