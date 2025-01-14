@@ -153,7 +153,6 @@ SegmentInMemory incomplete_segment_from_frame(
     auto field_tensors = std::move(frame->field_tensors);
     auto output = std::visit([&](const auto& idx) {
         using IdxType = std::decay_t<decltype(idx)>;
-        // TODO aseaton would a simpler change be to just change the policy here?
         using SingleSegmentAggregator = Aggregator<IdxType, FixedSchema, NeverSegmentPolicy>;
         auto copy_prev_key = prev_key;
         auto timeseries_desc = index_descriptor_from_frame(frame, existing_rows, std::move(prev_key));
@@ -218,7 +217,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
         mutable_seg.sort(sort_columns);
 }
 
-folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame_with_sorting(
+[[nodiscard]] folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame_with_sorting(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
@@ -226,14 +225,15 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame_wit
     ARCTICDB_SAMPLE(WriteIncompleteFrameWithSorting, 0)
     log::version().debug("Command: write_incomplete_frame_with_sorting {}", stream_id);
 
+    util::check(
+        options.sort_on_index || (options.sort_columns && !options.sort_columns->empty()),
+        "Should call write_incomplete_frame when sorting not required");
+
     using namespace arcticdb::pipelines;
 
     auto index_range = frame->index_range;
     const auto index = std::move(frame->index);
 
-    WriteOptions write_options = options.write_options;
-    write_options.column_group_size = std::numeric_limits<size_t>::max(); // column slicing not supported yet (makes it hard
-    // to infer the schema we want after compaction)
     bool sparsify_floats{false};
 
     auto next_key = std::nullopt;
@@ -255,50 +255,49 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame_wit
         do_sort(segment, *options.sort_columns);
     }
 
-    if (options.sort_on_index || (options.sort_columns && options.sort_columns->at(0) == segment.descriptor().field(0).name())) {
-        segment.descriptor().set_sorted(SortedValue::ASCENDING);
-    }
+    auto timeseries_desc = index_descriptor_from_frame(frame, 0, std::nullopt);
+    auto norm_meta = timeseries_desc.proto().normalization();
+    auto tsd = pack_timeseries_descriptor(frame->desc, frame->num_rows, std::nullopt, std::move(norm_meta));
+    segment.set_timeseries_descriptor(tsd);
 
-    std::vector<folly::Future<AtomKey>> fut_vec;
-    std::visit([segment=std::move(segment), &frame, &index, &fut_vec, &store, &stream_id, &write_options](auto&& idx) mutable {
+    bool is_sorted = options.sort_on_index || (options.sort_columns && options.sort_columns->at(0) == segment.descriptor().field(0).name());
+
+    auto segments = segment.split(options.write_options.segment_row_size);
+    auto res = std::visit([&segments, &store, &stream_id, tsd, is_sorted](auto&& idx) {
+        std::vector<folly::Future<AtomKey>> fut_vec;
         using IdxType = std::decay_t<decltype(idx)>;
-        using RowCountAggregator = SegmentAggregator<IdxType, FixedSchema, RowCountSegmentPolicy>;
 
-        auto descriptor = frame->desc;
-        RowCountAggregator agg{
-            [](FrameSlice&&){},
-            FixedSchema{descriptor, index},
-            [&](SegmentInMemory&& segment) {
-                auto timeseries_desc = index_descriptor_from_frame(frame, 0, std::nullopt);
-                auto norm_meta = timeseries_desc.proto().normalization();
-                auto tsd = pack_timeseries_descriptor(descriptor, frame->num_rows, std::nullopt, std::move(norm_meta));
-                segment.set_timeseries_descriptor(tsd);
-                const auto local_index_start = IdxType::start_value_for_segment(segment);
-                const auto local_index_end = IdxType::end_value_for_segment(segment);
-                stream::StreamSink::PartialKey pk{KeyType::APPEND_DATA, 0, stream_id, local_index_start, local_index_end};
-                auto fut = store->write(pk, std::move(segment))
-                    .thenValueInline([](VariantKey&& res) {
-                        return to_atom(std::move(res));
-                    });
-                fut_vec.emplace_back(std::move(fut));
-            }, RowCountSegmentPolicy(write_options.segment_row_size)};
-
-        bool convert_int_to_float{false};
-        FrameSlice slice = FrameSlice(segment);
-        agg.add_segment(std::move(segment), slice, convert_int_to_float);
-        agg.commit();
+        for (SegmentInMemory& seg : segments) {
+            seg.set_timeseries_descriptor(tsd);
+            if (is_sorted) {
+                seg.descriptor().set_sorted(SortedValue::ASCENDING);
+            }
+            const auto local_index_start = IdxType::start_value_for_segment(seg);
+            const auto local_index_end = IdxType::end_value_for_segment(seg);
+            stream::StreamSink::PartialKey pk{KeyType::APPEND_DATA, 0, stream_id, local_index_start, local_index_end};
+            auto fut = store->write(pk, std::move(seg))
+                .thenValueInline([](VariantKey&& res) {
+                    return to_atom(std::move(res));
+                });
+            fut_vec.emplace_back(std::move(fut));
+        }
+        return fut_vec;
     }, index);
 
-    return folly::collect(fut_vec).via(&async::io_executor());
+    return folly::collect(res).via(&async::io_executor());
 }
 
-folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
+[[nodiscard]] folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteIncompleteOptions& options) {
     ARCTICDB_SAMPLE(WriteIncompleteFrame, 0)
     log::version().debug("Command: write_incomplete_frame {}", stream_id);
+
+    util::check(
+        !options.sort_on_index && (!options.sort_columns || options.sort_columns->empty()),
+        "Should call write_incomplete_frame_with_sorting when sorting required");
 
     using namespace arcticdb::pipelines;
 
@@ -313,7 +312,7 @@ folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     write_options.column_group_size = std::numeric_limits<size_t>::max(); // column slicing not supported yet (makes it hard
     // to infer the schema we want after compaction)
 
-    auto slicing_policy = get_slicing_policy(write_options, *frame);
+    auto slicing_policy = FixedSlicer{write_options.column_group_size, write_options.segment_row_size};
     auto slices = slice(*frame, slicing_policy);
 
     if (slices.empty()) {
@@ -402,11 +401,11 @@ void write_parallel_impl(
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteIncompleteOptions& options) {
-    write_incomplete_frame(store,
-                           stream_id,
-                           frame,
-                           options
-                           ).get();
+    if (options.sort_on_index || (options.sort_columns && !options.sort_columns->empty())) {
+        write_incomplete_frame_with_sorting(store, stream_id, frame, options).get();
+    } else {
+        write_incomplete_frame(store, stream_id, frame, options ).get();
+    }
 }
 
 std::vector<SliceAndKey> get_incomplete(
