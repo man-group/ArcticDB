@@ -115,6 +115,22 @@ def test_parallel_write(basic_store):
     assert len(get_append_keys(basic_store, sym)) == 0
 
 
+def test_parallel_write_chunking(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment # row size 2 column size 2
+    lib_tool = lib.library_tool()
+    sym = "sym"
+    df = pd.DataFrame({"col_1": np.arange(10), "col_2": np.arange(10), "col_3": np.arange(10)}, pd.date_range("2024-01-01", periods=10))
+    lib.write(sym, df.iloc[:8], parallel=True)
+    lib.write(sym, df.iloc[8:], parallel=True)
+
+    data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)
+    # We don't apply column slicing when staging incompletes, do apply row slicing
+    assert len(data_keys) == 5
+
+    ref_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, sym)
+    assert not ref_keys
+
+
 def test_roundtrip_nan(lmdb_version_store):
     df = pd.DataFrame(np.nan, index=[0, 1, 2, 3], columns=["A", "B"])
     lmdb_version_store.write("all_nans", df)
