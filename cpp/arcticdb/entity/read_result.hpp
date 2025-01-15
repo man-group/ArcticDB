@@ -49,6 +49,26 @@ inline ReadResult create_python_read_result(
     const VersionedItem& version,
     FrameAndDescriptor&& fd) {
     auto result = std::move(fd);
+    // Very old (pre Nov-2020) PandasIndex protobuf messages had no "start" or "step" fields. If is_physically_stored
+    // (renamed from is_not_range_index) was false, the index was always RangeIndex(num_rows, 1)
+    // This used to be handled in the Python layer by passing None to the DataFrame index parameter, which would then
+    // default to RangeIndex(num_rows, 1). However, the empty index also has is_physically_stored as false, and because
+    // integer protobuf fields default to zero if they are not present on the wire, it is impossible to tell from
+    // the normalization metadata alone if the data was written with an empty index, or with a very old range index.
+    // We therefore patch the normalization metadata here in this case
+    auto norm_meta = result.desc_.mutable_proto().mutable_normalization();
+    if (norm_meta->has_df() || norm_meta->has_series()) {
+        auto common = norm_meta->has_df() ? norm_meta->mutable_df()->mutable_common() : norm_meta->mutable_series()->mutable_common();
+        if (common->has_index()) {
+            auto index = common->mutable_index();
+            if (result.desc_.index().type() == IndexDescriptor::Type::ROWCOUNT &&
+                !index->is_physically_stored()
+                && index->start() == 0 &&
+                index->step() == 0) {
+                index->set_step(1);
+            }
+        }
+    }
     auto python_frame = pipelines::PythonOutputFrame{result.frame_, result.buffers_};
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
 
