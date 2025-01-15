@@ -245,10 +245,10 @@ def real_s3_library(real_s3_storage, lib_name) -> Library:
 
 @pytest.fixture(scope="session") # Config loaded at the first ArcticDB binary import, so we need to set it up before any tests
 def real_s3_sts_storage_factory() -> Generator[BaseS3StorageFixtureFactory, None, None]:
-    sts_test_credentials_prefix = os.getenv("ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX", f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}")
-    username = os.getenv("ARCTICDB_REAL_S3_STS_TEST_USERNAME", f"gh_sts_test_user_{sts_test_credentials_prefix}")
-    role_name = os.getenv("ARCTICDB_REAL_S3_STS_TEST_ROLE", f"gh_sts_test_role_{sts_test_credentials_prefix}")
-    policy_name = os.getenv("ARCTICDB_REAL_S3_STS_TEST_POLICY_NAME", f"gh_sts_test_policy_name_{sts_test_credentials_prefix}")
+    sts_test_credentials_prefix = f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+    username = f"gh_sts_test_user_{sts_test_credentials_prefix}"
+    role_name = f"gh_sts_test_role_{sts_test_credentials_prefix}"
+    policy_name = f"gh_sts_test_policy_name_{sts_test_credentials_prefix}"
     profile_name = "sts_test_profile"
     set_config_int("S3Storage.STSTokenExpiryMin", 15)
     working_dir = mkdtemp(suffix="S3STSStorageFixtureFactory")
