@@ -203,6 +203,7 @@ struct LoadProgress {
     VersionId oldest_loaded_undeleted_index_version_ = std::numeric_limits<VersionId>::max();
     timestamp earliest_loaded_timestamp_ = std::numeric_limits<timestamp>::max();
     timestamp earliest_loaded_undeleted_timestamp_ = std::numeric_limits<timestamp>::max();
+    bool is_earliest_version_loaded { false };
 };
 
 struct VersionMapEntry {
@@ -241,7 +242,6 @@ struct VersionMapEntry {
         tombstone_all_.reset();
         keys_.clear();
         load_progress_ = LoadProgress{};
-        load_strategy_ = LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED};
     }
 
     bool empty() const {
@@ -258,14 +258,13 @@ struct VersionMapEntry {
         swap(left.last_reload_time_, right.last_reload_time_);
         swap(left.tombstone_all_, right.tombstone_all_);
         swap(left.head_, right.head_);
-        swap(left.load_strategy_, right.load_strategy_);
         swap(left.load_progress_, right.load_progress_);
     }
 
     // Below four functions used to return optional<AtomKey> of the tombstone, but copying keys is expensive and only
     // one function was actually interested in the key, so they now return bool. See get_tombstone().
     bool has_individual_tombstone(VersionId version_id) const {
-        return tombstones_.count(version_id) != 0;
+        return tombstones_.contains(version_id);
     }
 
     bool is_tombstoned_via_tombstone_all(VersionId version_id) const {
@@ -432,7 +431,6 @@ struct VersionMapEntry {
     }
 
     std::optional<AtomKey> head_;
-    LoadStrategy load_strategy_ = LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED};
     timestamp last_reload_time_ = 0;
     LoadProgress load_progress_;
     std::deque<AtomKey> keys_;
