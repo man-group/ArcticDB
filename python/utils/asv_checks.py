@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import os
 import re
 import subprocess
@@ -6,11 +7,13 @@ import sys
 from typing import List
 
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("ASV Linter")
+
 def error(mes):
-    print("-" * 80)
-    print(f"ERROR :{mes}", file=sys.stderr )
-    print(f"ERROR (same error printed on stdout also)): {mes}")
-    print("-" * 80)
+    logger.error("-" * 80)
+    logger.error(f"ERROR :{mes}")
+    logger.error("-" * 80)
 
 
 def run_command(command: List[str], cwd: str, ok_errors_list: List[str] = None) -> int:
@@ -25,18 +28,18 @@ def run_command(command: List[str], cwd: str, ok_errors_list: List[str] = None) 
     err_output = result.stderr
     error_code = result.returncode
 
-    if not err_output is None:
+    if err_output is not None:
         error(err_output)
         if error_code == 0:
-            print("ABOVE ERRORS DOES NOT AFFECT FINAL ERROR CODE = 0")
+            logger.info("ABOVE ERRORS DO NOT AFFECT FINAL ERROR CODE = 0")
 
-    if not output is None:
-        print("Standard Output:")
-        print(output)
+    if output is not None:
+        logger.info("Standard Output:")
+        logger.info(output)
 
     if error_code != 0:
-        print(f"Error Code Returned: {error_code}") 
-        if not ok_errors_list is None:
+        logger.error(f"Error Code Returned: {error_code}") 
+        if ok_errors_list is not None:
             for ok_error in ok_errors_list:
                 err_output.replace(ok_error, "")
                 err_output = err_output.strip()
@@ -67,7 +70,7 @@ def file_unchanged(filepath, last_check_time):
 
 def get_project_root():
     file_location = os.path.abspath(__file__)
-    return file_location.split("/python/benchmarks")[0]
+    return file_location.split("/python/utils")[0]
 
 
 def perform_asv_checks() -> int:
@@ -85,29 +88,35 @@ def perform_asv_checks() -> int:
     benchmark_config = f"{path}/python/.asv/results/benchmarks.json"
     orig_hash = compute_file_hash(benchmark_config)
 
-    print("_" * 80)
-    print("""IMPORTANT: The tool checks CURRENT versions of asv tests along with asv.conf.json")
-            That means that if there are files that are not submitted yet,
-            they would need to be in order for completion of current PR""")
-    print("_" * 80)
+    logger.info("_" * 80)
+    logger.info("""IMPORTANT: The tool checks CURRENT ACTUAL versions of asv benchmark tests along with the one in benchmarks.json file.
+            That means that if there are files that are not submitted yet (tests and benchmark.json),
+            they would need to be in order for completion of current PR.
+            benchmarks.json is updated with a version number calculated as a hash
+            of the python test method. Thus any change of this method triggers different
+            version. Hence you would need to update json file also.
+            It happens automatically if you run following commandline:
+             > asv run --bench just-discover --python=same  """)
+    logger.info("_" * 80)
 
-    print("\n\nCheck 1: Executing check for python code of asv tests")
+    logger.info("\n\nCheck 1: Executing check for python code of asv tests")
     if run_command(["asv", "check", "--python=same"], path) != 0:
         error("Please address all reported errors and submit code in the PR.")
         err = 1
     else:
-        print("Relax, no worries. Code is fine!")
+        logger.info("Relax, no worries. Code is fine!")
 
 
-    print("\n\nCheck 2: Check that benchmarks.json has up to date latest versions of tests.")
+    logger.info("\n\nCheck 2: Check that benchmarks.json has up to date latest versions of tests.")
     if run_command(command = ["asv", "run", "--bench", "just-discover", "--python=same"], 
                    cwd = path, 
                    ok_errors_list = ["Couldn't load asv.plugins._mamba_helpers"]) != 0:
         error("There was error getting latest benchmarks. See log")        
         err = 1
     else: 
-        if compute_file_hash(benchmark_config) == orig_hash:
-            print("Great, there are no new versions of asv test either!")
+        new_hash = compute_file_hash(benchmark_config)
+        if new_hash == orig_hash:
+            logger.info("Great, there are no new versions of asv test either!")
         else:
             error(f"""\n\n There are changes in asv test versions. 
 Open file {benchmark_config} compare with previous version and             
@@ -121,4 +130,4 @@ if res != 0:
     error("Errors detected - check output above")
     sys.exit(res)
 else: 
-    print("SUCCESS! All checks pass")
+    logger.info("SUCCESS! All checks pass")
