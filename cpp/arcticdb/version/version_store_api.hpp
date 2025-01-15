@@ -362,14 +362,7 @@ inline std::vector<std::variant<ReadResult, DataError>> frame_to_read_result(std
     std::vector<std::variant<ReadResult, DataError>> read_results;
     read_results.reserve(keys_frame_and_descriptors.size());
     for (auto& read_version_output : keys_frame_and_descriptors) {
-        const auto& desc_proto = read_version_output.frame_and_descriptor_.desc_.proto();
-        read_results.emplace_back(ReadResult(
-            read_version_output.versioned_item_,
-            PythonOutputFrame{read_version_output.frame_and_descriptor_.frame_, read_version_output.frame_and_descriptor_.buffers_},
-            desc_proto.normalization(),
-            desc_proto.user_meta(),
-            desc_proto.multi_key_meta(),
-            std::vector<AtomKey>{}));
+        read_results.emplace_back(create_python_read_result(read_version_output.versioned_item_, std::move(read_version_output.frame_and_descriptor_)));
     }
     return read_results;
 }
