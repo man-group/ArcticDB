@@ -23,6 +23,15 @@ class Features:
     ENCODING_V2 = feat("encoding_v2")
 
 
+class Storage:
+
+    def storage(type: str) -> str:
+        return f"stor.{type}"
+
+    AMAZON_S3 = storage("AmazonS3")
+    LMDB = storage("LMDB")
+
+
 class Functions:
 
     def func(function: str) -> str:
@@ -42,6 +51,7 @@ class Functions:
 
 class Marks:
     covers = pytest.mark.covers
+    environment = pytest.mark.environment
     slow  = pytest.mark.slow
     prio0 = pytest.mark.prio0
     prio2 = pytest.mark.prio2

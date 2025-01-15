@@ -344,6 +344,8 @@ class ArcticdbTestAnalysis:
 
         sys.path.insert(0,python_files)
         sys.path.insert(0,path_to_tests)
+        #sys.path.append(path_to_tests)
+        #sys.path.append(python_files)
         
 
         for root, _, files in os.walk(python_files):
