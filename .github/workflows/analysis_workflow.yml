@@ -125,8 +125,8 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           token: ${{ secrets.ARCTICDB_TEST_PAT }}
-          ref: ${{ github.event.pull_request.head.sha }}
-              
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }} # Note: This is dangerous if we run automatic CI on external PRs          
+
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.3
         with:
