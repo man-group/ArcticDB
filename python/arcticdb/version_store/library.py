@@ -1241,7 +1241,6 @@ class Library:
                 is not the same as the schema of the existing data
             - If dynamic schema is used and different segments have the same column names but their dtypes don't have a
                 common type (e.g string and any numeric type)
-            - If a different index name is encountered in the staged data, regardless of the schema mode
 
         See Also
         --------
@@ -1352,7 +1351,6 @@ class Library:
                 staged segment is not the same as the schema of the existing data
             - If dynamic schema is used and different segments have the same column names but their dtypes don't have a
                 common type (e.g string and any numeric type)
-            - If a different index name is encountered in the staged data, regardless of the schema mode
 
         See Also
         --------

@@ -650,7 +650,7 @@ size_t SegmentInMemoryImpl::num_bytes() const {
 void SegmentInMemoryImpl::sort(const std::string& column_name) {
     init_column_map();
     auto idx = column_index(std::string_view(column_name));
-    schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(static_cast<bool>(idx), "Column {} not found in sort", column_name);
+    user_input::check<ErrorCode::E_COLUMN_NOT_FOUND>(static_cast<bool>(idx), "Column {} not found in sort", column_name);
     sort(static_cast<position_t>(idx.value()));
 }
 
@@ -659,7 +659,7 @@ void SegmentInMemoryImpl::sort(const std::vector<std::string>& column_names) {
     std::vector<position_t> positions;
     for(const auto& column_name : column_names) {
         auto idx = column_index(std::string_view(column_name));
-        schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(static_cast<bool>(idx), "Column {} not found in multi-sort", column_name);
+        user_input::check<ErrorCode::E_COLUMN_NOT_FOUND>(static_cast<bool>(idx), "Column {} not found in multi-sort", column_name);
         positions.emplace_back(static_cast<position_t>(*idx));
     }
     sort(positions);
