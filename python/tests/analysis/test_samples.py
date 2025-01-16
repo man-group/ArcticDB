@@ -1,5 +1,6 @@
 
 
+import pytest
 from tests.analysis.adb_meta_info import Dataframe, Features, Functions, Marks, Storage
 
 ## Using custom marks that we control
@@ -41,3 +42,32 @@ def test_testonly_one():
 @Marks.not_ready # Automatically will skip the test
 def test_testonly_two():
     assert True    
+
+@Marks.environment(Storage.AMAZON_S3, Storage.LMDB) 
+@Marks.prio0
+@pytest.fixture(params=["A", "B"])
+def factory_fixture_1(request):
+    return request.param
+
+@Marks.prio0
+def test_example_fixture_1(factory_fixture_1):
+    arg1 = factory_fixture_1
+    print (arg1)
+
+@pytest.fixture
+def factory_fixture_2(request):
+    environment = request.param
+    result = None
+    if (environment == Storage.AMAZON_S3):
+        # Here storage can be  setup
+        result = Storage.AMAZON_S3
+    elif (environment == Storage.LMDB):
+        result =  Storage.LMDB
+    return result
+
+## Parameterize fixture from the test
+@Marks.environment(Storage.AMAZON_S3, Storage.LMDB) 
+@pytest.mark.parametrize("factory_fixture_2", [ Storage.AMAZON_S3, Storage.AMAZON_S3 ], indirect=True)
+def test_example_fixture_2(factory_fixture_2): 
+    arg1 = factory_fixture_2
+    print (arg1)
