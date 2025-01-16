@@ -246,12 +246,12 @@ class TaskScheduler {
     }
 
     SchedulerWrapper<CPUSchedulerType>& cpu_exec() {
-        ARCTICDB_DEBUG(log::schedule(), "Getting CPU executor: {}", cpu_exec_.getTaskQueueSize());
+        ARCTICDB_TRACE(log::schedule(), "Getting CPU executor: {}", cpu_exec_.getTaskQueueSize());
         return cpu_exec_;
     }
 
     SchedulerWrapper<IOSchedulerType>& io_exec() {
-        ARCTICDB_DEBUG(log::schedule(), "Getting IO executor: {}", io_exec_.getPendingTaskCount());
+        ARCTICDB_TRACE(log::schedule(), "Getting IO executor: {}", io_exec_.getPendingTaskCount());
         return io_exec_;
     }
 

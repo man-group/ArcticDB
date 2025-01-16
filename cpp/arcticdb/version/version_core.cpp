@@ -33,11 +33,11 @@ namespace arcticdb::version_store {
 
 void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, const ReadOptions& read_options) {
 
-    if (opt_false(read_options.force_strings_to_object_) || opt_false(read_options.force_strings_to_fixed_))
+    if (opt_false(read_options.force_strings_to_object()) || opt_false(read_options.force_strings_to_fixed()))
         pipeline_context->orig_desc_ = pipeline_context->desc_;
 
     auto& desc = *pipeline_context->desc_;
-    if (opt_false(read_options.force_strings_to_object_)) {
+    if (opt_false(read_options.force_strings_to_object())) {
         auto& fields = desc.fields();
         for (Field& field_desc : fields) {
             if (field_desc.type().data_type() == DataType::ASCII_FIXED64)
@@ -46,7 +46,7 @@ void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>& pipeli
             if (field_desc.type().data_type() == DataType::UTF_FIXED64)
                 set_data_type(DataType::UTF_DYNAMIC64, field_desc.mutable_type());
         }
-    } else if (opt_false(read_options.force_strings_to_fixed_)) {
+    } else if (opt_false(read_options.force_strings_to_fixed())) {
         auto& fields = desc.fields();
         for (Field& field_desc : fields) {
             if (field_desc.type().data_type() == DataType::ASCII_DYNAMIC64)
@@ -889,7 +889,7 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
     const ReadOptions& read_options
     ) {
     auto component_manager = std::make_shared<ComponentManager>();
-    ProcessingConfig processing_config{opt_false(read_options.dynamic_schema_), pipeline_context->rows_};
+    ProcessingConfig processing_config{opt_false(read_options.dynamic_schema()), pipeline_context->rows_};
     for (auto& clause: read_query->clauses_) {
         clause->set_processing_config(processing_config);
         clause->set_component_manager(component_manager);
@@ -914,7 +914,7 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
     .thenValue([component_manager, read_query, pipeline_context](std::vector<EntityId>&& processed_entity_ids) {
         auto proc = gather_entities<std::shared_ptr<SegmentInMemory>,
                                     std::shared_ptr<RowRange>,
-                                    std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
+                                    std::shared_ptr<ColRange>>(*component_manager, processed_entity_ids);
 
         if (std::any_of(read_query->clauses_.begin(),
                         read_query->clauses_.end(),
@@ -1022,7 +1022,7 @@ void read_indexed_keys_to_pipeline(
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     pipeline_context->desc_ = tsd.as_stream_descriptor();
 
-    bool dynamic_schema = opt_false(read_options.dynamic_schema_);
+    bool dynamic_schema = opt_false(read_options.dynamic_schema());
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
         read_query,
         pipeline_context,
@@ -1359,7 +1359,7 @@ folly::Future<SegmentInMemory> prepare_output_frame(
 		return std::tie(left.slice_.row_range, left.slice_.col_range) < std::tie(right.slice_.row_range, right.slice_.col_range);
 	});
     adjust_slice_rowcounts(pipeline_context);
-    const auto dynamic_schema = opt_false(read_options.dynamic_schema_);
+    const auto dynamic_schema = opt_false(read_options.dynamic_schema());
     mark_index_slices(pipeline_context, dynamic_schema, pipeline_context->bucketize_dynamic_);
     pipeline_context->ensure_vectors();
 
@@ -1539,7 +1539,7 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
     } else {
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
         util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query->row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
-        mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema_), pipeline_context->bucketize_dynamic_);
+        mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema()), pipeline_context->bucketize_dynamic_);
         const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
         auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
         util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
@@ -1694,7 +1694,7 @@ VersionedItem sort_merge_impl(
                 write_options.dynamic_schema
             }));
             ReadOptions read_options;
-            read_options.dynamic_schema_ = write_options.dynamic_schema;
+            read_options.set_dynamic_schema(write_options.dynamic_schema);
             auto segments = read_and_process(store, pipeline_context, read_query, read_options).get();
             if (options.append_ && update_info.previous_index_key_ && !segments.empty()) {
                 const timestamp last_index_on_disc = update_info.previous_index_key_->end_time() - 1;
@@ -2007,12 +2007,12 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
         return read_multi_key(store, *pipeline_context->multi_key_, handler_data);
     }
 
-    if(opt_false(read_options.incompletes_)) {
+    if(opt_false(read_options.incompletes())) {
         util::check(std::holds_alternative<IndexRange>(read_query->row_filter), "Streaming read requires date range filter");
         const auto& query_range = std::get<IndexRange>(read_query->row_filter);
         const auto existing_range = pipeline_context->index_range();
         if(!existing_range.specified_ || query_range.end_ > existing_range.end_)
-            read_incompletes_to_pipeline(store, pipeline_context, *read_query, read_options, false, false, false,  opt_false(read_options.dynamic_schema_));
+            read_incompletes_to_pipeline(store, pipeline_context, *read_query, read_options, false, false, false,  opt_false(read_options.dynamic_schema()));
     }
 
     if(std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {
@@ -2026,7 +2026,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 
     DecodePathData shared_data;
     return version_store::do_direct_read_or_process(store, read_query, read_options, pipeline_context, shared_data, handler_data)
-    .thenValue([res_versioned_item, pipeline_context, &read_options, &handler_data, read_query, shared_data](auto&& frame) mutable {
+    .thenValue([res_versioned_item, pipeline_context, read_options, &handler_data, read_query, shared_data](auto&& frame) mutable {
         ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
         return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
         .via(&async::cpu_executor())

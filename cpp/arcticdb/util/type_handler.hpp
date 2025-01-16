@@ -134,6 +134,8 @@ private:
     }
 
     const TypeHandlerMap& handler_map(OutputFormat output_format) const {
+        const auto pos = static_cast<int>(output_format);
+        util::check(size_t(pos) < handlers_.size(), "No handler map found for output format {}", pos);
         return handlers_[static_cast<int>(output_format)];
     }
 

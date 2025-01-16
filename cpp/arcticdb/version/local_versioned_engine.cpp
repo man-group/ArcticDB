@@ -348,7 +348,7 @@ std::variant<VersionedItem, StreamId> get_version_identifier(
         const ReadOptions& read_options,
         const std::optional<VersionedItem>& version) {
     if (!version) {
-        if (opt_false(read_options.incompletes_)) {
+        if (opt_false(read_options.incompletes())) {
             log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", stream_id);
             return stream_id;
         } else {
@@ -438,7 +438,7 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
     const std::vector<VersionQuery>& version_queries,
     const ReadOptions& read_options) {
 
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error().has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
 
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
@@ -454,7 +454,7 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
         if (descriptor.hasValue()) {
             descriptors_or_errors.emplace_back(std::move(descriptor.value()));
         } else {
-            if (*read_options.batch_throw_on_error_) {
+            if (*read_options.batch_throw_on_error()) {
                 descriptor.throwUnlessValue();
             } else {
                 auto exception = descriptor.exception();
@@ -1080,7 +1080,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
     std::any& handler_data) {
     py::gil_scoped_release release_gil;
     // This read option should always be set when calling batch_read
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error().has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<ReadVersionOutput>> read_versions_futs;
@@ -1103,7 +1103,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
                     if (opt_index_key.has_value()) {
                         version_info = VersionedItem(std::move(*opt_index_key));
                     } else {
-                        if (opt_false(read_options.incompletes_)) {
+                        if (opt_false(read_options.incompletes())) {
                             log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", stream_ids[idx]);
                             version_info = stream_ids[idx];
                         } else {
@@ -1133,7 +1133,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
         if (read_version.hasValue()) {
             read_versions_or_errors.emplace_back(std::move(read_version.value()));
         } else {
-            if (*read_options.batch_throw_on_error_) {
+            if (*read_options.batch_throw_on_error()) {
                 read_version.throwUnlessValue();
             } else {
                 auto exception = read_version.exception();
@@ -1559,7 +1559,7 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
     const ReadOptions& read_options
     ) {
     // This read option should always be set when calling batch_read_metadata
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error().has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>>> metadata_futures;
@@ -1576,7 +1576,7 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
         } else {
             auto exception = metadata.exception();
             // For historical reasons, batch_read_metadata does not raise if the version does not exist (unlike batch_read)
-            if (*read_options.batch_throw_on_error_ && !exception.is_compatible_with<NoSuchVersionException>()) {
+            if (*read_options.batch_throw_on_error() && !exception.is_compatible_with<NoSuchVersionException>()) {
                 metadata.throwUnlessValue();
             } else {
                 DataError data_error(stream_ids[idx], exception.what().toStdString(), version_queries[idx].content_);

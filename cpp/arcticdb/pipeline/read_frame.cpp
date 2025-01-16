@@ -429,6 +429,19 @@ void advance_skipped_cols(
     }
 }
 
+void advance_to_end(
+    const uint8_t*& data,
+    const StaticColumnMappingIterator& it,
+    const EncodedFieldCollection& fields,
+    const SegmentHeader& hdr) {
+    const auto next_col = it.prev_col_offset() + 1;
+    auto skipped_cols = it.last_slice_col_offset() - next_col;
+    if(skipped_cols) {
+        const auto bytes_to_skip = get_field_range_compressed_size((next_col -  it.first_slice_col_offset()) + it.index_fieldcount(), skipped_cols, hdr, fields);
+        data += bytes_to_skip;
+    }
+}
+
 template<typename IteratorType>
 bool remaining_fields_empty(IteratorType it, const PipelineContextRow& context) {
     while(it.has_next()) {
@@ -536,14 +549,14 @@ void decode_into_frame_static(
                 encoding_version,
                 mapping,
                 context.string_pool_ptr(),
-                read_options.output_format_
+                read_options.output_format()
             );
 
             ARCTICDB_TRACE(log::codec(), "Decoded or expanded static column {} to position {}", field_name, data - begin);
 
             it.advance();
             if(it.at_end_of_selected()) {
-                advance_skipped_cols(data, it, fields, hdr);
+                advance_to_end(data, it, fields, hdr);
                 break;
             } else if (has_magic_nums) {
                 util::check_magic_in_place<ColumnMagic>(data);
@@ -578,8 +591,8 @@ void promote_integral_type(
     const auto src_ptr_offset = src_data_type_size * (m.num_rows_ - 1);
     const auto dest_ptr_offset = dest_data_type_size * (m.num_rows_ - 1);
 
-    auto src_ptr = reinterpret_cast<SourceType*>(column.bytes_at(src_ptr_offset, 0UL)); // No bytes required as we are at the end
-    auto dest_ptr = reinterpret_cast<DestinationType*>(column.bytes_at(dest_ptr_offset, 0UL));
+    auto src_ptr = reinterpret_cast<SourceType*>(column.bytes_at(m.offset_bytes_ + src_ptr_offset, 0UL)); // No bytes required as we are at the end
+    auto dest_ptr = reinterpret_cast<DestinationType*>(column.bytes_at(m.offset_bytes_ + dest_ptr_offset, 0UL));
     for (auto i = 0u; i < m.num_rows_; ++i) {
         *dest_ptr-- = static_cast<DestinationType>(*src_ptr--);
     }
@@ -669,7 +682,7 @@ void decode_into_frame_dynamic(
                 encoding_version,
                 mapping,
                 context.string_pool_ptr(),
-                read_options.output_format_
+                read_options.output_format()
             );
 
             handle_type_promotion(mapping, shared_data, read_options, column);
@@ -779,7 +792,7 @@ struct ReduceColumnTask : async::BaseTask {
         const auto &frame_field = frame_.field(column_index_);
         const auto field_type = frame_field.type().data_type();
         auto &column = frame_.column(static_cast<position_t>(column_index_));
-        const auto dynamic_schema = read_options_.dynamic_schema_.value_or(false);
+        const auto dynamic_schema = read_options_.dynamic_schema().value_or(false);
 
         const auto column_data = slice_map_->columns_.find(frame_field.name());
         if(dynamic_schema && column_data == slice_map_->columns_.end()) {
@@ -828,14 +841,14 @@ folly::Future<folly::Unit> reduce_and_fix_columns(
     if(frame.empty())
         return folly::Unit{};
 
-    auto slice_map = std::make_shared<FrameSliceMap>(context, read_options.dynamic_schema_.value_or(false));
+    auto slice_map = std::make_shared<FrameSliceMap>(context, read_options.dynamic_schema().value_or(false));
 
     // This logic mimics that in ReduceColumnTask operator() to identify whether the task will actually do any work
     // This is to avoid scheduling work that is a no-op
     std::vector<size_t> fields_to_reduce;
     for (size_t idx=0; idx<frame.descriptor().fields().size(); ++idx) {
         const auto& frame_field = frame.field(idx);
-        if (read_options.dynamic_schema_ ||
+        if (read_options.dynamic_schema().value_or(false) ||
             (slice_map->columns_.contains(frame_field.name()) && is_sequence_type(frame_field.type().data_type()))) {
             fields_to_reduce.emplace_back(idx);
         }
@@ -868,10 +881,10 @@ folly::Future<SegmentInMemory> fetch_data(
     context->ensure_vectors();
     {
         ARCTICDB_SUBSAMPLE_DEFAULT(QueueReadContinuations)
-        const auto dynamic_schema = read_options.dynamic_schema_.value_or(false);
+        const auto dynamic_schema = read_options.dynamic_schema().value_or(false);
         for ( auto& row : *context) {
             keys_and_continuations.emplace_back(row.slice_and_key().key(),
-            [row=row, frame=frame, dynamic_schema=dynamic_schema, shared_data, &handler_data, &read_query, &read_options](auto &&ks) mutable {
+            [row=row, frame=frame, dynamic_schema=dynamic_schema, shared_data, &handler_data, read_query, read_options](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
                 if(dynamic_schema) {
                     decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), shared_data, handler_data, read_query, read_options);

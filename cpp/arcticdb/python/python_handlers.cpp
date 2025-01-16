@@ -83,7 +83,7 @@ void PythonEmptyHandler::convert_type(
         const DecodePathData& shared_data,
         std::any& handler_data,
         const std::shared_ptr<StringPool>&) const {
-    auto dest_data = dest_column.bytes_at(mapping.offset_bytes_, mapping.num_rows_ * sizeof(PyObject*));
+    auto dest_data = dest_column.bytes_at(mapping.offset_bytes_, mapping.num_rows_ * get_type_size(mapping.dest_type_desc_.data_type()));
     util::check(dest_data != nullptr, "Got null destination pointer");
     ARCTICDB_TRACE(
         log::version(),
