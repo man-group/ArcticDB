@@ -420,3 +420,86 @@ def test_project_ternary_column_sliced(version_store_factory, index):
 #     q = q.apply("projected_col", q["col_to_project"] * 2)
 #     received = lib.read(symbol, query_builder=q).data
 #     assert_frame_equal(expected, received)
+
+
+def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_project_ternary_dynamic_missing_columns"
+    all_columns_df = pd.DataFrame(
+        {
+            "conditional": [True, False],
+            "col1": np.arange(2),
+            "col2": np.arange(10, 12),
+        },
+        index=pd.date_range("2024-01-01", periods=2),
+    )
+    lib.write(symbol, all_columns_df[:2])
+
+    base_update_df = pd.DataFrame(
+        {
+            "conditional": [True, False],
+            "col1": np.arange(2, 4),
+            "col2": np.arange(12, 14),
+        },
+        index=pd.date_range("2024-01-03", periods=2),
+    )
+
+    # conditional column missing
+    update_df = base_update_df.drop(columns="conditional")
+    lib.update(symbol, update_df)
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], q["col1"], q["col2"]))
+    received = lib.read(symbol, query_builder=q).data
+    expected = pd.concat([all_columns_df, update_df]).fillna(False)
+    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    assert_frame_equal(expected, received, check_dtype=False)
+
+    # left column missing
+    update_df = base_update_df.drop(columns="col1")
+    lib.update(symbol, update_df)
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], q["col1"], q["col2"]))
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+    # left column missing
+    update_df = base_update_df.drop(columns="col2")
+    lib.update(symbol, update_df)
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], q["col1"], q["col2"]))
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+    # conditional and left columns missing
+    update_df = base_update_df.drop(columns=["conditional", "col1"])
+    lib.update(symbol, update_df)
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], q["col1"], q["col2"]))
+    received = lib.read(symbol, query_builder=q).data
+    expected = pd.concat([all_columns_df, update_df])
+    expected["conditional"].fillna(False, inplace=True)
+    expected["col1"].fillna(0, inplace=True)
+    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    assert_frame_equal(expected, received, check_dtype=False)
+
+    # conditional and right columns missing
+    update_df = base_update_df.drop(columns=["conditional", "col2"])
+    lib.update(symbol, update_df)
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], q["col1"], q["col2"]))
+    received = lib.read(symbol, query_builder=q).data
+    expected = pd.concat([all_columns_df, update_df])
+    expected["conditional"].fillna(False, inplace=True)
+    expected["col2"].fillna(0, inplace=True)
+    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    assert_frame_equal(expected, received, check_dtype=False)
+
+    # left and right columns missing
+    update_df = base_update_df.drop(columns=["col1", "col2"])
+    lib.update(symbol, update_df)
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["conditional"], q["col1"], q["col2"]))
+    received = lib.read(symbol, query_builder=q).data
+    expected = pd.concat([all_columns_df, update_df]).fillna(0)
+    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    assert_frame_equal(expected, received, check_dtype=False)
