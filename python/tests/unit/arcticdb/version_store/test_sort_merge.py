@@ -868,3 +868,35 @@ class TestSlicing:
         lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.WRITE)
 
         assert_frame_equal(lib.read("sym").data, df_1)
+
+
+@pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+@pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
+def test_sort_and_finalize_staged_data_dynamic_schema_named_index(
+    lmdb_library_static_dynamic, delete_staged_data_on_failure, mode
+):
+    lib = lmdb_library_static_dynamic
+    sym = "test_sort_and_finalize_staged_data_append_dynamic_schema_named_index"
+    df_0 = pd.DataFrame(
+        {"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1)
+    )
+    df_0.index.name = "date"
+    df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
+    if mode == StagedDataFinalizeMethod.APPEND:
+        lib.write(sym, df_0)
+    else:
+        lib.write(sym, df_0, staged=True)
+    lib.write(sym, df_1, staged=True)
+
+    with pytest.raises(SchemaException) as exception_info:
+        lib.sort_and_finalize_staged_data(
+            sym,
+            mode=mode,
+            delete_staged_data_on_failure=delete_staged_data_on_failure,
+        )
+
+    # Make sure that name of the problematic index column
+    assert "date" in str(exception_info.value)
+    staged_keys = 1 if mode == StagedDataFinalizeMethod.APPEND else 2
+    expected_key_count = 0 if delete_staged_data_on_failure else staged_keys
+    assert len(get_append_keys(lib, sym)) == expected_key_count
