@@ -363,6 +363,7 @@ jobs:
           CI_MONGO_HOST: mongodb
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
           PYTEST_XDIST_MODE: ${{inputs.pytest_xdist_mode}}
+          ARCTICDB_all_loglevel: DEBUG
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()
