@@ -505,6 +505,7 @@ set(arcticdb_srcs
         version/key_block.hpp
         version/key_block.cpp
         version/local_versioned_engine.cpp
+        version/schema_checks.cpp
         version/op_log.cpp
         version/snapshot.cpp
         version/symbol_list.cpp
