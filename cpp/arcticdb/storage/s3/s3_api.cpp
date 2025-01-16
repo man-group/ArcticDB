@@ -31,9 +31,8 @@ S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level) :
     }
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Begin initializing AWS API");
     using namespace Aws::Utils::Logging;
-    Aws::SDKOptions options;
-    options.loggingOptions.logLevel = LogLevel::Debug;
-    options.loggingOptions.logger_create_fn = [] { return std::make_shared<ConsoleLogSystem>(LogLevel::Trace); };
+    options_.loggingOptions.logLevel = LogLevel::Debug;
+    options_.loggingOptions.logger_create_fn = [] { return std::make_shared<ConsoleLogSystem>(LogLevel::Trace); };
     Aws::InitAPI(options_);
     // A workaround for https://github.com/aws/aws-sdk-cpp/issues/1410.
     if (is_running_inside_aws_fast()) {
