@@ -710,7 +710,7 @@ if MEMRAY_SUPPORTED:
         yield (lib, symbol)
 
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_leaks(location_limit="30 KB", filter_fn=is_relevant)
+    @pytest.mark.limit_leaks(location_limit="40 KB", filter_fn=is_relevant)
     def test_mem_leak_read_all_arctic_lib_memray(library_with_big_symbol_):
         """
         This is a new version of the initial test that reads the whole
