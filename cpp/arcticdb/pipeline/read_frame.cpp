@@ -429,6 +429,19 @@ void advance_skipped_cols(
     }
 }
 
+void advance_to_end(
+    const uint8_t*& data,
+    const StaticColumnMappingIterator& it,
+    const EncodedFieldCollection& fields,
+    const SegmentHeader& hdr) {
+    const auto next_col = it.prev_col_offset() + 1;
+    auto skipped_cols = it.last_slice_col_offset() - next_col;
+    if(skipped_cols) {
+        const auto bytes_to_skip = get_field_range_compressed_size((next_col -  it.first_slice_col_offset()) + it.index_fieldcount(), skipped_cols, hdr, fields);
+        data += bytes_to_skip;
+    }
+}
+
 template<typename IteratorType>
 bool remaining_fields_empty(IteratorType it, const PipelineContextRow& context) {
     while(it.has_next()) {
@@ -532,21 +545,16 @@ void decode_into_frame_static(
                 shared_data,
                 handler_data,
                 encoding_version,
-                m,
-                context.string_pool_ptr()
+                mapping,
+                context.string_pool_ptr(),
+                read_options.output_format()
             );
 
             ARCTICDB_TRACE(log::codec(), "Decoded or expanded static column {} to position {}", field_name, data - begin);
 
             it.advance();
             if(it.at_end_of_selected()) {
-                advance_skipped_cols(data,
-                    static_cast<ssize_t>(it.prev_col_offset()),
-                    it.last_slice_col_offset(),
-                    it.first_slice_col_offset(),
-                    it.index_fieldcount(),
-                    fields,
-                    hdr);
+                advance_to_end(data, it, fields, hdr);
                 break;
             } else if (has_magic_nums) {
                 util::check_magic_in_place<ColumnMagic>(data);
@@ -554,6 +562,63 @@ void decode_into_frame_static(
         }
     }
     ARCTICDB_TRACE(log::codec(), "Frame decoded into static schema");
+}
+
+void check_mapping_type_compatibility(const ColumnMapping& m) {
+    util::check(
+        static_cast<bool>(has_valid_type_promotion(m.source_type_desc_, m.dest_type_desc_)),
+        "Can't promote type {} to type {} in field {}",
+        m.source_type_desc_,
+        m.dest_type_desc_,
+        m.frame_field_descriptor_.name()
+    );
+}
+
+// If the source and destination types are different, then sizeof(destination type) >= sizeof(source type)
+// We have decoded the column of source type directly onto the output buffer above
+// We therefore need to iterate backwards through the source values, static casting them to the destination
+// type to avoid overriding values we haven't cast yet.
+template <typename SourceType, typename DestinationType>
+void promote_integral_type(
+    const ColumnMapping& m,
+    const ReadOptions& read_options,
+    Column& column) {
+    const auto src_data_type_size = data_type_size(m.source_type_desc_, read_options.output_format(), DataTypeMode::INTERNAL);
+    const auto dest_data_type_size = data_type_size(m.dest_type_desc_, read_options.output_format(), DataTypeMode::INTERNAL);
+
+    const auto src_ptr_offset = src_data_type_size * (m.num_rows_ - 1);
+    const auto dest_ptr_offset = dest_data_type_size * (m.num_rows_ - 1);
+
+    auto src_ptr = reinterpret_cast<SourceType*>(column.bytes_at(m.offset_bytes_ + src_ptr_offset, 0UL)); // No bytes required as we are at the end
+    auto dest_ptr = reinterpret_cast<DestinationType*>(column.bytes_at(m.offset_bytes_ + dest_ptr_offset, 0UL));
+    for (auto i = 0u; i < m.num_rows_; ++i) {
+        *dest_ptr-- = static_cast<DestinationType>(*src_ptr--);
+    }
+}
+
+bool source_is_empty(const ColumnMapping& m) {
+    return is_empty_type(m.source_type_desc_.data_type());
+}
+
+void handle_type_promotion(
+    const ColumnMapping& m,
+    const DecodePathData& shared_data,
+    const ReadOptions& read_options,
+    Column& column
+    ) {
+    if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_) && !source_is_empty(m)) {
+        m.dest_type_desc_.visit_tag([&column, &m, shared_data, &read_options] (auto dest_desc_tag) {
+            using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
+            m.source_type_desc_.visit_tag([&column, &m, &read_options] (auto src_desc_tag ) {
+                using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
+                if constexpr(std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
+                    promote_integral_type<SourceType, DestinationType>(m, read_options, column);
+                } else {
+                    util::raise_rte("Can't promote type {} to type {} in field {}", m.source_type_desc_, m.dest_type_desc_, m.frame_field_descriptor_.name());
+                }
+            });
+        });
+    }
 }
 
 void decode_into_frame_dynamic(
@@ -612,8 +677,9 @@ void decode_into_frame_dynamic(
                 shared_data,
                 handler_data,
                 encoding_version,
-                m,
-                context.string_pool_ptr()
+                mapping,
+                context.string_pool_ptr(),
+                read_options.output_format()
             );
 
             if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_) && !source_is_empty) {
@@ -793,9 +859,7 @@ folly::Future<folly::Unit> reduce_and_fix_columns(
     if(frame.empty())
         return folly::Unit{};
 
-    bool dynamic_schema = opt_false(read_options.dynamic_schema_);
-    auto slice_map = std::make_shared<FrameSliceMap>(context, dynamic_schema);
-    DecodePathData shared_data;
+    auto slice_map = std::make_shared<FrameSliceMap>(context, read_options.dynamic_schema().value_or(false));
 
     // This logic mimics that in ReduceColumnTask operator() to identify whether the task will actually do any work
     // This is to avoid scheduling work that is a no-op
