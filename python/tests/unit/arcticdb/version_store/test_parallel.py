@@ -905,8 +905,9 @@ def test_parallel_append_dynamic_schema_missing_column(
 
 
 @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
-def test_parallel_write_dynamic_schema_named_index(
-    lmdb_version_store_tiny_segment_dynamic, delete_staged_data_on_failure
+@pytest.mark.parametrize("append", (True, False))
+def test_parallel_dynamic_schema_named_index(
+    lmdb_version_store_tiny_segment_dynamic, delete_staged_data_on_failure, append
 ):
     lib = lmdb_version_store_tiny_segment_dynamic
     sym = "test_parallel_append_dynamic_schema_named_index"
@@ -915,45 +916,24 @@ def test_parallel_write_dynamic_schema_named_index(
     )
     df_0.index.name = "date"
     df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
-    lib.write(sym, df_0, parallel=True)
-    lib.write(sym, df_1, parallel=True)
+    if append:
+        lib.write(sym, df_0)
+        lib.append(sym, df_1, incomplete=True)
+    else:
+        lib.write(sym, df_0, parallel=True)
+        lib.write(sym, df_1, parallel=True)
 
     with pytest.raises(SchemaException) as exception_info:
         lib.compact_incomplete(
             sym,
-            False,
+            append,
             False,
             delete_staged_data_on_failure=delete_staged_data_on_failure,
         )
 
     assert "date" in str(exception_info.value)
-    expected_key_count = 0 if delete_staged_data_on_failure else 2
-    assert len(get_append_keys(lib, sym)) == expected_key_count
-
-
-@pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
-def test_parallel_append_dynamic_schema_named_index(
-    lmdb_version_store_tiny_segment_dynamic, delete_staged_data_on_failure
-):
-    lib = lmdb_version_store_tiny_segment_dynamic
-    sym = "test_parallel_append_dynamic_schema_named_index"
-    df_0 = pd.DataFrame(
-        {"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1)
-    )
-    df_0.index.name = "date"
-    df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
-    lib.write(sym, df_0)
-    lib.append(sym, df_1, incomplete=True)
-    with pytest.raises(SchemaException) as exception_info:
-        lib.compact_incomplete(
-            sym,
-            True,
-            False,
-            delete_staged_data_on_failure=delete_staged_data_on_failure,
-        )
-
-    assert "date" in str(exception_info.value)
-    expected_key_count = 0 if delete_staged_data_on_failure else 1
+    staged_keys = 1 if append else 2
+    expected_key_count = 0 if delete_staged_data_on_failure else staged_keys
     assert len(get_append_keys(lib, sym)) == expected_key_count
 
 
