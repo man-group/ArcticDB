@@ -11,6 +11,15 @@ from benchmarks.common import *
 
 
 class ListFunctions:
+    """
+    The class contains test for time and peak memory measurements tests for
+    list_snapshots.
+    As list_snapshots depends on following variables we try to see each one's influence
+     - number of snapshots 
+     - are snapshots with metadata or not
+     - are we getting list of snapshots with or without metadata
+    Ideally the pattern of  time and mem increase should be linear at best or better and not exponential
+    """
     number = 5
     timeout = 6000
 
