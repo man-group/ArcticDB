@@ -368,7 +368,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
                     std::tuple<stream::StreamSink::PartialKey,
                                SegmentInMemory,
                                pipelines::FrameSlice> &&ks) {
-                    auto &seg = std::get<SegmentInMemory>(ks);
+                    auto& seg = std::get<SegmentInMemory>(ks);
                     auto norm_meta_copy = norm_meta;
                     auto prev_key = std::nullopt;
                     auto next_key = std::nullopt;
@@ -382,6 +382,12 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
                         bucketize_dynamic
                     );
                     seg.set_timeseries_descriptor(tsd);
+
+                    // Just inherit sortedness from the overall frame for now. This is not mathematically correct when our
+                    // slicing happens to break an unordered df up in to ordered chunks, but should be OK in practice since
+                    // the user did stage unordered data.
+                    seg.descriptor().set_sorted(tsd.sorted());
+
                     return std::move(ks);
                 })
                 .thenValue([store, de_dup_map](auto&& ks) {

@@ -153,6 +153,40 @@ def test_parallel_write_chunking(lmdb_version_store_tiny_segment):
     assert_frame_equal(df, lib.read(sym).data)
 
 
+def test_parallel_write_chunking_dynamic(lmdb_version_store_tiny_segment_dynamic):
+    lib = lmdb_version_store_tiny_segment_dynamic # row size 2 column size 2
+    lib_tool = lib.library_tool()
+    sym = "sym"
+
+    df1 = pd.DataFrame({
+        "timestamp": pd.date_range("2023-01-01", periods=7, freq="H"),
+        "col1": np.arange(1, 8, dtype=np.uint8),
+        "col2": [f"a{i:02d}" for i in range(1, 8)],
+        "col3": np.arange(1, 8, dtype=np.int32)
+    }).set_index("timestamp")
+
+    df2 = pd.DataFrame({
+        "timestamp": pd.date_range("2023-01-04", periods=7, freq="H"),
+        "col1": np.arange(8, 15, dtype=np.int32),
+        "col2": [f"b{i:02d}" for i in range(8, 15)],
+        "col3": np.arange(8, 15, dtype=np.uint16)
+    }).set_index("timestamp")
+
+    lib.write(sym, df1, parallel=True)
+    lib.write(sym, df2, parallel=True)
+
+    data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)
+    assert len(data_keys) == 8
+
+    ref_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, sym)
+    assert not ref_keys
+
+    lib.compact_incomplete(sym, append=False, convert_int_to_float=False)
+
+    expected = pd.concat([df1, df2])
+    assert_frame_equal(expected, lib.read(sym).data)
+
+
 def test_roundtrip_nan(lmdb_version_store):
     df = pd.DataFrame(np.nan, index=[0, 1, 2, 3], columns=["A", "B"])
     lmdb_version_store.write("all_nans", df)
