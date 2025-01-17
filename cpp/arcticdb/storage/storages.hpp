@@ -59,7 +59,7 @@ public:
         return primary().supports_prefix_matching();
     }
 
-    [[nodiscard]] bool supports_atomic_writes() const {
+    [[nodiscard]] bool supports_atomic_writes() {
         return primary().supports_atomic_writes();
     }
 

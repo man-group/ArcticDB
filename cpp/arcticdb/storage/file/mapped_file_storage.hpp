@@ -54,8 +54,8 @@ class MappedFileStorage final : public SingleFileStorage {
         return false;
     };
 
-    bool do_supports_atomic_writes() const final {
-        return false;
+    SupportsAtomicWrites do_supports_atomic_writes() const final {
+        return SupportsAtomicWrites::NO;
     }
 
     std::string do_key_path(const VariantKey&) const override { return {}; }
