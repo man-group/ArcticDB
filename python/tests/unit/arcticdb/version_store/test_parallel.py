@@ -132,12 +132,17 @@ def test_parallel_write(basic_store):
     assert len(get_append_keys(basic_store, sym)) == 0
 
 
-def test_parallel_write_chunking(lmdb_version_store_tiny_segment):
+@pytest.mark.parametrize("index, expect_ordered", [
+    (pd.date_range(datetime.datetime(2000, 1, 1), periods=10, freq="s"), True),
+    (np.arange(10), False),
+    ([chr(ord('a') + i) for i in range(10)], False)
+])
+def test_parallel_write_chunking(lmdb_version_store_tiny_segment, index, expect_ordered):
     lib = lmdb_version_store_tiny_segment # row size 2 column size 2
     lib_tool = lib.library_tool()
     sym = "sym"
     df = util.test.sample_dataframe(size=10)
-    df.index = pd.date_range(datetime.datetime(2000, 1, 1), periods=10, freq="s")
+    df.index = index
     lib.write(sym, df.iloc[:7], parallel=True)
     lib.write(sym, df.iloc[7:], parallel=True)
 
@@ -150,7 +155,7 @@ def test_parallel_write_chunking(lmdb_version_store_tiny_segment):
 
     lib.compact_incomplete(sym, append=False, convert_int_to_float=False)
 
-    assert_frame_equal(df, lib.read(sym).data)
+    assert_frame_equal(df, lib.read(sym).data, check_like=not expect_ordered)
 
 
 def test_parallel_write_chunking_dynamic(lmdb_version_store_tiny_segment_dynamic):
