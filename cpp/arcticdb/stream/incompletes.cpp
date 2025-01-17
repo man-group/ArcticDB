@@ -263,14 +263,14 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
 
     bool is_sorted = options.sort_on_index || (options.sort_columns && options.sort_columns->at(0) == segment.descriptor().field(0).name());
 
-    auto segments = segment.split(options.write_options.segment_row_size);
+    // Have to give each its own string pool for thread safety
+    bool filter_down_stringpool{true};
+    auto segments = segment.split(options.write_options.segment_row_size, filter_down_stringpool);
     auto res = std::visit([&segments, &store, &stream_id, &norm_meta, &stream_desc, is_sorted](auto&& idx) {
-        std::vector<folly::Future<AtomKey>> fut_vec;
         using IdxType = std::decay_t<decltype(idx)>;
 
-        return folly::window(std::move(segments), [is_sorted, stream_id, store, &norm_meta, stream_desc](SegmentInMemory&& seg) {
-            auto norm_meta_copy = norm_meta;
-            auto tsd = pack_timeseries_descriptor(stream_desc, seg.row_count(), std::nullopt, std::move(norm_meta_copy));
+        return folly::window(std::move(segments), [is_sorted, stream_id, store, norm_meta, stream_desc](SegmentInMemory&& seg) mutable {
+            auto tsd = pack_timeseries_descriptor(stream_desc, seg.row_count(), std::nullopt, std::move(norm_meta));
             seg.set_timeseries_descriptor(tsd);
             if (is_sorted) {
                 seg.descriptor().set_sorted(SortedValue::ASCENDING);
