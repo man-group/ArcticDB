@@ -32,8 +32,8 @@ namespace arcticdb {
 
 const std::string MONGO_INSTANCE_LABEL = "mongo_instance";
 const std::string PROMETHEUS_ENV_LABEL = "env";
-const int SUMMARY_MAX_AGE = 30;
-const int SUMMARY_AGE_BUCKETS = 5;
+constexpr int SUMMARY_MAX_AGE = 30;
+constexpr int SUMMARY_AGE_BUCKETS = 5;
 
 class MetricsConfig {
 public:
