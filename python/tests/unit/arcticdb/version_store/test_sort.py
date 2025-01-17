@@ -1,12 +1,11 @@
 import pandas as pd
 import numpy as np
 import arcticdb as adb
+from arcticdb.util.test import assert_frame_equal
 import random
 import string
 
 from arcticdb_ext.storage import KeyType
-
-from python.arcticdb.util.test import assert_frame_equal
 
 
 def test_stage_finalize(arctic_library):
@@ -175,7 +174,7 @@ def test_stage_finalize_sort_index(arctic_library):
 
 def test_stage_with_sort_index_chunking(lmdb_version_store_tiny_segment):
     symbol = "AAPL"
-    lib = lmdb_version_store_tiny_segment
+    lib = lmdb_version_store_tiny_segment # 2 rows per segment, 2 cols per segment
 
     df1 = pd.DataFrame({
         "timestamp": pd.date_range("2023-01-01", periods=50, freq="H"),
@@ -193,6 +192,7 @@ def test_stage_with_sort_index_chunking(lmdb_version_store_tiny_segment):
     assert len(data_keys) == 25
     for k in data_keys:
         df = lib_tool.read_to_dataframe(k)
+        assert df.shape == (2, 3)  # we should apply row slicing but not column slicing
         assert df.index.is_monotonic_increasing
 
     ref_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, symbol)
@@ -201,7 +201,7 @@ def test_stage_with_sort_index_chunking(lmdb_version_store_tiny_segment):
     lib.compact_incomplete(symbol, append=False, convert_int_to_float=False)
 
     actual = lib.read(symbol).data
-    assert assert_frame_equal(df1, actual)
+    assert_frame_equal(df1, actual)
 
 
 def test_stage_finalize_index_and_additional(arctic_library):
