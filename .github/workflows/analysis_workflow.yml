@@ -203,13 +203,13 @@ jobs:
   #         echo "CPP_COV_PERCENT=$(cat output.txt | grep 'TOTAL' | awk '{print $NF}' | tr -d '%')" >> $GITHUB_ENV
 
   #     - name: Upload Coverage
-  #       uses: actions/upload-artifact@v3.1.3
+  #       uses: actions/upload-artifact@v4
   #       with:
   #         name: cpp-coverage-artifact
   #         path: cpp/out/linux-debug-build/coverage.zip
 
   #     - name: Upload Python Coverage
-  #       uses: actions/upload-artifact@v3.1.3
+  #       uses: actions/upload-artifact@v4
   #       with:
   #         name: python-coverage-artifact
   #         path: python/python_cov.zip
