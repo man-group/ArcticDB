@@ -130,6 +130,10 @@ std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vec
     return slice_and_rowcount;
 }
 
+int64_t write_window_size() {
+    return ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow", 2 * async::TaskScheduler::instance()->io_thread_count());
+}
+
 folly::Future<std::vector<SliceAndKey>> write_slices(
         const std::shared_ptr<InputTensorFrame> &frame,
         std::vector<FrameSlice>&& slices,
@@ -142,7 +146,7 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
 
     auto slice_and_rowcount = get_slice_and_rowcount(slices);
 
-    const auto write_window = ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow", 2 * async::TaskScheduler::instance()->io_thread_count());
+    int64_t write_window = write_window_size();
     return folly::collect(folly::window(std::move(slice_and_rowcount), [de_dup_map, frame, slicing, key=std::move(key), sink, sparsify_floats](auto&& slice) {
             return async::submit_cpu_task(WriteToSegmentTask(
                 frame,

@@ -6,6 +6,8 @@ import string
 
 from arcticdb_ext.storage import KeyType
 
+from python.arcticdb.util.test import assert_frame_equal
+
 
 def test_stage_finalize(arctic_library):
     symbol = "AAPL"
@@ -189,9 +191,17 @@ def test_stage_with_sort_index_chunking(lmdb_version_store_tiny_segment):
     data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
     # We don't apply column slicing when staging incompletes, do apply row slicing
     assert len(data_keys) == 25
+    for k in data_keys:
+        df = lib_tool.read_to_dataframe(k)
+        assert df.index.is_monotonic_increasing
 
     ref_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, symbol)
     assert not ref_keys
+
+    lib.compact_incomplete(symbol, append=False, convert_int_to_float=False)
+
+    actual = lib.read(symbol).data
+    assert assert_frame_equal(df1, actual)
 
 
 def test_stage_finalize_index_and_additional(arctic_library):

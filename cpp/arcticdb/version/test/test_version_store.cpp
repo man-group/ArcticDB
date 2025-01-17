@@ -358,7 +358,6 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaIndexed) {
     for (size_t i = 0; i < num_incompletes; ++i) {
         for(size_t j = 0; j < num_rows_per_incomplete; ++j ) {
             auto idx = seg.scalar_at<uint64_t>(count, 0);
-            log::version().info("Index value {} count {}", idx.value(), count);
             ASSERT_EQ(idx.value(), count);
             auto v1 = seg.scalar_at<uint64_t>(count, col1_pos);
             ASSERT_EQ(v1.value(), j);

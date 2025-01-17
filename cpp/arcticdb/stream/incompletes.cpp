@@ -267,7 +267,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
         std::vector<folly::Future<AtomKey>> fut_vec;
         using IdxType = std::decay_t<decltype(idx)>;
 
-        for (SegmentInMemory& seg : segments) {
+        return folly::window(std::move(segments), [is_sorted, tsd, stream_id, store](SegmentInMemory&& seg) {
             seg.set_timeseries_descriptor(tsd);
             if (is_sorted) {
                 seg.descriptor().set_sorted(SortedValue::ASCENDING);
@@ -275,13 +275,11 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
             const auto local_index_start = IdxType::start_value_for_segment(seg);
             const auto local_index_end = IdxType::end_value_for_segment(seg);
             stream::StreamSink::PartialKey pk{KeyType::APPEND_DATA, 0, stream_id, local_index_start, local_index_end};
-            auto fut = store->write(pk, std::move(seg))
+            return store->write(pk, std::move(seg))
                 .thenValueInline([](VariantKey&& res) {
                     return to_atom(std::move(res));
                 });
-            fut_vec.emplace_back(std::move(fut));
-        }
-        return fut_vec;
+        }, write_window_size());
     }, index);
 
     return folly::collect(res).via(&async::io_executor());
@@ -340,8 +338,6 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     util::check(!slices.empty(), "Unexpected empty slice in write_incomplete_frame");
     auto slice_and_rowcount = get_slice_and_rowcount(slices);
 
-    const auto write_window = ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow",
-                                                              2 * async::TaskScheduler::instance()->io_thread_count());
     IndexPartialKey key{stream_id, VersionId(0)};
     auto de_dup_map = std::make_shared<DeDupMap>();
 
@@ -357,12 +353,11 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
          store, sparsify_floats, typed_stream_version = std::move(typed_stream_version),
             bucketize_dynamic, de_dup_map, desc, norm_meta, user_meta](
             auto&& slice) {
-            auto typed_stream_version_copy = typed_stream_version;
             return async::submit_cpu_task(WriteToSegmentTask(
                 frame,
                 slice.first,
                 slicing_policy,
-                get_partial_key_gen(frame, std::move(typed_stream_version_copy)),
+                get_partial_key_gen(frame, typed_stream_version),
                 slice.second,
                 frame->index,
                 sparsify_floats))
@@ -393,7 +388,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
                     return sk.key();
                 });
         },
-        write_window)).via(&async::io_executor());
+        write_window_size())).via(&async::io_executor());
 }
 
 void write_parallel_impl(

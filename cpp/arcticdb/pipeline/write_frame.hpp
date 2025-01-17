@@ -55,6 +55,8 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
         bool allow_sparse = false
 );
 
+int64_t write_window_size();
+
 folly::Future<std::vector<SliceAndKey>> write_slices(
         const std::shared_ptr<InputTensorFrame> &frame,
         std::vector<FrameSlice>&& slices,

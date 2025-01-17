@@ -16,6 +16,13 @@
 
 namespace arcticdb::stream {
 
+namespace {
+    template <class Container, class F, std::size_t... Is>
+    void compile_for_(Container cont, F func, std::index_sequence<Is...>) {
+        (func(cont.at(Is)), ...);
+    }
+}
+
 struct AggregationStats {
     size_t nbytes = 0;
     size_t count = 0;
@@ -60,6 +67,66 @@ class NeverSegmentPolicy {
     }
 
     [[nodiscard]] size_t expected_row_size() const { return 0; }
+};
+
+template<class Sysclock=util::SysClock>
+class TimeBasedSegmentPolicy {
+public:
+    static constexpr std::size_t default_max_diff_ = 2 * ONE_MINUTE;
+
+    TimeBasedSegmentPolicy() = default;
+    explicit TimeBasedSegmentPolicy(timestamp diff) : max_diff_(diff) {}
+
+    bool operator()(AggregationStats &stats) const {
+        auto curr_time = Sysclock::coarse_nanos_since_epoch();
+        auto diff = curr_time - stats.last_active_time_;
+        ARCTICDB_DEBUG(log::inmem(), "TimeBasedSegmentPolicy AggregationStats diff={}, max_diff={}",
+            diff, max_diff_);
+        bool is_policy_valid = false;
+        if (diff >= max_diff_) {
+            is_policy_valid = true;
+            stats.last_active_time_ = curr_time;
+        }
+        return is_policy_valid;
+    }
+
+    [[nodiscard]] size_t expected_row_size() const { return 0; }
+
+private:
+    timestamp max_diff_ = default_max_diff_;
+};
+
+using VariantPolicyType = std::variant<NeverSegmentPolicy, RowCountSegmentPolicy, TimeBasedSegmentPolicy<>>;
+
+template <int N>
+class ListOfSegmentPolicies {
+public:
+
+    ListOfSegmentPolicies() = default;
+    template <typename... Policies>
+    explicit ListOfSegmentPolicies(const Policies&... policies) {
+        static_assert(N == sizeof...(policies));
+        policies_ = {policies...};
+    }
+
+    bool operator()(AggregationStats &stats) const {
+        bool is_policy_valid = false;
+        compile_for_(policies_, [&is_policy_valid, &stats](const auto& variant_policy) {
+            std::visit([&is_policy_valid, &stats](const auto& policy) {
+                is_policy_valid = is_policy_valid || policy(stats);
+            }, variant_policy);
+        }, std::make_index_sequence<N>());
+        return is_policy_valid;
+    }
+
+    [[nodiscard]] size_t expected_row_size() const {
+        size_t val = 0;
+        // TODO: Do it differently later, currently just using 0 since that's what we need for tickdata
+        return val;
+    }
+
+private:
+    std::array<VariantPolicyType, N> policies_ ;
 };
 
 class DenseColumnPolicy {
