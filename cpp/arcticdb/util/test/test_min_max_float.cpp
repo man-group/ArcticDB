@@ -6,8 +6,6 @@
 
 namespace arcticdb {
 
-#if defined (__clang__)
-
 class FloatFinderTest : public ::testing::Test {
 protected:
     std::mt19937 rng{std::random_device{}()};
@@ -56,15 +54,13 @@ TEST_F(FloatFinderTest, VectorWithNaNs) {
     EXPECT_FLOAT_EQ(find_float_max(data.data(), data.size()), 62.0f);
 }
 
-// Performance test (disabled by default)
-TEST_F(FloatFinderTest, DISABLED_LargeArrayPerformance) {
-    constexpr size_t size = 10'000'000;
+TEST_F(FloatFinderTest, LargeArrayPerformance) {
+    constexpr size_t size = 100'000'000;
     auto data = create_aligned_data<float>(size);
     std::uniform_real_distribution<float> dist(-1000.0f, 1000.0f);
 
-    for (auto &x : data) {
+    for (auto &x : data)
         x = dist(rng);
-    }
 
     auto start = std::chrono::high_resolution_clock::now();
     auto min_result = find_float_min(data.data(), data.size());
@@ -76,16 +72,16 @@ TEST_F(FloatFinderTest, DISABLED_LargeArrayPerformance) {
 
     // Compare with std::minmax_element
     start = std::chrono::high_resolution_clock::now();
-    auto std_result = std::minmax_element(data.begin(), data.end());
+    auto std_result_max = std::max_element(data.begin(), data.end());
+    auto std_result_min = std::min_element(data.begin(), data.end());
     end = std::chrono::high_resolution_clock::now();
 
     auto std_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     std::cout << "std::minmax_element time: " << std_duration.count() << "ms\n";
 
-    EXPECT_FLOAT_EQ(min_result, *std_result.first);
-    EXPECT_FLOAT_EQ(max_result, *std_result.second);
+    EXPECT_FLOAT_EQ(min_result, *std_result_min);
+    EXPECT_FLOAT_EQ(max_result, *std_result_max);
 }
 
-#endif
 
 } // namespace arcticdb

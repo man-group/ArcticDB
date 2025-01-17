@@ -39,7 +39,6 @@ class ChunkedBufferImpl {
 
     using BlockType = MemBlock;
 
-    static_assert(sizeof(BlockType) == BlockType::Align + BlockType::MinSize);
     static_assert(DefaultBlockSize >= BlockType::MinSize);
 
   public:

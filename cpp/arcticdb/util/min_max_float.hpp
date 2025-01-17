@@ -4,16 +4,12 @@
 #include <cstddef>
 #include <algorithm>
 
+#include <arcticdb/util/vector_common.hpp>
+
 namespace arcticdb {
 
 template<typename T>
-struct is_supported_float : std::false_type {};
-
-template<typename T>
 using vector_type __attribute__((vector_size(64))) = T;
-
-template<> struct is_supported_float<float> : std::true_type {};
-template<> struct is_supported_float<double> : std::true_type {};
 
 template<typename T>
 class FloatMinFinder {
@@ -21,37 +17,38 @@ class FloatMinFinder {
     static_assert(std::is_floating_point_v<T>, "Type must be floating point");
 
 public:
-    static T find(const T *data, size_t n) {
-        using vec_t __attribute__((vector_size(64))) = T;
+    static T find(const T* data, size_t n) {
+        using vec_t = vector_type<T>;
 
+        // Initialize min vector with infinity
         vec_t vmin;
-        for (size_t i = 0; i < sizeof(vec_t) / sizeof(T); i++) {
-            reinterpret_cast<T *>(&vmin)[i] = std::numeric_limits<T>::infinity();
+        for(size_t i = 0; i < sizeof(vec_t)/sizeof(T); i++) {
+            reinterpret_cast<T*>(&vmin)[i] = std::numeric_limits<T>::infinity();
         }
 
-        const vec_t *vdata = reinterpret_cast<const vec_t *>(data);
+        // Process full vectors
+        const vec_t* vdata = reinterpret_cast<const vec_t*>(data);
         const size_t elements_per_vector = sizeof(vec_t) / sizeof(T);
         const size_t vlen = n / elements_per_vector;
 
-        for (size_t i = 0; i < vlen; i++) {
+        // Main SIMD loop
+        for(size_t i = 0; i < vlen; i++) {
             vec_t v = vdata[i];
-            vec_t mask = v == v;  // !NaN
-            vec_t valid = v & mask;
-            vec_t replaced = vmin & ~mask;
-            v = valid | replaced;
             vmin = (v < vmin) ? v : vmin;
         }
 
+        // Reduce vector to scalar
         T min_val = std::numeric_limits<T>::infinity();
-        const T *min_arr = reinterpret_cast<const T *>(&vmin);
-        for (size_t i = 0; i < elements_per_vector; i++) {
+        const T* min_arr = reinterpret_cast<const T*>(&vmin);
+        for(size_t i = 0; i < elements_per_vector; i++) {
             if (min_arr[i] == min_arr[i]) {  // Not NaN
                 min_val = std::min(min_val, min_arr[i]);
             }
         }
 
-        const T *remain = data + (vlen * elements_per_vector);
-        for (size_t i = 0; i < n % elements_per_vector; i++) {
+        // Handle remainder
+        const T* remain = data + (vlen * elements_per_vector);
+        for(size_t i = 0; i < n % elements_per_vector; i++) {
             if (remain[i] == remain[i]) {  // Not NaN
                 min_val = std::min(min_val, remain[i]);
             }
@@ -67,41 +64,38 @@ class FloatMaxFinder {
     static_assert(std::is_floating_point_v<T>, "Type must be floating point");
 
 public:
-    static T find(const T *data, size_t n) {
+    static T find(const T* data, size_t n) {
         using vec_t = vector_type<T>;
 
         // Initialize max vector with negative infinity
         vec_t vmax;
-        for (size_t i = 0; i < sizeof(vec_t) / sizeof(T); i++) {
-            reinterpret_cast<T *>(&vmax)[i] = -std::numeric_limits<T>::infinity();
+        for(size_t i = 0; i < sizeof(vec_t)/sizeof(T); i++) {
+            reinterpret_cast<T*>(&vmax)[i] = -std::numeric_limits<T>::infinity();
         }
 
-        const vec_t *vdata = reinterpret_cast<const vec_t *>(data);
+        // Process full vectors
+        const vec_t* vdata = reinterpret_cast<const vec_t*>(data);
         const size_t elements_per_vector = sizeof(vec_t) / sizeof(T);
         const size_t vlen = n / elements_per_vector;
 
         // Main SIMD loop
-        for (size_t i = 0; i < vlen; i++) {
+        for(size_t i = 0; i < vlen; i++) {
             vec_t v = vdata[i];
-            // Create mask for non-NaN values
-            vec_t mask = v == v;  // false for NaN
-            vec_t valid = v & mask;
-            vec_t replaced = vmax & ~mask;
-            v = valid | replaced;
-            // Vector max
             vmax = (v > vmax) ? v : vmax;
         }
 
+        // Reduce vector to scalar
         T max_val = -std::numeric_limits<T>::infinity();
-        const T *max_arr = reinterpret_cast<const T *>(&vmax);
-        for (size_t i = 0; i < elements_per_vector; i++) {
+        const T* max_arr = reinterpret_cast<const T*>(&vmax);
+        for(size_t i = 0; i < elements_per_vector; i++) {
             if (max_arr[i] == max_arr[i]) {  // Not NaN
                 max_val = std::max(max_val, max_arr[i]);
             }
         }
 
-        const T *remain = data + (vlen * elements_per_vector);
-        for (size_t i = 0; i < n % elements_per_vector; i++) {
+        // Handle remainder
+        const T* remain = data + (vlen * elements_per_vector);
+        for(size_t i = 0; i < n % elements_per_vector; i++) {
             if (remain[i] == remain[i]) {  // Not NaN
                 max_val = std::max(max_val, remain[i]);
             }

@@ -29,18 +29,18 @@ class SumFinder {
 
 public:
     static double find(const T *data, size_t n) {
-        using vec_t __attribute__((vector_size(64))) = T;
+        using VectorType __attribute__((vector_size(64))) = T;
         using acc_vec_t __attribute((vector_size(64))) = double;
 
         acc_vec_t vsum = {0.0};
-        const size_t elements_per_vector = sizeof(vec_t) / sizeof(T);
+        const size_t elements_per_vector = sizeof(VectorType) / sizeof(T);
         const size_t doubles_per_vector = sizeof(acc_vec_t) / sizeof(double);
 
-        const vec_t *vdata = reinterpret_cast<const vec_t *>(data);
-        const size_t vlen = n / elements_per_vector;
+        const VectorType *vdata = reinterpret_cast<const VectorType*>(data);
+        const size_t vector_len = n / elements_per_vector;
 
-        for (size_t i = 0; i < vlen; i++) {
-            vec_t v = vdata[i];
+        for (size_t i = 0; i < vector_len; i++) {
+            VectorType v = vdata[i];
 
             const T *v_arr = reinterpret_cast<const T *>(&v);
             for (size_t j = 0; j < elements_per_vector; j++) {
@@ -56,7 +56,7 @@ public:
             total += sum_arr[i];
         }
 
-        const T *remain = data + (vlen * elements_per_vector);
+        const T *remain = data + (vector_len * elements_per_vector);
         for (size_t i = 0; i < n % elements_per_vector; i++) {
             total += static_cast<double>(remain[i]);
         }

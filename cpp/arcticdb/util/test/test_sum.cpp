@@ -122,12 +122,10 @@ protected:
         auto naive_time = std::chrono::microseconds(0);
         auto kahan_time = std::chrono::microseconds(0);
 
-        // Result variables
         double simd_sum = 0.0;
         double naive_sum_result = 0.0;
         double kahan_sum_result = 0.0;
 
-        // Run multiple times to get average performance
         for(int i = 0; i < num_runs; i++) {
             {
                 auto start = std::chrono::high_resolution_clock::now();
@@ -151,12 +149,10 @@ protected:
             }
         }
 
-        // Calculate average times
         double simd_avg = simd_time.count() / static_cast<double>(num_runs);
         double naive_avg = naive_time.count() / static_cast<double>(num_runs);
         double kahan_avg = kahan_time.count() / static_cast<double>(num_runs);
 
-        // Calculate relative errors using Kahan as reference
         double simd_error = std::abs((simd_sum - kahan_sum_result) / kahan_sum_result);
         double naive_error = std::abs((naive_sum_result - kahan_sum_result) / kahan_sum_result);
 
@@ -218,7 +214,6 @@ TEST_F(SumStressTest, KahanChallenging) {
     size_t n = 10'000'000;
     auto data = create_aligned_data<double>(n);
 
-    // Create a sequence that's challenging for naive summation
     data[0] = 1.0;
     for(size_t i = 1; i < n; i++) {
         data[i] = 1.0e-16;
@@ -256,9 +251,5 @@ TEST_F(SumStressTest, ExtremeValues) {
 
     run_benchmark(data, "Extreme Values");
 }
-
-
-
-
 
 } // namespace arcticdb

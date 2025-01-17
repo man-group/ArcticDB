@@ -3,98 +3,79 @@
 #include <type_traits>
 #include <cstddef>
 
+#include <arcticdb/util/vector_common.hpp>
 
-template<typename T>
-struct is_supported_type : std::false_type {};
-
-template<> struct is_supported_type<int8_t> : std::true_type {};
-template<> struct is_supported_type<uint8_t> : std::true_type {};
-template<> struct is_supported_type<int16_t> : std::true_type {};
-template<> struct is_supported_type<uint16_t> : std::true_type {};
-template<> struct is_supported_type<int32_t> : std::true_type {};
-template<> struct is_supported_type<uint32_t> : std::true_type {};
-template<> struct is_supported_type<int64_t> : std::true_type {};
-template<> struct is_supported_type<uint64_t> : std::true_type {};
-template<> struct is_supported_type<float> : std::true_type {};
-template<> struct is_supported_type<double> : std::true_type {};
-
-template<typename T>
-struct MeanResult {
-    T mean;
-    size_t count;  // Useful for floating point to know how many non-NaN values
-};
+namespace arcticdb {
 
 template<typename T>
 class MeanFinder {
-    static_assert(is_supported_type<T>::value, "Unsupported type");
-
-    using VectorType = T __attribute__((vector_size(64)));
+    static_assert(is_supported_int<T>::value || is_supported_float<T>::value, "Unsupported type");
 
 public:
-
     static double find(const T* data, size_t n) {
+        using VectorType = vector_type<T>;
+        using AccumVectorType = vector_type<double>;
 
-        using AccumVectorType = double __attribute__((vector_size(64)));
-
+        AccumVectorType vsum = {0.0};
         const size_t elements_per_vector = sizeof(VectorType) / sizeof(T);
-        const size_t vlen = n / elements_per_vector;
+        const size_t doubles_per_vector = sizeof(AccumVectorType) / sizeof(double);
+        const size_t vectors_per_acc = elements_per_vector / doubles_per_vector;
 
-        AccumVectorType sum_vec = {0};
-        AccumVectorType count_vec = {0};
-        double total_sum = 0;
         size_t valid_count = 0;
 
-        for(size_t i = 0; i < vlen; i++) {
-            VectorType v = reinterpret_cast<const VectorType*>(data)[i];
+        const auto* vdata = reinterpret_cast<const VectorType*>(data);
+        const size_t vector_len = n / elements_per_vector;
+
+        for(size_t i = 0; i < vector_len; i++) {
+            VectorType v = vdata[i];
 
             if constexpr(std::is_floating_point_v<T>) {
-                VectorType mask = v == v;  // !NaN
-                VectorType valid = v & mask;
-                VectorType replaced = VectorType{0} & ~mask;
-                v = valid | replaced;
+                VectorType mask = v == v;
+                v = v & mask;
 
-                AccumVectorType count_mask;
+                const T* mask_arr = reinterpret_cast<const T*>(&mask);
                 for(size_t j = 0; j < elements_per_vector; j++) {
-                    count_mask[j] = reinterpret_cast<const T*>(&mask)[j] != 0 ? 1.0 : 0.0;
+                    if(mask_arr[j] != 0) valid_count++;
                 }
-                count_vec += count_mask;
             } else {
-                count_vec += AccumVectorType{1};
+                valid_count += elements_per_vector;
             }
 
-            AccumVectorType v_double;
-            for(size_t j = 0; j < elements_per_vector; j++) {
-                v_double[j] = static_cast<double>(reinterpret_cast<const T*>(&v)[j]);
+            const T* v_arr = reinterpret_cast<const T*>(&v);
+            for(size_t chunk = 0; chunk < vectors_per_acc; chunk++) {
+                for(size_t j = 0; j < doubles_per_vector; j++) {
+                    size_t idx = chunk * doubles_per_vector + j;
+                    reinterpret_cast<double*>(&vsum)[j] += static_cast<double>(v_arr[idx]);
+                }
             }
-            sum_vec += v_double;
         }
 
-        const double* sum_arr = reinterpret_cast<const double*>(&sum_vec);
-        const double* count_arr = reinterpret_cast<const double*>(&count_vec);
-        for(size_t i = 0; i < elements_per_vector; i++) {
-            total_sum += sum_arr[i];
-            valid_count += static_cast<size_t>(count_arr[i]);
+        double total = 0.0;
+        const auto* sum_arr = reinterpret_cast<const double*>(&vsum);
+        for(size_t i = 0; i < doubles_per_vector; i++) {
+            total += sum_arr[i];
         }
 
-        const T* remain = data + (vlen * elements_per_vector);
+        const T* remain = data + (vector_len * elements_per_vector);
         for(size_t i = 0; i < n % elements_per_vector; i++) {
             if constexpr(std::is_floating_point_v<T>) {
                 if (remain[i] == remain[i]) {  // Not NaN
-                    total_sum += static_cast<double>(remain[i]);
+                    total += static_cast<double>(remain[i]);
                     valid_count++;
                 }
             } else {
-                total_sum += static_cast<double>(remain[i]);
+                total += static_cast<double>(remain[i]);
                 valid_count++;
             }
         }
 
-        double mean = valid_count > 0 ? total_sum / valid_count : 0.0;
-        return mean;
+        return valid_count > 0 ? total / static_cast<double>(valid_count) : 0.0;
     }
 };
 
 template<typename T>
-double find_mean(const T* data, size_t n) {
+double find_mean(const T *data, size_t n) {
     return MeanFinder<T>::find(data, n);
 }
+
+} // namespace arcticdb

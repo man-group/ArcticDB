@@ -19,7 +19,6 @@ protected:
     }
 };
 
-// Basic Tests
 TEST_F(MeanFinderTest, BasicInt32) {
     std::vector<int32_t> data = {1, 2, 3, 4, 5};
     EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), 3.0);
@@ -42,18 +41,17 @@ TEST_F(MeanFinderTest, EmptyArray) {
 
 // Vector Size Tests
 TEST_F(MeanFinderTest, VectorSizedArray) {
-    auto data = create_aligned_data<int32_t>(64);  // One full vector
-    std::iota(data.begin(), data.end(), 0);  // Fill with 0..63
+    auto data = create_aligned_data<int32_t>(64);
+    std::iota(data.begin(), data.end(), 0);
     EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), 31.5);
 }
 
 TEST_F(MeanFinderTest, NonVectorSizedArray) {
-    std::vector<int32_t> data(67);  // Non-multiple of vector size
-    std::iota(data.begin(), data.end(), 0);  // Fill with 0..66
+    std::vector<int32_t> data(67);
+    std::iota(data.begin(), data.end(), 0);
     EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), 33.0);
 }
 
-// Different Integer Types
 TEST_F(MeanFinderTest, Int8Type) {
     std::vector<int8_t> data = {-128, 0, 127};
     EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), -0.3333333333333333);
@@ -73,7 +71,6 @@ TEST_F(MeanFinderTest, Int64Type) {
     EXPECT_FALSE(std::isnan(find_mean(data.data(), data.size())));
 }
 
-// Large Numbers
 TEST_F(MeanFinderTest, LargeIntegers) {
     std::vector<int32_t> data = {1000000, 2000000, 3000000};
     EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), 2000000.0);
@@ -88,7 +85,6 @@ TEST_F(MeanFinderTest, MaxIntegers) {
                      static_cast<double>(std::numeric_limits<int32_t>::max()));
 }
 
-// Random Data Tests
 TEST_F(MeanFinderTest, RandomInt32) {
     auto data = create_aligned_data<int32_t>(1000);
     std::uniform_int_distribution<int32_t> dist(-1000, 1000);
@@ -97,7 +93,7 @@ TEST_F(MeanFinderTest, RandomInt32) {
         x = dist(rng);
     }
 
-    double expected = std::accumulate(data.begin(), data.end(), 0.0) / data.size();
+    double expected = std::accumulate(data.begin(), data.end(), 0.0) / static_cast<double>(data.size());
     EXPECT_NEAR(find_mean(data.data(), data.size()), expected, 1e-10);
 }
 
@@ -105,15 +101,13 @@ TEST_F(MeanFinderTest, RandomUInt32) {
     auto data = create_aligned_data<uint32_t>(1000);
     std::uniform_int_distribution<uint32_t> dist(0, 1000);
 
-    for (auto &x : data) {
+    for (auto &x : data)
         x = dist(rng);
-    }
 
-    double expected = std::accumulate(data.begin(), data.end(), 0.0) / data.size();
+    double expected = std::accumulate(data.begin(), data.end(), 0.0) / static_cast<double>(data.size());
     EXPECT_NEAR(find_mean(data.data(), data.size()), expected, 1e-10);
 }
 
-// Edge Cases
 TEST_F(MeanFinderTest, AllZeros) {
     std::vector<int32_t> data(1000, 0);
     EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), 0.0);
@@ -127,15 +121,13 @@ TEST_F(MeanFinderTest, AlternatingValues) {
     EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), 0.0);
 }
 
-// Performance Test (disabled by default)
-TEST_F(MeanFinderTest, DISABLED_LargeArrayPerformance) {
-    constexpr size_t size = 10'000'000;
+TEST_F(MeanFinderTest, LargeArrayPerformance) {
+    constexpr size_t size = 100'000'000;
     auto data = create_aligned_data<int32_t>(size);
     std::uniform_int_distribution<int32_t> dist(-1000, 1000);
 
-    for (auto &x : data) {
+    for (auto &x : data)
         x = dist(rng);
-    }
 
     auto start = std::chrono::high_resolution_clock::now();
     double simd_mean = find_mean(data.data(), data.size());
@@ -143,9 +135,8 @@ TEST_F(MeanFinderTest, DISABLED_LargeArrayPerformance) {
 
     auto simd_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-    // Compare with std::accumulate
     start = std::chrono::high_resolution_clock::now();
-    double std_mean = std::accumulate(data.begin(), data.end(), 0.0) / data.size();
+    double std_mean = std::accumulate(data.begin(), data.end(), 0.0) / static_cast<double>(data.size());
     end = std::chrono::high_resolution_clock::now();
 
     auto std_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
@@ -158,4 +149,4 @@ TEST_F(MeanFinderTest, DISABLED_LargeArrayPerformance) {
     EXPECT_NEAR(simd_mean, std_mean, 1e-10);
 }
 
-} //namespace arcticdb
+} // namespace arcticdb

@@ -3,37 +3,13 @@
 #include <type_traits>
 #include <cmath>
 
+#include <cstdint>
+#include <limits>
+#include <type_traits>
+
+#include <arcticdb/util/vector_common.hpp>
+
 namespace arcticdb {
-
-#include <cstdint>
-#include <limits>
-#include <type_traits>
-
-// Check compiler support for vector extensions
-#if defined(__GNUC__) || defined(__clang__)
-#define HAS_VECTOR_EXTENSIONS 1
-#else
-#define HAS_VECTOR_EXTENSIONS 0
-#endif
-
-#include <cstdint>
-#include <limits>
-#include <type_traits>
-
-template<typename T>
-using vector_type = T __attribute__((vector_size(64)));
-
-template<typename T>
-struct is_supported_int : std::false_type {};
-
-template<> struct is_supported_int<int8_t> : std::true_type {};
-template<> struct is_supported_int<uint8_t> : std::true_type {};
-template<> struct is_supported_int<int16_t> : std::true_type {};
-template<> struct is_supported_int<uint16_t> : std::true_type {};
-template<> struct is_supported_int<int32_t> : std::true_type {};
-template<> struct is_supported_int<uint32_t> : std::true_type {};
-template<> struct is_supported_int<int64_t> : std::true_type {};
-template<> struct is_supported_int<uint64_t> : std::true_type {};
 
 template<typename T>
 struct MinMax {
@@ -48,10 +24,12 @@ class MinMaxFinder {
 
 public:
     static MinMax<T> find(const T* data, size_t n) {
-        using vec_t = vector_type<T>;
+        using VectorType = vector_type<T>;
 
-        vec_t vmin, vmax;
-        T min_val, max_val;
+        VectorType vector_min;
+        VectorType vector_max;
+        T min_val;
+        T max_val;
 
         if constexpr(std::is_signed_v<T>) {
             min_val = std::numeric_limits<T>::max();
@@ -61,23 +39,23 @@ public:
             max_val = 0;
         }
 
-        for(size_t i = 0; i < sizeof(vec_t)/sizeof(T); i++) {
-            reinterpret_cast<T*>(&vmin)[i] = min_val;
-            reinterpret_cast<T*>(&vmax)[i] = max_val;
+        for(size_t i = 0; i < sizeof(VectorType)/sizeof(T); i++) {
+            reinterpret_cast<T*>(&vector_min)[i] = min_val;
+            reinterpret_cast<T*>(&vector_max)[i] = max_val;
         }
 
-        const vec_t* vdata = reinterpret_cast<const vec_t*>(data);
-        const size_t elements_per_vector = sizeof(vec_t) / sizeof(T);
-        const size_t vlen = n / elements_per_vector;
+        const auto* vdata = reinterpret_cast<const VectorType*>(data);
+        const size_t elements_per_vector = sizeof(VectorType) / sizeof(T);
+        const size_t vector_len = n / elements_per_vector;
 
-        for(size_t i = 0; i < vlen; i++) {
-            vec_t v = vdata[i];
-            vmin = (v < vmin) ? v : vmin;
-            vmax = (v > vmax) ? v : vmax;
+        for(size_t i = 0; i < vector_len; i++) {
+            VectorType v = vdata[i];
+            vector_min = (v < vector_min) ? v : vector_min;
+            vector_max = (v > vector_max) ? v : vector_max;
         }
 
-        const T* min_arr = reinterpret_cast<const T*>(&vmin);
-        const T* max_arr = reinterpret_cast<const T*>(&vmax);
+        const T* min_arr = reinterpret_cast<const T*>(&vector_min);
+        const T* max_arr = reinterpret_cast<const T*>(&vector_max);
 
         min_val = min_arr[0];
         max_val = max_arr[0];
@@ -86,7 +64,7 @@ public:
             max_val = std::max(max_val, max_arr[i]);
         }
 
-        const T* remain = data + (vlen * elements_per_vector);
+        const T* remain = data + (vector_len * elements_per_vector);
         for(size_t i = 0; i < n % elements_per_vector; i++) {
             min_val = std::min(min_val, remain[i]);
             max_val = std::max(max_val, remain[i]);
@@ -103,31 +81,31 @@ class MinFinder {
 
 public:
     static T find(const T* data, size_t n) {
-        using vec_t = vector_type<T>;
+        using VectorType = vector_type<T>;
 
-        vec_t vmin;
+        VectorType vector_min;
         T min_val = std::numeric_limits<T>::max();
 
-        for(size_t i = 0; i < sizeof(vec_t)/sizeof(T); i++) {
-            reinterpret_cast<T*>(&vmin)[i] = min_val;
+        for(size_t i = 0; i < sizeof(VectorType)/sizeof(T); i++) {
+            reinterpret_cast<T*>(&vector_min)[i] = min_val;
         }
 
-        const vec_t* vdata = reinterpret_cast<const vec_t*>(data);
-        const size_t elements_per_vector = sizeof(vec_t) / sizeof(T);
-        const size_t vlen = n / elements_per_vector;
+        const auto* vdata = reinterpret_cast<const VectorType*>(data);
+        const size_t elements_per_vector = sizeof(VectorType) / sizeof(T);
+        const size_t vector_len = n / elements_per_vector;
 
-        for(size_t i = 0; i < vlen; i++) {
-            vec_t v = vdata[i];
-            vmin = (v < vmin) ? v : vmin;
+        for(size_t i = 0; i < vector_len; i++) {
+            VectorType v = vdata[i];
+            vector_min = (v < vector_min) ? v : vector_min;
         }
 
-        const T* min_arr = reinterpret_cast<const T*>(&vmin);
+        const T* min_arr = reinterpret_cast<const T*>(&vector_min);
         min_val = min_arr[0];
         for(size_t i = 1; i < elements_per_vector; i++) {
             min_val = std::min(min_val, min_arr[i]);
         }
 
-        const T* remain = data + (vlen * elements_per_vector);
+        const T* remain = data + (vector_len * elements_per_vector);
         for(size_t i = 0; i < n % elements_per_vector; i++) {
             min_val = std::min(min_val, remain[i]);
         }
@@ -143,9 +121,9 @@ class MaxFinder {
 
 public:
     static T find(const T* data, size_t n) {
-        using vec_t = vector_type<T>;
+        using VectorType = vector_type<T>;
 
-        vec_t vmax;
+        VectorType vector_max;
         T max_val;
 
         if constexpr(std::is_signed_v<T>) {
@@ -154,26 +132,26 @@ public:
             max_val = 0;
         }
 
-        for(size_t i = 0; i < sizeof(vec_t)/sizeof(T); i++) {
-            reinterpret_cast<T*>(&vmax)[i] = max_val;
+        for(size_t i = 0; i < sizeof(VectorType)/sizeof(T); i++) {
+            reinterpret_cast<T*>(&vector_max)[i] = max_val;
         }
 
-        const vec_t* vdata = reinterpret_cast<const vec_t*>(data);
-        const size_t elements_per_vector = sizeof(vec_t) / sizeof(T);
-        const size_t vlen = n / elements_per_vector;
+        const auto* vdata = reinterpret_cast<const VectorType*>(data);
+        const size_t elements_per_vector = sizeof(VectorType) / sizeof(T);
+        const size_t vector_len = n / elements_per_vector;
 
-        for(size_t i = 0; i < vlen; i++) {
-            vec_t v = vdata[i];
-            vmax = (v > vmax) ? v : vmax;
+        for(size_t i = 0; i < vector_len; i++) {
+            VectorType v = vdata[i];
+            vector_max = (v > vector_max) ? v : vector_max;
         }
 
-        const T* max_arr = reinterpret_cast<const T*>(&vmax);
+        const auto* max_arr = reinterpret_cast<const T*>(&vector_max);
         max_val = max_arr[0];
         for(size_t i = 1; i < elements_per_vector; i++) {
             max_val = std::max(max_val, max_arr[i]);
         }
 
-        const T* remain = data + (vlen * elements_per_vector);
+        const T* remain = data + (vector_len * elements_per_vector);
         for(size_t i = 0; i < n % elements_per_vector; i++) {
             max_val = std::max(max_val, remain[i]);
         }
@@ -196,6 +174,5 @@ template<typename T>
 T find_max(const T* data, size_t n) {
     return MaxFinder<T>::find(data, n);
 }
-
 
 } // namespace arcticdb
