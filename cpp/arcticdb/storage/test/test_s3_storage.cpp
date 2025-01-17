@@ -140,6 +140,12 @@ TEST(TestS3Storage, proxy_env_var_parsing) {
     }
 }
 
+TEST(TestS3Storage, test_s3_settings_default_value) {
+    arcticdb::proto::s3_storage::Config s3_config;
+    arcticdb::storage::s3::S3Settings s3_settings(s3_config);
+    ASSERT_EQ(s3_settings.aws_auth(), arcticdb::storage::s3::AWSAuthMethod::DISABLED);
+}
+
 TEST_F(ProxyEnvVarSetHttpProxyForHttpsEndpointFixture, test_config_resolution_proxy) {
     arcticdb::proto::s3_storage::Config s3_config;
     s3_config.set_endpoint("https://test.endpoint.com");
