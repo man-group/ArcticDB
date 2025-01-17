@@ -23,9 +23,8 @@ using AcquiredLockId = uint64_t;
 
 using AcquiredLock = AcquiredLockId;
 using LockInUse = std::monostate;
-using UnsupportedOperation = std::string;
 
-using ReliableLockResult = std::variant<AcquiredLock, LockInUse, UnsupportedOperation>;
+using ReliableLockResult = std::variant<AcquiredLock, LockInUse>;
 
 // The ReliableStorageLock is a storage lock which relies on atomic If-None-Match Put and ListObject operations to
 // provide a more reliable lock than the StorageLock but it requires the backend to support atomic operations. It should

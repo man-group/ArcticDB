@@ -120,22 +120,6 @@ ReliableLockResult ReliableStorageLock<ClockType>::try_take_lock() const {
     return try_take_next_id(existing_locks, latest);
 }
 
-inline std::optional<AcquiredLockId> parse_reliable_storage_lock_result(const ReliableLockResult& result) {
-    return util::variant_match(
-        result,
-        [&](const AcquiredLock &acquired_lock) -> std::optional<AcquiredLockId> {
-            return acquired_lock;
-        },
-        [&](const LockInUse &) -> std::optional<AcquiredLockId> {
-            return std::nullopt;
-        },
-        [&](const UnsupportedOperation &err) -> std::optional<AcquiredLockId> {
-            log::lock().error("Unsupported operation while taking lock: {}", err);
-            throw LostReliableLock();
-        }
-    );
-}
-
 template<class ClockType>
 AcquiredLockId ReliableStorageLock<ClockType>::retry_until_take_lock() const {
     // We don't use the ExponentialBackoff because we want to be able to wait indefinitely
@@ -149,14 +133,14 @@ AcquiredLockId ReliableStorageLock<ClockType>::retry_until_take_lock() const {
         return current_wait * factor;
     };
 
-    std::optional<AcquiredLockId> acquired_lock = parse_reliable_storage_lock_result(try_take_lock());
+    auto acquired_lock = try_take_lock();
 
-    while (!acquired_lock.has_value()) {
+    while (!std::holds_alternative<AcquiredLock>(acquired_lock)) {
         std::this_thread::sleep_for(jittered_wait());
         current_wait = std::min(current_wait * 2, max_wait);
-        acquired_lock = parse_reliable_storage_lock_result(try_take_lock());
+        acquired_lock = try_take_lock();
     }
-    return acquired_lock.value();
+    return std::get<AcquiredLock>(acquired_lock);
 }
 
 template <class ClockType>
@@ -194,15 +178,7 @@ ReliableLockResult ReliableStorageLock<ClockType>::try_take_next_id(const std::v
     auto expiration = ClockType::nanos_since_epoch() + timeout_;
     try {
         store_->write_if_none_sync(KeyType::ATOMIC_LOCK, lock_stream_id, lock_segment(lock_stream_id, expiration));
-    } catch (const NotImplementedException& e) {
-        auto err = fmt::format("Failed to acquire lock (storage does not support atomic writes): {}", e.what());
-        log::lock().debug(err);
-        return UnsupportedOperation{err};
-    } catch (const StorageException& e) {
-        // There is no specific Aws::S3::S3Errors for the failed atomic operation, so we catch any StorageException.
-        // Either way it's safe to assume we have failed to acquire the lock in case of transient S3 error.
-        // If error persists we'll appropriately raise in the next attempt to LIST/GET the existing lock and propagate
-        // the transient error.
+    } catch (const AtomicOperationFailedException & e) {
         log::lock().debug("Failed to acquire lock (likely someone acquired it before us): {}", e.what());
         return LockInUse{};
     }
@@ -220,22 +196,25 @@ inline ReliableStorageLockGuard::ReliableStorageLockGuard(const ReliableStorageL
     extend_lock_heartbeat_.addFunction(
         [that=this](){
             if (that->acquired_lock_.has_value()) {
-                auto result = that->lock_.try_extend_lock(that->acquired_lock_.value());
-                util::variant_match(
-                    result,
-                    [&](AcquiredLock &acquired_lock) {
-                        that->acquired_lock_ = acquired_lock;
-                    },
-                    [&](LockInUse &) {
-                        // Clean up if we have lost the lock.
-                        that->cleanup_on_lost_lock();
-                    },
-                    [&](UnsupportedOperation &err) {
-                        // This should never happen
-                        log::lock().error("Unsupported operation while extending lock {}: {}", that->acquired_lock_.value(), err);
-                        that->cleanup_on_lost_lock();
-                    }
-                );
+                try {
+                    auto result = that->lock_.try_extend_lock(that->acquired_lock_.value());
+                    util::variant_match(
+                            result,
+                            [&](AcquiredLock &acquired_lock) {
+                                that->acquired_lock_ = acquired_lock;
+                            },
+                            [&](LockInUse &) {
+                                // Clean up if we have lost the lock.
+                                log::lock().error("Unexpectedly lost the lock in heartbeating thread. Maybe lock timeout is too small.");
+                                that->cleanup_on_lost_lock();
+                            }
+                    );
+                } catch (StorageException& e) {
+                    // If we get an unexpected storage exception (e.g. network error) we declare the lock as lost and
+                    // still need to exit the heartbeating thread gracefully.
+                    log::lock().error("Received an unexpected storage error in lock heartbeating thread. Assuming lock is lost. {}", e.what());
+                    that->cleanup_on_lost_lock();
+                }
             }
         }, hearbeat_frequency, "Extend lock", hearbeat_frequency);
     extend_lock_heartbeat_.start();
@@ -277,4 +256,26 @@ inline void ReliableStorageLockManager::free_lock_guard() {
 
 }
 
+}
+
+namespace fmt {
+    template<>
+    struct formatter<arcticdb::lock::ReliableLockResult> {
+        template<typename ParseContext>
+        constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+        template<typename FormatContext>
+        auto format(arcticdb::lock::ReliableLockResult result, FormatContext &ctx) const {
+            arcticdb::util::variant_match(
+                result,
+                [&](arcticdb::lock::AcquiredLock &lock) {
+                    return fmt::format_to(ctx.out(), "Acquired_lock_{}", lock);
+                },
+                [&](arcticdb::lock::LockInUse &) {
+                    // Clean up if we have lost the lock.
+                    return fmt::format_to(ctx.out(), "Lock in use");
+                }
+            );
+        }
+    };
 }

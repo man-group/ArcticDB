@@ -182,6 +182,8 @@ using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA
 using UserInputException = ArcticCategorizedException<ErrorCategory::USER_INPUT>;
 using CompatibilityException = ArcticCategorizedException<ErrorCategory::COMPATIBILITY>;
 using CodecException = ArcticCategorizedException<ErrorCategory::CODEC>;
+using AtomicOperationFailedException = ArcticSpecificException<ErrorCode::E_ATOMIC_OPERATION_FAILED>;
+using UnsupportedAtomicOperationException = ArcticSpecificException<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>;
 using NotImplementedException = ArcticSpecificException<ErrorCode::E_NOT_IMPLEMENTED_BY_STORAGE>;
 
 template<ErrorCode error_code>
@@ -242,6 +244,16 @@ template<>
 template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_UNSORTED_DATA>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_ATOMIC_OPERATION_FAILED>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_ATOMIC_OPERATION_FAILED>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>(msg);
 }
 
 template<>

@@ -49,8 +49,8 @@ namespace arcticdb::storage::memory {
             return false;
         }
 
-        bool do_supports_atomic_writes() const final {
-            return false;
+        SupportsAtomicWrites do_supports_atomic_writes() const final {
+            return SupportsAtomicWrites::NO;
         }
 
         inline bool do_fast_delete() final;
