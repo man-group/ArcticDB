@@ -6,6 +6,7 @@ import random
 import string
 
 from arcticdb_ext.storage import KeyType
+from arcticdb_ext.version_store import SortedValue
 
 
 def test_stage_finalize(arctic_library):
@@ -194,12 +195,38 @@ def test_stage_with_sort_index_chunking(lmdb_version_store_tiny_segment):
         df = lib_tool.read_to_dataframe(k)
         assert df.shape == (2, 3)  # we should apply row slicing but not column slicing
         assert df.index.is_monotonic_increasing
+        assert lib_tool.read_descriptor(k).sorted() == SortedValue.ASCENDING
 
     ref_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, symbol)
     assert not ref_keys
 
     lib.compact_incomplete(symbol, append=False, convert_int_to_float=False)
 
+    actual = lib.read(symbol).data
+    assert_frame_equal(df1, actual)
+
+
+def test_stage_with_sort_columns_not_ts(lmdb_version_store_v1):
+    symbol = "AAPL"
+    lib = lmdb_version_store_v1
+
+    df1 = pd.DataFrame({
+        "idx": np.arange(1, 51),
+        "col1": np.arange(1, 51),
+        "col2": [f"a{i:02d}" for i in range(1, 51)],
+        "col3": np.arange(1, 51)
+    }).set_index("idx")
+    df1_shuffled = df1.sample(frac=1)
+
+    lib.stage(symbol, df1_shuffled, validate_index=False, sort_on_index=False, sort_columns=["idx"])
+
+    lib_tool = lib.library_tool()
+    data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
+    assert len(data_keys) == 1
+    data_key = data_keys[0]
+    assert lib_tool.read_descriptor(data_key).sorted() == SortedValue.UNKNOWN
+
+    lib.compact_incomplete(symbol, append=False, convert_int_to_float=False)
     actual = lib.read(symbol).data
     assert_frame_equal(df1, actual)
 

@@ -261,7 +261,9 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     auto tsd = pack_timeseries_descriptor(frame->desc, frame->num_rows, std::nullopt, std::move(norm_meta));
     segment.set_timeseries_descriptor(tsd);
 
-    bool is_sorted = options.sort_on_index || (options.sort_columns && options.sort_columns->at(0) == segment.descriptor().field(0).name());
+    bool is_timestamp_index = std::holds_alternative<stream::TimeseriesIndex>(frame->index);
+    bool is_sorted = is_timestamp_index && (options.sort_on_index || (
+        is_timestamp_index && options.sort_columns && options.sort_columns->at(0) == segment.descriptor().field(0).name()));
 
     // Have to give each its own string pool for thread safety
     bool filter_down_stringpool{true};

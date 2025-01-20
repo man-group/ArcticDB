@@ -120,6 +120,7 @@ void register_types(py::module &m) {
         .def("fields", [](const StreamDescriptor& desc){
             return field_collection_to_ref_vector(desc.fields());
         })
+        .def("sorted", &StreamDescriptor::sorted)
     );
 
     py::class_<TimeseriesDescriptor>(m, "TimeseriesDescriptor")
