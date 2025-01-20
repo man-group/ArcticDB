@@ -33,7 +33,6 @@ from arcticdb_ext.version_store import ResampleClauseRightClosed as _ResampleCla
 from arcticdb_ext.version_store import ResampleBoundary as _ResampleBoundary
 from arcticdb_ext.version_store import RowRangeClause as _RowRangeClause
 from arcticdb_ext.version_store import DateRangeClause as _DateRangeClause
-from arcticdb_ext.version_store import ConcatClause as _ConcatClause
 from arcticdb_ext.version_store import RowRangeType as _RowRangeType
 from arcticdb_ext.version_store import ExpressionName as _ExpressionName
 from arcticdb_ext.version_store import ColumnName as _ColumnName
@@ -323,11 +322,6 @@ class PythonResampleClause:
     # In nanosecods
     offset: int = 0
     origin: Union[str, pd.Timestamp] = "epoch"
-
-
-@dataclass
-class PythonConcatClause:
-    pass
 
 
 class QueryBuilder:
@@ -909,11 +903,6 @@ class QueryBuilder:
         start, end = normalize_dt_range_to_ts(date_range)
         self.clauses = self.clauses + [_DateRangeClause(start.value, end.value)]
         self._python_clauses = self._python_clauses + [PythonDateRangeClause(start.value, end.value)]
-        return self
-
-    def concat(self):
-        self.clauses = self.clauses + [_ConcatClause()]
-        self._python_clauses = self._python_clauses + [PythonConcatClause()]
         return self
 
     def __eq__(self, right):

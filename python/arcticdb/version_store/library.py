@@ -478,6 +478,31 @@ class LazyDataFrameCollection(QueryBuilder):
         return self.__str__()
 
 
+class LazyDataFrameAfterJoin(QueryBuilder):
+    def __init__(
+            self,
+            lazy_dataframes: LazyDataFrameCollection,
+    ):
+        super().__init__()
+        self._lazy_dataframes = lazy_dataframes
+
+    def collect(self) -> VersionedItem:
+        pass
+
+    def __str__(self) -> str:
+        query_builder_repr = super().__str__()
+        return f"LazyDataFrameAfterJoin(Concat({self._lazy_dataframes._lazy_dataframes}){' | ' if len(query_builder_repr) else ''}{query_builder_repr})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+
+def concat(lazy_dataframes: Union[List[LazyDataFrame], LazyDataFrameCollection]) -> LazyDataFrameAfterJoin:
+    if not isinstance(lazy_dataframes, LazyDataFrameCollection):
+        lazy_dataframes = LazyDataFrameCollection(lazy_dataframes)
+    return LazyDataFrameAfterJoin(lazy_dataframes)
+
+
 def col(name: str) -> ExpressionNode:
     """
     Placeholder for referencing columns by name in lazy dataframe operations before the underlying object has been
