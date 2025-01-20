@@ -311,7 +311,6 @@ class PythonRowRangeClause(NamedTuple):
     start: int = None
     end: int = None
 
-
 # Would be cleaner if all Python*Clause classes were dataclasses, but this is used for pickling, so hard to change now
 @dataclass
 class PythonResampleClause:
