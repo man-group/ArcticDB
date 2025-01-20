@@ -81,6 +81,10 @@ struct IndexSliceDescriptor : StreamDescriptor {
         IndexSliceDescriptor<IndexType> desc(stream_id, has_column_groups);
         return stream::FixedSchema{desc, IndexType::default_index()};
     }
+
+    static stream::FixedSchema schema(const StreamDescriptor& descriptor) {
+        return stream::FixedSchema{descriptor, IndexType::default_index()};
+    }
 };
 
 // The compile-time definition of the row and column slices above

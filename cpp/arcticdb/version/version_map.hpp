@@ -396,7 +396,7 @@ public:
         if (prev_journal_key)
             journal_agg.add_key(*prev_journal_key);
 
-        journal_agg.commit();
+        journal_agg.finalize();
         return journal_key;
     }
 

@@ -472,7 +472,7 @@ void decode_v2(const Segment& segment,
                 data += encoding_sizes::field_compressed_size(*encoded_field) + sizeof(ColumnMagic);
             }
             ++encoded_field;
-            ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", i, data-begin);
+            ARCTICDB_TRACE(log::codec(), "V2 Decoded column {} to position {}", i, data-begin);
         }
 
         util::check_magic<StringPoolMagic>(data);
@@ -533,7 +533,7 @@ void decode_v1(const Segment& segment,
                     hdr.encoding_version()
                 );
                 seg_row_count = std::max(seg_row_count, calculate_last_row(col));
-                ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", i, data - begin);
+                ARCTICDB_TRACE(log::codec(), "V1 Decoded column {} to position {}", i, data - begin);
             } else {
                 data += encoding_sizes::field_compressed_size(field);
                 ARCTICDB_TRACE(log::codec(), "Skipped column {}, at position {}", i, data - begin);

@@ -7,13 +7,21 @@
 
 #pragma once
 
-#include <cstdint>
+#include <arcticdb/column_store/memory_segment.hpp>
+
+#include <sparrow/sparrow.hpp>
+#include <sparrow/record_batch.hpp>
 
 namespace arcticdb {
-enum class OutputType : uint8_t {
-    PANDAS,
-    ARROW,
-    PARQUET
+
+struct ArrowData {
+    ArrowData(sparrow::record_batch&& record_batch) :
+        record_batch_(std::move(record_batch)) {
+    }
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(ArrowData)
+
+    sparrow::record_batch record_batch_;
 };
 
-}  // namespace arcticdb
+} // namespace arcticdb

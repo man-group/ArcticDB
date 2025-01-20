@@ -74,7 +74,7 @@ SliceAndKey &PipelineContextRow::slice_and_key()  {
     return parent_->slice_and_keys_[index_];
 }
 
-bool PipelineContextRow::fetch_index() {
+bool PipelineContextRow::fetch_index() const {
     return parent_->fetch_index_[index_];
 }
 
