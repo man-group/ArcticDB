@@ -8,28 +8,34 @@
 
 #include <arcticdb/arrow/arrow_utils.hpp>
 
+#include <sparrow/sparrow.hpp>
+#include <sparrow/record_batch.hpp>
+
 #include <vector>
 #include <memory>
 
 namespace arcticdb {
 struct ArrowData;
 
+struct RecordBatchData {
+    uintptr_t array_;
+    uintptr_t schema_;
+};
+
 struct ArrowOutputFrame {
     ArrowOutputFrame() = default;
 
     ArrowOutputFrame(
-        std::vector<std::vector<ArrowData>>&& data,
+        std::shared_ptr<std::vector<sparrow::record_batch>>&& data,
         std::vector<std::string>&& names);
 
-    std::shared_ptr<std::vector<std::vector<ArrowData>>> data_;
+    std::shared_ptr<std::vector<sparrow::record_batch>> data_;
     std::vector<std::string> names_;
 
-    std::vector<std::vector<uintptr_t>> arrays();
+    std::vector<RecordBatchData> record_batches();
 
-    std::vector<std::vector<uintptr_t>> schemas();
+    [[nodiscard]] std::vector<std::string> names() const;
 
-    std::vector<std::string> names() const;
-
-    size_t num_blocks() const;
+    [[nodiscard]] size_t num_blocks() const;
 };
 } // namespace arcticdb

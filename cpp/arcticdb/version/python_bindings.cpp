@@ -79,7 +79,7 @@ requires std::integral<T>
                 return { origin_ns, origin_ns };
             } else {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                    "Invalid origin value {}. Supported values are: \"start\", \"start_day\", \"end\", \"end_day\", \"epoch\" or timestamp in nanoseconds",
+                    R"(Invalid origin value {}. Supported values are: "start", "start_day", "end", "end_day", "epoch" or timestamp in nanoseconds)",
                     o);
             }
         }
@@ -259,10 +259,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         });
 
         py::class_<ArrowOutputFrame>(version, "ArrowOutputFrame")
-        .def_property_readonly("arrays", &ArrowOutputFrame::arrays)
-        .def_property_readonly("schemas", &ArrowOutputFrame::schemas)
+        .def_property_readonly("record_batches", &ArrowOutputFrame::record_batches)
         .def_property_readonly("names", &ArrowOutputFrame::names)
-        .def_property_readonly("num_blocks", &ArrowOutputFrame::num_blocks)
         ;
 
     py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(

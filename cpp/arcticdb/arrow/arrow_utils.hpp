@@ -6,12 +6,14 @@
  */
 #pragma once
 
-#include <string_view>
-#include <vector>
-
 #include <arcticdb/arrow/arrow_output_frame.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/util/preprocess.hpp>
+#include <sparrow/sparrow.hpp>
+#include <sparrow/record_batch.hpp>
+
+#include <string_view>
+#include <vector>
 
 namespace arcticdb {
 
@@ -26,12 +28,12 @@ struct ArrowReadResult {
     ArrowReadResult() = default;
 
     ArrowReadResult(
-        const VersionedItem& versioned_item,
+        VersionedItem versioned_item,
         ArrowOutputFrame&& frame_data,
-        const arcticdb::proto::descriptors::UserDefinedMetadata& user_meta) :
-        versioned_item_(versioned_item),
+        arcticdb::proto::descriptors::UserDefinedMetadata user_meta) :
+        versioned_item_(std::move(versioned_item)),
         frame_(std::move(frame_data)),
-        user_meta_(user_meta) {
+        user_meta_(std::move(user_meta)) {
     }
 
     VersionedItem versioned_item_;
@@ -43,9 +45,8 @@ ArrowReadResult create_arrow_read_result(
     const VersionedItem& version,
     FrameAndDescriptor&& fd);
 
-std::vector<ArrowData> arrow_data_from_column(const Column& column, std::string_view name);
 
-std::vector<std::vector<ArrowData>> segment_to_arrow_data(SegmentInMemory& segment);
+std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(SegmentInMemory& segment);
 
 std::vector<std::string> names_from_segment(const SegmentInMemory& segment);
 

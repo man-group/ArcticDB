@@ -7,28 +7,21 @@
 
 #pragma once
 
-#ifdef ARCTICDB_ARROW_SUPPORT
-
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <sparrow/arrow_interface/arrow_schema/smart_pointers.hpp>
-#include <sparrow/arrow_interface/arrow_array/smart_pointers.hpp>
+
+#include <sparrow/sparrow.hpp>
+#include <sparrow/record_batch.hpp>
 
 namespace arcticdb {
 
 struct ArrowData {
-    ArrowData(
-        sparrow::arrow_array_unique_ptr &&data,
-        sparrow::arrow_schema_unique_ptr &&schema
-    ) :
-        data_(std::move(data)),
-        schema_(std::move(schema)) {}
+    ArrowData(sparrow::record_batch&& record_batch) :
+        record_batch_(std::move(record_batch)) {
+    }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(ArrowData)
 
-    sparrow::arrow_array_unique_ptr data_;
-    sparrow::arrow_schema_unique_ptr schema_;
+    sparrow::record_batch record_batch_;
 };
 
 } // namespace arcticdb
-
-#endif

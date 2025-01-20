@@ -12,14 +12,12 @@
 
 #include <vector>
 
-#ifdef ARCTIDB_ARROW_SUPPORT
-
 namespace arcticdb {
 
 ArrowOutputFrame::ArrowOutputFrame(
-    std::vector<std::vector<ArrowData>>&& data,
+    std::shared_ptr<std::vector<sparrow::record_batch>>&& data,
     std::vector<std::string>&& names) :
-    data_(std::make_shared<std::vector<std::vector<ArrowData>>>(std::move(data))),
+    data_(std::move(data)),
     names_(std::move(names)) {
 }
 
@@ -27,37 +25,13 @@ size_t ArrowOutputFrame::num_blocks() const {
     if(data_->empty())
         return 0;
 
-    return data_->begin()->size();
+    return data_->size();
 }
 
-std::vector<std::vector<uintptr_t>> ArrowOutputFrame::arrays() {
-    std::vector<std::vector<uintptr_t>> output;
-    output.reserve(data_->size());
-    for(auto& column : *data_) {
-        std::vector<uintptr_t> vec;
-        vec.reserve(column.size());
-        for(auto& data : column) {
-            vec.emplace_back(reinterpret_cast<uintptr_t>(data.data_.get()));
-        }
-        output.emplace_back(std::move(vec));
-    }
-
-    return output;
-}
-
-std::vector<std::vector<uintptr_t>> ArrowOutputFrame::schemas() {
-    std::vector<std::vector<uintptr_t>> output;
-    output.reserve(data_->size());
-    for(auto& column : *data_) {
-        std::vector<uintptr_t> vec;
-        vec.reserve(column.size());
-        for(auto& data : column) {
-            vec.emplace_back(reinterpret_cast<uintptr_t>(data.schema_.get()));
-        }
-        output.emplace_back(std::move(vec));
-    }
-
-    return output;
+std::vector<RecordBatchData> ArrowOutputFrame::record_batches() {
+    std::vector<RecordBatchData> output;
+    for(auto& batch : *data_)
+        output.emplace_back({batch.})
 }
 
 std::vector<std::string> ArrowOutputFrame::names() const {
@@ -65,27 +39,3 @@ std::vector<std::string> ArrowOutputFrame::names() const {
 }
 
 }  // namespace arcticdb
-
-#else
-
-namespace arcticdb {
-
-std::vector<std::vector<uintptr_t>> ArrowOutputFrame::arrays() {
-    return {};
-}
-
-std::vector<std::vector<uintptr_t>> ArrowOutputFrame::schemas() {
-    return {};
-}
-
-size_t ArrowOutputFrame::num_blocks() const {
-    return 0;
-}
-
-std::vector<std::string> ArrowOutputFrame::names() const {
-    return {};
-}
-
-}
-
-#endif
