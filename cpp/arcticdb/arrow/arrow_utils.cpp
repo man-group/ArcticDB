@@ -4,93 +4,40 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
-#ifdef ARCTICDB_ARROW_SUPPORT
 
 #include <arcticdb/arrow/arrow_utils.hpp>
-#include <sparrow/sparrow.hpp>
 #include <arcticdb/arrow/arrow_data.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 
+#include <sparrow/sparrow.hpp>
+
+#include <span>
+
 namespace arcticdb {
 
-sparrow::arrow_schema_unique_ptr arrow_schema_from_type(std::string_view name, sparrow::data_descriptor type) {
-    auto format = sparrow::data_type_to_format(type.id());
-    return sparrow::make_arrow_schema_unique_ptr(
-        format,
-        name,
-        std::nullopt,
-        sparrow::ArrowFlag(0),
-        std::nullopt,
-        nullptr);
+
+
+
+template <typename TagType>
+sparrow::array arrow_array_from_block(TypedBlockData<TagType>& block) {
+    using DataType = TagType::DataTypeTag;
+    using RawType = DataType::raw_type;
+    auto *tmp = const_cast<RawType*>(block.release());
+    sparrow::primitive_array<RawType> raw_array(std::span(tmp, block.row_count()), std::nullopt, std::nullopt);
+    return sparrow::array{std::move(raw_array)};
 }
 
-std::vector<ArrowData> arrow_data_from_column(const Column& column, std::string_view name) {
-    return column.type().visit_tag([&](auto &&impl) -> std::vector<ArrowData> {
+
+void arrow_arrays_from_column(const Column& column, std::vector<sparrow::array>& vec) {
+    auto column_data = column.data();
+    vec.reserve(column.num_blocks());
+    column.type().visit_tag([&](auto &&impl) -> std::vector<sparrow::array> {
         using TagType = std::decay_t<decltype(impl)>;
-        using DataType = TagType::DataTypeTag;
-        using RawType = DataType::raw_type;
-        std::vector<ArrowData> output;
-        auto column_data = column.data();
-
         while (auto block = column_data.next<TagType>()) {
-            sparrow::array_data data;
-            auto type = sparrow::data_descriptor(sparrow::arrow_traits<RawType>::type_id);
-            data.type = type;
-
-            const auto row_count = block->row_count();
-            auto *tmp = const_cast<RawType *>(block->release());
-            data.buffers.emplace_back(reinterpret_cast<uint8_t *>(tmp),
-                                      row_count * sizeof(RawType),
-                                      sparrow::any_allocator<uint8_t>{});
-            data.length = static_cast<std::int64_t>(row_count);
-            data.offset = static_cast<std::int64_t>(0);
-            output.emplace_back(to_arrow_array_unique_ptr(std::move(data)), arrow_schema_from_type(name, type));
+            vec.emplace_back(arrow_array_from_block<TagType>(*block));
         }
-        return output;
     });
-};
-
-std::vector<ArrowData> arrow_data_from_string_column(Column& column, std::string_view name) {
-        using ArrowStringTagType = ScalarTagType<DataTypeTag<DataType::UINT32>>;
-        std::vector<ArrowData> output;
-        auto column_data = column.data();
-
-        while (auto block = column_data.next<ArrowStringTagType>()) {
-            sparrow::array_data data;
-            auto type = sparrow::data_descriptor(sparrow::arrow_traits<std::string>::type_id);
-            data.type = type;
-            const auto row_count = block->row_count();
-
-            auto *tmp = const_cast<uint32_t*>(block->release());
-            data.buffers.emplace_back(reinterpret_cast<uint8_t *>(tmp),
-                                      row_count * sizeof(uint32_t),
-                                      sparrow::any_allocator<uint8_t>{});
-
-            const auto offset = block->offset();
-            auto& string_buffer = column.get_extra_buffer(offset);
-            auto string_block = string_buffer.block(0);
-            const auto string_block_size = string_block->bytes();
-            data.buffers.emplace_back(const_cast<uint8_t*>(string_block->release()), string_block_size, sparrow::any_allocator<uint8_t>{});
-
-            data.length = static_cast<std::int64_t>(row_count);
-            data.offset = static_cast<std::int64_t>(0);
-            output.emplace_back(to_arrow_array_unique_ptr(std::move(data)), arrow_schema_from_type(name, type));
-        }
-        return output;
-}
-
-std::vector<std::vector<ArrowData>> segment_to_arrow_data(SegmentInMemory& segment/*, DecodePathData& shared_data*/) {
-    std::vector<std::vector<ArrowData>> output;
-    for(auto i = 0UL; i < segment.num_columns(); ++i) {
-        auto& column = segment.column(static_cast<position_t>(i));
-        if(is_sequence_type(column.type().data_type())) {
-            output.emplace_back(arrow_data_from_string_column(column, segment.field(i).name()));
-        } else {
-            output.emplace_back(arrow_data_from_column(segment.column(static_cast<position_t>(i)), segment.field(i).name()));
-        }
-    }
-    return output;
 }
 
 std::vector<std::string> names_from_segment(const SegmentInMemory& segment) {
@@ -103,6 +50,39 @@ std::vector<std::string> names_from_segment(const SegmentInMemory& segment) {
     return output;
 }
 
+template<std::ranges::random_access_range R>
+auto strided_range(R&& range, size_t stride, size_t start) {
+    return std::views::iota(start, std::ranges::size(range) / stride)
+        | std::views::transform([&range, stride](auto i) { return range[i * stride]; });
+}
+
+std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(SegmentInMemory& segment) {
+    std::vector<sparrow::array> arrays;
+    const auto num_blocks = segment.num_blocks();
+    const auto num_columns = segment.num_columns();
+    arrays.reserve(segment.num_columns() * num_blocks);
+
+    for (auto i = 0UL; i < num_columns; ++i) {
+        auto& column = segment.column(static_cast<position_t>(i));
+        if (is_sequence_type(column.type().data_type())) {
+            //output.emplace_back(arrow_data_from_string_column(column, segment.field(i).name()));
+        } else {
+            arrow_arrays_from_column(segment.column(static_cast<position_t>(i)), arrays);
+        }
+    }
+
+    auto output = std::make_shared<std::vector<sparrow::record_batch>>();
+    output->reserve(num_columns);
+
+    for(auto i = 0UL; i < num_blocks; ++i) {
+        auto batch_data = strided_range(std::span(arrays), num_columns, i);
+        output->emplace_back(sparrow::record_batch(names_from_segment(segment), std::move(batch_data)));
+    }
+
+    return output;
+}
+
+
 ArrowReadResult create_arrow_read_result(
     const VersionedItem& version,
     FrameAndDescriptor&& fd) {
@@ -114,5 +94,3 @@ ArrowReadResult create_arrow_read_result(
 }
 
 } // namespace arcticdb
-
-#endif

@@ -256,10 +256,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         });
 
         py::class_<ArrowOutputFrame>(version, "ArrowOutputFrame")
-        .def_property_readonly("arrays", &ArrowOutputFrame::arrays)
-        .def_property_readonly("schemas", &ArrowOutputFrame::schemas)
+        .def_property_readonly("record_batches", &ArrowOutputFrame::record_batches)
         .def_property_readonly("names", &ArrowOutputFrame::names)
-        .def_property_readonly("num_blocks", &ArrowOutputFrame::num_blocks)
         ;
 
     py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(

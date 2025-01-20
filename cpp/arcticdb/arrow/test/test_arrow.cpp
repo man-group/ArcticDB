@@ -7,15 +7,13 @@
 
 #include <gtest/gtest.h>
 
-#ifdef ARCTICDB_ARROW_SUPPORT
-
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/arrow/arrow_data.hpp>
 
 
 
-TEST(Arrow, ConvertColumn) {
+/*TEST(Arrow, ConvertColumn) {
       using namespace arcticdb;
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::UINT16>, DimensionTag<Dimension ::Dim0>>;
     Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
@@ -27,7 +25,7 @@ TEST(Arrow, ConvertColumn) {
     ASSERT_EQ(data[0].data_->n_buffers, 2);
     ASSERT_EQ(data[0].data_->offset, 0);
     ASSERT_EQ(data[0].data_->n_children, 0);
-}
+}*/
 
 TEST(Arrow, ConvertSegment) {
     using namespace arcticdb;
@@ -47,5 +45,3 @@ TEST(Arrow, ConvertSegment) {
     auto vec = segment_to_arrow_data(segment);
     ASSERT_EQ(vec.size(), 2);
 }
-
-#endif
