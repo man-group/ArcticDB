@@ -482,12 +482,18 @@ class LazyDataFrameAfterJoin(QueryBuilder):
     def __init__(
             self,
             lazy_dataframes: LazyDataFrameCollection,
+            join: Any,
     ):
         super().__init__()
         self._lazy_dataframes = lazy_dataframes
+        self._join = join
 
     def collect(self) -> VersionedItem:
-        pass
+        if not len(self._lazy_dataframes._lazy_dataframes):
+            return []
+        else:
+            lib = self._lazy_dataframes._lib
+            return lib._read_batch_with_join(self._lazy_dataframes._read_requests(), self._join, self)
 
     def __str__(self) -> str:
         query_builder_repr = super().__str__()
@@ -500,7 +506,7 @@ class LazyDataFrameAfterJoin(QueryBuilder):
 def concat(lazy_dataframes: Union[List[LazyDataFrame], LazyDataFrameCollection]) -> LazyDataFrameAfterJoin:
     if not isinstance(lazy_dataframes, LazyDataFrameCollection):
         lazy_dataframes = LazyDataFrameCollection(lazy_dataframes)
-    return LazyDataFrameAfterJoin(lazy_dataframes)
+    return LazyDataFrameAfterJoin(lazy_dataframes, "concat")
 
 
 def col(name: str) -> ExpressionNode:
@@ -1667,6 +1673,38 @@ class Library:
                 implement_read_index=True,
                 iterate_snapshots_if_tombstoned=False,
             )
+
+    def _read_batch_with_join(
+            self,
+            read_requests: List[ReadRequest],
+            join: Any,
+            query_builder: Optional[QueryBuilder] = None,
+    ) -> VersionedItem:
+        symbol_strings = []
+        as_ofs = []
+        date_ranges = []
+        row_ranges = []
+        columns = []
+        per_symbol_query_builders = []
+
+        for r in read_requests:
+            symbol_strings.append(r.symbol)
+            as_ofs.append(r.as_of)
+            date_ranges.append(r.date_range)
+            row_ranges.append(r.row_range)
+            columns.append(r.columns)
+            per_symbol_query_builders.append(r.query_builder)
+
+        return self._nvs._batch_read_with_join(
+            symbol_strings,
+            as_ofs,
+            date_ranges,
+            row_ranges,
+            columns,
+            per_symbol_query_builders,
+            join,
+            query_builder,
+        )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
         """
