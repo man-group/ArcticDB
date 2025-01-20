@@ -75,6 +75,10 @@ struct IClause {
         OutputSchema modify_schema(OutputSchema&& output_schema) const {
             return folly::poly_call<6>(*this, std::move(output_schema));
         }
+
+        OutputSchema join_schemas(std::vector<OutputSchema>&& input_schemas) const {
+            return folly::poly_call<7>(*this, std::move(input_schemas));
+        }
     };
 
     template<class T>
@@ -85,7 +89,8 @@ struct IClause {
             &T::clause_info,
             &T::set_processing_config,
             &T::set_component_manager,
-            &T::modify_schema>;
+            &T::modify_schema,
+            &T::join_schemas>;
 };
 
 using Clause = folly::Poly<IClause>;
@@ -121,6 +126,10 @@ struct PassthroughClause {
 
     OutputSchema modify_schema(OutputSchema&& output_schema) const {
         return output_schema;
+    }
+
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+        util::raise_rte("PassThroughClause::join_schemas should never be called");
     }
 };
 
@@ -166,6 +175,10 @@ struct FilterClause {
     }
 
     OutputSchema modify_schema(OutputSchema&& output_schema) const;
+
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+        util::raise_rte("FilterClause::join_schemas should never be called");
+    }
 
     [[nodiscard]] std::string to_string() const;
 
@@ -217,6 +230,10 @@ struct ProjectClause {
     }
 
     OutputSchema modify_schema(OutputSchema&& output_schema) const;
+
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+        util::raise_rte("ProjectClause::join_schemas should never be called");
+    }
 
     [[nodiscard]] std::string to_string() const;
 };
@@ -281,6 +298,10 @@ struct PartitionClause {
         return output_schema;
     }
 
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+        util::raise_rte("GroupByClause::join_schemas should never be called");
+    }
+
     [[nodiscard]] std::string to_string() const {
         return fmt::format("GROUPBY Column[\"{}\"]", grouping_column_);
     }
@@ -338,6 +359,10 @@ struct AggregationClause {
 
     OutputSchema modify_schema(OutputSchema&& output_schema) const;
 
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+        util::raise_rte("AggregationClause::join_schemas should never be called");
+    }
+
     [[nodiscard]] std::string to_string() const;
 };
 
@@ -383,6 +408,10 @@ struct ResampleClause {
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
 
     OutputSchema modify_schema(OutputSchema&& output_schema) const;
+
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+        util::raise_rte("ResampleClause::join_schemas should never be called");
+    }
 
     [[nodiscard]] std::string to_string() const;
 
@@ -444,6 +473,10 @@ struct RemoveColumnPartitioningClause {
     OutputSchema modify_schema(OutputSchema&& output_schema) const {
         return output_schema;
     }
+
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+        util::raise_rte("RemoveColumnPartitioningClause::join_schemas should never be called");
+    }
 };
 
 struct SplitClause {
@@ -478,6 +511,10 @@ struct SplitClause {
 
     OutputSchema modify_schema(OutputSchema&& output_schema) const {
         return output_schema;
+    }
+
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+        util::raise_rte("SplitClause::join_schemas should never be called");
     }
 };
 
@@ -517,6 +554,10 @@ struct SortClause {
     OutputSchema modify_schema(OutputSchema&& output_schema) const {
         return output_schema;
     }
+
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+        util::raise_rte("SortClause::join_schemas should never be called");
+    }
 };
 
 struct MergeClause {
@@ -553,6 +594,10 @@ struct MergeClause {
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
 
     OutputSchema modify_schema(OutputSchema&& output_schema) const;
+
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+        util::raise_rte("MergeClause::join_schemas should never be called");
+    }
 };
 
 struct ColumnStatsGenerationClause {
@@ -598,6 +643,10 @@ struct ColumnStatsGenerationClause {
 
     OutputSchema modify_schema(ARCTICDB_UNUSED OutputSchema&& output_schema) const {
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>("ColumnStatsGenerationClause::modify_schema should never be called");
+    }
+
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+        util::raise_rte("ColumnStatsGenerationClause::join_schemas should never be called");
     }
 };
 
@@ -665,6 +714,10 @@ struct RowRangeClause {
         return output_schema;
     }
 
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+        util::raise_rte("RowRangeClause::join_schemas should never be called");
+    }
+
     [[nodiscard]] std::string to_string() const;
 
     void calculate_start_and_end(size_t total_rows);
@@ -708,6 +761,10 @@ struct DateRangeClause {
 
     OutputSchema modify_schema(OutputSchema&& output_schema) const;
 
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
+        util::raise_rte("DateRangeClause::join_schemas should never be called");
+    }
+
     [[nodiscard]] timestamp start() const {
         return start_;
     }
@@ -715,6 +772,45 @@ struct DateRangeClause {
     [[nodiscard]] timestamp end() const {
         return end_;
     }
+
+    [[nodiscard]] std::string to_string() const;
+};
+
+
+
+struct ConcatClause {
+    ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
+    JoinType join_type_;
+
+    explicit ConcatClause(JoinType join_type);
+
+    ARCTICDB_MOVE_COPY_DEFAULT(ConcatClause)
+
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>&) {
+        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("ConcatClause should never be first in the pipeline");
+    }
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec);
+
+    [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
+
+    [[nodiscard]] const ClauseInfo& clause_info() const {
+        return clause_info_;
+    }
+
+    void set_processing_config(const ProcessingConfig&) {
+    }
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+        component_manager_ = component_manager;
+    }
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const {
+        return output_schema;
+    }
+
+    OutputSchema join_schemas(std::vector<OutputSchema>&& input_schemas) const;
 
     [[nodiscard]] std::string to_string() const;
 };

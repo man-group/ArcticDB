@@ -44,7 +44,7 @@ TEST(Append, MergeDescriptorsPromote) {
     using namespace arcticdb;
 
     StreamId id{"test_desc"};
-    IndexDescriptorImpl idx{1u, IndexDescriptorImpl::Type::TIMESTAMP};
+    IndexDescriptorImpl idx{IndexDescriptorImpl::Type::TIMESTAMP, 1u};
 
     std::vector<FieldRef> fields {
         scalar_field(DataType::NANOSECONDS_UTC64, "time"),
@@ -86,7 +86,7 @@ TEST(Append, MergeDescriptorsNoPromote) {
     using namespace arcticdb;
 
     StreamId id{"test_desc"};
-    IndexDescriptorImpl idx{1u, IndexDescriptorImpl::Type::TIMESTAMP};
+    IndexDescriptorImpl idx{IndexDescriptorImpl::Type::TIMESTAMP, 1u};
 
     std::vector<FieldRef> fields {
         scalar_field(DataType::NANOSECONDS_UTC64, "time"),

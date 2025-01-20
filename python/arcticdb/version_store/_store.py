@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import copy
+from dataclasses import dataclass
 import datetime
 import os
 import sys
@@ -168,6 +169,23 @@ class VersionedItem:
     def __iter__(self):  # Backwards compatible with the old NamedTuple implementation
         warnings.warn("Don't iterate VersionedItem. Use attrs.astuple() explicitly", SyntaxWarning, stacklevel=2)
         return iter(attr.astuple(self))
+
+
+@dataclass
+class VersionedItemWithJoin:
+    """
+    Return type for operations that join multiple symbols together to produce a single output DataFrame.
+
+    Attributes
+    ----------
+    versions: List[VersionedItem]
+        The individual version information about the symbols that were joined together.
+        The data field of these versioned items will be None.
+    data: Any
+        The joined together data.
+    """
+    versions: List[VersionedItem]
+    data: Any
 
 
 def _env_config_from_lib_config(lib_cfg, env):
@@ -1116,6 +1134,117 @@ class NativeVersionStore:
                 versioned_items.append(vitem)
         return versioned_items
 
+    def batch_read_and_join(
+            self,
+            symbols: List[str],
+            query_builder: QueryBuilder,
+            as_ofs: Optional[List[VersionQueryInput]] = None,
+            date_ranges: Optional[List[Optional[DateRangeInput]]] = None,
+            row_ranges: Optional[List[Optional[Tuple[int, int]]]] = None,
+            columns: Optional[List[List[str]]] = None,
+            per_symbol_query_builders: Optional[Union[QueryBuilder, List[QueryBuilder]]] = None,
+            **kwargs,
+    ) -> VersionedItemWithJoin:
+        """
+        Reads multiple symbols in a batch fashion, and then joins them together using the first clause in the
+        `query_builder` argument. If there are subsequent clauses in the `query_builder` argument, then these are
+        applied to the joined data.
+
+        Parameters
+        ----------
+        symbols: `List[str]`
+            List of symbols to read
+        query_builder: `QueryBuilder`
+            The first clause must be a multi-symbol join, such as `concat`. Any subsequent clauses must work on
+            individual dataframes, and will be applied to the joined data.
+        as_ofs: `Optional[List[VersionQueryInput]]`, default=None
+            List of version queries. See documentation of `read` method for more details.
+            i-th entry corresponds to i-th element of `symbols`.
+        date_ranges: `Optional[List[Optional[DateRangeInput]]]`, default=None
+            List of date ranges to filter the symbols.
+            i-th entry corresponds to i-th element of `symbols`.
+        row_ranges: `Optional[List[Optional[Tuple[int, int]]]]`, default=None
+            List of row ranges to filter the symbols.
+            i-th entry corresponds to i-th element of `symbols`.
+        columns: `List[List[str]]`, default=None
+            Which columns to return for a dataframe.
+            i-th entry restricts columns for the i-th element in `symbols`.
+        per_symbol_query_builders: `Optional[Union[QueryBuilder, List[QueryBuilder]]]`, default=None
+            Either a single QueryBuilder object to apply to all the symbols before they are joined, or a list of
+            QueryBuilder objects of the same length as the symbols list.
+            For more information see the documentation for the QueryBuilder class.
+            i-th entry corresponds to i-th element of `symbols`.
+
+        Examples
+        --------
+
+        Join 2 symbols together without any pre or post processing.
+
+        >>> df0 = pd.DataFrame(
+            {
+                "col1": [0.5],
+                "col2": [1],
+            },
+            index=[pd.Timestamp("2025-01-01")],
+        )
+        >>> df1 = pd.DataFrame(
+            {
+                "col3": ["hello"],
+                "col2": [2],
+            },
+            index=[pd.Timestamp("2025-01-02")],
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.concat("outer")
+        >>> lib.write("symbol0", df0)
+        >>> lib.write("symbol1", df1)
+        >>> lib.batch_read_and_join(["symbol0", "symbol1"], query_builder=q).data
+
+                                   col1     col2     col3
+            2025-01-01 00:00:00     0.5        1     None
+            2025-01-02 00:00:00     NaN        2  "hello"
+
+        >>> q = adb.QueryBuilder()
+        >>> q = q.concat("inner")
+        >>> lib.batch_read_and_join(["symbol0", "symbol1"], query_builder=q).data
+
+                                   col2
+            2025-01-01 00:00:00       1
+            2025-01-02 00:00:00       2
+
+        Returns
+        -------
+        VersionedItemWithJoin
+            Contains a .data field with the joined together data, and a list of VersionedItem objects describing the
+            version number, metadata, etc., of the symbols that were joined together.
+
+        Raises
+        -------
+        UserInputException
+            * If the first clause in `query_builder` is not a multi-symbol join
+            * If any subsequent clauses in `query_builder` are not single-symbol clauses
+            * If any of the specified symbols are recursively normalized
+        MissingDataException
+            * If a symbol or the version of symbol specified in as_ofs does not exist or has been deleted
+        SchemaException
+            * If the schema of symbols to be joined are incompatible. Examples of incompatible schemas include:
+                * Trying to join a Series to a DataFrame
+                * Different index types, including MultiIndexes with different numbers of levels
+                * Incompatible column types e.g. joining a string column to an integer column
+        """
+        implement_read_index = kwargs.get("implement_read_index", False)
+        if columns:
+            columns = [self._resolve_empty_columns(c, implement_read_index) for c in columns]
+        version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
+        # Take a copy as _get_read_queries can modify the input argument, which makes reusing the input counter-intuitive
+        per_symbol_query_builders = copy.deepcopy(per_symbol_query_builders)
+        # Needed to force date_range and row_range arguments to go through the read_and_process path rather than the
+        # direct read path if no explicit query is provided for a symbol
+        force_ranges_to_queries = True
+        read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, per_symbol_query_builders, force_ranges_to_queries)
+        read_options = self._get_read_options(**kwargs)
+        return self._adapt_read_res(ReadResult(*self.version_store.batch_read_and_join(symbols, version_queries, read_queries, read_options, query_builder.clauses)))
+
     def batch_read_metadata(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None, **kwargs
     ) -> Dict[str, VersionedItem]:
@@ -1651,6 +1780,7 @@ class NativeVersionStore:
         row_ranges: Optional[List[Optional[Tuple[int, int]]]],
         columns: Optional[List[List[str]]],
         query_builder: Optional[Union[QueryBuilder, List[QueryBuilder]]],
+        force_ranges_to_queries: bool = False,
     ):
         read_queries = []
 
@@ -1696,6 +1826,9 @@ class NativeVersionStore:
                 these_columns = columns[idx]
             if query_builder is not None:
                 query = copy.deepcopy(query_builder) if isinstance(query_builder, QueryBuilder) else query_builder[idx]
+
+            if query is None and force_ranges_to_queries:
+                query = QueryBuilder()
 
             read_query = self._get_read_query(
                 date_range=date_range,
@@ -2148,21 +2281,40 @@ class NativeVersionStore:
 
         return index_columns
 
-    def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
+    def _adapt_read_res(self, read_result: ReadResult) -> Union[VersionedItem, VersionedItemWithJoin]:
         frame_data = FrameData.from_cpp(read_result.frame_data)
-        meta = denormalize_user_metadata(read_result.udm, self._normalizer)
         data = self._normalizer.denormalize(frame_data, read_result.norm)
         if read_result.norm.HasField("custom"):
             data = self._custom_normalizer.denormalize(data, read_result.norm.custom)
-        return VersionedItem(
-            symbol=read_result.version.symbol,
-            library=self._library.library_path,
-            data=data,
-            version=read_result.version.version,
-            metadata=meta,
-            host=self.env,
-            timestamp=read_result.version.timestamp,
-        )
+
+        if isinstance(read_result.version, list):
+            versions = []
+            for idx in range(len(read_result.version)):
+                versions.append(
+                    VersionedItem(
+                        symbol=read_result.version[idx].symbol,
+                        library=self._library.library_path,
+                        data=None,
+                        version=read_result.version[idx].version,
+                        metadata=denormalize_user_metadata(read_result.udm[idx], self._normalizer),
+                        host=self.env,
+                        timestamp=read_result.version[idx].timestamp,
+                    )
+                )
+            return VersionedItemWithJoin(
+                versions=versions,
+                data=data,
+            )
+        else:
+            return VersionedItem(
+                symbol=read_result.version.symbol,
+                library=self._library.library_path,
+                data=data,
+                version=read_result.version.version,
+                metadata=denormalize_user_metadata(read_result.udm, self._normalizer),
+                host=self.env,
+                timestamp=read_result.version.timestamp,
+            )
 
     def list_versions(
         self,
