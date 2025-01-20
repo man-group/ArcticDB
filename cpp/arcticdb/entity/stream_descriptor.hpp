@@ -274,10 +274,12 @@ struct StreamDescriptor {
 };
 
 struct OutputSchema {
-    arcticdb::proto::descriptors::NormalizationMetadata norm_metadata_;
+    proto::descriptors::NormalizationMetadata norm_metadata_;
+
+    OutputSchema() = default;
 
     OutputSchema(StreamDescriptor stream_descriptor,
-                 arcticdb::proto::descriptors::NormalizationMetadata norm_metadata):
+                 proto::descriptors::NormalizationMetadata norm_metadata):
             norm_metadata_(std::move(norm_metadata)),
             stream_descriptor_(std::move(stream_descriptor)) {};
 

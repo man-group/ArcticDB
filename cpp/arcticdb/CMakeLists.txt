@@ -937,6 +937,7 @@ if(${TEST})
             processing/test/test_component_manager.cpp
             processing/test/test_expression.cpp
             processing/test/test_filter_and_project_sparse.cpp
+            processing/test/test_join_schemas.cpp
             processing/test/test_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
             processing/test/test_output_schema_aggregator_types.cpp

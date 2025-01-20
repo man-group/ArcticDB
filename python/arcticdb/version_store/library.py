@@ -22,7 +22,7 @@ from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
-from arcticdb.version_store._store import NativeVersionStore, VersionedItem
+from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError, OutputFormat
 import pandas as pd
@@ -499,6 +499,40 @@ class LazyDataFrameCollection(QueryBuilder):
 
     def __repr__(self) -> str:
         return self.__str__()
+
+
+class LazyDataFrameAfterJoin(QueryBuilder):
+    def __init__(
+            self,
+            lazy_dataframes: LazyDataFrameCollection,
+            join: QueryBuilder,
+    ):
+        super().__init__()
+        self._lazy_dataframes = lazy_dataframes
+        self.then(join)
+
+    def collect(self) -> VersionedItemWithJoin:
+        if not len(self._lazy_dataframes._lazy_dataframes):
+            return []
+        else:
+            lib = self._lazy_dataframes._lib
+            return lib.read_batch_and_join(self._lazy_dataframes._read_requests(), self)
+
+    def __str__(self) -> str:
+        query_builder_repr = super().__str__()
+        return f"LazyDataFrameAfterJoin({self._lazy_dataframes._lazy_dataframes} | {query_builder_repr})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+
+def concat(
+        lazy_dataframes: Union[List[LazyDataFrame], LazyDataFrameCollection],
+        join: str = "outer",
+) -> LazyDataFrameAfterJoin:
+    if not isinstance(lazy_dataframes, LazyDataFrameCollection):
+        lazy_dataframes = LazyDataFrameCollection(lazy_dataframes)
+    return LazyDataFrameAfterJoin(lazy_dataframes, QueryBuilder().concat(join))
 
 
 def col(name: str) -> ExpressionNode:
@@ -1794,6 +1828,37 @@ class Library:
                 implement_read_index=True,
                 iterate_snapshots_if_tombstoned=False,
             )
+
+    def read_batch_and_join(
+            self,
+            read_requests: List[ReadRequest],
+            query_builder: QueryBuilder,
+    ) -> VersionedItemWithJoin:
+        symbol_strings = []
+        as_ofs = []
+        date_ranges = []
+        row_ranges = []
+        columns = []
+        per_symbol_query_builders = []
+
+        for r in read_requests:
+            symbol_strings.append(r.symbol)
+            as_ofs.append(r.as_of)
+            date_ranges.append(r.date_range)
+            row_ranges.append(r.row_range)
+            columns.append(r.columns)
+            per_symbol_query_builders.append(r.query_builder)
+
+        return self._nvs.batch_read_and_join(
+            symbol_strings,
+            query_builder,
+            as_ofs,
+            date_ranges,
+            row_ranges,
+            columns,
+            per_symbol_query_builders,
+            iterate_snapshots_if_tombstoned=False,
+        )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
         """

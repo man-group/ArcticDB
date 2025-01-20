@@ -14,7 +14,18 @@ namespace arcticdb {
 
 inline auto adapt_read_df = [](ReadResult && ret) -> py::tuple{
     auto pynorm = python_util::pb_to_python(ret.norm_meta);
-    auto pyuser_meta = python_util::pb_to_python(ret.user_meta);
+    auto pyuser_meta = util::variant_match(
+            ret.user_meta,
+            [](const arcticdb::proto::descriptors::UserDefinedMetadata& metadata) -> py::object {
+                return python_util::pb_to_python(metadata);
+            },
+            [](const std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>& metadatas) -> py::object {
+                py::list py_metadatas;
+                for (const auto& metadata: metadatas) {
+                    py_metadatas.append(python_util::pb_to_python(metadata));
+                }
+                return py_metadatas;
+            });
     auto multi_key_meta = python_util::pb_to_python(ret.multi_key_meta);
     return py::make_tuple(ret.item, std::move(ret.frame_data), pynorm, pyuser_meta, multi_key_meta, ret.multi_keys);
 };

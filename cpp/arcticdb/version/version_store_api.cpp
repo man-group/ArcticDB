@@ -808,8 +808,24 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_up
     bool prune_previous_versions,
     bool upsert
 ) {
-    auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas, cfg().write_options().empty_types());
-    return batch_update_internal(stream_ids, std::move(frames), update_qeries, prune_previous_versions, upsert);
+        auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas, cfg().write_options().empty_types());
+        return batch_update_internal(stream_ids, std::move(frames), update_qeries, prune_previous_versions, upsert);
+    }
+
+ReadResult PythonVersionStore::batch_read_and_join(
+    const std::vector<StreamId>& stream_ids,
+    const std::vector<VersionQuery>& version_queries,
+    std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+    const ReadOptions& read_options,
+    std::vector<std::shared_ptr<Clause>>&& clauses,
+    std::any& handler_data) {
+    auto versions_and_frame = batch_read_and_join_internal(stream_ids, version_queries, read_queries, read_options, std::move(clauses), handler_data);
+    return create_python_read_result(
+            versions_and_frame.versioned_items_,
+            read_options.output_format(),
+            std::move(versions_and_frame.frame_and_descriptor_),
+            std::move(versions_and_frame.metadatas_)
+            );
 }
 
 void PythonVersionStore::delete_snapshot(const SnapshotId& snap_name) {
