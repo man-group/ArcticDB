@@ -402,6 +402,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("end", &DateRangeClause::end)
             .def("__str__", &DateRangeClause::to_string);
 
+    py::class_<ConcatClause, std::shared_ptr<ConcatClause>>(version, "ConcatClause")
+            .def(py::init<>())
+            .def("__str__", &ConcatClause::to_string);
+
     py::class_<ReadQuery, std::shared_ptr<ReadQuery>>(version, "PythonVersionStoreReadQuery")
             .def(py::init())
             .def_readwrite("columns",&ReadQuery::columns)
