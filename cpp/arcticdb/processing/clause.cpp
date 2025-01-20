@@ -1217,28 +1217,4 @@ std::string DateRangeClause::to_string() const {
     return fmt::format("DATE RANGE {} - {}", start_, end_);
 }
 
-ConcatClause::ConcatClause() {
-
-}
-
-std::vector<std::vector<size_t>> ConcatClause::structure_for_processing(ARCTICDB_UNUSED std::vector<RangesAndKey>& ranges_and_keys) {
-    return {};
-}
-
-std::vector<std::vector<EntityId>> ConcatClause::structure_for_processing(ARCTICDB_UNUSED std::vector<std::vector<EntityId>>&& entity_ids_vec) {
-    return {};
-}
-
-std::vector<EntityId> ConcatClause::process(ARCTICDB_UNUSED std::vector<EntityId>&& entity_ids) const {
-    return {};
-}
-
-void ConcatClause::set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {
-
-}
-
-std::string ConcatClause::to_string() const {
-    return "CONCAT";
-}
-
 }

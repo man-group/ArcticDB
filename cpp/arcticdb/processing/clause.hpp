@@ -669,31 +669,4 @@ struct DateRangeClause {
     [[nodiscard]] std::string to_string() const;
 };
 
-struct ConcatClause {
-    ClauseInfo clause_info_;
-    std::shared_ptr<ComponentManager> component_manager_;
-
-    ConcatClause();
-
-    ARCTICDB_MOVE_COPY_DEFAULT(ConcatClause)
-
-    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys);
-
-    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec);
-
-    [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
-
-    [[nodiscard]] const ClauseInfo& clause_info() const {
-        return clause_info_;
-    }
-
-    void set_processing_config(const ProcessingConfig& processing_config);
-
-    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
-        component_manager_ = component_manager;
-    }
-
-    [[nodiscard]] std::string to_string() const;
-};
-
 }//namespace arcticdb
