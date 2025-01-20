@@ -719,4 +719,41 @@ struct DateRangeClause {
     [[nodiscard]] std::string to_string() const;
 };
 
+struct ConcatClause {
+
+    ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
+
+    ConcatClause();
+
+    ARCTICDB_MOVE_COPY_DEFAULT(ConcatClause)
+
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(ARCTICDB_UNUSED std::vector<RangesAndKey>& ranges_and_keys) {
+        // TODO: This isn't a long term requirement, for simplicity at the moment we force all input symbols through their own
+        // processing pipeline right now, even if they have no clauses
+        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("ConcatClause should never be first in the pipeline");
+    }
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec);
+
+    [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
+
+    [[nodiscard]] const ClauseInfo& clause_info() const {
+        return clause_info_;
+    }
+
+    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {
+    }
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+        component_manager_ = component_manager;
+    }
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const {
+        return output_schema;
+    }
+
+    [[nodiscard]] std::string to_string() const;
+};
+
 }//namespace arcticdb
