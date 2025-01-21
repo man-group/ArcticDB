@@ -53,6 +53,20 @@ struct ReadVersionOutput {
     FrameAndDescriptor frame_and_descriptor_;
 };
 
+struct MultiSymbolReadOutput {
+    // TODO: delete this ctor
+//    MultiSymbolReadOutput() = delete;
+    MultiSymbolReadOutput() = default;
+    MultiSymbolReadOutput(std::vector<VersionedItem>&& versioned_items, FrameAndDescriptor&& frame_and_descriptor):
+            versioned_items_(std::move(versioned_items)),
+            frame_and_descriptor_(std::move(frame_and_descriptor)) {}
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(MultiSymbolReadOutput)
+
+    std::vector<VersionedItem> versioned_items_;
+    FrameAndDescriptor frame_and_descriptor_;
+};
+
 VersionedItem write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,

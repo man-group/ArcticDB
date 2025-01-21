@@ -17,6 +17,7 @@
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/processing/query_planner.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/versioned_engine.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>
@@ -285,6 +286,15 @@ public:
         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
         const ReadOptions& read_options,
         std::any& handler_data);
+
+    MultiSymbolReadOutput batch_read_with_join_internal(
+            const std::vector<StreamId>& stream_ids,
+            const std::vector<VersionQuery>& version_queries,
+            std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+            const ReadOptions& read_options,
+            const std::string& join, // TODO: Make a Clause or MultiSymbolClause
+            const std::vector<ClauseVariant>& post_join_clauses,
+            std::any& handler_data);
 
     std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor_internal(
             const std::vector<StreamId>& stream_ids,

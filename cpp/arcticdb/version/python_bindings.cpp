@@ -767,6 +767,19 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                  return python_util::adapt_read_dfs(v.batch_read(stream_ids, version_queries, read_queries, read_options, handler_data));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
+        .def("batch_read_with_join",
+             [&](PythonVersionStore& v,
+                 const std::vector<StreamId> &stream_ids,
+                 const std::vector<VersionQuery>& version_queries,
+                 std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+                 const ReadOptions& read_options,
+                 const std::string& join, // TODO: Make a Clause or MultiSymbolClause
+                 std::vector<ClauseVariant> post_join_clauses
+                 ){
+                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+                 return adapt_read_df(v.batch_read_with_join(stream_ids, version_queries, read_queries, read_options, join, post_join_clauses, handler_data));
+             },
+             py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
         .def("batch_read_keys",
              [&](PythonVersionStore& v, std::vector<AtomKey> atom_keys) {
                  return python_util::adapt_read_dfs(frame_to_read_result(v.batch_read_keys(atom_keys)));

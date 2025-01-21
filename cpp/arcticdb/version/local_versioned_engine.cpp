@@ -1151,6 +1151,17 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
     return read_versions_or_errors;
 }
 
+MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
+        ARCTICDB_UNUSED const std::vector<StreamId>& stream_ids,
+        ARCTICDB_UNUSED const std::vector<VersionQuery>& version_queries,
+        ARCTICDB_UNUSED std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+        ARCTICDB_UNUSED const ReadOptions& read_options,
+        ARCTICDB_UNUSED const std::string& join, // TODO: Make a Clause or MultiSymbolClause
+        ARCTICDB_UNUSED const std::vector<ClauseVariant>& post_join_clauses,
+        ARCTICDB_UNUSED std::any& handler_data) {
+    return {};
+}
+
 void LocalVersionedEngine::write_version_and_prune_previous(
         bool prune_previous_versions,
         const AtomKey& new_version,

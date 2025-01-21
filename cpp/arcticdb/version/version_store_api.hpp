@@ -300,6 +300,15 @@ class PythonVersionStore : public LocalVersionedEngine {
         const ReadOptions& read_options,
         std::any& handler_data);
 
+    ReadResult batch_read_with_join(
+            const std::vector<StreamId>& stream_ids,
+            const std::vector<VersionQuery>& version_queries,
+            std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+            const ReadOptions& read_options,
+            const std::string& join, // TODO: Make a Clause or MultiSymbolClause
+            const std::vector<ClauseVariant>& post_join_clauses,
+            std::any& handler_data);
+
     std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> batch_read_metadata(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
