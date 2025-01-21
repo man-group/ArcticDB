@@ -12,17 +12,16 @@ import math
 import pytest
 import pandas as pd
 import numpy as np
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List
 from enum import Enum
 
 from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException
-from arcticdb_ext.version_store import SortedValue
-from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions, StreamDescriptorMismatch, SchemaException
+from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
-from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
+from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder
 from arcticdb.storage_fixtures.api import StorageFixture, ArcticUriFields, StorageFixtureFactory
 from arcticdb.storage_fixtures.mongo import MongoDatabase
@@ -33,7 +32,6 @@ from arcticdb.version_store.library import (
     ArcticUnsupportedDataTypeException,
     ReadRequest,
     StagedDataFinalizeMethod,
-    ArcticInvalidApiUsageException,
 )
 
 from ...util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK, SSL_TESTS_MARK, SSL_TEST_SUPPORTED

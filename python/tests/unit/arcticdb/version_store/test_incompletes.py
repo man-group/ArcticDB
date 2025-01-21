@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.exceptions import MissingDataException
+from arcticdb_ext.storage import KeyType
 
 
 @pytest.mark.parametrize("batch", (True, False))
@@ -60,3 +61,22 @@ def test_read_incompletes_non_existent_symbol(lmdb_version_store_v1, batch):
             lib.batch_read([sym], date_ranges=[date_range], incomplete=True)
         else:
             lib.read(sym, date_range=date_range, incomplete=True)
+
+
+def test_read_incompletes_no_chunking(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    lib_tool = lib.library_tool()
+    sym = "sym"
+    df = pd.DataFrame({"col": np.arange(10)}, pd.date_range("2024-01-01", periods=10))
+    lib_tool.append_incomplete(sym, df.iloc[:8])
+    lib_tool.append_incomplete(sym, df.iloc[8:])
+    received_vit = lib.read(sym, date_range=(None, None), incomplete=True)
+
+    assert_frame_equal(df, received_vit.data)
+
+    data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)
+    # We don't apply row slicing within append_incomplete, callers must handle their own slicing
+    assert len(data_keys) == 2
+
+    ref_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, sym)
+    assert len(ref_keys) == 1

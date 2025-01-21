@@ -615,7 +615,7 @@ std::optional<std::string_view> SegmentInMemoryImpl::string_at(position_t row, p
     }
 }
 
-std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::split(size_t rows) const {
+std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::split(size_t rows, bool filter_down_stringpool) const {
     std::vector<std::shared_ptr<SegmentInMemoryImpl>> output;
     util::check(rows > 0, "rows supplied in SegmentInMemoryImpl.split() is non positive");
     auto total_rows = row_count();
@@ -625,7 +625,7 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::split(siz
         util::BitSetSizeType end = std::min(start + rows, total_rows);
         // set_range is close interval on [left, right]
         bitset.set_range(start, end - 1, true);
-        output.emplace_back(filter(std::move(bitset)));
+        output.emplace_back(filter(std::move(bitset), filter_down_stringpool));
     }
     return output;
 }
