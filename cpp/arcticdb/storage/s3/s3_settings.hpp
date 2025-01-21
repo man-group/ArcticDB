@@ -44,9 +44,13 @@ public:
         aws_auth_(aws_auth),
         aws_profile_(aws_profile) {
     }
-    explicit S3Settings(const arcticc::pb2::s3_storage_pb2::Config& config) {
+
+    explicit S3Settings(const arcticc::pb2::s3_storage_pb2::Config& config) : 
+        S3Settings(AWSAuthMethod::DISABLED, "")
+    {
         update(config);
     }
+    
     S3Settings update(const arcticc::pb2::s3_storage_pb2::Config& config){
         bucket_name_ = config.bucket_name();
         credential_name_ = config.credential_name();

@@ -24,6 +24,8 @@
 #include <string>
 #include <variant>
 #include <ranges>
+#include <span>
+
 
 namespace arcticdb::pipelines {
 

@@ -21,12 +21,9 @@
 
 #include <folly/gen/Base.h>
 #include <folly/futures/Future.h>
-
 #include <filesystem>
 #include <span>
 #include <string>
-
-namespace fg = folly::gen;
 
 namespace arcticdb {
 

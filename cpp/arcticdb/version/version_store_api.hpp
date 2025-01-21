@@ -31,9 +31,8 @@ using namespace arcticdb::entity;
 namespace as = arcticdb::stream;
 
 /**
- * PythonVersionStore contains all the Python cruft that isn't portable, as well as non-essential features that are
- * part of the backwards-compatibility with Arctic Python but that we think are random/a bad idea and aren't part of
- * the main product.
+ * The purpose of this class is to perform python-specific translations into either native C++ or protobuf objects
+ * so that the LocalVersionedEngine contains only partable C++ code.
  */
 class PythonVersionStore : public LocalVersionedEngine {
 
@@ -62,7 +61,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     VersionedItem write_versioned_composite_data(
         const StreamId& stream_id,
         const py::object &metastruct,
-        const std::vector<StreamId> &sub_keys,  // TODO: make this optional?
+        const std::vector<StreamId> &sub_keys,
         const std::vector<py::tuple> &items,
         const std::vector<py::object> &norm_metas,
         const py::object &user_meta,
@@ -360,14 +359,7 @@ inline std::vector<std::variant<ReadResult, DataError>> frame_to_read_result(std
     std::vector<std::variant<ReadResult, DataError>> read_results;
     read_results.reserve(keys_frame_and_descriptors.size());
     for (auto& read_version_output : keys_frame_and_descriptors) {
-        const auto& desc_proto = read_version_output.frame_and_descriptor_.desc_.proto();
-        read_results.emplace_back(ReadResult(
-            read_version_output.versioned_item_,
-            PythonOutputFrame{read_version_output.frame_and_descriptor_.frame_, read_version_output.frame_and_descriptor_.buffers_},
-            desc_proto.normalization(),
-            desc_proto.user_meta(),
-            desc_proto.multi_key_meta(),
-            std::vector<AtomKey>{}));
+        read_results.emplace_back(create_python_read_result(read_version_output.versioned_item_, std::move(read_version_output.frame_and_descriptor_)));
     }
     return read_results;
 }

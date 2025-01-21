@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import os
 import sys
 import pytest
@@ -13,6 +14,9 @@ from datetime import date
 from numpy import datetime64
 from copy import deepcopy
 
+MACOS=sys.platform.lower().startswith('darwin')
+LINUX=sys.platform.lower().startswith('linux')
+WINDOWS=sys.platform.lower().startswith('win32')
 
 # TODO: Some tests are either segfaulting or failing on MacOS with conda builds.
 # This is meant to be used as a temporary flag to skip/xfail those tests.
@@ -58,6 +62,11 @@ Currently controlled by the ARCTICDB_PERSISTENT_STORAGE_TESTS and ARCTICDB_FAST_
 TODO: https://github.com/man-group/ArcticDB/issues/1394"""
 SSL_TEST_SUPPORTED = sys.platform == "linux"
 
+## MEMRAY supports linux and macos and python 3.8 and above
+MEMRAY_SUPPORTED = (sys.version_info >= (3, 8)) and (MACOS or LINUX)
+MEMRAY_TESTS_MARK = pytest.mark.skipif(
+    not MEMRAY_SUPPORTED, 
+    reason="MEMRAY supports linux and macos and python 3.8 and above")
 
 SSL_TESTS_MARK = pytest.mark.skipif(
     not SSL_TEST_SUPPORTED,
@@ -65,8 +74,10 @@ SSL_TESTS_MARK = pytest.mark.skipif(
 )
 
 VENV_COMPAT_TESTS_MARK = pytest.mark.skipif(
-    MACOS_CONDA_BUILD,
-    reason="Skipping compatibility tests because macOS conda builds don't have an available PyPi arcticdb version"
+    MACOS_CONDA_BUILD
+    or sys.version.startswith("3.12")
+    or sys.version.startswith("3.13"),  # Waiting for https://github.com/man-group/ArcticDB/issues/2008
+    reason="Skipping compatibility tests because macOS conda builds don't have an available PyPi arcticdb version",
 )
 
 

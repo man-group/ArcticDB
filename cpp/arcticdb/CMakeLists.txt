@@ -62,7 +62,7 @@ else()
     add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
 
     SET(HIDE_LINKED_SYMBOLS OFF)
-
+    
     find_package(pybind11 REQUIRED)
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
@@ -268,6 +268,7 @@ set(arcticdb_srcs
         processing/query_planner.hpp
         processing/sorted_aggregation.hpp
         processing/unsorted_aggregation.hpp
+        storage/async_storage.hpp
         storage/constants.hpp
         storage/common.hpp
         storage/config_resolvers.hpp
@@ -277,22 +278,22 @@ set(arcticdb_srcs
         storage/library.hpp
         storage/library_index.hpp
         storage/library_manager.hpp
-        storage/storage_mock_client.hpp
-        storage/azure/azure_client_wrapper.hpp
-        storage/azure/azure_mock_client.hpp
-        storage/azure/azure_real_client.hpp
+        storage/mock/storage_mock_client.hpp
+        storage/azure/azure_client_interface.hpp
+        storage/mock/azure_mock_client.hpp
+        storage/azure/azure_client_impl.hpp
         storage/azure/azure_storage.hpp
         storage/lmdb/lmdb.hpp
-        storage/lmdb/lmdb_client_wrapper.hpp
-        storage/lmdb/lmdb_mock_client.hpp
-        storage/lmdb/lmdb_real_client.hpp
+        storage/lmdb/lmdb_client_interface.hpp
+        storage/mock/lmdb_mock_client.hpp
+        storage/lmdb/lmdb_client_impl.hpp
         storage/lmdb/lmdb_storage.hpp
         storage/memory/memory_storage.hpp
         storage/memory/memory_storage.cpp
         storage/mongo/mongo_client.hpp
         storage/mongo/mongo_instance.hpp
-        storage/mongo/mongo_client_wrapper.hpp
-        storage/mongo/mongo_mock_client.hpp
+        storage/mongo/mongo_client_interface.hpp
+        storage/mock/mongo_mock_client.hpp
         storage/mongo/mongo_storage.hpp
         storage/object_store_utils.hpp
         storage/file/file_store.hpp
@@ -300,7 +301,7 @@ set(arcticdb_srcs
         storage/file/file_store.hpp
         storage/single_file_storage.hpp
         storage/s3/nfs_backed_storage.hpp
-        storage/s3/s3_client_wrapper.hpp
+        storage/s3/s3_client_interface.hpp
         storage/s3/s3_storage_tool.hpp
         storage/s3/s3_settings.hpp
         storage/storage_factory.hpp
@@ -331,6 +332,7 @@ set(arcticdb_srcs
         toolbox/library_tool.hpp
         toolbox/storage_mover.hpp
         util/allocator.hpp
+        util/allocation_tracing.hpp
         util/bitset.hpp
         util/buffer.hpp
         util/buffer_pool.hpp
@@ -379,6 +381,7 @@ set(arcticdb_srcs
         util/lazy.hpp
         util/type_traits.hpp
         util/variant.hpp
+        util/gil_safe_py_none.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
         version/schema_checks.hpp
@@ -414,6 +417,7 @@ set(arcticdb_srcs
         column_store/key_segment.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
+        column_store/statistics.hpp
         column_store/string_pool.cpp
         entity/data_error.cpp
         entity/field_collection.cpp
@@ -470,21 +474,21 @@ set(arcticdb_srcs
         storage/failure_simulation.cpp
         storage/library_manager.cpp
         storage/azure/azure_storage.cpp
-        storage/azure/azure_real_client.cpp
-        storage/azure/azure_mock_client.cpp
-        storage/lmdb/lmdb_mock_client.cpp
-        storage/lmdb/lmdb_real_client.cpp
+        storage/azure/azure_client_impl.cpp
+        storage/mock/azure_mock_client.cpp
+        storage/mock/lmdb_mock_client.cpp
+        storage/lmdb/lmdb_client_impl.cpp
         storage/lmdb/lmdb_storage.cpp
         storage/file/mapped_file_storage.cpp
         storage/mongo/mongo_client.cpp
         storage/mongo/mongo_instance.cpp
-        storage/mongo/mongo_mock_client.cpp
+        storage/mock/mongo_mock_client.cpp
         storage/mongo/mongo_storage.cpp
         storage/s3/nfs_backed_storage.cpp
         storage/s3/ec2_utils.cpp
         storage/s3/s3_api.cpp
-        storage/s3/s3_real_client.cpp
-        storage/s3/s3_mock_client.cpp
+        storage/s3/s3_client_impl.cpp
+        storage/mock/s3_mock_client.cpp
         storage/s3/s3_storage.cpp
         storage/s3/s3_storage_tool.cpp
         storage/storage_factory.cpp
@@ -497,6 +501,7 @@ set(arcticdb_srcs
         toolbox/library_tool.cpp
         util/allocator.cpp
         util/buffer_holder.cpp
+        util/allocation_tracing.cpp
         util/buffer_pool.cpp
         util/configs_map.cpp
         util/decimal.cpp
@@ -512,7 +517,9 @@ set(arcticdb_srcs
         util/type_handler.cpp
         version/key_block.hpp
         version/key_block.cpp
+        util/gil_safe_py_none.cpp
         version/local_versioned_engine.cpp
+        version/schema_checks.cpp
         version/op_log.cpp
         version/snapshot.cpp
         version/symbol_list.cpp
@@ -674,6 +681,12 @@ set (arcticdb_core_libraries
         Azure::azure-identity
         Azure::azure-storage-blobs
 )
+
+if(${ARCTICDB_COUNT_ALLOCATIONS})
+    list(APPEND arcticdb_core_libraries
+            cpptrace::cpptrace
+    )
+endif()
 
 if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
     # Even though python is transitive dependency MSVS builds fail if we don't link against python explicitly
@@ -901,6 +914,7 @@ if(${TEST})
             column_store/test/test_column_data_random_accessor.cpp
             column_store/test/test_index_filtering.cpp
             column_store/test/test_memory_segment.cpp
+            column_store/test/test_statistics.cpp
             entity/test/test_atom_key.cpp
             entity/test/test_key_serialization.cpp
             entity/test/test_metrics.cpp
@@ -929,10 +943,12 @@ if(${TEST})
             storage/test/test_storage_factory.cpp
             storage/test/test_storage_exceptions.cpp
             storage/test/test_azure_storage.cpp
+            storage/test/common.hpp
             storage/test/test_storage_operations.cpp
             stream/test/stream_test_common.cpp
             stream/test/test_aggregator.cpp
             stream/test/test_append_map.cpp
+            stream/test/test_protobuf_mappings.cpp
             stream/test/test_row_builder.cpp
             stream/test/test_segment_aggregator.cpp
             stream/test/test_types.cpp
@@ -967,8 +983,7 @@ if(${TEST})
             version/test/test_version_map_batch.cpp
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
-            python/python_handlers.cpp
-            storage/test/common.hpp)
+            python/python_handlers.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

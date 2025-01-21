@@ -108,6 +108,7 @@ inline std::optional<AtomKey> read_segment_with_keys(
     load_progress.oldest_loaded_undeleted_index_version_ = std::min(load_progress.oldest_loaded_undeleted_index_version_, oldest_loaded_undeleted_index);
     load_progress.earliest_loaded_timestamp_ = std::min(load_progress.earliest_loaded_timestamp_, earliest_loaded_timestamp);
     load_progress.earliest_loaded_undeleted_timestamp_ = std::min(load_progress.earliest_loaded_undeleted_timestamp_, earliest_loaded_undeleted_timestamp);
+    load_progress.is_earliest_version_loaded = !next.has_value();
     return next;
 }
 
@@ -131,21 +132,21 @@ std::shared_ptr<VersionMapEntry> build_version_map_entry_with_predicate_iteratio
     std::vector<AtomKey> read_keys;
     for (auto key_type : key_types) {
         store->iterate_type(key_type,
-                            [&predicate, &read_keys, &store, &output, &perform_read_segment_with_keys](VariantKey &&vk) {
-                                const auto &key = to_atom(std::move(vk));
-                                if (!predicate(key))
-                                    return;
+            [&predicate, &read_keys, &store, &output, &perform_read_segment_with_keys](VariantKey &&vk) {
+                const auto &key = to_atom(std::move(vk));
+                if (!predicate(key))
+                    return;
 
-                                read_keys.push_back(key);
-                                ARCTICDB_DEBUG(log::storage(), "Version map iterating key {}", key);
-                                if (perform_read_segment_with_keys) {
-                                    auto [kv, seg] = store->read_sync(to_atom(key));
-                                    LoadProgress load_progress;
-                                    (void)read_segment_with_keys(seg, output, load_progress);
-                                }
-                            },
-                            prefix);
-    }
+                read_keys.push_back(key);
+                ARCTICDB_DEBUG(log::storage(), "Version map iterating key {}", key);
+                if (perform_read_segment_with_keys) {
+                    auto [kv, seg] = store->read_sync(to_atom(key));
+                    LoadProgress load_progress;
+                    (void)read_segment_with_keys(seg, output, load_progress);
+                }
+            },
+            prefix);
+}
     if (!perform_read_segment_with_keys) {
         output->keys_.insert(output->keys_.end(),
                              std::move_iterator(read_keys.begin()),
@@ -176,13 +177,11 @@ inline void read_symbol_ref(const std::shared_ptr<StreamSource>& store, const St
     std::pair<entity::VariantKey, SegmentInMemory> key_seg_pair;
     // Trying to read a missing ref key is expected e.g. when writing a previously missing symbol.
     // If the ref key is missing we keep the entry empty and should not raise warnings.
-    auto read_opts = storage::ReadKeyOpts{};
-    read_opts.dont_warn_about_missing_key=true;
     try {
-        key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION_REF}, read_opts);
+        key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION_REF});
     } catch (const storage::KeyNotFoundException&) {
         try {
-            key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION, true}, read_opts);
+            key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION, true});
         } catch (const storage::KeyNotFoundException&) {
             return;
         }

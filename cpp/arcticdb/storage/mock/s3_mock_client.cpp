@@ -5,12 +5,10 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/storage/s3/s3_mock_client.hpp>
-#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
-
+#include <arcticdb/storage/mock/s3_mock_client.hpp>
+#include <arcticdb/storage/s3/s3_client_interface.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/buffer_pool.hpp>
-
 #include <arcticdb/storage/storage_utils.hpp>
 
 #include <aws/s3/S3Errors.h>
@@ -50,6 +48,7 @@ std::optional<Aws::S3::S3Error> has_failure_trigger(const std::string& s3_object
 
 const auto not_found_error = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::RESOURCE_NOT_FOUND, false));
 const auto precondition_failed_error = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::UNKNOWN, "Precondition failed", "Precondition failed", false));
+const auto not_implemented_error = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::UNKNOWN, "NotImplemented", "A header you provided implies functionality that is not implemented", false));
 
 S3Result<std::monostate> MockS3Client::head_object(
         const std::string& s3_object_name,
@@ -81,12 +80,23 @@ S3Result<Segment> MockS3Client::get_object(
     return {pos->second.clone()};
 }
 
+folly::Future<S3Result<Segment>> MockS3Client::get_object_async(
+    const std::string &s3_object_name,
+    const std::string &bucket_name) const {
+    return folly::makeFuture(get_object(s3_object_name, bucket_name));
+}
+
 S3Result<std::monostate> MockS3Client::put_object(
         const std::string &s3_object_name,
         Segment &&segment,
         const std::string &bucket_name,
         PutHeader header) {
     auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::WRITE);
+
+    if (maybe_error.has_value() && header == PutHeader::IF_NONE_MATCH) {
+        return {not_implemented_error};
+    }
+
     if (maybe_error.has_value()) {
         return {*maybe_error};
     }
@@ -128,7 +138,7 @@ constexpr auto page_size = 10;
 S3Result<ListObjectsOutput> MockS3Client::list_objects(
         const std::string& name_prefix,
         const std::string& bucket_name,
-        const std::optional<std::string> continuation_token) const {
+        const std::optional<std::string>& continuation_token) const {
     // Terribly inefficient but fine for tests.
     auto matching_names = std::vector<std::string>();
     for (auto& key : s3_contents) {

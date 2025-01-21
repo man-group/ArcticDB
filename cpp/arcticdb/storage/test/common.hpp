@@ -14,7 +14,7 @@
 
 namespace arcticdb::storage {
 
-inline VariantKey get_test_key(std::string name, entity::KeyType key_type = entity::KeyType::TABLE_DATA) {
+inline VariantKey get_test_key(const std::string& name, entity::KeyType key_type = entity::KeyType::TABLE_DATA) {
     auto builder = arcticdb::atom_key_builder();
     return builder.build(name, key_type);
 }
@@ -25,22 +25,22 @@ inline Segment get_test_segment() {
     return encode_dispatch(std::move(segment_in_memory), codec_opts, arcticdb::EncodingVersion::V2);
 }
 
-inline void write_in_store(Storage &store, std::string symbol, entity::KeyType key_type = entity::KeyType::TABLE_DATA) {
+inline void write_in_store(Storage &store, const std::string& symbol, entity::KeyType key_type = entity::KeyType::TABLE_DATA) {
     auto variant_key = get_test_key(symbol, key_type);
     store.write(KeySegmentPair(std::move(variant_key), get_test_segment()));
 }
 
-inline void update_in_store(Storage &store, std::string symbol, entity::KeyType key_type = entity::KeyType::TABLE_DATA) {
+inline void update_in_store(Storage &store, const std::string& symbol, entity::KeyType key_type = entity::KeyType::TABLE_DATA) {
     auto variant_key = get_test_key(symbol, key_type);
     store.update(KeySegmentPair(std::move(variant_key), get_test_segment()), arcticdb::storage::UpdateOpts{});
 }
 
-inline bool exists_in_store(Storage &store, std::string symbol, entity::KeyType key_type = entity::KeyType::TABLE_DATA) {
+inline bool exists_in_store(Storage &store, const std::string& symbol, entity::KeyType key_type = entity::KeyType::TABLE_DATA) {
     auto variant_key = get_test_key(symbol, key_type);
     return store.key_exists(variant_key);
 }
 
-inline std::string read_in_store(Storage &store, std::string symbol, entity::KeyType key_type = entity::KeyType::TABLE_DATA) {
+inline std::string read_in_store(Storage &store, const std::string& symbol, entity::KeyType key_type = entity::KeyType::TABLE_DATA) {
     auto variant_key = get_test_key(symbol, key_type);
     auto opts = ReadKeyOpts{};
     auto result = store.read(std::move(variant_key), opts);
@@ -53,7 +53,7 @@ inline void remove_in_store(Storage &store, const std::vector<std::string>& symb
         to_remove.emplace_back(get_test_key(symbol, key_type));
     }
     auto opts = RemoveOpts();
-    store.remove(Composite(std::move(to_remove)), opts);
+    store.remove(std::span(to_remove), opts);
 }
 
 inline std::set<std::string> list_in_store(Storage &store, entity::KeyType key_type = entity::KeyType::TABLE_DATA) {

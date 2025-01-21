@@ -81,13 +81,13 @@ class Library {
         return storages_->scan_for_matching_key(key_type, predicate);
     }
 
-    void write(Composite<KeySegmentPair>&& kvs) {
+    void write(KeySegmentPair&& key_seg) {
         ARCTICDB_SAMPLE(LibraryWrite, 0)
         if (open_mode() < OpenMode::WRITE) {
             throw LibraryPermissionException(library_path_, open_mode(), "write");
         }
 
-        storages_->write(std::move(kvs));
+        storages_->write(std::move(key_seg));
     }
 
     void write_if_none(KeySegmentPair&& kv) {
@@ -98,29 +98,52 @@ class Library {
         storages_->write_if_none(std::move(kv));
     }
 
-    void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
+    void update(KeySegmentPair&& key_seg, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(LibraryUpdate, 0)
         if (open_mode() < OpenMode::WRITE)
             throw LibraryPermissionException(library_path_, open_mode(), "update");
 
-        storages_->update(std::move(kvs), opts);
+        storages_->update(std::move(key_seg), opts);
     }
 
-    void read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
+    folly::Future<folly::Unit> read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
         ARCTICDB_SAMPLE(LibraryRead, 0)
-        storages_->read(std::move(ks), visitor, opts, !storage_fallthrough_);
+        return storages_->read(std::move(variant_key), visitor, opts, !storage_fallthrough_);
     }
 
-    void remove(Composite<VariantKey>&& ks, storage::RemoveOpts opts) {
+    folly::Future<KeySegmentPair> read(VariantKey variant_key, ReadKeyOpts opts = ReadKeyOpts{}) {
+        return storages_->read(std::move(variant_key), opts);
+    }
+
+    void read_sync(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
+        ARCTICDB_SAMPLE(LibraryRead, 0)
+        storages_->read_sync(variant_key, visitor, opts, !storage_fallthrough_);
+    }
+
+    KeySegmentPair read_sync(const VariantKey& key, ReadKeyOpts opts = ReadKeyOpts{}) {
+        util::check(!std::holds_alternative<StringId>(variant_key_id(key)) || !std::get<StringId>(variant_key_id(key)).empty(), "Unexpected empty id");
+        return storages_->read_sync(key, opts, !storage_fallthrough_);
+    }
+
+    void remove(std::span<VariantKey> variant_keys, storage::RemoveOpts opts) {
         if (open_mode() < arcticdb::storage::OpenMode::DELETE) {
             throw LibraryPermissionException(library_path_, open_mode(), "delete");
         }
 
         ARCTICDB_SAMPLE(LibraryRemove, 0)
-        storages_->remove(std::move(ks), opts);
+        storages_->remove(variant_keys, opts);
     }
 
-    std::optional<std::shared_ptr<SingleFileStorage>> get_single_file_storage() const {
+    void remove(VariantKey&& variant_key, storage::RemoveOpts opts) {
+        if (open_mode() < arcticdb::storage::OpenMode::DELETE) {
+            throw LibraryPermissionException(library_path_, open_mode(), "delete");
+        }
+
+        ARCTICDB_SAMPLE(LibraryRemove, 0)
+        storages_->remove(std::move(variant_key), opts);
+    }
+
+    [[nodiscard]] std::optional<std::shared_ptr<SingleFileStorage>> get_single_file_storage() const {
         return storages_->get_single_file_storage();
     }
 
@@ -136,24 +159,12 @@ class Library {
         return storages_->key_exists(key);
     }
 
-    bool is_path_valid(const std::string_view path) const {
+    [[nodiscard]] bool is_path_valid(const std::string_view path) const {
         return storages_->is_path_valid(path);
     }
 
-    KeySegmentPair read(VariantKey key, ReadKeyOpts opts = ReadKeyOpts{}) {
-        KeySegmentPair res{VariantKey{key}};
-        util::check(!std::holds_alternative<StringId>(variant_key_id(key)) || !std::get<StringId>(variant_key_id(key)).empty(), "Unexpected empty id");
-        const ReadVisitor& visitor = [&res](const VariantKey&, Segment&& value) {
-            res.segment() = std::move(value);
-        };
-
-        read(Composite<VariantKey>(std::move(key)), visitor, opts);
-
-        return res;
-    }
-
     /** Calls VariantStorage::do_key_path on the primary storage */
-    std::string key_path(const VariantKey& key) const {
+    [[nodiscard]] std::string key_path(const VariantKey& key) const {
         return storages_->key_path(key);
     }
 
@@ -161,17 +172,17 @@ class Library {
         storages_->move_storage(key_type, horizon, storage_index);
     }
 
-    bool supports_prefix_matching() const { return storages_->supports_prefix_matching(); }
+    [[nodiscard]] bool supports_prefix_matching() const { return storages_->supports_prefix_matching(); }
 
     bool supports_atomic_writes() const { return storages_->supports_atomic_writes(); }
 
-    const LibraryPath &library_path() const { return library_path_; }
+    [[nodiscard]] const LibraryPath &library_path() const { return library_path_; }
 
-    OpenMode open_mode() const { return storages_->open_mode(); }
+    [[nodiscard]] OpenMode open_mode() const { return storages_->open_mode(); }
 
-    const auto & config() const { return config_;}
+    [[nodiscard]] const auto & config() const { return config_;}
 
-    void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) {
+    static void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) {
        StorageFailureSimulator::instance()->configure(cfg);
     }
 

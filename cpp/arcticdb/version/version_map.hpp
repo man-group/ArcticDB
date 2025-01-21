@@ -581,7 +581,11 @@ public:
             return false;
         }
 
-        LoadType cached_load_type = entry->load_strategy_.load_type_;
+        const bool has_loaded_everything = entry->load_progress_.is_earliest_version_loaded;
+        const bool has_loaded_earliest_undeleted = entry->tombstone_all_.has_value() && entry->load_progress_.oldest_loaded_index_version_ <= entry->tombstone_all_->version_id();
+        if (has_loaded_everything || (!requested_load_strategy.should_include_deleted() && has_loaded_earliest_undeleted)) {
+            return true;
+        }
 
         switch (requested_load_type) {
             case LoadType::NOT_LOADED:
@@ -606,14 +610,9 @@ public:
                 return cached_timestamp <= requested_load_strategy.load_from_time_.value();
             }
             case LoadType::ALL:
-                // We can use cache when it was populated by a ALL call, in which case it is only unsafe to use
-                // when the cache is of undeleted versions and the request is for all versions
-                if (cached_load_type==LoadType::ALL){
-                    return entry->load_strategy_.should_include_deleted() || !requested_load_strategy.should_include_deleted();
-                }
-                return false;
+            case LoadType::UNKNOWN:
             default:
-                util::raise_rte("Unexpected load type in cache {}", cached_load_type);
+                return false;
         }
     }
 
@@ -763,12 +762,10 @@ private:
         const auto clock_unsync_tolerance = ConfigsMap::instance()->get_int("VersionMap.UnsyncTolerance",
                                                                             DEFAULT_CLOCK_UNSYNC_TOLERANCE);
         entry->last_reload_time_ = Clock::nanos_since_epoch() - clock_unsync_tolerance;
-        entry->load_strategy_ = LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}; // FUTURE: to make more thread-safe with #368
 
         auto temp = std::make_shared<VersionMapEntry>(*entry);
         load_via_ref_key(store, stream_id, load_strategy, temp);
         std::swap(*entry, *temp);
-        entry->load_strategy_ = load_strategy;
 
         util::check(entry->keys_.empty() || entry->head_, "Non-empty VersionMapEntry should set head");
         if (validate_)

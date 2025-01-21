@@ -5,11 +5,13 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import copy
 import datetime
 import os
 import sys
 import pandas as pd
+import numpy as np
 import pytz
 import re
 import itertools
@@ -69,8 +71,9 @@ from arcticdb.version_store._normalization import (
     _from_tz_timestamp,
     restrict_data_to_date_range_only,
     normalize_dt_range_to_ts,
-    _denormalize_single_index
+    _denormalize_single_index,
 )
+
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
 from arcticdb.util._versions import PANDAS_VERSION
 from packaging.version import Version
@@ -216,9 +219,10 @@ class NativeVersionStore:
     """
 
     _warned_about_list_version_latest_only_and_snapshot: bool = False
-    norm_failure_options_msg_write = \
-        "Setting the pickle_on_failure parameter to True will allow the object to be written. However, many " \
+    norm_failure_options_msg_write = (
+        "Setting the pickle_on_failure parameter to True will allow the object to be written. However, many "
         "operations (such as date_range filtering and column selection) will not work on pickled data."
+    )
     norm_failure_options_msg_append = "Data must be normalizable to be appended to existing data."
     norm_failure_options_msg_update = "Data must be normalizable to be used to update existing data."
 
@@ -256,12 +260,10 @@ class NativeVersionStore:
         self._open_mode = open_mode
         self._native_cfg = native_cfg
 
-
     @classmethod
     def create_store_from_lib_config(cls, lib_cfg, env, open_mode=OpenMode.DELETE):
         lib = cls.create_lib_from_lib_config(lib_cfg, env, open_mode)
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
-    
 
     @staticmethod
     def create_library_config(cfg, env, lib_name, encoding_version=EncodingVersion.V1):
@@ -276,7 +278,9 @@ class NativeVersionStore:
         cls, cfg, env, lib_name, open_mode=OpenMode.DELETE, encoding_version=EncodingVersion.V1
     ):
         protobuf_cfg, native_cfg = NativeVersionStore.get_environment_cfg_and_native_cfg_from_tuple(cfg)
-        lib_cfg = NativeVersionStore.create_library_config(protobuf_cfg, env, lib_name, encoding_version=encoding_version)
+        lib_cfg = NativeVersionStore.create_library_config(
+            protobuf_cfg, env, lib_name, encoding_version=encoding_version
+        )
         lib = cls.create_lib_from_config((protobuf_cfg, native_cfg), env, lib_cfg.lib_desc.name, open_mode)
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode, native_cfg=native_cfg)
 
@@ -294,14 +298,12 @@ class NativeVersionStore:
         lib_idx = _LibraryIndex.create_from_resolver(env, cfg_resolver)
         return lib_idx.get_library(lib_name, _OpenMode(open_mode), native_cfg)
 
-
     @staticmethod
     def get_environment_cfg_and_native_cfg_from_tuple(cfgs):
         if isinstance(cfgs, tuple):
             return cfgs
         else:
             return cfgs, None
-        
 
     def __setstate__(self, state):
         lib_cfg = LibraryConfig()
@@ -348,15 +350,15 @@ class NativeVersionStore:
         return backing_store
 
     def _try_normalize(
-            self,
-            symbol,
-            dataframe,
-            metadata,
-            pickle_on_failure,
-            dynamic_strings,
-            coerce_columns,
-            norm_failure_options_msg="",
-            **kwargs
+        self,
+        symbol,
+        dataframe,
+        metadata,
+        pickle_on_failure,
+        dynamic_strings,
+        coerce_columns,
+        norm_failure_options_msg="",
+        **kwargs,
     ):
         dynamic_schema = self.resolve_defaults(
             "dynamic_schema", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
@@ -382,7 +384,9 @@ class NativeVersionStore:
                 )
         except ArcticDbNotYetImplemented as ex:
             log.debug(f"ArcticDbNotYetImplemented: data: \n{dataframe}, metadata: {metadata}")
-            raise ArcticDbNotYetImplemented(f"Not supported: normalizing, symbol: {symbol}, Reason: {ex}, {norm_failure_options_msg}")
+            raise ArcticDbNotYetImplemented(
+                f"Not supported: normalizing, symbol: {symbol}, Reason: {ex}, {norm_failure_options_msg}"
+            )
         except Exception as ex:
             log.debug(f"ArcticNativeException: data: \n{dataframe}, metadata: {metadata}")
             raise ArcticNativeException(f"Error while normalizing symbol={symbol}, {ex}")
@@ -476,13 +480,14 @@ class NativeVersionStore:
         return global_default
 
     def stage(
-            self,
-            symbol: str,
-            data: Any,
-            validate_index: bool = False,
-            sort_on_index: bool = False,
-            sort_columns: List[str] = None,
-            **kwargs):
+        self,
+        symbol: str,
+        data: Any,
+        validate_index: bool = False,
+        sort_on_index: bool = False,
+        sort_columns: List[str] = None,
+        **kwargs,
+    ):
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
         _handle_categorical_columns(symbol, data, True)
         udm, item, norm_meta = self._try_normalize(
@@ -829,9 +834,7 @@ class NativeVersionStore:
         update_query = _PythonVersionStoreUpdateQuery()
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        dynamic_schema = self.resolve_defaults(
-            "dynamic_schema", proto_cfg, False, **kwargs
-        )
+        dynamic_schema = self.resolve_defaults("dynamic_schema", proto_cfg, False, **kwargs)
         coerce_columns = kwargs.get("coerce_columns", None)
 
         prune_previous_version = self.resolve_defaults(
@@ -1108,7 +1111,7 @@ class NativeVersionStore:
         Reads the metadata for multiple symbols in a batch fashion. This is more efficient than making multiple
         `read_metadata` calls in succession as some constant-time operations can be executed only once rather than once
         for each element of `symbols`.
-        
+
         If a `symbol` or its `as_of` in the query does not exist then the symbol will not be present in the resulting dict.
         Consider using `Library#read_metadata_batch` instead, which has improved error handling behaviour.
 
@@ -1164,7 +1167,7 @@ class NativeVersionStore:
                             version=vitem.version,
                             metadata=meta,
                             host=self.env,
-                            timestamp=vitem.timestamp
+                            timestamp=vitem.timestamp,
                         )
                     )
         return meta_items
@@ -1220,7 +1223,7 @@ class NativeVersionStore:
                 version=vitem.version,
                 metadata=meta,
                 host=self.env,
-                timestamp=vitem.timestamp
+                timestamp=vitem.timestamp,
             )
 
         return results_dict
@@ -1234,7 +1237,7 @@ class NativeVersionStore:
             version=cxx_versioned_item.version,
             metadata=metadata,
             host=self.env,
-            timestamp=cxx_versioned_item.timestamp
+            timestamp=cxx_versioned_item.timestamp,
         )
 
     def batch_write(
@@ -1558,7 +1561,7 @@ class NativeVersionStore:
                 version=result.version.version,
                 metadata=meta,
                 host=self.env,
-                timestamp=result.version.timestamp
+                timestamp=result.version.timestamp,
             )
             for result, meta in zip(read_results, metadatas)
         ]
@@ -1714,9 +1717,9 @@ class NativeVersionStore:
             stop = index_meta.start + read_result.frame_data.row_count * step
             index = pd.RangeIndex(start=index_meta.start, stop=stop, step=step)
             if row_range:
-                index=index[row_range[0]:row_range[1]]
+                index = index[row_range[0] : row_range[1]]
         elif PANDAS_VERSION < Version("2.0.0"):
-            index = pd.RangeIndex(start=0, stop=0,step=1)
+            index = pd.RangeIndex(start=0, stop=0, step=1)
         else:
             index = pd.DatetimeIndex([])
         meta = denormalize_user_metadata(read_result.udm, self._normalizer)
@@ -1727,11 +1730,16 @@ class NativeVersionStore:
             version=read_result.version.version,
             metadata=meta,
             host=self.env,
-            timestamp=read_result.version.timestamp
+            timestamp=read_result.version.timestamp,
         )
 
     def _resolve_empty_columns(self, columns, implement_read_index):
-        if not implement_read_index and columns == []:
+        is_columns_empty = (
+            columns is None
+            or (isinstance(columns, list) and len(columns) == 0)
+            or (isinstance(columns, np.ndarray) and columns.size == 0)
+        )
+        if not implement_read_index and is_columns_empty:
             columns = None
         return columns
 
@@ -1869,15 +1877,17 @@ class NativeVersionStore:
 
     def _post_process_dataframe(self, read_result, read_query, implement_read_index=False, head=None, tail=None):
         index_type = read_result.norm.df.common.WhichOneof("index_type")
-        index_is_rowcount = (index_type == "index" and
-                             not read_result.norm.df.common.index.is_physically_stored and
-                             len(read_result.frame_data.index_columns) == 0)
+        index_is_rowcount = (
+            index_type == "index"
+            and not read_result.norm.df.common.index.is_physically_stored
+            and len(read_result.frame_data.index_columns) == 0
+        )
         if implement_read_index and read_query.columns == [] and index_is_rowcount:
             row_range = None
             if head:
-                row_range=(0, head)
+                row_range = (0, head)
             elif tail:
-                row_range=(-tail, None)
+                row_range = (-tail, None)
             elif read_query.row_filter is not None:
                 row_range = self._compute_filter_start_end_row(read_result, read_query)
             return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
@@ -1906,7 +1916,7 @@ class NativeVersionStore:
                 version=vitem.version,
                 metadata=vitem.metadata,
                 host=vitem.host,
-                timestamp=vitem.timestamp
+                timestamp=vitem.timestamp,
             )
 
         return vitem
@@ -1983,7 +1993,7 @@ class NativeVersionStore:
             version=read_result.version.version,
             metadata=meta,
             host=self.env,
-            timestamp=read_result.version.timestamp
+            timestamp=read_result.version.timestamp,
         )
 
     def list_symbols_with_incomplete_data(self) -> List[str]:
@@ -2020,7 +2030,7 @@ class NativeVersionStore:
         metadata: Optional[Any] = None,
         prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
-        delete_staged_data_on_failure: bool = False
+        delete_staged_data_on_failure: bool = False,
     ) -> VersionedItem:
         """
         Compact previously written un-indexed chunks of data, produced by a tick collector or parallel
@@ -2050,11 +2060,11 @@ class NativeVersionStore:
             update operations. This requires that the indexes of the incomplete segments are non-overlapping with each
             other, and, in the case of append=True, fall after the last index value in the previous version.
         delete_staged_data_on_failure : bool, default=False
-            Determines the handling of staged data when an exception occurs during the execution of the 
+            Determines the handling of staged data when an exception occurs during the execution of the
             ``compact_incomplete`` function.
 
             - If set to True, all staged data for the specified symbol will be deleted if an exception occurs.
-            - If set to False, the staged data will be retained and will be used in subsequent calls to 
+            - If set to False, the staged data will be retained and will be used in subsequent calls to
               ``compact_incomplete``.
 
             To manually delete staged data, use the ``remove_incomplete`` function.
@@ -2068,7 +2078,15 @@ class NativeVersionStore:
         )
         udm = normalize_metadata(metadata)
         vit = self.version_store.compact_incomplete(
-            symbol, append, convert_int_to_float, via_iteration, sparsify, udm, prune_previous_version, validate_index, delete_staged_data_on_failure
+            symbol,
+            append,
+            convert_int_to_float,
+            via_iteration,
+            sparsify,
+            udm,
+            prune_previous_version,
+            validate_index,
+            delete_staged_data_on_failure,
         )
         return self._convert_thin_cxx_item_to_python(vit, metadata)
 
@@ -2105,7 +2123,7 @@ class NativeVersionStore:
             version=read_result.version.version,
             metadata=meta,
             host=self.env,
-            timestamp=read_result.version.timestamp
+            timestamp=read_result.version.timestamp,
         )
 
     def list_versions(
@@ -2157,7 +2175,9 @@ class NativeVersionStore:
             List of dictionaries describing the discovered versions in the library.
         """
         if iterate_on_failure:
-            log.warning("The iterate_on_failure argument is deprecated and will soon be removed. It's safe to remove since it doesn't change behavior.")
+            log.warning(
+                "The iterate_on_failure argument is deprecated and will soon be removed. It's safe to remove since it doesn't change behavior."
+            )
 
         if latest_only and snapshot and not NativeVersionStore._warned_about_list_version_latest_only_and_snapshot:
             log.warning("latest_only has no effect when snapshot is specified")
@@ -2274,7 +2294,7 @@ class NativeVersionStore:
         and versions written to the library post snapshot creation.
 
         ``NoSuchVersionException`` will be thrown if no symbol exist in the library
-        
+
         Parameters
         ----------
         snap_name : `str`
@@ -2370,9 +2390,7 @@ class NativeVersionStore:
         """
         if date_range is not None:
             proto_cfg = self._lib_cfg.lib_desc.version.write_options
-            dynamic_schema = self.resolve_defaults(
-                "dynamic_schema", proto_cfg, False, **kwargs
-            )
+            dynamic_schema = self.resolve_defaults("dynamic_schema", proto_cfg, False, **kwargs)
             # All other methods use prune_previous_version, but also support prune_previous_versions here in case
             # anyone is relying on it
             prune_previous_versions = _assume_false("prune_previous_versions", kwargs)
@@ -2469,12 +2487,11 @@ class NativeVersionStore:
             True if the symbol exists as_of the specified revision, False otherwise.
         """
         if iterate_on_failure:
-            log.warning("The iterate_on_failure argument is deprecated and will soon be removed. It's safe to remove since it doesn't change behavior.")
+            log.warning(
+                "The iterate_on_failure argument is deprecated and will soon be removed. It's safe to remove since it doesn't change behavior."
+            )
 
-        return (
-            self._find_version(symbol, as_of=as_of, raise_on_missing=False)
-            is not None
-        )
+        return self._find_version(symbol, as_of=as_of, raise_on_missing=False) is not None
 
     def column_names(self, symbol: str, as_of: Optional[VersionQueryInput] = None) -> List[str]:
         """
@@ -2561,7 +2578,7 @@ class NativeVersionStore:
             version=version_item.version,
             metadata=meta,
             host=self.env,
-            timestamp=version_item.timestamp
+            timestamp=version_item.timestamp,
         )
 
     def get_type(self) -> str:
@@ -2739,11 +2756,11 @@ class NativeVersionStore:
         return self._open_mode
 
     def _process_info(
-            self,
-            symbol: str,
-            dit,
-            as_of: VersionQueryInput,
-            date_range_ns_precision: bool,
+        self,
+        symbol: str,
+        dit,
+        as_of: VersionQueryInput,
+        date_range_ns_precision: bool,
     ) -> Dict[str, Any]:
         timeseries_descriptor = dit.timeseries_descriptor
         columns = [f.name for f in timeseries_descriptor.fields]
@@ -2792,7 +2809,9 @@ class NativeVersionStore:
             if timeseries_descriptor.normalization.df.has_synthetic_columns:
                 columns = pd.RangeIndex(0, len(columns))
 
-        date_range = self._get_time_range_from_ts(timeseries_descriptor, dit.start_index, dit.end_index, date_range_ns_precision)
+        date_range = self._get_time_range_from_ts(
+            timeseries_descriptor, dit.start_index, dit.end_index, date_range_ns_precision
+        )
         last_update = datetime64(dit.creation_ts, "ns")
         return {
             "col_names": {"columns": columns, "index": index, "index_dtype": index_dtype},
@@ -2807,12 +2826,7 @@ class NativeVersionStore:
             "sorted": sorted_value_name(timeseries_descriptor.sorted),
         }
 
-    def get_info(
-            self,
-            symbol: str,
-            version: Optional[VersionQueryInput] = None,
-            **kwargs
-    ) -> Dict[str, Any]:
+    def get_info(self, symbol: str, version: Optional[VersionQueryInput] = None, **kwargs) -> Dict[str, Any]:
         """
         Returns descriptive data for `symbol`.
 
@@ -2961,11 +2975,11 @@ class NativeVersionStore:
         return self.version_store.is_symbol_fragmented(symbol, segment_size)
 
     def defragment_symbol_data(
-            self,
-            symbol: str,
-            segment_size: Optional[int] = None,
-            prune_previous_versions: Optional[bool] = None,
-            **kwargs,
+        self,
+        symbol: str,
+        segment_size: Optional[int] = None,
+        prune_previous_versions: Optional[bool] = None,
+        **kwargs,
     ) -> VersionedItem:
         """
         Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
@@ -3044,7 +3058,7 @@ class NativeVersionStore:
             metadata=None,
             data=None,
             host=self.env,
-            timestamp=result.timestamp
+            timestamp=result.timestamp,
         )
 
     def library(self):

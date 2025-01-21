@@ -5,7 +5,11 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 from typing import List, Tuple, Union
-from typing_extensions import Literal
+import sys 
+if sys.version_info >= (3, 8): 
+    from typing import Literal 
+else: 
+    from typing_extensions import Literal
 import numpy as np
 import pandas as pd
 
