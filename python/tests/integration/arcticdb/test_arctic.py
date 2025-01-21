@@ -130,7 +130,56 @@ def test_s3_sts_auth(lib_name, real_s3_sts_storage):
     ac = Arctic(real_s3_sts_storage.arctic_uri)
     lib = ac.get_library(library)
     assert_frame_equal(lib.read("sym").data, df)
+    ac.delete_library(library)
+
+
+
+@SLOW_TESTS_MARK
+@REAL_S3_TESTS_MARK
+def test_s3_expiry_check(lib_name, real_s3_storage):
+    """
+    The test will obtain token at minimum expiration time of 15 minutes.
+    Then will loop reading content of a symbol for 15+3 minuets minutes. If the 
+    test reaches final lines then it would effectively mean that the token
+    has been renewed.
+    """
+    symbol = "sym"
+    library = lib_name
+    logger.info(f"Library to create: {library}")
+    # Precondition check
+    min_exp_time_min = 15 # This is minimum expiry time, set at fixture level
+    value = get_config_int("S3Storage.STSTokenExpiryMin")
+    logger.info(f"S3Storage.STSTokenExpiryMin = {value}")
+    logger.info(f"Current process id = {psutil.Process()}")
+    logger.info(f"Minimum possible is {min_exp_time_min} minutes. Test will fail if bigger")
+    assert min_exp_time_min >= value 
+
+    ac = Arctic(real_s3_storage.arctic_uri)
+    ac.delete_library(library) # make sure we delete any previously existing library
+    lib = ac.create_library(library)
+    df = pd.DataFrame({'a': [1, 2, 3]})
+    lib.write(symbol, df)
+
+    now = datetime.now()
+    complete_at = now + timedelta(minutes=min_exp_time_min+5)
+    logger.info(f"Test will complete at {complete_at}")
+
+    data: pd.DataFrame = lib.read(symbol).data
+    assert_frame_equal(df, data)
+    while (datetime.now() < complete_at):
+        data: pd.DataFrame = lib.read(symbol).data
+        assert_frame_equal(df, data)
+        logger.info(f"sleeping 15 sec")
+        time.sleep(15)
+        logger.info(f"Time remaining: {complete_at - datetime.now()}")
+        logger.info(f"Should complete at: {complete_at}")
+
+    data: pd.DataFrame = lib.read(symbol).data
+    assert_frame_equal(df, data)
+    logger.info("Connection did not expire")
+    logger.info(f"Library to remove: {library}")
     ac.delete_library(library) 
+
 
 @SLOW_TESTS_MARK
 @REAL_S3_TESTS_MARK
