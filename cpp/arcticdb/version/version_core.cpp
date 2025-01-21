@@ -358,16 +358,17 @@ static void check_can_update(
 
 static std::vector<SliceAndKey> get_keys_affected_by_update(
     const index::IndexSegmentReader& index_segment_reader,
-    const InputTensorFrame* frame,
+    const InputTensorFrame& frame,
     const UpdateQuery& query,
     bool dynamic_schema
 ) {
     std::vector<FilterQuery<index::IndexSegmentReader>> queries = build_update_query_filters<index::IndexSegmentReader>(
-    query.row_filter,
-    frame->index,
-    frame->index_range,
-    dynamic_schema,
-    index_segment_reader.bucketize_dynamic());
+        query.row_filter,
+        frame.index,
+        frame.index_range,
+        dynamic_schema,
+        index_segment_reader.bucketize_dynamic()
+    );
     return filter_index(index_segment_reader, combine_filter_functions(queries));
 }
 
@@ -437,7 +438,7 @@ folly::Future<AtomKey> async_update_impl(
             index_segment_reader=std::move(index_segment_reader)
         ](std::vector<SliceAndKey>&& new_slice_and_keys) mutable {
             std::sort(std::begin(new_slice_and_keys), std::end(new_slice_and_keys));
-            auto affected_keys = get_keys_affected_by_update(index_segment_reader, frame.get(), query, dynamic_schema);
+            auto affected_keys = get_keys_affected_by_update(index_segment_reader, *frame, query, dynamic_schema);
             auto unaffected_keys = get_keys_not_affected_by_update(index_segment_reader, affected_keys);
             util::check(
                 affected_keys.size() + unaffected_keys.size() == index_segment_reader.size(),
