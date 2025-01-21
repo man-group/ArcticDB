@@ -14,11 +14,10 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/stream/aggregator.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
-#include <arcticdb/stream/append_map.hpp>
+#include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/format_date.hpp>
 #include <vector>
@@ -131,11 +130,15 @@ std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vec
     return slice_and_rowcount;
 }
 
+int64_t write_window_size() {
+    return ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow", 2 * async::TaskScheduler::instance()->io_thread_count());
+}
+
 folly::Future<std::vector<SliceAndKey>> write_slices(
         const std::shared_ptr<InputTensorFrame> &frame,
         std::vector<FrameSlice>&& slices,
         const SlicingPolicy &slicing,
-        IndexPartialKey&& key,
+        TypedStreamVersion&& key,
         const std::shared_ptr<stream::StreamSink>& sink,
         const std::shared_ptr<DeDupMap>& de_dup_map,
         bool sparsify_floats) {
@@ -143,7 +146,7 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
 
     auto slice_and_rowcount = get_slice_and_rowcount(slices);
 
-    const auto write_window = ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow", 2 * async::TaskScheduler::instance()->io_thread_count());
+    int64_t write_window = write_window_size();
     return folly::collect(folly::window(std::move(slice_and_rowcount), [de_dup_map, frame, slicing, key=std::move(key), sink, sparsify_floats](auto&& slice) {
             return async::submit_cpu_task(WriteToSegmentTask(
                 frame,
@@ -172,7 +175,8 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
         return folly::makeFuture(std::vector<SliceAndKey>{});
 
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)
-    return write_slices(frame, std::move(slices), slicing, std::move(key), sink, de_dup_map, sparsify_floats);
+    TypedStreamVersion tsv{std::move(key.id), std::move(key.version_id), KeyType::TABLE_DATA};
+    return write_slices(frame, std::move(slices), slicing, std::move(tsv), sink, de_dup_map, sparsify_floats);
 }
 
 folly::Future<entity::AtomKey>

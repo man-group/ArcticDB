@@ -76,6 +76,8 @@ struct SinkWrapperImpl {
 
 using TestAggregator =  Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy>;
 using SinkWrapper = SinkWrapperImpl<TestAggregator>;
+using TestRowCountAggregator =  Aggregator<RowCountIndex, FixedSchema, stream::NeverSegmentPolicy>;
+using RowCountSinkWrapper = SinkWrapperImpl<TestRowCountAggregator>;
 using TestSparseAggregator = Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy, SparseColumnPolicy>;
 using SparseSinkWrapper = SinkWrapperImpl<TestSparseAggregator>;
 
@@ -440,14 +442,6 @@ struct SegmentToInputFrameAdapter {
             input_frame_->field_tensors.emplace_back(tensor_from_column(segment_.column(col++)));
 
         input_frame_->set_index_range();
-    }
-
-    void synthesize_norm_meta() {
-        if (segment_.metadata()) {
-            auto segment_tsd = segment_.index_descriptor();
-            input_frame_->norm_meta.CopyFrom(segment_tsd.proto().normalization());
-        }
-        ensure_timeseries_norm_meta(input_frame_->norm_meta, input_frame_->desc.id(), false);
     }
 
 };

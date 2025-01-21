@@ -201,6 +201,3 @@ IndexDescriptor get_descriptor_from_index(const Index& index);
 Index empty_index();
 
 }
-
-
-

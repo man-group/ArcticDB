@@ -27,7 +27,7 @@
 #include <arcticdb/pipeline/read_pipeline.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
-#include <arcticdb/stream/append_map.hpp>
+#include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/entity/read_result.hpp>

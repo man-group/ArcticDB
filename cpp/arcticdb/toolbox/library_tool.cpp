@@ -18,7 +18,7 @@
 #include <arcticdb/util/key_utils.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/version/version_utils.hpp>
-#include <arcticdb/stream/append_map.hpp>
+#include <arcticdb/stream/incompletes.hpp>
 #include <cstdlib>
 
 namespace arcticdb::toolbox::apy {

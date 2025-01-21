@@ -793,7 +793,7 @@ public:
     std::vector<std::shared_ptr<SegmentInMemoryImpl>> partition(const std::vector<uint8_t>& row_to_segment,
                                                        const std::vector<uint64_t>& segment_counts) const;
 
-    std::vector<std::shared_ptr<SegmentInMemoryImpl>> split(size_t rows) const;
+    std::vector<std::shared_ptr<SegmentInMemoryImpl>> split(size_t rows, bool filter_down_stringpool=false) const;
     void drop_empty_columns();
 
 private:

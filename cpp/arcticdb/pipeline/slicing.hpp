@@ -95,7 +95,7 @@ inline auto end_index_generator(T end_index){//works for both rawtype and rawtyp
     }
 }
 
-inline auto get_partial_key_gen(std::shared_ptr<InputTensorFrame> frame, IndexPartialKey key) {
+inline auto get_partial_key_gen(std::shared_ptr<InputTensorFrame> frame, TypedStreamVersion key) {
     using PartialKey = stream::StreamSink::PartialKey;
 
     return [frame=std::move(frame), key = std::move(key)](const FrameSlice& s) {
@@ -105,11 +105,11 @@ inline auto get_partial_key_gen(std::shared_ptr<InputTensorFrame> frame, IndexPa
             auto start = *idx.ptr_cast<timestamp>(slice_begin_pos(s, *frame));
             auto end = *idx.ptr_cast<timestamp>(slice_end_pos(s, *frame));
             return PartialKey{
-                    KeyType::TABLE_DATA, key.version_id, key.id, start, end_index_generator(end)};
+                    key.type, key.version_id, key.id, start, end_index_generator(end)};
         }
         else {
             return PartialKey{
-                    KeyType::TABLE_DATA, key.version_id, key.id,
+                    key.type, key.version_id, key.id,
                     entity::safe_convert_to_numeric_index(s.row_range.first, "Rows"),
                     entity::safe_convert_to_numeric_index(s.row_range.second, "Rows")};
         }
