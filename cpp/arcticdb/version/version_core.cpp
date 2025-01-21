@@ -922,6 +922,43 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
     });
 }
 
+folly::Future<std::vector<EntityId>> read_and_process_2(
+    const std::shared_ptr<Store>& store,
+    const std::shared_ptr<PipelineContext>& pipeline_context,
+    const std::shared_ptr<ReadQuery>& read_query,
+    const ReadOptions& read_options,
+    std::shared_ptr<ComponentManager> component_manager
+    ) {
+    ProcessingConfig processing_config{opt_false(read_options.dynamic_schema_), pipeline_context->rows_};
+    for (auto& clause: read_query->clauses_) {
+        clause->set_processing_config(processing_config);
+        clause->set_component_manager(component_manager);
+    }
+
+    auto ranges_and_keys = generate_ranges_and_keys(*pipeline_context);
+
+    // Each element of the vector corresponds to one processing unit containing the list of indexes in ranges_and_keys required for that processing unit
+    // i.e. if the first processing unit needs ranges_and_keys[0] and ranges_and_keys[1], and the second needs ranges_and_keys[2] and ranges_and_keys[3]
+    // then the structure will be {{0, 1}, {2, 3}}
+    std::vector<std::vector<size_t>> processing_unit_indexes;
+    if (!read_query->clauses_.empty()) {
+        processing_unit_indexes = read_query->clauses_[0]->structure_for_processing(
+                ranges_and_keys);
+    } else {
+        processing_unit_indexes = structure_by_row_slice(ranges_and_keys);
+    }
+
+    // Start reading as early as possible
+    auto segment_and_slice_futures = generate_segment_and_slice_futures(store, pipeline_context, processing_config, std::move(ranges_and_keys));
+
+    return schedule_clause_processing(
+        component_manager,
+        std::move(segment_and_slice_futures),
+        std::move(processing_unit_indexes),
+        std::make_shared<std::vector<std::shared_ptr<Clause>>>(read_query->clauses_))
+    .via(&async::cpu_executor());
+}
+
 void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc) {
     if (read_query.columns.has_value()) {
         auto index_columns = stream::get_index_columns_from_descriptor(desc);
@@ -1535,6 +1572,16 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
     }
 }
 
+folly::Future<std::vector<EntityId>> do_process(
+        const std::shared_ptr<Store>& store,
+        const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options,
+        const std::shared_ptr<PipelineContext>& pipeline_context,
+        std::shared_ptr<ComponentManager> component_manager) {
+    util::check_rte(!pipeline_context->is_pickled(),"Cannot perform multi-symbol join on pickled data");
+    return read_and_process_2(store, pipeline_context, read_query, read_options, component_manager);
+}
+
 VersionedItem collate_and_write(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<PipelineContext>& pipeline_context,
@@ -2026,6 +2073,44 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
                                       shared_data.buffers()}};
         });
     });
+}
+
+folly::Future<std::vector<EntityId>> read_entity_ids_for_version(
+        const std::shared_ptr<Store>& store,
+        const std::variant<VersionedItem, StreamId>& version_info,
+        const std::shared_ptr<ReadQuery>& read_query ,
+        const ReadOptions& read_options,
+        std::shared_ptr<ComponentManager> component_manager) {
+    using namespace arcticdb::pipelines;
+    auto pipeline_context = std::make_shared<PipelineContext>();
+    VersionedItem res_versioned_item;
+
+    if(std::holds_alternative<StreamId>(version_info)) {
+        pipeline_context->stream_id_ = std::get<StreamId>(version_info);
+    } else {
+        pipeline_context->stream_id_ = std::get<VersionedItem>(version_info).key_.id();
+        read_indexed_keys_to_pipeline(store, pipeline_context, std::get<VersionedItem>(version_info), *read_query, read_options);
+    }
+
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(!pipeline_context->multi_key_, "Multi-symbol joines not supported with recursively normalized data");
+
+    if(opt_false(read_options.incompletes_)) {
+        util::check(std::holds_alternative<IndexRange>(read_query->row_filter), "Streaming read requires date range filter");
+        const auto& query_range = std::get<IndexRange>(read_query->row_filter);
+        const auto existing_range = pipeline_context->index_range();
+        if(!existing_range.specified_ || query_range.end_ > existing_range.end_)
+            read_incompletes_to_pipeline(store, pipeline_context, *read_query, read_options, false, false, false,  opt_false(read_options.dynamic_schema_));
+    }
+
+    if(std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {
+        return std::vector<EntityId>{};
+    }
+
+    modify_descriptor(pipeline_context, read_options);
+    generate_filtered_field_descriptors(pipeline_context, read_query->columns);
+    ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
+
+    return version_store::do_process(store, read_query, read_options, pipeline_context, component_manager);
 }
 } //namespace arcticdb::version_store
 

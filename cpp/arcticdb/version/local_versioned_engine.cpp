@@ -1159,6 +1159,36 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
         ARCTICDB_UNUSED const std::string& join, // TODO: Make a Clause or MultiSymbolClause
         ARCTICDB_UNUSED std::vector<std::shared_ptr<Clause>>&& post_join_clauses,
         ARCTICDB_UNUSED std::any& handler_data) {
+    py::gil_scoped_release release_gil;
+    auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
+    std::vector<folly::Future<std::vector<EntityId>>> symbol_entities_futs;
+    symbol_entities_futs.reserve(opt_index_key_futs.size());
+    auto component_manager = std::make_shared<ComponentManager>();
+    for (auto idx = 0UL; idx < opt_index_key_futs.size(); ++idx) {
+        symbol_entities_futs.emplace_back(
+                std::move(opt_index_key_futs[idx]).thenValue([store = store(),
+                                                                     idx,
+                                                                     &stream_ids,
+                                                                     &version_queries,
+                                                                     read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
+                                                                     &read_options,
+                                                                     &component_manager](auto&& opt_index_key) {
+                    std::variant<VersionedItem, StreamId> version_info;
+                    if (opt_index_key.has_value()) {
+                        version_info = VersionedItem(std::move(*opt_index_key));
+                    } else {
+                        if (opt_false(read_options.incompletes_)) {
+                            log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", stream_ids[idx]);
+                            version_info = stream_ids[idx];
+                        } else {
+                            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
+                                    "batch_read_internal: version matching query '{}' not found for symbol '{}'", version_queries[idx], stream_ids[idx]);
+                        }
+                    }
+                    return read_entity_ids_for_version(store, version_info, read_query, read_options, component_manager);
+                })
+        );
+    }
     return {};
 }
 
