@@ -777,7 +777,16 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                  std::vector<ClauseVariant> post_join_clauses
                  ){
                  auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
-                 return adapt_read_df(v.batch_read_with_join(stream_ids, version_queries, read_queries, read_options, join, post_join_clauses, handler_data));
+                 // TODO: Remove duplication with ReadQuery interface
+                 post_join_clauses = plan_query(std::move(post_join_clauses));
+                 std::vector<std::shared_ptr<Clause>> _clauses;
+                 for (auto&& clause: post_join_clauses) {
+                     util::variant_match(
+                             clause,
+                             [&](auto&& clause) {_clauses.emplace_back(std::make_shared<Clause>(*clause));}
+                     );
+                 }
+                 return adapt_read_df(v.batch_read_with_join(stream_ids, version_queries, read_queries, read_options, join, std::move(_clauses), handler_data));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
         .def("batch_read_keys",

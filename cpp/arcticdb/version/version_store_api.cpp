@@ -793,9 +793,9 @@ ReadResult PythonVersionStore::batch_read_with_join(
         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
         const ReadOptions& read_options,
         const std::string& join, // TODO: Make a Clause or MultiSymbolClause
-        const std::vector<ClauseVariant>& post_join_clauses,
+        std::vector<std::shared_ptr<Clause>>&& post_join_clauses,
         std::any& handler_data) {
-    auto versions_and_frame = batch_read_with_join_internal(stream_ids, version_queries, read_queries, read_options, join, post_join_clauses, handler_data);
+    auto versions_and_frame = batch_read_with_join_internal(stream_ids, version_queries, read_queries, read_options, join, std::move(post_join_clauses), handler_data);
     // TODO: Decide what to do with VersionedItem part of read result
     return create_python_read_result({}, std::move(versions_and_frame.frame_and_descriptor_));
 }

@@ -1157,7 +1157,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
         ARCTICDB_UNUSED std::vector<std::shared_ptr<ReadQuery>>& read_queries,
         ARCTICDB_UNUSED const ReadOptions& read_options,
         ARCTICDB_UNUSED const std::string& join, // TODO: Make a Clause or MultiSymbolClause
-        ARCTICDB_UNUSED const std::vector<ClauseVariant>& post_join_clauses,
+        ARCTICDB_UNUSED std::vector<std::shared_ptr<Clause>>&& post_join_clauses,
         ARCTICDB_UNUSED std::any& handler_data) {
     return {};
 }
