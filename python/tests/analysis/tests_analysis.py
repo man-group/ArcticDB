@@ -69,6 +69,26 @@ class TestFunction:
     
     def get_name(self) -> str:
         return self.func.__name__
+    
+    def get_docstring(self) -> str:
+        return self.func.__doc__
+
+    def get_code(self) -> str:
+        return inspect.getsource(self.get_function())
+    
+    def get_source_file(self) -> str:
+        return inspect.getsourcefile(self.get_function())
+    
+    def get_source_first_line(self) -> str:
+        return inspect.getsourcelines(self.get_function())[1]
+    
+    def get_source_link(self) -> str:
+        """
+        A string representation of the file and the line
+        (when in console output the IDE can locate directly there)
+        """
+        return f"{self.get_source_file()}, line {self.get_source_first_line()}"
+
 
     def is_marked(self) -> bool: 
         return hasattr(self.func, self.PYTEST_MARK_ATTR)
@@ -87,7 +107,10 @@ class TestFunction:
         else:
             return self.__markers 
 
-    def get_marker_arguments(self, marker_name):
+    def get_marker_arguments(self, marker_name) -> tuple[Any, ...]:
+        """
+        Returns a list of arguments for the specified marker
+        """
         if self.has_marker(marker_name):
             markers: List[pytest.Mark] = getattr(self.func, self.PYTEST_MARK_ATTR, [])
             for marker in markers:
@@ -106,7 +129,6 @@ class TestFunction:
                 result.append(arg)
         return result
 
-
     def have_markers_argument_value(self, marker_argument_value):
         """
         Check to see if supplied value is part of any mark's arguments list (args)
@@ -115,14 +137,7 @@ class TestFunction:
             if marker_argument_value == arg:
                 return True
         return False
-        """
-        markers: List[pytest.Mark] = self.get_markers()
-        result = []
-        for mark in markers: 
-            if marker_argument_value in mark.args: 
-                return True
-        return False
-        """
+
     def have_markers_all_argument_values(self, *marker_argument_values):
         """
         Check to see if supplied value is part of any mark's arguments list (args)
@@ -166,6 +181,12 @@ class TestFunction:
                 if condition_func(value): 
                     return True
         return False
+    
+    def __str__(self):
+        return f"[Function - {self.get_function().__name__}]"
+    
+    def __repr__(self):
+        return self.__str__
 
     def __log(self, msg: str):
         logger.debug(msg)
@@ -175,18 +196,52 @@ class ArcrticdbFixture(TestFunction):
 
     def __init__(self, fixture: FunctionType):
         super().__init__(fixture)
+        self.__fixtures = None
+        self.__immediate_fixtures = None
 
     def get_fixture(self) -> FunctionType:
         return self.get_function()
-    
-    def get_fixtures(self) -> List['ArcrticdbFixture']: 
-        return ArcrticdbFixture.get_function_fixtures(self.func)
+ 
+    def __str__(self):
+        return f"[Fixture - {self.get_function().__name__}]"
 
+    def __repr__(self):
+        return self.__str__
+
+    def get_fixtures(self) -> List['ArcrticdbFixture']: 
+        if self.__immediate_fixtures is None:
+            self.__immediate_fixtures = ArcrticdbFixture.get_function_fixtures(self.func)
+        return self.__immediate_fixtures
+    
+    def get_all_fixtures(self) -> List['ArcrticdbFixture']: 
+        if self.__fixtures is None:
+            self.__fixtures = ArcrticdbFixture.get_all_function_fixtures(self.func)
+        return self.__fixtures
+
+    @classmethod
+    def get_all_function_fixtures(cls, func : FunctionType) -> List['ArcrticdbFixture']: 
+        all: List[ArcrticdbFixture] = []
+        immediate = ArcrticdbFixture.get_function_fixtures(func)
+        if len(immediate) < 1:
+            return []
+        all.extend(immediate)
+        next: List[ArcrticdbFixture] = []
+        for fixture in immediate:
+            others = ArcrticdbFixture.get_all_function_fixtures(fixture.get_function())
+            if (len(others) > 0):
+                next.extend(others)
+        if (len(next) > 0):
+            all.extend(next)
+        return all
+    
     @classmethod
     def get_function_fixtures(cls, func : FunctionType) -> List['ArcrticdbFixture']: 
         list: List[ArcrticdbFixture] = []
         # Get the function signature 
-        signature = inspect.signature(func) 
+        try:
+            signature = inspect.signature(func) 
+        except:
+            return list
         # Retrieve the parameters 
         parameters = signature.parameters 
         #  Print the parameter names and details 
@@ -201,6 +256,8 @@ class ArcrticdbTest(TestFunction):
 
     def __init__(self, function: FunctionType):
         super().__init__(function)
+        self.__fixtures = None
+        self.__immediate_fixtures = None
 
     def get_test(self) -> FunctionType:
         return self.get_function()
@@ -227,8 +284,21 @@ class ArcrticdbTest(TestFunction):
     def __str__(self):
         return self.as_pytest_name()
     
-    def get_fixtures(self) -> List[ArcrticdbFixture]: 
-        return ArcrticdbFixture.get_function_fixtures(self.func)
+    def get_all_fixtures(self) -> List['ArcrticdbFixture']: 
+        if self.__fixtures is None:
+            self.__fixtures = ArcrticdbFixture.get_all_function_fixtures(self.get_function())
+        return self.__fixtures
+
+    def get_fixtures(self) -> List['ArcrticdbFixture']: 
+        if self.__immediate_fixtures is None:
+            self.__immediate_fixtures = ArcrticdbFixture.get_function_fixtures(self.get_function())
+        return self.__immediate_fixtures
+    
+    def __str__(self):
+        return f"[Pytest - {self.get_function().__name__}]"
+    
+    def __repr__(self):
+        return self.__str__
 
 
 class TestsFilterPipeline:
@@ -236,11 +306,8 @@ class TestsFilterPipeline:
     Filtering pipeline for narrowing tests needed
     ''' 
 
-
-    PYTEST_MARK_ATTR = 'pytestmark'
     ARCTICDB_MARK_ATTR = 'arcticdb_mark_name'
     ARCTICDB_TEST_ATTR = 'artcticdb_test'
-
     
     def __init__(self, list: List[FunctionType], verbose: bool = False): 
         self.verbose = verbose
@@ -287,36 +354,34 @@ class TestsFilterPipeline:
                 if (TestFunction(func).has_markers(*pytest_mark_names)):
                     functions.append(func) 
         return functions
-    
-    """
-    def __filter_tests_pytest_marked(self, pytest_mark_name: str = None) -> List[FunctionType]:
+
+    def filter_pytests_named(self, *pytest_names_have) -> 'TestsFilterPipeline':
+        """
+        Filters only tests which names(or part of names) are listed as parameters
+        """
+        self.list = self.__filter_tests_pytest_named(*pytest_names_have)
+        return self
+
+    def exclude_pytests_named(self, *pytest_names_have) -> 'TestsFilterPipeline':
+        """
+        Exlude only tests which names(or part of names) are listed as parameters
+        pytest mark
+        """
+        self.list = self.__exclude_tests(self.__filter_tests_pytest_named(*pytest_names_have))
+        return self
+
+    def __filter_tests_pytest_named(self, *pytest_names_have) -> List[FunctionType]:
         functions: List[FunctionType] = []
         for func in self.list:
-            if pytest_mark_name is None:
-                if (TestFunction(func).is_marked()):
-                    functions.append(func) 
+            if len(pytest_names_have) < 1:
+                raise Exception("No test names to filter")
             else:
-                if (TestFunction(func).has_marker(pytest_mark_name)):
-                    functions.append(func) 
-       -----
-        for func in self.list:
-            has_pytest_mark = hasattr(func, self.PYTEST_MARK_ATTR)
-            if has_pytest_mark: 
-                if pytest_mark_name is None:
-                    functions.append(func) 
-                else:
-                    if (TestFunction(func).has_marker(pytest_mark_name)):
+                test_name = TestFunction(func).get_name()
+                for name in pytest_names_have:
+                    if (name in test_name):
                         functions.append(func) 
-                    markers = getattr(func, self.PYTEST_MARK_ATTR, [])
-                    self.__log(f"----> Markers: {markers}")
-                    for marker in markers:
-                        if (str(pytest_mark_name).lower() in marker.name.lower()):
-                            functions.append(func) 
-                            break
-        -----
         return functions
-    """
-    
+
     def filter_pytests_where_parameter(self, pytest_mark_parameter: str, 
                                         condition_func: Callable[[Any], bool]) -> 'TestsFilterPipeline':
         """
@@ -341,16 +406,6 @@ class TestsFilterPipeline:
         for func in self.list:
             if TestFunction(func).check_test_mark_parameter(pytest_mark_parameter, condition_func):
                 functions.append(func)
-        """
-        for func in self.list:
-            if hasattr(func, self.PYTEST_MARK_ATTR): 
-                markers = getattr(func, self.PYTEST_MARK_ATTR, [])
-                for mark in markers: 
-                    if pytest_mark_parameter in mark.kwargs:
-                        value = mark.kwargs.get(pytest_mark_parameter)
-                        if condition_func(value): 
-                            functions.append(func)
-        """
         return functions
     
     def filter_pytests_where_argument_is(self, 
@@ -377,13 +432,17 @@ class TestsFilterPipeline:
         for func in self.list:
             if (TestFunction(func).have_markers_argument_value(marker_argument_value)):
                 functions.append(func)
-        """
-            if hasattr(func, self.PYTEST_MARK_ATTR): 
-                markers = getattr(func, self.PYTEST_MARK_ATTR, [])
-                for mark in markers: 
-                    if marker_argument_value in mark.args: 
-                        functions.append(func)
-        """
+        return functions
+    
+    def __filter_tests_which_fixture_is_marked(self, 
+                                                *marker_names) -> List[FunctionType]:
+        functions: List[FunctionType] = []
+        for func in self.list:
+            fixtures = ArcrticdbTest(func).get_all_fixtures()
+            for fixture in fixtures: 
+                if (fixture.has_markers(*marker_names)):
+                    functions.append(func)
+                    break
         return functions
 
     def filter_tests_arcticdb(self, arcticdb_mark_name: str = None) -> 'TestsFilterPipeline': 
@@ -665,7 +724,7 @@ if __name__ == "__main__":
 
     fix_list = adbt.get_tests()[0].get_fixtures()
     print(len(fix_list))
-    print(fix_list[0].get_fixture())
+    print(fix_list[0].get_function())
     print(fix_list[0].get_fixtures())
 
     """
@@ -679,7 +738,7 @@ if __name__ == "__main__":
         else:
             print(f"Test : {test.get_test()}")
             for fix in fix_list:
-               print(f"  fixture - {fix.get_fixture()}")
+               print(f"  fixture - {fix.get_function()}")
     print(f"SKIPIF is used at {len(adbt.get_tests())} tests")
 
     adbt = ArcticdbTestAnalysis().start_filter().filter_pytests_marked("prio0")
@@ -687,7 +746,7 @@ if __name__ == "__main__":
         fix_list = test.get_fixtures()
         print(f"Test : {test.get_test()}")
         for fix in fix_list:
-            print(f"  fixture - {fix.get_fixture()}")
+            print(f"  fixture - {fix.get_function()}")
             print(f"    Environment - {fix.get_marker_arguments('environment')}")
             print(f"    has - {fix.has_markers('environment')}")
             print(f"    has - {fix.has_markers('prio0')}")
@@ -705,5 +764,22 @@ if __name__ == "__main__":
             .filter_pytests_marked("mymark")
             .exclude_pytests_marked("slow")).get_tests()
     print_test_list(tests)
+
+    print("NEW 1")
+    adbt = ArcticdbTestAnalysis().start_filter().filter_pytests_marked("prio0")
+    for test in adbt.get_tests():
+        print(f"Test : {test.get_test()}")
+        for f in test.get_fixtures():
+            print(f"Fixtures : {f}") 
+        for f in test.get_all_fixtures():
+            print(f"All Fixtures : {f}")
+
+    print("NEW 2")
+    adbt = ArcticdbTestAnalysis().start_filter().filter_pytests_named("test_example").exclude_pytests_named("fixture_1")
+    for test in adbt.get_tests():
+        print(f"Test : {test.get_name()}")
+        print(f" doc : {test.get_docstring()}")
+        print(f"code : {test.get_code()}")
+        print(f"link : {test.get_source_file()}, line {test.get_source_first_line()}")
 
     print("End")

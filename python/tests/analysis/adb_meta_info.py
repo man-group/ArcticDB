@@ -9,9 +9,13 @@ class Dataframe:
     NO_INDEX = df("no_index")
     RANGE_INDEX = df("range_index")
     TIMESTAMP_INDEX = df("timestamp_index")
-    EMPTY = df("df.empty")
-    EMPTY_WITH_SCHEMA = df("df.empty_with_schema")
-
+    EMPTY = df("empty")
+    EMPTY_WITH_SCHEMA = df("empty_with_schema")
+    ONE_ROW = df("one_row")
+    VERY_WIDE = df("very_wide")
+    TINY = df("tiny") # All DF's less than 1k
+    MEDIUM = df("tiny") # All DF's > 1k and 100k
+    BIG = df("tiny") # All DF's > 100k
 
 class Features:
 
@@ -21,6 +25,9 @@ class Features:
     DYNAMIC_SHEMA = feat("dynamic_scema")
     ENCODING_V1 = feat("encoding_v1")
     ENCODING_V2 = feat("encoding_v2")
+    COLUMN_SEGMENTS = feat("segments_cols")
+    ROW_SEGMENTS = feat("segments_row")
+    BOTH_SEGMENTS = feat("segments_both")
 
 
 class Storage:
@@ -56,6 +63,8 @@ class Marks:
     prio0 = pytest.mark.prio0
     prio2 = pytest.mark.prio2
     desc  = pytest.mark.desc
-    
+    bug  = pytest.mark.bug # bug id
+    req  = pytest.mark.req # requirement id
+
     def not_ready(reason):
         return pytest.mark.not_ready(pytest.mark.skip(reason=reason))
