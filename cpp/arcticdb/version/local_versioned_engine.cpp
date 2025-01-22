@@ -1447,7 +1447,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                         dynamic_schema,
                         empty_types);
                 } else {
-                    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(upsert, "Cannot append to non-existent symbol {}", stream_id);
+                    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(upsert, "Cannot update non-existent symbol {}", stream_id);
                     index_key_fut = async_write_dataframe_impl(
                         store(),
                         0,
