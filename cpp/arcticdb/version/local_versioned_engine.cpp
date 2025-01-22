@@ -1189,7 +1189,21 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
                 })
         );
     }
-    auto symbol_entities = folly::collect(symbol_entities_futs).get();
+    ARCTICDB_UNUSED auto segment_in_memory = folly::collect(symbol_entities_futs)
+            .via(&async::cpu_executor())
+            .thenValue([](std::vector<std::vector<EntityId>>&& entity_id_vectors) {
+        return flatten_entities(std::move(entity_id_vectors));
+    }).thenValueInline([component_manager](std::vector<EntityId>&& processed_entity_ids) {
+        auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
+        // TODO: Handle output descriptors
+        return collect_segments(std::move(proc));
+    }).thenValueInline([store=store(), &handler_data](std::vector<SliceAndKey>&& slice_and_keys) {
+        auto pipeline_context = std::make_shared<PipelineContext>();
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(!slice_and_keys.empty(), "No slice and keys in batch_read_with_join_internal");
+        pipeline_context->set_descriptor(slice_and_keys[0].segment(store).descriptor());
+        ReadOptions read_options;
+        return prepare_output_frame(std::move(slice_and_keys), pipeline_context, store, read_options, handler_data);
+    }).get();
     return {};
 }
 

@@ -261,6 +261,13 @@ std::optional<DeleteIncompleteKeysOnExit> get_delete_keys_on_failure(
     const std::shared_ptr<Store>& store,
     const CompactIncompleteOptions& options);
 
+folly::Future<SegmentInMemory> prepare_output_frame(
+        std::vector<SliceAndKey>&& items,
+        const std::shared_ptr<PipelineContext>& pipeline_context,
+        const std::shared_ptr<Store>& store,
+        const ReadOptions& read_options,
+        std::any& handler_data);
+
 } //namespace arcticdb::version_store
 
 namespace arcticdb {

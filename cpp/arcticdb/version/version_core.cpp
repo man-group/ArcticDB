@@ -1304,7 +1304,7 @@ void copy_frame_data_to_buffer(
 }
 
 struct CopyToBufferTask : async::BaseTask {
-    SegmentInMemory&& source_segment_;
+    SegmentInMemory source_segment_;
     SegmentInMemory target_segment_;
     FrameSlice frame_slice_;
     DecodePathData shared_data_;
@@ -1362,11 +1362,10 @@ folly::Future<folly::Unit> copy_segments_to_frame(
     DecodePathData shared_data;
     for (auto context_row : folly::enumerate(*pipeline_context)) {
         auto &slice_and_key = context_row->slice_and_key();
-        auto &segment = slice_and_key.segment(store);
 
         copy_tasks.emplace_back(async::submit_cpu_task(
             CopyToBufferTask{
-                std::move(segment),
+                slice_and_key.release_segment(store),
                 frame,
                 context_row->slice_and_key().slice(),
                 shared_data,
