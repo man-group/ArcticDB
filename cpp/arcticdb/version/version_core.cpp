@@ -528,6 +528,9 @@ void add_slice_to_component_manager(
 }
 
 size_t num_scheduling_iterations(const std::vector<std::shared_ptr<Clause>>& clauses) {
+    if (clauses.empty()) {
+        return 0;
+    }
     size_t res = 1UL;
     auto it = std::next(clauses.cbegin());
     while (it != clauses.cend()) {

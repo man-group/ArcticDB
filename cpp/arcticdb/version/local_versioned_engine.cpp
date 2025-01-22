@@ -1189,6 +1189,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
                 })
         );
     }
+    auto symbol_entities = folly::collect(symbol_entities_futs).get();
     return {};
 }
 
