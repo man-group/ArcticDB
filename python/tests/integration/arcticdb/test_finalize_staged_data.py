@@ -9,7 +9,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 import time
 import pandas as pd
 import numpy as np
-from typing import List
 
 import pytest
 
@@ -240,24 +239,22 @@ def test_finalize_with_unsorted_indexes(lmdb_library_dynamic_schema, mode, valid
     df3 = sample_dataframe('2026-1-2', [4])
     df4 = sample_dataframe('2021-1-2', [4])
     df_unsorted = pd.concat([df1, df2, df3, df4])
-    df_all = pd.concat([df,df1,df2,df3,df4])
 
     lib.write(symbol=symbol,data=df)
 
-    if (validate_index):
+    if validate_index:
         with pytest.raises(UnsortedDataException):
-            lib.write(symbol=symbol,staged=True,validate_index=validate_index,data=df_unsorted)
+            lib.write(symbol=symbol,staged=True,validate_index=True,data=df_unsorted)
         with pytest.raises(UserInputException):
             lib.finalize_staged_data(symbol=symbol,mode=mode,validate_index=False)
     else:
-        lib.write(symbol=symbol,staged=True,validate_index=validate_index,data=df_unsorted)
+        lib.write(symbol=symbol,staged=True,validate_index=False,data=df_unsorted)
         with pytest.raises(UnsortedDataException):
             lib.finalize_staged_data(symbol=symbol,mode=mode,validate_index=False)
 
-    result:pd.DataFrame = lib.read(symbol).data
-    dataframe_dump_to_log("RESULT DF:", result)
-
+    result: pd.DataFrame = lib.read(symbol).data
     assert_frame_equal(df,result)
+
 
 def test_finalize_with_upcast_type_new_columns(lmdb_library_dynamic_schema):
     """

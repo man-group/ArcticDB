@@ -15,7 +15,7 @@
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/async/tasks.hpp>
 #include <arcticdb/util/name_validation.hpp>
-#include <arcticdb/stream/append_map.hpp>
+#include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
@@ -1713,7 +1713,8 @@ VersionedItem sort_merge_impl(
                     stream::StreamSink::PartialKey
                     pk{KeyType::TABLE_DATA, pipeline_context->version_id_, pipeline_context->stream_id_, local_index_start, local_index_end};
                     fut_vec.emplace_back(store->write(pk, std::move(segment)));
-                }};
+                },
+                RowCountSegmentPolicy(write_options.segment_row_size)};
 
             for(auto& sk : segments) {
                 SegmentInMemory segment = sk.release_segment(store);

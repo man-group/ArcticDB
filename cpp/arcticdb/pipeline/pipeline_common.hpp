@@ -17,4 +17,11 @@ struct IndexPartialKey {
     StreamId id;
     VersionId version_id;
 };
+
+struct TypedStreamVersion {
+    StreamId id;
+    VersionId version_id;
+    KeyType type;
+};
+
 }

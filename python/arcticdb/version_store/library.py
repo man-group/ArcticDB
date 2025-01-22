@@ -624,7 +624,7 @@ class Library:
             sort_on_index=sort_on_index,
             sort_columns=sort_columns,
             norm_failure_options_msg="Failed to normalize data. It is inadvisable to pickle staged data"
-                                     "as it will not be possible to finalize it.")
+                                     " as it will not be possible to finalize it.")
 
     def write(
         self,

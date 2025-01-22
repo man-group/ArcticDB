@@ -12,7 +12,7 @@
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
-#include <arcticdb/stream/append_map.hpp>
+#include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/entity/atom_key.hpp>
