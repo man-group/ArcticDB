@@ -12,6 +12,7 @@ import pytest
 from itertools import product
 import datetime
 import random
+from arcticdb import DataError
 
 from arcticdb.util.test import (
     random_strings_of_length,
@@ -26,8 +27,8 @@ from arcticdb.exceptions import (
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from tests.util.date import DateRange
 from pandas import MultiIndex
+import arcticdb
 from arcticdb.version_store import VersionedItem
-
 from arcticdb.version_store.library import UpdatePayload
 
 
@@ -701,7 +702,7 @@ def test_update_not_sorted_range_index_exception(lmdb_version_store):
 
 
 class TestBatchUpdate:
-    def test_update_batch_success(self, lmdb_library):
+    def test_success(self, lmdb_library):
         lib = lmdb_library
 
         initial_data = {
@@ -743,6 +744,123 @@ class TestBatchUpdate:
             if vit.symbol in batch_update_queries.values():
                 assert vit.version == 1
             assert_frame_equal(vit.data, expected[vit.symbol])
+
+    def test_empty_payload_list(self, lmdb_library):
+        lib = lmdb_library
+        symbol_1_data = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")]))
+        lib.write("symbol_1", symbol_1_data)
+        symbol_2_data = pd.DataFrame({"b": [2]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")]))
+        lib.write("symbol_2", symbol_2_data)
+        update_result = lib.update_batch([])
+        assert update_result == []
+        symbol_1_vit, symbol_2_vit = lib.read("symbol_1"), lib.read("symbol_2")
+        assert_frame_equal(symbol_1_vit.data, symbol_1_data)
+        assert_frame_equal(symbol_2_vit.data, symbol_2_data)
+        assert symbol_1_vit.version == 0
+        assert symbol_2_vit.version == 0
+
+    def test_missing_symbol_is_error(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("symbol_1", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
+        lib.write("symbol_2", pd.DataFrame({"b": [2]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
+        update_result = lib.update_batch([
+            UpdatePayload(symbol="symbol_3", data=pd.DataFrame({"a": [1, 2]}, index=pd.date_range("2024-01-02", periods=2))),
+            UpdatePayload(symbol="symbol_1", data=pd.DataFrame({"a": [2, 3]}, index=pd.date_range("2024-01-02", periods=2)))
+        ])
+        assert set(lib.list_symbols()) == {"symbol_1", "symbol_2"}
+        assert isinstance(update_result[0], DataError)
+        assert isinstance(update_result[1], VersionedItem)
+
+        symbol_1_vit = lib.read("symbol_1")
+        assert symbol_1_vit.version == 1
+        assert len(lib.list_versions("symbol_1")) == 2
+        assert_frame_equal(symbol_1_vit.data, pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3)))
+
+    def test_update_batch_upsert_creates_symbol(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("symbol_1", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
+
+        lib.update_batch(
+            [
+                UpdatePayload(symbol="symbol_2", data=pd.DataFrame({"b": [10, 11]}, index=pd.date_range("2024-01-04", periods=2))),
+                UpdatePayload(symbol="symbol_1", data=pd.DataFrame({"a": [2, 3]}, index=pd.date_range("2024-01-02", periods=2)))
+            ],
+            upsert=True
+        )
+
+        assert set(lib.list_symbols()) == {"symbol_1", "symbol_2"}
+        symbol_1_vit, symbol_2_vit = lib.read("symbol_1"), lib.read("symbol_2")
+        assert symbol_1_vit.version == 1
+        assert len(lib.list_versions("symbol_1")) == 2
+        assert_frame_equal(symbol_1_vit.data, pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3)))
+        assert symbol_2_vit.version == 0
+        assert len(lib.list_versions("symbol_2")) == 1
+        assert_frame_equal(symbol_2_vit.data, pd.DataFrame({"b": [10, 11]}, index=pd.date_range("2024-01-04", periods=2)))
+
+    def test_prune_previous(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("symbol_1", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
+        lib.write("symbol_2", pd.DataFrame({"b": [10]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
+        lib.update_batch(
+            [
+                UpdatePayload(symbol="symbol_1", data=pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))),
+                UpdatePayload(symbol="symbol_2", data=pd.DataFrame({"b": [8, 9]}, index=pd.date_range("2023-01-01", periods=2)))
+            ],
+            prune_previous_versions=True
+        )
+        symbol_1_vit, symbol_2_vit = lib.read("symbol_1"), lib.read("symbol_2")
+        assert_frame_equal(symbol_1_vit.data, pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3)))
+        assert len(lib.list_versions("symbol_1")) == 1
+
+        symbol_2_expected_data = pd.DataFrame(
+            {"b": [8, 9, 10]},
+            index=pd.DatetimeIndex([pd.Timestamp("2023-01-01"), pd.Timestamp("2023-01-02"), pd.Timestamp("2024-01-01")])
+        )
+        assert_frame_equal(symbol_2_vit.data, symbol_2_expected_data)
+        assert len(lib.list_versions("symbol_2")) == 1
+
+    def test_static_schema_does_not_allow_new_columns(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("symbol_1", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
+        lib.write("symbol_2", pd.DataFrame({"b": [10]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
+        update_result = lib.update_batch(
+            [
+                UpdatePayload(symbol="symbol_1", data=pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))),
+                UpdatePayload(symbol="symbol_2", data=pd.DataFrame({"c": [8, 9]}, index=pd.date_range("2023-01-01", periods=2)))
+            ]
+        )
+        assert isinstance(update_result[0], VersionedItem)
+        assert isinstance(update_result[1], DataError)
+
+    def test_dynamic_schema_allows_new_columns(self, lmdb_library_dynamic_schema):
+        lib = lmdb_library_dynamic_schema
+        lib.write("symbol_1", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
+        lib.write("symbol_2", pd.DataFrame({"b": [10]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
+        update_result = lib.update_batch(
+            [
+                UpdatePayload(symbol="symbol_1", data=pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))),
+                UpdatePayload(symbol="symbol_2", data=pd.DataFrame({"c": [8, 9]}, index=pd.date_range("2023-01-01", periods=2)))
+            ]
+        )
+        assert isinstance(update_result[0], VersionedItem)
+        assert isinstance(update_result[1], VersionedItem)
+        symbol_2_data = lib.read("symbol_2").data
+        symbol_2_expected_data = pd.DataFrame(
+            {"b": [0, 0, 10], "c": [8, 9, 0]},
+            index=pd.DatetimeIndex([pd.Timestamp("2023-01-01"), pd.Timestamp("2023-01-02"), pd.Timestamp("2024-01-01")])
+        )
+        assert_frame_equal(symbol_2_data, symbol_2_expected_data)
+
+    def test_repeating_symbol_in_payload_list_throws(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("symbol_1", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
+        with pytest.raises(arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException):
+            lib.update_batch(
+                [
+                    UpdatePayload(symbol="symbol_1", data=pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))),
+                    UpdatePayload(symbol="symbol_1", data=pd.DataFrame({"a": [8, 9]}, index=pd.date_range("2023-01-01", periods=2)))
+                ]
+            )
 
 
 def test_regular_update_dynamic_schema_named_index(
