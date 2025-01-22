@@ -84,36 +84,6 @@ public:
         return do_supports_prefix_matching();
     }
 
-    [[nodiscard]] bool test_atomic_write_support() {
-        auto atomic_write_works_as_expected = false;
-
-        std::random_device rd;
-        std::mt19937_64 e2(rd());
-        std::uniform_int_distribution<uint64_t> dist;
-        // We use the configs map to get a custom suffix to allow inserting a fail trigger for tests
-        auto dummy_key_suffix = ConfigsMap::instance()->get_string("Storage.AtomicSupportTestSuffix", "");
-        auto dummy_key = RefKey(fmt::format("ATOMIC_TEST_{}_{}{}", dist(e2), dist(e2), dummy_key_suffix), KeyType::ATOMIC_LOCK);
-        auto dummy_segment = [&](){
-            SegmentInMemory segment_in_memory{stream_descriptor("test", stream::RowCountIndex(), {})};
-            segment_in_memory.end_row();
-            return encode_dispatch(std::move(segment_in_memory), proto::encoding::VariantCodec(), EncodingVersion::V1);
-        };
-        try {
-            write_if_none(KeySegmentPair{dummy_key, dummy_segment()});
-            try {
-                write_if_none(KeySegmentPair{dummy_key, dummy_segment()});
-                atomic_write_works_as_expected = false;
-            } catch (AtomicOperationFailedException&) {
-                // On the second write we should raise an AtomicOperationFailed because the key is already written.
-                atomic_write_works_as_expected = true;
-            }
-            remove(dummy_key, RemoveOpts{});
-        } catch (NotImplementedException&) {
-            atomic_write_works_as_expected = false;
-        }
-        return atomic_write_works_as_expected;
-    }
-
     [[nodiscard]] bool supports_atomic_writes() {
         if (supports_atomic_writes_.has_value()) {
             return supports_atomic_writes_.value();
@@ -170,6 +140,42 @@ public:
     [[nodiscard]] virtual std::string name() const = 0;
 
 private:
+    // Tests whether a storage supports atomic write_if_none operations. The test is required for some backends (e.g. S3)
+    // for which different vendors/versions might or might not support atomic operations and might not indicate they're
+    // not supporting them in any meaningful way (e.g. as of 2025-01 Vast will happily override an existing key with an
+    // IfNoneMatch header).
+    [[nodiscard]] bool test_atomic_write_support() {
+        auto atomic_write_works_as_expected = false;
+
+        std::random_device rd;
+        std::mt19937_64 e2(rd());
+        std::uniform_int_distribution<uint64_t> dist;
+        // We use the configs map to get a custom suffix to allow inserting a fail trigger for tests
+        auto dummy_key_suffix = ConfigsMap::instance()->get_string("Storage.AtomicSupportTestSuffix", "");
+        auto dummy_key = RefKey(fmt::format("ATOMIC_TEST_{}_{}{}", dist(e2), dist(e2), dummy_key_suffix), KeyType::ATOMIC_LOCK);
+        auto dummy_segment = [&](){
+            auto descriptor = stream_descriptor("test", stream::RowCountIndex(), {});
+            return Segment::initialize(SegmentHeader{}, std::make_shared<Buffer>(), descriptor.data_ptr(), descriptor.fields_ptr(), descriptor.id());
+        };
+        try {
+            // First write should succeed (as we've chosen a unique random key, previously not written to the storage).
+            write_if_none(KeySegmentPair{dummy_key, dummy_segment()});
+            try {
+                // Second write should fail with an AtomicOperationFailed because the key is already written.
+                write_if_none(KeySegmentPair{dummy_key, dummy_segment()});
+                // If second write succeeded then storage ignores the IfNoneMatch headers and doesn't support atomic writes. (e.g. Vast)
+                atomic_write_works_as_expected = false;
+            } catch (AtomicOperationFailedException&) {
+                atomic_write_works_as_expected = true;
+            }
+            remove(dummy_key, RemoveOpts{});
+        } catch (NotImplementedException&) {
+            // If a write_if_none raises a NotImplementedException it doesn't support atomic writes. (e.g. Pure does this)
+            atomic_write_works_as_expected = false;
+        }
+        return atomic_write_works_as_expected;
+    }
+
     virtual void do_write(KeySegmentPair&& key_seg) = 0;
 
     virtual void do_write_if_none(KeySegmentPair&& kv) = 0;
