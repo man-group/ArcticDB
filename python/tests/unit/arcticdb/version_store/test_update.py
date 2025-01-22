@@ -862,6 +862,20 @@ class TestBatchUpdate:
                 ]
             )
 
+    def test_non_normalizable_data_throws(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("symbol_1", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
+        lib.write("symbol_2", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
+        with pytest.raises(arcticdb.version_store.library.ArcticUnsupportedDataTypeException) as ex_info:
+            lib.update_batch(
+                [
+                    UpdatePayload(symbol="symbol_1", data={1, 2, 3}),
+                    UpdatePayload(symbol="symbol_2", data=pd.DataFrame({"a": [8, 9]}, index=pd.date_range("2023-01-01", periods=2)))
+                ]
+            )
+        assert "symbol_1" in str(ex_info.value)
+        assert "symbol_2" not in str(ex_info.value)
+
 
 def test_regular_update_dynamic_schema_named_index(
     lmdb_version_store_tiny_segment_dynamic,
