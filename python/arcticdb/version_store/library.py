@@ -311,7 +311,7 @@ class ReadInfoRequest(NamedTuple):
 class UpdatePayload(NamedTuple):
     symbol: str
     data: Union[Any, NormalizableType]
-    metadata: Any = None,
+    metadata: Any = None
     date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None
 
     def __repr__(self):
