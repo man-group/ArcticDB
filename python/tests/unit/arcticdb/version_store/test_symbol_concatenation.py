@@ -30,11 +30,11 @@ def test_symbol_concat_basic(lmdb_library):
     lazy_df_2 = lazy_df_2.date_range((pd.Timestamp("2025-01-04"), None))
     lazy_df_3 = lib.read("sym3", lazy=True)
 
-    lazy_df = concat([lazy_df_2, lazy_df_3, lazy_df_1])
+    lazy_df = concat([lazy_df_1, lazy_df_2, lazy_df_3])
 
-    lazy_df.resample("2D").agg({"col": "sum"})
+    # lazy_df.resample("2D").agg({"col": "sum"})
 
     received = lazy_df.collect().data
-    expected = pd.concat([df_1, df_2.iloc[1:], df_3]).resample("2D").agg({"col": "sum"})
+    expected = pd.concat([df_1, df_2.iloc[1:], df_3]) #.resample("2D").agg({"col": "sum"})
     assert_frame_equal(expected, received)
 

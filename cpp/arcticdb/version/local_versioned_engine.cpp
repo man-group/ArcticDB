@@ -1164,6 +1164,9 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
     std::vector<folly::Future<std::vector<EntityId>>> symbol_entities_futs;
     symbol_entities_futs.reserve(opt_index_key_futs.size());
     auto component_manager = std::make_shared<ComponentManager>();
+    auto pipeline_context = std::make_shared<PipelineContext>();
+    auto norm_meta_mtx = std::make_shared<std::mutex>();
+    DecodePathData shared_data;
     for (auto idx = 0UL; idx < opt_index_key_futs.size(); ++idx) {
         symbol_entities_futs.emplace_back(
                 std::move(opt_index_key_futs[idx]).thenValue([store = store(),
@@ -1172,24 +1175,22 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
                                                                      &version_queries,
                                                                      read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
                                                                      &read_options,
-                                                                     &component_manager](auto&& opt_index_key) {
+                                                                     &component_manager,
+                                                                     pipeline_context,
+                                                                     norm_meta_mtx](auto&& opt_index_key) mutable {
                     std::variant<VersionedItem, StreamId> version_info;
-                    if (opt_index_key.has_value()) {
-                        version_info = VersionedItem(std::move(*opt_index_key));
-                    } else {
-                        if (opt_false(read_options.incompletes_)) {
-                            log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", stream_ids[idx]);
-                            version_info = stream_ids[idx];
-                        } else {
-                            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
-                                    "batch_read_internal: version matching query '{}' not found for symbol '{}'", version_queries[idx], stream_ids[idx]);
-                        }
+                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_index_key.has_value(), "batch_read_with_join_internal not supported with non-indexed data");
+                    auto index_key_seg = store->read_sync(*opt_index_key).second;
+                    {
+                        std::lock_guard<std::mutex> lock(*norm_meta_mtx);
+                        pipeline_context->norm_meta_ =std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_key_seg.mutable_index_descriptor().mutable_proto().mutable_normalization()));
                     }
+                    version_info = VersionedItem(std::move(*opt_index_key));
                     return read_entity_ids_for_version(store, version_info, read_query, read_options, component_manager);
                 })
         );
     }
-    ARCTICDB_UNUSED auto segment_in_memory = folly::collect(symbol_entities_futs)
+    return folly::collect(symbol_entities_futs)
             .via(&async::cpu_executor())
             .thenValue([](std::vector<std::vector<EntityId>>&& entity_id_vectors) {
         return flatten_entities(std::move(entity_id_vectors));
@@ -1197,14 +1198,20 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
         auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
         // TODO: Handle output descriptors
         return collect_segments(std::move(proc));
-    }).thenValueInline([store=store(), &handler_data](std::vector<SliceAndKey>&& slice_and_keys) {
-        auto pipeline_context = std::make_shared<PipelineContext>();
+    }).thenValueInline([store=store(), &handler_data, pipeline_context](std::vector<SliceAndKey>&& slice_and_keys) {
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(!slice_and_keys.empty(), "No slice and keys in batch_read_with_join_internal");
         pipeline_context->set_descriptor(slice_and_keys[0].segment(store).descriptor());
-        ReadOptions read_options;
-        return prepare_output_frame(std::move(slice_and_keys), pipeline_context, store, read_options, handler_data);
+        return prepare_output_frame(std::move(slice_and_keys), pipeline_context, store, ReadOptions{}, handler_data);
+    }).thenValueInline([&handler_data, pipeline_context, shared_data](SegmentInMemory&& frame) mutable {
+        return reduce_and_fix_columns(pipeline_context, frame, ReadOptions{}, handler_data)
+        .thenValue([pipeline_context, frame, shared_data](auto&&) mutable {
+            return MultiSymbolReadOutput{{},
+                                     {frame,
+                                      timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_),
+                                      {},
+                                      shared_data.buffers()}};
+        });
     }).get();
-    return {};
 }
 
 void LocalVersionedEngine::write_version_and_prune_previous(

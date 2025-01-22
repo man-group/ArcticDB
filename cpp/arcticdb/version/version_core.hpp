@@ -54,9 +54,7 @@ struct ReadVersionOutput {
 };
 
 struct MultiSymbolReadOutput {
-    // TODO: delete this ctor
-//    MultiSymbolReadOutput() = delete;
-    MultiSymbolReadOutput() = default;
+    MultiSymbolReadOutput() = delete;
     MultiSymbolReadOutput(std::vector<VersionedItem>&& versioned_items, FrameAndDescriptor&& frame_and_descriptor):
             versioned_items_(std::move(versioned_items)),
             frame_and_descriptor_(std::move(frame_and_descriptor)) {}
