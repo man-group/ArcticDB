@@ -1170,14 +1170,12 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
     for (auto idx = 0UL; idx < opt_index_key_futs.size(); ++idx) {
         symbol_entities_futs.emplace_back(
                 std::move(opt_index_key_futs[idx]).thenValue([store = store(),
-                                                                     idx,
-                                                                     &stream_ids,
-                                                                     &version_queries,
-                                                                     read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
-                                                                     &read_options,
-                                                                     &component_manager,
-                                                                     pipeline_context,
-                                                                     norm_meta_mtx](auto&& opt_index_key) mutable {
+                                                              idx,
+                                                              read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
+                                                              &read_options,
+                                                              &component_manager,
+                                                              pipeline_context,
+                                                              norm_meta_mtx](auto&& opt_index_key) mutable {
                     std::variant<VersionedItem, StreamId> version_info;
                     internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_index_key.has_value(), "batch_read_with_join_internal not supported with non-indexed data");
                     auto index_key_seg = store->read_sync(*opt_index_key).second;
@@ -1190,6 +1188,8 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
                 })
         );
     }
+//    auto entity_ids_vec_fut = folly::collect(symbol_entities_futs).via(&async::io_executor());
+
     return folly::collect(symbol_entities_futs)
             .via(&async::cpu_executor())
             .thenValue([](std::vector<std::vector<EntityId>>&& entity_id_vectors) {

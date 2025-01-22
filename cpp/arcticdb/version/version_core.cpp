@@ -640,6 +640,34 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
     return futures;
 }
 
+folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
+        folly::Future<std::vector<std::vector<EntityId>>>&& entity_ids_vec_fut,
+        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
+        ) {
+    const auto scheduling_iterations = num_scheduling_iterations(*clauses);
+    for (auto i = 1UL; i < scheduling_iterations; ++i) {
+        entity_ids_vec_fut = std::move(entity_ids_vec_fut).thenValue([clauses, scheduling_iterations, i] (std::vector<std::vector<EntityId>>&& entity_id_vectors) {
+            ARCTICDB_RUNTIME_DEBUG(log::memory(), "Scheduling iteration {} of {}", i, scheduling_iterations);
+
+            util::check(!clauses->empty(), "Scheduling iteration {} has no clauses to process", scheduling_iterations);
+            remove_processed_clauses(*clauses);
+            auto next_units_of_work = clauses->front()->structure_for_processing(std::move(entity_id_vectors));
+
+            std::vector<folly::Future<std::vector<EntityId>>> work_futures;
+            for(auto&& unit_of_work : next_units_of_work) {
+                ARCTICDB_RUNTIME_DEBUG(log::memory(), "Scheduling work for entity ids: {}", unit_of_work);
+                work_futures.emplace_back(async::submit_cpu_task(async::MemSegmentProcessingTask{*clauses, std::move(unit_of_work)}));
+            }
+
+            return folly::collect(work_futures).via(&async::io_executor());
+        });
+    }
+
+    return std::move(entity_ids_vec_fut).thenValueInline([](std::vector<std::vector<EntityId>>&& entity_id_vectors) {
+        return flatten_entities(std::move(entity_id_vectors));
+    });
+}
+
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
         std::shared_ptr<ComponentManager> component_manager,
         std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
@@ -672,29 +700,7 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
         clauses);
 
     auto entity_ids_vec_fut = folly::collect(*futures).via(&async::io_executor());
-
-    const auto scheduling_iterations = num_scheduling_iterations(*clauses);
-    for (auto i = 1UL; i < scheduling_iterations; ++i) {
-        entity_ids_vec_fut = std::move(entity_ids_vec_fut).thenValue([clauses, scheduling_iterations, i] (std::vector<std::vector<EntityId>>&& entity_id_vectors) {
-            ARCTICDB_RUNTIME_DEBUG(log::memory(), "Scheduling iteration {} of {}", i, scheduling_iterations);
-
-            util::check(!clauses->empty(), "Scheduling iteration {} has no clauses to process", scheduling_iterations);
-            remove_processed_clauses(*clauses);
-            auto next_units_of_work = clauses->front()->structure_for_processing(std::move(entity_id_vectors));
-
-            std::vector<folly::Future<std::vector<EntityId>>> work_futures;
-            for(auto&& unit_of_work : next_units_of_work) {
-                ARCTICDB_RUNTIME_DEBUG(log::memory(), "Scheduling work for entity ids: {}", unit_of_work);
-                work_futures.emplace_back(async::submit_cpu_task(async::MemSegmentProcessingTask{*clauses, std::move(unit_of_work)}));
-            }
-
-            return folly::collect(work_futures).via(&async::io_executor());
-        });
-    }
-
-    return std::move(entity_ids_vec_fut).thenValueInline([](std::vector<std::vector<EntityId>>&& entity_id_vectors) {
-        return flatten_entities(std::move(entity_id_vectors));
-    });
+    return schedule_remaining_iterations(std::move(entity_ids_vec_fut), clauses);
 }
 
 void set_output_descriptors(
@@ -2112,7 +2118,7 @@ folly::Future<std::vector<EntityId>> read_entity_ids_for_version(
     generate_filtered_field_descriptors(pipeline_context, read_query->columns);
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
 
-    return version_store::do_process(store, read_query, read_options, pipeline_context, component_manager);
+    return do_process(store, read_query, read_options, pipeline_context, component_manager);
 }
 } //namespace arcticdb::version_store
 
