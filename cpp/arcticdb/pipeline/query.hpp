@@ -26,7 +26,6 @@
 #include <ranges>
 #include <span>
 
-
 namespace arcticdb::pipelines {
 
 namespace ranges = std::ranges;

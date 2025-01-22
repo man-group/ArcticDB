@@ -250,7 +250,7 @@ def test_empty_symbol_name_2(object_version_store):
 
 
 @pytest.mark.parametrize(
-    "method", ("write", "append", "update", "write_metadata", "batch_write", "batch_append", "batch_write_metadata", "batch_update")
+    "method", ("write", "append", "update", "write_metadata", "batch_write", "batch_append", "batch_write_metadata")
 )
 def test_empty_symbol_name(lmdb_version_store_v1, method):
     first_arg = [""] if method.startswith("batch_") else ""

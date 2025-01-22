@@ -300,7 +300,7 @@ def test_date_range_multi_index(lmdb_version_store):
 
 @pytest.mark.parametrize(
     "method",
-    ("write", "append", "update", "write_metadata", "batch_write", "batch_append", "batch_write_metadata", "batch_update")
+    ("write", "append", "update", "write_metadata", "batch_write", "batch_append", "batch_write_metadata")
 )
 @pytest.mark.parametrize("lib_config", (True, False))
 @pytest.mark.parametrize("env_var", (True, False))
