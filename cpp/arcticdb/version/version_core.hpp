@@ -289,8 +289,9 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
             stream::StreamSink::PartialKey
                 pk{KeyType::TABLE_DATA, pipeline_context->version_id_, pipeline_context->stream_id_, local_index_start, local_index_end};
 
-            // TODO We should apply back pressure to the work we are generating here, to bound memory use
-            write_futures.emplace_back(store->write(pk, std::move(segment)));
+            // Submit to the blocking queue to bound memory use, we do not want to create too many futures as each one
+            // holds a SegmentInMemory.
+            write_futures.emplace_back(store->write_maybe_blocking(pk, std::move(segment)));
         },
         segment_size.has_value() ? SegmentationPolicy{*segment_size} : SegmentationPolicy{}
     };

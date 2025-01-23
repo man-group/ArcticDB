@@ -90,6 +90,18 @@ struct StreamSink {
         PartialKey pk,
         SegmentInMemory &&segment) = 0;
 
+    [[nodiscard]] virtual folly::Future<entity::VariantKey> write_maybe_blocking(
+        PartialKey pk,
+        SegmentInMemory &&segment) = 0;
+
+    [[nodiscard]] virtual folly::Future<entity::VariantKey> write_maybe_blocking(
+        stream::KeyType key_type,
+        VersionId version_id,
+        const StreamId &stream_id,
+        IndexValue start_index,
+        IndexValue end_index,
+        SegmentInMemory &&segment) = 0;
+
     virtual entity::VariantKey write_sync(
         PartialKey pk,
         SegmentInMemory &&segment) = 0;

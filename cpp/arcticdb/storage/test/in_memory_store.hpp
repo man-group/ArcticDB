@@ -142,6 +142,22 @@ public:
         return write(key_type, stream_id, std::move(segment)).get();
     }
 
+    folly::Future<VariantKey>
+    write_maybe_blocking(PartialKey pk, SegmentInMemory &&segment) override {
+        return write(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index,
+                     std::move(segment));
+    }
+
+    folly::Future<entity::VariantKey> write_maybe_blocking(
+        stream::KeyType key_type,
+        VersionId version_id,
+        const StreamId &stream_id,
+        IndexValue start_index,
+        IndexValue end_index,
+        SegmentInMemory &&segment) override {
+        return write(key_type, version_id, stream_id, start_index, end_index, std::move(segment));
+    }
+
     entity::VariantKey write_if_none_sync(
             KeyType key_type,
             const StreamId& stream_id,
