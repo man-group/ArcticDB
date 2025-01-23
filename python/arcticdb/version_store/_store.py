@@ -141,7 +141,7 @@ def _normalize_dt_range(dtr: DateRangeInput) -> _IndexRange:
     return _IndexRange(start.value, end.value)
 
 
-def _handle_categorical_columns(symbol, data, throw=True):
+def _handle_categorical_columns(symbol, data, throw=True, operation_supports_categoricals=False):
     if isinstance(data, (pd.DataFrame, pd.Series)):
         categorical_columns = []
         if isinstance(data, pd.DataFrame):
@@ -157,9 +157,9 @@ def _handle_categorical_columns(symbol, data, throw=True):
                 "Symbol: {}\nDataFrame/Series contains categorical data, cannot append or update\nCategorical"
                 " columns: {}".format(symbol, categorical_columns)
             )
-            if throw:
+            if throw and not operation_supports_categoricals:
                 raise ArcticDbNotYetImplemented(message)
-            else:
+            elif not throw and not operation_supports_categoricals:
                 log.warn(message)
 
 
@@ -489,7 +489,7 @@ class NativeVersionStore:
         **kwargs,
     ):
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
-        _handle_categorical_columns(symbol, data, True)
+        _handle_categorical_columns(symbol, data, True, operation_supports_categoricals=True)
         udm, item, norm_meta = self._try_normalize(
             symbol,
             data,
@@ -600,7 +600,7 @@ class NativeVersionStore:
         sparsify_floats = kwargs.get("sparsify_floats", False)
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
 
-        _handle_categorical_columns(symbol, data, False)
+        _handle_categorical_columns(symbol, data, False, operation_supports_categoricals=True)
 
         log.debug(
             "Writing with pickle_on_failure={}, prune_previous_version={}, recursive_normalizers={}",
@@ -1318,6 +1318,7 @@ class NativeVersionStore:
         dynamic_strings: bool,
         pickle_on_failure: bool,
         norm_failure_msg: str,
+        operation_supports_categoricals: bool=False
     ) -> Tuple[List, List, List, List]:
         # metadata_vector used to be type-hinted as an Iterable, so handle this case in case anyone is relying on it
         if metadata_vector is None:
@@ -1326,7 +1327,8 @@ class NativeVersionStore:
             metadata_vector = list(metadata_vector)
 
         for idx in range(len(symbols)):
-            _handle_categorical_columns(symbols[idx], data_vector[idx])
+            _handle_categorical_columns(
+                symbols[idx], data_vector[idx], operation_supports_categoricals=operation_supports_categoricals)
 
         udms = []
         items = []
@@ -1368,7 +1370,14 @@ class NativeVersionStore:
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
 
         udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
-            symbols, data_vector, metadata_vector, dynamic_strings, pickle_on_failure, norm_failure_options_msg)
+            symbols,
+            data_vector,
+            metadata_vector,
+            dynamic_strings,
+            pickle_on_failure,
+            norm_failure_options_msg,
+            operation_supports_categoricals=True
+        )
         cxx_versioned_items = self.version_store.batch_write(
             symbols, items, norm_metas, udms, prune_previous_version, validate_index, throw_on_error
         )
