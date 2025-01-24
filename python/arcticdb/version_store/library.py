@@ -308,19 +308,26 @@ class ReadInfoRequest(NamedTuple):
         res += ")"
         return res
 
-class UpdatePayload(NamedTuple):
-    symbol: str
-    data: Union[Any, NormalizableType]
-    metadata: Any = None
-    date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None
+class UpdatePayload:
+
+    def __init__(
+        self,
+        symbol: str,
+        data: NormalizableType,
+        metadata: Any = None,
+        date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None
+    ):
+        self.symbol = symbol
+        self.data = data
+        self.metadata = metadata
+        self.date_range = date_range
 
     def __repr__(self):
         return(
             f"UpdatePayload(symbol={self.symbol}, data_id={id(self.data)}"
-            f", metadata={self.metadata}" if self.metadata is not None else "",
-            f", date_range={self.date_range if self.date_range is not None else ''})"
+            f", metadata={self.metadata}" if self.metadata is not None else ""
+            f", date_range={self.date_range}" if self.date_range is not None else ""
         )
-
 
 class LazyDataFrame(QueryBuilder):
     """
@@ -1155,8 +1162,8 @@ class Library:
     def update_batch(
         self,
         update_payloads: List[UpdatePayload],
-        prune_previous_versions: bool = False,
         upsert: bool = False,
+        prune_previous_versions: bool = False,
     ) -> List[Union[VersionedItem, DataError]]:
         """
         Perform an update operation on a list of symbols in parallel.
