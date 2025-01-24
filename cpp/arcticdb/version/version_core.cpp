@@ -315,7 +315,11 @@ struct UpdateRanges {
 };
 
 
-static UpdateRanges compute_update_ranges(const FilterRange& row_filter, const InputTensorFrame& update_frame, std::span<SliceAndKey> update_slice_and_keys) {
+static UpdateRanges compute_update_ranges(
+    const FilterRange& row_filter,
+    const InputTensorFrame& update_frame,
+    std::span<SliceAndKey> update_slice_and_keys
+) {
     return util::variant_match(row_filter,
         [&](std::monostate) -> UpdateRanges {
             util::check(std::holds_alternative<TimeseriesIndex>(update_frame.index), "Update with row count index is not permitted");

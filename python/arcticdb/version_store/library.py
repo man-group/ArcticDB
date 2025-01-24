@@ -1209,7 +1209,7 @@ class Library:
         >>> lib.write("symbol_1", df1)
         >>> lib.write("symbol_2", df1)
         >>> lib.update_batch([arcticdb.library.UpdatePayload("symbol_1", pd.DataFrame({"column_1": [4, 5]}, index=pd.date_range("2025-01-03", periods=2))), arcticdb.library.UpdatePayload("symbol_2", pd.DataFrame({"column_2": [-1]}, index=pd.date_range("2023-01-01", periods=1)))])
-        [VersionedItem(symbol='symbol_1', library='test', data=n/a, version=1, metadata=(None,), host='LMDB(path=...)', timestamp=1737542783853861819), VersionedItem(symbol='symbol_2', library='test', data=n/a, version=2, metadata=(None,), host='LMDB(path=...)', timestamp=1737542783851798754)]
+        [VersionedItem(symbol='symbol_1', library='test', data=n/a, version=1, metadata=(None,), host='LMDB(path=...)', timestamp=1737542783853861819), VersionedItem(symbol='symbol_2', library='test', data=n/a, version=1, metadata=(None,), host='LMDB(path=...)', timestamp=1737542783851798754)]
         >>> lib.read("symbol_1").data
                     column_1
         2025-01-01         1

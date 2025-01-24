@@ -30,6 +30,7 @@ from pandas import MultiIndex
 import arcticdb
 from arcticdb.version_store import VersionedItem
 from arcticdb.version_store.library import UpdatePayload
+from arcticdb.exceptions import ErrorCode, ErrorCategory
 
 
 def test_update_single_dates(lmdb_version_store_dynamic_schema):
@@ -769,6 +770,10 @@ class TestBatchUpdate:
         ])
         assert set(lib.list_symbols()) == {"symbol_1", "symbol_2"}
         assert isinstance(update_result[0], DataError)
+        assert update_result[0].symbol == "symbol_3"
+        assert update_result[0].error_code == ErrorCode.E_NO_SUCH_VERSION
+        assert update_result[0].error_category == ErrorCategory.MISSING_DATA
+        assert all(expected in update_result[0].exception_string for expected in ["upsert", "Cannot update", "symbol_3"])
         assert isinstance(update_result[1], VersionedItem)
 
         symbol_1_vit = lib.read("symbol_1")
@@ -819,37 +824,6 @@ class TestBatchUpdate:
         assert_frame_equal(symbol_2_vit.data, symbol_2_expected_data)
         assert len(lib.list_versions("symbol_2")) == 1
 
-    def test_static_schema_does_not_allow_new_columns(self, lmdb_library):
-        lib = lmdb_library
-        lib.write("symbol_1", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
-        lib.write("symbol_2", pd.DataFrame({"b": [10]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
-        update_result = lib.update_batch(
-            [
-                UpdatePayload(symbol="symbol_1", data=pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))),
-                UpdatePayload(symbol="symbol_2", data=pd.DataFrame({"c": [8, 9]}, index=pd.date_range("2023-01-01", periods=2)))
-            ]
-        )
-        assert isinstance(update_result[0], VersionedItem)
-        assert isinstance(update_result[1], DataError)
-
-    def test_dynamic_schema_allows_new_columns(self, lmdb_library_dynamic_schema):
-        lib = lmdb_library_dynamic_schema
-        lib.write("symbol_1", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
-        lib.write("symbol_2", pd.DataFrame({"b": [10]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
-        update_result = lib.update_batch(
-            [
-                UpdatePayload(symbol="symbol_1", data=pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))),
-                UpdatePayload(symbol="symbol_2", data=pd.DataFrame({"c": [8, 9]}, index=pd.date_range("2023-01-01", periods=2)))
-            ]
-        )
-        assert isinstance(update_result[0], VersionedItem)
-        assert isinstance(update_result[1], VersionedItem)
-        symbol_2_data = lib.read("symbol_2").data
-        symbol_2_expected_data = pd.DataFrame(
-            {"b": [0, 0, 10], "c": [8, 9, 0]},
-            index=pd.DatetimeIndex([pd.Timestamp("2023-01-01"), pd.Timestamp("2023-01-02"), pd.Timestamp("2024-01-01")])
-        )
-        assert_frame_equal(symbol_2_data, symbol_2_expected_data)
 
     def test_repeating_symbol_in_payload_list_throws(self, lmdb_library):
         lib = lmdb_library

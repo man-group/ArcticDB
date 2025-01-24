@@ -104,6 +104,7 @@
   ],
   "overrides": [
     { "name": "openssl", "version-string": "3.3.0" },
+    { "name": "arrow", "version-string": "18.0.0" },
     { "name": "aws-sdk-cpp", "version": "1.11.405" },
     { "name": "azure-core-cpp", "version": "1.12.0" },
     { "name": "benchmark", "version": "1.9.0" },
