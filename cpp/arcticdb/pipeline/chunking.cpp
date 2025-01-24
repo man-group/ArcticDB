@@ -18,7 +18,7 @@ ChunkIterator::ChunkIterator(
     std::shared_ptr<Store> store,
     ReadQuery& read_query,
     const ReadOptions& read_options,
-    std::shared_ptr<std::any>& handler_data,
+    std::any& handler_data,
     DecodePathData shared_data) :
     index_segment_reader_(std::move(index_segment_reader)),
     pipeline_context_(std::move(pipeline_context)),

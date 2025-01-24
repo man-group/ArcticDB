@@ -41,7 +41,7 @@ public:
         std::shared_ptr<Store> store,
         pipelines::ReadQuery& read_query,
         const ReadOptions& read_options,
-        std::shared_ptr<std::any>& handler_data,
+        std::any& handler_data,
         DecodePathData shared_data);
 
     std::optional<ReadResult> next();

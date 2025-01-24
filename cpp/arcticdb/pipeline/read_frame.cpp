@@ -211,7 +211,7 @@ void decode_or_expand(
     ChunkedBuffer& dest_buffer,
     const EncodedFieldImpl& encoded_field_info,
     const DecodePathData& shared_data,
-    std::shared_ptr<std::any>& handler_data,
+    std::any& handler_data,
 	EncodingVersion encoding_version,
     const ColumnMapping& m,
     const std::shared_ptr<StringPool>& string_pool) {
@@ -307,7 +307,7 @@ void decode_into_frame_static(
     PipelineContextRow &context,
     Segment &&s,
     const DecodePathData& shared_data,
-    std::shared_ptr<std::any>& handler_data) {
+    std::any& handler_data) {
     auto seg = std::move(s);
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     const uint8_t *data = seg.buffer().data();
@@ -400,7 +400,7 @@ void decode_into_frame_dynamic(
     PipelineContextRow& context,
     Segment&& s,
     const DecodePathData& shared_data,
-    std::shared_ptr<std::any>& handler_data
+    std::any& handler_data
 ) {
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     auto seg = std::move(s);
@@ -511,7 +511,7 @@ class NullValueReducer {
     SegmentInMemory frame_;
     size_t pos_;
     DecodePathData shared_data_;
-    std::shared_ptr<std::any>& handler_data_;
+    std::any& handler_data_;
 
 public:
     NullValueReducer(
@@ -519,7 +519,7 @@ public:
         std::shared_ptr<PipelineContext> &context,
         SegmentInMemory frame,
         DecodePathData shared_data,
-        std::shared_ptr<std::any>& handler_data) :
+        std::any& handler_data) :
         column_(column),
         context_(context),
         frame_(std::move(frame)),
@@ -572,7 +572,7 @@ struct ReduceColumnTask : async::BaseTask {
     std::shared_ptr<FrameSliceMap> slice_map_;
     std::shared_ptr<PipelineContext> context_;
     DecodePathData shared_data_;
-    std::shared_ptr<std::any>& handler_data_;
+    std::any& handler_data_;
     bool dynamic_schema_;
 
     ReduceColumnTask(
@@ -581,7 +581,7 @@ struct ReduceColumnTask : async::BaseTask {
         std::shared_ptr<FrameSliceMap> slice_map,
         std::shared_ptr<PipelineContext>& context,
         DecodePathData shared_data,
-        std::shared_ptr<std::any>& handler_data,
+        std::any& handler_data,
         bool dynamic_schema) :
         frame_(std::move(frame)),
         column_index_(c),
@@ -637,7 +637,7 @@ folly::Future<folly::Unit> reduce_and_fix_columns(
     std::shared_ptr<PipelineContext> &context,
     SegmentInMemory &frame,
     const ReadOptions& read_options,
-    std::shared_ptr<std::any>& handler_data
+    std::any& handler_data
 ) {
     ARCTICDB_SAMPLE_DEFAULT(ReduceAndFixStringCol)
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
@@ -673,7 +673,7 @@ folly::Future<SegmentInMemory> fetch_data(
     const std::shared_ptr<stream::StreamSource>& ssource,
     bool dynamic_schema,
     DecodePathData shared_data,
-    std::shared_ptr<std::any>& handler_data
+    std::any& handler_data
     ) {
     ARCTICDB_SAMPLE_DEFAULT(FetchSlices)
     if (frame.empty())
@@ -1149,7 +1149,7 @@ void copy_frame_data_to_buffer(
     size_t source_index,
     const RowRange& row_range,
     const DecodePathData& shared_data,
-    std::shared_ptr<std::any>& handler_data) {
+    std::any& handler_data) {
     const auto num_rows = row_range.diff();
     if (num_rows == 0) {
         return;
@@ -1222,7 +1222,7 @@ struct CopyToBufferTask : async::BaseTask {
     SegmentInMemory target_segment_;
     FrameSlice frame_slice_;
     DecodePathData shared_data_;
-    std::shared_ptr<std::any>& handler_data_;
+    std::any& handler_data_;
     bool fetch_index_;
 
     CopyToBufferTask(
@@ -1230,7 +1230,7 @@ struct CopyToBufferTask : async::BaseTask {
         SegmentInMemory target_segment,
         FrameSlice frame_slice,
         DecodePathData shared_data,
-        std::shared_ptr<std::any>& handler_data,
+        std::any& handler_data,
         bool fetch_index) :
         source_segment_(std::move(source_segment)),
         target_segment_(std::move(target_segment)),
@@ -1271,7 +1271,7 @@ folly::Future<folly::Unit> copy_segments_to_frame(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<PipelineContext>& pipeline_context,
     SegmentInMemory frame,
-    std::shared_ptr<std::any>& handler_data) {
+    std::any& handler_data) {
     std::vector<folly::Future<folly::Unit>> copy_tasks;
     DecodePathData shared_data;
     for (auto context_row : folly::enumerate(*pipeline_context)) {
@@ -1295,7 +1295,7 @@ folly::Future<SegmentInMemory> prepare_output_frame(
     const std::shared_ptr<PipelineContext>& pipeline_context,
     const std::shared_ptr<Store>& store,
     const ReadOptions& read_options,
-    std::shared_ptr<std::any>& handler_data) {
+    std::any& handler_data) {
     pipeline_context->clear_vectors();
     pipeline_context->slice_and_keys_ = std::move(items);
     std::sort(std::begin(pipeline_context->slice_and_keys_), std::end(pipeline_context->slice_and_keys_), [] (const auto& left, const auto& right) {
@@ -1322,7 +1322,7 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
     const ReadOptions& read_options,
     const std::shared_ptr<PipelineContext>& pipeline_context,
     const DecodePathData& shared_data,
-    std::shared_ptr<std::any>& handler_data) {
+    std::any& handler_data) {
     if(!read_query->clauses_.empty()) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
         util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");

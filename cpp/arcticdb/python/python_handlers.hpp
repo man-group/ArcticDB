@@ -26,7 +26,7 @@ struct EmptyHandler {
         const EncodedFieldImpl &field,
         const ColumnMapping& m,
         const DecodePathData& shared_data,
-        std::shared_ptr<std::any>& handler_data,
+        std::any& handler_data,
         EncodingVersion encoding_version,
         const std::shared_ptr<StringPool>& string_pool
     );
@@ -41,7 +41,7 @@ struct EmptyHandler {
         TypeDescriptor source_type_desc,
         TypeDescriptor dest_type_desc,
         const DecodePathData& shared_data,
-        std::shared_ptr<std::any>& handler_data,
+        std::any& handler_data,
         const std::shared_ptr<StringPool>& string_pool
     );
 
@@ -50,7 +50,7 @@ struct EmptyHandler {
         size_t offset,
         size_t byte_size,
         const DecodePathData& shared_data,
-        std::shared_ptr<std::any>& handler_data) const;
+        std::any& handler_data) const;
 };
 
 struct StringHandler {
@@ -60,7 +60,7 @@ struct StringHandler {
         const EncodedFieldImpl &field,
         const ColumnMapping& m,
         const DecodePathData& shared_data,
-        std::shared_ptr<std::any>& handler_data,
+        std::any& handler_data,
         EncodingVersion encoding_version,
         const std::shared_ptr<StringPool>& string_pool
     );
@@ -75,7 +75,7 @@ struct StringHandler {
         TypeDescriptor source_type_desc,
         TypeDescriptor dest_type_desc,
         const DecodePathData& shared_data,
-        std::shared_ptr<std::any>& handler_data,
+        std::any& handler_data,
         const std::shared_ptr<StringPool>& string_pool);
 
     void default_initialize(
@@ -83,7 +83,7 @@ struct StringHandler {
         size_t offset,
         size_t byte_size,
         const DecodePathData& shared_data,
-        std::shared_ptr<std::any>& handler_data) const;
+        std::any& handler_data) const;
 };
 
 struct BoolHandler {
@@ -93,7 +93,7 @@ struct BoolHandler {
         const EncodedFieldImpl &field,
         const ColumnMapping& m,
         const DecodePathData& shared_data,
-        std::shared_ptr<std::any>& handler_data,
+        std::any& handler_data,
         EncodingVersion encoding_version,
         const std::shared_ptr<StringPool>& string_pool
     );
@@ -108,7 +108,7 @@ struct BoolHandler {
         TypeDescriptor source_type_desc,
         TypeDescriptor dest_type_desc,
         const DecodePathData& shared_data,
-        std::shared_ptr<std::any>& handler_data,
+        std::any& handler_data,
         const std::shared_ptr<StringPool>& string_pool
     );
 
@@ -117,7 +117,7 @@ struct BoolHandler {
         size_t offset,
         size_t byte_size,
         const DecodePathData& shared_data,
-        std::shared_ptr<std::any>& handler_data) const;
+        std::any& handler_data) const;
 };
 
 struct ArrayHandler {
@@ -127,7 +127,7 @@ struct ArrayHandler {
         const EncodedFieldImpl &field,
         const ColumnMapping& m,
         const DecodePathData& shared_data,
-        std::shared_ptr<std::any>& handler_data,
+        std::any& handler_data,
         EncodingVersion encoding_version,
         const std::shared_ptr<StringPool>& string_pool
     );
@@ -139,7 +139,7 @@ struct ArrayHandler {
         size_t offset,
         size_t byte_size,
         const DecodePathData& shared_data,
-        std::shared_ptr<std::any>& handler_data) const;
+        std::any& handler_data) const;
 
     void convert_type(
         const Column& source_column,
@@ -149,7 +149,7 @@ struct ArrayHandler {
         TypeDescriptor source_type_desc,
         TypeDescriptor dest_type_desc,
         const DecodePathData& shared_data,
-        std::shared_ptr<std::any>& handler_data,
+        std::any& handler_data,
         const std::shared_ptr<StringPool>& string_pool);
 };
 

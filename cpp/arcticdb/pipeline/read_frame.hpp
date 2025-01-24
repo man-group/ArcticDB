@@ -77,7 +77,7 @@ folly::Future<SegmentInMemory> fetch_data(
     const std::shared_ptr<stream::StreamSource>& ssource,
     bool dynamic_schema,
     DecodePathData shared_data,
-    std::shared_ptr<std::any>& handler_data);
+    std::any& handler_data);
 
 folly::Future<SegmentInMemory> do_direct_read_or_process(
     const std::shared_ptr<Store>& store,
@@ -85,27 +85,27 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
     const ReadOptions& read_options,
     const std::shared_ptr<PipelineContext>& pipeline_context,
     const DecodePathData& shared_data,
-    std::shared_ptr<std::any>& handler_data);
+    std::any& handler_data);
 
 void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
     Segment &&seg,
     const DecodePathData& shared_data,
-    std::shared_ptr<std::any>& handler_data);
+    std::any& handler_data);
 
 void decode_into_frame_dynamic(
     SegmentInMemory &frame,
     PipelineContextRow &context,
     Segment &&seg,
     const DecodePathData& shared_data,
-    std::shared_ptr<std::any>& handler_data);
+    std::any& handler_data);
 
 folly::Future<folly::Unit> reduce_and_fix_columns(
     std::shared_ptr<PipelineContext> &context,
     SegmentInMemory &frame,
     const ReadOptions& read_options,
-    std::shared_ptr<std::any>& handler_data);
+    std::any& handler_data);
 
 StreamDescriptor get_filtered_descriptor(
     const StreamDescriptor& desc,

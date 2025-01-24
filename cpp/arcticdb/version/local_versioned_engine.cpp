@@ -370,7 +370,7 @@ ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
     const VersionQuery& version_query,
     const std::shared_ptr<ReadQuery>& read_query,
     const ReadOptions& read_options,
-    std::shared_ptr<std::any>& handler_data) {
+    std::any& handler_data) {
     py::gil_scoped_release release_gil;
     auto version = get_version_to_read(stream_id, version_query);
     const auto identifier = check_have_version_if_required(stream_id, version_query, read_options, version);
@@ -382,7 +382,7 @@ ChunkIterator LocalVersionedEngine::read_dataframe_chunked_internal(
     const VersionQuery& version_query,
     ReadQuery& read_query,
     const ReadOptions& read_options,
-    std::shared_ptr<std::any>& handler_data,
+    std::any& handler_data,
     DecodePathData shared_data) {
     auto version = get_version_to_read(stream_id, version_query);
     const auto identifier = check_have_version_if_required(stream_id, version_query, read_options, version);
@@ -1122,7 +1122,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
     const std::vector<VersionQuery>& version_queries,
     std::vector<std::shared_ptr<ReadQuery>>& read_queries,
     const ReadOptions& read_options,
-    std::shared_ptr<std::any>& handler_data) {
+    std::any& handler_data) {
     py::gil_scoped_release release_gil;
     // This read option should always be set when calling batch_read
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),

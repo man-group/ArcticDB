@@ -17,7 +17,7 @@
 
 namespace arcticdb::pipelines {
 
-inline void apply_type_handlers(SegmentInMemory seg, std::shared_ptr<std::any>& handler_data) {
+inline void apply_type_handlers(SegmentInMemory seg, std::any& handler_data) {
     DecodePathData shared_data;
     if(seg.empty())
         return;

@@ -103,7 +103,7 @@ public:
         const VersionQuery& version_query,
         const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options,
-        std::shared_ptr<std::any>& handler_data) = 0;
+        std::any& handler_data) = 0;
 
     virtual VersionedItem write_versioned_dataframe_internal(
         const StreamId& stream_id,

@@ -110,7 +110,7 @@ ReadVersionOutput read_dataframe_from_file_internal(
         const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options,
         const arcticdb::proto::encoding::VariantCodec &codec_opts,
-        std::shared_ptr<std::any>& handler_data) {
+        std::any& handler_data) {
     auto config = storage::file::pack_config(path, codec_opts);
     storage::LibraryPath lib_path{std::string{"file"}, fmt::format("{}", stream_id)};
     auto library = create_library(lib_path, storage::OpenMode::WRITE, {std::move(config)});

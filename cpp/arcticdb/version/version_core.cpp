@@ -492,7 +492,7 @@ VersionedItem update_impl(
 folly::Future<ReadVersionOutput> read_multi_key(
     const std::shared_ptr<Store>& store,
     const SegmentInMemory& index_key_seg,
-    std::shared_ptr<std::any>& handler_data) {
+    std::any& handler_data) {
     std::vector<AtomKey> keys;
     for (size_t idx = 0; idx < index_key_seg.row_count(); idx++) {
         keys.emplace_back(stream::read_key_row(index_key_seg, static_cast<ssize_t>(idx)));
@@ -1356,7 +1356,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::variant<VersionedItem, StreamId>& version_info,
         const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options,
-        std::shared_ptr<std::any>& handler_data) {
+        std::any& handler_data) {
     using namespace arcticdb::pipelines;
     auto pipeline_context = std::make_shared<PipelineContext>();
     VersionedItem res_versioned_item;

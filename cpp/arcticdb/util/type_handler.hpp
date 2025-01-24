@@ -40,7 +40,7 @@ struct ITypeHandler {
             const EncodedFieldImpl& encoded_field_info,
             const ColumnMapping& mapping,
             const DecodePathData& shared_data,
-            std::shared_ptr<std::any>& handler_data,
+            std::any& handler_data,
             EncodingVersion encoding_version,
             const std::shared_ptr<StringPool>& string_pool
         ) {
@@ -69,12 +69,12 @@ struct ITypeHandler {
             TypeDescriptor source_type_desc,
             TypeDescriptor dest_type_desc,
             const DecodePathData& shared_data,
-            std::shared_ptr<std::any>& handler_data,
+            std::any& handler_data,
             const std::shared_ptr<StringPool>& string_pool) {
             folly::poly_call<1>(*this, source_column, dest_buffer, num_rows, offset_bytes, source_type_desc, dest_type_desc, shared_data, handler_data, string_pool);
         }
 
-        void default_initialize(ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data, std::shared_ptr<std::any>& handler_data) const {
+        void default_initialize(ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data, std::any& handler_data) const {
             folly::poly_call<3>(*this, buffer, offset, byte_size, shared_data, handler_data);
         }
     };

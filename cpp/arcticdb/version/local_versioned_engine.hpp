@@ -144,7 +144,7 @@ public:
         const VersionQuery& version_query,
         const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options,
-        std::shared_ptr<std::any>& handler_data) override;
+        std::any& handler_data) override;
 
     DescriptorItem read_descriptor_internal(
             const StreamId& stream_id,
@@ -194,7 +194,7 @@ public:
         const VersionQuery& version_query,
         ReadQuery& read_query,
         const ReadOptions& read_options,
-        std::shared_ptr<std::any>& handler_data,
+        std::any& handler_data,
         DecodePathData shared_data);
 
     folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata(
@@ -293,7 +293,7 @@ public:
         const std::vector<VersionQuery>& version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
         const ReadOptions& read_options,
-        std::shared_ptr<std::any>& handler_data);
+        std::any& handler_data);
 
     std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor_internal(
             const std::vector<StreamId>& stream_ids,
