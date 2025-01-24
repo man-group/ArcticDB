@@ -1010,7 +1010,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "list_functions:22",
+        "setup_cache_key": "list_functions:23",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1028,7 +1028,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "list_functions:22",
+        "setup_cache_key": "list_functions:23",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1051,7 +1051,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "list_functions:22",
+        "setup_cache_key": "list_functions:23",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -1075,7 +1075,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "list_functions:22",
+        "setup_cache_key": "list_functions:23",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -1099,143 +1099,119 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "list_functions:22",
+        "setup_cache_key": "list_functions:23",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
         "version": "cc2c68ce66d0087882fffcb8be554f525c3f314c8693a37897d37cc18373f1ff",
         "warmup_time": -1
     },
-    "list_functions_snapshots.SnaphotFunctions.peakmem_snapshots_no_metadata_list_with_load_meta": {
-        "code": "class SnaphotFunctions:\n    def peakmem_snapshots_no_metadata_list_with_load_meta(self, num_symbols):\n        list = self.lib_no_snaps.list_snapshots(load_metadata=True)\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n        self.lib = self.ac[self.get_lib_name(num_symbols, True)]\n        self.lib_no_snaps = self.ac[self.get_lib_name(num_symbols, False)]\n\n    def setup_cache(self):\n        start = time.time()\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n    \n        self.create_test_library(self.ac, True)\n        self.create_test_library(self.ac, False)\n    \n        print(f\"Libraries generation took [{time.time() - start}]\")",
-        "name": "list_functions_snapshots.SnaphotFunctions.peakmem_snapshots_no_metadata_list_with_load_meta",
+    "list_snapshots.SnaphotFunctions.peakmem_snapshots_no_metadata_list": {
+        "code": "class SnaphotFunctions:\n    def peakmem_snapshots_no_metadata_list(self, symbols_x_snaps_per_sym):\n        list = self.lib_no_meta.list_snapshots(load_metadata=False)\n\n    def setup(self, symbols_x_snaps_per_sym):\n        num_symbols = self.get_symbols(symbols_x_snaps_per_sym)\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n        self.lib = self.ac[self.get_lib_name(num_symbols, True)]\n        self.lib_no_meta = self.ac[self.get_lib_name(num_symbols, False)]\n\n    def setup_cache(self):\n        start = time.time()\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n    \n        self.create_test_library(True)\n        self.create_test_library(False)\n    \n        print(f\"Libraries generation took [{time.time() - start}]\")",
+        "name": "list_snapshots.SnaphotFunctions.peakmem_snapshots_no_metadata_list",
         "param_names": [
-            "num_symbols"
+            "symbols_x_snaps_per_sym"
         ],
         "params": [
             [
-                "250",
-                "500"
+                "'20x10'",
+                "'40x20'"
             ]
         ],
-        "setup_cache_key": "list_functions_snapshots:27",
+        "setup_cache_key": "list_snapshots:40",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "56d9584183cc923d447cc3a055312c68b3b97e4b32c65b9f36fb52cf46626b76"
+        "version": "55c5726e8be0eafb5adfab9f83954dc1fd727249fc74a1df3d27bed647ad1040"
     },
-    "list_functions_snapshots.SnaphotFunctions.peakmem_snapshots_with_metadata_list_with_load_meta": {
-        "code": "class SnaphotFunctions:\n    def peakmem_snapshots_with_metadata_list_with_load_meta(self, num_symbols):\n        list = self.lib.list_snapshots(load_metadata=True)\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n        self.lib = self.ac[self.get_lib_name(num_symbols, True)]\n        self.lib_no_snaps = self.ac[self.get_lib_name(num_symbols, False)]\n\n    def setup_cache(self):\n        start = time.time()\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n    \n        self.create_test_library(self.ac, True)\n        self.create_test_library(self.ac, False)\n    \n        print(f\"Libraries generation took [{time.time() - start}]\")",
-        "name": "list_functions_snapshots.SnaphotFunctions.peakmem_snapshots_with_metadata_list_with_load_meta",
+    "list_snapshots.SnaphotFunctions.peakmem_snapshots_with_metadata_list_with_load_meta": {
+        "code": "class SnaphotFunctions:\n    def peakmem_snapshots_with_metadata_list_with_load_meta(self, symbols_x_snaps_per_sym):\n        list = self.lib.list_snapshots(load_metadata=True)\n\n    def setup(self, symbols_x_snaps_per_sym):\n        num_symbols = self.get_symbols(symbols_x_snaps_per_sym)\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n        self.lib = self.ac[self.get_lib_name(num_symbols, True)]\n        self.lib_no_meta = self.ac[self.get_lib_name(num_symbols, False)]\n\n    def setup_cache(self):\n        start = time.time()\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n    \n        self.create_test_library(True)\n        self.create_test_library(False)\n    \n        print(f\"Libraries generation took [{time.time() - start}]\")",
+        "name": "list_snapshots.SnaphotFunctions.peakmem_snapshots_with_metadata_list_with_load_meta",
         "param_names": [
-            "num_symbols"
+            "symbols_x_snaps_per_sym"
         ],
         "params": [
             [
-                "250",
-                "500"
+                "'20x10'",
+                "'40x20'"
             ]
         ],
-        "setup_cache_key": "list_functions_snapshots:27",
+        "setup_cache_key": "list_snapshots:40",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "b4b2e406c1f9d2a910b517918250fe5a0fe6b661598c6e435d66afc742534056"
+        "version": "b7f4df120eb3ef915bcfd99cc75efe38896ffeafd5b6a8c3e5f3a8db67ccaad3"
     },
-    "list_functions_snapshots.SnaphotFunctions.time_snapshots_no_metadata_list_with_load_meta": {
-        "code": "class SnaphotFunctions:\n    def time_snapshots_no_metadata_list_with_load_meta(self, num_symbols):\n        list = self.lib_no_snaps.list_snapshots(load_metadata=True)\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n        self.lib = self.ac[self.get_lib_name(num_symbols, True)]\n        self.lib_no_snaps = self.ac[self.get_lib_name(num_symbols, False)]\n\n    def setup_cache(self):\n        start = time.time()\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n    \n        self.create_test_library(self.ac, True)\n        self.create_test_library(self.ac, False)\n    \n        print(f\"Libraries generation took [{time.time() - start}]\")",
+    "list_snapshots.SnaphotFunctions.time_snapshots_no_metadata_list": {
+        "code": "class SnaphotFunctions:\n    def time_snapshots_no_metadata_list(self, symbols_x_snaps_per_sym):\n        list = self.lib_no_meta.list_snapshots()\n\n    def setup(self, symbols_x_snaps_per_sym):\n        num_symbols = self.get_symbols(symbols_x_snaps_per_sym)\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n        self.lib = self.ac[self.get_lib_name(num_symbols, True)]\n        self.lib_no_meta = self.ac[self.get_lib_name(num_symbols, False)]\n\n    def setup_cache(self):\n        start = time.time()\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n    \n        self.create_test_library(True)\n        self.create_test_library(False)\n    \n        print(f\"Libraries generation took [{time.time() - start}]\")",
         "min_run_count": 2,
-        "name": "list_functions_snapshots.SnaphotFunctions.time_snapshots_no_metadata_list_with_load_meta",
+        "name": "list_snapshots.SnaphotFunctions.time_snapshots_no_metadata_list",
         "number": 5,
         "param_names": [
-            "num_symbols"
+            "symbols_x_snaps_per_sym"
         ],
         "params": [
             [
-                "250",
-                "500"
+                "'20x10'",
+                "'40x20'"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "list_functions_snapshots:27",
+        "setup_cache_key": "list_snapshots:40",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "904ac8a4ab834656d1255da050ed121a2574de36f25afa4dced0e6a9b75a3528",
+        "version": "706e811eef8155e3494d1a30ae8920e15ae32e0b69826eaa92388d620a5bb4ff",
         "warmup_time": -1
     },
-    "list_functions_snapshots.SnaphotFunctions.time_snapshots_no_metadata_list_without_load_meta": {
-        "code": "class SnaphotFunctions:\n    def time_snapshots_no_metadata_list_without_load_meta(self, num_symbols):\n        list = self.lib_no_snaps.list_snapshots()\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n        self.lib = self.ac[self.get_lib_name(num_symbols, True)]\n        self.lib_no_snaps = self.ac[self.get_lib_name(num_symbols, False)]\n\n    def setup_cache(self):\n        start = time.time()\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n    \n        self.create_test_library(self.ac, True)\n        self.create_test_library(self.ac, False)\n    \n        print(f\"Libraries generation took [{time.time() - start}]\")",
+    "list_snapshots.SnaphotFunctions.time_snapshots_with_metadata_list_with_load_meta": {
+        "code": "class SnaphotFunctions:\n    def time_snapshots_with_metadata_list_with_load_meta(self, symbols_x_snaps_per_sym):\n        list = self.lib.list_snapshots(load_metadata=True)\n\n    def setup(self, symbols_x_snaps_per_sym):\n        num_symbols = self.get_symbols(symbols_x_snaps_per_sym)\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n        self.lib = self.ac[self.get_lib_name(num_symbols, True)]\n        self.lib_no_meta = self.ac[self.get_lib_name(num_symbols, False)]\n\n    def setup_cache(self):\n        start = time.time()\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n    \n        self.create_test_library(True)\n        self.create_test_library(False)\n    \n        print(f\"Libraries generation took [{time.time() - start}]\")",
         "min_run_count": 2,
-        "name": "list_functions_snapshots.SnaphotFunctions.time_snapshots_no_metadata_list_without_load_meta",
+        "name": "list_snapshots.SnaphotFunctions.time_snapshots_with_metadata_list_with_load_meta",
         "number": 5,
         "param_names": [
-            "num_symbols"
+            "symbols_x_snaps_per_sym"
         ],
         "params": [
             [
-                "250",
-                "500"
+                "'20x10'",
+                "'40x20'"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "list_functions_snapshots:27",
+        "setup_cache_key": "list_snapshots:40",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "5b0d8c79608c682b09c90a56c992abf9611763035758431bcd0b4690a375ece7",
+        "version": "d4090a8af79a8cd45f87d87a807c4f344d86fa4e51e528809922b6a602ce06f9",
         "warmup_time": -1
     },
-    "list_functions_snapshots.SnaphotFunctions.time_snapshots_with_metadata_list_with_load_meta": {
-        "code": "class SnaphotFunctions:\n    def time_snapshots_with_metadata_list_with_load_meta(self, num_symbols):\n        list = self.lib.list_snapshots(load_metadata=True)\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n        self.lib = self.ac[self.get_lib_name(num_symbols, True)]\n        self.lib_no_snaps = self.ac[self.get_lib_name(num_symbols, False)]\n\n    def setup_cache(self):\n        start = time.time()\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n    \n        self.create_test_library(self.ac, True)\n        self.create_test_library(self.ac, False)\n    \n        print(f\"Libraries generation took [{time.time() - start}]\")",
+    "list_snapshots.SnaphotFunctions.time_snapshots_with_metadata_list_without_load_meta": {
+        "code": "class SnaphotFunctions:\n    def time_snapshots_with_metadata_list_without_load_meta(self, symbols_x_snaps_per_sym):\n        list = self.lib.list_snapshots(load_metadata=False)\n\n    def setup(self, symbols_x_snaps_per_sym):\n        num_symbols = self.get_symbols(symbols_x_snaps_per_sym)\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n        self.lib = self.ac[self.get_lib_name(num_symbols, True)]\n        self.lib_no_meta = self.ac[self.get_lib_name(num_symbols, False)]\n\n    def setup_cache(self):\n        start = time.time()\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n    \n        self.create_test_library(True)\n        self.create_test_library(False)\n    \n        print(f\"Libraries generation took [{time.time() - start}]\")",
         "min_run_count": 2,
-        "name": "list_functions_snapshots.SnaphotFunctions.time_snapshots_with_metadata_list_with_load_meta",
+        "name": "list_snapshots.SnaphotFunctions.time_snapshots_with_metadata_list_without_load_meta",
         "number": 5,
         "param_names": [
-            "num_symbols"
+            "symbols_x_snaps_per_sym"
         ],
         "params": [
             [
-                "250",
-                "500"
+                "'20x10'",
+                "'40x20'"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "list_functions_snapshots:27",
+        "setup_cache_key": "list_snapshots:40",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "0982a996bf3122785419955daae4fe9867f553244e8c1907ce4d642b0690001f",
-        "warmup_time": -1
-    },
-    "list_functions_snapshots.SnaphotFunctions.time_snapshots_with_metadata_list_without_load_meta": {
-        "code": "class SnaphotFunctions:\n    def time_snapshots_with_metadata_list_without_load_meta(self, num_symbols):\n        list = self.lib.list_snapshots()\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n        self.lib = self.ac[self.get_lib_name(num_symbols, True)]\n        self.lib_no_snaps = self.ac[self.get_lib_name(num_symbols, False)]\n\n    def setup_cache(self):\n        start = time.time()\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n    \n        self.create_test_library(self.ac, True)\n        self.create_test_library(self.ac, False)\n    \n        print(f\"Libraries generation took [{time.time() - start}]\")",
-        "min_run_count": 2,
-        "name": "list_functions_snapshots.SnaphotFunctions.time_snapshots_with_metadata_list_without_load_meta",
-        "number": 5,
-        "param_names": [
-            "num_symbols"
-        ],
-        "params": [
-            [
-                "250",
-                "500"
-            ]
-        ],
-        "repeat": 0,
-        "rounds": 2,
-        "sample_time": 0.01,
-        "setup_cache_key": "list_functions_snapshots:27",
-        "timeout": 6000,
-        "type": "time",
-        "unit": "seconds",
-        "version": "1aa54b846a089194b24859256f2ab0bf4a747fdd7de3b51f8b6b8298da146820",
+        "version": "71446e73206e086160b0733fdec4689d0c813c036e061f99d6f4ef372dd49b3b",
         "warmup_time": -1
     },
     "local_query_builder.LocalQueryBuilderFunctions.peakmem_filtering_numeric": {
