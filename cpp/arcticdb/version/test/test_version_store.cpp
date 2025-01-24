@@ -189,7 +189,7 @@ TEST_F(VersionStoreTest, SortMerge) {
         }
 
         wrapper.aggregator_.commit();
-        data.emplace_back( SegmentToInputFrameAdapter{std::move(wrapper.segment())});
+        data.emplace_back(std::move(wrapper.segment()));
     }
     std::mt19937 mt{42};
     std::shuffle(data.begin(), data.end(), mt);
@@ -852,4 +852,29 @@ TEST(VersionStore, TestWriteAppendMapHead) {
     auto [next_key, total_rows] = read_head(version_store._test_get_store(), symbol);
     ASSERT_EQ(next_key, key);
     ASSERT_EQ(total_rows, num_rows);
+}
+
+TEST(VersionStore, ChunkIterator) {
+    using namespace arcticdb;
+
+    auto version_store = get_test_engine();
+    StreamId stream_id{"test_chunk"};
+    VersionId v_id{0};
+    const size_t rows = 1000000;
+
+    IndexPartialKey pk{stream_id, v_id};
+    auto wrapper = get_test_simple_frame(stream_id, rows, 0);
+    auto copy_frame = wrapper.frame_;
+    version_store.write_versioned_dataframe_internal(stream_id, std::move(wrapper.frame_), false, false, false);
+    DecodePathData shared_data;
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    ReadQuery read_query;
+    auto iterator = version_store.read_dataframe_chunked_internal(stream_id, VersionQuery{}, read_query, ReadOptions{}, handler_data, shared_data);
+
+    size_t count = 0UL;
+    while (auto chunk = iterator.next()) {
+        ++count;
+    }
+    ASSERT_EQ(count, 10);
 }

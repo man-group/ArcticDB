@@ -87,7 +87,7 @@ inline void default_initialize(uint8_t* data, size_t bytes) {
 }
 
 template <typename TagType>
-inline void default_initialize(ChunkedBuffer& buffer, size_t offset, size_t bytes, DecodePathData shared_data, std::any& handler_data) {
+inline void default_initialize(ChunkedBuffer& buffer, size_t offset, size_t bytes, DecodePathData shared_data, std::shared_ptr<std::any>& handler_data) {
     using RawType = typename TagType::DataTypeTag::raw_type;
     const auto num_rows ARCTICDB_UNUSED = bytes / sizeof(RawType);
     constexpr auto type = static_cast<TypeDescriptor>(TagType{});

@@ -47,7 +47,7 @@ void EmptyHandler::handle_type(
         const EncodedFieldImpl &field,
         const ColumnMapping& mapping,
         const DecodePathData&,
-        std::any& handler_data,
+        std::shared_ptr<std::any>& handler_data,
         EncodingVersion encoding_version,
         const std::shared_ptr<StringPool>&) {
     ARCTICDB_SAMPLE(HandleEmpty, 0)
@@ -85,7 +85,7 @@ void EmptyHandler::convert_type(
         TypeDescriptor source_type_desc ARCTICDB_UNUSED,
         TypeDescriptor dest_type_desc,
         const DecodePathData& shared_data,
-        std::any& handler_data,
+        std::shared_ptr<std::any>& handler_data,
         const std::shared_ptr<StringPool>&) {
     auto dest_data = dest_buffer.data() + offset_bytes;
     util::check(dest_data != nullptr, "Got null destination pointer");
@@ -125,7 +125,7 @@ void BoolHandler::handle_type(
         const EncodedFieldImpl &field,
         const ColumnMapping& m,
         const DecodePathData& shared_data,
-        std::any& handler_data,
+        std::shared_ptr<std::any>& handler_data,
         EncodingVersion encoding_version,
         const std::shared_ptr<StringPool>&) {
     ARCTICDB_SAMPLE(HandleBool, 0)
@@ -198,7 +198,7 @@ void StringHandler::handle_type(
         const EncodedFieldImpl &field,
         const ColumnMapping& m,
         const DecodePathData& shared_data,
-        std::any& handler_data,
+        std::shared_ptr<std::any>& handler_data,
         EncodingVersion encoding_version,
         const std::shared_ptr<StringPool>& string_pool) {
     ARCTICDB_SAMPLE(HandleString, 0)
@@ -241,7 +241,7 @@ void StringHandler::convert_type(
         TypeDescriptor source_type_desc,
         TypeDescriptor dest_type_desc,
         const DecodePathData& shared_data,
-        std::any& handler_data,
+        std::shared_ptr<std::any>& handler_data,
         const std::shared_ptr<StringPool>& string_pool) {
     auto dest_data = &dest_buffer[offset_bytes];
     auto ptr_dest = reinterpret_cast<PyObject**>(dest_data);

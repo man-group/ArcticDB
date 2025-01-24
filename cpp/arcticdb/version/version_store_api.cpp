@@ -550,6 +550,17 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
     //    TODO: now store this in the version key for this symbol
 }
 
+ChunkIterator PythonVersionStore::read_dataframe_chunked(
+    const StreamId &stream_id,
+    const VersionQuery& version_query,
+    ReadQuery& read_query,
+    const ReadOptions& read_options,
+    std::shared_ptr<std::any>& handler_data) {
+    DecodePathData shared_data;
+    auto release_gil = std::make_unique<py::gil_scoped_release>();
+    return read_dataframe_chunked_internal(stream_id, version_query, read_query, read_options, handler_data, shared_data);
+}
+
 VersionedItem PythonVersionStore::write_versioned_composite_data(
     const StreamId& stream_id,
     const py::object &metastruct,
@@ -769,7 +780,7 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
     const std::vector<VersionQuery>& version_queries,
     std::vector<std::shared_ptr<ReadQuery>>& read_queries,
     const ReadOptions& read_options,
-    std::any& handler_data) {
+    std::shared_ptr<std::any>& handler_data) {
     auto read_versions_or_errors = batch_read_internal(stream_ids, version_queries, read_queries, read_options, handler_data);
     std::vector<std::variant<ReadResult, DataError>> res;
     for (auto&& [idx, read_version_or_error]: folly::enumerate(read_versions_or_errors)) {
@@ -835,7 +846,7 @@ ReadResult PythonVersionStore::read_dataframe_version(
     const VersionQuery& version_query,
     const std::shared_ptr<ReadQuery>& read_query,
     const ReadOptions& read_options,
-    std::any& handler_data) {
+    std::shared_ptr<std::any>& handler_data) {
 
     auto opt_version_and_frame = read_dataframe_version_internal(stream_id, version_query, read_query, read_options, handler_data);
     return create_python_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));
@@ -1151,7 +1162,7 @@ ReadResult read_dataframe_from_file(
         const StreamId &stream_id,
         const std::string& path,
         const std::shared_ptr<ReadQuery>& read_query,
-        std::any& handler_data) {
+        std::shared_ptr<std::any>& handler_data) {
     auto opt_version_and_frame = read_dataframe_from_file_internal(
         stream_id,
         path,

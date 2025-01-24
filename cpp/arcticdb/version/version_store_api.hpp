@@ -168,7 +168,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const VersionQuery& version_query,
         const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options,
-        std::any& handler_data);
+        std::shared_ptr<std::any>& handler_data);
 
     VersionedItem sort_merge(
             const StreamId& stream_id,
@@ -297,12 +297,19 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<VersionQuery>& version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
         const ReadOptions& read_options,
-        std::any& handler_data);
+        std::shared_ptr<std::any>& handler_data);
 
     std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> batch_read_metadata(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         const ReadOptions& read_options);
+
+    ChunkIterator read_dataframe_chunked(
+        const StreamId &stream_id,
+        const VersionQuery& version_query,
+        ReadQuery& read_query,
+        const ReadOptions& read_options,
+        std::shared_ptr<std::any>& handler_data);
 
     std::set<StreamId> list_streams(
         const std::optional<SnapshotId>& snap_name = std::nullopt,
@@ -350,7 +357,7 @@ ReadResult read_dataframe_from_file(
     const StreamId &stream_id,
     const std::string& path,
     const std::shared_ptr<ReadQuery>& read_query,
-    std::any& handler_data);
+    std::shared_ptr<std::any>& handler_data);
 
 struct ManualClockVersionStore : PythonVersionStore {
     ManualClockVersionStore(const std::shared_ptr<storage::Library>& library) :

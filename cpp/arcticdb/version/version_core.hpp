@@ -23,6 +23,8 @@
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/version/schema_checks.hpp>
+#include <arcticdb/version/read_version_output.hpp>
+#include <arcticdb/version/schema_checks.hpp>
 
 #include <string>
 
@@ -32,13 +34,13 @@ using namespace arcticdb::entity;
 using namespace arcticdb::pipelines;
 
 struct CompactIncompleteOptions {
-    bool prune_previous_versions_;
-    bool append_;
-    bool convert_int_to_float_;
-    bool via_iteration_;
-    bool sparsify_;
-    bool validate_index_{true}; // Default value as unused in sort_merge
-    bool delete_staged_data_on_failure_{false};
+    bool prune_previous_versions_ = false;
+    bool append_ = false;
+    bool convert_int_to_float_ = false;
+    bool via_iteration_ = false;
+    bool sparsify_ = false;
+    bool validate_index_ = true; // Default value as unused in sort_merge
+    bool delete_staged_data_on_failure_ = false;
 };
 
 VersionedItem write_dataframe_impl(
@@ -118,13 +120,7 @@ ColumnStats get_column_stats_info_impl(
 folly::Future<ReadVersionOutput> read_multi_key(
     const std::shared_ptr<Store>& store,
     const SegmentInMemory& index_key_seg,
-    std::any& handler_data);
-
-folly::Future<std::vector<EntityId>> schedule_clause_processing(
-    std::shared_ptr<ComponentManager> component_manager,
-    std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
-    std::vector<std::vector<size_t>>&& processing_unit_indexes,
-    std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses);
+    std::shared_ptr<std::any>& handler_data);
 
 FrameAndDescriptor read_segment_impl(
     const std::shared_ptr<Store>& store,
@@ -196,7 +192,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
     const std::variant<VersionedItem, StreamId>& version_info,
     const std::shared_ptr<ReadQuery>& read_query,
     const ReadOptions& read_options,
-    std::any& handler_data
+    std::shared_ptr<std::any>& handler_data
 );
 
 class DeleteIncompleteKeysOnExit {
@@ -231,19 +227,7 @@ std::optional<DeleteIncompleteKeysOnExit> get_delete_keys_on_failure(
 
 namespace arcticdb {
 
-struct Error {
 
-    explicit Error(folly::Function<void(std::string)> raiser, std::string msg);
-    void throw_error();
-
-    folly::Function<void(std::string)> raiser_;
-    std::string msg_;
-};
-
-using CheckOutcome = std::variant<Error, std::monostate>;
-using StaticSchemaCompactionChecks = folly::Function<CheckOutcome(const StreamDescriptor&, const StreamDescriptor&)>;
-using CompactionWrittenKeys = std::vector<VariantKey>;
-using CompactionResult = std::variant<CompactionWrittenKeys, Error>;
 
 void remove_written_keys(Store* store, CompactionWrittenKeys&& written_keys);
 
@@ -328,8 +312,6 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
     aggregator.commit();
     return folly::collect(std::move(write_futures)).get();
 }
-
-CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const StreamDescriptor& pipeline_context);
 
 }
 

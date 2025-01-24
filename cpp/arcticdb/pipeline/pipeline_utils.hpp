@@ -17,7 +17,7 @@
 
 namespace arcticdb::pipelines {
 
-inline void apply_type_handlers(SegmentInMemory seg, std::any& handler_data) {
+inline void apply_type_handlers(SegmentInMemory seg, std::shared_ptr<std::any>& handler_data) {
     DecodePathData shared_data;
     if(seg.empty())
         return;
@@ -51,7 +51,7 @@ inline ReadResult read_result_from_single_frame(FrameAndDescriptor& frame_and_de
     return create_python_read_result(VersionedItem{key}, std::move(frame_and_desc));
 }
 
-void sort_by_row_range(std::vector<SliceAndKey>& slices_and_keys) {
+inline void sort_by_row_range(std::vector<SliceAndKey>& slices_and_keys) {
     std::sort(std::begin(slices_and_keys), std::end(slices_and_keys), [] (const SliceAndKey& left, const SliceAndKey& right) {
         return std::tie(left.slice_.row_range.first, left.slice_.col_range.first) < std::tie(right.slice_.row_range.first, right.slice_.col_range.first);
     });
