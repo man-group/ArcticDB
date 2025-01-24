@@ -138,6 +138,7 @@ void fix_descriptor_mismatch_or_throw(
     if(!index_names_match(old_sd, new_frame.desc)) {
         throw StreamDescriptorMismatch(
             "The index names in the argument are not identical to that of the existing version",
+            new_frame.desc.id(),
             old_sd,
             new_frame.desc,
             operation);
@@ -146,6 +147,7 @@ void fix_descriptor_mismatch_or_throw(
     if (!dynamic_schema && !columns_match(old_sd, new_frame.desc)) {
         throw StreamDescriptorMismatch(
             "The columns (names and types) in the argument are not identical to that of the existing version",
+            new_frame.desc.id(),
             old_sd,
             new_frame.desc,
             operation);
