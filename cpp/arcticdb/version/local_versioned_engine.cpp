@@ -1616,7 +1616,7 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
     const TransformBatchResultsFlags flags({
         {TransformBatchResultsFlags::THROW_ON_MISSING_SYMBOL, false},
         {TransformBatchResultsFlags::THROW_ON_ERROR, *read_options.batch_throw_on_error_}});
-    return transform_batch_items_or_throw(std::move(metadatas), stream_ids, flags);
+    return transform_batch_items_or_throw(std::move(metadatas), stream_ids, flags, version_queries);
 }
 
 std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> LocalVersionedEngine::read_metadata_internal(
