@@ -28,7 +28,8 @@ enum class ProcessingStructure {
     ROW_SLICE,
     TIME_BUCKETED,
     HASH_BUCKETED,
-    ALL
+    ALL,
+    MULTI_SYMBOL
 };
 
 struct KeepCurrentIndex{};

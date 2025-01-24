@@ -18,23 +18,23 @@ pytestmark = pytest.mark.pipeline
 
 def test_symbol_concat_basic(lmdb_library):
     lib = lmdb_library
-    df_1 = pd.DataFrame({"col": np.arange(3, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=3))
-    df_2 = pd.DataFrame({"col": np.arange(4, dtype=np.int64)}, index=pd.date_range("2025-01-03", periods=4))
-    df_3 = pd.DataFrame({"col": np.arange(5, dtype=np.int64)}, index=pd.date_range("2025-03-07", periods=5))
+    df_1 = pd.DataFrame({"col": np.arange(3, dtype=np.int64)}, index=pd.date_range(pd.Timestamp(0), freq="1000ns", periods=3))
+    df_2 = pd.DataFrame({"col": np.arange(4, dtype=np.int64)}, index=pd.date_range(pd.Timestamp(2000), freq="1000ns", periods=4))
+    df_3 = pd.DataFrame({"col": np.arange(5, dtype=np.int64)}, index=pd.date_range(pd.Timestamp(6000), freq="1000ns", periods=5))
     lib.write("sym1", df_1)
     lib.write("sym2", df_2)
     lib.write("sym3", df_3)
 
     lazy_df_1 = lib.read("sym1", lazy=True)
     lazy_df_2 = lib.read("sym2", lazy=True)
-    lazy_df_2 = lazy_df_2.date_range((pd.Timestamp("2025-01-04"), None))
+    lazy_df_2 = lazy_df_2.date_range((pd.Timestamp(pd.Timestamp(3000)), None))
     lazy_df_3 = lib.read("sym3", lazy=True)
 
     lazy_df = concat([lazy_df_1, lazy_df_2, lazy_df_3])
 
-    lazy_df.resample("2D").agg({"col": "sum"})
+    lazy_df.resample("2000ns").agg({"col": "sum"})
 
     received = lazy_df.collect().data
-    expected = pd.concat([df_1, df_2.iloc[1:], df_3]).resample("2D").agg({"col": "sum"})
+    expected = pd.concat([df_1, df_2.iloc[1:], df_3]).resample("2000ns").agg({"col": "sum"})
     assert_frame_equal(expected, received)
 

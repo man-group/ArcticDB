@@ -291,8 +291,7 @@ public:
             const std::vector<VersionQuery>& version_queries,
             std::vector<std::shared_ptr<ReadQuery>>& read_queries,
             const ReadOptions& read_options,
-            const std::string& join, // TODO: Make a Clause or MultiSymbolClause
-            std::vector<std::shared_ptr<Clause>>&& post_join_clauses,
+            std::vector<std::shared_ptr<Clause>>&& clauses,
             std::any& handler_data);
 
     std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor_internal(

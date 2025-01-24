@@ -402,6 +402,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("end", &DateRangeClause::end)
             .def("__str__", &DateRangeClause::to_string);
 
+    py::class_<ConcatClause, std::shared_ptr<ConcatClause>>(version, "ConcatClause")
+            .def(py::init<>())
+            .def("__str__", &ConcatClause::to_string);
+
     py::class_<ReadQuery, std::shared_ptr<ReadQuery>>(version, "PythonVersionStoreReadQuery")
             .def(py::init())
             .def_readwrite("columns",&ReadQuery::columns)
@@ -773,20 +777,25 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                  const std::vector<VersionQuery>& version_queries,
                  std::vector<std::shared_ptr<ReadQuery>>& read_queries,
                  const ReadOptions& read_options,
-                 const std::string& join, // TODO: Make a Clause or MultiSymbolClause
+                 ClauseVariant join,
                  std::vector<ClauseVariant> post_join_clauses
                  ){
                  auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
                  // TODO: Remove duplication with ReadQuery interface
                  post_join_clauses = plan_query(std::move(post_join_clauses));
                  std::vector<std::shared_ptr<Clause>> _clauses;
+                 // TODO: Verify at some point that this is a multi-symbol clause
+                 util::variant_match(
+                         join,
+                         [&](auto&& clause) {_clauses.emplace_back(std::make_shared<Clause>(*clause));}
+                 );
                  for (auto&& clause: post_join_clauses) {
                      util::variant_match(
                              clause,
                              [&](auto&& clause) {_clauses.emplace_back(std::make_shared<Clause>(*clause));}
                      );
                  }
-                 return adapt_read_df(v.batch_read_with_join(stream_ids, version_queries, read_queries, read_options, join, std::move(_clauses), handler_data));
+                 return adapt_read_df(v.batch_read_with_join(stream_ids, version_queries, read_queries, read_options, std::move(_clauses), handler_data));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
         .def("batch_read_keys",

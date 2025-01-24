@@ -22,7 +22,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError
+from arcticdb_ext.version_store import DataError, ConcatClause as _ConcatClause
 import pandas as pd
 import numpy as np
 import logging
@@ -497,7 +497,7 @@ class LazyDataFrameAfterJoin(QueryBuilder):
 
     def __str__(self) -> str:
         query_builder_repr = super().__str__()
-        return f"LazyDataFrameAfterJoin(Concat({self._lazy_dataframes._lazy_dataframes}){' | ' if len(query_builder_repr) else ''}{query_builder_repr})"
+        return f"LazyDataFrameAfterJoin({self._join}({self._lazy_dataframes._lazy_dataframes}){' | ' if len(query_builder_repr) else ''}{query_builder_repr})"
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -506,7 +506,7 @@ class LazyDataFrameAfterJoin(QueryBuilder):
 def concat(lazy_dataframes: Union[List[LazyDataFrame], LazyDataFrameCollection]) -> LazyDataFrameAfterJoin:
     if not isinstance(lazy_dataframes, LazyDataFrameCollection):
         lazy_dataframes = LazyDataFrameCollection(lazy_dataframes)
-    return LazyDataFrameAfterJoin(lazy_dataframes, "concat")
+    return LazyDataFrameAfterJoin(lazy_dataframes, _ConcatClause())
 
 
 def col(name: str) -> ExpressionNode:

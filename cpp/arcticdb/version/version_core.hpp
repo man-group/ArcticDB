@@ -144,6 +144,11 @@ folly::Future<ReadVersionOutput> read_multi_key(
     const SegmentInMemory& index_key_seg,
     std::any& handler_data);
 
+folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
+    folly::Future<std::vector<std::vector<EntityId>>>&& entity_ids_vec_fut,
+    std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses,
+    const bool from_join = false);
+
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
     std::shared_ptr<ComponentManager> component_manager,
     std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,

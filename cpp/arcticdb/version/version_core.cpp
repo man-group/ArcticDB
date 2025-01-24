@@ -642,15 +642,25 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
 
 folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
         folly::Future<std::vector<std::vector<EntityId>>>&& entity_ids_vec_fut,
-        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
+        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses,
+        const bool from_join
         ) {
-    const auto scheduling_iterations = num_scheduling_iterations(*clauses);
+    auto scheduling_iterations = num_scheduling_iterations(*clauses);
+    if (from_join) {
+        ++scheduling_iterations;
+    }
     for (auto i = 1UL; i < scheduling_iterations; ++i) {
-        entity_ids_vec_fut = std::move(entity_ids_vec_fut).thenValue([clauses, scheduling_iterations, i] (std::vector<std::vector<EntityId>>&& entity_id_vectors) {
+        entity_ids_vec_fut = std::move(entity_ids_vec_fut).thenValue([clauses, scheduling_iterations, i, from_join] (std::vector<std::vector<EntityId>>&& entity_id_vectors) {
             ARCTICDB_RUNTIME_DEBUG(log::memory(), "Scheduling iteration {} of {}", i, scheduling_iterations);
 
             util::check(!clauses->empty(), "Scheduling iteration {} has no clauses to process", scheduling_iterations);
-            remove_processed_clauses(*clauses);
+            if (i == 1) {
+                if (!from_join) {
+                    remove_processed_clauses(*clauses);
+                }
+            } else {
+                remove_processed_clauses(*clauses);
+            }
             auto next_units_of_work = clauses->front()->structure_for_processing(std::move(entity_id_vectors));
 
             std::vector<folly::Future<std::vector<EntityId>>> work_futures;
