@@ -184,12 +184,14 @@ def _diff_long_stream_descriptor_mismatch(nvs):  # Diffing strings is easier don
         yield
     except StreamDescriptorMismatch as sdm:
         nvs.last_mismatch_msg = sdm.args[0]
-        preamble, existing, new_val = sdm.args[0].split("\n")
+        # TODO: This is too hacky. Consider providing a useful exception in C++ instead of string munging in Python.
+        preamble, stream_id, existing, new_val = sdm.args[0].split("; ")
         existing = _STREAM_DESCRIPTOR_SPLIT.split(existing[existing.find("=") + 1 :])
         new_val = _STREAM_DESCRIPTOR_SPLIT.split(new_val[new_val.find("=") + 1 :])
         diff = difflib.unified_diff(existing, new_val, n=0)
         new_msg_lines = (
             preamble,
+            stream_id,
             "(Showing only the mismatch. Full col list saved in the `last_mismatch_msg` attribute of the lib instance.",
             "'-' marks columns missing from the argument, '+' for unexpected.)",
             *(x for x in itertools.islice(diff, 3, None) if not x.startswith("@@")),
