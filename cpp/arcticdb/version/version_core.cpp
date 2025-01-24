@@ -646,9 +646,6 @@ folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
         const bool from_join
         ) {
     auto scheduling_iterations = num_scheduling_iterations(*clauses);
-    if (from_join) {
-        ++scheduling_iterations;
-    }
     for (auto i = 1UL; i < scheduling_iterations; ++i) {
         entity_ids_vec_fut = std::move(entity_ids_vec_fut).thenValue([clauses, scheduling_iterations, i, from_join] (std::vector<std::vector<EntityId>>&& entity_id_vectors) {
             ARCTICDB_RUNTIME_DEBUG(log::memory(), "Scheduling iteration {} of {}", i, scheduling_iterations);
