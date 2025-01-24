@@ -86,14 +86,12 @@ class ComparisonBenchmarks:
         self.lib.write("symbol", df)
 
     def peakmem_read_dataframe_arctic(self, tpl):
-        df, dict = tpl
-        info = self.lib.read(ComparisonBenchmarks.SYMBOL)
+        self.lib.read(ComparisonBenchmarks.SYMBOL)
 
     def peakmem_write_dataframe_parquet(self, tpl):
         df, dict = tpl
         df.to_parquet(self.path, index=True)
 
     def peakmem_read_dataframe_parquet(self, tpl):
-        df, dict = tpl
         pd.read_parquet(self.path_to_read)
 
