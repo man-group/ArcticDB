@@ -242,7 +242,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
 
     using PythonOutputFrame = arcticdb::pipelines::PythonOutputFrame;
     py::class_<PythonOutputFrame>(version, "PythonOutputFrame")
-        //.def(py::init<const SegmentInMemory&, OutputFormat output_format, std::shared_ptr<BufferHolder>>())
         .def(py::init<>([](const SegmentInMemory& segment_in_memory, OutputFormat output_format) {
             return PythonOutputFrame(segment_in_memory, output_format);
         }))
@@ -257,11 +256,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("row_count", [](PythonOutputFrame& self) {
             return self.frame().row_count();
         });
-
-        py::class_<ArrowOutputFrame>(version, "ArrowOutputFrame")
-        .def_property_readonly("record_batches", &ArrowOutputFrame::record_batches)
-        .def_property_readonly("names", &ArrowOutputFrame::names)
-        ;
 
     py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(
         Enum of possible version request types passed to as_of.
@@ -679,14 +673,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
               },
              py::call_guard<SingleThreadMutexHolder>(),
              "Read the specified version of the dataframe from the store")
-            .def("read_dataframe_version_arrow",
-            [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options) {
-                auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
-                return adapt_arrow_df(v.read_dataframe_version_arrow(sid, version_query, read_query, read_options, handler_data));
-            },
-            py::call_guard<SingleThreadMutexHolder>(),
-            "Read the specified version of the dataframe from the store")
-        .def("read_index",
+         .def("read_index",
              [&](PythonVersionStore& v, StreamId sid, const VersionQuery& version_query){
                  return adapt_read_df(v.read_index(sid, version_query));
              },

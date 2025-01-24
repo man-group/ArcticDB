@@ -1028,7 +1028,6 @@ private:
     };
 
     std::unique_ptr<ExtraBufferContainer> extra_buffers_;
->>>>>>> f7d3f2fe9 (Read arrow data)
     util::MagicNum<'D', 'C', 'o', 'l'> magic_;
 };
 
