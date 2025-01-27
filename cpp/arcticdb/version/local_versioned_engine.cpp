@@ -1156,6 +1156,144 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
     return read_versions_or_errors;
 }
 
+StreamDescriptor descriptor_from_segments(std::vector<SliceAndKey>& slice_and_keys) {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(!slice_and_keys.empty(), "No slice and keys in batch_read_with_join_internal");
+    std::sort(std::begin(slice_and_keys), std::end(slice_and_keys), [] (const auto& left, const auto& right) {
+        return std::tie(left.slice_.row_range, left.slice_.col_range) < std::tie(right.slice_.row_range, right.slice_.col_range);
+    });
+    // TODO: Make more memory efficient by only keeping first element in memory, and comparing others on the fly
+    // Track the field collections for each row-slice
+    std::vector<FieldCollection> field_collections;
+    RowRange current_row_range(std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max());
+    for (const auto& slice_and_key: slice_and_keys) {
+        const auto& desc = slice_and_key.segment_->descriptor();
+        if (slice_and_key.slice().rows() != current_row_range) {
+            field_collections.emplace_back();
+            for (size_t field_idx = 0; field_idx < desc.data().index().field_count(); ++field_idx) {
+                field_collections.back().add(desc.fields().ref_at(field_idx));
+            }
+            current_row_range = slice_and_key.slice().rows();
+        }
+        for (size_t field_idx = desc.data().index().field_count(); field_idx < desc.field_count(); ++field_idx) {
+            field_collections.back().add(desc.fields().ref_at(field_idx));
+        }
+    }
+    // Ensure they are all the same
+    // TODO: Relax this requirement
+    for (size_t idx = 1; idx < field_collections.size(); ++idx) {
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                field_collections[0] == field_collections[idx],
+                "Mismatching fields in multi-symbol join: {} != {}",
+                field_collections[0],
+                field_collections[idx]
+                );
+    }
+
+    // Set the output descriptor based on the first row slice
+    StreamDescriptor res = slice_and_keys[0].segment_->descriptor().clone();
+    res.fields_ = std::make_shared<FieldCollection>(std::move(field_collections[0]));
+
+//    auto index_field_count = res.data().index().field_count();
+//    const auto& first_row_range = slice_and_keys[0].slice().rows();
+//    for (size_t slice_idx = 1; slice_idx < slice_and_keys.size(); ++slice_idx) {
+//        const auto& slice_and_key = slice_and_keys[slice_idx];
+//        if (slice_and_key.slice().rows() == first_row_range) {
+//            const auto& desc = slice_and_key.segment_->descriptor();
+//            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+//                    desc.data().index().field_count() == index_field_count,
+//                    "Mismatching index field count {} != {}",
+//                    desc.data().index().field_count(),
+//                    index_field_count);
+//            for (size_t field_idx = index_field_count; field_idx < desc.field_count(); ++field_idx) {
+//                res.add_field(desc.fields().ref_at(field_idx));
+//            }
+//        } else {
+//            // For other row-slices, check that they match the first
+//            const auto& desc = slice_and_key.segment_->descriptor();
+//            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+//                    desc.data().index().field_count() == index_field_count,
+//                    "Mismatching index field count {} != {}",
+//                    desc.data().index().field_count(),
+//                    index_field_count);
+//            for (size_t field_idx = 0; field_idx < index_field_count; ++field_idx) {
+//                schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+//                        desc.fields().ref_at(field_idx) == res.fields().ref_at(field_idx),
+//                        "Mismatching index fields: {} != {}",
+//                        desc.fields().ref_at(field_idx),
+//                        res.fields().ref_at(field_idx));
+//            }
+//            for (size_t field_idx = index_field_count; field_idx < desc.field_count(); ++field_idx) {
+//                schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+//                        desc.fields().ref_at(field_idx) == res.fields().ref_at(field_idx + slice_and_key.slice().columns().first - index_field_count),
+//                        "Mismatching fields: {} != {}",
+//                        desc.fields().ref_at(field_idx),
+//                        res.fields().ref_at(field_idx + slice_and_key.slice().columns().first - index_field_count));
+//            }
+//        }
+//    }
+    return res;
+}
+
+MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
+        const std::vector<StreamId>& stream_ids,
+        const std::vector<VersionQuery>& version_queries,
+        std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+        const ReadOptions& read_options,
+        std::vector<std::shared_ptr<Clause>>&& clauses,
+        std::any& handler_data) {
+    py::gil_scoped_release release_gil;
+    auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
+    std::vector<folly::Future<std::vector<EntityId>>> symbol_entities_futs;
+    symbol_entities_futs.reserve(opt_index_key_futs.size());
+    auto component_manager = std::make_shared<ComponentManager>();
+    auto pipeline_context = std::make_shared<PipelineContext>();
+    auto norm_meta_mtx = std::make_shared<std::mutex>();
+    DecodePathData shared_data;
+    for (auto&& [idx, opt_index_key_fut]: folly::enumerate(opt_index_key_futs)) {
+        symbol_entities_futs.emplace_back(
+                std::move(opt_index_key_fut).thenValue([store = store(),
+                                                        read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
+                                                        &read_options,
+                                                        &component_manager,
+                                                        pipeline_context,
+                                                        norm_meta_mtx](auto&& opt_index_key) mutable {
+                    std::variant<VersionedItem, StreamId> version_info;
+                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_index_key.has_value(), "batch_read_with_join_internal not supported with non-indexed data");
+                    auto index_key_seg = store->read_sync(*opt_index_key).second;
+                    {
+                        std::lock_guard<std::mutex> lock(*norm_meta_mtx);
+                        pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_key_seg.mutable_index_descriptor().mutable_proto().mutable_normalization()));
+                    }
+                    version_info = VersionedItem(std::move(*opt_index_key));
+                    return read_entity_ids_for_version(store, version_info, read_query, read_options, component_manager);
+                })
+        );
+    }
+    auto entity_ids_vec_fut = folly::collect(symbol_entities_futs).via(&async::io_executor());
+    for (auto& clause: clauses) {
+        clause->set_component_manager(component_manager);
+    }
+    auto clauses_ptr = std::make_shared<std::vector<std::shared_ptr<Clause>>>(std::move(clauses));
+
+    return schedule_remaining_iterations(std::move(entity_ids_vec_fut), clauses_ptr, true)
+    .thenValueInline([component_manager](std::vector<EntityId>&& processed_entity_ids) {
+        auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
+        return collect_segments(std::move(proc));
+    }).thenValueInline([store=store(), &handler_data, pipeline_context](std::vector<SliceAndKey>&& slice_and_keys) {
+        pipeline_context->set_descriptor(descriptor_from_segments(slice_and_keys));
+        return prepare_output_frame(std::move(slice_and_keys), pipeline_context, store, ReadOptions{}, handler_data);
+    }).thenValueInline([&handler_data, pipeline_context, shared_data](SegmentInMemory&& frame) mutable {
+        return reduce_and_fix_columns(pipeline_context, frame, ReadOptions{}, handler_data)
+        .thenValue([pipeline_context, frame, shared_data](auto&&) mutable {
+            return MultiSymbolReadOutput{{},
+                                     {frame,
+                                      timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_),
+                                      {},
+                                      shared_data.buffers()}};
+        });
+    }).get();
+}
+
 void LocalVersionedEngine::write_version_and_prune_previous(
         bool prune_previous_versions,
         const AtomKey& new_version,

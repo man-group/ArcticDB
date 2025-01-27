@@ -787,6 +787,17 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
     return res;
 }
 
+ReadResult PythonVersionStore::batch_read_with_join(
+        const std::vector<StreamId>& stream_ids,
+        const std::vector<VersionQuery>& version_queries,
+        std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+        const ReadOptions& read_options,
+        std::vector<std::shared_ptr<Clause>>&& clauses,
+        std::any& handler_data) {
+    auto versions_and_frame = batch_read_with_join_internal(stream_ids, version_queries, read_queries, read_options, std::move(clauses), handler_data);
+    return create_python_read_result({}, std::move(versions_and_frame.frame_and_descriptor_));
+}
+
 void PythonVersionStore::delete_snapshot(const SnapshotId& snap_name) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_snapshot");
     auto opt_snapshot =  get_snapshot(store(), snap_name);
