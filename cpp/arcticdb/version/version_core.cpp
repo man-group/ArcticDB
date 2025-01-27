@@ -190,7 +190,7 @@ std::vector<SliceAndKey> filter_existing_slices(std::vector<std::optional<SliceA
 using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<SliceAndKey>>;
 
 [[nodiscard]] folly::Future<IntersectingSegments> async_intersecting_segments(
-    const std::vector<SliceAndKey>& affected_keys,
+    std::shared_ptr<std::vector<SliceAndKey>> affected_keys,
     const IndexRange& front_range,
     const IndexRange& back_range,
     VersionId version_id,
@@ -205,7 +205,7 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
     std::vector<folly::Future<std::optional<SliceAndKey>>> maybe_intersect_before_fut;
     std::vector<folly::Future<std::optional<SliceAndKey>>> maybe_intersect_after_fut;
 
-    for (const auto& affected_slice_and_key : affected_keys) {
+    for (const auto& affected_slice_and_key : *affected_keys) {
         const auto& affected_range = affected_slice_and_key.key().index_range();
         if (intersects(affected_range, front_range) && !overlaps(affected_range, front_range) &&
             is_before(affected_range, front_range)) {
@@ -267,7 +267,7 @@ VersionedItem delete_range_impl(
                         std::end(affected_keys),
                         std::back_inserter(unaffected_keys));
 
-    auto [intersect_before, intersect_after] = async_intersecting_segments(affected_keys, index_range, index_range, update_info.next_version_id_, store).get();
+    auto [intersect_before, intersect_after] = async_intersecting_segments(std::make_shared<std::vector<SliceAndKey>>(affected_keys), index_range, index_range, update_info.next_version_id_, store).get();
 
     auto orig_filter_range = std::holds_alternative<std::monostate>(query.row_filter) ? get_query_index_range(index, index_range) : query.row_filter;
 
@@ -360,7 +360,7 @@ static void check_can_update(
     fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, frame, empty_types);
 }
 
-static std::vector<SliceAndKey> get_keys_affected_by_update(
+static std::shared_ptr<std::vector<SliceAndKey>> get_keys_affected_by_update(
     const index::IndexSegmentReader& index_segment_reader,
     const InputTensorFrame& frame,
     const UpdateQuery& query,
@@ -373,7 +373,7 @@ static std::vector<SliceAndKey> get_keys_affected_by_update(
         dynamic_schema,
         index_segment_reader.bucketize_dynamic()
     );
-    return filter_index(index_segment_reader, combine_filter_functions(queries));
+    return std::make_shared<std::vector<SliceAndKey>>(filter_index(index_segment_reader, combine_filter_functions(queries)));
 }
 
 static std::vector<SliceAndKey> get_keys_not_affected_by_update(
@@ -443,11 +443,11 @@ folly::Future<AtomKey> async_update_impl(
         ](std::vector<SliceAndKey>&& new_slice_and_keys) mutable {
             std::sort(std::begin(new_slice_and_keys), std::end(new_slice_and_keys));
             auto affected_keys = get_keys_affected_by_update(index_segment_reader, *frame, query, dynamic_schema);
-            auto unaffected_keys = get_keys_not_affected_by_update(index_segment_reader, affected_keys);
+            auto unaffected_keys = get_keys_not_affected_by_update(index_segment_reader, *affected_keys);
             util::check(
-                affected_keys.size() + unaffected_keys.size() == index_segment_reader.size(),
+                affected_keys->size() + unaffected_keys.size() == index_segment_reader.size(),
                 "The sum of affected keys and unaffected keys must be equal to the total number of keys {} + {} != {}",
-                affected_keys.size(), unaffected_keys.size(), index_segment_reader.size());
+                affected_keys->size(), unaffected_keys.size(), index_segment_reader.size());
             const UpdateRanges update_ranges = compute_update_ranges(query.row_filter, *frame, new_slice_and_keys);
             return async_intersecting_segments(
                 affected_keys,
@@ -466,7 +466,7 @@ folly::Future<AtomKey> async_update_impl(
                 auto [flattened_slice_and_keys, row_count] = get_slice_and_keys_for_update(
                     update_ranges,
                     unaffected_keys,
-                    affected_keys,
+                    *affected_keys,
                     std::move(intersecting_segments),
                     std::move(new_slice_and_keys));
                 auto tsd = index::get_merged_tsd(row_count, dynamic_schema, index_segment_reader.tsd(), frame);

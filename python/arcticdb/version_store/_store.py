@@ -868,10 +868,18 @@ class NativeVersionStore:
         update_query: _PythonVersionStoreUpdateQuery
     ) -> TimeSeriesType:
         """
-        :param data: Time series to filter by date range
-        :param date_range: The interval used to filter data
-        :param update_query: The query passed to the update function. Will be modified if date_range is not None
-        :return: data filtered by date_range if date_range is not None or unmodified data otherwise
+        Parameters
+        ----------
+        data: `TimeSeriesType`
+            Time series to filter by date range
+        date_range: `Optional[DateRangeInput]`
+            The interval used to filter data
+        update_query: `_PythonVersionStoreUpdateQuery`
+            The query passed to the update function. Will be modified if date_range is not None
+
+        Returns
+        -------
+        Data filtered by date_range if date_range is not None or unmodified data otherwise
         """
         if date_range is not None:
             start, end = normalize_dt_range_to_ts(date_range)
@@ -886,8 +894,7 @@ class NativeVersionStore:
         metadata_vector: List[Any],
         date_range_vector: List[Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]]],
         prune_previous_version: bool = None,
-        upsert: bool = False,
-        **kwargs,
+        upsert: bool = False
     ):
         update_queries = [_PythonVersionStoreUpdateQuery() for _ in range(len(symbols))]
         for i in range(len(data_vector)):
@@ -896,7 +903,8 @@ class NativeVersionStore:
         prune_previous_version = self.resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
-        dynamic_strings = self._resolve_dynamic_strings(kwargs)
+        # Batch update is available only via V2 Library API. Dynamic Strings are always on in it
+        dynamic_strings = True
         udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
             symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_update)
         cxx_versioned_items = self.version_store.batch_update(
