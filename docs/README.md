@@ -100,8 +100,6 @@ For managing git, please follow these conventions:
 The reason for the separate docs tags is to allow improvements to the docs to be made to recent versions without re-tagging the release. The docs branches can eventually be deleted for older versions. The tags should not be deleted.
 
 
-## Publishing `docs.arcticdb.io`
+## Deployment of `docs.arcticdb.io`
 
-Run the `Docs Publish` github action.
-- Environment: ProdPypi, to push to docs.arcticdb.io
-- Environment: TestPypi, to push to a preview site
+[docs.arcticdb.io](https://docs.arcticdb.io) is hosted by netlify and runs continous deployment on the `docs-pages` branch of ArcticDB.
