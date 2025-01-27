@@ -109,7 +109,7 @@ public:
         handler_data_factory_ = std::move(data);
     }
 
-    std::any get_handler_data() {
+    std::shared_ptr<std::any> get_handler_data() {
         util::check(static_cast<bool>(handler_data_factory_), "No type handler set");
         return handler_data_factory_->get_data();
     }
@@ -132,7 +132,7 @@ inline std::shared_ptr<TypeHandler> get_type_handler(TypeDescriptor source, Type
     return TypeHandlerRegistry::instance()->get_handler(target);
 }
 
-inline std::any get_type_handler_data() {
+inline std::shared_ptr<std::any> get_type_handler_data() {
     return TypeHandlerRegistry::instance()->get_handler_data();
 }
 

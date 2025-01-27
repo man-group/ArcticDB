@@ -526,7 +526,8 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/version_map_batch_methods.cpp)
+        version/version_map_batch_methods.cpp processing/resample_boundaries.hpp pipeline/chunking.cpp pipeline/error.hpp)
+
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -753,8 +754,8 @@ if (SSL_LINK)
     find_package(OpenSSL REQUIRED)
     list(APPEND arcticdb_core_libraries OpenSSL::SSL)
     if (NOT WIN32)
-        list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
-        list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
+        #list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
+        #list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
     endif()
 endif ()
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})

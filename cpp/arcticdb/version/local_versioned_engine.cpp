@@ -18,9 +18,12 @@
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
+#include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/container_filter_wrapper.hpp>
 #include <arcticdb/util/allocation_tracing.hpp>
+#include <arcticdb/pipeline/chunking.hpp>
+#include <arcticdb/version/read_version_output.hpp>
 
 namespace arcticdb::version_store {
 
@@ -342,7 +345,7 @@ IndexRange LocalVersionedEngine::get_index_range(
     return index::get_index_segment_range(version->key_, store());
 }
 
-std::variant<VersionedItem, StreamId> get_version_identifier(
+std::variant<VersionedItem, StreamId> check_have_version_if_required(
         const StreamId& stream_id,
         const VersionQuery& version_query,
         const ReadOptions& read_options,
@@ -370,8 +373,50 @@ ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
     std::any& handler_data) {
     py::gil_scoped_release release_gil;
     auto version = get_version_to_read(stream_id, version_query);
-    const auto identifier = get_version_identifier(stream_id, version_query, read_options, version);
+    const auto identifier = check_have_version_if_required(stream_id, version_query, read_options, version);
     return read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
+}
+
+ChunkIterator LocalVersionedEngine::read_dataframe_chunked_internal(
+    const StreamId &stream_id,
+    const VersionQuery& version_query,
+    ReadQuery& read_query,
+    const ReadOptions& read_options,
+    std::any& handler_data,
+    DecodePathData shared_data) {
+    auto version = get_version_to_read(stream_id, version_query);
+    const auto identifier = check_have_version_if_required(stream_id, version_query, read_options, version);
+    util::check(std::holds_alternative<VersionedItem>(identifier), "Chunking not implemented for recursive normalizers");
+    const auto& index_key = std::get<VersionedItem>(identifier);
+    auto [index_segment_reader, slice_and_keys] = index::read_index_to_vector(store(), index_key.key_);
+    const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
+    const bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
+
+    auto pipeline_context = std::make_shared<PipelineContext>();
+    pipeline_context->stream_id_ = version->key_.id();
+    read_indexed_keys_to_pipeline(store(), pipeline_context, *version, read_query, read_options);
+
+    auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
+        read_query,
+        pipeline_context,
+        dynamic_schema,
+        bucketize_dynamic);
+
+    pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
+    pipelines::sort_by_row_range(pipeline_context->slice_and_keys_);
+
+    generate_filtered_field_descriptors(pipeline_context, read_query.columns);
+    mark_index_slices(pipeline_context, dynamic_schema, bucketize_dynamic);
+
+    return ChunkIterator(
+        std::move(index_segment_reader),
+        pipeline_context,
+        version->key_,
+        store(),
+        read_query,
+        read_options,
+        handler_data,
+        shared_data);
 }
 
 folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(
