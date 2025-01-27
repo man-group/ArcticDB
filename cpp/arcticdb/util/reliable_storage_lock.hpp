@@ -26,6 +26,15 @@ using LockInUse = std::monostate;
 
 using ReliableLockResult = std::variant<AcquiredLock, LockInUse>;
 
+struct ActiveLock {
+    AcquiredLockId lock_id;
+    timestamp expiration;
+
+    bool operator == (const ActiveLock& other) const {
+        return lock_id == other.lock_id && expiration == other.expiration;
+    }
+};
+
 // The ReliableStorageLock is a storage lock which relies on atomic If-None-Match Put and ListObject operations to
 // provide a more reliable lock than the StorageLock but it requires the backend to support atomic operations. It should
 // be completely consistent unless a process holding a lock gets paused for times comparable to the lock timeout.
@@ -45,12 +54,21 @@ public:
     ReliableLockResult try_extend_lock(AcquiredLockId acquired_lock) const;
     void free_lock(AcquiredLockId acquired_lock) const;
     timestamp timeout() const;
+    // Below APIs are for admin management of the lock
+    std::optional<ActiveLock> inspect_latest_lock() const;
+    // Forcefully takes a new lock without waiting for any timeouts. If custom_timeout is negative the resulting lock
+    // will be expired at creation (hence will result in forcefully freeing the locks).
+    AcquiredLockId force_take_lock(timestamp custom_timeout) const;
 private:
-    ReliableLockResult try_take_next_id(const std::vector<AcquiredLockId>& existing_locks, std::optional<AcquiredLockId> latest) const;
+    ReliableLockResult try_take_id(
+            const std::vector<AcquiredLockId>& existing_locks,
+            AcquiredLockId lock_id,
+            std::optional<timestamp> timeout_override = std::nullopt) const;
     std::pair<std::vector<AcquiredLockId>, std::optional<AcquiredLockId>> get_all_locks() const;
     timestamp get_expiration(RefKey lock_key) const;
     void clear_old_locks(const std::vector<AcquiredLockId>& acquired_locks) const;
     StreamId get_stream_id(AcquiredLockId acquired_lock) const;
+    RefKey get_ref_key(AcquiredLockId acquired_lock) const;
     std::string base_name_;
     std::shared_ptr<Store> store_;
     timestamp timeout_;
