@@ -56,9 +56,19 @@ inline AcquiredLockId get_next_id(std::optional<AcquiredLockId> maybe_prev) {
     return 0;
 }
 
+inline AcquiredLockId get_force_next_id(std::optional<AcquiredLockId> maybe_prev) {
+    // When taking a lock with force we use a higher lock id so we can force acquire it even if there is high lock contention.
+    return maybe_prev.value_or(0) + 10;
+}
+
 template <class ClockType>
 StreamId ReliableStorageLock<ClockType>::get_stream_id(AcquiredLockId lock_id) const {
     return fmt::format("{}{}{}", base_name_, SEPARATOR, lock_id);
+}
+
+template <class ClockType>
+RefKey ReliableStorageLock<ClockType>::get_ref_key(AcquiredLockId lock_id) const {
+    return RefKey{get_stream_id(lock_id), KeyType::ATOMIC_LOCK};
 }
 
 inline AcquiredLockId extract_lock_id_from_stream_id(const StreamId& stream_id) {
@@ -87,7 +97,7 @@ timestamp ReliableStorageLock<ClockType>::get_expiration(RefKey lock_key) const 
 }
 
 template <class ClockType>
-void ReliableStorageLock<ClockType>::clear_old_locks(const std::vector<AcquiredLockId>& lock_ids) const {
+void ReliableStorageLock<ClockType>::clear_locks(const std::vector<AcquiredLockId>& lock_ids, bool old_only) const {
     auto now = ClockType::nanos_since_epoch();
     auto to_delete = std::vector<VariantKey>();
     // We only clear locks that have expired more than 10 timeouts (we assume a process can't be paused for more than the timeout) ago.
@@ -99,8 +109,8 @@ void ReliableStorageLock<ClockType>::clear_old_locks(const std::vector<AcquiredL
     // 5. Process B decides to clear lock 7 since it's not the latest
     // 6. Process A succeeds in taking lock 7
     for (auto lock_id : lock_ids) {
-        auto lock_key = RefKey{get_stream_id(lock_id), KeyType::ATOMIC_LOCK};
-        if (get_expiration(lock_key) + REMOVE_AFTER_TIMEOUTS * timeout_ < now) {
+        auto lock_key = get_ref_key(lock_id);
+        if (!old_only || get_expiration(lock_key) + REMOVE_AFTER_TIMEOUTS * timeout_ < now) {
             to_delete.emplace_back(lock_key);
         }
     }
@@ -111,13 +121,14 @@ template <class ClockType>
 ReliableLockResult ReliableStorageLock<ClockType>::try_take_lock() const {
     auto [existing_locks, latest] = get_all_locks();
     if (latest.has_value()) {
-        auto expires = get_expiration(RefKey{get_stream_id(latest.value()), KeyType::ATOMIC_LOCK});
+        auto expires = get_expiration(get_ref_key(latest.value()));
         if (expires > ClockType::nanos_since_epoch()) {
             // An unexpired lock exists
             return LockInUse{};
         }
     }
-    return try_take_next_id(existing_locks, latest);
+    auto next_id = get_next_id(latest);
+    return try_take_id(existing_locks, next_id);
 }
 
 template<class ClockType>
@@ -153,7 +164,8 @@ ReliableLockResult ReliableStorageLock<ClockType>::try_extend_lock(AcquiredLockI
         // We have lost the lock while holding it (most likely due to timeout).
         return LockInUse{};
     }
-    return try_take_next_id(existing_locks, latest);
+    auto next_id = get_next_id(latest);
+    return try_take_id(existing_locks, next_id);
 }
 
 template <class ClockType>
@@ -172,10 +184,37 @@ void ReliableStorageLock<ClockType>::free_lock(AcquiredLockId acquired_lock) con
 }
 
 template <class ClockType>
-ReliableLockResult ReliableStorageLock<ClockType>::try_take_next_id(const std::vector<AcquiredLockId>& existing_locks, std::optional<AcquiredLockId> latest) const {
-    AcquiredLockId lock_id = get_next_id(latest);
+std::optional<ActiveLock> ReliableStorageLock<ClockType>::inspect_latest_lock() const {
+    auto [existing_locks, latest_lock_id] = get_all_locks();
+    if (latest_lock_id.has_value()) {
+        auto expiration = get_expiration(get_ref_key(latest_lock_id.value()));
+        return {{latest_lock_id.value(), expiration}};
+    }
+    return std::nullopt;
+}
+
+template <class ClockType>
+AcquiredLockId ReliableStorageLock<ClockType>::force_take_lock(timestamp custom_timeout) const {
+    auto [existing_locks, latest] = get_all_locks();
+    auto force_next_id = get_force_next_id(latest);
+    auto result = try_take_id(existing_locks, force_next_id, custom_timeout);
+    return util::variant_match(
+            result,
+            [&](AcquiredLock &acquired_lock) {
+                log::lock().info("Forcefully acquired a lock with id {}", acquired_lock);
+                return acquired_lock;
+            },
+            [&](LockInUse &) -> AcquiredLockId {
+                log::lock().error("Failed to acquire a lock with force.");
+                throw LostReliableLock{};
+            }
+    );
+}
+
+template <class ClockType>
+ReliableLockResult ReliableStorageLock<ClockType>::try_take_id(const std::vector<AcquiredLockId>& existing_locks, AcquiredLockId lock_id, std::optional<timestamp> timeout_override) const {
     auto lock_stream_id = get_stream_id(lock_id);
-    auto expiration = ClockType::nanos_since_epoch() + timeout_;
+    auto expiration = ClockType::nanos_since_epoch() + timeout_override.value_or(timeout_);
     try {
         store_->write_if_none_sync(KeyType::ATOMIC_LOCK, lock_stream_id, lock_segment(lock_stream_id, expiration));
     } catch (const AtomicOperationFailedException & e) {
@@ -183,8 +222,14 @@ ReliableLockResult ReliableStorageLock<ClockType>::try_take_next_id(const std::v
         return LockInUse{};
     }
     // We clear old locks only after acquiring the lock to avoid duplicating the deletion work
-    clear_old_locks(existing_locks);
+    clear_locks(existing_locks);
     return AcquiredLock{lock_id};
+}
+
+template <class ClockType>
+void ReliableStorageLock<ClockType>::force_clear_locks() const {
+    auto [existing_locks, latest] = get_all_locks();
+    clear_locks(existing_locks, false);
 }
 
 inline ReliableStorageLockGuard::ReliableStorageLockGuard(const ReliableStorageLock<> &lock, AcquiredLockId acquired_lock, std::optional<folly::Func>&& on_lost_lock) :
