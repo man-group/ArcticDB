@@ -12,7 +12,7 @@
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
-#include <arcticdb/stream/append_map.hpp>
+#include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/pipeline/read_pipeline.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
@@ -22,6 +22,7 @@
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
+#include <arcticdb/version/schema_checks.hpp>
 
 #include <string>
 
@@ -306,6 +307,12 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
         }
 
         const SegmentInMemory& segment = sk.segment(store);
+
+        if(!index_names_match(segment.descriptor(), pipeline_context->descriptor())) {
+            auto written_keys = folly::collect(write_futures).get();
+            remove_written_keys(store.get(), std::move(written_keys));
+            return Error{throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>, fmt::format("Index names in segment {} and pipeline context {} do not match", segment.descriptor(), pipeline_context->descriptor())};
+        }
 
         if(validate_index && is_segment_unsorted(segment)) {
             auto written_keys = folly::collect(write_futures).get();

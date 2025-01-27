@@ -62,7 +62,7 @@ else()
     add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
 
     SET(HIDE_LINKED_SYMBOLS OFF)
-    
+
     find_package(pybind11 REQUIRED)
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
@@ -312,7 +312,7 @@ set(arcticdb_srcs
         storage/storage_utils.hpp
         stream/aggregator.hpp
         stream/aggregator-inl.hpp
-        stream/append_map.hpp
+        stream/incompletes.hpp
         stream/merge_utils.hpp
         stream/piloted_clock.hpp
         stream/index_aggregator.hpp
@@ -417,6 +417,7 @@ set(arcticdb_srcs
         column_store/key_segment.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
+        column_store/statistics.hpp
         column_store/string_pool.cpp
         entity/data_error.cpp
         entity/field_collection.cpp
@@ -493,7 +494,7 @@ set(arcticdb_srcs
         storage/storage_factory.cpp
         storage/storage_utils.cpp
         stream/aggregator.cpp
-        stream/append_map.cpp
+        stream/incompletes.cpp
         stream/index.cpp
         stream/piloted_clock.cpp
         stream/protobuf_mappings.cpp
@@ -518,6 +519,7 @@ set(arcticdb_srcs
         version/key_block.cpp
         util/gil_safe_py_none.cpp
         version/local_versioned_engine.cpp
+        version/schema_checks.cpp
         version/op_log.cpp
         version/snapshot.cpp
         version/symbol_list.cpp
@@ -912,6 +914,7 @@ if(${TEST})
             column_store/test/test_column_data_random_accessor.cpp
             column_store/test/test_index_filtering.cpp
             column_store/test/test_memory_segment.cpp
+            column_store/test/test_statistics.cpp
             entity/test/test_atom_key.cpp
             entity/test/test_key_serialization.cpp
             entity/test/test_metrics.cpp
@@ -940,10 +943,12 @@ if(${TEST})
             storage/test/test_storage_factory.cpp
             storage/test/test_storage_exceptions.cpp
             storage/test/test_azure_storage.cpp
+            storage/test/common.hpp
             storage/test/test_storage_operations.cpp
             stream/test/stream_test_common.cpp
             stream/test/test_aggregator.cpp
-            stream/test/test_append_map.cpp
+            stream/test/test_incompletes.cpp
+            stream/test/test_protobuf_mappings.cpp
             stream/test/test_row_builder.cpp
             stream/test/test_segment_aggregator.cpp
             stream/test/test_types.cpp
@@ -978,8 +983,7 @@ if(${TEST})
             version/test/test_version_map_batch.cpp
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
-            python/python_handlers.cpp
-            storage/test/common.hpp)
+            python/python_handlers.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

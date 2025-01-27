@@ -9,6 +9,7 @@
 
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/column_store/statistics.hpp>
 
 #include <string>
 
@@ -37,5 +38,11 @@ entity::SegmentDescriptorImpl segment_descriptor_from_proto(const arcticdb::prot
 StreamId stream_id_from_proto(const arcticdb::proto::descriptors::StreamDescriptor& desc);
 
 size_t num_blocks(const arcticdb::proto::encoding::EncodedField& field);
+
+void field_stats_to_proto(const FieldStatsImpl& stats, arcticdb::proto::encoding::FieldStats& msg);
+
+void field_stats_from_proto(const arcticdb::proto::encoding::FieldStats& msg, FieldStatsImpl& stats);
+
+FieldStatsImpl create_from_proto(const arcticdb::proto::encoding::FieldStats& msg);
 
 } //namespace arcticdb

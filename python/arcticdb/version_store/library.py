@@ -611,7 +611,7 @@ class Library:
             sort_on_index=sort_on_index,
             sort_columns=sort_columns,
             norm_failure_options_msg="Failed to normalize data. It is inadvisable to pickle staged data"
-                                     "as it will not be possible to finalize it.")
+                                     " as it will not be possible to finalize it.")
 
     def write(
         self,
@@ -1241,6 +1241,7 @@ class Library:
                 is not the same as the schema of the existing data
             - If dynamic schema is used and different segments have the same column names but their dtypes don't have a
                 common type (e.g string and any numeric type)
+            - If a different index name is encountered in the staged data, regardless of the schema mode
 
         See Also
         --------
@@ -1351,6 +1352,7 @@ class Library:
                 staged segment is not the same as the schema of the existing data
             - If dynamic schema is used and different segments have the same column names but their dtypes don't have a
                 common type (e.g string and any numeric type)
+            - If a different index name is encountered in the staged data, regardless of the schema mode
 
         See Also
         --------

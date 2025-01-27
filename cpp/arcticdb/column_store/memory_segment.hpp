@@ -235,6 +235,10 @@ public:
         impl_->reset_timeseries_descriptor();
     }
 
+    void calculate_statistics() {
+        impl_->calculate_statistics();
+    }
+
     [[nodiscard]] size_t num_columns() const { return impl_->num_columns(); }
 
     [[nodiscard]] size_t row_count() const { return impl_->row_count(); }
@@ -464,9 +468,9 @@ public:
         return impl_->is_sparse();
     }
 
-    [[nodiscard]] std::vector<SegmentInMemory> split(size_t rows) const {
+    [[nodiscard]] std::vector<SegmentInMemory> split(size_t rows, bool filter_down_stringpool=false) const {
         std::vector<SegmentInMemory> output;
-        auto new_impls = impl_->split(rows);
+        auto new_impls = impl_->split(rows, filter_down_stringpool);
         output.reserve(new_impls.size());
         for(const auto& impl : new_impls)
             output.emplace_back(SegmentInMemory{impl});

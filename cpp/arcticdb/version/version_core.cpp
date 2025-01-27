@@ -15,7 +15,7 @@
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/async/tasks.hpp>
 #include <arcticdb/util/name_validation.hpp>
-#include <arcticdb/stream/append_map.hpp>
+#include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
@@ -1078,6 +1078,20 @@ bool read_incompletes_to_pipeline(
         ensure_timeseries_norm_meta(*pipeline_context->norm_meta_, pipeline_context->stream_id_, sparsify);
     }
 
+    const StreamDescriptor &staged_desc = incomplete_segments[0].segment(store).descriptor();
+
+
+    // We need to check that the index names match regardless of the dynamic schema setting
+    // A more detailed check is done later in the do_compact function
+    if (pipeline_context->desc_) {
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+            index_names_match(staged_desc, *pipeline_context->desc_),
+            "The index names in the staged stream descriptor {} are not identical to that of the stream descriptor on storage {}",
+            staged_desc,
+            *pipeline_context->desc_
+        );
+    }
+
     if (dynamic_schema) {
         pipeline_context->staged_descriptor_ =
             merge_descriptors(seg.descriptor(), incomplete_segments, read_query.columns);
@@ -1089,7 +1103,6 @@ bool read_incompletes_to_pipeline(
             pipeline_context->desc_ = pipeline_context->staged_descriptor_;
         }
     } else {
-        const StreamDescriptor &staged_desc = incomplete_segments[0].segment(store).descriptor();
         if (pipeline_context->desc_) {
             schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                 columns_match(staged_desc, *pipeline_context->desc_),
@@ -1697,7 +1710,8 @@ VersionedItem sort_merge_impl(
                     stream::StreamSink::PartialKey
                     pk{KeyType::TABLE_DATA, pipeline_context->version_id_, pipeline_context->stream_id_, local_index_start, local_index_end};
                     fut_vec.emplace_back(store->write(pk, std::move(segment)));
-                }};
+                },
+                RowCountSegmentPolicy(write_options.segment_row_size)};
 
             for(auto& sk : segments) {
                 SegmentInMemory segment = sk.release_segment(store);
@@ -2037,6 +2051,17 @@ bool is_segment_unsorted(const SegmentInMemory& segment) {
 }
 
 CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const StreamDescriptor& pipeline_desc) {
+    // We need to check that the index names match regardless of the dynamic schema setting
+    if(!index_names_match(stream_descriptor_incomplete, pipeline_desc)) {
+        return Error{
+            throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
+            fmt::format("{} All staged segments must have the same index names."
+                        "{} is different than {}",
+                        error_code_data<ErrorCode::E_DESCRIPTOR_MISMATCH>.name_,
+                        stream_descriptor_incomplete,
+                        pipeline_desc)
+        };
+    }
     if (!columns_match(stream_descriptor_incomplete, pipeline_desc)) {
         return Error{
             throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,

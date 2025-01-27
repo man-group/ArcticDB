@@ -615,7 +615,7 @@ std::optional<std::string_view> SegmentInMemoryImpl::string_at(position_t row, p
     }
 }
 
-std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::split(size_t rows) const {
+std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::split(size_t rows, bool filter_down_stringpool) const {
     std::vector<std::shared_ptr<SegmentInMemoryImpl>> output;
     util::check(rows > 0, "rows supplied in SegmentInMemoryImpl.split() is non positive");
     auto total_rows = row_count();
@@ -625,7 +625,7 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::split(siz
         util::BitSetSizeType end = std::min(start + rows, total_rows);
         // set_range is close interval on [left, right]
         bitset.set_range(start, end - 1, true);
-        output.emplace_back(filter(std::move(bitset)));
+        output.emplace_back(filter(std::move(bitset), filter_down_stringpool));
     }
     return output;
 }
@@ -650,7 +650,7 @@ size_t SegmentInMemoryImpl::num_bytes() const {
 void SegmentInMemoryImpl::sort(const std::string& column_name) {
     init_column_map();
     auto idx = column_index(std::string_view(column_name));
-    user_input::check<ErrorCode::E_COLUMN_NOT_FOUND>(static_cast<bool>(idx), "Column {} not found in sort", column_name);
+    schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(static_cast<bool>(idx), "Column {} not found in sort", column_name);
     sort(static_cast<position_t>(idx.value()));
 }
 
@@ -659,7 +659,7 @@ void SegmentInMemoryImpl::sort(const std::vector<std::string>& column_names) {
     std::vector<position_t> positions;
     for(const auto& column_name : column_names) {
         auto idx = column_index(std::string_view(column_name));
-        user_input::check<ErrorCode::E_COLUMN_NOT_FOUND>(static_cast<bool>(idx), "Column {} not found in multi-sort", column_name);
+        schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(static_cast<bool>(idx), "Column {} not found in multi-sort", column_name);
         positions.emplace_back(static_cast<position_t>(*idx));
     }
     sort(positions);
@@ -698,6 +698,20 @@ void SegmentInMemoryImpl::set_timeseries_descriptor(const TimeseriesDescriptor& 
 
 void SegmentInMemoryImpl::reset_timeseries_descriptor() {
     tsd_.reset();
+}
+
+void SegmentInMemoryImpl::calculate_statistics() {
+    for(auto& column : columns_) {
+        if(column->type().dimension() == Dimension::Dim0) {
+            const auto type = column->type();
+            if(is_numeric_type(type.data_type()) || is_sequence_type(type.data_type())) {
+                type.visit_tag([&column] (auto tdt) {
+                    using TagType = std::decay_t<decltype(tdt)>;
+                    column->set_statistics(generate_column_statistics<TagType>(column->data()));
+                });
+            }
+        }
+    }
 }
 
 void SegmentInMemoryImpl::reset_metadata() {

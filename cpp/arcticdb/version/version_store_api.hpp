@@ -27,7 +27,7 @@
 #include <arcticdb/pipeline/read_pipeline.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
-#include <arcticdb/stream/append_map.hpp>
+#include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/entity/read_result.hpp>
@@ -42,9 +42,8 @@ using namespace arcticdb::entity;
 namespace as = arcticdb::stream;
 
 /**
- * PythonVersionStore contains all the Python cruft that isn't portable, as well as non-essential features that are
- * part of the backwards-compatibility with Arctic Python but that we think are random/a bad idea and aren't part of
- * the main product.
+ * The purpose of this class is to perform python-specific translations into either native C++ or protobuf objects
+ * so that the LocalVersionedEngine contains only partable C++ code.
  */
 class PythonVersionStore : public LocalVersionedEngine {
 
@@ -73,7 +72,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     VersionedItem write_versioned_composite_data(
         const StreamId& stream_id,
         const py::object &metastruct,
-        const std::vector<StreamId> &sub_keys,  // TODO: make this optional?
+        const std::vector<StreamId> &sub_keys,
         const std::vector<py::tuple> &items,
         const std::vector<py::object> &norm_metas,
         const py::object &user_meta,
