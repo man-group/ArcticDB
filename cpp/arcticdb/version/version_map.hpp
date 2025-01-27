@@ -191,12 +191,10 @@ public:
             try {
                 VersionMapEntry ref_entry;
                 read_symbol_ref(store, stream_id, ref_entry);
-                ARCTICDB_DEBUG(log::version(), "load_via_ref_key read_symbol_ref done for stream {}", stream_id);
                 if (ref_entry.empty())
                     return;
 
                 follow_version_chain(store, ref_entry, entry, load_strategy);
-                ARCTICDB_DEBUG(log::version(), "load_via_ref_key follow_version_chain done for stream {}", stream_id);
                 break;
             } catch (const std::exception &err) {
                 if (--max_trials <= 0) {

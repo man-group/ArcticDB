@@ -112,23 +112,21 @@ def test_s3_no_ssl_verification(monkeypatch, s3_no_ssl_storage, client_cert_file
 
 
 @REAL_S3_TESTS_MARK
-@pytest.mark.skip(reason="This test is not stable")
-def test_s3_sts_auth(real_s3_sts_storage):
-    library = "test"
+def test_s3_sts_auth(lib_name, real_s3_sts_storage):
     ac = Arctic(real_s3_sts_storage.arctic_uri)
-    ac.delete_library(library) # make sure we delete any previously existing library
-    lib = ac.create_library(library)
+    ac.delete_library(lib_name) # make sure we delete any previously existing library
+    lib = ac.create_library(lib_name)
     df = pd.DataFrame({'a': [1, 2, 3]})
     lib.write("sym", df)
     assert_frame_equal(lib.read("sym").data, df)
-    lib = ac.get_library(library)
+    lib = ac.get_library(lib_name)
     assert_frame_equal(lib.read("sym").data, df)
 
     # Reload for testing a different codepath
     ac = Arctic(real_s3_sts_storage.arctic_uri)
-    lib = ac.get_library(library)
+    lib = ac.get_library(lib_name)
     assert_frame_equal(lib.read("sym").data, df)
-    ac.delete_library(library)
+    ac.delete_library(lib_name)
 
 
 @SLOW_TESTS_MARK
