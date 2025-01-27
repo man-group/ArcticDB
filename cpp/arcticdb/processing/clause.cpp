@@ -647,6 +647,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     SegmentInMemory seg;
     RowRange output_row_range(row_slices.front().row_ranges_->at(0)->start(),
                               row_slices.front().row_ranges_->at(0)->start() + output_index_column->row_count());
+    ColRange output_col_range(1, aggregators_.size() + 1);
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, index_column_name), output_index_column);
     seg.descriptor().set_index(IndexDescriptorImpl(1, IndexDescriptor::Type::TIMESTAMP));
     auto& string_pool = seg.string_pool();
@@ -675,7 +676,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
         seg.add_column(scalar_field(aggregated_column->type().data_type(), aggregator.get_output_column_name().value), aggregated_column);
     }
     seg.set_row_data(output_index_column->row_count() - 1);
-    return push_entities(*component_manager_, ProcessingUnit(std::move(seg), std::move(output_row_range)));
+    return push_entities(*component_manager_, ProcessingUnit(std::move(seg), std::move(output_row_range), std::move(output_col_range)));
 }
 
 template<ResampleBoundary closed_boundary>
