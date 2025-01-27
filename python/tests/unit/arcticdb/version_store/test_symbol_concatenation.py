@@ -16,8 +16,10 @@ from arcticdb.util.test import assert_frame_equal
 pytestmark = pytest.mark.pipeline
 
 
-def test_symbol_concat_basic(lmdb_library_factory):
-    lib = lmdb_library_factory()
+@pytest.mark.parametrize("rows_per_segment", [2, 100_000])
+@pytest.mark.parametrize("columns_per_segment", [2, 100_000])
+def test_symbol_concat_basic(lmdb_library_factory, rows_per_segment, columns_per_segment):
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
     df_1 = pd.DataFrame({"col": np.arange(3, dtype=np.int64)}, index=pd.date_range(pd.Timestamp(0), freq="1000ns", periods=3))
     df_2 = pd.DataFrame({"col": np.arange(4, dtype=np.int64)}, index=pd.date_range(pd.Timestamp(2000), freq="1000ns", periods=4))
     df_3 = pd.DataFrame({"col": np.arange(5, dtype=np.int64)}, index=pd.date_range(pd.Timestamp(6000), freq="1000ns", periods=5))
@@ -39,31 +41,3 @@ def test_symbol_concat_basic(lmdb_library_factory):
     assert_frame_equal(expected, received)
 
 
-def test_symbol_concat_column_sliced(lmdb_library_factory):
-    lib = lmdb_library_factory(LibraryOptions(columns_per_segment=2))
-    # lib = lmdb_library_factory()
-    df_1 = pd.DataFrame(
-        {
-            "col1": np.arange(3, dtype=np.int64),
-            "col2": np.arange(10, 13, dtype=np.int64),
-            "col3": np.arange(110, 113, dtype=np.int64),
-        },
-        index=pd.date_range(pd.Timestamp(0), freq="1000ns", periods=3)
-    )
-    df_2 = pd.DataFrame(
-        {
-            "col1": np.arange(4, dtype=np.int64),
-            "col2": np.arange(20, 24, dtype=np.int64),
-            "col3": np.arange(210, 214, dtype=np.int64),
-        },
-        index=pd.date_range(pd.Timestamp(3000), freq="1000ns", periods=4)
-    )
-    lib.write("sym1", df_1)
-    lib.write("sym2", df_2)
-
-    lazy_df = concat(lib.read_batch(["sym1", "sym2"], lazy=True))
-    lazy_df.resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
-    received = lazy_df.collect().data
-    received = received.reindex(columns=sorted(received.columns))
-    expected = pd.concat([df_1, df_2]).resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
-    assert_frame_equal(expected, received)
