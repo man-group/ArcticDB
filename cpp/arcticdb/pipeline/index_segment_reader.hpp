@@ -76,7 +76,6 @@ struct IndexSegmentReader {
     }
 
 private:
-    mutable std::unordered_map<ColRange, std::shared_ptr<StreamDescriptor>, AxisRange::Hasher> descriptor_by_col_group_;
     SegmentInMemory seg_;
 };
 
