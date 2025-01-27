@@ -53,6 +53,8 @@ struct ClauseInfo {
     std::variant<KeepCurrentIndex, KeepCurrentTopLevelIndex, NewIndex> index_{KeepCurrentIndex()};
     // Whether this clause modifies the output descriptor
     bool modifies_output_descriptor_{false};
+    // Whether this clause operates on one or multiple symbols
+    bool multi_symbol_{false};
 };
 
 // Changes how the clause behaves based on information only available after it is constructed

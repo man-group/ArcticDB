@@ -1219,6 +1219,7 @@ std::string DateRangeClause::to_string() const {
 
 ConcatClause::ConcatClause() {
     clause_info_.input_structure_ = ProcessingStructure::MULTI_SYMBOL;
+    clause_info_.multi_symbol_ = true;
 }
 
 std::vector<std::vector<EntityId>> ConcatClause::structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
