@@ -746,6 +746,42 @@ class TestBatchUpdate:
                 assert vit.version == 1
             assert_frame_equal(vit.data, expected[vit.symbol])
 
+    def test_date_range(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("symbol_1", pd.DataFrame({"a": range(5)}, index=pd.date_range("2024-01-01", "2024-01-05")))
+        lib.write("symbol_2", pd.DataFrame({"b": range(10, 16)}, index=pd.date_range("2024-01-05", "2024-01-10")))
+        update_queries = [
+            UpdatePayload(
+                "symbol_1",
+                data=pd.DataFrame({"a": range(-10, 0)}, index=pd.date_range("2024-01-01", "2024-01-10")),
+                date_range=(pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02"))
+            ),
+            UpdatePayload(
+                "symbol_2",
+                data=pd.DataFrame({"b": range(100, 120)}, index=pd.date_range("2024-01-01", "2024-01-20")),
+                date_range=(pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-11"))
+            )
+        ]
+        lib.update_batch(update_queries)
+        symbol1, symbol2 = lib.read("symbol_1").data, lib.read("symbol_2").data
+        expected1 = pd.DataFrame({"a": [0, -9, 2, 3, 4]}, index=pd.date_range("2024-01-01", "2024-01-05"))
+        assert_frame_equal(symbol1, expected1)
+        expected2 = pd.DataFrame({"b": range(104, 111)}, index=pd.date_range("2024-01-05", "2024-01-11"))
+        assert_frame_equal(symbol2, expected2)
+
+    def test_metadata(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("symbol_1", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])), metadata={"meta": "data"})
+        lib.write("symbol_2", pd.DataFrame({"b": [2]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])), metadata={"meta": [1]})
+        update_result = lib.update_batch([
+            UpdatePayload("symbol_1", pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])), metadata={1, 2}),
+            UpdatePayload("symbol_2", pd.DataFrame({"b": [3]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])), metadata=[4, 5])
+        ])
+        assert update_result[0].metadata == {1, 2}
+        assert lib.read("symbol_1").metadata == {1, 2}
+        assert update_result[1].metadata == [4, 5]
+        assert lib.read("symbol_2").metadata == [4, 5]
+
     def test_empty_payload_list(self, lmdb_library):
         lib = lmdb_library
         symbol_1_data = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")]))
