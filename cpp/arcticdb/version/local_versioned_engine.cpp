@@ -518,7 +518,7 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
     }
     auto descriptors = collectAll(descriptor_futures).get();
     const TransformBatchResultsFlags flags({{TransformBatchResultsFlags::THROW_ON_ERROR, *read_options.batch_throw_on_error_}});
-    return transform_batch_items_or_throw(std::move(descriptors), stream_ids, flags);
+    return transform_batch_items_or_throw(std::move(descriptors), stream_ids, flags, version_queries);
 }
 
 void LocalVersionedEngine::flush_version_map() {
