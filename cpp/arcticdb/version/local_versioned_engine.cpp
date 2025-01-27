@@ -1196,7 +1196,6 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
     return schedule_remaining_iterations(std::move(entity_ids_vec_fut), clauses_ptr, true)
     .thenValueInline([component_manager](std::vector<EntityId>&& processed_entity_ids) {
         auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
-        // TODO: Handle output descriptors
         return collect_segments(std::move(proc));
     }).thenValueInline([store=store(), &handler_data, pipeline_context](std::vector<SliceAndKey>&& slice_and_keys) {
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(!slice_and_keys.empty(), "No slice and keys in batch_read_with_join_internal");
@@ -1212,29 +1211,6 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
                                       shared_data.buffers()}};
         });
     }).get();
-
-//    return folly::collect(symbol_entities_futs)
-//            .via(&async::cpu_executor())
-//            .thenValue([](std::vector<std::vector<EntityId>>&& entity_id_vectors) {
-//        return flatten_entities(std::move(entity_id_vectors));
-//    }).thenValueInline([component_manager](std::vector<EntityId>&& processed_entity_ids) {
-//        auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
-//        // TODO: Handle output descriptors
-//        return collect_segments(std::move(proc));
-//    }).thenValueInline([store=store(), &handler_data, pipeline_context](std::vector<SliceAndKey>&& slice_and_keys) {
-//        internal::check<ErrorCode::E_ASSERTION_FAILURE>(!slice_and_keys.empty(), "No slice and keys in batch_read_with_join_internal");
-//        pipeline_context->set_descriptor(slice_and_keys[0].segment(store).descriptor());
-//        return prepare_output_frame(std::move(slice_and_keys), pipeline_context, store, ReadOptions{}, handler_data);
-//    }).thenValueInline([&handler_data, pipeline_context, shared_data](SegmentInMemory&& frame) mutable {
-//        return reduce_and_fix_columns(pipeline_context, frame, ReadOptions{}, handler_data)
-//        .thenValue([pipeline_context, frame, shared_data](auto&&) mutable {
-//            return MultiSymbolReadOutput{{},
-//                                     {frame,
-//                                      timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_),
-//                                      {},
-//                                      shared_data.buffers()}};
-//        });
-//    }).get();
 }
 
 void LocalVersionedEngine::write_version_and_prune_previous(

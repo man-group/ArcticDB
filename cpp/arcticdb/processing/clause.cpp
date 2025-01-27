@@ -1233,7 +1233,6 @@ std::vector<std::vector<EntityId>> ConcatClause::structure_for_processing(std::v
     size_t prev_range_end{0};
     std::vector<std::shared_ptr<RowRange>> new_row_ranges;
     new_row_ranges.reserve(old_row_ranges.size());
-    // TODO: Handle column-slicing
     for (const auto& old_range: old_row_ranges) {
         auto new_range = std::make_shared<RowRange>();
         if (first_range) {

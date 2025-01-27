@@ -773,10 +773,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                  std::vector<ClauseVariant> post_join_clauses
                  ){
                  auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
-                 // TODO: Remove duplication with ReadQuery interface
                  post_join_clauses = plan_query(std::move(post_join_clauses));
                  std::vector<std::shared_ptr<Clause>> _clauses;
-                 // TODO: Verify at some point that this is a multi-symbol clause
                  util::variant_match(
                          join,
                          [&](auto&& clause) {_clauses.emplace_back(std::make_shared<Clause>(*clause));}
