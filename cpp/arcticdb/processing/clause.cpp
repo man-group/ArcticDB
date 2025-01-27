@@ -1227,7 +1227,7 @@ std::vector<std::vector<EntityId>> ConcatClause::structure_for_processing(std::v
     if (entity_ids.empty()) {
         return {};
     }
-    auto [segments, old_row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
+    auto [old_row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
 
     // Similar logic to RowRangeClause::structure_for_processing but as input row ranges come from multiple symbols it is slightly different
     bool first_range{true};
