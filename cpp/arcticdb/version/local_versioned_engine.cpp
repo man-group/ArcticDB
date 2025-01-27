@@ -1166,15 +1166,14 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
     auto pipeline_context = std::make_shared<PipelineContext>();
     auto norm_meta_mtx = std::make_shared<std::mutex>();
     DecodePathData shared_data;
-    for (auto idx = 0UL; idx < opt_index_key_futs.size(); ++idx) {
+    for (auto&& [idx, opt_index_key_fut]: folly::enumerate(opt_index_key_futs)) {
         symbol_entities_futs.emplace_back(
-                std::move(opt_index_key_futs[idx]).thenValue([store = store(),
-                                                              idx,
-                                                              read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
-                                                              &read_options,
-                                                              &component_manager,
-                                                              pipeline_context,
-                                                              norm_meta_mtx](auto&& opt_index_key) mutable {
+                std::move(opt_index_key_fut).thenValue([store = store(),
+                                                        read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
+                                                        &read_options,
+                                                        &component_manager,
+                                                        pipeline_context,
+                                                        norm_meta_mtx](auto&& opt_index_key) mutable {
                     std::variant<VersionedItem, StreamId> version_info;
                     internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_index_key.has_value(), "batch_read_with_join_internal not supported with non-indexed data");
                     auto index_key_seg = store->read_sync(*opt_index_key).second;
