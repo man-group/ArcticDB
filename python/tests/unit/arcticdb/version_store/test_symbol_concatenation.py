@@ -40,8 +40,8 @@ def test_symbol_concat_basic(lmdb_library_factory):
 
 
 def test_symbol_concat_column_sliced(lmdb_library_factory):
-    # lib = lmdb_library_factory(LibraryOptions(columns_per_segment=2))
-    lib = lmdb_library_factory()
+    lib = lmdb_library_factory(LibraryOptions(columns_per_segment=2))
+    # lib = lmdb_library_factory()
     df_1 = pd.DataFrame(
         {
             "col1": np.arange(3, dtype=np.int64),

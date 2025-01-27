@@ -1223,42 +1223,79 @@ ConcatClause::ConcatClause() {
 }
 
 std::vector<std::vector<EntityId>> ConcatClause::structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
-    auto entity_ids = flatten_entities(std::move(entity_ids_vec));
-    if (entity_ids.empty()) {
-        return {};
-    }
-    auto [old_row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
-
     // Similar logic to RowRangeClause::structure_for_processing but as input row ranges come from multiple symbols it is slightly different
+    std::vector<RangesAndEntity> ranges_and_entities;
     bool first_range{true};
     size_t prev_range_end{0};
-    std::vector<std::shared_ptr<RowRange>> new_row_ranges;
-    new_row_ranges.reserve(old_row_ranges.size());
-    for (const auto& old_range: old_row_ranges) {
-        auto new_range = std::make_shared<RowRange>();
-        if (first_range) {
-            // Make the first row-range start from zero
-            new_range->first = 0;
-            new_range->second = old_range->diff();
-            first_range = false;
-        } else {
-            new_range->first = prev_range_end;
-            new_range->second = new_range->first + old_range->diff();
+    for (const auto& entity_ids: entity_ids_vec) {
+        auto [old_row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
+        // Map from old row ranges WITHIN THIS SYMBOL to new ones
+        std::map<RowRange, RowRange> row_range_mapping;
+        for (const auto& row_range: old_row_ranges) {
+            // Value is same as key initially
+            row_range_mapping.insert({*row_range, *row_range});
         }
-        prev_range_end = new_range->second;
-        new_row_ranges.emplace_back(std::move(new_range));
+        for (auto& [old_range, new_range]: row_range_mapping) {
+            if (first_range) {
+                // Make the first row-range start from zero
+                new_range.first = 0;
+                new_range.second = old_range.diff();
+                first_range = false;
+            } else {
+                new_range.first = prev_range_end;
+                new_range.second = new_range.first + old_range.diff();
+            }
+            prev_range_end = new_range.second;
+        }
+        std::vector<std::shared_ptr<RowRange>> new_row_ranges;
+        new_row_ranges.reserve(old_row_ranges.size());
+        for (size_t idx=0; idx<entity_ids.size(); ++idx) {
+            auto new_row_range = std::make_shared<RowRange>(row_range_mapping.at(*old_row_ranges[idx]));
+            ranges_and_entities.emplace_back(entity_ids[idx], new_row_range, col_ranges[idx]);
+            new_row_ranges.emplace_back(std::move(new_row_range));
+        }
+        component_manager_->replace_entities<std::shared_ptr<RowRange>>(entity_ids, new_row_ranges);
     }
-
-    std::vector<RangesAndEntity> ranges_and_entities;
-    ranges_and_entities.reserve(entity_ids.size());
-    for (size_t idx=0; idx<entity_ids.size(); ++idx) {
-        ranges_and_entities.emplace_back(entity_ids[idx], new_row_ranges[idx], col_ranges[idx]);
-    }
-
-    component_manager_->replace_entities<std::shared_ptr<RowRange>>(entity_ids, new_row_ranges);
-
     auto new_structure_offsets = structure_by_row_slice(ranges_and_entities);
     return offsets_to_entity_ids(new_structure_offsets, ranges_and_entities);
+
+
+//    auto entity_ids = flatten_entities(std::move(entity_ids_vec));
+//    if (entity_ids.empty()) {
+//        return {};
+//    }
+//    auto [old_row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
+//
+//
+//    bool first_range{true};
+//    size_t prev_range_end{0};
+//    std::vector<std::shared_ptr<RowRange>> new_row_ranges;
+//    new_row_ranges.reserve(old_row_ranges.size());
+//    for (const auto& old_range: old_row_ranges) {
+//        auto new_range = std::make_shared<RowRange>();
+//        if (first_range) {
+//            // Make the first row-range start from zero
+//            new_range->first = 0;
+//            new_range->second = old_range->diff();
+//            first_range = false;
+//        } else {
+//            new_range->first = prev_range_end;
+//            new_range->second = new_range->first + old_range->diff();
+//        }
+//        prev_range_end = new_range->second;
+//        new_row_ranges.emplace_back(std::move(new_range));
+//    }
+//
+//    std::vector<RangesAndEntity> ranges_and_entities;
+//    ranges_and_entities.reserve(entity_ids.size());
+//    for (size_t idx=0; idx<entity_ids.size(); ++idx) {
+//        ranges_and_entities.emplace_back(entity_ids[idx], new_row_ranges[idx], col_ranges[idx]);
+//    }
+//
+//    component_manager_->replace_entities<std::shared_ptr<RowRange>>(entity_ids, new_row_ranges);
+//
+//    auto new_structure_offsets = structure_by_row_slice(ranges_and_entities);
+//    return offsets_to_entity_ids(new_structure_offsets, ranges_and_entities);
 }
 
 std::vector<EntityId> ConcatClause::process(std::vector<EntityId>&& entity_ids) const {
