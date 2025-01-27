@@ -9,7 +9,6 @@
 #include <aws/core/utils/memory/stl/AWSString.h>
 #include <aws/core/utils/logging/DefaultLogSystem.h>
 #include <aws/core/utils/logging/AWSLogging.h>
-#include <aws/core/utils/logging/ConsoleLogSystem.h>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/ec2_utils.hpp>
@@ -30,9 +29,6 @@ S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level) :
               "v", log_level, "aws_sdk_"));
     }
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Begin initializing AWS API");
-    using namespace Aws::Utils::Logging;
-    options_.loggingOptions.logLevel = LogLevel::Debug;
-    options_.loggingOptions.logger_create_fn = [] { return std::make_shared<ConsoleLogSystem>(LogLevel::Trace); };
     Aws::InitAPI(options_);
     // A workaround for https://github.com/aws/aws-sdk-cpp/issues/1410.
     if (is_running_inside_aws_fast()) {

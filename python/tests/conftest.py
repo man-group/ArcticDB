@@ -42,7 +42,7 @@ from arcticdb.storage_fixtures.s3 import (
 from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb_ext.storage import NativeVariantStorage
-from arcticdb_ext import set_config_int, get_config_int
+from arcticdb_ext import set_config_int
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
 from arcticdb.arctic import Arctic
