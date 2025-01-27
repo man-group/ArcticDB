@@ -78,6 +78,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           configuration: build_tooling/change_log.json
+          ignorePreReleases: "true"
 
       - name: Release
         uses: softprops/action-gh-release@v1
