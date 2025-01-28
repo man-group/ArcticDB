@@ -21,6 +21,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
+from arcticdb.toolbox.query_stats import QueryStatsTools 
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError
 import pandas as pd
@@ -518,11 +519,11 @@ class AdminTools:
     def __init__(self, nvs):
         self._nvs = nvs
 
-    def get_stats(self):
-        raise NotImplementedError
+    def get_query_stats(self):
+        return QueryStatsTools(self._nvs)
     
-    def reset_stats(self):
-        raise NotImplementedError
+    def reset_query_stats(self):
+        QueryStatsTools.reset_stats()
 
 
 class Library:
