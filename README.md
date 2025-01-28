@@ -43,7 +43,7 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 
 ### Prebuilt binary availability
 
-|                       | PyPI (Python 3.6 - 3.11) | conda-forge (Python 3.8 - 3.11) |
+|                       | PyPI (Python 3.7 - 3.13) | conda-forge (Python 3.9 - 3.13) |
 | --------------------- | - | - |
 | Linux (Intel/AMD)     | ✔️ | ✔️ |
 | Windows (Intel/AMD)   | ✔️ | ➖ |
@@ -164,6 +164,7 @@ Please see version conversion dates in the below table:
 | 4.5 | Business Source License 1.1 | Aug 14, 2026 |
 | 5.0 | Business Source License 1.1 | Oct 31, 2026 |
 | 5.1 | Business Source License 1.1 | Nov 15, 2026 |
+| 5.2 | Business Source License 1.1 | Jan 27, 2027 |
 ## Code of Conduct
 
 [Code of Conduct](https://github.com/man-group/ArcticDB/blob/master/CODE_OF_CONDUCT.md)
