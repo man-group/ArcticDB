@@ -193,6 +193,16 @@ def old_venv(request, tmp_path):
         yield old_venv
 
 
+@pytest.fixture
+def v1_venv(tmp_path):
+    version = "1.6.2"
+    path = os.path.join("venvs", tmp_path, version)
+    compat_dir = os.path.dirname(os.path.abspath(__file__))
+    requirements_file = os.path.join(compat_dir, f"requirements-{version}.txt")
+    with Venv(path, requirements_file, version) as old_venv:
+        yield old_venv
+
+
 @pytest.fixture(
     params=[
         "lmdb",
@@ -214,7 +224,7 @@ def arctic_uri(request):
         return storage_fixture.arctic_uri
 
 
-@pytest.fixture()
+@pytest.fixture
 def old_venv_and_arctic_uri(old_venv, arctic_uri):
     if arctic_uri.startswith("mongo") and "1.6.2" in old_venv.version:
         pytest.skip("Mongo storage backend is not supported in 1.6.2")
