@@ -470,7 +470,7 @@ public:
         auto entry = std::make_shared<VersionMapEntry>();
         try {
             entry = check_reload(store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__);
-        } catch (const storage::NoSuchKeyException& e) {
+        } catch (const storage::KeyNotFoundException& e) {
             log::version().debug("Failed to load version entry for symbol {} in overwrite_symbol_tree, creating new entry, exception: {}", stream_id, e.what());
         }
         auto old_entry = *entry;
