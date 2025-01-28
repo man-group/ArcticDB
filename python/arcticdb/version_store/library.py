@@ -21,7 +21,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
-from arcticdb.toolbox.query_stats import QueryStatsTools 
+from arcticdb.toolbox.query_stats import QueryStatsTools
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError
 import pandas as pd
