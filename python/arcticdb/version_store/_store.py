@@ -141,7 +141,7 @@ def _normalize_dt_range(dtr: DateRangeInput) -> _IndexRange:
     return _IndexRange(start.value, end.value)
 
 
-def _handle_categorical_columns(symbol, data, throw=True):
+def _handle_categorical_columns(symbol, data, throw=True, operation_supports_categoricals=False):
     if isinstance(data, (pd.DataFrame, pd.Series)):
         categorical_columns = []
         if isinstance(data, pd.DataFrame):
@@ -157,9 +157,9 @@ def _handle_categorical_columns(symbol, data, throw=True):
                 "Symbol: {}\nDataFrame/Series contains categorical data, cannot append or update\nCategorical"
                 " columns: {}".format(symbol, categorical_columns)
             )
-            if throw:
+            if throw and not operation_supports_categoricals:
                 raise ArcticDbNotYetImplemented(message)
-            else:
+            elif not throw and not operation_supports_categoricals:
                 log.warn(message)
 
 
@@ -491,7 +491,7 @@ class NativeVersionStore:
         **kwargs,
     ):
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
-        _handle_categorical_columns(symbol, data, True)
+        _handle_categorical_columns(symbol, data, True, operation_supports_categoricals=True)
         udm, item, norm_meta = self._try_normalize(
             symbol,
             data,
@@ -602,7 +602,7 @@ class NativeVersionStore:
         sparsify_floats = kwargs.get("sparsify_floats", False)
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
 
-        _handle_categorical_columns(symbol, data, False)
+        _handle_categorical_columns(symbol, data, False, operation_supports_categoricals=True)
 
         log.debug(
             "Writing with pickle_on_failure={}, prune_previous_version={}, recursive_normalizers={}",
@@ -843,11 +843,7 @@ class NativeVersionStore:
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
         )
 
-        if date_range is not None:
-            start, end = normalize_dt_range_to_ts(date_range)
-            update_query.row_filter = _IndexRange(start.value, end.value)
-            data = restrict_data_to_date_range_only(data, start=start, end=end)
-
+        data = self._apply_date_range_to_update_query(data, date_range, update_query)
         _handle_categorical_columns(symbol, data)
 
         udm, item, norm_meta = self._try_normalize(
@@ -866,6 +862,57 @@ class NativeVersionStore:
                     symbol, update_query, item, norm_meta, udm, upsert, dynamic_schema, prune_previous_version
                 )
             return self._convert_thin_cxx_item_to_python(vit, metadata)
+
+    def _apply_date_range_to_update_query(
+        self,
+        data: TimeSeriesType,
+        date_range: Optional[DateRangeInput],
+        update_query: _PythonVersionStoreUpdateQuery
+    ) -> TimeSeriesType:
+        """
+        Parameters
+        ----------
+        data: `TimeSeriesType`
+            Time series to filter by date range
+        date_range: `Optional[DateRangeInput]`
+            The interval used to filter data
+        update_query: `_PythonVersionStoreUpdateQuery`
+            The query passed to the update function. Will be modified if date_range is not None
+
+        Returns
+        -------
+        Data filtered by date_range if date_range is not None or unmodified data otherwise
+        """
+        if date_range is not None:
+            start, end = normalize_dt_range_to_ts(date_range)
+            update_query.row_filter = _IndexRange(start.value, end.value)
+            return restrict_data_to_date_range_only(data, start=start, end=end)
+        return data
+
+    def _batch_update_internal(
+        self,
+        symbols: List[str],
+        data_vector: List[TimeSeriesType],
+        metadata_vector: List[Any],
+        date_range_vector: List[Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]]],
+        prune_previous_version: bool = None,
+        upsert: bool = False
+    ):
+        update_queries = [_PythonVersionStoreUpdateQuery() for _ in range(len(symbols))]
+        for i in range(len(data_vector)):
+            data_vector[i] = self._apply_date_range_to_update_query(data_vector[i], date_range_vector[i], update_queries[i])
+        proto_cfg = self._lib_cfg.lib_desc.version.write_options
+        prune_previous_version = self.resolve_defaults(
+            "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
+        )
+        # Batch update is available only via V2 Library API. Dynamic Strings are always on in it
+        dynamic_strings = True
+        udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
+            symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_update)
+        cxx_versioned_items = self.version_store.batch_update(
+            symbols, items, norm_metas, udms, update_queries, prune_previous_version, upsert
+        )
+        return self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
 
     def create_column_stats(
         self, symbol: str, column_stats: Dict[str, Set[str]], as_of: Optional[VersionQueryInput] = None
@@ -1273,6 +1320,44 @@ class NativeVersionStore:
             **kwargs,
         )
 
+    def _generate_batch_vectors_for_modifying_operations(
+        self,
+        symbols: List[str],
+        data_vector: List[Any],
+        metadata_vector: Optional[List[Any]],
+        dynamic_strings: bool,
+        pickle_on_failure: bool,
+        norm_failure_msg: str,
+        operation_supports_categoricals: bool=False
+    ) -> Tuple[List, List, List, List]:
+        # metadata_vector used to be type-hinted as an Iterable, so handle this case in case anyone is relying on it
+        if metadata_vector is None:
+            metadata_vector = len(symbols) * [None]
+        else:
+            metadata_vector = list(metadata_vector)
+
+        for idx in range(len(symbols)):
+            _handle_categorical_columns(
+                symbols[idx], data_vector[idx], operation_supports_categoricals=operation_supports_categoricals)
+
+        udms = []
+        items = []
+        norm_metas = []
+        for idx in range(len(symbols)):
+            udm, item, norm_meta = self._try_normalize(
+                symbols[idx],
+                data_vector[idx],
+                metadata_vector[idx],
+                pickle_on_failure,
+                dynamic_strings,
+                None,
+                norm_failure_msg,
+            )
+            udms.append(udm)
+            items.append(item)
+            norm_metas.append(norm_meta)
+        return udms, items, norm_metas, metadata_vector
+
     def _batch_write_internal(
         self,
         symbols: List[str],
@@ -1288,47 +1373,25 @@ class NativeVersionStore:
         prune_previous_version = self.resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
-
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         pickle_on_failure = self.resolve_defaults(
             "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
         )
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
 
-        # metadata_vector used to be type-hinted as an Iterable, so handle this case in case anyone is relying on it
-        if metadata_vector is None:
-            metadata_vector = len(symbols) * [None]
-        else:
-            metadata_vector = list(metadata_vector)
-
-        for idx in range(len(symbols)):
-            _handle_categorical_columns(symbols[idx], data_vector[idx], False)
-
-        normalized_infos = [
-            self._try_normalize(
-                symbols[idx],
-                data_vector[idx],
-                metadata_vector[idx],
-                pickle_on_failure,
-                dynamic_strings,
-                None,
-                norm_failure_options_msg,
-            )
-            for idx in range(len(symbols))
-        ]
-        udms = [info[0] for info in normalized_infos]
-        items = [info[1] for info in normalized_infos]
-        norm_metas = [info[2] for info in normalized_infos]
+        udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
+            symbols,
+            data_vector,
+            metadata_vector,
+            dynamic_strings,
+            pickle_on_failure,
+            norm_failure_options_msg,
+            operation_supports_categoricals=True
+        )
         cxx_versioned_items = self.version_store.batch_write(
             symbols, items, norm_metas, udms, prune_previous_version, validate_index, throw_on_error
         )
-        write_results = []
-        for idx, result in enumerate(cxx_versioned_items):
-            if isinstance(result, DataError):
-                write_results.append(result)
-            else:
-                write_results.append(self._convert_thin_cxx_item_to_python(result, metadata_vector[idx]))
-        return write_results
+        return self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
 
     def _batch_write_metadata_to_versioned_items(
         self, symbols: List[str], metadata_vector: List[Any], prune_previous_version, throw_on_error
@@ -1455,34 +1518,9 @@ class NativeVersionStore:
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
-
-        # metadata_vector used to be type-hinted as an Iterable, so handle this case in case anyone is relying on it
-        if metadata_vector is None:
-            metadata_vector = len(symbols) * [None]
-        else:
-            metadata_vector = list(metadata_vector)
-
-        for idx in range(len(symbols)):
-            _handle_categorical_columns(symbols[idx], data_vector[idx])
-
-        normalized_infos = [
-            self._try_normalize(
-                symbols[idx],
-                data_vector[idx],
-                metadata_vector[idx],
-                False,
-                dynamic_strings,
-                None,
-                self.norm_failure_options_msg_append,
-            )
-            for idx in range(len(symbols))
-        ]
-        udms = [info[0] for info in normalized_infos]
-        items = [info[1] for info in normalized_infos]
-        norm_metas = [info[2] for info in normalized_infos]
-
+        udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
+            symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_append)
         write_if_missing = kwargs.get("write_if_missing", True)
-
         cxx_versioned_items = self.version_store.batch_append(
             symbols,
             items,
@@ -1493,13 +1531,20 @@ class NativeVersionStore:
             write_if_missing,
             throw_on_error,
         )
-        append_results = []
+        return self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
+
+    def _convert_cxx_batch_results_to_python(
+        self,
+        cxx_versioned_items,
+        metadata_vector
+    ):
+        results = []
         for idx, result in enumerate(cxx_versioned_items):
             if isinstance(result, DataError):
-                append_results.append(result)
+                results.append(result)
             else:
-                append_results.append(self._convert_thin_cxx_item_to_python(result, metadata_vector[idx]))
-        return append_results
+                results.append(self._convert_thin_cxx_item_to_python(result, metadata_vector[idx]))
+        return results
 
     def batch_restore_version(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None, **kwargs
