@@ -512,6 +512,18 @@ class DevTools:
 
     def library_tool(self):
         return self._nvs.library_tool()
+    
+
+class AdminTools:
+    def __init__(self, nvs):
+        self._nvs = nvs
+
+    def get_stats(self):
+        raise NotImplementedError
+    
+    def reset_stats(self):
+        raise NotImplementedError
+
 
 class Library:
     """
@@ -544,6 +556,7 @@ class Library:
         self._nvs = nvs
         self._nvs._normalizer.df._skip_df_consolidation = True
         self._dev_tools = DevTools(nvs)
+        self._admin_tools = AdminTools(nvs)
 
     def __repr__(self):
         return "Library(%s, path=%s, storage=%s)" % (
