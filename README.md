@@ -165,6 +165,7 @@ Please see version conversion dates in the below table:
 | 5.0 | Business Source License 1.1 | Oct 31, 2026 |
 | 5.1 | Business Source License 1.1 | Nov 15, 2026 |
 | 5.2 | Business Source License 1.1 | Jan 27, 2027 |
+
 ## Code of Conduct
 
 [Code of Conduct](https://github.com/man-group/ArcticDB/blob/master/CODE_OF_CONDUCT.md)
