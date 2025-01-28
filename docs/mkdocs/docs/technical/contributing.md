@@ -13,7 +13,7 @@ You must use your real name (no pseudonyms, and no anonymous contributions).
 Signed-Off By: Random J. Developer <random@developer.example.org>. By including this sign-off line I agree to the terms of the Contributor License Agreement.
 ```
 
-**Corporations** - For corporations who wish to make contributions to ArcticDB, please contact arcticdb@man.com and
+**Corporations** - For corporations who wish to make contributions to ArcticDB, please contact info@arcticdb.io and
 we will arrange for the CLA to be sent to the signing authority within your corporation.
 
 Docker Quickstart
