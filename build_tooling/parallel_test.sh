@@ -29,5 +29,5 @@ else
         --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
         --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
         --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
-        "$ARCTICDB_PYTEST_ARGS" 2>&1
+        $ARCTICDB_PYTEST_ARGS 2>&1
 fi
