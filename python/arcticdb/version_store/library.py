@@ -21,6 +21,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
+from arcticdb.toolbox.query_stats import QueryStatsTools
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError
 import pandas as pd
@@ -512,6 +513,18 @@ class DevTools:
 
     def library_tool(self):
         return self._nvs.library_tool()
+    
+
+class AdminTools:
+    def __init__(self, nvs):
+        self._nvs = nvs
+
+    def get_query_stats(self):
+        return QueryStatsTools(self._nvs)
+    
+    def reset_query_stats(self):
+        QueryStatsTools.reset_stats()
+
 
 class Library:
     """
@@ -544,6 +557,7 @@ class Library:
         self._nvs = nvs
         self._nvs._normalizer.df._skip_df_consolidation = True
         self._dev_tools = DevTools(nvs)
+        self._admin_tools = AdminTools(nvs)
 
     def __repr__(self):
         return "Library(%s, path=%s, storage=%s)" % (
@@ -2378,3 +2392,15 @@ class Library:
     def name(self):
         """The name of this library."""
         return self._nvs.name()
+
+
+    def get_admin_tools(self) -> AdminTools:
+        """
+        Returns the admin tools for this library.
+
+        Returns
+        -------
+        AdminTools
+            Admin tools object for this library.
+        """
+        return self._admin_tools
