@@ -360,16 +360,16 @@ struct PipelineContext;
 }
 
 size_t adjust_slice_rowcounts(
-    std::vector<pipelines::SliceAndKey> & slice_and_keys, const std::optional<size_t>& first_row = std::nullopt);
+    std::vector<pipelines::SliceAndKey> & slice_and_keys,
+    const std::optional<size_t>& first_row = std::nullopt);
 
-void adjust_slice_rowcounts(
-    const std::shared_ptr<pipelines::PipelineContext>& pipeline_context);
+void adjust_slice_rowcounts(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context);
 
-size_t get_slice_rowcounts(
-    std::vector<pipelines::SliceAndKey>& slice_and_keys);
+size_t get_slice_rowcounts(std::vector<pipelines::SliceAndKey>& slice_and_keys);
 
-std::pair<size_t, size_t> offset_and_row_count(
-    const std::shared_ptr<pipelines::PipelineContext>& context);
+std::pair<size_t, size_t> offset_and_row_count(const std::shared_ptr<pipelines::PipelineContext>& context);
+
+std::vector<size_t> output_block_row_counts(const std::shared_ptr<pipelines::PipelineContext>& context);
 
 bool index_is_not_timeseries_or_is_sorted_ascending(const pipelines::InputTensorFrame& frame);
 

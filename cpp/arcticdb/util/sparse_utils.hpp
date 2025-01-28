@@ -12,7 +12,7 @@
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/util/constants.hpp>
-#include <arcticdb/util/buffer_holder.hpp>
+#include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/column_store/column_data.hpp>
 
 #include <arcticdb/column_store/chunked_buffer.hpp>

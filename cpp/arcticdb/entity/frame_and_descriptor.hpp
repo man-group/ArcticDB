@@ -8,7 +8,7 @@
 #pragma once
 
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <arcticdb/util/buffer_holder.hpp>
+#include <arcticdb/util/decode_path_data.hpp>
 
 namespace arcticdb {
 
@@ -16,7 +16,6 @@ struct FrameAndDescriptor {
     SegmentInMemory frame_;
     TimeseriesDescriptor desc_;
     std::vector<AtomKey> keys_;
-    std::shared_ptr<BufferHolder> buffers_;
 };
 
 } //namespace arcticdb

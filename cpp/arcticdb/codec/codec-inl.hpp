@@ -87,6 +87,7 @@ std::size_t decode_ndarray(
 
         const auto data_size = encoding_sizes::data_uncompressed_size(field);
         const bool is_empty_array = (data_size == 0) && type_desc_tag.dimension() > Dimension::Dim0;
+        ARCTICDB_TRACE(log::version(), "Decoding ndarray of size {}", data_size);
         // Empty array types will not contain actual data, however, its sparse map should be loaded
         // so that we can distinguish None from []
         if(data_size == 0 && !is_empty_array) {

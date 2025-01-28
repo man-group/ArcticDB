@@ -57,6 +57,7 @@ struct MemBlock {
     }
 
     ~MemBlock() {
+        magic_.check();
         if(owns_external_data_) {
             util::check(is_external(), "Cannot free inline allocated block");
             if(external_data_ != nullptr) {
@@ -103,7 +104,7 @@ struct MemBlock {
     void copy_from(const uint8_t *src, size_t bytes, size_t pos) {
         arcticdb::util::check_arg(pos + bytes <= capacity_, "Copying more bytes: {} is greater than capacity {}", bytes,
                                  capacity_);
-        memcpy(data_ + pos, src, bytes);
+        memcpy(data() + pos, src, bytes);
     }
 
     uint8_t &operator[](size_t pos) {
@@ -114,10 +115,13 @@ struct MemBlock {
 
     [[nodiscard]] const uint8_t *data() const { return is_external() ? external_data_ : data_; }
 
+    [[nodiscard]] uint8_t *data() { return is_external() ? external_data_ : data_; }
+
     [[nodiscard]] const uint8_t* release() {
         util::check(is_external() && owns_external_data_, "Cannot release inlined or external data pointer");
         auto* tmp = external_data_;
         external_data_ = nullptr;
+        owns_external_data_ = false;
         return tmp;
     }
 
