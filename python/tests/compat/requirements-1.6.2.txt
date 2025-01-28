@@ -1,6 +1,6 @@
 arcticdb==1.6.2
 numpy <2
-pandas
+pandas <2
 attrs
 protobuf <5
 msgpack >=0.5.0
