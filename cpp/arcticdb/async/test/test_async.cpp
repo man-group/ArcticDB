@@ -141,6 +141,99 @@ TEST(Async, CollectWithThrow) {
    ARCTICDB_DEBUG(log::version(), "Collect returned");
 }
 
+struct GaugeTask : arcticdb::async::BaseTask {
+    std::atomic_uint64_t& executing_tasks_;
+    // Most tasks observed running at once.
+    std::atomic_uint64_t& max_executing_tasks_;
+
+    explicit GaugeTask(
+        std::atomic_uint64_t& gauge,
+        std::atomic_uint64_t& max_tasks) :
+        executing_tasks_(gauge), max_executing_tasks_(max_tasks) {
+
+    }
+
+    folly::Unit operator()() const {
+        auto total_tasks = executing_tasks_.fetch_add(1) + 1;
+
+        // Atomic std::max to update max_tasks_
+        for(uint64_t observed_max=max_executing_tasks_;
+            observed_max < total_tasks
+            && !max_executing_tasks_.compare_exchange_strong(observed_max, total_tasks, std::memory_order_acquire); );
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        executing_tasks_.fetch_sub(1);
+
+        return folly::Unit{};
+    }
+};
+
+TEST(Async, BlockingCpuQueueSmallQueue) {
+    ScopedConfig reload_interval("VersionStore.BlockingCPUQueueSize", 1);
+    // 2 threads in the blocking pool, should never have more than 2 tasks executing at once.
+    async::TaskScheduler sched{20, 20, 2};
+
+    std::atomic_uint64_t executing_tasks{0};
+    std::atomic_uint64_t max_executing_tasks_observed{0};
+    std::vector<folly::Future<folly::Unit>> stuff;
+    for(auto i = 0u; i < 100; ++i) {
+        stuff.push_back(sched.submit_blocking_cpu_task(GaugeTask(executing_tasks, max_executing_tasks_observed)));
+        ASSERT_LT(sched.blocking_cpu_exec().getPoolStats().totalTaskCount, 4);
+    }
+    folly::collectAll(stuff).get();
+
+    ASSERT_EQ(max_executing_tasks_observed.load(), 2);
+}
+
+TEST(Async, BlockingCpuQueueLargerQueue) {
+    ScopedConfig reload_interval("VersionStore.BlockingCPUQueueSize", 10);
+    async::TaskScheduler sched{20, 20, 2};
+
+    std::atomic_uint64_t executing_tasks{0};
+    std::atomic_uint64_t max_executing_tasks_observed{0};
+    std::vector<folly::Future<folly::Unit>> stuff;
+    for(auto i = 0u; i < 100; ++i) {
+        stuff.push_back(sched.submit_blocking_cpu_task(GaugeTask(executing_tasks, max_executing_tasks_observed)));
+        ASSERT_LT(sched.blocking_cpu_exec().getPoolStats().totalTaskCount, 15);
+    }
+    folly::collectAll(stuff).get();
+
+    ASSERT_EQ(max_executing_tasks_observed.load(), 2);
+}
+
+TEST(Async, BlockingCpuQueueDefaultQueue) {
+    // 2 threads in the blocking pool, should never have more than 2 tasks executing at once.
+    async::TaskScheduler sched{20, 20, 2};
+
+    std::atomic_uint64_t executing_tasks{0};
+    std::atomic_uint64_t max_executing_tasks_observed{0};
+    std::vector<folly::Future<folly::Unit>> stuff;
+    for(auto i = 0u; i < 100; ++i) {
+        stuff.push_back(sched.submit_blocking_cpu_task(GaugeTask(executing_tasks, max_executing_tasks_observed)));
+        // The size bound on the queue is a bit imprecise, can have a few more tasks than the queue size live at once
+        ASSERT_LT(sched.blocking_cpu_exec().getPoolStats().totalTaskCount, 10);
+    }
+    folly::collectAll(stuff).get();
+
+    ASSERT_EQ(max_executing_tasks_observed.load(), 2);
+}
+
+TEST(Async, BlockingCpuQueueDefaultQueueMoreThreads) {
+    // 15 threads in the blocking pool
+    async::TaskScheduler sched{20, 20, 15};
+
+    std::atomic_uint64_t executing_tasks{0};
+    std::atomic_uint64_t max_executing_tasks_observed{0};
+    std::vector<folly::Future<folly::Unit>> stuff;
+    for(auto i = 0u; i < 500; ++i) {
+        stuff.push_back(sched.submit_blocking_cpu_task(GaugeTask(executing_tasks, max_executing_tasks_observed)));
+        ASSERT_LT(sched.blocking_cpu_exec().getPoolStats().totalTaskCount, 60);
+    }
+    folly::collectAll(stuff).get();
+
+    ASSERT_EQ(max_executing_tasks_observed.load(), 15);
+}
+
 using IndexSegmentReader = int;
 
 int get_index_segment_reader_impl(arcticdb::StreamId id) {

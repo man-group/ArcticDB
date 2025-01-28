@@ -166,7 +166,7 @@ inline auto get_default_num_cpus([[maybe_unused]] const std::string& cgroup_fold
 }
 
 /*
- * Possible areas of inprovement in the future:
+ * Possible areas of improvement in the future:
  * 1/ Task/op decoupling: push task and then use strategy to implement smart batching to
  * amortize costs wherever possible
  * 2/ Worker thread Affinity - would better locality improve throughput by keeping hot structure in
@@ -179,14 +179,31 @@ class TaskScheduler {
     using CPUSchedulerType = folly::FutureExecutor<folly::CPUThreadPoolExecutor>;
     using IOSchedulerType = folly::FutureExecutor<folly::IOThreadPoolExecutor>;
 
-     explicit TaskScheduler(const std::optional<size_t>& cpu_thread_count = std::nullopt, const std::optional<size_t>& io_thread_count = std::nullopt) :
+    /**
+     * The blocking CPU pool is used in a few places to control the size of work queues when the tasks on the queue
+     * consume a lot of memory. We may wish to completely replace the CPU queue with the blocking version in future
+     * after trialling the blocking version.
+     *
+     * Folly dynamically creates and removes threads from the CPU pools as they are needed (by default).
+     */
+    explicit TaskScheduler(
+        const std::optional<size_t>& cpu_thread_count = std::nullopt,
+        const std::optional<size_t>& io_thread_count = std::nullopt,
+        const std::optional<size_t>& blocking_cpu_thread_count = std::nullopt) :
         cgroup_folder_("/sys/fs/cgroup"),
         cpu_thread_count_(cpu_thread_count ? *cpu_thread_count : ConfigsMap::instance()->get_int("VersionStore.NumCPUThreads", get_default_num_cpus(cgroup_folder_))),
+        blocking_cpu_thread_count_(blocking_cpu_thread_count ? *blocking_cpu_thread_count : ConfigsMap::instance()->get_int("VersionStore.NumBlockingCPUThreads", cpu_thread_count_)),
         io_thread_count_(io_thread_count ? *io_thread_count : ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", (int) (cpu_thread_count_ * 1.5))),
-        cpu_exec_(cpu_thread_count_, std::make_shared<InstrumentedNamedFactory>("CPUPool")) ,
-        io_exec_(io_thread_count_,  std::make_shared<InstrumentedNamedFactory>("IOPool")){
-        util::check(cpu_thread_count_ > 0 && io_thread_count_ > 0, "Zero IO or CPU threads: {} {}", io_thread_count_, cpu_thread_count_);
-        ARCTICDB_RUNTIME_DEBUG(log::schedule(), "Task scheduler created with {:d} {:d}", cpu_thread_count_, io_thread_count_);
+        cpu_exec_(cpu_thread_count_, std::make_shared<InstrumentedNamedFactory>("CPUPool")),
+        blocking_cpu_exec_(
+            blocking_cpu_thread_count_,
+            std::make_unique<folly::LifoSemMPMCQueue<folly::CPUThreadPoolExecutor::CPUTask, folly::QueueBehaviorIfFull::BLOCK>>(
+                ConfigsMap::instance()->get_int("VersionStore.BlockingCPUQueueSize", 2 * blocking_cpu_thread_count_)),
+            std::make_shared<InstrumentedNamedFactory>("CpuBlockingPool")
+            ),
+        io_exec_(io_thread_count_,  std::make_shared<InstrumentedNamedFactory>("IOPool")) {
+        util::check(cpu_thread_count_ > 0 && io_thread_count_ > 0 && blocking_cpu_thread_count_ > 0, "Zero threads in a pool: IO={} CPU={} Blocking={}", io_thread_count_, cpu_thread_count_, blocking_cpu_thread_count_);
+        ARCTICDB_RUNTIME_DEBUG(log::schedule(), "Task scheduler created with IO={:d} CPU={:d} BLOCKING={:d}", cpu_thread_count_, io_thread_count_, blocking_cpu_thread_count_);
     }
 
     template<class Task>
@@ -196,6 +213,18 @@ class TaskScheduler {
         ARCTICDB_DEBUG(log::schedule(), "{} Submitting CPU task {}: {} of {}", uintptr_t(this), typeid(task).name(), cpu_exec_.getTaskQueueSize(), cpu_exec_.kDefaultMaxQueueSize);
         std::lock_guard lock{cpu_mutex_};
         return cpu_exec_.addFuture(std::move(task));
+    }
+
+    /**
+     * Submit a task to the blocking pool. This call may block until there is space on the work queue.
+     */
+    template<class Task>
+    auto submit_blocking_cpu_task(Task &&t) {
+        auto task = std::forward<decltype(t)>(t);
+        static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only supports Task derived from BaseTask");
+        ARCTICDB_DEBUG(log::schedule(), "{} Submitting BLOCKING task {}: {} of {}", uintptr_t(this), typeid(task).name(), blocking_cpu_exec_.getTaskQueueSize(), blocking_cpu_exec_.kDefaultMaxQueueSize);
+        std::lock_guard lock{blocking_cpu_mutex_};
+        return blocking_cpu_exec_.addFuture(std::move(task));
     }
 
     template<class Task>
@@ -225,24 +254,28 @@ class TaskScheduler {
         ARCTICDB_DEBUG(log::schedule(), "Joining task scheduler");
         io_exec_.join();
         cpu_exec_.join();
+        blocking_cpu_exec_.join();
     }
 
     void stop() {
         ARCTICDB_DEBUG(log::schedule(), "Stopping task scheduler");
         cpu_exec_.stop();
         io_exec_.stop();
+        blocking_cpu_exec_.stop();
     }
 
     void set_active_threads(size_t n) {
-        ARCTICDB_RUNTIME_DEBUG(log::schedule(), "Setting CPU and IO thread pools to {} active threads", n);
+        ARCTICDB_RUNTIME_DEBUG(log::schedule(), "Setting thread pools to {} active threads", n);
         cpu_exec_.set_active_threads(n);
         io_exec_.set_active_threads(n);
+        blocking_cpu_exec_.set_active_threads(n);
     }
 
     void set_max_threads(size_t n) {
-        ARCTICDB_RUNTIME_DEBUG(log::schedule(), "Setting CPU and IO thread pools to {} max threads", n);
+        ARCTICDB_RUNTIME_DEBUG(log::schedule(), "Setting thread pools to {} max threads", n);
         cpu_exec_.set_max_threads(n);
         io_exec_.set_max_threads(n);
+        blocking_cpu_exec_.set_max_threads(n);
     }
 
     SchedulerWrapper<CPUSchedulerType>& cpu_exec() {
@@ -255,20 +288,32 @@ class TaskScheduler {
         return io_exec_;
     }
 
+    SchedulerWrapper<CPUSchedulerType>& blocking_cpu_exec() {
+        ARCTICDB_DEBUG(log::schedule(), "Getting BLOCKING executor: {}", blocking_cpu_exec_.getTaskQueueSize());
+        return blocking_cpu_exec_;
+    }
+
     void re_init() {
-        ARCTICDB_RUNTIME_DEBUG(log::schedule(), "Reinitializing task scheduler: {} {}", cpu_thread_count_, io_thread_count_);
+        ARCTICDB_RUNTIME_DEBUG(log::schedule(), "Reinitializing task scheduler: IO={} CPU={} BLOCKING={}", io_thread_count_, cpu_thread_count_, blocking_cpu_thread_count_);
         ARCTICDB_RUNTIME_DEBUG(log::schedule(), "IO exec num threads: {}", io_exec_.numActiveThreads());
         ARCTICDB_RUNTIME_DEBUG(log::schedule(), "CPU exec num threads: {}", cpu_exec_.numActiveThreads());
+        ARCTICDB_RUNTIME_DEBUG(log::schedule(), "BLOCKING exec num threads: {}", blocking_cpu_exec_.numActiveThreads());
         set_active_threads(0);
         set_max_threads(0);
         io_exec_.set_thread_factory(std::make_shared<InstrumentedNamedFactory>("IOPool"));
         cpu_exec_.set_thread_factory(std::make_shared<InstrumentedNamedFactory>("CPUPool"));
+        blocking_cpu_exec_.set_thread_factory(std::make_shared<InstrumentedNamedFactory>("CPUBlockingPool"));
         io_exec_.setNumThreads(io_thread_count_);
         cpu_exec_.setNumThreads(cpu_thread_count_);
+        blocking_cpu_exec_.setNumThreads(blocking_cpu_thread_count_);
     }
 
     size_t cpu_thread_count() const {
         return cpu_thread_count_;
+    }
+
+    size_t blocking_cpu_thread_count() const {
+        return blocking_cpu_thread_count_;
     }
 
     size_t io_thread_count() const {
@@ -278,10 +323,13 @@ class TaskScheduler {
 private:
     std::string cgroup_folder_;
     size_t cpu_thread_count_;
+    size_t blocking_cpu_thread_count_;
     size_t io_thread_count_;
     SchedulerWrapper<CPUSchedulerType> cpu_exec_;
+    SchedulerWrapper<CPUSchedulerType> blocking_cpu_exec_;
     SchedulerWrapper<IOSchedulerType> io_exec_;
     std::mutex cpu_mutex_;
+    std::mutex blocking_cpu_mutex_;
     std::mutex io_mutex_;
 };
 
@@ -299,12 +347,16 @@ auto submit_cpu_task(Task&& task) {
     return TaskScheduler::instance()->submit_cpu_task(std::forward<decltype(task)>(task));
 }
 
+template <typename Task>
+auto submit_blocking_cpu_task(Task&& task) {
+    return TaskScheduler::instance()->submit_blocking_cpu_task(std::forward<decltype(task)>(task));
+}
 
 template <typename Task>
 auto submit_io_task(Task&& task) {
     return TaskScheduler::instance()->submit_io_task(std::forward<decltype(task)>(task));
 }
 
-void print_scheduler_stats();
+void print_scheduler_stats(spdlog::level::level_enum level=spdlog::level::info);
 
 }

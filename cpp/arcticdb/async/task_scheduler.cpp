@@ -57,14 +57,18 @@ TaskSchedulerPtrWrapper::~TaskSchedulerPtrWrapper() {
     delete ptr_;
 }
 
-void print_scheduler_stats() {
+void print_scheduler_stats(spdlog::level::level_enum level) {
     auto cpu_stats = TaskScheduler::instance()->cpu_exec().getPoolStats();
-    log::schedule().info("CPU: Threads: {}\tIdle: {}\tActive: {}\tPending: {}\tTotal: {}\tMaxIdleTime: {}",
+    log::schedule().log(level, "CPU: Threads: {}\tIdle: {}\tActive: {}\tPending: {}\tTotal: {}\tMaxIdleTime: {}",
         cpu_stats.threadCount, cpu_stats.idleThreadCount, cpu_stats.activeThreadCount, cpu_stats.pendingTaskCount, cpu_stats.totalTaskCount, cpu_stats.maxIdleTime.count());
 
     auto io_stats = TaskScheduler::instance()->io_exec().getPoolStats();
-    log::schedule().info("IO: Threads: {}\tIdle: {}\tActive: {}\tPending: {}\tTotal: {}\tMaxIdleTime: {}",
+    log::schedule().log(level, "IO: Threads: {}\tIdle: {}\tActive: {}\tPending: {}\tTotal: {}\tMaxIdleTime: {}",
         io_stats.threadCount, io_stats.idleThreadCount, io_stats.activeThreadCount, io_stats.pendingTaskCount, io_stats.totalTaskCount, io_stats.maxIdleTime.count());
+
+    auto blocking_cpu_stats = TaskScheduler::instance()->blocking_cpu_exec().getPoolStats();
+    log::schedule().log(level, "Blocking CPU: Threads: {}\tIdle: {}\tActive: {}\tPending: {}\tTotal: {}\tMaxIdleTime: {}",
+                         blocking_cpu_stats.threadCount, blocking_cpu_stats.idleThreadCount, blocking_cpu_stats.activeThreadCount, blocking_cpu_stats.pendingTaskCount, blocking_cpu_stats.totalTaskCount, blocking_cpu_stats.maxIdleTime.count());
 }
 
 } // namespace arcticdb

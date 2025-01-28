@@ -48,32 +48,32 @@ auto read_and_continue(const VariantKey& key, std::shared_ptr<storage::Library> 
 template<class ClockType = util::SysClock>
 class AsyncStore : public Store {
 public:
-    AsyncStore(
-        std::shared_ptr<storage::Library> library,
-        const proto::encoding::VariantCodec &codec,
-        EncodingVersion encoding_version
-    ) :
-        library_(std::move(library)),
-        codec_(std::make_shared<proto::encoding::VariantCodec>(codec)),
-        encoding_version_(encoding_version) {
-    }
+AsyncStore(
+    std::shared_ptr<storage::Library> library,
+    const proto::encoding::VariantCodec &codec,
+    EncodingVersion encoding_version
+) :
+    library_(std::move(library)),
+    codec_(std::make_shared<proto::encoding::VariantCodec>(codec)),
+    encoding_version_(encoding_version) {
+}
 
-    folly::Future<entity::VariantKey> write(
-        stream::KeyType key_type,
-        VersionId version_id,
-        const StreamId &stream_id,
-        IndexValue start_index,
-        IndexValue end_index,
-        SegmentInMemory &&segment) override {
+folly::Future<entity::VariantKey> write(
+    stream::KeyType key_type,
+    VersionId version_id,
+    const StreamId &stream_id,
+    IndexValue start_index,
+    IndexValue end_index,
+    SegmentInMemory &&segment) override {
 
-        util::check(segment.descriptor().id() == stream_id, "Descriptor id mismatch in atom key {} != {}", stream_id, segment.descriptor().id());
+    util::check(segment.descriptor().id() == stream_id, "Descriptor id mismatch in atom key {} != {}", stream_id, segment.descriptor().id());
 
-        return async::submit_cpu_task(EncodeAtomTask{
-            key_type, version_id, stream_id, start_index, end_index, current_timestamp(),
-            std::move(segment), codec_, encoding_version_
-        }).via(&async::io_executor())
-        .thenValue(WriteSegmentTask{library_});
-    }
+    return async::submit_cpu_task(EncodeAtomTask{
+        key_type, version_id, stream_id, start_index, end_index, current_timestamp(),
+        std::move(segment), codec_, encoding_version_
+    }).via(&async::io_executor())
+    .thenValue(WriteSegmentTask{library_});
+}
 
 folly::Future<entity::VariantKey> write(
     stream::KeyType key_type,
@@ -141,6 +141,30 @@ entity::VariantKey write_sync(
     util::check(is_ref_key_class(key_type), "Expected ref key type got  {}", key_type);
     auto encoded = EncodeRefTask{key_type, stream_id, std::move(segment), codec_, encoding_version_}();
     return WriteSegmentTask{library_}(std::move(encoded));
+}
+
+folly::Future<VariantKey> write_maybe_blocking(PartialKey pk, SegmentInMemory &&segment) override {
+    return write_maybe_blocking(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index, std::move(segment));
+}
+
+folly::Future<entity::VariantKey> write_maybe_blocking(
+    stream::KeyType key_type,
+    VersionId version_id,
+    const StreamId &stream_id,
+    IndexValue start_index,
+    IndexValue end_index,
+    SegmentInMemory &&segment) override {
+
+    util::check(segment.descriptor().id() == stream_id,
+                "Descriptor id mismatch in atom key {} != {}",
+                stream_id,
+                segment.descriptor().id());
+
+    return async::submit_blocking_cpu_task(EncodeAtomTask{
+        key_type, version_id, stream_id, start_index, end_index, current_timestamp(),
+        std::move(segment), codec_, encoding_version_
+    })
+        .thenValueInline(WriteSegmentTask{library_});
 }
 
 entity::VariantKey write_if_none_sync(
