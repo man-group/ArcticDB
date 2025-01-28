@@ -2391,3 +2391,15 @@ class Library:
     def name(self):
         """The name of this library."""
         return self._nvs.name()
+
+
+    def get_admin_tools(self) -> AdminTools:
+        """
+        Returns the admin tools for this library.
+
+        Returns
+        -------
+        AdminTools
+            Admin tools object for this library.
+        """
+        return self._admin_tools
