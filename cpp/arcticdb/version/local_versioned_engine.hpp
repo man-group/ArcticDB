@@ -69,7 +69,7 @@ public:
     explicit LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library,
         const ClockType& = ClockType{},
-        const BlockCodecImpl& codec = codec::default_lz4_codec());
+        const BlockCodecImpl& codec = codec::default_adaptive_codec());
 
     virtual ~LocalVersionedEngine() = default;
 

@@ -148,7 +148,7 @@ TYPED_TEST(FieldEncoderTestFromColumnDim0, Passthrough) {
         TestFixture::values.data(),
         TestFixture::values_byte_size);
     Buffer shapes_buffer;
-    ColumnData column_data(&values_buffer, &shapes_buffer, TestFixture::type_descriptor, nullptr);
+    ColumnData column_data(&values_buffer, &shapes_buffer, TestFixture::type_descriptor, nullptr, nullptr);
     EncodedFieldType field;
     std::ptrdiff_t pos = 0;
     const auto [_, max_compressed_size] = ColumnEncoder::max_compressed_size(TestFixture::passthrough_encoding_options,
@@ -290,7 +290,7 @@ TEST_F(TestMultiblockData_Dim1, EncodingVersion_2) {
     constexpr size_t encoded_field_size = EncodedFieldImpl::Size + 3 * sizeof(EncodedBlock);
     std::array<uint8_t, encoded_field_size> encoded_field_owner;
     EncodedFieldImpl* encoded_field = new(encoded_field_owner.data()) EncodedFieldImpl;
-    ColumnData column_data(&data_buffer, &shapes_buffer, type_descriptor, nullptr);
+    ColumnData column_data(&data_buffer, &shapes_buffer, type_descriptor, nullptr, nullptr);
     const auto [_, max_compressed_size] = ColumnEncoderV2::max_compressed_size(passthrough_encoding_options, column_data);
     Buffer out(max_compressed_size);
     ptrdiff_t out_pos = 0;

@@ -109,6 +109,7 @@ ColumnData StringPool::column_data() const {
         &block_.buffer(),
         &shapes_.buffer(),
         string_pool_descriptor().type(),
+        nullptr,
         nullptr
     };
 }

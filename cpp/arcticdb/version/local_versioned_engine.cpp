@@ -989,7 +989,7 @@ void LocalVersionedEngine::write_parallel_frame(
         .write_options=get_write_options(),
         .sort_on_index=sort_on_index,
         .sort_columns=sort_columns};
-    write_parallel_impl(store_, stream_id, frame, options);
+    write_parallel_impl(store_, stream_id, frame, options, block_codec());
 }
 
 void LocalVersionedEngine::add_to_symbol_list_on_compaction(

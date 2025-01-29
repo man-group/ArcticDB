@@ -40,7 +40,9 @@ bool is_constant(const T* data, size_t num_rows) {
     auto loops = num_rows / CHUNK_SIZE;
     for(auto i = 0UL; i < loops; ++i) {
         size_t chunk_mismatch = 0;
+#ifdef __clang__
         #pragma clang loop vectorize(enable) interleave(enable)
+#endif
         for(size_t j = 0; j < CHUNK_SIZE; ++j) {
             chunk_mismatch |= (data[i + j] != value);
         }

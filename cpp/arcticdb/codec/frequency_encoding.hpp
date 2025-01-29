@@ -27,7 +27,9 @@ void batch_apply(T* data, size_t num_rows, F functor) {
 
     auto loops = num_rows / CHUNK_SIZE;
     for(auto i = 0UL; i < loops; ++i) {
+#ifdef __clang__
 #pragma clang loop vectorize(enable) interleave(enable)
+#endif
         for(size_t j = 0; j < CHUNK_SIZE; ++j) {
             functor(data[i * CHUNK_SIZE + j]);
         }

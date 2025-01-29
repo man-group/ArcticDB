@@ -296,7 +296,7 @@ public:
         const Buffer* shapes,
         const TypeDescriptor &type,
         const util::BitMagic* bit_vector,
-        const Statistics* statistics) :
+        const FieldStatsImpl* statistics) :
         data_(data),
         shapes_(shapes),
         pos_(0),
@@ -480,7 +480,42 @@ public:
     size_t shape_pos_ = 0;
     TypeDescriptor type_;
     const util::BitMagic* bit_vector_ = nullptr;
-    const Statistics* statistics_ = nullptr;
+    const FieldStatsImpl* statistics_ = nullptr;
 };
+
+
+
+template <typename TagType>
+FieldStatsImpl generate_column_statistics(ColumnData column_data) {
+    using RawType = typename TagType::DataTypeTag::raw_type;
+    if(column_data.num_blocks() == 1) {
+        auto block = column_data.next<TagType>();
+        const RawType* ptr = block->data();
+        const size_t count = block->row_count();
+        if constexpr (is_numeric_type(TagType::DataTypeTag::data_type)) {
+            return generate_numeric_statistics<RawType>(std::span{ptr, count});
+        } else if constexpr (is_dynamic_string_type(TagType::DataTypeTag::data_type)) {
+            return generate_string_statistics(std::span{ptr, count});
+        } else {
+            util::raise_rte("Cannot generate statistics for data type");
+        }
+    } else {
+        FieldStatsImpl stats;
+        while (auto block = column_data.next<TagType>()) {
+            const RawType* ptr = block->data();
+            const size_t count = block->row_count();
+            if constexpr (is_numeric_type(TagType::DataTypeTag::data_type)) {
+                auto local_stats = generate_numeric_statistics<RawType>(std::span{ptr, count});
+                stats.compose<RawType>(local_stats);
+            } else if constexpr (is_dynamic_string_type(TagType::DataTypeTag::data_type)) {
+                auto local_stats = generate_string_statistics(std::span{ptr, count});
+                stats.compose<RawType>(local_stats);
+            } else {
+                util::raise_rte("Cannot generate statistics for data type");
+            }
+        }
+        return stats;
+    }
+}
 
 }

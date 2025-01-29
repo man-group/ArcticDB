@@ -88,8 +88,6 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
                 agg, 0, rows_to_write, offset_in_frame, slice_num_for_column_, regular_slice_size, false);
             if (opt_error.has_value()) {
                 opt_error->raise(frame_->desc.fields(0).name(), offset_in_frame);
-            } else if (block_codec_.codec_type() == Codec::ADAPTIVE)  {
-                agg.populate_statistics(0);
             }
         }
 
@@ -103,8 +101,6 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
                 regular_slice_size, write_options_.sparsify_floats);
             if (opt_error.has_value()) {
                 opt_error->raise(fd.name(), offset_in_frame);
-            } else if (block_codec_.codec_type() == Codec::ADAPTIVE) {
-                agg.populate_statistics(abs_col);
             }
         }
 
@@ -153,13 +149,8 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
 
     auto slice_and_rowcount = get_slice_and_rowcount(slices);
 
-<<<<<<< HEAD
     int64_t write_window = write_window_size();
-    return folly::collect(folly::window(std::move(slice_and_rowcount), [de_dup_map, frame, slicing, key=std::move(key), sink, sparsify_floats](auto&& slice) {
-=======
-    const auto write_window = ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow", 2 * async::TaskScheduler::instance()->io_thread_count());
     return folly::collect(folly::window(std::move(slice_and_rowcount), [de_dup_map, frame, slicing, key=std::move(key), sink, &write_options, &block_codec](auto&& slice) {
->>>>>>> e49711b22 (Adaptive encoding)
             return async::submit_cpu_task(WriteToSegmentTask(
                 frame,
                 slice.first,
@@ -190,12 +181,8 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
         return folly::makeFuture(std::vector<SliceAndKey>{});
 
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)
-<<<<<<< HEAD
     TypedStreamVersion tsv{std::move(key.id), std::move(key.version_id), KeyType::TABLE_DATA};
-    return write_slices(frame, std::move(slices), slicing, std::move(tsv), sink, de_dup_map, sparsify_floats);
-=======
-    return write_slices(frame, std::move(slices), slicing, std::move(key), sink, de_dup_map, write_options, block_codec);
->>>>>>> e49711b22 (Adaptive encoding)
+    return write_slices(frame, std::move(slices), slicing, std::move(tsv), sink, de_dup_map, write_options, block_codec);
 }
 
 folly::Future<entity::AtomKey> write_frame(

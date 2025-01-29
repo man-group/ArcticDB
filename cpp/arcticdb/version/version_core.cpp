@@ -68,7 +68,7 @@ VersionedItem write_dataframe_impl(
     ) {
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
     ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}, {} rows", frame->desc.id(), version_id, frame->num_rows);
-    auto atom_key_fut = async_write_dataframe_impl(store, version_id, frame, options, de_dup_map, sparsify_floats, validate_index);
+    auto atom_key_fut = async_write_dataframe_impl(store, version_id, frame, de_dup_map, options, block_codec, validate_index);
     return {std::move(atom_key_fut).get()};
 }
 
@@ -411,31 +411,28 @@ folly::Future<AtomKey> async_update_impl(
     const UpdateQuery& query,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
-    bool dynamic_schema,
-    bool empty_types) {
+    BlockCodecImpl block_codec) {
     return index::async_get_index_reader(*(update_info.previous_index_key_), store).thenValue([
         store,
         update_info,
         query,
         frame,
         options=options,
-        dynamic_schema,
-        empty_types
-        ](index::IndexSegmentReader&& index_segment_reader) {
-        check_can_update(*frame, index_segment_reader, update_info, dynamic_schema, empty_types);
+        block_codec](index::IndexSegmentReader&& index_segment_reader) {
+        check_can_update(*frame, index_segment_reader, update_info, options.dynamic_schema, options.empty_types);
         ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", frame->desc.id(), update_info.previous_index_key_->version_id());
         frame->set_bucketize_dynamic(index_segment_reader.bucketize_dynamic());
-        return slice_and_write(frame, get_slicing_policy(options, *frame), IndexPartialKey{frame->desc.id(), update_info.next_version_id_} , store
-        ).via(&async::cpu_executor()).thenValue([
+        return slice_and_write(frame, get_slicing_policy(options, *frame), IndexPartialKey{frame->desc.id(), update_info.next_version_id_} , store, options, block_codec, {})
+        .via(&async::cpu_executor()).thenValue([
             store,
             update_info,
             query,
             frame,
-            dynamic_schema,
+            options,
             index_segment_reader=std::move(index_segment_reader)
         ](std::vector<SliceAndKey>&& new_slice_and_keys) mutable {
             std::sort(std::begin(new_slice_and_keys), std::end(new_slice_and_keys));
-            auto affected_keys = get_keys_affected_by_update(index_segment_reader, *frame, query, dynamic_schema);
+            auto affected_keys = get_keys_affected_by_update(index_segment_reader, *frame, query, options.dynamic_schema);
             auto unaffected_keys = get_keys_not_affected_by_update(index_segment_reader, *affected_keys);
             util::check(
                 affected_keys->size() + unaffected_keys.size() == index_segment_reader.size(),
@@ -454,7 +451,7 @@ folly::Future<AtomKey> async_update_impl(
                     affected_keys=affected_keys,
                     index_segment_reader=std::move(index_segment_reader),
                     frame,
-                    dynamic_schema,
+                    options,
                     update_info,
                     store](IntersectingSegments&& intersecting_segments) mutable {
                 auto [flattened_slice_and_keys, row_count] = get_slice_and_keys_for_update(
@@ -463,7 +460,7 @@ folly::Future<AtomKey> async_update_impl(
                     *affected_keys,
                     std::move(intersecting_segments),
                     std::move(new_slice_and_keys));
-                auto tsd = index::get_merged_tsd(row_count, dynamic_schema, index_segment_reader.tsd(), frame);
+                auto tsd = index::get_merged_tsd(row_count, options.dynamic_schema, index_segment_reader.tsd(), frame);
                 return index::write_index(
                     index_type_from_descriptor(tsd.as_stream_descriptor()),
                     tsd,
@@ -477,14 +474,13 @@ folly::Future<AtomKey> async_update_impl(
 }
 
 VersionedItem update_impl(
-    const std::shared_ptr<Store>& store,
-    const UpdateInfo& update_info,
-    const UpdateQuery& query,
-    const std::shared_ptr<InputTensorFrame>& frame,
-    WriteOptions&& options,
-    bool dynamic_schema,
-    bool empty_types) {
-    auto version_key = async_update_impl(store, update_info, query, frame, options, dynamic_schema, empty_types).get();
+        const std::shared_ptr<Store>& store,
+        const UpdateInfo& update_info,
+        const UpdateQuery& query,
+        const std::shared_ptr<InputTensorFrame>& frame,
+        WriteOptions&& options,
+        BlockCodecImpl block_codec) {
+    auto version_key = async_update_impl(store, update_info, query, frame, options, block_codec).get();
     auto versioned_item = VersionedItem(to_atom(std::move(version_key)));
     ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", frame->desc.id(), update_info.next_version_id_);
     return versioned_item;

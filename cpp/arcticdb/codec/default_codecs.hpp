@@ -11,16 +11,22 @@
 
 namespace arcticdb::codec {
 
-constexpr inline BlockCodecImpl default_lz4_codec() {
+inline BlockCodecImpl default_lz4_codec() {
     BlockCodecImpl codec;
     auto lz4ptr = codec.mutable_lz4();
     lz4ptr->acceleration_ = 1;
     return codec;
 }
 
+inline BlockCodecImpl default_adaptive_codec() {
+    BlockCodecImpl codec;
+    codec.type_ = Codec::ADAPTIVE;
+    return codec;
+}
+
 constexpr inline BlockCodecImpl default_passthrough_codec() {
     BlockCodecImpl codec;
-    codec.codec_ = Codec::PASS;
+    codec.type_ = Codec::PASS;
     return codec;
 }
 

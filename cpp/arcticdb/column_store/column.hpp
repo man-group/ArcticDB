@@ -499,7 +499,7 @@ public:
     }
 
     ColumnData data() const {
-        return ColumnData(&data_.buffer(), &shapes_.buffer(), type_, sparse_map_ ? &*sparse_map_ : nullptr);
+        return ColumnData(&data_.buffer(), &shapes_.buffer(), type_, sparse_map_ ? &*sparse_map_ : nullptr, nullptr);
     }
 
     const uint8_t* ptr() const {
@@ -919,9 +919,6 @@ public:
         }
         inserter.flush();
     }
-
-    bool has_statistics() const;
-    void populate_statistics();
 
 private:
     position_t last_offset() const;

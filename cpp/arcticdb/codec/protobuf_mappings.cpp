@@ -49,7 +49,7 @@ void proto_from_block(const EncodedBlock& input, arcticdb::proto::encoding::Bloc
     output.set_hash(input.hash());
     output.set_encoder_version(input.encoder_version());
 
-    switch (input.codec().codec_) {
+    switch (input.codec().type_) {
     case Codec::ZSTD: {
         set_zstd(input.codec().zstd(), *output.mutable_codec()->mutable_zstd());
         break;

@@ -190,8 +190,8 @@ set(arcticdb_srcs
         codec/fastlanes_common.hpp
         codec/delta.hpp codec/ffor.hpp
         codec/bitpack_fused.hpp
-        codec/adaptive_encoder.hpp
-        codec/adaptive_encoder.hpp
+        codec/adaptive.hpp
+        codec/adaptive.hpp
         codec/slice_data_sink.hpp
         codec/segment_header.hpp
         codec/segment_identifier.hpp
@@ -413,6 +413,15 @@ set(arcticdb_srcs
         async/task_scheduler.cpp
         async/tasks.cpp
         codec/codec.cpp
+        codec/frequency_encoding.hpp
+        codec/constant_encoding.hpp
+        codec/calculate_stats.hpp
+        codec/fastlanes_common.hpp
+        codec/delta.hpp codec/ffor.hpp
+        codec/bitpack_fused.hpp
+        codec/adaptive.hpp
+        codec/adaptive.hpp
+        codec/scanner.hpp
         codec/encode_v1.cpp
         codec/encode_v2.cpp
         codec/encoded_field.cpp
@@ -537,19 +546,7 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-<<<<<<< HEAD
         util/buffer_holder.cpp)
-=======
-        util/buffer_holder.cpp
-        codec/frequency_encoding.hpp
-        codec/constant_encoding.hpp
-        codec/calculate_stats.hpp
-        codec/fastlanes_common.hpp
-        codec/delta.hpp codec/ffor.hpp
-        codec/bitpack_fused.hpp
-        codec/adaptive_encoder.hpp
-        codec/adaptive_encoder.hpp codec/scanner.hpp)
->>>>>>> e49711b22 (Adaptive encoding)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -776,8 +773,8 @@ if (SSL_LINK)
     find_package(OpenSSL REQUIRED)
     list(APPEND arcticdb_core_libraries OpenSSL::SSL)
     if (NOT WIN32)
-        list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
-        list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
+        #list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
+        #list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
     endif()
 endif ()
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})

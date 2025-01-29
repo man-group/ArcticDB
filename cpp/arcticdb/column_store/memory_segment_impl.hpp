@@ -656,6 +656,7 @@ public:
             &string_pool_->data(),
             &string_pool_->shapes(),
             string_pool_descriptor().type(),
+            nullptr,
             nullptr
         };
     }

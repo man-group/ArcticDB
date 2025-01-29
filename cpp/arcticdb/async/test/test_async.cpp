@@ -34,12 +34,7 @@ namespace asl = arcticdb::storage::lmdb;
 namespace ast = arcticdb::stream;
 
 TEST(Async, SinkBasic) {
-<<<<<<< HEAD
     as::EnvironmentName environment_name{"research"};
-=======
-
- /*   as::EnvironmentName environment_name{"research"};
->>>>>>> 58d39a765 (Add some lightweight encodings)
     as::StorageName storage_name("lmdb_local");
     as::LibraryPath library_path{"a", "b"};
 
@@ -48,18 +43,21 @@ TEST(Async, SinkBasic) {
     as::LibraryIndex library_index{environment_name, config_resolver};
 
     as::UserAuth au{"abc"};
-<<<<<<< HEAD
     auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, au, as::NativeVariantStorage());
-    auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
-=======
-    auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, au);
-    auto codec_opt = std::make_shared<BlockCodec>();
->>>>>>> 58d39a765 (Add some lightweight encodings)
+    auto block_codec = std::make_shared<BlockCodecImpl>();
     aa::TaskScheduler sched{1};
 
     auto seg = SegmentInMemory();
     aa::EncodeAtomTask enc{
-        entity::KeyType::GENERATION, entity::VersionId{6}, NumericId{123}, NumericId{456}, timestamp{457}, entity::NumericIndex{999}, std::move(seg), codec_opt, EncodingVersion::V2
+        entity::KeyType::GENERATION,
+        entity::VersionId{6},
+        NumericId{123},
+        NumericId{456},
+        timestamp{457},
+        entity::NumericIndex{999},
+        std::move(seg),
+        block_codec,
+        EncodingVersion::V2
     };
 
     auto v = sched.submit_cpu_task(std::move(enc)).via(&aa::io_executor()).thenValue(aa::WriteSegmentTask{lib}).get();
@@ -70,7 +68,7 @@ TEST(Async, SinkBasic) {
     ASSERT_EQ(entity::atom_key_builder().gen_id(6).start_index(456).end_index(457).creation_ts(999)
         .content_hash(default_content_hash).build(NumericId{123}, entity::KeyType::GENERATION),
               to_atom(v)
-    );*/
+    );
 }
 
 TEST(Async, DeDupTest) {
@@ -84,15 +82,9 @@ TEST(Async, DeDupTest) {
     as::LibraryIndex library_index{environment_name, config_resolver};
 
     as::UserAuth au{"abc"};
-<<<<<<< HEAD
     auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, au, storage::NativeVariantStorage());
-    auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
-    aa::AsyncStore store(lib, *codec_opt, EncodingVersion::V2);
-=======
-    auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, au);
     auto codec_opt = std::make_shared<BlockCodecImpl>();
     aa::AsyncStore store(lib, codec::default_lz4_codec(), EncodingVersion::V2);
->>>>>>> 58d39a765 (Add some lightweight encodings)
     auto seg = SegmentInMemory();
 
     std::vector<std::pair<ast::StreamSink::PartialKey, SegmentInMemory>> key_segments;

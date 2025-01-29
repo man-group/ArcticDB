@@ -2,7 +2,7 @@
 #include <arcticdb/codec/passthrough.hpp>
 #include <arcticdb/codec/zstd.hpp>
 #include <arcticdb/codec/lz4.hpp>
-#include <arcticdb/codec/adaptive_encoder.hpp>
+#include <arcticdb/codec/adaptive.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/util/buffer.hpp>
 

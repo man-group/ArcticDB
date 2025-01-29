@@ -96,8 +96,7 @@ VersionedItem update_impl(
     const UpdateQuery & query,
     const std::shared_ptr<InputTensorFrame>& frame,
     WriteOptions&& options,
-    bool dynamic_schema,
-    bool empty_types);
+    BlockCodecImpl block_codec);
 
 VersionedItem delete_range_impl(
     const std::shared_ptr<Store>& store,

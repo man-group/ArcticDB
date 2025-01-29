@@ -69,7 +69,7 @@ struct AdaptiveCodec {
 };
 
 struct BlockCodec {
-    Codec codec_ = Codec::UNKNOWN;
+    Codec type_ = Codec::UNKNOWN;
     constexpr static size_t DataSize = 24;
     std::array<uint8_t, DataSize> data_ = {};
 };
@@ -80,8 +80,8 @@ struct Block {
     uint64_t hash_ = 0;
     uint16_t encoder_version_ = 0;
     bool is_shape_ = false;
-    uint8_t num_codecs_ = 0;
-    std::array<BlockCodec, 1> codecs_;
+    uint8_t unused_ = 0;
+    BlockCodec codec_;
 
     Block() = default;
 };
@@ -108,7 +108,6 @@ enum class UniqueCountType : uint8_t {
 };
 
 struct FieldStats {
-
     FieldStats() = default;
 
     uint64_t min_ = 0UL;

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <arcticdb/storage/memory_layout.hpp>
-#include <arcticdb/column_store/column_data.hpp>
 
 #include <ankerl/unordered_dense.h>
 
@@ -21,10 +20,10 @@ void get_value(uint64_t value, T& target) {
 }
 
 enum class FieldStatsValue : uint8_t {
-        MIN = 1,
-        MAX = 1 << 1,
-        UNIQUE = 1 << 2
-    };
+    MIN = 1,
+    MAX = 1 << 1,
+    UNIQUE = 1 << 2
+};
 
 struct FieldStatsImpl : public FieldStats {
     FieldStatsImpl() = default;
@@ -44,8 +43,8 @@ struct FieldStatsImpl : public FieldStats {
     }
 
     void set_unique(
-            uint32_t unique_count,
-            UniqueCountType unique_count_precision) {
+        uint32_t unique_count,
+        UniqueCountType unique_count_precision) {
         unique_count_ = unique_count;
         unique_count_precision_ = unique_count_precision;
         set_ |= static_cast<uint8_t>(FieldStatsValue::UNIQUE);
@@ -95,10 +94,10 @@ struct FieldStatsImpl : public FieldStats {
 
     template<typename T>
     FieldStatsImpl(
-            T min,
-            T max,
-            uint32_t unique_count,
-            UniqueCountType unique_count_precision) {
+        T min,
+        T max,
+        uint32_t unique_count,
+        UniqueCountType unique_count_precision) {
         set_min(min);
         set_max(max);
         set_unique(unique_count, unique_count_precision);
@@ -107,7 +106,7 @@ struct FieldStatsImpl : public FieldStats {
     FieldStatsImpl(
         uint32_t unique_count,
         UniqueCountType unique_count_precision) {
-      set_unique(unique_count, unique_count_precision);
+        set_unique(unique_count, unique_count_precision);
     }
 
 
@@ -153,30 +152,6 @@ struct FieldStatsImpl : public FieldStats {
             }
         }
     }
-
-    template<typename T>
-    void set_min(const void* t) const {
-        util::check(impl_->type() == typeid(T), "Bad type case in statistics set_min {} != {}", impl_->type().name(), typeid(T).name());
-        impl_->set_min(t);
-    }
-
-    template<typename T>
-    void set_max(const void* t) const {
-        util::check(impl_->type() == typeid(T), "Bad type case in statistics get_max {} != {}", impl_->type().name(), typeid(T).name());
-        impl_->set_max(t);
-    }
-
-    void set_unique_count(size_t count) {
-        unique_count_ = count;
-    }
-
-    [[nodiscard]] size_t get_unique_count() const { return unique_count_; }
-
-    void set_sorted(bool sorted) {
-        sorted_ = sorted;
-    }
-
-    [[nodiscard]] size_t get_sorted() const { return sorted_; }
 };
 
 template <typename T>
@@ -202,36 +177,5 @@ inline FieldStatsImpl generate_string_statistics(std::span<const uint64_t> data)
     return field_stats;
 }
 
-template <typename TagType>
-FieldStatsImpl generate_column_statistics(ColumnData column_data) {
-    using RawType = typename TagType::DataTypeTag::raw_type;
-    if(column_data.num_blocks() == 1) {
-        auto block = column_data.next<TagType>();
-        const RawType* ptr = block->data();
-        const size_t count = block->row_count();
-        if constexpr (is_numeric_type(TagType::DataTypeTag::data_type)) {
-            return generate_numeric_statistics<RawType>(std::span{ptr, count});
-        } else if constexpr (is_dynamic_string_type(TagType::DataTypeTag::data_type)) {
-            return generate_string_statistics(std::span{ptr, count});
-        } else {
-            util::raise_rte("Cannot generate statistics for data type");
-        }
-    } else {
-        FieldStatsImpl stats;
-        while (auto block = column_data.next<TagType>()) {
-            const RawType* ptr = block->data();
-            const size_t count = block->row_count();
-            if constexpr (is_numeric_type(TagType::DataTypeTag::data_type)) {
-                auto local_stats = generate_numeric_statistics<RawType>(std::span{ptr, count});
-                stats.compose<RawType>(local_stats);
-            } else if constexpr (is_dynamic_string_type(TagType::DataTypeTag::data_type)) {
-                auto local_stats = generate_string_statistics(std::span{ptr, count});
-                stats.compose<RawType>(local_stats);
-            } else {
-                util::raise_rte("Cannot generate statistics for data type");
-            }
-        }
-        return stats;
-    }
-}
+
 } // namespace arcticdb

@@ -1021,6 +1021,11 @@ TEST(VersionStore, AdaptiveEncoding) {
     StreamId symbol{"adaptive"};
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
     version_store.write_versioned_dataframe_internal(symbol, test_frame.frame_, false);
+    auto read_query = std::make_shared<ReadQuery>();
 
+    ReadOptions read_options;
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, handler_data);
+    ASSERT_EQ(test_frame.segment_, read_result.frame_and_descriptor_.frame_);
 }
->>>>>>> e49711b22 (Adaptive encoding)

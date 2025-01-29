@@ -14,6 +14,7 @@
 #include <arcticdb/codec/zstd.hpp>
 #include <arcticdb/codec/lz4.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
+#include <arcticdb/codec/adaptive.hpp>
 #include <arcticdb/codec/magic_words.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/util/buffer.hpp>
@@ -35,14 +36,25 @@ void decode_block(const BlockType &block, const std::uint8_t *input, T *output) 
         std::uint32_t encoder_version = block.encoder_version();
         switch (block.codec().codec_type()) {
         case arcticdb::Codec::ZSTD:
-            arcticdb::detail::ZstdDecoder::decode_block<T>(encoder_version,
-                 input,
-                 size_to_decode,
-                 output,
-                 decoded_size);
+            arcticdb::detail::ZstdDecoder::decode_block<T>(
+                encoder_version,
+                input,
+                size_to_decode,
+                output,
+                decoded_size);
             break;
         case arcticdb::Codec::LZ4:
-            arcticdb::detail::Lz4Decoder::decode_block<T>(encoder_version,
+            arcticdb::detail::Lz4Decoder::decode_block<T>(
+                encoder_version,
+                input,
+                size_to_decode,
+                output,
+                decoded_size);
+            break;
+
+        case arcticdb::Codec::ADAPTIVE:
+            arcticdb::detail::AdaptiveDecoder::decode_block<T>(
+                encoder_version,
                 input,
                 size_to_decode,
                 output,

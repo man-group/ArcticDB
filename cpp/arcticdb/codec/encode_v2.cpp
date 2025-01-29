@@ -11,7 +11,7 @@
 #include <arcticdb/codec/magic_words.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/codec/segment_identifier.hpp>
-#include <arcticdb/codec/adaptive_encoder.hpp>
+#include <arcticdb/codec/adaptive.hpp>
 
 namespace arcticdb {
 void add_bitmagic_compressed_size(
@@ -127,7 +127,7 @@ void ColumnEncoderV2::encode_blocks(
         using Encoder = TypedBlockEncoderImpl<TypedBlockData, TDT, EncodingVersion::V2>;
         ARCTICDB_TRACE(log::codec(), "Column data has {} blocks", column_data.num_blocks());
         if(codec_opts.codec_type() == Codec::ADAPTIVE) {
-            Adapt
+            // stuff
         }
         while (auto block = column_data.next<TDT>()) {
             if constexpr(must_contain_data(static_cast<TypeDescriptor>(type_desc_tag))) {

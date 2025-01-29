@@ -64,7 +64,7 @@ class DynamicFieldBuffer {
         if (td.dimension() == Dimension::Dim0) {
             data_.ensure_bytes(data_bytes);
             memcpy(data_.cursor(), d_info_.ptr, data_bytes);
-            field_ = std::make_shared<ColumnData>(&data_.buffer(), &shapes_.buffer(), td_, nullptr);
+            field_ = std::make_shared<ColumnData>(&data_.buffer(), &shapes_.buffer(), td_, nullptr, nullptr);
         } else {
             data_.ensure_bytes(data_bytes);
             shapes_.ensure_bytes(shape_bytes);
@@ -72,7 +72,7 @@ class DynamicFieldBuffer {
             memcpy(data_.cursor(), d_info_.ptr, data_bytes);
             data_.commit();
             shapes_.commit();
-            field_ = std::make_shared<ColumnData>(&data_.buffer(), &shapes_.buffer(), td_, nullptr);
+            field_ = std::make_shared<ColumnData>(&data_.buffer(), &shapes_.buffer(), td_, nullptr, nullptr);
         }
     }
 
