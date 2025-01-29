@@ -59,6 +59,26 @@ def test_symbol_concat_basic(lmdb_library_factory, rows_per_segment, columns_per
 
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
+def test_symbol_concat_multiindex(lmdb_library_factory, rows_per_segment, columns_per_segment):
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+    df = pd.DataFrame(
+        {
+            "col1": np.arange(12, dtype=np.int64),
+            "col2": np.arange(100, 112, dtype=np.int64),
+            "col3": np.arange(1000, 1012, dtype=np.int64),
+        },
+        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4), [0, 1, 2]], names=["datetime", "level"]),
+    )
+    lib.write("sym1", df[:3])
+    lib.write("sym2", df[3:7])
+    lib.write("sym3", df[7:])
+
+    received = concat(lib.read_batch(["sym1", "sym2", "sym3"], lazy=True)).collect().data
+    assert_frame_equal(df, received)
+
+
+@pytest.mark.parametrize("rows_per_segment", [2, 100_000])
+@pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 def test_symbol_concat_complex(lmdb_library_factory, rows_per_segment, columns_per_segment):
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
     df_1 = pd.DataFrame(
