@@ -68,8 +68,24 @@ using Range = folly::Range<It>;
                                                    error_message_suffix));
     }
 
-    if(err.GetExceptionName().find("NotImplemented") != std::string::npos) {
-        raise<ErrorCode::E_NOT_IMPLEMENTED_BY_STORAGE>(fmt::format("Operation is not implemented for storage: {}", error_message_suffix));
+    if (type == Aws::S3::S3Errors::UNKNOWN) {
+        // Unknown is a catchall which can contain several different important exception types which we want to identify
+        if (err.GetResponseCode() == Aws::Http::HttpResponseCode::PRECONDITION_FAILED) {
+            raise<ErrorCode::E_ATOMIC_OPERATION_FAILED>(
+                    fmt::format("Atomic operation failed: {}", error_message_suffix));
+        }
+
+        if (err.GetExceptionName().find("NotImplemented") != std::string::npos) {
+            raise<ErrorCode::E_NOT_IMPLEMENTED_BY_STORAGE>(
+                    fmt::format("Operation is not implemented for storage: {}", error_message_suffix));
+        }
+
+        if (err.GetResponseCode() == Aws::Http::HttpResponseCode::BAD_REQUEST) {
+            raise<ErrorCode::E_BAD_REQUEST>(
+                    fmt::format("Aws-sdk sent a bad request to S3. This could be due to improper use of the sdk or due "
+                                "to using the S3Client in parallel from forked processes. Error message: {}",
+                                error_message_suffix));
+        }
     }
 
     if (err.ShouldRetry()) {

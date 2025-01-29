@@ -46,9 +46,17 @@ std::optional<Aws::S3::S3Error> has_failure_trigger(const std::string& s3_object
     }
 }
 
-const auto not_found_error = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::RESOURCE_NOT_FOUND, false));
-const auto precondition_failed_error = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::UNKNOWN, "Precondition failed", "Precondition failed", false));
-const auto not_implemented_error = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::UNKNOWN, "NotImplemented", "A header you provided implies functionality that is not implemented", false));
+Aws::S3::S3Error create_error(Aws::S3::S3Errors error_type, const std::string& exception_name="", const std::string& exception_message="", bool is_retriable=false, std::optional<Aws::Http::HttpResponseCode> response_code=std::nullopt) {
+    auto error = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(error_type, exception_name, exception_message, is_retriable));
+    if (response_code.has_value()) {
+        error.SetResponseCode(response_code.value());
+    }
+    return error;
+}
+
+const auto not_found_error = create_error(Aws::S3::S3Errors::RESOURCE_NOT_FOUND);
+const auto precondition_failed_error = create_error(Aws::S3::S3Errors::UNKNOWN, "PreconditionFailed", "Precondition failed", false, Aws::Http::HttpResponseCode::PRECONDITION_FAILED);
+const auto not_implemented_error = create_error(Aws::S3::S3Errors::UNKNOWN, "NotImplemented", "A header you provided implies functionality that is not implemented", false);
 
 S3Result<std::monostate> MockS3Client::head_object(
         const std::string& s3_object_name,

@@ -39,7 +39,11 @@
     },
     {
       "name":  "aws-crt-cpp",
-      "version>=": "0.28.3"
+      "version>=": "0.29.7"
+    },
+    {
+      "name": "aws-c-mqtt",
+      "version>=": "0.11.0"
     },
     {
       "name": "aws-c-s3",
@@ -105,7 +109,7 @@
   "overrides": [
     { "name": "openssl", "version-string": "3.3.0" },
     { "name": "arrow", "version": "18.0.0" },
-    { "name": "aws-sdk-cpp", "version": "1.11.405" },
+    { "name": "aws-sdk-cpp", "version": "1.11.474" },
     { "name": "azure-core-cpp", "version": "1.12.0" },
     { "name": "benchmark", "version": "1.9.0" },
     { "name": "bitmagic", "version": "7.12.3" },

@@ -14,9 +14,13 @@ enum NormalizationOperation : uint8_t {
 std::string_view normalization_operation_str(NormalizationOperation operation);
 
 struct StreamDescriptorMismatch : ArcticSpecificException<ErrorCode::E_DESCRIPTOR_MISMATCH>  {
-    StreamDescriptorMismatch(const char* preamble, const StreamDescriptor& existing, const StreamDescriptor& new_val, NormalizationOperation operation) :
-    ArcticSpecificException(fmt::format("{}: {} \nexisting={}\n new_val={}", preamble, normalization_operation_str(operation),
-                                        existing.fields(), new_val.fields())) {}
+    StreamDescriptorMismatch(const char* preamble, const StreamId& stream_id, const StreamDescriptor& existing, const StreamDescriptor& new_val, NormalizationOperation operation) :
+    ArcticSpecificException(fmt::format("{}: {}; stream_id=\"{}\"; existing=\"{}\"; new_val=\"{}\"",
+                                        preamble,
+                                        normalization_operation_str(operation),
+                                        stream_id,
+                                        existing.fields(),
+                                        new_val.fields())) {}
 };
 
 IndexDescriptor::Type get_common_index_type(const IndexDescriptor::Type& left, const IndexDescriptor::Type& right) ;

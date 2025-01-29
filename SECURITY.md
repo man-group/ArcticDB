@@ -12,13 +12,13 @@
 | 1.6              |          :x:         |
 | 2.0              |          :x:         |
 | 3.0              |          :x:         |
-| 4.0              |  :white_check_mark:  |
+| 4.0 onwards      |  :white_check_mark:  |
 
 ## Reporting a Vulnerability
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Instead, report security vulnerabilities by email to [`arcticdb@man.com`](mailto:arcticdb@man.com).
+Instead, report security vulnerabilities by email to [`info@arcticdb.io`](mailto:info@arcticdb.io).
 
 ### Email content
 

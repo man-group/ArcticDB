@@ -39,7 +39,7 @@ jobs:
       - name: Tag required version
         run: |
           git config user.name "GitHub Actions"
-          git config user.email "arcticdb@man.com"
+          git config user.email "info@arcticdb.io"
           git switch -C tagging ${{github.ref}}
           # Remove the build status badge from a version tag
           sed -i 's#<img src="https://github.com/man-group/ArcticDB/actions/workflows/build.yml/badge.svg"/>##' README.md || true
