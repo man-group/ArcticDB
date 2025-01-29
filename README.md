@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://github.com/man-group/ArcticDB/raw/master/static/ArcticDBCropped.png" width="33%">
+<img src="https://github.com/man-group/ArcticDB/raw/master/static/ArcticDB Logo Purple Horizontal.svg" width="33%">
 </p>
 
 ---
