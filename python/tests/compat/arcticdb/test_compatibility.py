@@ -90,14 +90,13 @@ def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_nam
         assert(cfg_after_use == expected_cfg)
 
 
-def test_pandas_pickling(v1_venv, s3_ssl_disabled_storage, lib_name):
+def test_pandas_pickling(pandas_v1_venv, s3_ssl_disabled_storage, lib_name):
     arctic_uri = s3_ssl_disabled_storage.arctic_uri
 
     # Create library using old version and write pickled Pandas 1 metadata
-    old_ac = v1_venv.create_arctic(arctic_uri)
+    old_ac = pandas_v1_venv.create_arctic(arctic_uri)
     old_ac.create_library(lib_name)
     old_ac.execute([f"""
-import pandas as pd
 from packaging import version
 pandas_version = version.parse(pd.__version__)
 assert pandas_version < version.Version("2.0.0")
@@ -109,7 +108,7 @@ lib.write("sym", df, metadata={{"abc": df}})
 """])
 
     pandas_version = version.parse(pd.__version__)
-    assert pandas_version > version.Version("2.0.0")
+    assert pandas_version >= version.Version("2.0.0")
     # Check we can read with Pandas 2
     with CurrentVersion(arctic_uri, lib_name) as curr:
         sym = "sym"

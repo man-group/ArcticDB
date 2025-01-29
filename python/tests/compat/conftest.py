@@ -10,6 +10,7 @@ from ..util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
     VENV_COMPAT_TESTS_MARK,
+    PANDAS_2_COMPAT_TESTS_MARK
 )
 from packaging.version import Version
 
@@ -193,9 +194,15 @@ def old_venv(request, tmp_path):
         yield old_venv
 
 
-@pytest.fixture
-def v1_venv(tmp_path):
+@pytest.fixture(
+    params=[
+        pytest.param("tmp_path", marks=PANDAS_2_COMPAT_TESTS_MARK)
+    ]
+)
+def pandas_v1_venv(request):
+    """A venv with Pandas v1 installed (and an old ArcticDB version). To help test compat across Pandas versions."""
     version = "1.6.2"
+    tmp_path = request.getfixturevalue(request.param)
     path = os.path.join("venvs", tmp_path, version)
     compat_dir = os.path.dirname(os.path.abspath(__file__))
     requirements_file = os.path.join(compat_dir, f"requirements-{version}.txt")
