@@ -245,8 +245,16 @@ def real_s3_library(real_s3_storage, lib_name) -> Library:
     return real_s3_storage.create_arctic().create_library(lib_name)
 
 
+@pytest.fixture(scope='session')
+def monkeypatch_session():
+    from _pytest.monkeypatch import MonkeyPatch
+    m = MonkeyPatch()
+    yield m
+    m.undo()
+
+
 @pytest.fixture(scope="session") # Config loaded at the first ArcticDB binary import, so we need to set it up before any tests
-def real_s3_sts_storage_factory() -> Generator[BaseS3StorageFixtureFactory, None, None]:
+def real_s3_sts_storage_factory(monkeypatch_session) -> Generator[BaseS3StorageFixtureFactory, None, None]:
     sts_test_credentials_prefix = f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
     username = f"gh_sts_test_user_{sts_test_credentials_prefix}"
     role_name = f"gh_sts_test_role_{sts_test_credentials_prefix}"
@@ -267,11 +275,9 @@ def real_s3_sts_storage_factory() -> Generator[BaseS3StorageFixtureFactory, None
             )
         # Check is made here as the new user gets authenticated only during being used; the check could be time consuming
         real_s3_sts_resources_ready(f) # resources created in iam may not be ready immediately in s3; Could take 10+ seconds
-        with pytest.MonkeyPatch.context() as mp:
-            mp.delenv("USERPROFILE", raising=False)
-            mp.setenv("AWS_CONFIG_FILE", config_file_path)
-            importlib.reload(sys.modules['arcticdb'])
-            yield f
+        monkeypatch_session.setenv("AWS_CONFIG_FILE", config_file_path)
+        importlib.reload(sys.modules['arcticdb'])
+        yield f
     finally:
         real_s3_sts_clean_up(role_name, policy_name, username)
         safer_rmtree(None, working_dir)
