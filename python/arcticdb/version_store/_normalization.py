@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import copy
 import datetime
+import io
 from datetime import timedelta
 import math
 
@@ -1054,7 +1055,9 @@ class Pickler(object):
                 return pickle.loads(data, encoding="bytes")
 
         try:
-            return pickle.loads(data)
+            # This tries normal pickle.loads first then falls back to special Pandas unpickling. Pandas unpickling
+            # handles Pandas 1 vs Pandas 2 API breaks better.
+            return pd.read_pickle(io.BytesIO(data))
         except UnicodeDecodeError as exc:
             log.debug("Failed decoding with ascii, using latin-1.")
             return pickle.loads(data, encoding="latin-1")

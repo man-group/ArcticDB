@@ -1,6 +1,5 @@
-import numpy as np
+from packaging import version
 import pandas as pd
-import pytest
 from arcticdb.arctic import Arctic
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext import set_config_int
@@ -54,6 +53,7 @@ def test_compat_write_read(old_venv_and_arctic_uri, lib_name):
         read_df = curr.lib.read(sym).data
         assert_frame_equal(read_df, df_2)
 
+
 def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_name):
     old_venv, arctic_uri = old_venv_and_arctic_uri
     sym = "sym"
@@ -88,3 +88,32 @@ def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_nam
     with CurrentVersion(arctic_uri, lib_name) as curr:
         cfg_after_use = LibraryTool.read_unaltered_lib_cfg(curr.ac._library_manager, lib_name)
         assert(cfg_after_use == expected_cfg)
+
+
+def test_pandas_pickling(pandas_v1_venv, s3_ssl_disabled_storage, lib_name):
+    arctic_uri = s3_ssl_disabled_storage.arctic_uri
+
+    # Create library using old version and write pickled Pandas 1 metadata
+    old_ac = pandas_v1_venv.create_arctic(arctic_uri)
+    old_ac.create_library(lib_name)
+    old_ac.execute([f"""
+from packaging import version
+pandas_version = version.parse(pd.__version__)
+assert pandas_version < version.Version("2.0.0")
+df = pd.DataFrame({{"a": [1, 2, 3]}})
+idx = pd.Int64Index([1, 2, 3])
+df.index = idx
+lib = ac.get_library("{lib_name}")
+lib.write("sym", df, metadata={{"abc": df}})
+"""])
+
+    pandas_version = version.parse(pd.__version__)
+    assert pandas_version >= version.Version("2.0.0")
+    # Check we can read with Pandas 2
+    with CurrentVersion(arctic_uri, lib_name) as curr:
+        sym = "sym"
+        read_df = curr.lib.read(sym).metadata["abc"]
+        expected_df = pd.DataFrame({"a": [1, 2, 3]})
+        idx = pd.Index([1, 2, 3], dtype="int64")
+        expected_df.index = idx
+        assert_frame_equal(read_df, expected_df)
