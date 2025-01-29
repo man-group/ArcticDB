@@ -114,8 +114,8 @@ def test_s3_no_ssl_verification(monkeypatch, s3_no_ssl_storage, client_cert_file
 @REAL_S3_TESTS_MARK
 def test_s3_sts_auth(lib_name, real_s3_sts_storage):
     import os
-    logger.info(f"AWS_CONFIG_FILE: {os.getenv("AWS_CONFIG_FILE")}")
-    logger.info(f"USERPROFILE: {os.getenv("USERPROFILE")}")
+    logger.info(f"AWS_CONFIG_FILE: {os.getenv('AWS_CONFIG_FILE', None)}")
+    logger.info(f"USERPROFILE: {os.getenv('USERPROFILE', None)}")
     library = lib_name
     logger.info(f"Library to create: {library}")
     ac = Arctic(real_s3_sts_storage.arctic_uri)
