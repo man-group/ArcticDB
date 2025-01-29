@@ -25,6 +25,7 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
             auto new_type = field.type();
 
             if (auto it = field_name_to_index.find(std::string{field.name()}); it != field_name_to_index.end()) {
+                log::version().info("Doing stats for field {}", field.name());
                 auto &merged_type = type_descriptors.at(field_name_to_index.at(std::string{field.name()}));
                 auto opt_common_type = has_valid_common_type(merged_type, new_type);
                 internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_common_type.has_value(),

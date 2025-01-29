@@ -69,6 +69,8 @@ def test_column_stats_basic_flow(lmdb_version_store_tiny_segment):
     assert lib.get_column_stats_info(sym) == column_stats_dict
 
     column_stats = lib.read_column_stats(sym)
+    print("Expected: {}".format(expected_column_stats))
+    print("Actual: {}".format(column_stats))
     assert_stats_equal(column_stats, expected_column_stats)
 
     lib.drop_column_stats(sym)
