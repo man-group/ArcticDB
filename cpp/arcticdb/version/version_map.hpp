@@ -467,7 +467,12 @@ public:
 
     void overwrite_symbol_tree(
             std::shared_ptr<Store> store, const StreamId& stream_id, const std::vector<AtomKey>& index_keys) {
-        auto entry = check_reload(store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__);
+        auto entry = std::make_shared<VersionMapEntry>();
+        try {
+            entry = check_reload(store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__);
+        } catch (const storage::KeyNotFoundException& e) {
+            log::version().debug("Failed to load version entry for symbol {} in overwrite_symbol_tree, creating new entry, exception: {}", stream_id, e.what());
+        }
         auto old_entry = *entry;
         if (!index_keys.empty()) {
             entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
@@ -476,7 +481,11 @@ public:
             if (validate_)
                 entry->validate();
         }
-        remove_entry_version_keys(store, old_entry, stream_id);
+        try {
+            remove_entry_version_keys(store, old_entry, stream_id);
+        } catch (const storage::KeyNotFoundException& e) {
+            log::version().debug("Failed to remove version keys for symbol {} in overwrite_symbol_tree, exception: {}", stream_id, e.what());
+        }
     }
 
     /**
