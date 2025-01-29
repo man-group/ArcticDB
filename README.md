@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="static/ArcticDB Logo Purple Horizontal.svg" width="33%">
+  <img src="static/ArcticDB Logo Purple Horizontal.svg">
 </p>
 
 ---
