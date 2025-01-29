@@ -1175,7 +1175,10 @@ StreamDescriptor descriptor_from_segments(std::vector<SliceAndKey>& slice_and_ke
         }
     }
     // Ensure they are all the same
-    // TODO: Relax this requirement
+    // TODO: Relax this requirement:
+    // - columns in different orders
+    // - columns of different but promotable types
+    // - extra/missing columns in different row slices
     for (size_t idx = 1; idx < field_collections.size(); ++idx) {
         schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                 field_collections[0] == field_collections[idx],

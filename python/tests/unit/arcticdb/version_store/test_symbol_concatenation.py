@@ -77,6 +77,34 @@ def test_symbol_concat_multiindex(lmdb_library_factory, rows_per_segment, column
     assert_frame_equal(df, received)
 
 
+def test_symbol_concat_with_date_range(lmdb_library):
+    lib = lmdb_library
+    df_1 = pd.DataFrame(
+        {
+            "col1": np.arange(3, dtype=np.int64),
+        },
+        index=pd.date_range(pd.Timestamp(0), freq="1000ns", periods=3),
+    )
+    df_2 = pd.DataFrame(
+        {
+            "col1": np.arange(4, dtype=np.int64),
+        },
+        index=pd.date_range(pd.Timestamp(1000), freq="1000ns", periods=4),
+    )
+    lib.write("sym1", df_1)
+    lib.write("sym2", df_2)
+
+    # Use date_range arg to trim last row from sym1
+    lazy_df_1 = lib.read("sym1", date_range=(None, pd.Timestamp(1000)), lazy=True)
+    # Use date_range clause to trim first row from sym2
+    lazy_df_2 = lib.read("sym2", lazy=True)
+    lazy_df_2 = lazy_df_2.date_range((pd.Timestamp(2000), None))
+
+    received = concat([lazy_df_1, lazy_df_2]).collect().data
+    expected = pd.concat([df_1[:2], df_2[1:]])
+    assert_frame_equal(expected, received)
+
+
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 def test_symbol_concat_complex(lmdb_library_factory, rows_per_segment, columns_per_segment):
@@ -112,7 +140,7 @@ def test_symbol_concat_complex(lmdb_library_factory, rows_per_segment, columns_p
     lazy_df_1 = lib.read("sym1", lazy=True)
     lazy_df_2 = lib.read("sym2", lazy=True)
     lazy_df_2 = lazy_df_2.date_range((pd.Timestamp(pd.Timestamp(3000)), None))
-    lazy_df_3 = lib.read("sym3", lazy=True)
+    lazy_df_3 = lib.read("sym3", date_range=(None, pd.Timestamp(9000)), lazy=True)
 
     lazy_df = concat([lazy_df_1, lazy_df_2, lazy_df_3])
 
@@ -120,7 +148,7 @@ def test_symbol_concat_complex(lmdb_library_factory, rows_per_segment, columns_p
 
     received = lazy_df.collect().data
     received = received.reindex(columns=sorted(received.columns))
-    expected = pd.concat([df_1, df_2.iloc[1:], df_3]).resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
+    expected = pd.concat([df_1, df_2[1:], df_3[:4]]).resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
     assert_frame_equal(expected, received)
 
 
