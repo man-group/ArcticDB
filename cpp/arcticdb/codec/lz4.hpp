@@ -19,7 +19,7 @@ namespace arcticdb::detail {
 
 struct Lz4BlockEncoder {
 
-    using Opts = arcticdb::proto::encoding::VariantCodec::Lz4;
+    using Opts = Lz4Codec;
     static constexpr std::uint32_t VERSION = 1;
 
     static std::size_t max_compressed_size(std::size_t size) {
@@ -27,7 +27,7 @@ struct Lz4BlockEncoder {
     }
 
     static void set_shape_defaults(Opts &opts) {
-        opts.set_acceleration(0);
+        opts.acceleration_ = 0;
     }
 
     template<class T, class CodecType>
@@ -53,7 +53,7 @@ struct Lz4BlockEncoder {
         ARCTICDB_TRACE(log::storage(), "Block of size {} compressed to {} bytes", block_utils.bytes_, compressed_bytes);
         hasher(in, block_utils.count_);
         pos += ssize_t(compressed_bytes);
-        copy_codec(*out_codec.mutable_lz4(), opts);
+        *out_codec.mutable_lz4() = opts;
         return std::size_t(compressed_bytes);
     }
 };

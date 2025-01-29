@@ -30,7 +30,7 @@ constexpr TypeDescriptor metadata_type_desc() {
 
 SizeResult max_compressed_size_dispatch(
     const SegmentInMemory& in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec &codec_opts,
+    const BlockCodecImpl& codec_opts,
     EncodingVersion encoding_version) {
     if(encoding_version == EncodingVersion::V2) {
         return max_compressed_size_v2(in_mem_seg, codec_opts);
@@ -41,7 +41,7 @@ SizeResult max_compressed_size_dispatch(
 
 Segment encode_dispatch(
     SegmentInMemory&& in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec &codec_opts,
+    const BlockCodecImpl& codec_opts,
     EncodingVersion encoding_version) {
     if(encoding_version == EncodingVersion::V2) {
         return encode_v2(std::move(in_mem_seg), codec_opts);
@@ -214,30 +214,6 @@ inline arcticdb::proto::descriptors::FrameMetadata frame_metadata_from_any(const
     any.UnpackTo(&frame_meta);
     return frame_meta;
 }
-}
-
-std::optional<FieldCollection> decode_descriptor_fields(
-    const SegmentHeader& hdr,
-    const uint8_t*& data,
-    const uint8_t* begin ARCTICDB_UNUSED,
-    const uint8_t* end) {
-    if(hdr.has_descriptor_field()) {
-        ARCTICDB_TRACE(log::codec(), "Decoding index fields");
-        util::check(data!=end, "Reached end of input block with descriptor fields to decode");
-        std::optional<util::BitMagic> bv;
-        FieldCollection fields;
-        data += decode_field(FieldCollection::type(),
-                       hdr.descriptor_field(),
-                       data,
-                       fields,
-                       bv,
-                       hdr.encoding_version());
-
-        ARCTICDB_TRACE(log::codec(), "Decoded descriptor fields to position {}", data-begin);
-        return std::make_optional<FieldCollection>(std::move(fields));
-    } else {
-        return std::nullopt;
-    }
 }
 
 TimeseriesDescriptor unpack_timeseries_descriptor_from_proto(
@@ -635,6 +611,13 @@ void add_bitmagic_compressed_size(
         uncompressed_bytes += stat.memory_used;
         max_compressed_bytes += stat.max_serialize_mem;
     }
+}
+
+bm::serializer<bm::bvector<> >::buffer encode_bitmap(const util::BitSet& sparse_map) {
+    bm::serializer<bm::bvector<> > bvs;
+    bm::serializer<bm::bvector<> >::buffer buffer;
+    bvs.serialize(sparse_map, buffer);
+    return buffer;
 }
 
 /// @brief Write the sparse map to the out buffer

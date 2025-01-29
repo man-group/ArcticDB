@@ -176,7 +176,7 @@ public:
     }
 
     [[nodiscard]] ColumnData column_data() const {
-        return {&buffer_.buffer(), &shapes_.buffer(), type_, nullptr};
+        return {&buffer_.buffer(), &shapes_.buffer(), type_, nullptr, nullptr};
     }
 
     size_t num_blocks() const {

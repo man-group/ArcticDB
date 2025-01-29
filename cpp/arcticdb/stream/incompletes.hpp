@@ -56,7 +56,8 @@ void write_parallel_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
-    const WriteIncompleteOptions& options);
+    const WriteIncompleteOptions& options,
+    BlockCodecImpl block_codec);
 
 void write_head(
     const std::shared_ptr<Store>& store,

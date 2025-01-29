@@ -71,7 +71,7 @@ inline std::vector<SliceAndKey> filter_index(
     return output;
 }
 
-inline util::BitSet build_column_bitset(const StreamDescriptor& desc, const folly::F14FastSet<std::string_view>& columns) {
+inline util::BitSet build_column_bitset(const StreamDescriptor& desc, const ankerl::unordered_dense::set<std::string_view>& columns) {
     util::BitSet col_bitset(static_cast<util::BitSetSizeType>(desc.fields().size()));
     for (std::size_t c = 0; c < static_cast<std::size_t>(desc.fields().size()); ++c) {
         auto& f = desc.fields(static_cast<int>(c));
@@ -83,7 +83,7 @@ inline util::BitSet build_column_bitset(const StreamDescriptor& desc, const foll
 }
 
 inline util::BitSet build_column_bitset(const StreamDescriptor& desc, const std::vector<std::string>& columns) {
-    folly::F14FastSet<std::string_view> col_set{columns.begin(), columns.end()};
+    ankerl::unordered_dense::set<std::string_view> col_set{columns.begin(), columns.end()};
     return build_column_bitset(desc, col_set);
 }
 
@@ -115,7 +115,7 @@ inline std::optional<util::BitSet> requested_column_bitset_including_index(const
 inline std::optional<util::BitSet> clause_column_bitset(
         const StreamDescriptor& desc,
         const std::vector<std::shared_ptr<Clause>>& clauses) {
-    folly::F14FastSet<std::string_view> column_set;
+    ankerl::unordered_dense::set<std::string_view> column_set;
     for (const auto& clause: clauses) {
         auto opt_columns = clause->clause_info().input_columns_;
         if (opt_columns.has_value()) {

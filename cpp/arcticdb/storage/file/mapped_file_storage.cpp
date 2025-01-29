@@ -42,7 +42,7 @@ void MappedFileStorage::init() {
         ARCTICDB_DEBUG(log::storage(), "Creating new mapped file storage at path {}", config_.path());
         multi_segment_header_.initalize(StreamId{NumericId{0}}, config_.items_count());
         auto data_size = config_.bytes() + max_compressed_size_dispatch(multi_segment_header_.segment(),
-            config_.codec_opts(),
+            codec_,
             EncodingVersion{
             static_cast<uint16_t>(config_.encoding_version())}).max_compressed_bytes_;
         StreamId id = config_.has_str_id() ? StreamId{} : NumericId{};
@@ -133,7 +133,7 @@ bool MappedFileStorage::do_fast_delete() {
 void MappedFileStorage::do_finalize(KeyData key_data)  {
     multi_segment_header_.sort();
     auto header_segment = encode_dispatch(multi_segment_header_.detach_segment(),
-                                          config_.codec_opts(),
+                                          codec_,
                                           EncodingVersion{static_cast<uint16_t>(config_.encoding_version())});
     write_segment(std::move(header_segment));
     auto pos = reinterpret_cast<KeyData*>(file_.data() + offset_);

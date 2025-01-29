@@ -165,10 +165,9 @@ TEST(ReliableStorageLock, NotImplementedException) {
     as::LibraryIndex failed_library_index{environment_name, failed_config_resolver};
 
     as::UserAuth user_auth{"abc"};
-    auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
-
     auto lib = failed_library_index.get_library(library_path, as::OpenMode::WRITE, user_auth, storage::NativeVariantStorage());
-    auto store = std::make_shared<aa::AsyncStore<>>(aa::AsyncStore(lib, *codec_opt, EncodingVersion::V1));
+    BlockCodecImpl codec_opt;
+    auto store = std::make_shared<aa::AsyncStore<>>(aa::AsyncStore(lib, codec_opt, EncodingVersion::V1));
 
     EXPECT_THROW({
         ReliableStorageLock<> lock(StringId("test_lock"), store, ONE_SECOND);

@@ -9,6 +9,7 @@
 
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
+#include <arcticdb/codec/calculate_stats.hpp>
 
 namespace arcticdb {
 

@@ -11,6 +11,7 @@
 #include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/column_store/statistics.hpp>
 #include <arcticdb/column_store/column_data_random_accessor.hpp>
+#include <arcticdb/column_store/statistics.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/types.hpp>
@@ -498,7 +499,7 @@ public:
     }
 
     ColumnData data() const {
-        return ColumnData(&data_.buffer(), &shapes_.buffer(), type_, sparse_map_ ? &*sparse_map_ : nullptr);
+        return ColumnData(&data_.buffer(), &shapes_.buffer(), type_, sparse_map_ ? &*sparse_map_ : nullptr, nullptr);
     }
 
     const uint8_t* ptr() const {
@@ -931,6 +932,7 @@ private:
     size_t num_shapes() const;
     void set_sparse_bit_for_row(size_t sparse_location);
     void regenerate_offsets() const;
+
 
     // Permutes the physical column storage based on the given sorted_pos.
     void physical_sort_external(std::vector<uint32_t> &&sorted_pos);

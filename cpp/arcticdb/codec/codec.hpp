@@ -23,17 +23,17 @@ using ShapesBlockTDT = entity::TypeDescriptorTag<entity::DataTypeTag<entity::Dat
 
 Segment encode_dispatch(
     SegmentInMemory&& in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec &codec_opts,
+    const BlockCodecImpl& codec_opts,
     EncodingVersion encoding_version);
 
 Segment encode_v2(
     SegmentInMemory&& in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec& codec_opts
+    const BlockCodecImpl& codec_opts
 );
 
 Segment encode_v1(
     SegmentInMemory&& in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec& codec_opts
+    const BlockCodecImpl& codec_opts
 );
 
 void decode_v1(const Segment& segment,
@@ -49,7 +49,7 @@ void decode_v2(const Segment& segment,
 
 SizeResult max_compressed_size_dispatch(
     const SegmentInMemory& in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec &codec_opts,
+    const BlockCodecImpl& codec_opts,
     EncodingVersion encoding_version);
 
 EncodedFieldCollection decode_encoded_fields(
@@ -88,6 +88,8 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_for_incompletes
 HashedValue get_segment_hash(Segment& seg);
 
 SegmentDescriptorImpl read_segment_descriptor(const uint8_t*& data);
+
+bm::serializer<bm::bvector<> >::buffer encode_bitmap(const util::BitSet& sparse_map);
 
 } // namespace arcticdb
 

@@ -294,7 +294,8 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
-    const WriteIncompleteOptions& options) {
+    const WriteIncompleteOptions& options,
+    BlockCodecImpl block_codec) {
     ARCTICDB_SAMPLE(WriteIncompleteFrame, 0)
     log::version().debug("Command: write_incomplete_frame {}", stream_id);
 
@@ -350,22 +351,23 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta = frame->norm_meta;
     auto user_meta = frame->user_meta;
     auto bucketize_dynamic = frame->bucketize_dynamic;
-    bool sparsify_floats{false};
 
     TypedStreamVersion typed_stream_version{stream_id, VersionId{0}, KeyType::APPEND_DATA};
     return folly::collect(folly::window(std::move(slice_and_rowcount),
         [frame, slicing_policy, key = std::move(key),
-         store, sparsify_floats, typed_stream_version = std::move(typed_stream_version),
-            bucketize_dynamic, de_dup_map, desc, norm_meta, user_meta](
+         store, typed_stream_version = std::move(typed_stream_version),
+            bucketize_dynamic, de_dup_map, desc, norm_meta, user_meta, options, block_codec](
             auto&& slice) {
-            return async::submit_cpu_task(WriteToSegmentTask(
+            return async::submit_cpu_task(WriteToSegmentTask{
                 frame,
                 slice.first,
                 slicing_policy,
                 get_partial_key_gen(frame, typed_stream_version),
                 slice.second,
                 frame->index,
-                sparsify_floats))
+                options.write_options,
+                block_codec
+            })
                 .thenValue([store, de_dup_map, bucketize_dynamic, desc, norm_meta, user_meta](
                     std::tuple<stream::StreamSink::PartialKey,
                                SegmentInMemory,
@@ -406,11 +408,12 @@ void write_parallel_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
-    const WriteIncompleteOptions& options) {
+    const WriteIncompleteOptions& options,
+    BlockCodecImpl block_codec) {
     if (options.sort_on_index || (options.sort_columns && !options.sort_columns->empty())) {
         write_incomplete_frame_with_sorting(store, stream_id, frame, options).get();
     } else {
-        write_incomplete_frame(store, stream_id, frame, options ).get();
+        write_incomplete_frame(store, stream_id, frame, options, block_codec).get();
     }
 }
 
