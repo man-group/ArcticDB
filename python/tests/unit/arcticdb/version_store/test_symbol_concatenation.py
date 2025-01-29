@@ -64,16 +64,19 @@ def test_symbol_concat_complex(lmdb_library_factory, rows_per_segment, columns_p
     assert_frame_equal(expected, received)
 
 
-def test_symbol_concat_symbols_with_different_columns(lmdb_library_factory):
+@pytest.mark.parametrize("index", [None, [pd.Timestamp(0)]])
+def test_symbol_concat_symbols_with_different_columns(lmdb_library_factory, index):
     lib = lmdb_library_factory(LibraryOptions(columns_per_segment=2))
-    df_1 = pd.DataFrame({"col1": [0], "col3": [1]})
-    df_2 = pd.DataFrame({"col2": [2], "col3": [3]})
-    df_3 = pd.DataFrame({"col1": [4], "col4": [5]})
-    df_4 = pd.DataFrame({"col1": [6], "col3": [7], "col5": [8], "col6": [9]})
+    df_1 = pd.DataFrame({"col1": [0], "col3": [0]}, index=index)
+    df_2 = pd.DataFrame({"col2": [0], "col3": [0]}, index=index)
+    df_3 = pd.DataFrame({"col1": [0], "col4": [0]}, index=index)
+    df_4 = pd.DataFrame({"col1": [0], "col3": [0], "col5": [0], "col6": [0]}, index=index)
+    df_5 = pd.DataFrame({"col1": [0], "col3": [0], "col5": [0], "col7": [0]}, index=index)
     lib.write("sym1", df_1)
     lib.write("sym2", df_2)
     lib.write("sym3", df_3)
     lib.write("sym4", df_4)
+    lib.write("sym5", df_5)
 
     # First column different
     with pytest.raises(SchemaException):
@@ -87,4 +90,6 @@ def test_symbol_concat_symbols_with_different_columns(lmdb_library_factory):
     # Second row slice with extra column slice
     with pytest.raises(SchemaException):
         concat(lib.read_batch(["sym1", "sym4"], lazy=True)).collect()
-
+    # Row slices differ only in second column slice
+    with pytest.raises(SchemaException):
+        concat(lib.read_batch(["sym4", "sym5"], lazy=True)).collect()

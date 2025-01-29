@@ -1156,6 +1156,7 @@ StreamDescriptor descriptor_from_segments(std::vector<SliceAndKey>& slice_and_ke
     std::sort(std::begin(slice_and_keys), std::end(slice_and_keys), [] (const auto& left, const auto& right) {
         return std::tie(left.slice_.row_range, left.slice_.col_range) < std::tie(right.slice_.row_range, right.slice_.col_range);
     });
+    // TODO: Move this check to <join clause>::structure_for_processing, as it could be different for different clauses
     // TODO: Make more memory efficient by only keeping first element in memory, and comparing others on the fly
     // Track the field collections for each row-slice
     std::vector<FieldCollection> field_collections;
@@ -1188,44 +1189,6 @@ StreamDescriptor descriptor_from_segments(std::vector<SliceAndKey>& slice_and_ke
     StreamDescriptor res = slice_and_keys[0].segment_->descriptor().clone();
     res.fields_ = std::make_shared<FieldCollection>(std::move(field_collections[0]));
 
-//    auto index_field_count = res.data().index().field_count();
-//    const auto& first_row_range = slice_and_keys[0].slice().rows();
-//    for (size_t slice_idx = 1; slice_idx < slice_and_keys.size(); ++slice_idx) {
-//        const auto& slice_and_key = slice_and_keys[slice_idx];
-//        if (slice_and_key.slice().rows() == first_row_range) {
-//            const auto& desc = slice_and_key.segment_->descriptor();
-//            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-//                    desc.data().index().field_count() == index_field_count,
-//                    "Mismatching index field count {} != {}",
-//                    desc.data().index().field_count(),
-//                    index_field_count);
-//            for (size_t field_idx = index_field_count; field_idx < desc.field_count(); ++field_idx) {
-//                res.add_field(desc.fields().ref_at(field_idx));
-//            }
-//        } else {
-//            // For other row-slices, check that they match the first
-//            const auto& desc = slice_and_key.segment_->descriptor();
-//            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-//                    desc.data().index().field_count() == index_field_count,
-//                    "Mismatching index field count {} != {}",
-//                    desc.data().index().field_count(),
-//                    index_field_count);
-//            for (size_t field_idx = 0; field_idx < index_field_count; ++field_idx) {
-//                schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-//                        desc.fields().ref_at(field_idx) == res.fields().ref_at(field_idx),
-//                        "Mismatching index fields: {} != {}",
-//                        desc.fields().ref_at(field_idx),
-//                        res.fields().ref_at(field_idx));
-//            }
-//            for (size_t field_idx = index_field_count; field_idx < desc.field_count(); ++field_idx) {
-//                schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-//                        desc.fields().ref_at(field_idx) == res.fields().ref_at(field_idx + slice_and_key.slice().columns().first - index_field_count),
-//                        "Mismatching fields: {} != {}",
-//                        desc.fields().ref_at(field_idx),
-//                        res.fields().ref_at(field_idx + slice_and_key.slice().columns().first - index_field_count));
-//            }
-//        }
-//    }
     return res;
 }
 
