@@ -19,6 +19,46 @@ pytestmark = pytest.mark.pipeline
 
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
+@pytest.mark.parametrize("index", [None, pd.date_range("2025-01-01", periods=12)])
+def test_symbol_concat_basic(lmdb_library_factory, rows_per_segment, columns_per_segment, index):
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+    df_1 = pd.DataFrame(
+        {
+            "col1": np.arange(3, dtype=np.int64),
+            "col2": np.arange(100, 103, dtype=np.int64),
+            "col3": np.arange(1000, 1003, dtype=np.int64),
+        },
+        index=index[:3] if index is not None else None,
+    )
+    df_2 = pd.DataFrame(
+        {
+            "col1": np.arange(4, dtype=np.int64),
+            "col2": np.arange(200, 204, dtype=np.int64),
+            "col3": np.arange(2000, 2004, dtype=np.int64),
+        },
+        index=index[3:7] if index is not None else None,
+    )
+    df_3 = pd.DataFrame(
+        {
+            "col1": np.arange(5, dtype=np.int64),
+            "col2": np.arange(300, 305, dtype=np.int64),
+            "col3": np.arange(3000, 3005, dtype=np.int64),
+        },
+        index=index[7:] if index is not None else None,
+    )
+    lib.write("sym1", df_1)
+    lib.write("sym2", df_2)
+    lib.write("sym3", df_3)
+
+    received = concat(lib.read_batch(["sym1", "sym2", "sym3"], lazy=True)).collect().data
+    expected = pd.concat([df_1, df_2, df_3])
+    if index is None:
+        expected.index = pd.RangeIndex(len(expected))
+    assert_frame_equal(expected, received)
+
+
+@pytest.mark.parametrize("rows_per_segment", [2, 100_000])
+@pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 def test_symbol_concat_complex(lmdb_library_factory, rows_per_segment, columns_per_segment):
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
     df_1 = pd.DataFrame(
@@ -93,3 +133,36 @@ def test_symbol_concat_symbols_with_different_columns(lmdb_library_factory, inde
     # Row slices differ only in second column slice
     with pytest.raises(SchemaException):
         concat(lib.read_batch(["sym4", "sym5"], lazy=True)).collect()
+
+
+def test_symbol_concat_symbols_with_different_indexes(lmdb_library):
+    lib = lmdb_library
+    df_1 = pd.DataFrame({"col": [0]}, index=pd.RangeIndex(1))
+    df_2 = pd.DataFrame({"col": [0]}, index=[pd.Timestamp(0)])
+    dt1 = pd.Timestamp(0)
+    dt2 = pd.Timestamp(1)
+    arr1 = [dt1, dt1, dt2, dt2]
+    arr2 = [0, 1, 0, 1]
+    df_3 = pd.DataFrame({"col": [0]}, index=pd.MultiIndex.from_arrays([arr1, arr2], names=["datetime", "level"]))
+
+    lib.write("range_index_sym", df_1)
+    lib.write("timestamp_index_sym", df_2)
+    lib.write("multiindex_sym", df_3)
+
+    with pytest.raises(SchemaException):
+        concat(lib.read_batch(["range_index_sym", "timestamp_index_sym"], lazy=True)).collect()
+
+    with pytest.raises(SchemaException):
+        concat(lib.read_batch(["timestamp_index_sym", "range_index_sym"], lazy=True)).collect()
+
+    with pytest.raises(SchemaException):
+        concat(lib.read_batch(["range_index_sym", "multiindex_sym"], lazy=True)).collect()
+
+    with pytest.raises(SchemaException):
+        concat(lib.read_batch(["multiindex_sym", "range_index_sym"], lazy=True)).collect()
+
+    with pytest.raises(SchemaException):
+        concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True)).collect()
+
+    with pytest.raises(SchemaException):
+        concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True)).collect()
