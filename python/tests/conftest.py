@@ -22,6 +22,8 @@ import requests
 from datetime import datetime
 from functools import partial
 from tempfile import mkdtemp
+import sys
+import importlib
 
 from arcticdb import LibraryOptions
 from arcticdb.storage_fixtures.api import StorageFixture
@@ -268,6 +270,7 @@ def real_s3_sts_storage_factory() -> Generator[BaseS3StorageFixtureFactory, None
         with pytest.MonkeyPatch.context() as mp:
             mp.delenv("USERPROFILE", raising=False)
             mp.setenv("AWS_CONFIG_FILE", config_file_path)
+            importlib.reload(sys.modules['arcticdb'])
             yield f
     finally:
         real_s3_sts_clean_up(role_name, policy_name, username)
