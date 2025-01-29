@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://github.com/man-group/ArcticDB/raw/master/static/ArcticDBCropped.png" width="33%">
+  <img src="static/ArcticDB Logo Purple Horizontal.svg">
 </p>
 
 ---
@@ -7,7 +7,7 @@
 <div align="center">
   <p><b>Three minute ArcticDB demo from PyQuantNews</b></p>
   <a href="https://www.youtube.com/watch?v=5_AjD7aVEEM">
-    <img src="https://github.com/man-group/ArcticDB/raw/master/static/pqn_video_thumbnail.png" alt="Options data in ArcticDB" width="33%">
+    <img src="static/pqn_video_thumbnail.png" alt="Options data in ArcticDB" width="33%">
   </a>
 </div>
 
