@@ -266,6 +266,7 @@ def real_s3_sts_storage_factory() -> Generator[BaseS3StorageFixtureFactory, None
         # Check is made here as the new user gets authenticated only during being used; the check could be time consuming
         real_s3_sts_resources_ready(f) # resources created in iam may not be ready immediately in s3; Could take 10+ seconds
         with pytest.MonkeyPatch.context() as mp:
+            mp.delenv("USERPROFILE")
             mp.setenv("AWS_CONFIG_FILE", config_file_path)
             yield f
     finally:
