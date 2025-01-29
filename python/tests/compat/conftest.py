@@ -10,6 +10,7 @@ from ..util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
     VENV_COMPAT_TESTS_MARK,
+    PANDAS_2_COMPAT_TESTS_MARK
 )
 from packaging.version import Version
 
@@ -195,6 +196,22 @@ def old_venv(request, tmp_path):
 
 @pytest.fixture(
     params=[
+        pytest.param("tmp_path", marks=PANDAS_2_COMPAT_TESTS_MARK)
+    ]
+)
+def pandas_v1_venv(request):
+    """A venv with Pandas v1 installed (and an old ArcticDB version). To help test compat across Pandas versions."""
+    version = "1.6.2"
+    tmp_path = request.getfixturevalue(request.param)
+    path = os.path.join("venvs", tmp_path, version)
+    compat_dir = os.path.dirname(os.path.abspath(__file__))
+    requirements_file = os.path.join(compat_dir, f"requirements-{version}.txt")
+    with Venv(path, requirements_file, version) as old_venv:
+        yield old_venv
+
+
+@pytest.fixture(
+    params=[
         "lmdb",
         "s3_ssl_disabled",
         pytest.param("azurite", marks=AZURE_TESTS_MARK),
@@ -214,7 +231,7 @@ def arctic_uri(request):
         return storage_fixture.arctic_uri
 
 
-@pytest.fixture()
+@pytest.fixture
 def old_venv_and_arctic_uri(old_venv, arctic_uri):
     if arctic_uri.startswith("mongo") and "1.6.2" in old_venv.version:
         pytest.skip("Mongo storage backend is not supported in 1.6.2")
