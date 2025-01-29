@@ -186,3 +186,14 @@ def test_symbol_concat_symbols_with_different_indexes(lmdb_library):
 
     with pytest.raises(SchemaException):
         concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True)).collect()
+
+
+def test_symbol_concat_pickled_data(lmdb_library):
+    lib = lmdb_library
+    df = pd.DataFrame({"bytes": np.arange(10, dtype=np.uint64)})
+    pickled_data = {"hi", "there"}
+    lib.write("sym1", df)
+    lib.write_pickle("sym2", pickled_data)
+
+    with pytest.raises(SchemaException):
+        concat(lib.read_batch(["sym1", "sym2"], lazy=True)).collect()

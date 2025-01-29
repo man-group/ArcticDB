@@ -1216,10 +1216,13 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
                                                         pipeline_context,
                                                         norm_meta_mtx](auto&& opt_index_key) mutable {
                     std::variant<VersionedItem, StreamId> version_info;
+                    // TODO: Add support for symbols that only have incomplete segments
                     internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_index_key.has_value(), "batch_read_with_join_internal not supported with non-indexed data");
+                    // TODO: Only read the index segment once
                     auto index_key_seg = store->read_sync(*opt_index_key).second;
                     {
                         std::lock_guard<std::mutex> lock(*norm_meta_mtx);
+                        // TODO: Construct this at the end of the pipeline, instead of reusing input data
                         pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_key_seg.mutable_index_descriptor().mutable_proto().mutable_normalization()));
                     }
                     version_info = VersionedItem(std::move(*opt_index_key));

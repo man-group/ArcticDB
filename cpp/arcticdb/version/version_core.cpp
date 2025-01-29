@@ -1596,7 +1596,7 @@ folly::Future<std::vector<EntityId>> do_process(
         const ReadOptions& read_options,
         const std::shared_ptr<PipelineContext>& pipeline_context,
         std::shared_ptr<ComponentManager> component_manager) {
-    util::check_rte(!pipeline_context->is_pickled(),"Cannot perform multi-symbol join on pickled data");
+    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(!pipeline_context->is_pickled(),"Cannot perform multi-symbol join on pickled data");
     return read_and_process_2(store, pipeline_context, read_query, read_options, component_manager);
 }
 
@@ -2110,7 +2110,7 @@ folly::Future<std::vector<EntityId>> read_entity_ids_for_version(
         read_indexed_keys_to_pipeline(store, pipeline_context, std::get<VersionedItem>(version_info), *read_query, read_options);
     }
 
-    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(!pipeline_context->multi_key_, "Multi-symbol joines not supported with recursively normalized data");
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(!pipeline_context->multi_key_, "Multi-symbol joins not supported with recursively normalized data");
 
     if(opt_false(read_options.incompletes_)) {
         util::check(std::holds_alternative<IndexRange>(read_query->row_filter), "Streaming read requires date range filter");
