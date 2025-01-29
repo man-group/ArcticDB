@@ -481,7 +481,11 @@ public:
             if (validate_)
                 entry->validate();
         }
-        remove_entry_version_keys(store, old_entry, stream_id);
+        try {
+            remove_entry_version_keys(store, old_entry, stream_id);
+        } catch (const storage::KeyNotFoundException& e) {
+            log::version().debug("Failed to remove version keys for symbol {} in overwrite_symbol_tree, exception: {}", stream_id, e.what());
+        }
     }
 
     /**
