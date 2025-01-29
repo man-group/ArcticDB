@@ -57,6 +57,40 @@ def test_symbol_concat_basic(lmdb_library_factory, rows_per_segment, columns_per
     assert_frame_equal(expected, received)
 
 
+# TODO: Get working with column slicing
+@pytest.mark.xfail(reason="Not yet working with column slicing")
+@pytest.mark.parametrize("rows_per_segment", [2, 100_000])
+@pytest.mark.parametrize("columns_per_segment", [2, 100_000])
+@pytest.mark.parametrize("columns", [["col1"], ["col2"], ["col3"], ["col1", "col2"], ["col1", "col3"], ["col2", "col3"]])
+def test_symbol_concat_column_slicing(lmdb_library_factory, rows_per_segment, columns_per_segment, columns):
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+    df_1 = pd.DataFrame(
+        {
+            "col1": np.arange(3, dtype=np.int64),
+            "col2": np.arange(100, 103, dtype=np.int64),
+            "col3": np.arange(1000, 1003, dtype=np.int64),
+        },
+    )
+    df_2 = pd.DataFrame(
+        {
+            "col0": np.arange(10, 14, dtype=np.int64),
+            "col1": np.arange(4, dtype=np.int64),
+            "col2": np.arange(200, 204, dtype=np.int64),
+            "col3": np.arange(2000, 2004, dtype=np.int64),
+        },
+    )
+    lib.write("sym1", df_1)
+    lib.write("sym2", df_2)
+
+    lazy_df_1 = lib.read("sym1", columns=columns, lazy=True)
+    lazy_df_2 = lib.read("sym2", columns=columns, lazy=True)
+
+    received = concat([lazy_df_1, lazy_df_2]).collect().data
+    expected = pd.concat([df_1.loc[:, columns], df_2.loc[:, columns]])
+    expected.index = pd.RangeIndex(len(expected))
+    assert_frame_equal(expected, received)
+
+
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 def test_symbol_concat_multiindex(lmdb_library_factory, rows_per_segment, columns_per_segment):
