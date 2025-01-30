@@ -101,10 +101,6 @@ def test_s3_verification(monkeypatch, s3_storage, client_cert_file, client_cert_
     
 @REAL_S3_TESTS_MARK
 def test_s3_sts_auth(lib_name, real_s3_sts_storage):
-    importlib.reload(sys.modules['arcticdb'])
-    import os
-    logger.info(f"AWS_CONFIG_FILE: {os.getenv('AWS_CONFIG_FILE', None)}")
-    logger.info(f"USERPROFILE: {os.getenv('USERPROFILE', None)}")
     library = lib_name
     logger.info(f"Library to create: {library}")
     ac = Arctic(real_s3_sts_storage.arctic_uri)

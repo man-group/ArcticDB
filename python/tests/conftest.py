@@ -22,8 +22,6 @@ import requests
 from datetime import datetime
 from functools import partial
 from tempfile import mkdtemp
-import sys
-import importlib
 
 from arcticdb import LibraryOptions
 from arcticdb.storage_fixtures.api import StorageFixture
@@ -43,12 +41,13 @@ from arcticdb.storage_fixtures.s3 import (
 )
 from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
-from arcticdb_ext.storage import NativeVariantStorage
+from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod
 from arcticdb_ext import set_config_int, get_config_int
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
 from arcticdb.arctic import Arctic
 from .util.mark import (
+    WINDOWS,
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
     REAL_S3_TESTS_MARK,
@@ -255,32 +254,39 @@ def monkeypatch_session():
 
 @pytest.fixture(scope="session") # Config loaded at the first ArcticDB binary import, so we need to set it up before any tests
 def real_s3_sts_storage_factory(monkeypatch_session) -> Generator[BaseS3StorageFixtureFactory, None, None]:
-    sts_test_credentials_prefix = f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
-    username = f"gh_sts_test_user_{sts_test_credentials_prefix}"
-    role_name = f"gh_sts_test_role_{sts_test_credentials_prefix}"
-    policy_name = f"gh_sts_test_policy_name_{sts_test_credentials_prefix}"
     profile_name = "sts_test_profile"
     set_config_int("S3Storage.STSTokenExpiryMin", 15)
-    working_dir = mkdtemp(suffix="S3STSStorageFixtureFactory")
-    config_file_path = os.path.join(working_dir, "config")
-    try:
-        f = real_s3_sts_from_environment_variables(
-            user_name=username, 
-            role_name=role_name,
-            policy_name=policy_name, 
-            profile_name=profile_name, 
-            native_config=NativeVariantStorage(), # Setting here is purposely wrong to see whether it will get overridden later
-            additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
-            config_file_path=config_file_path
-            )
-        # Check is made here as the new user gets authenticated only during being used; the check could be time consuming
-        real_s3_sts_resources_ready(f) # resources created in iam may not be ready immediately in s3; Could take 10+ seconds
-        monkeypatch_session.setenv("AWS_CONFIG_FILE", config_file_path)
-        importlib.reload(sys.modules['arcticdb'])
+    # monkeypatch cannot runtime update environment variables in windows as copy of environment is made at startup
+    # Need to manually setup credetial beforehand if run locally
+    if WINDOWS: 
+        config_file_path = os.path.expanduser(os.path.join("~", ".aws", "config"))
+        f = real_s3_from_environment_variables(False, NativeVariantStorage(), "")
+        f.aws_auth = AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER
+        f.aws_profile = profile_name
         yield f
-    finally:
-        real_s3_sts_clean_up(role_name, policy_name, username)
-        safer_rmtree(None, working_dir)
+    else:
+        working_dir = mkdtemp(suffix="S3STSStorageFixtureFactory")
+        config_file_path = os.path.join(working_dir, "config")
+        sts_test_credentials_prefix = f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+        username = f"gh_sts_test_user_{sts_test_credentials_prefix}"
+        role_name = f"gh_sts_test_role_{sts_test_credentials_prefix}"
+        policy_name = f"gh_sts_test_policy_name_{sts_test_credentials_prefix}"
+        try:
+            f = real_s3_sts_from_environment_variables(
+                user_name=username, 
+                role_name=role_name,
+                policy_name=policy_name, 
+                profile_name=profile_name, 
+                native_config=NativeVariantStorage(), # Setting here is purposely wrong to see whether it will get overridden later
+                config_file_path=config_file_path
+                )
+            # Check is made here as the new user gets authenticated only during being used; the check could be time consuming
+            real_s3_sts_resources_ready(f) # resources created in iam may not be ready immediately in s3; Could take 10+ seconds
+            monkeypatch_session.setenv("AWS_CONFIG_FILE", config_file_path)
+            yield f
+        finally:
+            real_s3_sts_clean_up(role_name, policy_name, username)
+            safer_rmtree(None, working_dir)
 
 
 @pytest.fixture
