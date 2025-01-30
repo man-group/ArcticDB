@@ -122,11 +122,12 @@ std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vec
         if (!first_row)
             first_row = slice.row_range.first;
 
-        if (slice.row_range.first == *first_row)
-            slice_num_for_column = 0;
+        if (slice.row_range.first != *first_row) {
+            ++slice_num_for_column;
+            first_row = slice.row_range.first;
+        }
 
         slice_and_rowcount.emplace_back(slice, slice_num_for_column);
-        ++slice_num_for_column;
     }
     return slice_and_rowcount;
 }
