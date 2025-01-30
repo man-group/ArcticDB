@@ -20,7 +20,7 @@ from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
-from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
+from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError, ConcatClause as _ConcatClause
 import pandas as pd
@@ -488,7 +488,7 @@ class LazyDataFrameAfterJoin(QueryBuilder):
         self._lazy_dataframes = lazy_dataframes
         self._join = join
 
-    def collect(self) -> VersionedItem:
+    def collect(self) -> VersionedItemWithJoin:
         if not len(self._lazy_dataframes._lazy_dataframes):
             return []
         else:
@@ -1679,7 +1679,7 @@ class Library:
             read_requests: List[ReadRequest],
             join: Any,
             query_builder: Optional[QueryBuilder] = None,
-    ) -> VersionedItem:
+    ) -> VersionedItemWithJoin:
         symbol_strings = []
         as_ofs = []
         date_ranges = []

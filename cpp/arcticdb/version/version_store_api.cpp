@@ -795,7 +795,7 @@ ReadResult PythonVersionStore::batch_read_with_join(
         std::vector<std::shared_ptr<Clause>>&& clauses,
         std::any& handler_data) {
     auto versions_and_frame = batch_read_with_join_internal(stream_ids, version_queries, read_queries, read_options, std::move(clauses), handler_data);
-    return create_python_read_result({}, std::move(versions_and_frame.frame_and_descriptor_));
+    return create_python_read_result(versions_and_frame.versioned_items_, std::move(versions_and_frame.frame_and_descriptor_));
 }
 
 void PythonVersionStore::delete_snapshot(const SnapshotId& snap_name) {

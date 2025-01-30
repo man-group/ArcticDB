@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import copy
+from dataclasses import dataclass
 import datetime
 import os
 import sys
@@ -122,6 +123,12 @@ class VersionedItem:
     def __iter__(self):  # Backwards compatible with the old NamedTuple implementation
         warnings.warn("Don't iterate VersionedItem. Use attrs.astuple() explicitly", SyntaxWarning, stacklevel=2)
         return iter(attr.astuple(self))
+
+
+@dataclass
+class VersionedItemWithJoin:
+    versions: List[VersionedItem]
+    data: Any
 
 
 def _env_config_from_lib_config(lib_cfg, env):
@@ -2094,22 +2101,42 @@ class NativeVersionStore:
 
         return index_columns
 
-    def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
+    def _adapt_read_res(self, read_result: ReadResult) -> Union[VersionedItem, VersionedItemWithJoin]:
         frame_data = FrameData.from_cpp(read_result.frame_data)
+        # TODO: Return metadata for all symbol/version pairs as well
         meta = denormalize_user_metadata(read_result.udm, self._normalizer)
         data = self._normalizer.denormalize(frame_data, read_result.norm)
         if read_result.norm.HasField("custom"):
             data = self._custom_normalizer.denormalize(data, read_result.norm.custom)
 
-        return VersionedItem(
-            symbol=read_result.version.symbol,
-            library=self._library.library_path,
-            data=data,
-            version=read_result.version.version,
-            metadata=meta,
-            host=self.env,
-            timestamp=read_result.version.timestamp,
-        )
+        if isinstance(read_result.version, list):
+            versions = []
+            for idx in range(len(read_result.version)):
+                versions.append(
+                    VersionedItem(
+                        symbol=read_result.version[idx].symbol,
+                        library=self._library.library_path,
+                        data=None,
+                        version=read_result.version[idx].version,
+                        metadata=meta,
+                        host=self.env,
+                        timestamp=read_result.version[idx].timestamp,
+                    )
+                )
+            return VersionedItemWithJoin(
+                versions=versions,
+                data=data,
+            )
+        else:
+            return VersionedItem(
+                symbol=read_result.version.symbol,
+                library=self._library.library_path,
+                data=data,
+                version=read_result.version.version,
+                metadata=meta,
+                host=self.env,
+                timestamp=read_result.version.timestamp,
+            )
 
     def list_versions(
         self,

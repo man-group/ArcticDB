@@ -21,7 +21,7 @@ namespace arcticdb {
 
 struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
     ReadResult(
-            const VersionedItem& versioned_item,
+            const std::variant<VersionedItem, std::vector<VersionedItem>>& versioned_item,
             pipelines::PythonOutputFrame&& frame_data,
             const arcticdb::proto::descriptors::NormalizationMetadata& norm_meta,
             const arcticdb::proto::descriptors::UserDefinedMetadata& user_meta,
@@ -35,7 +35,7 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
             multi_keys(std::move(multi_keys)) {
 
     }
-    VersionedItem item;
+    std::variant<VersionedItem, std::vector<VersionedItem>> item;
     pipelines::PythonOutputFrame frame_data;
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta;
@@ -46,7 +46,7 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
 };
 
 inline ReadResult create_python_read_result(
-    const VersionedItem& version,
+    const std::variant<VersionedItem, std::vector<VersionedItem>>& version,
     FrameAndDescriptor&& fd) {
     auto result = std::move(fd);
     // Very old (pre Nov-2020) PandasIndex protobuf messages had no "start" or "step" fields. If is_physically_stored
