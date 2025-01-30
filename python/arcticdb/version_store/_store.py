@@ -1081,7 +1081,9 @@ class NativeVersionStore:
         version_queries = self._get_version_queries(len(symbols), as_ofs, iterate_snapshots_if_tombstoned=False)
         # Take a copy as _get_read_queries can modify the input argument, which makes reusing the input counter-intuitive
         per_symbol_query_builders = copy.deepcopy(per_symbol_query_builders)
-        read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, per_symbol_query_builders)
+        # TODO: Less hacky way for date ranges (and most likely row ranges) as part of ReadRequests to work
+        force_ranges_to_queries = True
+        read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, per_symbol_query_builders, force_ranges_to_queries)
         read_options = self._get_read_options(iterate_snapshots_if_tombstoned=False)
         return self._adapt_read_res(ReadResult(*self.version_store.batch_read_with_join(symbols, version_queries, read_queries, read_options, query_builder.clauses)))
 
@@ -1621,6 +1623,7 @@ class NativeVersionStore:
         row_ranges: Optional[List[Optional[Tuple[int, int]]]],
         columns: Optional[List[List[str]]],
         query_builder: Optional[Union[QueryBuilder, List[QueryBuilder]]],
+        force_ranges_to_queries: bool = False,
     ):
         read_queries = []
 
@@ -1666,6 +1669,9 @@ class NativeVersionStore:
                 these_columns = columns[idx]
             if query_builder is not None:
                 query = copy.deepcopy(query_builder) if isinstance(query_builder, QueryBuilder) else query_builder[idx]
+
+            if query is None and force_ranges_to_queries:
+                query = QueryBuilder()
 
             read_query = self._get_read_query(
                 date_range=date_range,

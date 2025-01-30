@@ -493,7 +493,7 @@ class LazyDataFrameAfterJoin(QueryBuilder):
             return []
         else:
             lib = self._lazy_dataframes._lib
-            return lib._read_batch_with_join(self._lazy_dataframes._read_requests(), self)
+            return lib.read_batch_with_join(self._lazy_dataframes._read_requests(), self)
 
     def __str__(self) -> str:
         query_builder_repr = super().__str__()
@@ -1674,7 +1674,7 @@ class Library:
                 iterate_snapshots_if_tombstoned=False,
             )
 
-    def _read_batch_with_join(
+    def read_batch_with_join(
             self,
             read_requests: List[ReadRequest],
             query_builder: Optional[QueryBuilder] = None,

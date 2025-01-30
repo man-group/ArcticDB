@@ -191,6 +191,49 @@ def test_symbol_concat_complex(lmdb_library_factory, rows_per_segment, columns_p
     assert_frame_equal(expected, received)
 
 
+def test_symbol_concat_querybuilder_syntax(lmdb_library):
+    lib = lmdb_library
+    df_0 = pd.DataFrame(
+        {
+            "col1": np.arange(3, dtype=np.int64),
+            "col2": np.arange(100, 103, dtype=np.int64),
+            "col3": np.arange(1000, 1003, dtype=np.int64),
+        },
+        index=pd.date_range(pd.Timestamp(0), freq="1000ns", periods=3),
+    )
+    df_1 = pd.DataFrame(
+        {
+            "col1": np.arange(4, dtype=np.int64),
+            "col2": np.arange(200, 204, dtype=np.int64),
+            "col3": np.arange(2000, 2004, dtype=np.int64),
+        },
+        index=pd.date_range(pd.Timestamp(2000), freq="1000ns", periods=4),
+    )
+    df_2 = pd.DataFrame(
+        {
+            "col1": np.arange(5, dtype=np.int64),
+            "col2": np.arange(300, 305, dtype=np.int64),
+            "col3": np.arange(3000, 3005, dtype=np.int64),
+        },
+        index=pd.date_range(pd.Timestamp(6000), freq="1000ns", periods=5),
+    )
+    lib.write("sym0", df_0)
+    lib.write("sym1", df_1)
+    lib.write("sym2", df_2)
+
+    read_request_0 = ReadRequest("sym0")
+    qb1 = QueryBuilder().date_range((pd.Timestamp(pd.Timestamp(3000)), None))
+    read_request_1 = ReadRequest("sym1", query_builder=qb1)
+    read_request_2 = ReadRequest("sym2", date_range=(None, pd.Timestamp(9000)))
+
+    q = QueryBuilder().concat().resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
+    received = lib.read_batch_with_join([read_request_0, read_request_1, read_request_2], query_builder=q).data
+
+    received = received.reindex(columns=sorted(received.columns))
+    expected = pd.concat([df_0, df_1[1:], df_2[:4]]).resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
+    assert_frame_equal(expected, received)
+
+
 @pytest.mark.parametrize("index", [None, [pd.Timestamp(0)]])
 def test_symbol_concat_symbols_with_different_columns(lmdb_library_factory, index):
     lib = lmdb_library_factory(LibraryOptions(columns_per_segment=2))
