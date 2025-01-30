@@ -402,6 +402,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("end", &DateRangeClause::end)
             .def("__str__", &DateRangeClause::to_string);
 
+    py::class_<ConcatClause, std::shared_ptr<ConcatClause>>(version, "ConcatClause")
+            .def(py::init<>())
+            .def("__str__", &ConcatClause::to_string);
+
     py::class_<ReadQuery, std::shared_ptr<ReadQuery>>(version, "PythonVersionStoreReadQuery")
             .def(py::init())
             .def_readwrite("columns",&ReadQuery::columns)
@@ -410,15 +414,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_readonly("needs_post_processing",&ReadQuery::needs_post_processing)
             // Unsurprisingly, pybind11 doesn't understand folly::poly, so use vector of variants here
             .def("add_clauses",
-                 [](ReadQuery& self,
-                    std::vector<std::variant<std::shared_ptr<FilterClause>,
-                                std::shared_ptr<ProjectClause>,
-                                std::shared_ptr<GroupByClause>,
-                                std::shared_ptr<AggregationClause>,
-                                std::shared_ptr<ResampleClause<ResampleBoundary::LEFT>>,
-                                std::shared_ptr<ResampleClause<ResampleBoundary::RIGHT>>,
-                                std::shared_ptr<RowRangeClause>,
-                                std::shared_ptr<DateRangeClause>>> clauses) {
+                [](ReadQuery& self, std::vector<ClauseVariant> clauses) {
                 clauses = plan_query(std::move(clauses));
                 std::vector<std::shared_ptr<Clause>> _clauses;
                 self.needs_post_processing = false;
@@ -765,6 +761,36 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                  const ReadOptions& read_options){
                  auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
                  return python_util::adapt_read_dfs(v.batch_read(stream_ids, version_queries, read_queries, read_options, handler_data));
+             },
+             py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
+        .def("batch_read_with_join",
+             [&](PythonVersionStore& v,
+                 const std::vector<StreamId> &stream_ids,
+                 const std::vector<VersionQuery>& version_queries,
+                 std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+                 const ReadOptions& read_options,
+                 ClauseVariant join,
+                 std::vector<ClauseVariant> post_join_clauses
+                 ){
+                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+                 post_join_clauses = plan_query(std::move(post_join_clauses));
+                 std::vector<std::shared_ptr<Clause>> _clauses;
+                 util::variant_match(
+                         join,
+                         [&](auto&& clause) {
+                             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                     clause->clause_info().multi_symbol_,
+                                     "Single-symbol clause cannot be used to join multiple symbols together");
+                             _clauses.emplace_back(std::make_shared<Clause>(*clause));
+                         }
+                 );
+                 for (auto&& clause: post_join_clauses) {
+                     util::variant_match(
+                             clause,
+                             [&](auto&& clause) {_clauses.emplace_back(std::make_shared<Clause>(*clause));}
+                     );
+                 }
+                 return adapt_read_df(v.batch_read_with_join(stream_ids, version_queries, read_queries, read_options, std::move(_clauses), handler_data));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
         .def("batch_read_keys",

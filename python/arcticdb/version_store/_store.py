@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import copy
+from dataclasses import dataclass
 import datetime
 import os
 import sys
@@ -122,6 +123,12 @@ class VersionedItem:
     def __iter__(self):  # Backwards compatible with the old NamedTuple implementation
         warnings.warn("Don't iterate VersionedItem. Use attrs.astuple() explicitly", SyntaxWarning, stacklevel=2)
         return iter(attr.astuple(self))
+
+
+@dataclass
+class VersionedItemWithJoin:
+    versions: List[VersionedItem]
+    data: Any
 
 
 def _env_config_from_lib_config(lib_cfg, env):
@@ -1066,6 +1073,19 @@ class NativeVersionStore:
                 vitem = self._post_process_dataframe(read_result, read_query, implement_read_index)
                 versioned_items.append(vitem)
         return versioned_items
+
+    def _batch_read_with_join(
+            self, symbols, as_ofs, date_ranges, row_ranges, columns, per_symbol_query_builders, join, query_builder
+    ):
+        implement_read_index = True
+        if columns:
+            columns = [self._resolve_empty_columns(c, implement_read_index) for c in columns]
+        version_queries = self._get_version_queries(len(symbols), as_ofs, iterate_snapshots_if_tombstoned=False)
+        # Take a copy as _get_read_queries can modify the input argument, which makes reusing the input counter-intuitive
+        per_symbol_query_builders = copy.deepcopy(per_symbol_query_builders)
+        read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, per_symbol_query_builders)
+        read_options = self._get_read_options(iterate_snapshots_if_tombstoned=False)
+        return self._adapt_read_res(ReadResult(*self.version_store.batch_read_with_join(symbols, version_queries, read_queries, read_options, join, query_builder.clauses)))
 
     def batch_read_metadata(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None, **kwargs
@@ -2083,22 +2103,40 @@ class NativeVersionStore:
 
         return index_columns
 
-    def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
+    def _adapt_read_res(self, read_result: ReadResult) -> Union[VersionedItem, VersionedItemWithJoin]:
         frame_data = FrameData.from_cpp(read_result.frame_data)
-        meta = denormalize_user_metadata(read_result.udm, self._normalizer)
         data = self._normalizer.denormalize(frame_data, read_result.norm)
         if read_result.norm.HasField("custom"):
             data = self._custom_normalizer.denormalize(data, read_result.norm.custom)
 
-        return VersionedItem(
-            symbol=read_result.version.symbol,
-            library=self._library.library_path,
-            data=data,
-            version=read_result.version.version,
-            metadata=meta,
-            host=self.env,
-            timestamp=read_result.version.timestamp,
-        )
+        if isinstance(read_result.version, list):
+            versions = []
+            for idx in range(len(read_result.version)):
+                versions.append(
+                    VersionedItem(
+                        symbol=read_result.version[idx].symbol,
+                        library=self._library.library_path,
+                        data=None,
+                        version=read_result.version[idx].version,
+                        metadata=denormalize_user_metadata(read_result.udm[idx], self._normalizer),
+                        host=self.env,
+                        timestamp=read_result.version[idx].timestamp,
+                    )
+                )
+            return VersionedItemWithJoin(
+                versions=versions,
+                data=data,
+            )
+        else:
+            return VersionedItem(
+                symbol=read_result.version.symbol,
+                library=self._library.library_path,
+                data=data,
+                version=read_result.version.version,
+                metadata=denormalize_user_metadata(read_result.udm, self._normalizer),
+                host=self.env,
+                timestamp=read_result.version.timestamp,
+            )
 
     def list_versions(
         self,

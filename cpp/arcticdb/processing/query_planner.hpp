@@ -22,7 +22,8 @@ using ClauseVariant = std::variant<std::shared_ptr<FilterClause>,
         std::shared_ptr<ResampleClause<ResampleBoundary::LEFT>>,
         std::shared_ptr<ResampleClause<ResampleBoundary::RIGHT>>,
         std::shared_ptr<RowRangeClause>,
-        std::shared_ptr<DateRangeClause>>;
+        std::shared_ptr<DateRangeClause>,
+        std::shared_ptr<ConcatClause>>;
 
 std::vector<ClauseVariant> plan_query(std::vector<ClauseVariant>&& clauses);
 
