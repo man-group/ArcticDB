@@ -22,7 +22,6 @@
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
 
 
 namespace arcticdb::version_store {
@@ -300,7 +299,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("error_code", &DataError::error_code)
             .def_property_readonly("error_category", &DataError::error_category)
             .def_property_readonly("exception_string", &DataError::exception_string)
-            .def("__str__", &DataError::to_string);
+            .def("__str__", &DataError::to_string)
+            .def("__repr__", &DataError::to_string);
 
     // TODO: add repr.
     py::class_<VersionedItem>(version, "VersionedItem")
@@ -784,6 +784,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("batch_append",
              &PythonVersionStore::batch_append,
              py::call_guard<SingleThreadMutexHolder>(), "Batch append to a list of symbols")
+        .def("batch_update",
+             &PythonVersionStore::batch_update,
+             py::call_guard<SingleThreadMutexHolder>(), "Batch update a list of symbols")
         .def("batch_restore_version",
              [&](PythonVersionStore& v, const std::vector<StreamId>& ids, const std::vector<VersionQuery>& version_queries){
                  auto results = v.batch_restore_version(ids, version_queries);
