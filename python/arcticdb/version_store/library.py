@@ -22,7 +22,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError, ConcatClause as _ConcatClause
+from arcticdb_ext.version_store import DataError
 import pandas as pd
 import numpy as np
 import logging
@@ -482,22 +482,22 @@ class LazyDataFrameAfterJoin(QueryBuilder):
     def __init__(
             self,
             lazy_dataframes: LazyDataFrameCollection,
-            join: Any,
+            join: QueryBuilder,
     ):
         super().__init__()
         self._lazy_dataframes = lazy_dataframes
-        self._join = join
+        self.then(join)
 
     def collect(self) -> VersionedItemWithJoin:
         if not len(self._lazy_dataframes._lazy_dataframes):
             return []
         else:
             lib = self._lazy_dataframes._lib
-            return lib._read_batch_with_join(self._lazy_dataframes._read_requests(), self._join, self)
+            return lib._read_batch_with_join(self._lazy_dataframes._read_requests(), self)
 
     def __str__(self) -> str:
         query_builder_repr = super().__str__()
-        return f"LazyDataFrameAfterJoin({self._join}({self._lazy_dataframes._lazy_dataframes}){' | ' if len(query_builder_repr) else ''}{query_builder_repr})"
+        return f"LazyDataFrameAfterJoin({self._lazy_dataframes._lazy_dataframes} | {query_builder_repr})"
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -506,7 +506,7 @@ class LazyDataFrameAfterJoin(QueryBuilder):
 def concat(lazy_dataframes: Union[List[LazyDataFrame], LazyDataFrameCollection]) -> LazyDataFrameAfterJoin:
     if not isinstance(lazy_dataframes, LazyDataFrameCollection):
         lazy_dataframes = LazyDataFrameCollection(lazy_dataframes)
-    return LazyDataFrameAfterJoin(lazy_dataframes, _ConcatClause())
+    return LazyDataFrameAfterJoin(lazy_dataframes, QueryBuilder().concat())
 
 
 def col(name: str) -> ExpressionNode:
@@ -1677,7 +1677,6 @@ class Library:
     def _read_batch_with_join(
             self,
             read_requests: List[ReadRequest],
-            join: Any,
             query_builder: Optional[QueryBuilder] = None,
     ) -> VersionedItemWithJoin:
         symbol_strings = []
@@ -1702,7 +1701,6 @@ class Library:
             row_ranges,
             columns,
             per_symbol_query_builders,
-            join,
             query_builder,
         )
 

@@ -769,27 +769,34 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                  const std::vector<VersionQuery>& version_queries,
                  std::vector<std::shared_ptr<ReadQuery>>& read_queries,
                  const ReadOptions& read_options,
-                 ClauseVariant join,
-                 std::vector<ClauseVariant> post_join_clauses
+                 std::vector<ClauseVariant> clauses
                  ){
-                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
-                 post_join_clauses = plan_query(std::move(post_join_clauses));
+                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(!clauses.empty(), "batch_read_with_join called with no clauses");
+                 clauses = plan_query(std::move(clauses));
                  std::vector<std::shared_ptr<Clause>> _clauses;
-                 util::variant_match(
-                         join,
-                         [&](auto&& clause) {
-                             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                                     clause->clause_info().multi_symbol_,
-                                     "Single-symbol clause cannot be used to join multiple symbols together");
-                             _clauses.emplace_back(std::make_shared<Clause>(*clause));
-                         }
-                 );
-                 for (auto&& clause: post_join_clauses) {
+                 bool first_clause{true};
+                 for (auto&& clause: clauses) {
                      util::variant_match(
                              clause,
-                             [&](auto&& clause) {_clauses.emplace_back(std::make_shared<Clause>(*clause));}
+                             [&](auto&& clause) {
+                                 if (first_clause) {
+                                     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                             clause->clause_info().multi_symbol_,
+                                             "Single-symbol clause cannot be used to join multiple symbols together");
+                                     _clauses.emplace_back(std::make_shared<Clause>(*clause));
+                                     first_clause = false;
+                                 } else {
+                                     // TODO: Add this check to ReadQuery.add_clauses
+                                     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                             !clause->clause_info().multi_symbol_,
+                                             "Multi-symbol clause cannot be used on a single symbol");
+                                     _clauses.emplace_back(std::make_shared<Clause>(*clause));
+                                 }
+                                 _clauses.emplace_back(std::make_shared<Clause>(*clause));
+                             }
                      );
                  }
+                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
                  return adapt_read_df(v.batch_read_with_join(stream_ids, version_queries, read_queries, read_options, std::move(_clauses), handler_data));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
