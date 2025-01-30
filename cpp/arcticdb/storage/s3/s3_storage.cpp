@@ -106,11 +106,7 @@ bool S3Storage::do_key_exists(const VariantKey& key) {
 namespace arcticdb::storage::s3 {
 
 void S3Storage::create_s3_client(const S3Settings &conf, const Aws::Auth::AWSCredentials& creds) {
-    if (conf.use_mock_storage_for_testing()){
-        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock S3 storage");
-        s3_client_ = std::make_unique<MockS3Client>();
-    }
-    else if (conf.aws_auth() == AWSAuthMethod::STS_PROFILE_CREDENTIALS_PROVIDER){
+    if (conf.aws_auth() == AWSAuthMethod::STS_PROFILE_CREDENTIALS_PROVIDER){
         Aws::Config::ReloadCachedConfigFile(); // config files loaded in Aws::InitAPI; It runs once at first S3Storage object construct; reload to get latest
         auto client_config = get_s3_config(conf);
         auto sts_client_factory = [&](const Aws::Auth::AWSCredentials& creds) { // Get default allocation tag
@@ -133,6 +129,11 @@ void S3Storage::create_s3_client(const S3Settings &conf, const Aws::Auth::AWSCre
     } else {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using provided auth credentials");
         s3_client_ = std::make_unique<S3ClientImpl>(creds, get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
+    }
+
+    if (conf.use_mock_storage_for_testing()){
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock S3 storage");
+        s3_client_ = std::make_unique<MockS3Client>(std::move(s3_client_));
     }
 }
 
