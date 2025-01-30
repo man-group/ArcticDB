@@ -135,6 +135,11 @@ void S3Storage::create_s3_client(const S3Settings &conf, const Aws::Auth::AWSCre
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using provided auth credentials");
         s3_client_ = std::make_unique<S3ClientImpl>(creds, get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
     }
+
+    if (conf.use_mock_storage_for_testing()){
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock S3 storage");
+        s3_client_ = std::make_unique<MockS3Client>(std::move(s3_client_));
+    }
 }
 
 S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const S3Settings &conf) :
