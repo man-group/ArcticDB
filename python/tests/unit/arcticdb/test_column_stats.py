@@ -29,12 +29,13 @@ def generate_symbol(lib, sym):
     lib.write(sym, df0)
     lib.append(sym, df1)
     expected_column_stats = lib.read_index(sym)
+
     expected_column_stats.drop(
         expected_column_stats.columns.difference(["start_index", "end_index"]),
         axis=1,
         inplace=True,
     )
-    expected_column_stats = expected_column_stats.iloc[[0, 1]]
+    expected_column_stats = expected_column_stats.iloc[[0, 2]]
     expected_column_stats["v1.0_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min()]
     expected_column_stats["v1.0_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max()]
     expected_column_stats["v1.0_MIN(col_2)"] = [df0["col_2"].min(), df1["col_2"].min()]
@@ -69,8 +70,6 @@ def test_column_stats_basic_flow(lmdb_version_store_tiny_segment):
     assert lib.get_column_stats_info(sym) == column_stats_dict
 
     column_stats = lib.read_column_stats(sym)
-    print("Expected: {}".format(expected_column_stats))
-    print("Actual: {}".format(column_stats))
     assert_stats_equal(column_stats, expected_column_stats)
 
     lib.drop_column_stats(sym)
@@ -315,7 +314,7 @@ def test_column_stats_duplicated_primary_index(lmdb_version_store_tiny_segment):
         axis=1,
         inplace=True,
     )
-    expected_column_stats = expected_column_stats.iloc[[0, 1]]
+    expected_column_stats = expected_column_stats.iloc[[0, 3]]
     expected_column_stats["v1.0_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min()]
     expected_column_stats["v1.0_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max()]
 
