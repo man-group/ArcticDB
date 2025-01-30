@@ -668,6 +668,8 @@ class Library:
         Any non-`DatetimeIndex` will converted into an internal `RowCount` index. That is, ArcticDB will assign each
         row a monotonically increasing integer identifier and that will be used for the index.
 
+        See the Metadata section of our online documentation for details about how metadata is persisted and caveats.
+
         Parameters
         ----------
         symbol : str
@@ -1804,6 +1806,8 @@ class Library:
 
         This method should be faster than `write` as it involves no data segment read/write operations.
 
+        See the Metadata section of our online documentation for details about how metadata is persisted and caveats.
+
         Parameters
         ----------
         symbol
@@ -1830,6 +1834,8 @@ class Library:
         `write_metadata_payloads`.
         Note that this isn't an atomic operation - it's possible for the metadata for one symbol to be fully written and
         readable before another symbol.
+
+        See the Metadata section of our online documentation for details about how metadata is persisted and caveats.
 
         Parameters
         ----------
