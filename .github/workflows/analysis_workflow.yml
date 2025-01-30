@@ -43,25 +43,30 @@ jobs:
       matrix: 
         commits: ${{ fromJson(needs.get_commits_to_benchmark.outputs.matrix)}}  
     name: Benchmark commit ${{ matrix.commits }}
-    uses: ./.github/workflows/benchmark_commits.yml
-    secrets: inherit
-    with:
-      commit: ${{ matrix.commits }}
-      run_all_benchmarks: ${{ inputs.run_all_benchmarks || false }}
-      run_on_pr_head: ${{ github.event_name == 'pull_request_target' }}
-      dev_image_tag: ${{ inputs.dev_image_tag || 'latest' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Dummy
+        run: echo hi
 
   publish_benchmark_results_to_gh_pages:  
     name: Publish benchmark results to gh-pages
-    if: ${{ github.ref == 'refs/heads/master' && github.head_ref == '' }}  # only publish for the scheduled master builds, head_ref only populated for PR builds https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/accessing-contextual-information-about-workflow-runs
+    if: ${{ github.event_name != 'pull_request_target' }} # only publish for the scheduled master builds, head_ref only populated for PR builds https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/accessing-contextual-information-about-workflow-runs
     needs: [benchmark_commits]
     runs-on: ubuntu-22.04
+    env:
+      event_name: ${{ github.event_name }}
+      head_ref: ${{ github.head_ref }}
     container:
       image: ubuntu:22.04 # Native runner doesn't allow setting up the ca softlinks required below
     permissions:
       contents: write
 
     steps:
+      - name: debug
+        run: |
+          echo event_name $event_name
+          echo head_ref $head_ref
+
       - name: Select Python
         uses: actions/setup-python@v4.7.1
         with:
