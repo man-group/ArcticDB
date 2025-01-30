@@ -308,6 +308,26 @@ class ReadInfoRequest(NamedTuple):
         res += ")"
         return res
 
+class UpdatePayload:
+
+    def __init__(
+        self,
+        symbol: str,
+        data: NormalizableType,
+        metadata: Any = None,
+        date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None
+    ):
+        self.symbol = symbol
+        self.data = data
+        self.metadata = metadata
+        self.date_range = date_range
+
+    def __repr__(self):
+        return(
+            f"UpdatePayload(symbol={self.symbol}, data_id={id(self.data)}"
+            f", metadata={self.metadata}" if self.metadata is not None else ""
+            f", date_range={self.date_range}" if self.date_range is not None else ""
+        )
 
 class LazyDataFrame(QueryBuilder):
     """
@@ -1138,6 +1158,83 @@ class Library:
             date_range=date_range,
             prune_previous_version=prune_previous_versions,
         )
+
+    def update_batch(
+        self,
+        update_payloads: List[UpdatePayload],
+        upsert: bool = False,
+        prune_previous_versions: bool = False,
+    ) -> List[Union[VersionedItem, DataError]]:
+        """
+        Perform an update operation on a list of symbols in parallel.
+
+        Parameters
+        ----------
+        update_payloads: List[UpdatePayload]
+            List `arcticdb.library.UpdatePayload`. Each element of the list describes an update operation for a
+            particular symbol. Providing the symbol name, data, etc.
+        prune_previous_versions: bool, default=False
+            Removes previous (non-snapshotted) versions from the library.
+        upsert: bool, default=False
+            If True any symbol in `update_payloads` which is not already in the library will be created.
+
+        Returns
+        -------
+        List[Union[VersionedItem, DataError]]
+            List of versioned items. i-th entry corresponds to i-th element of `update_payloads`. Each result correspond
+            to a structure containing metadata and version number of the affected symbol in the store. If a key error or
+            any other internal exception is raised, a DataError object is returned, with symbol, error_code,
+            error_category, and exception_string properties.
+
+        Raises
+        ------
+        ArcticDuplicateSymbolsInBatchException
+            When duplicate symbols appear in payload.
+        ArcticUnsupportedDataTypeException
+            If data that is not of NormalizableType appears in any of the payloads.
+
+        Examples
+        ------
+        >>> df1 = pd.DataFrame({'column_1': [1, 2, 3]}, index=pd.date_range("2025-01-01", periods=3))
+        >>> df1
+                    column_1
+        2025-01-01         1
+        2025-01-02         2
+        2025-01-03         3
+        >>> df2 = pd.DataFrame({'column_2': [10, 11]}, index=pd.date_range("2024-01-01", periods=2))
+        >>> df2
+                    column_2
+        2024-01-01        10
+        2024-01-02        11
+        >>> lib.write("symbol_1", df1)
+        >>> lib.write("symbol_2", df1)
+        >>> lib.update_batch([arcticdb.library.UpdatePayload("symbol_1", pd.DataFrame({"column_1": [4, 5]}, index=pd.date_range("2025-01-03", periods=2))), arcticdb.library.UpdatePayload("symbol_2", pd.DataFrame({"column_2": [-1]}, index=pd.date_range("2023-01-01", periods=1)))])
+        [VersionedItem(symbol='symbol_1', library='test', data=n/a, version=1, metadata=(None,), host='LMDB(path=...)', timestamp=1737542783853861819), VersionedItem(symbol='symbol_2', library='test', data=n/a, version=1, metadata=(None,), host='LMDB(path=...)', timestamp=1737542783851798754)]
+        >>> lib.read("symbol_1").data
+                    column_1
+        2025-01-01         1
+        2025-01-02         2
+        2025-01-03         4
+        2025-01-04         5
+        >>> lib.read("symbol_2").data
+                    column_2
+        2023-01-01        -1
+        2024-01-01        10
+        2024-01-02        11
+        """
+
+        self._raise_if_duplicate_symbols_in_batch(update_payloads)
+        self._raise_if_unsupported_type_in_write_batch(update_payloads)
+
+        batch_update_result = self._nvs._batch_update_internal(
+            [p.symbol for p in update_payloads],
+            [p.data for p in update_payloads],
+            [p.metadata for p in update_payloads],
+            [p.date_range for p in update_payloads],
+            prune_previous_version=prune_previous_versions,
+            upsert=upsert,
+        )
+        return batch_update_result
 
     def delete_staged_data(self, symbol: str):
         """

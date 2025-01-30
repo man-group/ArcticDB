@@ -787,6 +787,19 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
     return res;
 }
 
+std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_update(
+    const std::vector<StreamId>& stream_ids,
+    const std::vector<py::tuple>& items,
+    const std::vector<py::object>& norms,
+    const std::vector<py::object>& user_metas,
+    const std::vector<UpdateQuery>& update_qeries,
+    bool prune_previous_versions,
+    bool upsert
+) {
+    auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas, cfg().write_options().empty_types());
+    return batch_update_internal(stream_ids, std::move(frames), update_qeries, prune_previous_versions, upsert);
+}
+
 void PythonVersionStore::delete_snapshot(const SnapshotId& snap_name) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_snapshot");
     auto opt_snapshot =  get_snapshot(store(), snap_name);
