@@ -124,11 +124,12 @@ NfsBackedStorage::NfsBackedStorage(const LibraryPath &library_path, OpenMode mod
         bucket_name_(conf.bucket_name()),
         region_(conf.region()) {
 
+
+    s3_client_ = std::make_unique<s3::S3ClientImpl>(s3::get_aws_credentials(conf), s3::get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
+
     if (conf.use_mock_storage_for_testing()) {
         log::storage().warn("Using Mock S3 storage for NfsBackedStorage");
-        s3_client_ = std::make_unique<s3::MockS3Client>();
-    } else {
-        s3_client_ = std::make_unique<s3::S3ClientImpl>(s3::get_aws_credentials(conf), s3::get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
+        s3_client_ = std::make_unique<s3::MockS3Client>(std::move(s3_client_));
     }
 
     if (conf.prefix().empty()) {
