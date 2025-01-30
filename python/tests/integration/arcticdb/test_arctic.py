@@ -18,6 +18,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import List
 from enum import Enum
+import importlib
 
 from arcticdb_ext import get_config_int
 from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
@@ -79,9 +80,28 @@ def edit_connection_string(uri, delimiter, storage, ssl_setting, client_cert_fil
         uri += f"{delimiter}CA_cert_dir={storage.factory.client_cert_dir}"
     return uri
 
+# s3_storage will become non-ssl if SSL_TEST_SUPPORTED is False
+@pytest.mark.parametrize('client_cert_file', parameter_display_status if SSL_TEST_SUPPORTED else no_ssl_parameter_display_status)
+@pytest.mark.parametrize('client_cert_dir', parameter_display_status if SSL_TEST_SUPPORTED else no_ssl_parameter_display_status)
+@pytest.mark.parametrize('ssl_setting', parameter_display_status if SSL_TEST_SUPPORTED else no_ssl_parameter_display_status)
+def test_s3_verification(monkeypatch, s3_storage, client_cert_file, client_cert_dir, ssl_setting):
+    # monkeypatch.setenv("ARCTICDB_all_loglevel", "TRACE")
+    storage = s3_storage
+    # import importlib
+    # importlib.reload(sys.modules['arcticdb'])
+    # Leaving ca file and ca dir unset will fallback to using os default setting,
+    # which is different from the test environment
+    default_setting = DefaultSetting(storage.factory)
+    monkeypatch.setattr("ssl.get_default_verify_paths", lambda: default_setting)
+    uri = edit_connection_string(storage.arctic_uri, "&", storage, ssl_setting, client_cert_file, client_cert_dir)
+    ac = Arctic(uri)
+    lib = ac.create_library("test")
+    lib.write("sym", pd.DataFrame())
 
+    
 @REAL_S3_TESTS_MARK
 def test_s3_sts_auth(lib_name, real_s3_sts_storage):
+    importlib.reload(sys.modules['arcticdb'])
     import os
     logger.info(f"AWS_CONFIG_FILE: {os.getenv('AWS_CONFIG_FILE', None)}")
     logger.info(f"USERPROFILE: {os.getenv('USERPROFILE', None)}")
@@ -106,6 +126,7 @@ def test_s3_sts_auth(lib_name, real_s3_sts_storage):
 @SLOW_TESTS_MARK
 @REAL_S3_TESTS_MARK
 def test_s3_sts_expiry_check(lib_name, real_s3_sts_storage):
+    importlib.reload(sys.modules['arcticdb'])
     """
     The test will obtain token at minimum expiration time of 15 minutes.
     Then will loop reading content of a symbol for 15+3 minuets minutes. If the 
@@ -151,6 +172,7 @@ def test_s3_sts_expiry_check(lib_name, real_s3_sts_storage):
 
 @REAL_S3_TESTS_MARK
 def test_s3_sts_auth_store(real_s3_sts_version_store):
+    importlib.reload(sys.modules['arcticdb'])
     lib = real_s3_sts_version_store
     df = pd.DataFrame({'a': [1, 2, 3]})
     lib.write("sym", df)
