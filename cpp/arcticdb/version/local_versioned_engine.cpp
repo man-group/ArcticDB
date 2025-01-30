@@ -1209,8 +1209,9 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
     auto component_manager = std::make_shared<ComponentManager>();
     auto pipeline_context = std::make_shared<PipelineContext>();
     auto norm_meta_mtx = std::make_shared<std::mutex>();
-    // TODO: Generate this in a less hacky way
+    // TODO: Generate these in a less hacky way
     auto res_versioned_items = std::make_shared<std::vector<VersionedItem>>(stream_ids.size());
+    auto res_metadatas = std::make_shared<std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>(stream_ids.size());
     DecodePathData shared_data;
     for (auto&& [idx, opt_index_key_fut]: folly::enumerate(opt_index_key_futs)) {
         symbol_entities_futs.emplace_back(
@@ -1221,7 +1222,8 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
                                                         &component_manager,
                                                         pipeline_context,
                                                         norm_meta_mtx,
-                                                        res_versioned_items](auto&& opt_index_key) mutable {
+                                                        res_versioned_items,
+                                                        res_metadatas](auto&& opt_index_key) mutable {
                     std::variant<VersionedItem, StreamId> version_info;
                     // TODO: Add support for symbols that only have incomplete segments
                     internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_index_key.has_value(), "batch_read_with_join_internal not supported with non-indexed data");
@@ -1232,8 +1234,9 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
                         // TODO: Construct this at the end of the pipeline, instead of reusing input data
                         pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_key_seg.mutable_index_descriptor().mutable_proto().mutable_normalization()));
                     }
-                    // Shouldn't need mutex protecting as vector is presized and each element is only accessed once
-                    (*res_versioned_items)[idx] = VersionedItem(*opt_index_key);
+                    // Shouldn't need mutex protecting as vectors are presized and each element is only accessed once
+                    res_versioned_items->at(idx) = VersionedItem(*opt_index_key);
+                    res_metadatas->at(idx) = index_key_seg.mutable_index_descriptor().user_metadata();
                     version_info = VersionedItem(std::move(*opt_index_key));
                     return read_entity_ids_for_version(store, version_info, read_query, read_options, component_manager);
                 })
@@ -1253,10 +1256,11 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
         // TODO: Make constructing the output descriptor a standard end of pipeline operation
         pipeline_context->set_descriptor(descriptor_from_segments(slice_and_keys));
         return prepare_output_frame(std::move(slice_and_keys), pipeline_context, store, ReadOptions{}, handler_data);
-    }).thenValueInline([&handler_data, pipeline_context, shared_data, res_versioned_items](SegmentInMemory&& frame) mutable {
+    }).thenValueInline([&handler_data, pipeline_context, shared_data, res_versioned_items, res_metadatas](SegmentInMemory&& frame) mutable {
         return reduce_and_fix_columns(pipeline_context, frame, ReadOptions{}, handler_data)
-        .thenValue([pipeline_context, frame, shared_data, res_versioned_items](auto&&) mutable {
+        .thenValue([pipeline_context, frame, shared_data, res_versioned_items, res_metadatas](auto&&) mutable {
             return MultiSymbolReadOutput{std::move(*res_versioned_items),
+                                     std::move(*res_metadatas),
                                      {frame,
                                       timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_),
                                       {},

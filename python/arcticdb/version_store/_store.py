@@ -2103,8 +2103,6 @@ class NativeVersionStore:
 
     def _adapt_read_res(self, read_result: ReadResult) -> Union[VersionedItem, VersionedItemWithJoin]:
         frame_data = FrameData.from_cpp(read_result.frame_data)
-        # TODO: Return metadata for all symbol/version pairs as well
-        meta = denormalize_user_metadata(read_result.udm, self._normalizer)
         data = self._normalizer.denormalize(frame_data, read_result.norm)
         if read_result.norm.HasField("custom"):
             data = self._custom_normalizer.denormalize(data, read_result.norm.custom)
@@ -2118,7 +2116,7 @@ class NativeVersionStore:
                         library=self._library.library_path,
                         data=None,
                         version=read_result.version[idx].version,
-                        metadata=meta,
+                        metadata=denormalize_user_metadata(read_result.udm[idx], self._normalizer),
                         host=self.env,
                         timestamp=read_result.version[idx].timestamp,
                     )
@@ -2133,7 +2131,7 @@ class NativeVersionStore:
                 library=self._library.library_path,
                 data=data,
                 version=read_result.version.version,
-                metadata=meta,
+                metadata=denormalize_user_metadata(read_result.udm, self._normalizer),
                 host=self.env,
                 timestamp=read_result.version.timestamp,
             )

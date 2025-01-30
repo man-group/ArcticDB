@@ -55,13 +55,18 @@ struct ReadVersionOutput {
 
 struct MultiSymbolReadOutput {
     MultiSymbolReadOutput() = delete;
-    MultiSymbolReadOutput(std::vector<VersionedItem>&& versioned_items, FrameAndDescriptor&& frame_and_descriptor):
+    MultiSymbolReadOutput(
+            std::vector<VersionedItem>&& versioned_items,
+            std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>&& metadatas,
+            FrameAndDescriptor&& frame_and_descriptor):
             versioned_items_(std::move(versioned_items)),
+            metadatas_(std::move(metadatas)),
             frame_and_descriptor_(std::move(frame_and_descriptor)) {}
 
     ARCTICDB_MOVE_ONLY_DEFAULT(MultiSymbolReadOutput)
 
     std::vector<VersionedItem> versioned_items_;
+    std::vector<arcticdb::proto::descriptors::UserDefinedMetadata> metadatas_;
     FrameAndDescriptor frame_and_descriptor_;
 };
 

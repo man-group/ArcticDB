@@ -46,9 +46,9 @@ def test_symbol_concat_basic(lmdb_library_factory, rows_per_segment, columns_per
         },
         index=index[7:] if index is not None else None,
     )
-    lib.write("sym0", df_0)
+    lib.write("sym0", df_0, metadata=0)
     lib.write("sym1", df_1)
-    lib.write("sym2", df_2)
+    lib.write("sym2", df_2, metadata=2)
 
     received = concat(lib.read_batch(["sym0", "sym1", "sym2"], lazy=True)).collect()
     expected = pd.concat([df_0, df_1, df_2])
@@ -59,6 +59,7 @@ def test_symbol_concat_basic(lmdb_library_factory, rows_per_segment, columns_per
         assert version.symbol == f"sym{idx}"
         assert version.version == 0
         assert version.data is None
+        assert version.metadata == (None if idx == 1 else idx)
 
 
 # TODO: Get working with column slicing
