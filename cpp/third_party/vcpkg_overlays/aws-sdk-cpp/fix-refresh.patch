@@ -71,3 +71,32 @@ index fd82b678fba..d17bf8a2329 100644
  
      Reload();
  }
+diff --git a/src/aws-cpp-sdk-core/source/platform/windows/Environment.cpp b/src/aws-cpp-sdk-core/source/platform/windows/Environment.cpp
+index b70cc1cd212..ede06aabb75 100644
+--- a/src/aws-cpp-sdk-core/source/platform/windows/Environment.cpp
++++ b/src/aws-cpp-sdk-core/source/platform/windows/Environment.cpp
+@@ -21,23 +21,8 @@ since _dupenv_s is a non-standard function, on non-Microsoft compilers we will f
+ */
+ Aws::String GetEnv(const char *variableName)
+ {
+-#ifdef _MSC_VER    
+-    char* variableValue = nullptr;
+-    std::size_t valueSize = 0;
+-    auto queryResult = _dupenv_s(&variableValue, &valueSize, variableName);
+-
+-    Aws::String result;
+-    if(queryResult == 0 && variableValue != nullptr && valueSize > 0)
+-    {
+-        result.assign(variableValue, valueSize - 1);  // don't copy the c-string terminator byte
+-        free(variableValue);
+-    }
+-
+-    return result;
+-#else
+     auto variableValue = std::getenv(variableName);
+     return Aws::String( variableValue ? variableValue : "" );
+-#endif
+ }
+ 
+ } // namespace Environment
+ 
