@@ -16,7 +16,8 @@ import platform
 from tempfile import mkdtemp
 import boto3
 import time
-
+import random
+from datetime import datetime
 
 import requests
 from typing import Optional, Any, Type
@@ -258,8 +259,8 @@ def real_s3_sts_from_environment_variables(user_name: str,
                                            policy_name: str, 
                                            profile_name: str, 
                                            native_config: NativeVariantStorage, 
-                                           additional_suffix: str,
                                            config_file_path: str) -> BaseS3StorageFixtureFactory:
+    additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
     out = real_s3_from_environment_variables(False, native_config, additional_suffix)
     iam_client = boto3.client("iam", aws_access_key_id=out.default_key.id, aws_secret_access_key=out.default_key.secret)
     # Create IAM user
@@ -400,7 +401,9 @@ source_profile = {base_profile_name}
 aws_access_key_id = {factory.sts_test_key.id}
 aws_secret_access_key = {factory.sts_test_key.secret}
 """
-    
+    config_dir = os.path.dirname(config_file_path)
+    os.makedirs(config_dir, exist_ok=True)
+
     with open(config_file_path, "w") as config_file:
         config_file.write(aws_credentials)
 
