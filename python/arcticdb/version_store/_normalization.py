@@ -40,6 +40,7 @@ from typing import Dict, NamedTuple, List, Union, Mapping, Any, TypeVar, Tuple
 
 from arcticdb._msgpack_compat import packb, padded_packb, unpackb, ExtType
 from arcticdb.log import version as log
+from arcticdb_ext.log import LogLevel
 from arcticdb.version_store._common import _column_name_to_strings, TimeFrame
 
 PICKLE_PROTOCOL = 4
@@ -76,6 +77,9 @@ NPDDataFrame = NamedTuple(
 )
 
 NormalizedInput = NamedTuple("NormalizedInput", [("item", NPDDataFrame), ("metadata", NormalizationMetadata)])
+
+
+PICKLED_METADATA_LOGLEVEL = LogLevel.DEBUG if os.getenv("PICKLED_METADATA_LOGLEVEL_DEBUG") else LogLevel.WARN
 
 
 # To simplify unit testing of serialization logic. This maps the cpp _FrameData exposed object
@@ -1064,6 +1068,7 @@ class Pickler(object):
 
     @staticmethod
     def write(obj):
+        log.log(PICKLED_METADATA_LOGLEVEL, f"Pickling metadata - may not be readable by other clients")
         return pickle.dumps(obj, protocol=PICKLE_PROTOCOL)
 
 
