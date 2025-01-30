@@ -152,6 +152,7 @@ std::vector<FrameSlice> HashedSlicer::operator()(const arcticdb::pipelines::Inpu
         col += distance;
     } while(start_pos != std::cend(indices));
 
+    std::sort(std::begin(slices), std::end(slices));
     return slices;
 }
 } //namespace arcticdb::pipelines
