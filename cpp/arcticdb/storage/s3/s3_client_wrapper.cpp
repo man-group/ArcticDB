@@ -19,7 +19,7 @@ using namespace object_store_utils;
 
 namespace s3 {
 
-std::optional<Aws::S3::S3Error> S3ClientWrapper::check_failure_from_configs_map(const std::string& bucket_name) const {
+std::optional<Aws::S3::S3Error> S3ClientWrapper::has_failure_trigger(const std::string& bucket_name) const {
     bool static_failures_enabled = ConfigsMap::instance()->get_int("S3ClientWrapper.EnableFailures", 0) == 1;
     // Check if mock failures are enabled
     if (!static_failures_enabled) {
@@ -69,7 +69,7 @@ std::optional<Aws::S3::S3Error> S3ClientWrapper::check_failure_from_configs_map(
 S3Result<std::monostate> S3ClientWrapper::head_object(
         const std::string& s3_object_name,
         const std::string &bucket_name) const {
-    auto maybe_error = check_failure_from_configs_map(bucket_name);
+    auto maybe_error = has_failure_trigger(bucket_name);
     if (maybe_error.has_value()) {
         return {*maybe_error};
     }
@@ -81,7 +81,7 @@ S3Result<std::monostate> S3ClientWrapper::head_object(
 S3Result<Segment> S3ClientWrapper::get_object(
         const std::string &s3_object_name,
         const std::string &bucket_name) const {
-    auto maybe_error = check_failure_from_configs_map(bucket_name);
+    auto maybe_error = has_failure_trigger(bucket_name);
     if (maybe_error.has_value()) {
         return {*maybe_error};
     }
@@ -92,7 +92,7 @@ S3Result<Segment> S3ClientWrapper::get_object(
 folly::Future<S3Result<Segment>> S3ClientWrapper::get_object_async(
     const std::string &s3_object_name,
     const std::string &bucket_name) const {
-    auto maybe_error = check_failure_from_configs_map(bucket_name);
+    auto maybe_error = has_failure_trigger(bucket_name);
     if (maybe_error.has_value()) {
         return folly::makeFuture<S3Result<Segment>>({*maybe_error});
     }
@@ -105,7 +105,7 @@ S3Result<std::monostate> S3ClientWrapper::put_object(
         Segment &&segment,
         const std::string &bucket_name,
         PutHeader header) {
-    auto maybe_error = check_failure_from_configs_map(bucket_name);
+    auto maybe_error = has_failure_trigger(bucket_name);
     if (maybe_error.has_value()) {
         return {*maybe_error};
     }
@@ -116,7 +116,7 @@ S3Result<std::monostate> S3ClientWrapper::put_object(
 S3Result<DeleteOutput> S3ClientWrapper::delete_objects(
         const std::vector<std::string>& s3_object_names,
         const std::string& bucket_name) {
-    auto maybe_error = check_failure_from_configs_map(bucket_name);
+    auto maybe_error = has_failure_trigger(bucket_name);
     if (maybe_error.has_value()) {
         return {*maybe_error};
     }
@@ -132,7 +132,7 @@ S3Result<ListObjectsOutput> S3ClientWrapper::list_objects(
         const std::string& name_prefix,
         const std::string& bucket_name,
         const std::optional<std::string>& continuation_token) const {
-    auto maybe_error = check_failure_from_configs_map(bucket_name);
+    auto maybe_error = has_failure_trigger(bucket_name);
     if (maybe_error.has_value()) {
         return {*maybe_error};
     }
