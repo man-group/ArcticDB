@@ -27,4 +27,5 @@ message Config {
     bool use_mock_storage_for_testing = 15;
     // Whether to leave the prefix unchanged, or to translate the periods in it.
     bool use_raw_prefix = 16;
+    bool use_internal_client_wrapper_for_testing = 17;
 }
