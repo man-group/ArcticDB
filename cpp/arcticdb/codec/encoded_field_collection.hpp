@@ -68,7 +68,10 @@ public:
     EncodedFieldCollection() = default;
 
     [[nodiscard]] EncodedFieldCollection clone() const {
-        return {data_.clone(), offsets_.clone()};
+        auto output = EncodedFieldCollection{data_.clone(), offsets_.clone()};
+        output.count_ = count_;
+        output.offset_ = offset_;
+        return output;
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodedFieldCollection)
