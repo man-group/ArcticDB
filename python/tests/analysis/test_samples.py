@@ -65,7 +65,6 @@ def fixture_lvl_2b(request, fixture_lvl_3):
 def fixture_lvl_3(request):
     return request.param
 
-
 @Marks.prio0
 def test_example_fixture_1(factory_fixture_1, fixture_lvl_1):
     arg1 = factory_fixture_1
