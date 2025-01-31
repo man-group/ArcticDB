@@ -82,7 +82,12 @@ public:
         const std::optional<std::string>& continuation_token) const override;
 
 private:
-    std::map<S3Key, Segment> s3_contents;
+    // We store a std::nullopt for deleted segments.
+    // We need to preserve the deleted keys in the map to ensure a correct thread-safe list_objects operation.
+    // Between two calls to list_objects() part of the same query via a continuation_token there might have been
+    // new writes or deletes and we still need to return a consistent list of symbols.
+    std::map<S3Key, std::optional<Segment>> s3_contents_;
+    mutable std::mutex mutex_; // Used to guard the map.
 };
 
 }
