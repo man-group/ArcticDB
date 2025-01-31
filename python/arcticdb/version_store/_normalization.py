@@ -1050,11 +1050,11 @@ class MsgPackNormalizer(Normalizer):
             # If stored in Python2 we want to use raw while unpacking.
             # https://github.com/msgpack/msgpack-python/blob/master/msgpack/_unpacker.pyx#L230
             data = unpackb(data, raw=True)
-            return Pickler.read(data, pickled_in_python2=True)
+            return Pickler.read(data)
 
         if code == MsgPackSerialization.PY_PICKLE_3:
             data = unpackb(data, raw=False)
-            return Pickler.read(data, pickled_in_python2=False)
+            return Pickler.read(data)
 
         return ExtType(code, data)
 
@@ -1070,21 +1070,8 @@ class MsgPackNormalizer(Normalizer):
 
 class Pickler(object):
     @staticmethod
-    def read(data, pickled_in_python2=False):
-        if isinstance(data, str):
-            return pickle.loads(data.encode("ascii"), encoding="bytes")
-        elif isinstance(data, str):
-            if not pickled_in_python2:
-                # Use the default encoding for python2 pickled objects similar to what's being done for PY2.
-                return pickle.loads(data, encoding="bytes")
-
-        try:
-            # This tries normal pickle.loads first then falls back to special Pandas unpickling. Pandas unpickling
-            # handles Pandas 1 vs Pandas 2 API breaks better.
-            return pd.read_pickle(io.BytesIO(data))
-        except UnicodeDecodeError as exc:
-            log.debug("Failed decoding with ascii, using latin-1.")
-            return pickle.loads(data, encoding="latin-1")
+    def read(data):
+        return pd.read_pickle(io.BytesIO(data))
 
     @staticmethod
     def write(obj):
