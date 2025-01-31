@@ -36,6 +36,7 @@ private:
     std::string ca_cert_path_;
     std::string ca_cert_dir_;
     bool use_raw_prefix_;
+    bool use_internal_client_wrapper_for_testing_;
     AWSAuthMethod aws_auth_;
     std::string aws_profile_;
 
@@ -68,6 +69,7 @@ public:
         ca_cert_path_ = config.ca_cert_path();
         ca_cert_dir_ = config.ca_cert_dir();
         use_raw_prefix_ = config.use_raw_prefix();
+        use_internal_client_wrapper_for_testing_ = config.use_internal_client_wrapper_for_testing();
         return *this;
     }
 
@@ -133,6 +135,10 @@ public:
 
     AWSAuthMethod aws_auth() const {
         return aws_auth_;
+    }
+
+    bool use_internal_client_wrapper_for_testing() const {
+        return use_internal_client_wrapper_for_testing_;
     }
 
     std::string aws_profile() const {

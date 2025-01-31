@@ -11,8 +11,6 @@
 
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
 #include <arcticdb/storage/mock/storage_mock_client.hpp>
-#include <arcticdb/storage/s3/s3_client_impl.hpp>
-#include <memory>
 
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/pb_util.hpp>
@@ -25,7 +23,6 @@
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/composite.hpp>
-#include <chrono>
 
 namespace arcticdb::storage::s3 {
 
@@ -38,18 +35,12 @@ struct S3Key {
     }
 };
 
-// A mock S3ClientInterface which can wrap the real client and can simulate failures.
-// The MockS3Client delegates to the real client by default, but can intercept operations
-// to simulate failures or track operations for testing purposes.
+// A mock S3ClientInterface which can simulate failures.
+// The MockS3Client stores the segments in memory to simulate regular S3 behavior for unit tests.
+// The MockS3Client can simulate storage failures by using the get_failure_trigger for s3_object_names.
 class MockS3Client : public S3ClientInterface {
 public:
-    explicit MockS3Client(std::unique_ptr<S3ClientInterface> real_client) : 
-        real_client_(std::move(real_client)) {
-    }
-
-    MockS3Client() : real_client_(nullptr) {}
-
-    ~MockS3Client() override = default; 
+    MockS3Client() {}
 
     // Can be used to trigger a simulated failure inside MockS3Client. For example:
     // auto object_to_trigger_put_failure = get_failure_trigger("test", StorageOperation::WRITE, Aws::S3::S3Errors::NETWORK_FAILURE, false);
