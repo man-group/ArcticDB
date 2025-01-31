@@ -54,7 +54,7 @@ Pickling can have [serious downsides](https://nedbatchelder.com/blog/202006/pick
 unpickle data written with one set of library versions from a client with a different set of library versions.
 
 Because of this, we log a warning when metadata gets pickled. You can disable the warning by setting an environment
-variable `PICKLED_METADATA_LOGLEVEL_DEBUG` to any value. The log message looks like:
+variable `ARCTICDB_PickledMetadata_loglevel_str` to `DEBUG`. The log message looks like:
 
 ```
 Pickling metadata - may not be readable by other clients
