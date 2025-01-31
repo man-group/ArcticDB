@@ -36,18 +36,21 @@ private:
     std::string ca_cert_path_;
     std::string ca_cert_dir_;
     bool use_raw_prefix_;
-    bool use_internal_client_wrapper_for_testing_;
     AWSAuthMethod aws_auth_;
     std::string aws_profile_;
+    bool use_internal_client_wrapper_for_testing_;
 
 public:
-    explicit S3Settings(AWSAuthMethod aws_auth, const std::string& aws_profile) :
+    explicit S3Settings(AWSAuthMethod aws_auth,
+                        const std::string& aws_profile,
+                        bool use_internal_client_wrapper_for_testing) :
         aws_auth_(aws_auth),
-        aws_profile_(aws_profile) {
+        aws_profile_(aws_profile),
+        use_internal_client_wrapper_for_testing_(use_internal_client_wrapper_for_testing) {
     }
 
     explicit S3Settings(const arcticc::pb2::s3_storage_pb2::Config& config) : 
-        S3Settings(AWSAuthMethod::DISABLED, "")
+        S3Settings(AWSAuthMethod::DISABLED, "", false)
     {
         update(config);
     }
@@ -69,7 +72,6 @@ public:
         ca_cert_path_ = config.ca_cert_path();
         ca_cert_dir_ = config.ca_cert_dir();
         use_raw_prefix_ = config.use_raw_prefix();
-        use_internal_client_wrapper_for_testing_ = config.use_internal_client_wrapper_for_testing();
         return *this;
     }
 
