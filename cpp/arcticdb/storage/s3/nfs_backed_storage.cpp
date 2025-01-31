@@ -11,7 +11,7 @@
 #include <arcticdb/storage/s3/s3_client_impl.hpp>
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
 #include <arcticdb/util/simple_string_hash.hpp>
-
+#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 namespace arcticdb::storage::nfs_backed {
 
 std::string add_suffix_char(const std::string& str) {
@@ -124,12 +124,11 @@ NfsBackedStorage::NfsBackedStorage(const LibraryPath &library_path, OpenMode mod
         bucket_name_(conf.bucket_name()),
         region_(conf.region()) {
 
-
-    s3_client_ = std::make_unique<s3::S3ClientImpl>(s3::get_aws_credentials(conf), s3::get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
-
     if (conf.use_mock_storage_for_testing()) {
         log::storage().warn("Using Mock S3 storage for NfsBackedStorage");
-        s3_client_ = std::make_unique<s3::MockS3Client>(std::move(s3_client_));
+        s3_client_ = std::make_unique<s3::MockS3Client>();
+    } else {
+        s3_client_ = std::make_unique<s3::S3ClientImpl>(s3::get_aws_credentials(conf), s3::get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
     }
 
     if (conf.prefix().empty()) {
@@ -141,6 +140,11 @@ NfsBackedStorage::NfsBackedStorage(const LibraryPath &library_path, OpenMode mod
         auto prefix_path = LibraryPath::from_delim_path(conf.prefix(), '.');
         root_folder_ = object_store_utils::get_root_folder(prefix_path);
         ARCTICDB_DEBUG(log::version(), "parsed prefix found, using: {}", root_folder_);
+    }
+
+    if (conf.use_internal_client_wrapper_for_testing()) {
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using internal client wrapper for testing");
+        s3_client_ = std::make_unique<s3::S3ClientWrapper>(std::move(s3_client_));
     }
 
     // When linking against libraries built with pre-GCC5 compilers, the num_put facet is not initalized on the classic locale
