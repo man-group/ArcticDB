@@ -40,7 +40,7 @@ namespace s3 {
 
 S3Result<std::monostate> S3ClientImpl::head_object(
         const std::string& s3_object_name,
-        const std::string &bucket_name) const {
+        const std::string &bucket_name) {
 
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Looking for head of object {}", s3_object_name);
     Aws::S3::Model::HeadObjectRequest request;
@@ -113,7 +113,7 @@ Aws::IOStreamFactory S3StreamFactory() {
 
 S3Result<Segment> S3ClientImpl::get_object(
         const std::string &s3_object_name,
-        const std::string &bucket_name) const {
+        const std::string &bucket_name) {
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Looking for object {}", s3_object_name);
     auto start = util::SysClock::coarse_nanos_since_epoch();
     Aws::S3::Model::GetObjectRequest request;
@@ -163,7 +163,7 @@ struct GetObjectAsyncHandler {
 
 folly::Future<S3Result<Segment>> S3ClientImpl::get_object_async(
     const std::string &s3_object_name,
-    const std::string &bucket_name) const {
+    const std::string &bucket_name) {
     auto promise = std::make_shared<folly::Promise<S3Result<Segment>>>();
     auto future = promise->getFuture().via(&async::io_executor());
     Aws::S3::Model::GetObjectRequest request;
@@ -237,7 +237,7 @@ S3Result<DeleteOutput> S3ClientImpl::delete_objects(
 S3Result<ListObjectsOutput> S3ClientImpl::list_objects(
         const std::string& name_prefix,
         const std::string& bucket_name,
-        const std::optional<std::string>& continuation_token) const {
+        const std::optional<std::string>& continuation_token) {
 
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Searching for objects in bucket {} with prefix {}", bucket_name,
                            name_prefix);
