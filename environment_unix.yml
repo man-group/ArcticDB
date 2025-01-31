@@ -82,6 +82,7 @@ dependencies:
   - trustme
   - entt
   - psutil
+  - memory_profiler
   - memray 
   - pytest-memray
 

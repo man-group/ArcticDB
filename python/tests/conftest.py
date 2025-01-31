@@ -236,8 +236,12 @@ def real_s3_storage(real_s3_storage_factory) -> Generator[S3Bucket, None, None]:
 
 
 @pytest.fixture
-def real_s3_library(real_s3_storage, lib_name) -> Library:
-    return real_s3_storage.create_arctic().create_library(lib_name)
+def real_s3_library(real_s3_storage, lib_name) -> Generator[Library, None, None]:
+    ac: Arctic = real_s3_storage.create_arctic()
+    lib = ac.create_library(lib_name)
+    yield lib
+    print("Delete library : ", lib_name)
+    ac.delete_library(lib_name)
 
 
 @pytest.fixture(scope="session") # Config loaded at the first ArcticDB binary import, so we need to set it up before any tests
