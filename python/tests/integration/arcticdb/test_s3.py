@@ -15,7 +15,7 @@ import sys
 
 from arcticdb_ext.exceptions import StorageException
 from arcticdb_ext import set_config_string
-from arcticdb.util.test import create_df
+from arcticdb.util.test import create_df, assert_frame_equal
 
 from arcticdb.storage_fixtures.s3 import MotoNfsBackedS3StorageFixtureFactory
 from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory
@@ -29,9 +29,14 @@ pytestmark = pytest.mark.skipif(
 
 def test_s3_storage_failures(mock_s3_store_with_error_simulation):
     lib = mock_s3_store_with_error_simulation
+    symbol_success = "symbol"
     symbol_fail_write = "symbol#Failure_Write_99_0"
     symbol_fail_read = "symbol#Failure_Read_17_0"
     df = pd.DataFrame({"a": list(range(100))}, index=list(range(100)))
+
+    lib.write(symbol_success, df)
+    result_df = lib.read(symbol_success).data
+    assert_frame_equal(result_df, df)
 
     with pytest.raises(StorageException, match="Unexpected network error: S3Error#99"):
         lib.write(symbol_fail_write, df)
