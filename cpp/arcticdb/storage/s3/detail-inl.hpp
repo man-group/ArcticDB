@@ -162,7 +162,7 @@ KeySegmentPair do_read_impl(
         VariantKey&& variant_key,
         const std::string& root_folder,
         const std::string& bucket_name,
-        const S3ClientInterface& s3_client,
+        S3ClientInterface& s3_client,
         KeyBucketizer&& bucketizer,
 	    KeyDecoder&& key_decoder,
         ReadKeyOpts opts) {
@@ -197,7 +197,7 @@ folly::Future<KeySegmentPair> do_async_read_impl(
     VariantKey&& variant_key,
     const std::string& root_folder,
     const std::string& bucket_name,
-    const S3ClientInterface& s3_client,
+    S3ClientInterface& s3_client,
     KeyBucketizer&& bucketizer,
     KeyDecoder&& key_decoder,
     ReadKeyOpts) {
@@ -220,7 +220,7 @@ void do_read_impl(
     const ReadVisitor& visitor,
     const std::string& root_folder,
     const std::string& bucket_name,
-    const S3ClientInterface& s3_client,
+    S3ClientInterface& s3_client,
     KeyBucketizer&& bucketizer,
     KeyDecoder&& key_decoder,
     ReadKeyOpts opts) {
@@ -357,7 +357,7 @@ bool do_iterate_type_impl(
     const IterateTypePredicate& visitor,
     const std::string& root_folder,
     const std::string& bucket_name,
-    const S3ClientInterface& s3_client,
+    S3ClientInterface& s3_client,
     KeyBucketizer&& bucketizer,
     PrefixHandler&& prefix_handler = default_prefix_handler(),
     const std::string& prefix = std::string{}) {
@@ -426,7 +426,7 @@ bool do_key_exists_impl(
     const VariantKey& key,
     const std::string& root_folder,
     const std::string& bucket_name,
-    const S3ClientInterface& s3_client,
+    S3ClientInterface& s3_client,
     KeyBucketizer&& b
 ) {
     auto key_type_dir = key_type_folder(root_folder, variant_key_type(key));

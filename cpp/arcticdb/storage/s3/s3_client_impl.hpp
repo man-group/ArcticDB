@@ -33,15 +33,15 @@ public:
 
     S3Result<std::monostate> head_object(
         const std::string& s3_object_name,
-        const std::string& bucket_name) const override;
+        const std::string& bucket_name) override;
 
     S3Result<Segment> get_object(
         const std::string& s3_object_name,
-        const std::string& bucket_name) const override;
+        const std::string& bucket_name) override;
 
     folly::Future<S3Result<Segment>> get_object_async(
         const std::string& s3_object_name,
-        const std::string& bucket_name) const override;
+        const std::string& bucket_name) override;
 
     S3Result<std::monostate> put_object(
             const std::string& s3_object_name,
@@ -56,7 +56,7 @@ public:
     S3Result<ListObjectsOutput> list_objects(
         const std::string& prefix,
         const std::string& bucket_name,
-        const std::optional<std::string>& continuation_token) const override;
+        const std::optional<std::string>& continuation_token) override;
 private:
     Aws::S3::S3Client s3_client;
 };
