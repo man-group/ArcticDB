@@ -71,12 +71,12 @@ if platform.system() == "Linux":
 
 
 @pytest.fixture()
-def sym(request: pytest.FixtureRequest):
+def sym(request: "pytest.FixtureRequest"):
     return request.node.name + datetime.utcnow().strftime("%Y-%m-%dT%H_%M_%S_%f")
 
 
 @pytest.fixture()
-def lib_name(request: pytest.FixtureRequest) -> str:
+def lib_name(request: "pytest.FixtureRequest") -> str:
     name = re.sub(r"[^\w]", "_", request.node.name)[:30]
     return f"{name}.{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
 
