@@ -142,11 +142,6 @@ NfsBackedStorage::NfsBackedStorage(const LibraryPath &library_path, OpenMode mod
         ARCTICDB_DEBUG(log::version(), "parsed prefix found, using: {}", root_folder_);
     }
 
-    if (conf.use_internal_client_wrapper_for_testing()) {
-        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using internal client wrapper for testing");
-        s3_client_ = std::make_unique<s3::S3ClientWrapper>(std::move(s3_client_));
-    }
-
     // When linking against libraries built with pre-GCC5 compilers, the num_put facet is not initalized on the classic locale
     // Rather than change the locale globally, which might cause unexpected behaviour in legacy code, just add the required
     // facet here
