@@ -127,6 +127,7 @@ class S3Bucket(StorageFixture):
             is_https=self.factory.endpoint.startswith("https://"),
             region=self.factory.region,
             use_mock_storage_for_testing=self.factory.use_mock_storage_for_testing,
+            use_internal_client_wrapper_for_testing=self.factory.use_internal_client_wrapper_for_testing,
             ssl=self.factory.ssl,
             ca_cert_path=self.factory.client_cert_file,
             is_nfs_layout=False,
@@ -207,6 +208,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
     use_raw_prefix: bool = False
     clean_bucket_on_fixture_exit = True
     use_mock_storage_for_testing = None  # If set to true allows error simulation
+    use_internal_client_wrapper_for_testing = None  # If set to true uses the internal client wrapper for testing
 
     def __init__(self, native_config: Optional[dict] = None):
         self.client_cert_file = None
@@ -511,6 +513,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         default_prefix: str = None,
         use_raw_prefix: bool = False,
         use_mock_storage_for_testing: bool = False,
+        use_internal_client_wrapper_for_testing: bool = False,
         native_config: Optional[NativeVariantStorage] = None,
     ):
         super().__init__(native_config)
@@ -520,6 +523,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self.default_prefix = default_prefix
         self.use_raw_prefix = use_raw_prefix
         self.use_mock_storage_for_testing = use_mock_storage_for_testing
+        self.use_internal_client_wrapper_for_testing = use_internal_client_wrapper_for_testing
 
     @staticmethod
     def run_server(port, key_file, cert_file):
