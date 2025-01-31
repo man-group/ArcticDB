@@ -65,7 +65,7 @@ public:
 
 private:
     // Returns error if failures are enabled for the given bucket
-    std::optional<Aws::S3::S3Error> check_failure_from_configs_map(const std::string& bucket_name) const;
+    std::optional<Aws::S3::S3Error> has_failure_trigger(const std::string& bucket_name) const;
 
     std::unique_ptr<S3ClientInterface> actual_client_;
 };
