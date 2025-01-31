@@ -61,12 +61,14 @@ const auto not_implemented_error = create_error(Aws::S3::S3Errors::UNKNOWN, "Not
 S3Result<std::monostate> MockS3Client::head_object(
         const std::string& s3_object_name,
         const std::string &bucket_name) const {
+    std::scoped_lock<std::mutex> lock(mutex_);
     auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::EXISTS);
     if (maybe_error.has_value()) {
         return {*maybe_error};
     }
 
-    if (s3_contents.find({bucket_name, s3_object_name}) == s3_contents.end()){
+    auto pos = s3_contents_.find({bucket_name, s3_object_name});
+    if (pos == s3_contents_.end() || !pos->second.has_value()){
         return {not_found_error};
     }
     return {std::monostate()};
@@ -76,16 +78,17 @@ S3Result<std::monostate> MockS3Client::head_object(
 S3Result<Segment> MockS3Client::get_object(
         const std::string &s3_object_name,
         const std::string &bucket_name) const {
+    std::scoped_lock<std::mutex> lock(mutex_);
     auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::READ);
     if (maybe_error.has_value()) {
         return {*maybe_error};
     }
 
-    auto pos = s3_contents.find({bucket_name, s3_object_name});
-    if (pos == s3_contents.end()){
+    auto pos = s3_contents_.find({bucket_name, s3_object_name});
+    if (pos == s3_contents_.end() || !pos->second.has_value()){
         return {not_found_error};
     }
-    return {pos->second.clone()};
+    return {pos->second.value().clone()};
 }
 
 folly::Future<S3Result<Segment>> MockS3Client::get_object_async(
@@ -99,6 +102,7 @@ S3Result<std::monostate> MockS3Client::put_object(
         Segment &&segment,
         const std::string &bucket_name,
         PutHeader header) {
+    std::scoped_lock<std::mutex> lock(mutex_);
     auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::WRITE);
 
     if (maybe_error.has_value() && header == PutHeader::IF_NONE_MATCH) {
@@ -109,11 +113,15 @@ S3Result<std::monostate> MockS3Client::put_object(
         return {*maybe_error};
     }
 
-    if (header == PutHeader::IF_NONE_MATCH && s3_contents.contains({bucket_name, s3_object_name})) {
+    auto pos = s3_contents_.find({bucket_name, s3_object_name});
+    if (header == PutHeader::IF_NONE_MATCH && pos != s3_contents_.end() && pos->second.has_value()) {
         return {precondition_failed_error};
     }
 
-    s3_contents.insert_or_assign({bucket_name, s3_object_name}, std::move(segment));
+    // When we write Segments we occasionally don't fill in the size_. This is fine as it's not needed for writing.
+    // However, it is required when reading so we need to calculate it. It's easier to do on write.
+    [[maybe_unused]] auto size = segment.calculate_size();
+    s3_contents_.insert_or_assign({bucket_name, s3_object_name}, std::make_optional<Segment>(std::move(segment)));
 
     return {std::monostate()};
 }
@@ -121,7 +129,8 @@ S3Result<std::monostate> MockS3Client::put_object(
 S3Result<DeleteOutput> MockS3Client::delete_objects(
         const std::vector<std::string>& s3_object_names,
         const std::string& bucket_name) {
-    for (auto& s3_object_name : s3_object_names){
+    std::scoped_lock<std::mutex> lock(mutex_);
+    for (auto& s3_object_name : s3_object_names) {
         auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::DELETE);
         if (maybe_error.has_value()) {
             return {*maybe_error};
@@ -129,12 +138,17 @@ S3Result<DeleteOutput> MockS3Client::delete_objects(
     }
 
     DeleteOutput output;
-    for (auto& s3_object_name : s3_object_names){
+    for (auto& s3_object_name : s3_object_names) {
         auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL);
         if (maybe_error.has_value()) {
             output.failed_deletes.emplace_back(s3_object_name, "Sample error message");
         } else {
-            s3_contents.erase({bucket_name, s3_object_name});
+            auto pos = s3_contents_.find({bucket_name, s3_object_name});
+            if (pos == s3_contents_.end() || !pos->second.has_value()) {
+                output.failed_deletes.emplace_back(s3_object_name, "KeyNotFound");
+            } else {
+                pos->second = std::nullopt;
+            }
         }
     }
     return {output};
@@ -147,35 +161,29 @@ S3Result<ListObjectsOutput> MockS3Client::list_objects(
         const std::string& name_prefix,
         const std::string& bucket_name,
         const std::optional<std::string>& continuation_token) const {
-    // Terribly inefficient but fine for tests.
-    auto matching_names = std::vector<std::string>();
-    for (auto& key : s3_contents) {
-        if (key.first.bucket_name == bucket_name && key.first.s3_object_name.rfind(name_prefix, 0) == 0){
-            matching_names.emplace_back(key.first.s3_object_name);
-        }
-    }
-
-    auto start_from = 0u;
-    if (continuation_token.has_value()) {
-        start_from = std::stoi(*continuation_token);
-    }
+    std::scoped_lock<std::mutex> lock(mutex_);
 
     ListObjectsOutput output;
-    auto end_to = matching_names.size();
-    if (start_from + page_size < end_to){
-        end_to = start_from + page_size;
-        output.next_continuation_token = std::to_string(end_to);
+    auto it = s3_contents_.begin();
+    if (continuation_token.has_value()) {
+        // We use the next s3_object_name as a continuation token. This way if new s3 objects get added to the
+        // s3_contents map in between list_objects calls we won't return duplicate entries.
+        it = s3_contents_.find({bucket_name, continuation_token.value()});
+        util::check(it != s3_contents_.end(), "Invalid mock continuation_token");
     }
+    for (auto i=0u; it != s3_contents_.end() && i<page_size; ++it, ++i) {
+        if (it->first.bucket_name == bucket_name && it->first.s3_object_name.rfind(name_prefix, 0) == 0 && it->second.has_value()){
+            auto s3_object_name = it->first.s3_object_name;
 
-    for (auto i=start_from; i < end_to; ++i){
-        auto& s3_object_name = matching_names[i];
+            auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::LIST);
+            if (maybe_error.has_value()) return {*maybe_error};
 
-        auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::LIST);
-        if (maybe_error.has_value()) return {*maybe_error};
-
-        output.s3_object_names.emplace_back(s3_object_name);
+            output.s3_object_names.emplace_back(std::move(s3_object_name));
+        }
     }
-
+    if (it != s3_contents_.end()) {
+        output.next_continuation_token = it->first.s3_object_name;
+    }
     return {output};
 }
 
