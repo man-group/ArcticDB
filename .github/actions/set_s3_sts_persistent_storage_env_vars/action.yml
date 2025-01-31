@@ -1,0 +1,31 @@
+name: 'Set Persistent storages env variables'
+description: 'Set the necessary variables for Persistent storage tests'
+inputs:
+  bucket:            {default: 'arcticdb-ci-test-bucket-02', type: string, description: The name of the S3 bucket that we will test against}
+  endpoint:          {default: 'http://s3.eu-west-1.amazonaws.com', type: string, description: The address of the S3 endpoint}
+  region:            {default: 'eu-west-1', type: string, description: The S3 region of the bucket}
+  aws_access_key:    {required: true, type: string, description: The value for the AWS Access key}      
+  aws_secret_key:    {required: true, type: string, description: The value for the AWS Secret key}
+runs:
+  using: "composite"
+  steps:
+  # add a step to run locally define python script
+    - name: Set s3 sts real storage variables
+      shell: bash
+      run: |
+        python -c "
+        from arcticdb.storage_fixtures.s3 import real_s3_sts_from_environment_variables, real_s3_sts_resources_ready
+        from arcticdb_ext.storage import NativeVariantStorage
+        import os
+
+        config_file_path = os.path.expanduser(os.path.join('~', '.aws', 'config'))
+        f = real_s3_sts_from_environment_variables(
+          user_name='${ARCTICDB_REAL_S3_STS_TEST_USERNAME}', 
+          role_name='${ARCTICDB_REAL_S3_STS_TEST_ROLE}',
+          policy_name='${ARCTICDB_REAL_S3_STS_TEST_POLICY_NAME}', 
+          profile_name='sts_test_profile', 
+          native_config=NativeVariantStorage(), # Setting here is purposely wrong to see whether it will get overridden later
+          config_file_path=config_file_path
+        )
+        real_s3_sts_resources_ready(f)
+        "
