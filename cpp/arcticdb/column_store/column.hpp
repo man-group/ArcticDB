@@ -112,8 +112,8 @@ public:
 
     public:
         TypedColumnIterator(const Column& col, bool begin) :
-        parent_(col.data()),
-        block_(begin ? parent_.next<TDT>() : std::nullopt) {
+            parent_(col.data()),
+            block_(begin ? parent_.next<TDT>() : std::nullopt) {
             if(begin)
                 set_block_range();
         }
@@ -121,10 +121,10 @@ public:
 
         template <class OtherValue>
         explicit TypedColumnIterator(const TypedColumnIterator<TDT, OtherValue>& other) :
-        parent_(other.parent_),
-        block_(other.block_),
-        block_pos_(other.block_pos_),
-        block_end_(other.block_end_){ }
+            parent_(other.parent_),
+            block_(other.block_),
+            block_pos_(other.block_pos_),
+            block_end_(other.block_end_){ }
 
         template <class OtherValue>
         bool equal(const TypedColumnIterator<TDT, OtherValue>& other) const{
@@ -231,11 +231,23 @@ public:
         TypeDescriptor type,
         size_t expected_rows,
         AllocationType presize,
-        Sparsity allow_sparse,
-        DataTypeMode mode = DataTypeMode::INTERNAL) :
-            data_(expected_rows * entity::data_type_size(type, mode), presize),
+        Sparsity allow_sparse) :
+            data_(expected_rows * entity::internal_data_type_size(type), presize),
             type_(type),
             allow_sparse_(allow_sparse) {
+        ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
+    }
+
+    Column(
+        TypeDescriptor type,
+        size_t expected_rows,
+        AllocationType presize,
+        Sparsity allow_sparse,
+        OutputFormat output_format,
+        DataTypeMode mode) :
+        data_(expected_rows * entity::data_type_size(type, output_format, mode), presize),
+        type_(type),
+        allow_sparse_(allow_sparse) {
         ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
     }
 
@@ -475,6 +487,12 @@ public:
 
     void change_type(DataType target_type);
 
+    void truncate_first_block(size_t row);
+
+    void truncate_last_block(size_t row);
+
+    void truncate_single_block(size_t start_offset, size_t end_offset);
+
     position_t row_count() const;
 
     std::optional<StringArrayData> string_array_at(position_t idx, const StringPool &string_pool) {
@@ -618,6 +636,19 @@ public:
         return data_.buffer();
     }
 
+    uint8_t* bytes_at(size_t bytes, size_t required) {
+        ARCTICDB_TRACE(log::inmem(), "Column returning {} bytes at position {}", required, bytes);
+        return data_.bytes_at(bytes, required);
+    }
+
+    const uint8_t* bytes_at(size_t bytes, size_t required) const {
+        return data_.bytes_at(bytes, required);
+    }
+
+    void assert_size(size_t bytes) const {
+        data_.buffer().assert_size(bytes);
+    }
+
     template<typename T>
     std::optional<position_t> search_unsorted(T val) const {
         util::check_arg(is_scalar(), "Cannot index on multidimensional values");
@@ -632,18 +663,18 @@ public:
     // Returns the index such that if val were inserted before that index, the order would be preserved
     // By default returns the lowest index satisfying this property. If from_right=true, returns the highest such index
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    size_t search_sorted(T val, bool from_right=false) const {
+    size_t search_sorted(T val, bool from_right=false, std::optional<int64_t> from = std::nullopt, std::optional<int64_t> to = std::nullopt) const {
         // There will not necessarily be a unique answer for sparse columns
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(!is_sparse(),
                                                         "Column::search_sorted not supported with sparse columns");
         std::optional<size_t> res;
         auto column_data = data();
-        details::visit_type(type().data_type(), [this, &res, &column_data, val, from_right](auto type_desc_tag) {
+        details::visit_type(type().data_type(), [this, &res, &column_data, val, from_right, &from, &to](auto type_desc_tag) {
             using type_info = ScalarTypeInfo<decltype(type_desc_tag)>;
             auto accessor = random_accessor<typename type_info::TDT>(&column_data);
             if constexpr(std::is_same_v<T, typename type_info::RawType>) {
-                int64_t low{0};
-                int64_t high{row_count() -1};
+                int64_t low = from.value_or(0);
+                int64_t high = to.value_or(row_count() - 1);
                 while (!res.has_value()) {
                     auto mid{low + (high - low) / 2};
                     auto mid_value = accessor.at(mid);
@@ -919,6 +950,26 @@ public:
         inserter.flush();
     }
 
+    void init_buffer() {
+        std::call_once(*init_buffer_, [this] () {
+            extra_buffers_ = std::make_unique<ExtraBufferContainer>();
+        });
+    }
+
+    ChunkedBuffer& create_extra_buffer(size_t offset, size_t size, AllocationType allocation_type) {
+        init_buffer();
+        return extra_buffers_->create_buffer(offset, size, allocation_type);
+    }
+
+    ChunkedBuffer& get_extra_buffer(size_t offset) {
+        util::check(static_cast<bool>(extra_buffers_), "Extra buffer {} requested but pointer is null", offset);
+        return extra_buffers_->get_buffer(offset);
+    }
+
+    void set_extra_buffer(size_t offset, ChunkedBuffer&& buffer) {
+        init_buffer();
+        extra_buffers_->set_buffer(offset, std::move(buffer));
+    }
 private:
     position_t last_offset() const;
     void update_offsets(size_t nbytes);
@@ -950,6 +1001,33 @@ private:
 
     std::optional<util::BitMagic> sparse_map_;
     FieldStatsImpl stats_;
+
+    std::unique_ptr<std::once_flag> init_buffer_ = std::make_unique<std::once_flag>();
+    struct ExtraBufferContainer {
+        std::mutex mutex_;
+        std::unordered_map<size_t, ChunkedBuffer> buffers_;
+
+        ChunkedBuffer& create_buffer(size_t offset, size_t size, AllocationType allocation_type) {
+            std::lock_guard lock(mutex_);
+            auto inserted = buffers_.try_emplace(offset, ChunkedBuffer{size, allocation_type});
+            util::check(inserted.second, "Failed to insert additional chunked buffer at position {}", offset);
+            return inserted.first->second;
+        }
+
+        void set_buffer(size_t offset, ChunkedBuffer&& buffer) {
+            std::lock_guard lock(mutex_);
+            buffers_.try_emplace(offset, std::move(buffer));
+        }
+
+        ChunkedBuffer& get_buffer(size_t offset) {
+            std::lock_guard lock(mutex_);
+            auto it = buffers_.find(offset);
+            util::check(it != buffers_.end(), "Failed to find additional chunked buffer at position {}", offset);
+            return it->second;
+        }
+    };
+
+    std::unique_ptr<ExtraBufferContainer> extra_buffers_;
     util::MagicNum<'D', 'C', 'o', 'l'> magic_;
 };
 

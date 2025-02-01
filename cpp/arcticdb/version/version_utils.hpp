@@ -216,7 +216,7 @@ inline void write_symbol_ref(std::shared_ptr<StreamSink> store,
         ref_agg.add_key(*previous_key);
 
     ref_agg.add_key(journal_key);
-    ref_agg.commit();
+    ref_agg.finalize();
     ARCTICDB_DEBUG(log::version(), "Done writing symbol ref for key: {}", journal_key);
 }
 

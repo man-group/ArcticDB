@@ -1,4 +1,5 @@
 
+
 /* Copyright 2023 Man Group Operations Limited
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
@@ -22,14 +23,14 @@
 namespace arcticdb {
 
 /*
- * ChunkedBufferImpl is an untyped buffer that is composed of blocks of data that can be either regularly or
+ * ChunkedBuffer is an untyped buffer that is composed of blocks of data that can be either regularly or
  * irregularly sized, with optimizations for the following representations:
  *
  *   - a single block
  *   - multiple blocks that are all regularly sized
  *   - multiple blocks that are regularly sized up until a point, and irregularly sized after that point
  *
- * No optimization is performed when the blocks are all irregularly sized.
+ * Lookup is log(n) where n is the number of blocks when the blocks are all irregularly sized.
  *
  * This class can be wrapped in a cursor for the purposes of linear reads and writes (see CursoredBuffer),
  * and subsequently detached if required.
@@ -95,9 +96,11 @@ class ChunkedBufferImpl {
         reserve(size);
     }
 
-    ChunkedBufferImpl(size_t size, entity::AllocationType allocation_type) {
+    ChunkedBufferImpl(size_t size, entity::AllocationType allocation_type) :
+            allocation_type_(allocation_type) {
         if(allocation_type == entity::AllocationType::DETACHABLE) {
             add_detachable_block(size);
+            bytes_ = size;
         } else {
             reserve(size);
         }
@@ -171,9 +174,15 @@ class ChunkedBufferImpl {
         swap(left.regular_sized_until_, right.regular_sized_until_);
         swap(left.blocks_, right.blocks_);
         swap(left.block_offsets_, right.block_offsets_);
+        swap(left.allocation_type_, right.allocation_type_);
     }
 
     [[nodiscard]] const auto &blocks() const { return blocks_; }
+
+    BlockType* block(size_t pos) {
+        util::check(pos < blocks_.size(), "Requested block {} out of range {}", pos, blocks_.size());
+        return blocks_[pos];
+    }
 
     // If the extra space required does not fit in the current last block, and is <=DefaultBlockSize, then if aligned is
     // set to true, the current last block will be padded with zeros, and a new default sized block added. This allows
@@ -192,8 +201,9 @@ class ChunkedBufferImpl {
             res = last_block().end();
             last_block().bytes_ += extra_size;
         } else {
-            // Still regular-sized, add a new block
-            if (is_regular_sized()) {
+            if(allocation_type_ == entity::AllocationType::DETACHABLE) {
+                add_detachable_block(extra_size);
+            } else if (is_regular_sized()) {
                 auto space = free_space();
                 if (extra_size <= DefaultBlockSize && (space == 0 || aligned)) {
                     if (aligned && space > 0) {
@@ -259,8 +269,9 @@ class ChunkedBufferImpl {
     };
 
     [[nodiscard]] BlockAndOffset block_and_offset(size_t pos_bytes) const {
-        if(blocks_.size() == 1u)
+        if(blocks_.size() == 1u) {
             return BlockAndOffset(blocks_[0], pos_bytes, 0);
+        }
 
         if (is_regular_sized() || pos_bytes < regular_sized_until_) {
             size_t block_offset = pos_bytes / DefaultBlockSize;
@@ -268,6 +279,7 @@ class ChunkedBufferImpl {
                         "Request for out of range block {}, only have {} blocks",
                         block_offset,
                         blocks_.size());
+            ARCTICDB_TRACE(log::inmem(), "Chunked buffer returning regular block {}, position {}", block_offset, pos_bytes % DefaultBlockSize);
             MemBlock *block = blocks_[block_offset];
             block->magic_.check();
             return BlockAndOffset(block, pos_bytes % DefaultBlockSize, block_offset);
@@ -280,12 +292,26 @@ class ChunkedBufferImpl {
 
         auto irregular_block_num = std::distance(block_offsets_.begin(), block_offset);
         auto first_irregular_block = regular_sized_until_ / DefaultBlockSize;
+        const auto block_pos = irregular_block_num + first_irregular_block;
+        util::check(block_pos < blocks_.size(), "Block {} out of bounds in blocks buffer of size {}", block_pos, blocks_.size());
         auto block = blocks_[first_irregular_block + irregular_block_num];
+        ARCTICDB_TRACE(log::inmem(), "Chunked buffer returning irregular block {}, position {}", first_irregular_block + irregular_block_num, pos_bytes - *block_offset);
         return BlockAndOffset(block, pos_bytes - *block_offset, first_irregular_block + irregular_block_num);
+    }
+
+    uint8_t* bytes_at(size_t pos_bytes, size_t required) {
+        auto [block, pos, _] = block_and_offset(pos_bytes);
+        util::check(pos + required <= block->bytes(), "Block overflow, position {} is greater than block capacity {}", pos, block->bytes());
+        return &(*block)[pos];
+    }
+
+    const uint8_t* bytes_at(size_t pos_bytes, size_t required) const {
+        return const_cast<ChunkedBufferImpl *>(this)->bytes_at(pos_bytes, required);
     }
 
     uint8_t &operator[](size_t pos_bytes) {
         auto [block, pos, _] = block_and_offset(pos_bytes);
+        util::check(pos < block->bytes(), "Block overflow, position {} is greater than block capacity {}", pos, block->bytes());
         return (*block)[pos];
     }
 
@@ -366,9 +392,7 @@ class ChunkedBufferImpl {
     }
 
     void add_block(size_t capacity, size_t offset) {
-        auto [ptr, ts] = Allocator::aligned_alloc(BlockType::alloc_size(capacity));
-        new(ptr) MemBlock(capacity, offset, ts);
-        blocks_.emplace_back(reinterpret_cast<BlockType*>(ptr));
+        blocks_.emplace_back(create_regular_block(capacity, offset));
     }
 
     void add_external_block(const uint8_t* data, size_t size, size_t offset) {
@@ -381,15 +405,18 @@ class ChunkedBufferImpl {
         bytes_ += size;
     }
 
-    void add_detachable_block(size_t size) {
+    void add_detachable_block(size_t capacity) {
+        if(capacity == 0)
+            return;
+
         if (!no_blocks() && last_block().empty())
             free_last_block();
 
-        auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
-        auto* data = reinterpret_cast<uint8_t*>(malloc(size));
-        new(ptr) MemBlock(data, size, 0UL, ts, true);
-        blocks_.emplace_back(reinterpret_cast<BlockType*>(ptr));
-        bytes_ += size;
+        blocks_.emplace_back(create_detachable_block(capacity));
+        if(block_offsets_.empty())
+            block_offsets_.emplace_back(0);
+
+        block_offsets_.emplace_back(last_offset() + capacity);
     }
 
     [[nodiscard]] bool empty() const { return bytes_ == 0; }
@@ -426,10 +453,65 @@ class ChunkedBufferImpl {
         util::check(bytes <= bytes_, "Expected allocation size {} smaller than actual allocation {}", bytes, bytes_);
     }
 
+    void truncate_single_block(size_t start_offset, size_t end_offset) {
+        auto [block, offset, ts] = block_and_offset(start_offset);
+        util::check(blocks_.size() == 1, "Truncate single block expects buffer with only one block");
+        const auto removed_bytes = start_offset + (block->bytes() - end_offset);
+        util::check(removed_bytes < block->bytes(), "Can't truncate {} bytes from a {} byte block", removed_bytes, block->bytes());
+        auto remaining_bytes = block->bytes() - removed_bytes;
+        auto new_block = create_block(remaining_bytes, 0);
+        new_block->copy_from(block->data() + start_offset, remaining_bytes, 0);
+        blocks_[0] = new_block;
+        delete block;
+    }
+
+    void truncate_first_block(size_t bytes) {
+        auto [block, offset, ts] = block_and_offset(bytes);
+        util::check(block == *blocks_.begin(), "Truncate first block position {} not within initial block", bytes);
+        util::check(bytes < block->bytes(), "Can't truncate {} bytes from a {} byte block", bytes, block->bytes());
+        auto remaining_bytes = block->bytes() - bytes;
+        auto new_block = create_block(bytes, 0);
+        new_block->copy_from(block->data() + bytes, remaining_bytes, 0);
+        blocks_[0] = new_block;
+        delete block;
+    }
+
+    void truncate_last_block(size_t bytes) {
+        auto [block, offset, ts] = block_and_offset(bytes);
+        util::check(block == *blocks_.rbegin(), "Truncate first block position {} not within initial block", bytes);
+        util::check(bytes < block->bytes(), "Can't truncate {} bytes from a {} byte block", bytes, block->bytes());
+        auto remaining_bytes = block->bytes() - bytes;
+        auto new_block = create_block(remaining_bytes, block->offset_);
+        new_block->copy_from(block->data(), remaining_bytes, 0);
+        *blocks_.rbegin() = new_block;
+        delete block;
+    }
+
   private:
+    MemBlock* create_block(size_t capacity, size_t offset) const {
+        if(allocation_type_ == entity::AllocationType::DETACHABLE)
+            return create_detachable_block(capacity);
+        else
+            return create_regular_block(capacity, offset);
+    }
+
+    MemBlock* create_regular_block(size_t capacity, size_t offset) const {
+        auto [ptr, ts] = Allocator::aligned_alloc(BlockType::alloc_size(capacity));
+        new(ptr) MemBlock(capacity, offset, ts);
+        return reinterpret_cast<BlockType*>(ptr);
+    }
+
+    MemBlock* create_detachable_block(size_t capacity) const {
+        auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
+        auto* data = new uint8_t[capacity];
+        new(ptr) MemBlock(data, capacity, 0UL, ts, true);
+        return reinterpret_cast<BlockType*>(ptr);
+    }
+
     void free_block(BlockType* block) const {
         ARCTICDB_TRACE(log::storage(), "Freeing block at address {:x}", uintptr_t(block));
         block->magic_.check();
+        block->~MemBlock();
         Allocator::free(std::make_pair(reinterpret_cast<uint8_t *>(block), block->timestamp_));
     }
 
@@ -477,6 +559,7 @@ class ChunkedBufferImpl {
     std::vector<BlockType*> blocks_;
     std::vector<size_t> block_offsets_;
 #endif
+    entity::AllocationType allocation_type_ = entity::AllocationType::DYNAMIC;
 };
 
 constexpr size_t PageSize = 4096;
@@ -489,10 +572,9 @@ std::vector<ChunkedBufferImpl<BlockSize>> split(const ChunkedBufferImpl<BlockSiz
 template <size_t BlockSize>
 ChunkedBufferImpl<BlockSize> truncate(const ChunkedBufferImpl<BlockSize>& input, size_t start_byte, size_t end_byte);
 
-inline HashedValue hash_buffer(const ChunkedBuffer& buffer, HashAccum& accum) {
+inline void hash_buffer(const ChunkedBuffer& buffer, HashAccum& accum) {
     for(const auto& block : buffer.blocks()) {
         accum(block->data(), block->bytes());
     }
-    return accum.digest();
 }
 }
