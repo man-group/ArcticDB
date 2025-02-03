@@ -87,7 +87,7 @@ using TypeHandler = folly::Poly<ITypeHandler>;
 
 class TypeHandlerDataFactory {
 public:
-    virtual std::any get_data() const = 0;
+    virtual std::shared_ptr<std::any> get_data() const = 0;
     virtual ~TypeHandlerDataFactory() = default;
 };
 

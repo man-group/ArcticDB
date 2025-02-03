@@ -634,11 +634,10 @@ struct ReduceColumnTask : async::BaseTask {
 };
 
 folly::Future<folly::Unit> reduce_and_fix_columns(
-    std::shared_ptr<PipelineContext> &context,
-    SegmentInMemory &frame,
-    const ReadOptions& read_options,
-    std::any& handler_data
-) {
+        std::shared_ptr<PipelineContext> &context,
+        SegmentInMemory &frame,
+        const ReadOptions& read_options,
+        std::any& handler_data) {
     ARCTICDB_SAMPLE_DEFAULT(ReduceAndFixStringCol)
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     if(frame.empty())

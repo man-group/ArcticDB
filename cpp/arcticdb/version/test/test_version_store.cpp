@@ -259,7 +259,7 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
+    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, *handler_data);
     const auto& seg = read_result.frame_data.frame();
 
     count = 0;
@@ -368,7 +368,7 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
     read_options.set_batch_throw_on_error(true);
-    auto latest_versions = test_store_->batch_read(symbols, std::vector<VersionQuery>(10), read_queries, read_options, handler_data);
+    auto latest_versions = test_store_->batch_read(symbols, std::vector<VersionQuery>(10), read_queries, read_options, *handler_data);
     for(auto&& [idx, version] : folly::enumerate(latest_versions)) {
         auto expected = get_test_simple_frame(std::get<ReadResult>(version).item.symbol(), 10, idx);
         bool equal = expected.segment_ == std::get<ReadResult>(version).frame_data.frame();
@@ -535,7 +535,7 @@ TEST(VersionStore, UpdateWithin) {
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, *handler_data);
     const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows; ++i) {
@@ -575,7 +575,7 @@ TEST(VersionStore, UpdateBefore) {
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, *handler_data);
     const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows + update_range.diff(); ++i) {
@@ -615,7 +615,7 @@ TEST(VersionStore, UpdateAfter) {
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, *handler_data);
     const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows + update_range.diff(); ++i) {
@@ -656,7 +656,7 @@ TEST(VersionStore, UpdateIntersectBefore) {
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, *handler_data);
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
@@ -697,7 +697,7 @@ TEST(VersionStore, UpdateIntersectAfter) {
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, *handler_data);
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
@@ -748,7 +748,7 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, handler_data);
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, *handler_data);
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u;i < num_rows; ++i) {
@@ -808,7 +808,7 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, handler_data);
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, *handler_data);
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u;i < num_rows; ++i) {
@@ -870,7 +870,7 @@ TEST(VersionStore, ChunkIterator) {
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
     ReadQuery read_query;
-    auto iterator = version_store.read_dataframe_chunked_internal(stream_id, VersionQuery{}, read_query, ReadOptions{}, handler_data, shared_data);
+    auto iterator = version_store.read_dataframe_chunked_internal(stream_id, VersionQuery{}, read_query, ReadOptions{}, *handler_data, shared_data);
 
     size_t count = 0UL;
     while (auto chunk = iterator.next()) {

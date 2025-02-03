@@ -129,7 +129,7 @@ TEST_F(IngestionStressStore, ScalarIntAppend) {
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ro, handler_data);
+    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ro, *handler_data);
     GTEST_COUT << "columns in res: " << read_result.frame_data.index_columns().size();
 }
 
@@ -217,7 +217,7 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = test_store_->read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, handler_data);
+    auto read_result = test_store_->read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, *handler_data);
 }
 
 TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {
@@ -270,6 +270,6 @@ TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, read_options, handler_data);
+    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, read_options, *handler_data);
     ARCTICDB_DEBUG(log::version(), "result columns: {}", read_result.frame_data.names());
 }

@@ -1111,7 +1111,7 @@ std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(const std::
     std::vector<folly::Future<ReadVersionOutput>> res;
     res.reserve(keys.size());
     for (const auto& index_key: keys) {
-        res.emplace_back(read_frame_for_version(store(), {index_key}, std::make_shared<ReadQuery>(), ReadOptions{}, handler_data));
+        res.emplace_back(read_frame_for_version(store(), {index_key}, std::make_shared<ReadQuery>(), ReadOptions{}, *handler_data));
     }
     Allocator::instance()->trim();
     return folly::collect(res).get();

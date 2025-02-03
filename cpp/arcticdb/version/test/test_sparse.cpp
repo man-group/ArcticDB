@@ -88,7 +88,7 @@ TEST_F(SparseTestStore, SimpleRoundtrip) {
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, *handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
     ASSERT_EQ(frame.row_count(), 2);
@@ -180,7 +180,7 @@ TEST_F(SparseTestStore, SimpleRoundtripBackwardsCompat) {
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, *handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
     ASSERT_EQ(frame.row_count(), 2);
@@ -231,7 +231,7 @@ TEST_F(SparseTestStore, DenseToSparse) {
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, *handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
 
@@ -279,7 +279,7 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     auto handler_data = get_type_handler_data();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, *handler_data);
     const auto& frame = read_result.frame_data.frame();;
 
     ASSERT_EQ(frame.row_count(), 2);
@@ -334,7 +334,7 @@ TEST_F(SparseTestStore, Multiblock) {
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, *handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
     for(size_t i = 0; i < num_rows; i += 2) {
@@ -387,7 +387,7 @@ TEST_F(SparseTestStore, Segment) {
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, *handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
     for(size_t i = 0; i < num_rows; i += 2) {
@@ -447,7 +447,7 @@ TEST_F(SparseTestStore, SegmentWithExistingIndex) {
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, *handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
     ASSERT_EQ(frame.row_count(), num_rows);
@@ -508,7 +508,7 @@ TEST_F(SparseTestStore, SegmentAndFilterColumn) {
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, *handler_data);
     const auto& frame =read_result.frame_data.frame();;
     ASSERT_EQ(frame.row_count(), num_rows);
     ASSERT_EQ(frame.descriptor().field_count(), 2);
@@ -564,7 +564,7 @@ TEST_F(SparseTestStore, SegmentWithRangeFilter) {
     read_query->row_filter = IndexRange(timestamp{3000}, timestamp{6999});
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, *handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
     ASSERT_EQ(frame.row_count(), 4000);
@@ -618,7 +618,7 @@ TEST_F(SparseTestStore, Compact) {
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
     auto handler_data = get_type_handler_data();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, *handler_data);
     const auto& frame = read_result.frame_data.frame();
 
     ASSERT_EQ(frame.row_count(), num_rows);
@@ -676,7 +676,7 @@ TEST_F(SparseTestStore, CompactWithStrings) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     auto handler_data = get_type_handler_data();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, *handler_data);
     const auto& frame = read_result.frame_data.frame();
     ASSERT_EQ(frame.row_count(), num_rows);
 

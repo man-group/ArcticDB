@@ -132,7 +132,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     version.def("read_dataframe_from_file",
         [] (StreamId sid, const std::string(path), std::shared_ptr<ReadQuery> read_query) {
             auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
-            return adapt_read_df(read_dataframe_from_file(sid, path, read_query, handler_data));
+            return adapt_read_df(read_dataframe_from_file(sid, path, read_query, *handler_data));
         });
 
     using FrameDataWrapper = arcticdb::pipelines::FrameDataWrapper;
@@ -458,7 +458,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("read_chunked",
             [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options) {
                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
-                return v.read_dataframe_chunked(sid, version_query, *read_query, read_options, handler_data);
+                return v.read_dataframe_chunked(sid, version_query, *read_query, read_options, *handler_data);
             },
             py::call_guard<SingleThreadMutexHolder>(), "Get an iterator to a dataframe that returns in the chunked order")
         .def("append",
@@ -585,7 +585,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("read_dataframe_version",
              [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options) {
                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
-                return adapt_read_df(v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data));
+                return adapt_read_df(v.read_dataframe_version(sid, version_query, read_query, read_options, *handler_data));
               },
              py::call_guard<SingleThreadMutexHolder>(),
              "Read the specified version of the dataframe from the store")
@@ -684,7 +684,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                  std::vector<std::shared_ptr<ReadQuery>>& read_queries,
                  const ReadOptions& read_options){
                  auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
-                 return python_util::adapt_read_dfs(v.batch_read(stream_ids, version_queries, read_queries, read_options, handler_data));
+                 return python_util::adapt_read_dfs(v.batch_read(stream_ids, version_queries, read_queries, read_options, *handler_data));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
         .def("batch_read_keys",
