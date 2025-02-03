@@ -19,15 +19,15 @@ using namespace object_store_utils;
 
 namespace s3 {
 
-std::optional<Aws::S3::S3Error> S3ClientWrapper::has_failure_trigger(const std::string& bucket_name) const {
-    bool static_failures_enabled = ConfigsMap::instance()->get_int("S3ClientWrapper.EnableFailures", 0) == 1;
+std::optional<Aws::S3::S3Error> S3ClientTestWrapper::has_failure_trigger(const std::string& bucket_name) const {
+    bool static_failures_enabled = ConfigsMap::instance()->get_int("S3ClientTestWrapper.EnableFailures", 0) == 1;
     // Check if mock failures are enabled
     if (!static_failures_enabled) {
         return std::nullopt;
     }
 
     // Get target buckets (if not set or "all", affects all buckets)
-    auto failure_buckets_str = ConfigsMap::instance()->get_string("S3ClientWrapper.FailureBucket", "all");
+    auto failure_buckets_str = ConfigsMap::instance()->get_string("S3ClientTestWrapper.FailureBucket", "all");
     
     if (failure_buckets_str != "all") {
         // Split the comma-separated bucket names and check if current bucket is in the list
@@ -52,8 +52,8 @@ std::optional<Aws::S3::S3Error> S3ClientWrapper::has_failure_trigger(const std::
     }
 
     // Get error configuration
-    auto error_code = ConfigsMap::instance()->get_int("S3ClientWrapper.ErrorCode", static_cast<int>(Aws::S3::S3Errors::NETWORK_CONNECTION));
-    auto retryable = ConfigsMap::instance()->get_int("S3ClientWrapper.ErrorRetryable", 0) == 1;
+    auto error_code = ConfigsMap::instance()->get_int("S3ClientTestWrapper.ErrorCode", static_cast<int>(Aws::S3::S3Errors::NETWORK_CONNECTION));
+    auto retryable = ConfigsMap::instance()->get_int("S3ClientTestWrapper.ErrorRetryable", 0) == 1;
 
     auto failure_error_ = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(
         static_cast<Aws::S3::S3Errors>(error_code),
@@ -66,7 +66,7 @@ std::optional<Aws::S3::S3Error> S3ClientWrapper::has_failure_trigger(const std::
     return failure_error_;
 }
 
-S3Result<std::monostate> S3ClientWrapper::head_object(
+S3Result<std::monostate> S3ClientTestWrapper::head_object(
         const std::string& s3_object_name,
         const std::string &bucket_name) const {
     auto maybe_error = has_failure_trigger(bucket_name);
@@ -78,7 +78,7 @@ S3Result<std::monostate> S3ClientWrapper::head_object(
     return actual_client_->head_object(s3_object_name, bucket_name);
 }
 
-S3Result<Segment> S3ClientWrapper::get_object(
+S3Result<Segment> S3ClientTestWrapper::get_object(
         const std::string &s3_object_name,
         const std::string &bucket_name) const {
     auto maybe_error = has_failure_trigger(bucket_name);
@@ -89,7 +89,7 @@ S3Result<Segment> S3ClientWrapper::get_object(
     return actual_client_->get_object(s3_object_name, bucket_name);
 }
 
-folly::Future<S3Result<Segment>> S3ClientWrapper::get_object_async(
+folly::Future<S3Result<Segment>> S3ClientTestWrapper::get_object_async(
     const std::string &s3_object_name,
     const std::string &bucket_name) const {
     auto maybe_error = has_failure_trigger(bucket_name);
@@ -100,7 +100,7 @@ folly::Future<S3Result<Segment>> S3ClientWrapper::get_object_async(
     return actual_client_->get_object_async(s3_object_name, bucket_name);
 }
 
-S3Result<std::monostate> S3ClientWrapper::put_object(
+S3Result<std::monostate> S3ClientTestWrapper::put_object(
         const std::string &s3_object_name,
         Segment &&segment,
         const std::string &bucket_name,
@@ -113,7 +113,7 @@ S3Result<std::monostate> S3ClientWrapper::put_object(
     return actual_client_->put_object(s3_object_name, std::move(segment), bucket_name, header);
 }
 
-S3Result<DeleteOutput> S3ClientWrapper::delete_objects(
+S3Result<DeleteOutput> S3ClientTestWrapper::delete_objects(
         const std::vector<std::string>& s3_object_names,
         const std::string& bucket_name) {
     auto maybe_error = has_failure_trigger(bucket_name);
@@ -128,7 +128,7 @@ S3Result<DeleteOutput> S3ClientWrapper::delete_objects(
 // Using a fixed page size since it's only being used for simple tests.
 // If we ever need to configure it we should move it to the s3 proto config instead.
 constexpr auto page_size = 10;
-S3Result<ListObjectsOutput> S3ClientWrapper::list_objects(
+S3Result<ListObjectsOutput> S3ClientTestWrapper::list_objects(
         const std::string& name_prefix,
         const std::string& bucket_name,
         const std::optional<std::string>& continuation_token) const {

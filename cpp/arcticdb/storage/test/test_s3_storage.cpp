@@ -250,11 +250,11 @@ protected:
     S3Storage store;
 
     void SetUp() override {
-        ConfigsMap::instance()->set_int("S3ClientWrapper.EnableFailures", 1);
+        ConfigsMap::instance()->set_int("S3ClientTestWrapper.EnableFailures", 1);
     }
 
     void TearDown() override {
-        ConfigsMap::instance()->unset_int("S3ClientWrapper.EnableFailures");
+        ConfigsMap::instance()->unset_int("S3ClientTestWrapper.EnableFailures");
     }
 };
 arcticdb::storage::nfs_backed::NfsBackedStorage::Config get_test_nfs_config() {

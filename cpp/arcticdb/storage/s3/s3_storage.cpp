@@ -139,7 +139,7 @@ void S3Storage::create_s3_client(const S3Settings &conf, const Aws::Auth::AWSCre
 
     if (conf.use_internal_client_wrapper_for_testing()){
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using internal client wrapper for testing");
-        s3_client_ = std::make_unique<S3ClientWrapper>(std::move(s3_client_));
+        s3_client_ = std::make_unique<S3ClientTestWrapper>(std::move(s3_client_));
     }
 }
 
