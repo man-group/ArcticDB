@@ -290,6 +290,15 @@ def get_s3_proto(
             raise UserInputException("aws_auth and aws_profile can only be set for S3")
         if aws_auth != AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER or not aws_profile:
             raise UserInputException("STS credential provider and aws_profile must be set together")
+
+    if use_internal_client_wrapper_for_testing:
+        assert native_cfg is not None, (
+            "use_internal_client_wrapper_for_testing can only be set if native_cfg is provided"
+        )
+
+    if native_cfg:
+        aws_auth = AWSAuthMethod.DISABLED if aws_auth is None else aws_auth
+        aws_profile = "" if aws_profile is None else aws_profile
         native_cfg.update(NativeS3Settings(aws_auth, aws_profile, use_internal_client_wrapper_for_testing))
 
     sid, storage = get_storage_for_lib_name(s3.prefix, env)
