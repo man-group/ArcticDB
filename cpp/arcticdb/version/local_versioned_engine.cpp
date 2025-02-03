@@ -509,7 +509,7 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
     }
     auto descriptors = collectAll(descriptor_futures).get();
     TransformBatchResultsFlags flags;
-    flags.throw_on_error_ = *read_options.batch_throw_on_error_;
+    flags.throw_on_error_ = *read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(descriptors), stream_ids, flags, version_queries);
 }
 
@@ -1160,7 +1160,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
 
     TransformBatchResultsFlags flags;
     flags.convert_no_data_found_to_key_not_found_ = true;
-    flags.throw_on_error_ = *read_options.batch_throw_on_error_;
+    flags.throw_on_error_ = *read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(all_results), stream_ids, flags, version_queries);
 }
 
@@ -1609,7 +1609,7 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
     // For legacy reason read_metadata_batch is not throwing if the symbol is missing
     TransformBatchResultsFlags flags;
     flags.throw_on_missing_symbol_ = false;
-    flags.throw_on_error_ = *read_options.batch_throw_on_error_;
+    flags.throw_on_error_ = *read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(metadatas), stream_ids, flags, version_queries);
 }
 
