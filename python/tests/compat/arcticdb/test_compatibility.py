@@ -1,8 +1,9 @@
+import pytest
 from packaging import version
 import pandas as pd
 from arcticdb.arctic import Arctic
 from arcticdb.util.test import assert_frame_equal
-from arcticdb_ext import set_config_int
+from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb.options import ModifiableEnterpriseLibraryOption
 from arcticdb.toolbox.library_tool import LibraryTool
 
@@ -19,11 +20,13 @@ class CurrentVersion:
         self.lib_name = lib_name
 
     def __enter__(self):
+        set_config_int("VersionMap.ReloadInterval", 0) # We disable the cache to be able to read the data written from old_venv
         self.ac = Arctic(self.uri)
         self.lib = self.ac.get_library(self.lib_name)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        unset_config_int("VersionMap.ReloadInterval")
         del self.lib
         del self.ac
 
@@ -39,7 +42,6 @@ def test_compat_write_read(old_venv_and_arctic_uri, lib_name):
     old_lib = old_ac.create_library(lib_name)
 
     # Write to library using current version
-    set_config_int("VersionMap.ReloadInterval", 0) # We disable the cache to be able to read the data written from old_venv
     with CurrentVersion(arctic_uri, lib_name) as curr:
         curr.lib.write(sym, df)
 
@@ -68,7 +70,6 @@ def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_nam
     old_lib.assert_read(sym, df)
 
     # Enable replication and background_deletion with current version
-    expected_cfg = None
     with CurrentVersion(arctic_uri, lib_name) as curr:
         expected_cfg = LibraryTool.read_unaltered_lib_cfg(curr.ac._library_manager, lib_name)
         expected_cfg.lib_desc.version.write_options.delayed_deletes = True
@@ -120,12 +121,16 @@ lib.write("sym", df, metadata={{"abc": df}})
         assert_frame_equal(read_df, expected_df)
 
 
-def test_compat_snapshot_metadata_read_write(pandas_v1_venv, s3_ssl_disabled_storage, lib_name):
+def test_compat_snapshot_metadata_read_write(old_venv_and_arctic_uri, lib_name):
     # Before v4.5.0 and after v5.2.1 we save metadata directly on the snapshot's segment header and we need to make
     # sure we can read snapshot metadata written by those versions, and that those versions can read snapshot metadata
     # written by the latest version.
-    arctic_uri = s3_ssl_disabled_storage.arctic_uri
-    old_ac = pandas_v1_venv.create_arctic(arctic_uri)
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    old_ac = old_venv.create_arctic(arctic_uri)
+
+    adb_version = version.Version(old_venv.version)
+    if version.Version("4.5.0") <= adb_version <= version.Version("5.2.1"):
+        pytest.skip(reason="Versions between 4.5.0 and 5.2.1 store snapshot metadata in timeseries descriptor which is incompatible with any other versions")
 
     sym = "sym"
     df = pd.DataFrame({"col": [1, 2, 3]})
@@ -135,7 +140,6 @@ def test_compat_snapshot_metadata_read_write(pandas_v1_venv, s3_ssl_disabled_sto
     old_lib = old_ac.create_library(lib_name)
 
     # Write snapshot metadata using current version
-    set_config_int("VersionMap.ReloadInterval", 0) # We disable the cache to be able to read the data written from old_venv
     with CurrentVersion(arctic_uri, lib_name) as curr:
         curr.lib.write(sym, df)
         curr.lib.snapshot(snap, metadata=snap_meta)
@@ -170,7 +174,6 @@ def test_compat_snapshot_metadata_read(old_venv_and_arctic_uri, lib_name):
     old_lib = old_ac.create_library(lib_name)
 
     # Write snapshot metadata using current version
-    set_config_int("VersionMap.ReloadInterval", 0) # We disable the cache to be able to read the data written from old_venv
     with CurrentVersion(arctic_uri, lib_name) as curr:
         curr.lib.write(sym, df)
 
