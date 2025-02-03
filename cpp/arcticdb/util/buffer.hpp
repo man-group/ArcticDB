@@ -89,8 +89,9 @@ struct Buffer : public BaseBuffer<Buffer, true> {
     }
 
     void deallocate() {
-        if (data_ != nullptr)
+        if (data_ != nullptr) {
             Allocator::free(std::make_pair(data_, ts_));
+        }
 
         data_ = nullptr;
         ptr_ = nullptr;

@@ -91,11 +91,13 @@ void initialise_output_bitset(
 
 // Column operators
 bool operator==(const Column& left, const Column& right) {
-    if (left.row_count() != right.row_count())
+    if (left.row_count() != right.row_count()) {
         return false;
+    }
 
-    if (left.type_ != right.type_)
+    if (left.type_ != right.type_) {
         return false;
+    }
 
     return left.type_.visit_tag([&left, &right](auto l_impl) {
         using LeftType = std::decay_t<decltype(l_impl)>;
@@ -109,8 +111,9 @@ bool operator==(const Column& left, const Column& right) {
                 for (auto i = 0u; i < left.row_count(); ++i) {
                     auto left_val = left.scalar_at<LeftRawType>(i);
                     auto right_val = right.scalar_at<RightRawType>(i);
-                    if (left_val != right_val)
+                    if (left_val != right_val) {
                         return false;
+                    }
                 }
                 return true;
             } else {
@@ -163,8 +166,9 @@ ssize_t Column::last_row() const { return last_logical_row_; }
 void Column::check_magic() const { magic_.check(); }
 
 void Column::unsparsify(size_t num_rows) {
-    if (!sparse_map_)
+    if (!sparse_map_) {
         return;
+    }
 
     type_.visit_tag([this, num_rows](const auto tdt) {
         using TagType = decltype(tdt);
@@ -259,8 +263,9 @@ void Column::append_sparse_map(const util::BitMagic& bv, position_t at_row) {
 }
 
 void Column::append(const Column& other, position_t at_row) {
-    if (other.row_count() == 0)
+    if (other.row_count() == 0) {
         return;
+    }
     util::check(type() == other.type(), "Cannot append column type {} to column type {}", type(), other.type());
     const bool was_sparse = is_sparse();
     const bool was_empty = empty();
@@ -306,10 +311,11 @@ void Column::append(const Column& other, position_t at_row) {
     }
 
     if (!was_sparse) {
-        if (!was_empty)
+        if (!was_empty) {
             backfill_sparse_map(initial_row_count - 1);
-        else
+        } else {
             sparse_map().clear();
+        }
     }
 
     if (other.is_sparse()) {
@@ -409,10 +415,11 @@ void Column::sort_external(const JiveTable& jive_table, std::vector<uint32_t>& p
 void Column::mark_absent_rows(size_t num_rows) {
     if (sparse_permitted()) {
         if (!sparse_map_) {
-            if (last_physical_row_ != -1)
+            if (last_physical_row_ != -1) {
                 backfill_sparse_map(last_physical_row_);
-            else
+            } else {
                 (void)sparse_map();
+            }
         }
         last_logical_row_ += static_cast<ssize_t>(num_rows);
     } else {
@@ -431,14 +438,16 @@ void Column::default_initialize_rows(size_t start_pos, size_t num_rows, bool ens
             using RawType = typename T::DataTypeTag::raw_type;
             const auto bytes = (num_rows * sizeof(RawType));
 
-            if (ensure_alloc)
+            if (ensure_alloc) {
                 data_.ensure<uint8_t>(bytes);
+            }
 
             auto type_ptr = data_.ptr_cast<RawType>(start_pos, bytes);
             util::default_initialize<T>(reinterpret_cast<uint8_t*>(type_ptr), bytes);
 
-            if (ensure_alloc)
+            if (ensure_alloc) {
                 data_.commit();
+            }
 
             last_logical_row_ += static_cast<ssize_t>(num_rows);
             last_physical_row_ += static_cast<ssize_t>(num_rows);
@@ -469,11 +478,13 @@ void Column::set_row_data(size_t row_id) {
 }
 
 size_t Column::get_physical_offset(size_t row) const {
-    if (!is_sparse())
+    if (!is_sparse()) {
         return row;
+    }
 
-    if (row == 0u)
+    if (row == 0u) {
         return 0u;
+    }
 
     // TODO: cache index
     auto rs = std::make_unique<bm::bvector<>::rs_index_type>();
@@ -485,15 +496,17 @@ void Column::set_sparse_map(util::BitSet&& bitset) { sparse_map_ = std::move(bit
 
 std::optional<position_t> Column::get_physical_row(position_t row) const {
     if (row > last_logical_row_) {
-        if (sparse_permitted())
+        if (sparse_permitted()) {
             return std::nullopt;
-        else
+        } else {
             util::raise_rte("Scalar index {} out of bounds in column of size {}", row, row_count());
+        }
     }
 
     util::check_arg(is_scalar(), "get_scalar requested on non-scalar column");
-    if (is_sparse() && !sparse_map().get_bit(bv_size(row)))
+    if (is_sparse() && !sparse_map().get_bit(bv_size(row))) {
         return std::nullopt;
+    }
 
     return get_physical_offset(row);
 }
@@ -521,8 +534,9 @@ void Column::inflate_string_array(
     const StringPool& string_pool
 ) {
     ssize_t max_size = 0;
-    for (int i = 0; i < string_refs.size(); ++i)
+    for (int i = 0; i < string_refs.size(); ++i) {
         max_size = std::max(max_size, static_cast<ssize_t>(string_pool.get_const_view(string_refs.at(i)).size()));
+    }
 
     size_t data_size = static_cast<size_t>(max_size) * string_refs.size();
     data.ensure<uint8_t>(data_size);
@@ -571,8 +585,9 @@ bool Column::is_inflated() const { return inflated_; }
 
 void Column::change_type(DataType target_type) {
     util::check(shapes_.empty(), "Can't change type on multi-dimensional column with type {}", type_);
-    if (type_.data_type() == target_type)
+    if (type_.data_type() == target_type) {
         return;
+    }
 
     CursoredBuffer<ChunkedBuffer> buf;
     for (const auto& block : data_.buffer().blocks()) {
@@ -587,8 +602,9 @@ void Column::change_type(DataType target_type) {
                     buf.ensure<target_raw_type>(num_values);
                     auto src = reinterpret_cast<const source_raw_type*>(block->data());
                     auto dest = reinterpret_cast<target_raw_type*>(buf.cursor());
-                    for (auto i = 0u; i < num_values; ++i)
+                    for (auto i = 0u; i < num_values; ++i) {
                         dest[i] = target_raw_type(src[i]);
+                    }
                 } else {
                     util::raise_rte("Cannot narrow column type from {} to {}", type, target_type);
                 }
@@ -606,8 +622,9 @@ position_t Column::row_count() const {
         return num_shapes() / shape_t(type_.dimension());
     }
 
-    if (is_sequence_type(type().data_type()) && inflated_ && is_fixed_string_type(type().data_type()))
+    if (is_sequence_type(type().data_type()) && inflated_ && is_fixed_string_type(type().data_type())) {
         return inflated_row_count();
+    }
 
     return data_.bytes() / size_t(item_size());
 }
@@ -742,8 +759,9 @@ void Column::update_offsets(size_t nbytes) { offsets_.push_back(last_offset() + 
 bool Column::is_scalar() const { return type().dimension() == Dimension(0); }
 
 const shape_t* Column::shape_index(position_t idx) const {
-    if (is_scalar())
+    if (is_scalar()) {
         return nullptr;
+    }
 
     return shapes_.buffer().ptr_cast<shape_t>(idx * size_t(type_.dimension()) * sizeof(shape_t), sizeof(shape_t));
 }
@@ -752,11 +770,13 @@ position_t Column::bytes_offset(position_t idx) const {
     regenerate_offsets();
     util::check_arg(idx < row_count(), "bytes_offset index {} out of bounds in column of size {}", idx, row_count());
 
-    if (idx == 0)
+    if (idx == 0) {
         return 0;
+    }
 
-    if (is_scalar())
+    if (is_scalar()) {
         return scalar_offset(idx);
+    }
 
     util::check(size_t(idx - 1) < offsets_.size(), "Offset {} out of range, only have {}", idx - 1, offsets_.size());
     return offsets_[idx - 1];
@@ -783,8 +803,9 @@ size_t Column::num_shapes() const { return shapes_.bytes() / sizeof(shape_t); }
 void Column::set_sparse_bit_for_row(size_t sparse_location) { sparse_map()[bv_size(sparse_location)] = true; }
 
 void Column::regenerate_offsets() const {
-    if (ARCTICDB_LIKELY(is_scalar() || !offsets_.empty()))
+    if (ARCTICDB_LIKELY(is_scalar() || !offsets_.empty())) {
         return;
+    }
 
     position_t pos = 0;
     for (position_t i = 0, j = i + position_t(type_.dimension()); j < position_t(num_shapes());
@@ -798,8 +819,9 @@ void Column::regenerate_offsets() const {
 }
 
 util::BitMagic& Column::sparse_map() {
-    if (!sparse_map_)
+    if (!sparse_map_) {
         sparse_map_ = std::make_optional<util::BitMagic>(0);
+    }
 
     return sparse_map_.value();
 }

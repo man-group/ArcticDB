@@ -214,8 +214,9 @@ void fix_normalization_or_throw(
         return;
     }
     if (is_append) {
-        if (check_ndarray_append(old_norm, new_norm))
+        if (check_ndarray_append(old_norm, new_norm)) {
             return;
+        }
     } else {
         // ndarray normalizes to a ROWCOUNT frame and we don't support update on those
         normalization::check<ErrorCode::E_UPDATE_NOT_SUPPORTED>(

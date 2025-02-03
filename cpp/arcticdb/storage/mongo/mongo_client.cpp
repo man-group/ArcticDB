@@ -41,10 +41,11 @@ std::string get_string_element(const ElementType& element) {
 template<typename DocType>
 StreamId stream_id_from_document(DocType& doc, KeyType key_type) {
     StreamId stream_id;
-    if (is_string_key_type(key_type))
+    if (is_string_key_type(key_type)) {
         stream_id = get_string_element(doc["stream_id"]);
-    else
+    } else {
         stream_id = NumericId(doc["stream_id"].get_int64().value);
+    }
 
     return stream_id;
 }
@@ -98,10 +99,11 @@ void add_common_key_values(bsoncxx::builder::basic::document& basic_builder, con
     basic_builder.append(kvp("key_type", types::b_int32{static_cast<int32_t>(key.type())}));
     basic_builder.append(kvp("key", fmt::format("{}", key).c_str()));
 
-    if (std::holds_alternative<std::string>(key.id()))
+    if (std::holds_alternative<std::string>(key.id())) {
         basic_builder.append(kvp("stream_id", std::get<StringId>(key.id())));
-    else
+    } else {
         basic_builder.append(kvp("stream_id", types::b_int64{int64_t(std::get<NumericId>(key.id()))}));
+    }
 }
 
 void add_atom_key_values(bsoncxx::builder::basic::document& basic_builder, const AtomKey& key) {
@@ -164,12 +166,15 @@ class MongoClientImpl {
         uint64_t selection_timeout_ms
     ) {
         const auto uri_options = mongocxx::uri(uri).options();
-        if (uri_options.find("minPoolSize") == uri_options.end())
+        if (uri_options.find("minPoolSize") == uri_options.end()) {
             uri += fmt::format("&minPoolSize={}", min_pool_size);
-        if (uri_options.find("maxPoolSize") == uri_options.end())
+        }
+        if (uri_options.find("maxPoolSize") == uri_options.end()) {
             uri += fmt::format("&maxPoolSize={}", max_pool_size);
-        if (uri_options.find("serverSelectionTimeoutMS") == uri_options.end())
+        }
+        if (uri_options.find("serverSelectionTimeoutMS") == uri_options.end()) {
             uri += fmt::format("&serverSelectionTimeoutMS={}", selection_timeout_ms);
+        }
         return uri;
     }
 
@@ -324,8 +329,9 @@ std::optional<KeySegmentPair> MongoClientImpl::read_segment(
 
     ARCTICDB_SUBSAMPLE(MongoStorageReadFindOne, 0)
     auto stream_id = variant_key_id(key);
-    if (StorageFailureSimulator::instance()->configured())
+    if (StorageFailureSimulator::instance()->configured()) {
         StorageFailureSimulator::instance()->go(FailureType::READ);
+    }
 
     auto result = collection.find_one(
         document{} << "key" << fmt::format("{}", key) << "stream_id" << fmt::format("{}", stream_id) << finalize
@@ -416,10 +422,11 @@ std::vector<VariantKey> MongoClientImpl::list_keys(
 
     for (auto& doc : cursor) {
         VariantKey key;
-        if (!is_ref_key_class(key_type))
+        if (!is_ref_key_class(key_type)) {
             key = detail::atom_key_from_document(doc, key_type);
-        else
+        } else {
             key = detail::ref_key_from_document(doc, key_type);
+        }
         keys.emplace_back(key);
         ARCTICDB_SUBSAMPLE(MongoStorageItTypeNext, 0)
     }

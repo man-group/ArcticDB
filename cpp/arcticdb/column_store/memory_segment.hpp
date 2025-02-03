@@ -335,8 +335,9 @@ class SegmentInMemory {
         std::vector<SegmentInMemory> output;
         auto new_impls = impl_->split(rows);
         output.reserve(new_impls.size());
-        for (const auto& impl : new_impls)
+        for (const auto& impl : new_impls) {
             output.emplace_back(SegmentInMemory{impl});
+        }
 
         return output;
     }

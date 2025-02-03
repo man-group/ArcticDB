@@ -169,8 +169,9 @@ class StorageFailureSimulator {
     ARCTICDB_NO_MOVE_OR_COPY(StorageFailureSimulator)
 
     void go(FailureType failure_type) {
-        if (ARCTICDB_LIKELY(!configured_))
+        if (ARCTICDB_LIKELY(!configured_)) {
             return;
+        }
         util::check(configured_, "Attempted failure simulation in unconfigured class");
         if (auto itr = categories_.find(failure_type); itr != categories_.end()) {
             auto& state = itr->second;

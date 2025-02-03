@@ -51,8 +51,9 @@ class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
                     } else if (T::DataTypeTag::data_type == DataType::ASCII_DYNAMIC64) {
                         auto string_refs = segment.tensor_at<entity::position_t>(row_pos, col).value();
                         std::vector<std::string_view> output;
-                        for (ssize_t i = 0; i < string_refs.size(); ++i)
+                        for (ssize_t i = 0; i < string_refs.size(); ++i) {
                             output.emplace_back(view_at(string_refs.at(i)));
+                        }
 
                         set_col(col, output);
                     } else {
@@ -101,13 +102,15 @@ inline void prefill_with_none(
 ) {
     std::lock_guard lock(spin_lock);
     auto none = py::none();
-    for (auto i = 0U; i < num_rows; ++i)
+    for (auto i = 0U; i < num_rows; ++i) {
         *ptr_dest++ = none.ptr();
+    }
 
     if (inc_ref_count == IncrementRefCount::ON) {
         auto none_count = num_rows - sparse_count;
-        for (auto j = 0U; j < none_count; ++j)
+        for (auto j = 0U; j < none_count; ++j) {
             none.inc_ref();
+        }
     }
     spin_lock.unlock();
 }
@@ -198,12 +201,15 @@ inline bool from_dt64(const py::object& o, timestamp& ts) {
 
 inline timestamp py_convert_type(const py::object& convertible) {
     timestamp ts = 0;
-    if (from_dt64(convertible, ts))
+    if (from_dt64(convertible, ts)) {
         return ts;
-    if (from_pd_timestamp(convertible, ts))
+    }
+    if (from_pd_timestamp(convertible, ts)) {
         return ts;
-    if (from_datetime(convertible, ts))
+    }
+    if (from_datetime(convertible, ts)) {
         return ts;
+    }
     return convertible.cast<timestamp>();
 }
 

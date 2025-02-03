@@ -142,17 +142,18 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     PipelineContextRow operator[](size_t num) { return PipelineContextRow{shared_from_this(), num}; }
 
     size_t last_row() const {
-        if (slice_and_keys_.empty())
+        if (slice_and_keys_.empty()) {
             return 0;
-        else {
+        } else {
             if (bucketize_dynamic_) {
                 size_t max_row = 0;
                 std::for_each(slice_and_keys_.begin(), slice_and_keys_.end(), [&max_row](const auto& sk) {
                     max_row = std::max(max_row, sk.slice_.row_range.second);
                 });
                 return max_row;
-            } else
+            } else {
                 return slice_and_keys_.rbegin()->slice_.row_range.second;
+            }
         }
     }
 
@@ -172,8 +173,9 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     void set_selected_columns(const std::optional<std::vector<std::string>>& columns);
 
     IndexRange index_range() const {
-        if (slice_and_keys_.empty())
+        if (slice_and_keys_.empty()) {
             return unspecified_range();
+        }
 
         return IndexRange{slice_and_keys_.begin()->key().start_index(), slice_and_keys_.rbegin()->key().end_index()};
     }

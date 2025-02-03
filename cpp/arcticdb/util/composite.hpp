@@ -56,8 +56,9 @@ struct Composite {
         const ValueType& pos() { return *ranges_.back().second; }
 
         void check_at_end() {
-            while (!ranges_.empty() && current_pair().second == current_pair().first.end())
+            while (!ranges_.empty() && current_pair().second == current_pair().first.end()) {
                 ranges_.pop_back();
+            }
         }
 
         void find_next_value() {
@@ -176,8 +177,9 @@ struct Composite {
         Composite output;
         broadcast([&func, &output](auto&& v) {
             auto val = std::forward<T>(v);
-            if (func(val))
+            if (func(val)) {
                 output.push_back(std::move(val));
+            }
         });
         return output;
     }

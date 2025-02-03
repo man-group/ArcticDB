@@ -112,8 +112,9 @@ struct StreamDescriptor {
     friend void swap(StreamDescriptor& left, StreamDescriptor& right) noexcept {
         using std::swap;
 
-        if (&left == &right)
+        if (&left == &right) {
             return;
+        }
 
         swap(left.stream_id_, right.stream_id_);
         swap(left.segment_desc_, right.segment_desc_);
@@ -174,15 +175,17 @@ struct StreamDescriptor {
     [[nodiscard]] std::optional<std::size_t> find_field(std::string_view view) const {
         auto it = std::find_if(begin(), end(), [&](const auto& field) { return field.name() == view; });
 
-        if (it == end())
+        if (it == end()) {
             return std::nullopt;
+        }
 
         return std::distance(begin(), it);
     }
 
     friend bool operator==(const StreamDescriptor& left, const StreamDescriptor& right) {
-        if (*left.segment_desc_ != *right.segment_desc_)
+        if (*left.segment_desc_ != *right.segment_desc_) {
             return false;
+        }
 
         return *left.fields_ == *right.fields_;
     }
@@ -214,8 +217,9 @@ StreamDescriptor index_descriptor_from_range(const StreamId& stream_id, IndexTyp
     set_index<IndexType>(desc);
 
     auto out_fields = desc.fields_ptr();
-    for (const auto& field : fields)
+    for (const auto& field : fields) {
         out_fields->add({field.type(), field.name()});
+    }
 
     return desc;
 }
@@ -236,8 +240,9 @@ StreamDescriptor stream_descriptor_from_range(const StreamId& stream_id, IndexTy
         output.add_field(FieldRef{field.type(), field.name()});
     }
 
-    for (const auto& field : fields)
+    for (const auto& field : fields) {
         output.add_field(FieldRef{field.type(), field.name()});
+    }
 
     return output;
 }
@@ -255,8 +260,9 @@ inline FieldCollection field_collection_from_proto(
     const google::protobuf::RepeatedPtrField<arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor>& fields
 ) {
     FieldCollection output;
-    for (const auto& field : fields)
+    for (const auto& field : fields) {
         output.add_field(type_desc_from_proto(field.type_desc()), field.name());
+    }
 
     return output;
 }
@@ -273,8 +279,9 @@ struct formatter<arcticdb::entity::StreamDescriptor> {
 
     template<typename FormatContext>
     auto format(const arcticdb::entity::StreamDescriptor& sd, FormatContext& ctx) const {
-        if (!sd.fields_ptr())
+        if (!sd.fields_ptr()) {
             return fmt::format_to(ctx.out(), "TSD<tsid={}, idx={}, fields=empty>", sd.id(), sd.index());
+        }
 
         return fmt::format_to(ctx.out(), "TSD<tsid={}, idx={}, fields={}>", sd.id(), sd.index(), sd.fields());
     }

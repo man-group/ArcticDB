@@ -27,8 +27,9 @@ inline std::string get_home_directory() {
         return {home_dir};
     } else {
         auto buffer_size = sysconf(_SC_GETPW_R_SIZE_MAX);
-        if (buffer_size == -1)
+        if (buffer_size == -1) {
             buffer_size = 16384;
+        }
 
         std::string buffer(buffer_size, 0);
         struct passwd pwd{};

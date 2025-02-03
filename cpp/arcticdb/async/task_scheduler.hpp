@@ -134,8 +134,9 @@ inline CGroupValues get_cgroup_values_v2(const std::string& cgroup_folder) {
 
         auto quota = std::string{values[0]};
         auto period = std::string{values[1]};
-        if (quota == std::string("max"))
+        if (quota == std::string("max")) {
             return CGroupValues{0, std::stod(period)};
+        }
 
         return CGroupValues{std::stod(quota), std::stod(period)};
     }
@@ -152,12 +153,14 @@ inline auto get_default_num_cpus([[maybe_unused]] const std::string& cgroup_fold
     auto cgroup_val = get_cgroup_values_v1(cgroup_folder);
 
     // if cgroup v1 values are not found, try to get values from cgroup v2
-    if (!cgroup_val.cpu_quota.has_value() || !cgroup_val.cpu_period.has_value())
+    if (!cgroup_val.cpu_quota.has_value() || !cgroup_val.cpu_period.has_value()) {
         cgroup_val = get_cgroup_values_v2(cgroup_folder);
+    }
 
     if ((cgroup_val.cpu_quota.has_value() && cgroup_val.cpu_period.has_value()) &&
-        (cgroup_val.cpu_quota.value() > -1 && cgroup_val.cpu_period.value() > 0))
+        (cgroup_val.cpu_quota.value() > -1 && cgroup_val.cpu_period.value() > 0)) {
         quota_count = static_cast<int64_t>(ceil(cgroup_val.cpu_quota.value() / cgroup_val.cpu_period.value()));
+    }
 
     int64_t limit_count = quota_count != 0 ? quota_count : cpu_count;
     return std::min(cpu_count, limit_count);

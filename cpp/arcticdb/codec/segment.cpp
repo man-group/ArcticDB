@@ -19,11 +19,13 @@ namespace arcticdb {
 
 arcticdb::proto::encoding::SegmentHeader generate_v1_header(const SegmentHeader& header, const StreamDescriptor& desc) {
     arcticdb::proto::encoding::SegmentHeader segment_header;
-    if (header.has_metadata_field())
+    if (header.has_metadata_field()) {
         copy_encoded_field_to_proto(header.metadata_field(), *segment_header.mutable_metadata_field());
+    }
 
-    if (header.has_string_pool_field())
+    if (header.has_string_pool_field()) {
         copy_encoded_field_to_proto(header.string_pool_field(), *segment_header.mutable_string_pool_field());
+    }
 
     copy_stream_descriptor_to_proto(desc, *segment_header.mutable_stream_descriptor());
     copy_encoded_fields_to_proto(header.body_fields(), segment_header);
@@ -38,8 +40,9 @@ arcticdb::proto::encoding::SegmentHeader generate_v1_header(const SegmentHeader&
 namespace segment_size {
 
 size_t column_fields_size(const SegmentHeader& seg_hdr) {
-    if (!seg_hdr.has_column_fields())
+    if (!seg_hdr.has_column_fields()) {
         return 0;
+    }
 
     return encoding_sizes::ndarray_field_compressed_size(seg_hdr.column_fields().ndarray());
 }
@@ -49,12 +52,14 @@ SegmentCompressedSize compressed(
     const std::optional<SegmentHeaderProtoWrapper>& proto_wrapper
 ) {
     size_t string_pool_size = 0;
-    if (seg_hdr.has_string_pool_field())
+    if (seg_hdr.has_string_pool_field()) {
         string_pool_size = encoding_sizes::ndarray_field_compressed_size(seg_hdr.string_pool_field().ndarray());
+    }
 
     size_t metadata_size = 0;
-    if (seg_hdr.has_metadata_field())
+    if (seg_hdr.has_metadata_field()) {
         metadata_size = encoding_sizes::ndarray_field_compressed_size(seg_hdr.metadata_field().ndarray());
+    }
 
     size_t buffer_size;
     size_t body_size;
@@ -72,8 +77,9 @@ SegmentCompressedSize compressed(
         body_size = buffer_size;
     } else {
         buffer_size = seg_hdr.footer_offset();
-        if (seg_hdr.has_column_fields())
+        if (seg_hdr.has_column_fields()) {
             buffer_size += sizeof(EncodedMagic) + column_fields_size(seg_hdr);
+        }
 
         body_size = seg_hdr.footer_offset();
         ARCTICDB_DEBUG(log::codec(), "V2 size buffer: {} body {}", buffer_size, body_size);
@@ -123,8 +129,9 @@ FieldCollection deserialize_descriptor_fields_collection(const uint8_t* src, con
     FieldCollection fields;
 
     util::check_magic<DescriptorFieldsMagic>(src);
-    if (seg_hdr.has_descriptor_field() && seg_hdr.descriptor_field().has_ndarray())
+    if (seg_hdr.has_descriptor_field() && seg_hdr.descriptor_field().has_ndarray()) {
         fields = decode_descriptor_fields(seg_hdr, src, src);
+    }
 
     return fields;
 }
@@ -382,8 +389,9 @@ std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_header(
 [[nodiscard]] const Field& Segment::fields(size_t pos) const { return desc_.fields(pos); }
 
 const arcticdb::proto::encoding::SegmentHeader& Segment::generate_header_proto() {
-    if (!proto_)
+    if (!proto_) {
         proto_ = std::make_unique<arcticdb::proto::encoding::SegmentHeader>(generate_v1_header(header_, desc_));
+    }
 
     return *proto_;
 }
@@ -393,10 +401,11 @@ void Segment::write_to(std::uint8_t* dst) {
     ARCTICDB_SUBSAMPLE(SegmentWriteHeader, RMTSF_Aggregate)
 
     size_t header_size;
-    if (header_.encoding_version() == EncodingVersion::V1)
+    if (header_.encoding_version() == EncodingVersion::V1) {
         header_size = write_proto_header(dst);
-    else
+    } else {
         header_size = write_binary_header(dst);
+    }
 
     ARCTICDB_SUBSAMPLE(SegmentWriteBody, RMTSF_Aggregate)
     ARCTICDB_DEBUG(

@@ -134,8 +134,9 @@ TEST(Async, DeDupTest) {
     }
     auto slice_keys = folly::collect(slice_key_futures).get();
     std::vector<AtomKey> keys;
-    for (const auto& slice_key : slice_keys)
+    for (const auto& slice_key : slice_keys) {
         keys.emplace_back(slice_key.key());
+    }
 
     // The first key will be de-duped, second key will be fresh because indexes dont match
     ASSERT_EQ(2ULL, keys.size());

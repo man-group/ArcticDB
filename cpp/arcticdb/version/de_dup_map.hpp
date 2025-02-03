@@ -43,10 +43,11 @@ class DeDupMap {
         if (!de_dup_map_) {
             util::raise_rte("Invalid de dup map object");
         }
-        if (de_dup_map_->count(key.content_hash()) != 0)
+        if (de_dup_map_->count(key.content_hash()) != 0) {
             de_dup_map_->at(key.content_hash()).push_back(key);
-        else
+        } else {
             de_dup_map_->insert({key.content_hash(), std::vector<AtomKey>({key})});
+        }
     }
 
   private:

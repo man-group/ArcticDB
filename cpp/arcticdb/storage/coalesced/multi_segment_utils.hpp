@@ -124,17 +124,19 @@ void set_index(const IndexValue& index, FieldType field, SegmentInMemory& segmen
         [&segment, field, set_type](const StringIndex& string_index) {
             auto offset = segment.string_pool().get(std::string_view(string_index));
             segment.set_scalar<uint64_t>(as_pos(field), offset.offset());
-            if (set_type)
+            if (set_type) {
                 segment.set_scalar<uint8_t>(
                     as_pos(FieldType::index_type), static_cast<uint8_t>(VariantType::STRING_TYPE)
                 );
+            }
         },
         [&segment, field, set_type](const NumericIndex& numeric_index) {
             segment.set_scalar<uint64_t>(as_pos(field), numeric_index);
-            if (set_type)
+            if (set_type) {
                 segment.set_scalar<uint8_t>(
                     as_pos(FieldType::index_type), static_cast<uint8_t>(VariantType::NUMERIC_TYPE)
                 );
+            }
         }
     );
 }

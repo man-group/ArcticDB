@@ -188,8 +188,9 @@ struct GetAllVersions : rc::state::Command<Model, MapStorePair> {
         auto sut_version = get_all_versions(sut.store_, sut.map_, symbol_);
         RC_ASSERT(model_versions.size() == sut_version.size());
 
-        for (auto i = size_t{0}; i < model_versions.size(); ++i)
+        for (auto i = size_t{0}; i < model_versions.size(); ++i) {
             RC_ASSERT(model_versions[i] == sut_version[i].version_id());
+        }
     }
 
     void show(std::ostream& os) const override { os << "GetAllVersions(" << symbol_ << ")"; }

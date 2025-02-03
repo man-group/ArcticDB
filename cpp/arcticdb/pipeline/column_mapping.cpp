@@ -45,13 +45,15 @@ StaticColumnMappingIterator::StaticColumnMappingIterator(
         } else {
             auto next_pos = bit_set_->get_next(bv_size(first_slice_col_offset_));
             // We have to do this extra check in bitmagic, get_next returns 0 in case no next present
-            if (next_pos == 0 && bit_set_->size() > 0 && !bit_set_->test(0))
+            if (next_pos == 0 && bit_set_->size() > 0 && !bit_set_->test(0)) {
                 invalid_ = true;
-            else
+            } else {
                 source_col_ = next_pos;
+            }
         }
-        if (source_col_ < first_slice_col_offset_)
+        if (source_col_ < first_slice_col_offset_) {
             invalid_ = true;
+        }
 
     } else {
         source_col_ = first_slice_col_offset_;
@@ -66,10 +68,11 @@ std::optional<size_t> StaticColumnMappingIterator::get_next_source_col() const {
         return source_col_ + 1;
     } else {
         auto next_pos = bit_set_->get_next(bv_size(source_col_));
-        if (next_pos == 0)
+        if (next_pos == 0) {
             return std::nullopt;
-        else
+        } else {
             return next_pos;
+        }
     }
 }
 

@@ -59,10 +59,11 @@ class SegmentHeader {
     template<HeaderFlag flag>
     void set_flag(bool value) {
         constexpr auto mask = flag_mask(flag);
-        if (value)
+        if (value) {
             data_.flags_ |= mask;
-        else
+        } else {
             data_.flags_ &= ~mask;
+        }
     }
 
     template<HeaderFlag flag>
@@ -127,8 +128,9 @@ class SegmentHeader {
     void validate() const {
         for (auto i = 0U; i < static_cast<size_t>(FieldOffset::COUNT); ++i) {
             auto offset = FieldOffset(i);
-            if (has_field(offset))
+            if (has_field(offset)) {
                 header_fields_.at(get_offset(offset)).validate();
+            }
         }
     }
 
@@ -233,28 +235,33 @@ struct formatter<arcticdb::SegmentHeader> {
         );
         using namespace arcticdb;
 
-        if (header.has_metadata_field())
+        if (header.has_metadata_field()) {
             fmt::format_to(
                 ctx.out(), "{}: Metadata: {}\n", header.get_pos(FieldOffset::METADATA), header.metadata_field()
             );
+        }
 
-        if (header.has_descriptor_field())
+        if (header.has_descriptor_field()) {
             fmt::format_to(
                 ctx.out(), "{}: Descriptor: {}\n", header.get_pos(FieldOffset::DESCRIPTOR), header.descriptor_field()
             );
+        }
 
-        if (header.has_index_descriptor_field())
+        if (header.has_index_descriptor_field()) {
             fmt::format_to(
                 ctx.out(), "{}: Index: {}\n", header.get_pos(FieldOffset::INDEX), header.index_descriptor_field()
             );
+        }
 
-        if (header.has_string_pool_field())
+        if (header.has_string_pool_field()) {
             fmt::format_to(
                 ctx.out(), "{}: String pool: {}\n", header.get_pos(FieldOffset::STRING_POOL), header.string_pool_field()
             );
+        }
 
-        if (header.has_column_fields())
+        if (header.has_column_fields()) {
             fmt::format_to(ctx.out(), "{}: Columns: {}\n", header.get_pos(FieldOffset::COLUMN), header.column_fields());
+        }
 
         return fmt::format_to(ctx.out(), "{} bytes \n", header.header_fields().data_bytes());
     }

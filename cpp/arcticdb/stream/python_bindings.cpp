@@ -155,8 +155,9 @@ void register_stream_bindings(py::module& m) {
         .def(
             "metadata",
             [](const SegmentInMemory& seg) {
-                if (!seg.metadata())
+                if (!seg.metadata()) {
                     return py::bytes();
+                }
                 return py::bytes(seg.metadata()->SerializeAsString());
             },
             py::return_value_policy::copy
@@ -187,10 +188,11 @@ void register_stream_bindings(py::module& m) {
         .def(
             "__exit__",
             [](FixedTickRowBuilder& b, py::object& type, py::object&, py::object&) {
-                if (!type.is_none())
+                if (!type.is_none()) {
                     b.rollback_row();
-                else
+                } else {
                     b.end_row();
+                }
             }
         )
         .def("find_field", &FixedTickRowBuilder::find_field)

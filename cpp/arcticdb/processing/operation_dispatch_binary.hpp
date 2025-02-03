@@ -177,8 +177,9 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
 
 template<typename Func>
 VariantData visit_binary_membership(const VariantData& left, const VariantData& right, Func&& func) {
-    if (std::holds_alternative<EmptyResult>(left))
+    if (std::holds_alternative<EmptyResult>(left)) {
         return EmptyResult{};
+    }
 
     return std::visit(
         util::overload{
@@ -359,8 +360,9 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
 
 template<typename Func>
 VariantData visit_binary_comparator(const VariantData& left, const VariantData& right, Func&& func) {
-    if (std::holds_alternative<EmptyResult>(left) || std::holds_alternative<EmptyResult>(right))
+    if (std::holds_alternative<EmptyResult>(left) || std::holds_alternative<EmptyResult>(right)) {
         return EmptyResult{};
+    }
 
     return std::visit(
         util::overload{
@@ -527,8 +529,9 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
 
 template<typename Func>
 VariantData visit_binary_operator(const VariantData& left, const VariantData& right, Func&& func) {
-    if (std::holds_alternative<EmptyResult>(left) || std::holds_alternative<EmptyResult>(right))
+    if (std::holds_alternative<EmptyResult>(left) || std::holds_alternative<EmptyResult>(right)) {
         return EmptyResult{};
+    }
 
     return std::visit(
         util::overload{

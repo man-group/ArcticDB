@@ -69,10 +69,11 @@ struct ScopedConfig {
     }
 
     ~ScopedConfig() {
-        if (original_)
+        if (original_) {
             ConfigsMap::instance()->set_int(name_, original_.value());
-        else
+        } else {
             ConfigsMap::instance()->unset_int(name_);
+        }
     }
 };
 

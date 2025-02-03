@@ -28,8 +28,9 @@ std::string_view FieldCollection::add_field(const TypeDescriptor& type, std::str
 }
 
 void FieldCollection::regenerate_offsets() {
-    if (!offsets_.empty() || shapes_.empty())
+    if (!offsets_.empty() || shapes_.empty()) {
         return;
+    }
 
     offsets_.ensure_bytes(shapes_.bytes());
     auto shape_ptr = reinterpret_cast<shape_t*>(shapes_.data());
@@ -45,14 +46,16 @@ void FieldCollection::regenerate_offsets() {
 }
 
 bool operator==(const FieldCollection& left, const FieldCollection& right) {
-    if (left.size() != right.size())
+    if (left.size() != right.size()) {
         return false;
+    }
 
     auto l = left.begin();
     auto r = right.begin();
     for (; l != left.end(); ++l, ++r) {
-        if (*l != *r)
+        if (*l != *r) {
             return false;
+        }
     }
 
     return true;

@@ -85,12 +85,14 @@ SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context) 
     if (context->orig_desc_) {
         for (const auto& field : context->orig_desc_.value().fields()) {
             auto col_index = output.column_index(field.name());
-            if (!col_index)
+            if (!col_index) {
                 continue;
+            }
 
             auto& column = output.column(static_cast<position_t>(*col_index));
-            if (field.type().data_type() != column.type().data_type())
+            if (field.type().data_type() != column.type().data_type()) {
                 column.set_orig_type(field.type());
+            }
         }
     }
 
@@ -101,8 +103,9 @@ size_t get_index_field_count(const SegmentInMemory& frame) { return frame.descri
 
 const uint8_t* skip_heading_fields(const SegmentHeader& hdr, const uint8_t*& data) {
     const auto has_magic_numbers = hdr.encoding_version() == EncodingVersion::V2;
-    if (has_magic_numbers)
+    if (has_magic_numbers) {
         util::check_magic<MetadataMagic>(data);
+    }
 
     if (hdr.has_metadata_field()) {
         auto metadata_size = encoding_sizes::ndarray_field_compressed_size(hdr.metadata_field().ndarray());
@@ -123,8 +126,9 @@ const uint8_t* skip_heading_fields(const SegmentHeader& hdr, const uint8_t*& dat
         data += descriptor_field_size;
     }
 
-    if (has_magic_numbers)
+    if (has_magic_numbers) {
         util::check_magic<IndexMagic>(data);
+    }
 
     if (hdr.has_index_descriptor_field()) {
         auto index_fields_size = encoding_sizes::ndarray_field_compressed_size(hdr.index_descriptor_field().ndarray());
@@ -138,8 +142,9 @@ const uint8_t* skip_to_string_pool(const SegmentHeader& hdr, const uint8_t* data
     const uint8_t* output = data;
     const auto& body_fields = hdr.body_fields();
     const auto magic_number_size = hdr.encoding_version() == EncodingVersion::V2 ? sizeof(ColumnMagic) : 0;
-    for (auto i = 0U; i < body_fields.size(); ++i)
+    for (auto i = 0U; i < body_fields.size(); ++i) {
         output += encoding_sizes::field_compressed_size(hdr.body_fields().at(i)) + magic_number_size;
+    }
 
     return output;
 }
@@ -158,8 +163,9 @@ void decode_string_pool(
         std::optional<util::BitMagic> bv;
 
         // Note that this will decode the entire string pool into a ChunkedBuffer with exactly 1 chunk
-        if (EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2)
+        if (EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2) {
             util::check_magic<StringPoolMagic>(data);
+        }
 
         util::check(hdr.string_pool_field().has_ndarray(), "Expected string pool field to be ndarray");
         data += decode_ndarray(
@@ -188,8 +194,9 @@ void decode_index_field(
         if (!context.fetch_index()) {
             // not selected, skip decompression
             auto size = encoding_sizes::ndarray_field_compressed_size(field.ndarray());
-            if (encoding_version == EncodingVersion::V2)
+            if (encoding_version == EncodingVersion::V2) {
                 size += sizeof(ColumnMagic);
+            }
 
             data += size;
         } else {
@@ -359,8 +366,9 @@ void decode_into_frame_static(
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
 
         StaticColumnMappingIterator it(context, index_fieldcount);
-        if (it.invalid())
+        if (it.invalid()) {
             return;
+        }
 
         while (it.has_next()) {
             advance_skipped_cols(
@@ -372,8 +380,9 @@ void decode_into_frame_static(
                 fields,
                 hdr
             );
-            if (has_magic_nums)
+            if (has_magic_nums) {
                 util::check_magic_in_place<ColumnMagic>(data);
+            }
 
             auto& encoded_field = fields.at(it.source_field_pos());
             util::check(
@@ -422,8 +431,9 @@ void decode_into_frame_static(
                 );
                 break;
             } else {
-                if (has_magic_nums)
+                if (has_magic_nums) {
                     util::check_magic_in_place<ColumnMagic>(data);
+                }
             }
         }
     }
@@ -590,8 +600,9 @@ class NullValueReducer {
                 column_.default_initialize_rows(start_row, num_rows, false);
             }
             pos_ = current_pos + sz_to_advance;
-        } else
+        } else {
             pos_ += sz_to_advance;
+        }
     }
 
     void finalize() {
@@ -674,8 +685,9 @@ struct ReduceColumnTask : async::BaseTask {
                     auto string_reducer = get_fixed_string_reducer(column, context_, frame_, frame_field, *slice_map_);
                     for (const auto& row : column_data->second) {
                         PipelineContextRow context_row{context_, row.second.context_index_};
-                        if (context_row.slice_and_key().slice().row_range.diff() > 0)
+                        if (context_row.slice_and_key().slice().row_range.diff() > 0) {
                             string_reducer->reduce(context_row, row.second.column_index_);
+                        }
                     }
                     string_reducer->finalize();
                 }
@@ -700,8 +712,9 @@ void reduce_and_fix_columns(
 ) {
     ARCTICDB_SAMPLE_DEFAULT(ReduceAndFixStringCol)
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
-    if (frame.empty())
+    if (frame.empty()) {
         return;
+    }
 
     bool dynamic_schema = opt_false(read_options.dynamic_schema_);
     auto slice_map = std::make_shared<FrameSliceMap>(context, dynamic_schema);
@@ -730,8 +743,9 @@ folly::Future<std::vector<VariantKey>> fetch_data(
     std::any& handler_data
 ) {
     ARCTICDB_SAMPLE_DEFAULT(FetchSlices)
-    if (frame.empty())
+    if (frame.empty()) {
         return {std::vector<VariantKey>{}};
+    }
 
     std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>> keys_and_continuations;
     keys_and_continuations.reserve(context->slice_and_keys_.size());

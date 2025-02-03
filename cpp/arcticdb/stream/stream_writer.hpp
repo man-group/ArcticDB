@@ -120,8 +120,9 @@ class StreamWriter : boost::noncopyable {
             );
         };
 
-        if (key_type == KeyType::UNDEFINED)
+        if (key_type == KeyType::UNDEFINED) {
             key_type = get_key_type_for_index_stream(stream_id());
+        }
 
         return collect_and_commit<decltype(verify), IndexType>(
             std::move(written_data_keys_),

@@ -36,10 +36,11 @@ struct EncodingPolicyType {
 
 template<typename EncodingPolicyType>
 size_t calc_num_blocks(const ColumnData& column_data) {
-    if constexpr (EncodingPolicyType::version == EncodingVersion::V1)
+    if constexpr (EncodingPolicyType::version == EncodingVersion::V1) {
         return column_data.num_blocks() + (column_data.num_blocks() * !column_data.shapes()->empty());
-    else
+    } else {
         return column_data.num_blocks() + !column_data.shapes()->empty();
+    }
 }
 
 template<typename EncodingPolicyType>
@@ -192,8 +193,9 @@ void encode_metadata(
         ARCTICDB_TRACE(log::codec(), "Encoding metadata to position {}", pos);
         BytesEncoder<EncodingPolicyType>::encode(meta_buffer, codec_opts, out_buffer, pos, encoded_field);
         ARCTICDB_TRACE(log::codec(), "Encoded metadata to position {}", pos);
-        if (malloced)
+        if (malloced) {
             free(meta_ptr);
+        }
     } else {
         ARCTICDB_TRACE(log::codec(), "Not encoding any metadata");
     }

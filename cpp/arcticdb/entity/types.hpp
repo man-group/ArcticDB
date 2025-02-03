@@ -654,15 +654,17 @@ struct less<arcticdb::StreamId> {
     bool operator()(const arcticdb::StreamId& left, const arcticdb::StreamId& right) const {
         using namespace arcticdb;
         if (std::holds_alternative<NumericId>(left)) {
-            if (std::holds_alternative<NumericId>(right))
+            if (std::holds_alternative<NumericId>(right)) {
                 return left < right;
-            else
+            } else {
                 return true;
+            }
         } else {
-            if (std::holds_alternative<StringId>(right))
+            if (std::holds_alternative<StringId>(right)) {
                 return left < right;
-            else
+            } else {
                 return false;
+            }
         }
     }
 };

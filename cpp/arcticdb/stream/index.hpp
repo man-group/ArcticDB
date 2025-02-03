@@ -72,8 +72,9 @@ class TimeseriesIndex : public BaseIndex<TimeseriesIndex> {
             util::check_arg(ts >= ts_, "timestamp decreasing, current val={}, candidate={}", ts_, ts);
             ts_ = ts;
             setter(0, ts);
-        } else
+        } else {
             util::raise_rte("Cannot set this type, expecting timestamp");
+        }
     }
 
   private:
@@ -107,10 +108,11 @@ class TableIndex : public BaseIndex<TableIndex> {
 
     template<class RowCellSetter>
     void set(RowCellSetter setter, const IndexValue& index_value) const {
-        if (std::holds_alternative<std::string>(index_value))
+        if (std::holds_alternative<std::string>(index_value)) {
             setter(0, std::get<std::string>(index_value));
-        else
+        } else {
             util::raise_rte("Cannot set this type. Expecting std::string");
+        }
     }
 
     static TableIndex make_from_descriptor(const StreamDescriptor& desc);

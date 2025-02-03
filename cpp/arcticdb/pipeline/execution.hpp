@@ -153,8 +153,9 @@ struct ProcessingNode {
 };
 
 void postorder_traverse(std::shared_ptr<ProcessingNode> root, std::shared_ptr<pipelines::PipelineContext> context) {
-    if (!root)
+    if (!root) {
         return;
+    }
 
     std::stack<std::shared_ptr<ProcessingNode>> stack, result;
     stack.push(root);
@@ -164,10 +165,12 @@ void postorder_traverse(std::shared_ptr<ProcessingNode> root, std::shared_ptr<pi
         stack.pop();
         result.push(node);
 
-        if (node->right_)
+        if (node->right_) {
             stack.push(node->right_);
-        if (node->left_)
+        }
+        if (node->left_) {
             stack.push(node->left_);
+        }
     }
 
     while (!result.empty()) {

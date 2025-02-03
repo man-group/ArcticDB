@@ -136,8 +136,9 @@ void ColumnEncoderV2::encode_blocks(
                 util::check(block->nbytes() > 0, "Zero-sized block");
                 Encoder::encode_values(codec_opts, *block, field, out, pos);
             } else {
-                if (block->nbytes() > 0)
+                if (block->nbytes() > 0) {
                     Encoder::encode_values(codec_opts, *block, field, out, pos);
+                }
             }
         }
     });
@@ -221,8 +222,9 @@ static void encode_index_descriptors(
 
 [[nodiscard]] size_t calc_column_blocks_size(const Column& col) {
     size_t bytes = EncodedFieldImpl::Size;
-    if (col.type().dimension() != entity::Dimension::Dim0)
+    if (col.type().dimension() != entity::Dimension::Dim0) {
         bytes += sizeof(EncodedBlock);
+    }
 
     bytes += sizeof(EncodedBlock) * col.num_blocks();
     ARCTICDB_TRACE(

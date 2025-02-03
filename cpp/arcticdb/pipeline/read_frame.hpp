@@ -35,8 +35,9 @@ std::optional<util::BitSet> check_and_mark_slices(
 ) {
     ARCTICDB_SAMPLE_DEFAULT(MarkIndexSlices)
     std::optional<util::BitSet> output = return_bitset ? std::make_optional<util::BitSet>(0u) : std::nullopt;
-    if (slice_and_keys.empty())
+    if (slice_and_keys.empty()) {
         return output;
+    }
 
     bool is_first = true;
     size_t count = 0u;

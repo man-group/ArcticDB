@@ -74,8 +74,9 @@ std::pair<index::IndexSegmentReader, std::vector<SliceAndKey>> read_index_to_vec
     auto [_, index_seg] = store->read_sync(index_key);
     index::IndexSegmentReader index_segment_reader(std::move(index_seg));
     std::vector<SliceAndKey> slice_and_keys;
-    for (const auto& row : index_segment_reader)
+    for (const auto& row : index_segment_reader) {
         slice_and_keys.push_back(row);
+    }
 
     return {std::move(index_segment_reader), std::move(slice_and_keys)};
 }

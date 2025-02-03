@@ -73,10 +73,11 @@ void do_merge(QueueType& input_streams, AggregatorType& agg, bool add_symbol_col
         const auto index_value =
             *pipelines::index::index_value_from_row(next->row(), IndexDescriptorImpl::Type::TIMESTAMP, 0);
         agg.start_row(index_value)([&](auto& rb) {
-            if (add_symbol_column)
+            if (add_symbol_column) {
                 rb.set_scalar_by_name(
                     "symbol", std::string_view(std::get<StringId>(next->id())), DataType::UTF_DYNAMIC64
                 );
+            }
 
             auto val = next->row().begin();
             std::advance(val, IndexType::field_count());
@@ -119,8 +120,9 @@ void do_merge(QueueType& input_streams, AggregatorType& agg, bool add_symbol_col
             }
         });
 
-        if (next->advance())
+        if (next->advance()) {
             input_streams.emplace(std::move(next));
+        }
     }
     agg.commit();
 }

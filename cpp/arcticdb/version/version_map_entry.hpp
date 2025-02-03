@@ -231,8 +231,9 @@ struct VersionMapEntry {
     void sort() {
         util::check(!head_, "Expect sort to be called on newly read entry");
 
-        if (keys_.empty())
+        if (keys_.empty()) {
             return;
+        }
 
         // Sorting by creation_ts is safe from clock skew because we don't support parallel writes to the same symbol.
         std::sort(std::begin(keys_), std::end(keys_), [](const AtomKey& l, const AtomKey& r) {
@@ -294,19 +295,23 @@ struct VersionMapEntry {
         std::ostringstream strm;
         strm << std::endl << "Last reload time: " << last_reload_time_ << std::endl;
 
-        if (head_)
+        if (head_) {
             strm << "Head: " << fmt::format("{}", *head_) << std::endl;
+        }
 
-        if (tombstone_all_)
+        if (tombstone_all_) {
             strm << "Tombstone all: " << fmt::format("{}", *tombstone_all_) << std::endl;
+        }
 
         strm << "Keys: " << std::endl << std::endl;
-        for (const auto& key : keys_)
+        for (const auto& key : keys_) {
             strm << fmt::format("    {}", key) << std::endl;
+        }
 
         strm << "Tombstones: " << std::endl << std::endl;
-        for (const auto& tombstone : tombstones_)
+        for (const auto& tombstone : tombstones_) {
             strm << fmt::format("    {} - {}", tombstone.first, tombstone.second) << std::endl;
+        }
 
         return strm.str();
     }
@@ -316,8 +321,9 @@ struct VersionMapEntry {
     std::vector<IndexTypeKey> get_indexes(bool include_deleted) const {
         std::vector<AtomKey> output;
         for (const auto& key : keys_) {
-            if (is_index_key_type(key.type()) && (include_deleted || !is_tombstoned(key)))
+            if (is_index_key_type(key.type()) && (include_deleted || !is_tombstoned(key))) {
                 output.emplace_back(key);
+            }
         }
         return output;
     }
@@ -325,8 +331,9 @@ struct VersionMapEntry {
     std::vector<IndexTypeKey> get_tombstoned_indexes() const {
         std::vector<AtomKey> output;
         for (const auto& key : keys_) {
-            if (is_index_key_type(key.type()) && is_tombstoned(key))
+            if (is_index_key_type(key.type()) && is_tombstoned(key)) {
                 output.emplace_back(key);
+            }
         }
         return output;
     }
@@ -335,8 +342,9 @@ struct VersionMapEntry {
         for (const auto& key : keys_) {
             if (is_index_key_type(key.type())) {
                 const auto tombstoned = is_tombstoned(key);
-                if (!tombstoned || include_deleted)
+                if (!tombstoned || include_deleted) {
                     return {key, tombstoned};
+                }
             }
         }
         return {std::nullopt, false};
@@ -359,22 +367,24 @@ struct VersionMapEntry {
     }
 
     void check_ordering() const {
-        if (empty())
+        if (empty()) {
             return;
+        }
 
         auto first_index = std::find_if(std::begin(keys_), std::end(keys_), [](const auto& key) {
             return is_index_key_type(key.type());
         });
-        if (keys_.size() == 2 && is_tombstone_key_type(keys_[0]))
+        if (keys_.size() == 2 && is_tombstone_key_type(keys_[0])) {
             return;
+        }
         util::check(first_index != std::end(keys_), "Didn't find any index keys");
         auto version_id = first_index->version_id();
         std::optional<timestamp> version_timestamp;
         for (const auto& key : keys_) {
             if (key.type() == KeyType::VERSION) {
-                if (!version_timestamp)
+                if (!version_timestamp) {
                     version_timestamp = key.creation_ts();
-                else {
+                } else {
                     util::check(
                         key.creation_ts() <= *version_timestamp,
                         "out of order timestamp: {} > {}",
@@ -402,14 +412,17 @@ struct VersionMapEntry {
     }
 
     void check_stream_id() const {
-        if (empty())
+        if (empty()) {
             return;
+        }
 
         std::unordered_map<StreamId, std::vector<VersionId>> id_to_version_id;
-        if (head_)
+        if (head_) {
             id_to_version_id[head_->id()].push_back(head_->version_id());
-        for (const auto& k : keys_)
+        }
+        for (const auto& k : keys_) {
             id_to_version_id[k.id()].push_back(k.version_id());
+        }
         util::check_rte(
             id_to_version_id.size() == 1, "Multiple symbols in keys: {}", fmt::format("{}", id_to_version_id)
         );
@@ -417,13 +430,15 @@ struct VersionMapEntry {
 
     void try_set_tombstone_all(const AtomKey& key) {
         util::check(key.type() == KeyType::TOMBSTONE_ALL, "Can't set tombstone all key with key {}", key);
-        if (!tombstone_all_ || tombstone_all_->version_id() < key.version_id())
+        if (!tombstone_all_ || tombstone_all_->version_id() < key.version_id()) {
             tombstone_all_ = key;
+        }
     }
 
     void validate() const {
-        if (!head_ && keys_.empty())
+        if (!head_ && keys_.empty()) {
             return;
+        }
         check_is_index_or_tombstone(keys_[0]);
         check_ordering();
         util::check(deque_is_unique(keys_), "Keys deque is not unique");
@@ -508,8 +523,9 @@ inline VersionDetails find_index_key_for_version_id_and_tombstone_status(
     auto key = std::find_if(std::begin(entry->keys_), std::end(entry->keys_), [version_id](const auto& key) {
         return is_index_key_type(key.type()) && key.version_id() == version_id;
     });
-    if (key == std::end(entry->keys_))
+    if (key == std::end(entry->keys_)) {
         return VersionDetails{std::nullopt, VersionStatus::NEVER_EXISTED};
+    }
     return VersionDetails{*key, entry->is_tombstoned(*key) ? VersionStatus::TOMBSTONED : VersionStatus::LIVE};
 }
 
@@ -520,10 +536,11 @@ inline std::optional<AtomKey> find_index_key_for_version_id(
 ) {
     auto version_details = find_index_key_for_version_id_and_tombstone_status(version_id, entry);
     if ((version_details.version_status_ == VersionStatus::TOMBSTONED && included_deleted) ||
-        version_details.version_status_ == VersionStatus::LIVE)
+        version_details.version_status_ == VersionStatus::LIVE) {
         return version_details.key_;
-    else
+    } else {
         return std::nullopt;
+    }
 }
 
 inline std::optional<std::pair<AtomKey, AtomKey>> get_latest_key_pair(const std::shared_ptr<VersionMapEntry>& entry) {

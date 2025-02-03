@@ -87,8 +87,9 @@ struct InputTensorFrame {
                     auto end_t = tensor.ptr_cast<RawType>(static_cast<size_t>(tensor.shape(0) - 1));
                     index_range.start_ = IndexValue(static_cast<timestamp>(*start_t));
                     index_range.end_ = IndexValue(static_cast<timestamp>(*end_t));
-                } else
+                } else {
                     throw std::runtime_error("Unsupported non-integral index type");
+                }
             });
         } else {
             index_range.start_ = IndexValue{NumericIndex{0}};

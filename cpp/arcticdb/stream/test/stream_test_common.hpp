@@ -36,8 +36,9 @@ namespace arcticdb {
 
 template<typename T, typename U>
 void check_value(const T& t, const U& u) {
-    if (t != u)
+    if (t != u) {
         std::cout << "Oops";
+    }
 
     ASSERT_EQ(t, u);
 }
@@ -143,10 +144,11 @@ NativeTensor test_column(ContainerType& container, DTT, shape_t num_rows, size_t
 
     strides = sizeof(RawType);
     elsize = static_cast<ssize_t>(get_type_size(dt));
-    if (is_index)
+    if (is_index) {
         fill_test_index_vector(container, RawType{}, num_rows, start_val);
-    else
+    } else {
         fill_test_value_vector(container, RawType{}, num_rows, start_val);
+    }
 
     ssize_t bytes = shapes * strides;
     return NativeTensor{bytes, 1, &strides, &shapes, dt, elsize, container.ptr(), 1};
@@ -207,17 +209,19 @@ void fill_test_column(
 ) {
     using RawType = typename decltype(data_type_tag)::raw_type;
     if (!is_index) {
-        if constexpr (std::is_integral_v<RawType> || std::is_floating_point_v<RawType>)
+        if constexpr (std::is_integral_v<RawType> || std::is_floating_point_v<RawType>) {
             frame.field_tensors.emplace_back(test_column(container, data_type_tag, num_rows, start_val, is_index));
-        else
+        } else {
             frame.field_tensors.emplace_back(test_string_column(container, data_type_tag, num_rows, start_val, is_index)
             );
+        }
     } else {
-        if constexpr (std::is_integral_v<RawType>)
+        if constexpr (std::is_integral_v<RawType>) {
             frame.index_tensor =
                 std::make_optional<NativeTensor>(test_column(container, data_type_tag, num_rows, start_val, is_index));
-        else
+        } else {
             util::raise_rte("Unexpected type in index column");
+        }
     }
 }
 

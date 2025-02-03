@@ -110,15 +110,17 @@ SegmentHeader deserialize_segment_header_from_proto(const arcticdb::proto::encod
     output.set_encoding_version(EncodingVersion(header.encoding_version()));
     output.set_compacted(header.compacted());
 
-    if (header.has_metadata_field())
+    if (header.has_metadata_field()) {
         encoded_field_from_proto(
             header.metadata_field(), output.mutable_metadata_field(num_blocks(header.metadata_field()))
         );
+    }
 
-    if (header.has_string_pool_field())
+    if (header.has_string_pool_field()) {
         encoded_field_from_proto(
             header.string_pool_field(), output.mutable_string_pool_field(num_blocks(header.string_pool_field()))
         );
+    }
 
     auto fields_from_proto = encoded_fields_from_proto(header);
     output.set_body_fields(std::move(fields_from_proto));

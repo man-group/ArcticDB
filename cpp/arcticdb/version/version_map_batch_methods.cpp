@@ -102,10 +102,11 @@ struct SnapshotCountMap {
         for (const auto& [_, info] : version_data) {
             for (const auto& snapshot : info.snapshots_) {
                 const auto it = snapshot_counts_.find(snapshot);
-                if (it == std::end(snapshot_counts_))
+                if (it == std::end(snapshot_counts_)) {
                     snapshot_counts_.try_emplace(snapshot, 1);
-                else
+                } else {
                     ++it->second;
+                }
             }
         }
     }
@@ -113,8 +114,9 @@ struct SnapshotCountMap {
     std::vector<SnapshotId> snapshots() const {
         std::vector<SnapshotId> output;
         output.reserve(snapshot_counts_.size());
-        for (const auto& [snapshot, _] : snapshot_counts_)
+        for (const auto& [snapshot, _] : snapshot_counts_) {
             output.emplace_back(snapshot);
+        }
 
         return output;
     }
@@ -271,8 +273,9 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
                         return get_key_for_version_query(version_map_entry, vq);
                     },
                     [&sid](std::optional<SnapshotPair> snapshot) {
-                        if (!snapshot)
+                        if (!snapshot) {
                             return std::make_optional<AtomKey>();
+                        }
 
                         auto [snap_key, snap_segment] = std::move(*snapshot);
                         auto opt_id = row_id_for_stream_in_snapshot_segment(

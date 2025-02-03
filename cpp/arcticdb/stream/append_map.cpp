@@ -38,8 +38,9 @@ struct AppendMapEntry {
     friend bool operator<(const AppendMapEntry& l, const AppendMapEntry& r) {
         const auto& right_key = r.key();
         const auto& left_key = l.key();
-        if (left_key.start_index() == right_key.start_index())
+        if (left_key.start_index() == right_key.start_index()) {
             return left_key.end_index() < right_key.end_index();
+        }
 
         return left_key.start_index() < right_key.start_index();
     }
@@ -68,8 +69,9 @@ inline std::vector<AppendMapEntry> load_via_iteration(
     std::vector<AppendMapEntry> output;
     store->iterate_type(KeyType::APPEND_DATA, [&store, load_data, &output, &stream_id](const auto& vk) {
         const auto& key = to_atom(vk);
-        if (key.id() != stream_id)
+        if (key.id() != stream_id) {
             return;
+        }
 
         auto entry = entry_from_key(store, key, load_data);
 
@@ -297,8 +299,9 @@ std::vector<SliceAndKey> get_incomplete(
     fix_slice_rowcounts(entries, last_row);
     std::vector<SliceAndKey> output;
     output.reserve(entries.size());
-    for (const auto& entry : entries)
+    for (const auto& entry : entries) {
         output.push_back(entry.slice_and_key_);
+    }
 
     return output;
 }
@@ -347,8 +350,9 @@ std::pair<std::optional<AtomKey>, size_t> read_head(const std::shared_ptr<Stream
     try {
         auto [key, seg] = store->read_sync(ref_key);
         const auto& tsd = seg.index_descriptor();
-        if (tsd.proto().has_next_key())
+        if (tsd.proto().has_next_key()) {
             output.first = key_from_proto(tsd.proto().next_key());
+        }
 
         output.second = tsd.total_rows();
     } catch (storage::KeyNotFoundException& ex) {
@@ -376,8 +380,9 @@ std::pair<TimeseriesDescriptor, std::optional<SegmentInMemory>> get_descriptor_a
 AppendMapEntry create_entry(const TimeseriesDescriptor& tsd) {
     AppendMapEntry entry;
 
-    if (tsd.proto().has_next_key())
+    if (tsd.proto().has_next_key()) {
         entry.next_key_ = key_from_proto(tsd.proto().next_key());
+    }
 
     entry.total_rows_ = tsd.total_rows();
     return entry;
@@ -392,8 +397,9 @@ AppendMapEntry entry_from_key(const std::shared_ptr<StreamSource>& store, const 
     auto desc = std::make_shared<StreamDescriptor>(tsd.as_stream_descriptor());
     auto index_field_count = desc->index().field_count();
     auto field_count = desc->fields().size();
-    if (seg)
+    if (seg) {
         seg->attach_descriptor(desc);
+    }
 
     auto frame_slice = FrameSlice{desc, ColRange{index_field_count, field_count}, RowRange{0, entry.total_rows_}};
     entry.slice_and_key_ = SliceAndKey{std::move(frame_slice), key, std::move(seg)};
@@ -502,8 +508,9 @@ std::vector<VariantKey> read_incomplete_keys_for_symbol(
 
 std::optional<int64_t> latest_incomplete_timestamp(const std::shared_ptr<Store>& store, const StreamId& stream_id) {
     auto [next_key, total_rows] = read_head(store, stream_id);
-    if (next_key && store->key_exists(next_key.value()).get())
+    if (next_key && store->key_exists(next_key.value()).get()) {
         return next_key.value().end_time();
+    }
 
     return std::nullopt;
 }

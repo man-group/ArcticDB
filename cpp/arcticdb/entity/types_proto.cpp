@@ -88,8 +88,9 @@ arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor field_proto(
     std::string_view name
 ) {
     arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor output;
-    if (!name.empty())
+    if (!name.empty()) {
         output.set_name(name.data(), name.size());
+    }
 
     auto output_desc = output.mutable_type_desc();
     output_desc->set_dimension(static_cast<uint32_t>(dim));
@@ -108,12 +109,13 @@ void set_id(arcticdb::proto::descriptors::StreamDescriptor& pb_desc, StreamId id
     std::visit(
         [&pb_desc](auto&& arg) {
             using IdType = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<IdType, NumericId>)
+            if constexpr (std::is_same_v<IdType, NumericId>) {
                 pb_desc.set_num_id(arg);
-            else if constexpr (std::is_same_v<IdType, StringId>)
+            } else if constexpr (std::is_same_v<IdType, StringId>) {
                 pb_desc.set_str_id(arg);
-            else
+            } else {
                 util::raise_rte("Encoding unknown descriptor type");
+            }
         },
         id
     );

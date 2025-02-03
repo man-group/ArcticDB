@@ -182,10 +182,11 @@ std::set<StreamId> LocalVersionedEngine::list_streams_internal(
     if (snap_name) {
         res = list_streams_in_snapshot(store(), *snap_name);
     } else {
-        if (use_symbol_list.value_or(cfg().symbol_list()))
+        if (use_symbol_list.value_or(cfg().symbol_list())) {
             res = symbol_list().get_symbol_set(store());
-        else
+        } else {
             res = list_streams(store(), version_map(), prefix, all_symbols.value_or(false));
+        }
     }
 
     if (regex) {
@@ -333,8 +334,9 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_to_read(
 
 IndexRange LocalVersionedEngine::get_index_range(const StreamId& stream_id, const VersionQuery& version_query) {
     auto version = get_version_to_read(stream_id, version_query);
-    if (!version)
+    if (!version) {
         return unspecified_range();
+    }
 
     return index::get_index_segment_range(version->key_, store());
 }
@@ -380,8 +382,9 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k) 
         auto key = to_atom(std::move(key_seg_pair.first));
         auto seg = std::move(key_seg_pair.second);
         std::optional<TimeseriesDescriptor> timeseries_descriptor;
-        if (seg.has_index_descriptor())
+        if (seg.has_index_descriptor()) {
             timeseries_descriptor.emplace(seg.index_descriptor());
+        }
 
         std::optional<timestamp> start_index;
         std::optional<timestamp> end_index;
@@ -618,8 +621,9 @@ VersionedItem LocalVersionedEngine::update_internal(
                 store_, update_info.next_version_id_, frame, write_options, std::make_shared<DeDupMap>(), false, true
             );
 
-            if (cfg_.symbol_list())
+            if (cfg_.symbol_list()) {
                 symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
+            }
 
             version_map()->write_version(store(), versioned_item.key_, std::nullopt);
             return versioned_item;
@@ -646,8 +650,9 @@ VersionedItem LocalVersionedEngine::write_versioned_metadata_internal(
         frame->user_meta = std::move(user_meta);
         auto versioned_item =
             write_versioned_dataframe_internal(stream_id, frame, prune_previous_versions, false, false);
-        if (cfg_.symbol_list())
+        if (cfg_.symbol_list()) {
             symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
+        }
 
         return versioned_item;
     }
@@ -754,8 +759,9 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     auto versioned_item =
         write_dataframe_impl(store(), version_id, frame, write_options, de_dup_map, allow_sparse, validate_index);
 
-    if (cfg().symbol_list())
+    if (cfg().symbol_list()) {
         symbol_list().add_symbol(store(), stream_id, versioned_item.key_.version_id());
+    }
 
     write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
     return versioned_item;
@@ -935,12 +941,14 @@ folly::Future<folly::Unit> delete_trees_responsibly(
                 key.version_id(), // Check 2)
                 [](const AtomKey&) {},
                 [&check, &not_to_delete](auto& prev) {
-                    if (check.prev_version)
+                    if (check.prev_version) {
                         not_to_delete.insert(prev);
+                    }
                 },
                 [&check, &not_to_delete](auto& next) {
-                    if (check.next_version)
+                    if (check.next_version) {
                         not_to_delete.insert(next);
+                    }
                 },
                 [v = key.version_id()](const AtomKeyImpl& key, const std::shared_ptr<VersionMapEntry>& entry) {
                     // Can't use is_live_index_type_key() because the target version's index key might have
@@ -1115,8 +1123,9 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(
 
     write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
 
-    if (cfg_.symbol_list())
+    if (cfg_.symbol_list()) {
         symbol_list().add_symbol(store_, stream_id, versioned_item.key_.version_id());
+    }
 
     return versioned_item;
 }
@@ -1483,8 +1492,9 @@ VersionedItem LocalVersionedEngine::append_internal(
                 validate_index
             );
 
-            if (cfg_.symbol_list())
+            if (cfg_.symbol_list()) {
                 symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
+            }
 
             version_map()->write_version(store(), versioned_item.key_, std::nullopt);
             return versioned_item;
@@ -1606,10 +1616,11 @@ std::map<StreamId, VersionId> get_sym_versions_from_query(
     WarnVersionTypeNotHandled warner;
     for (const auto& stream_id : folly::enumerate(stream_ids)) {
         const auto& query = version_queries[stream_id.index].content_;
-        if (std::holds_alternative<SpecificVersionQuery>(query))
+        if (std::holds_alternative<SpecificVersionQuery>(query)) {
             sym_versions[*stream_id] = std::get<SpecificVersionQuery>(query).version_id_;
-        else
+        } else {
             warner.warn(*stream_id);
+        }
     }
     return sym_versions;
 }
@@ -1622,10 +1633,11 @@ std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
     WarnVersionTypeNotHandled warner;
     for (const auto& stream_id : folly::enumerate(stream_ids)) {
         const auto& query = version_queries[stream_id.index].content_;
-        if (std::holds_alternative<SpecificVersionQuery>(query))
+        if (std::holds_alternative<SpecificVersionQuery>(query)) {
             sym_versions[*stream_id].push_back(std::get<SpecificVersionQuery>(query).version_id_);
-        else
+        } else {
             warner.warn(*stream_id);
+        }
     }
     return sym_versions;
 }
@@ -1673,8 +1685,9 @@ std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine
 
 timestamp LocalVersionedEngine::get_update_time_internal(const StreamId& stream_id, const VersionQuery& version_query) {
     auto version = get_version_to_read(stream_id, version_query);
-    if (!version)
+    if (!version) {
         throw storage::NoDataFoundException(fmt::format("get_update_time: version not found for symbol", stream_id));
+    }
     return version->key_.creation_ts();
 }
 
@@ -1845,11 +1858,13 @@ void LocalVersionedEngine::configure(const storage::LibraryDescriptor::VariantSt
 }
 
 timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
-    if (auto latest_incomplete = latest_incomplete_timestamp(store(), symbol); latest_incomplete)
+    if (auto latest_incomplete = latest_incomplete_timestamp(store(), symbol); latest_incomplete) {
         return *latest_incomplete;
+    }
 
-    if (auto latest_key = get_latest_version(symbol); latest_key)
+    if (auto latest_key = get_latest_version(symbol); latest_key) {
         return latest_key->key_.end_time();
+    }
 
     return -1;
 }

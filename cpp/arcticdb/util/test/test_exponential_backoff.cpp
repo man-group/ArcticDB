@@ -28,8 +28,9 @@ struct ThrowNTimes {
     ThrowNTimes(uint8_t limit) : limit_(limit) { g_called = 0; }
 
     void operator()() {
-        if (++g_called < limit_)
+        if (++g_called < limit_) {
             throw ExceptionType("it's all rubbish");
+        }
     }
 };
 

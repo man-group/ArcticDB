@@ -572,8 +572,9 @@ TEST(VersionStore, UpdateWithin) {
 
     for (auto i = 0u; i < num_rows; ++i) {
         auto expected = i;
-        if (update_range.contains(i))
+        if (update_range.contains(i)) {
             expected += update_val;
+        }
 
         auto val1 = seg.scalar_at<uint8_t>(i, 1);
         ASSERT_EQ(val1.value(), expected);
@@ -617,8 +618,9 @@ TEST(VersionStore, UpdateBefore) {
 
     for (auto i = 0u; i < num_rows + update_range.diff(); ++i) {
         auto expected = i;
-        if (update_range.contains(i))
+        if (update_range.contains(i)) {
             expected += update_val;
+        }
 
         auto val1 = seg.scalar_at<uint8_t>(i, 1);
         ASSERT_EQ(val1.value(), expected);
@@ -662,8 +664,9 @@ TEST(VersionStore, UpdateAfter) {
 
     for (auto i = 0u; i < num_rows + update_range.diff(); ++i) {
         auto expected = i;
-        if (update_range.contains(i))
+        if (update_range.contains(i)) {
             expected += update_val;
+        }
 
         auto val1 = seg.scalar_at<uint8_t>(i, 1);
         ASSERT_EQ(val1.value(), expected);
@@ -707,8 +710,9 @@ TEST(VersionStore, UpdateIntersectBefore) {
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
         auto expected = i;
-        if (update_range.contains(i))
+        if (update_range.contains(i)) {
             expected += update_val;
+        }
 
         auto val1 = seg.scalar_at<uint8_t>(i, 1);
         ASSERT_EQ(val1.value(), expected);
@@ -752,8 +756,9 @@ TEST(VersionStore, UpdateIntersectAfter) {
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
         auto expected = i;
-        if (update_range.contains(i))
+        if (update_range.contains(i)) {
             expected += update_val;
+        }
 
         auto val1 = seg.scalar_at<uint8_t>(i, 1);
         ASSERT_EQ(val1.value(), expected);
@@ -808,8 +813,9 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
 
     for (auto i = 0u; i < num_rows; ++i) {
         auto expected = i;
-        if (update_range.contains(i))
+        if (update_range.contains(i)) {
             expected += update_val;
+        }
 
         auto val1 = seg.scalar_at<uint8_t>(i, 1);
         check_value(val1.value(), expected);
@@ -874,8 +880,9 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
 
     for (auto i = 0u; i < num_rows; ++i) {
         auto expected = i;
-        if (update_range.contains(i))
+        if (update_range.contains(i)) {
             expected += update_val;
+        }
 
         auto val1 = seg.scalar_at<uint8_t>(i, 1);
         check_value(val1.value(), expected);

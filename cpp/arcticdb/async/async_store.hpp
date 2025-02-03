@@ -412,10 +412,11 @@ class AsyncStore : public Store {
             .via(&async::io_executor())
             .thenValue([lib = library_](auto&& item) {
                 auto [key_opt_segment, slice] = std::forward<decltype(item)>(item);
-                if (key_opt_segment.second)
+                if (key_opt_segment.second) {
                     lib->write(Composite<storage::KeySegmentPair>(
                         {VariantKey{key_opt_segment.first}, std::move(*key_opt_segment.second)}
                     ));
+                }
 
                 return SliceAndKey{slice, to_atom(key_opt_segment.first)};
             });

@@ -40,8 +40,9 @@ std::string MockS3Client::get_failure_trigger(
 std::optional<Aws::S3::S3Error> has_failure_trigger(const std::string& s3_object_name, StorageOperation operation) {
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = s3_object_name.rfind(failure_string_for_operation);
-    if (position == std::string::npos)
+    if (position == std::string::npos) {
         return std::nullopt;
+    }
 
     try {
         auto start = position + failure_string_for_operation.size();
@@ -158,8 +159,9 @@ S3Result<ListObjectsOutput> MockS3Client::list_objects(
         auto& s3_object_name = matching_names[i];
 
         auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::LIST);
-        if (maybe_error.has_value())
+        if (maybe_error.has_value()) {
             return {*maybe_error};
+        }
 
         output.s3_object_names.emplace_back(s3_object_name);
     }

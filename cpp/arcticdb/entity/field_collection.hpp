@@ -104,8 +104,9 @@ class FieldCollection {
         FieldCollection result;
         position_t count = 0;
         for (const auto& field : *this) {
-            if (count++ != pos)
+            if (count++ != pos) {
                 result.add_field(field.ref());
+            }
         }
         std::swap(*this, result);
     }
@@ -133,8 +134,9 @@ class FieldCollection {
     }
 
     [[nodiscard]] size_t get_offset(size_t pos) const {
-        if (pos == 0)
+        if (pos == 0) {
             return 0;
+        }
 
         return *offsets_.buffer().ptr_cast<shape_t>((pos - 1) * sizeof(shape_t), sizeof(shape_t));
     }

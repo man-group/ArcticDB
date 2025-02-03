@@ -263,8 +263,9 @@ TEST(MemSegment, SplitSegment) {
     auto segment = get_standard_timeseries_segment("test_clone", 100);
     auto split_segs = segment.split(10);
 
-    for (const auto& split : split_segs)
+    for (const auto& split : split_segs) {
         ASSERT_EQ(split.row_count(), 10);
+    }
 
     for (auto i = 0u; i < 100; ++i) {
         ASSERT_EQ(split_segs[i / 10].scalar_at<int8_t>(i % 10, 1), segment.scalar_at<int8_t>(i, 1));
@@ -311,8 +312,9 @@ TEST(MemSegment, SplitSparseSegment) {
 
     auto split_segs = sparse_segment.split(10);
 
-    for (const auto& split : split_segs)
+    for (const auto& split : split_segs) {
         ASSERT_EQ(split.row_count(), 10);
+    }
 
     for (auto i = 0u; i < 100; ++i) {
         ASSERT_EQ(split_segs[i / 10].scalar_at<uint32_t>(i % 10, 1), sparse_segment.scalar_at<uint32_t>(i, 1));

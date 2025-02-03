@@ -49,8 +49,9 @@ inline size_t get_max_string_size(
 
     for (auto row = 0u; row < num_rows; ++row) {
         auto offset_val = get_offset_string_at(offset + row, src);
-        if (offset_val == nan_placeholder() || offset_val == not_a_string())
+        if (offset_val == nan_placeholder() || offset_val == not_a_string()) {
             continue;
+        }
 
         max_length = std::max(max_length, get_string_from_pool(offset_val, context_row.string_pool()).size());
     }
@@ -146,10 +147,11 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                 auto data = const_cast<void*>(tensor.data());
                 auto ptr_data = reinterpret_cast<PyObject**>(data);
                 ptr_data += row;
-                if (!c_style)
+                if (!c_style) {
                     ptr_data = flatten_tensor<PyObject*>(
                         flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size
                     );
+                }
 
                 auto none = py::none{};
                 std::variant<convert::StringEncodingError, convert::PyStringWrapper> wrapper_or_error;
@@ -224,9 +226,10 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
             auto ptr_data = reinterpret_cast<PyObject**>(data);
             ptr_data += row;
 
-            if (!c_style)
+            if (!c_style) {
                 ptr_data =
                     flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
+            }
 
             util::BitSet bitset = util::scan_object_type_to_sparse(ptr_data, rows_to_write);
 
@@ -237,8 +240,9 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                 *bool_ptr = static_cast<uint8_t>(PyObject_IsTrue(ptr_data[*it]));
                 ++bool_ptr;
             }
-            if (bitset.count() > 0)
+            if (bitset.count() > 0) {
                 agg.set_sparse_block(col, std::move(bool_buffer), std::move(bitset));
+            }
 
         } else if constexpr (is_array_type(TypeDescriptor(tag))) {
             auto data = const_cast<void*>(tensor.data());

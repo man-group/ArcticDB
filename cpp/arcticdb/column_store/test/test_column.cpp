@@ -120,8 +120,9 @@ TEST(Column, IterateData) {
 
     auto column_data = column.data();
     while (auto block = column_data.next<TDT>()) {
-        for (const auto& item : *block)
+        for (const auto& item : *block) {
             output.emplace_back(item);
+        }
     }
 
     ASSERT_EQ(output.size(), 10u);

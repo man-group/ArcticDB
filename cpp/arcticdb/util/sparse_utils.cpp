@@ -17,8 +17,9 @@ util::BitSet scan_object_type_to_sparse(const PyObject* const* ptr, size_t rows_
     pybind11::none none;
     util::BitSet::bulk_insert_iterator inserter(bitset);
     for (size_t idx = 0; idx < rows_to_write; ++idx, ++scan_ptr) {
-        if (*scan_ptr != none.ptr())
+        if (*scan_ptr != none.ptr()) {
             inserter = bv_size(idx);
+        }
     }
     inserter.flush();
     bitset.resize(bv_size(rows_to_write));

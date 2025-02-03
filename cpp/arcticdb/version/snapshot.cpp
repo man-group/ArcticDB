@@ -116,8 +116,9 @@ void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void
             visitor(vk);
         } catch (storage::KeyNotFoundException& e) {
             e.keys().broadcast([&vk, &e](const VariantKey& key) {
-                if (key != vk)
+                if (key != vk) {
                     throw storage::KeyNotFoundException(std::move(e.keys()));
+                }
             });
             ARCTICDB_DEBUG(log::version(), "Ignored exception due to {} being deleted during iterate_snapshots().");
         }
@@ -208,8 +209,9 @@ VariantKey get_ref_key(const SnapshotId& snap_name) { return RefKey{snap_name, K
 std::optional<VariantKey> get_snapshot_key(const std::shared_ptr<Store>& store, const SnapshotId& snap_name) {
     ARCTICDB_SAMPLE(getSnapshot, 0)
 
-    if (auto maybe_ref_key = get_ref_key(snap_name); store->key_exists_sync(maybe_ref_key))
+    if (auto maybe_ref_key = get_ref_key(snap_name); store->key_exists_sync(maybe_ref_key)) {
         return maybe_ref_key;
+    }
 
     // Fall back to iteration
     ARCTICDB_DEBUG(log::version(), "Ref key not found for snapshot, falling back to slow path: {}", snap_name);
@@ -234,8 +236,9 @@ std::unordered_map<SnapshotId, std::optional<VariantKey>> all_ref_keys(
 ) {
     std::unordered_map<SnapshotId, std::optional<VariantKey>> output;
     output.reserve(snap_names.size());
-    for (auto name : folly::enumerate(snap_names))
+    for (auto name : folly::enumerate(snap_names)) {
         output.try_emplace(*name, ref_keys[name.index]);
+    }
 
     return output;
 }
@@ -248,18 +251,21 @@ std::unordered_map<SnapshotId, std::optional<VariantKey>> get_snapshot_keys_via_
 ) {
     std::unordered_map<SnapshotId, std::optional<VariantKey>> output;
     for (auto snap : folly::enumerate(snap_names)) {
-        if (!ref_key_exists[snap.index])
+        if (!ref_key_exists[snap.index]) {
             output.try_emplace(*snap, std::nullopt);
+        }
     }
 
     store->iterate_type(KeyType::SNAPSHOT, [&output](VariantKey&& vk) {
-        if (auto it = output.find(variant_key_id(vk)); it != output.end())
+        if (auto it = output.find(variant_key_id(vk)); it != output.end()) {
             it->second = std::move(vk);
+        }
     });
 
     for (auto snap : folly::enumerate(snap_names)) {
-        if (ref_key_exists[snap.index])
+        if (ref_key_exists[snap.index]) {
             output.try_emplace(*snap, ref_keys[snap.index]);
+        }
     }
     return output;
 }
@@ -294,8 +300,9 @@ std::optional<std::pair<VariantKey, SegmentInMemory>> get_snapshot(
 ) {
     ARCTICDB_SAMPLE(getSnapshot, 0)
     auto opt_snap_key = get_snapshot_key(store, snap_name);
-    if (!opt_snap_key)
+    if (!opt_snap_key) {
         return std::nullopt;
+    }
 
     return store->read_sync(*opt_snap_key);
 }
@@ -305,8 +312,9 @@ std::set<StreamId> list_streams_in_snapshot(const std::shared_ptr<Store>& store,
     std::set<StreamId> res;
     auto opt_snap_key = get_snapshot(store, snap_name);
 
-    if (!opt_snap_key)
+    if (!opt_snap_key) {
         throw storage::NoDataFoundException(snap_name);
+    }
 
     const auto& snapshot_segment = opt_snap_key->second;
 

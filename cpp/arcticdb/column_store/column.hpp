@@ -51,8 +51,9 @@ using namespace arcticdb::entity;
 // purpose for which it is used in this file.
 template<typename SourceType, typename TargetType>
 constexpr bool is_narrowing_conversion() {
-    if (sizeof(TargetType) < sizeof(SourceType))
+    if (sizeof(TargetType) < sizeof(SourceType)) {
         return true;
+    }
 
     if (sizeof(SourceType) == sizeof(TargetType) && std::is_integral_v<TargetType> && std::is_unsigned_v<SourceType> &&
         std::is_signed_v<TargetType>) {
@@ -107,10 +108,11 @@ class Column {
         }
 
         void set_next_block() {
-            if (auto block = parent_.next<TDT>(); block)
+            if (auto block = parent_.next<TDT>(); block) {
                 block_.emplace(std::move(*block));
-            else
+            } else {
                 block_ = std::nullopt;
+            }
 
             set_block_range();
         }
@@ -119,8 +121,9 @@ class Column {
         TypedColumnIterator(const Column& col, bool begin)
             : parent_(col.data()),
               block_(begin ? parent_.next<TDT>() : std::nullopt) {
-            if (begin)
+            if (begin) {
                 set_block_range();
+            }
         }
 
         template<class OtherValue>
@@ -133,8 +136,9 @@ class Column {
         template<class OtherValue>
         bool equal(const TypedColumnIterator<TDT, OtherValue>& other) const {
             if (block_) {
-                if (!other.block_)
+                if (!other.block_) {
                     return false;
+                }
 
                 return *block_ == *other.block_ && block_pos_ == other.block_pos_;
             }
@@ -145,8 +149,9 @@ class Column {
 
         void increment() {
             ++block_pos_;
-            if (block_pos_ == block_end_)
+            if (block_pos_ == block_end_) {
                 set_next_block();
+            }
         }
 
         void decrement() {
@@ -166,8 +171,9 @@ class Column {
         }
 
         [[nodiscard]] ssize_t get_offset() const {
-            if (!block_)
+            if (!block_) {
                 return parent_.buffer().bytes() / type_size;
+            }
 
             const auto off = block_->offset();
             const auto dist = std::distance(std::begin(*block_), block_pos_);
@@ -286,10 +292,11 @@ class Column {
         if (row_offset != prev_logical_row + 1) {
             if (sparse_permitted()) {
                 if (!sparse_map_) {
-                    if (prev_logical_row != -1)
+                    if (prev_logical_row != -1) {
                         backfill_sparse_map(prev_logical_row);
-                    else
+                    } else {
                         (void)sparse_map();
+                    }
                 }
             } else {
                 util::raise_rte("set_scalar expected row {}, actual {} ", prev_logical_row + 1, row_offset);
@@ -472,8 +479,9 @@ class Column {
     std::optional<StringArrayData> string_array_at(position_t idx, const StringPool& string_pool) {
         util::check_arg(idx < row_count(), "String array index out of bounds in column");
         util::check_arg(type_.dimension() == Dimension::Dim1, "String array should always be one dimensional");
-        if (!inflated_)
+        if (!inflated_) {
             inflate_string_arrays(string_pool);
+        }
 
         const shape_t* shape_ptr = shape_index(idx);
         auto num_strings = *shape_ptr;
@@ -531,8 +539,9 @@ class Column {
     template<typename T>
     std::optional<T> scalar_at(position_t row) const {
         auto physical_row = get_physical_row(row);
-        if (!physical_row)
+        if (!physical_row) {
             return std::nullopt;
+        }
 
         return *data_.buffer().ptr_cast<T>(bytes_offset(*physical_row), sizeof(T));
     }
@@ -595,8 +604,9 @@ class Column {
     std::optional<position_t> search_unsorted(T val) const {
         util::check_arg(is_scalar(), "Cannot index on multidimensional values");
         for (position_t i = 0; i < row_count(); ++i) {
-            if (val == *ptr_cast<T>(i, sizeof(T)))
+            if (val == *ptr_cast<T>(i, sizeof(T))) {
                 return i;
+            }
         }
         return std::nullopt;
     }

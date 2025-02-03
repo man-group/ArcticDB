@@ -51,8 +51,9 @@ inline uint32_t murmur3_32(std::string_view str) {
 
 inline size_t bucketize(std::string_view name, const std::optional<size_t>& num_buckets) {
     auto hash = murmur3_32(name);
-    if (!num_buckets)
+    if (!num_buckets) {
         return hash;
+    }
     return hash % *num_buckets;
 }
 

@@ -214,13 +214,15 @@ struct EncodedFieldImpl : public EncodedField {
         [[nodiscard]] size_t first() const { return shape_value_offset(); }
 
         [[nodiscard]] size_t last() const {
-            if (field_.is_scalar())
+            if (field_.is_scalar()) {
                 return is_shapes_ ? 0 : field_.values_count_;
+            }
 
-            if (field_.is_old_style_shapes())
+            if (field_.is_old_style_shapes()) {
                 return field_.values_count_ + field_.shapes_count_ + shape_value_offset();
-            else
+            } else {
                 return is_shapes_ ? field_.shapes_count_ : field_.shapes_count_ + field_.values_count_;
+            }
         }
 
         [[nodiscard]] const EncodedBlock& operator[](const size_t idx) const {
@@ -256,10 +258,11 @@ struct EncodedFieldImpl : public EncodedField {
             values_count_,
             shapes_count_
         );
-        if (is_scalar() || !is_old_style_shapes())
+        if (is_scalar() || !is_old_style_shapes()) {
             return blocks()[shapes_count_ + n];
-        else
+        } else {
             return blocks()[(n * 2) + 1];
+        }
     }
 
     [[nodiscard]] EncodedBlockCollection shapes() const { return {*this, true}; }
@@ -309,10 +312,11 @@ struct EncodedFieldImpl : public EncodedField {
     EncodedBlock* add_values(EncodingVersion encoding_version) {
         const bool old_style = encoding_version == EncodingVersion::V1;
         size_t pos;
-        if (!old_style || is_scalar())
+        if (!old_style || is_scalar()) {
             pos = shapes_count_ + values_count_;
-        else
+        } else {
             pos = (values_count_ * 2) + 1;
+        }
 
         auto block = new (static_cast<void*>(blocks() + pos)) EncodedBlock{false};
         ++values_count_;

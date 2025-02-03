@@ -56,19 +56,23 @@ struct NativeTensor {
           ptr(ptr),
           expanded_dim_(expanded_dim) {
         util::check(shapes != nullptr, "Unexpected null shapes ptr");
-        if (shapes[0] == 0)
+        if (shapes[0] == 0) {
             ARCTICDB_DEBUG(log::version(), "Supplied tensor is empty");
+        }
 
-        for (ssize_t i = 0; i < std::min(MaxDimensions, ndim); ++i)
+        for (ssize_t i = 0; i < std::min(MaxDimensions, ndim); ++i) {
             shapes_[i] = shapes[i];
+        }
 
         if (strides == nullptr) {
             strides_[ndim - 1] = static_cast<ssize_t>(get_type_size(dt_));
-            if (ndim == 2)
+            if (ndim == 2) {
                 strides_[0] = strides_[1] * shapes_[1];
+            }
         } else {
-            for (ssize_t i = 0; i < std::min(MaxDimensions, ndim); ++i)
+            for (ssize_t i = 0; i < std::min(MaxDimensions, ndim); ++i) {
                 strides_[i] = strides[i];
+            }
         }
     }
 
@@ -79,11 +83,13 @@ struct NativeTensor {
           elsize_(other.elsize_),
           ptr(other.ptr),
           expanded_dim_(other.expanded_dim_) {
-        for (ssize_t i = 0; i < std::min(MaxDimensions, ndim_); ++i)
+        for (ssize_t i = 0; i < std::min(MaxDimensions, ndim_); ++i) {
             shapes_[i] = other.shapes_[i];
+        }
 
-        for (ssize_t i = 0; i < std::min(MaxDimensions, ndim_); ++i)
+        for (ssize_t i = 0; i < std::min(MaxDimensions, ndim_); ++i) {
             strides_[i] = other.strides_[i];
+        }
     }
 
     friend void swap(NativeTensor& left, NativeTensor& right) {

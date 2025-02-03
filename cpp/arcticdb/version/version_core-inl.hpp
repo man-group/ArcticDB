@@ -61,8 +61,9 @@ void merge_frames_for_keys_impl(
     };
 
     IndexRange index_range = unspecified_range();
-    if (std::holds_alternative<IndexRange>(query.row_filter))
+    if (std::holds_alternative<IndexRange>(query.row_filter)) {
         index_range = std::get<IndexRange>(query.row_filter);
+    }
 
     auto compare = [](const std::unique_ptr<StreamMergeWrapper>& left,
                       const std::unique_ptr<StreamMergeWrapper>& right) {
@@ -156,10 +157,11 @@ void do_compact(
 
     for (auto it = target_start; it != target_end; ++it) {
         auto sk = [&it]() {
-            if constexpr (std::is_same_v<IteratorType, pipelines::PipelineContext::iterator>)
+            if constexpr (std::is_same_v<IteratorType, pipelines::PipelineContext::iterator>) {
                 return it->slice_and_key();
-            else
+            } else {
                 return *it;
+            }
         }();
         if (sk.slice().rows().diff() == 0) {
             continue;

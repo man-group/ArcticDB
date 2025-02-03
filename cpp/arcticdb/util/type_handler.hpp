@@ -140,8 +140,9 @@ class TypeHandlerRegistry {
 
 inline std::shared_ptr<TypeHandler> get_type_handler(TypeDescriptor source, TypeDescriptor target) {
     auto handler = TypeHandlerRegistry::instance()->get_handler(source);
-    if (handler)
+    if (handler) {
         return handler;
+    }
 
     return TypeHandlerRegistry::instance()->get_handler(target);
 }

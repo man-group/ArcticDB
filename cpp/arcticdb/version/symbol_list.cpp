@@ -190,21 +190,24 @@ DataType get_symbol_data_type(const SegmentInMemory& seg) {
 
 std::vector<SymbolListEntry> read_old_style_list_from_storage(const SegmentInMemory& seg) {
     std::vector<SymbolListEntry> output;
-    if (seg.empty())
+    if (seg.empty()) {
         return output;
+    }
 
     const auto data_type = get_symbol_data_type(seg);
 
-    for (auto row : seg)
+    for (auto row : seg) {
         output.emplace_back(stream_id_from_segment(data_type, seg, row.row_id_, 0), 0, 0, ActionType::ADD);
+    }
 
     return output;
 }
 
 std::vector<SymbolListEntry> read_new_style_list_from_storage(const SegmentInMemory& seg) {
     std::vector<SymbolListEntry> output;
-    if (seg.empty())
+    if (seg.empty()) {
         return output;
+    }
 
     const auto data_type = get_symbol_data_type(seg);
 
@@ -258,25 +261,28 @@ std::vector<SymbolListEntry> read_new_style_list_from_storage(const SegmentInMem
 std::vector<SymbolListEntry> read_from_storage(const std::shared_ptr<StreamSource>& store, const AtomKey& key) {
     ARCTICDB_DEBUG(log::symbol(), "Reading list from storage with key {}", key);
     auto [_, seg] = store->read_sync(key);
-    if (seg.row_count() == 0)
+    if (seg.row_count() == 0) {
         return {};
+    }
 
     missing_data::check<ErrorCode::E_UNREADABLE_SYMBOL_LIST>(
         seg.descriptor().field_count() > 0, "Expected at least one column in symbol list with key {}", key
     );
 
-    if (seg.descriptor().field_count() == 1)
+    if (seg.descriptor().field_count() == 1) {
         return read_old_style_list_from_storage(seg);
-    else
+    } else {
         return read_new_style_list_from_storage(seg);
+    }
 }
 
 MapType load_journal_keys(const std::vector<AtomKey>& keys) {
     MapType map;
     for (const auto& key : keys) {
         const auto& action_id = key.id();
-        if (action_id == compaction_id)
+        if (action_id == compaction_id) {
             continue;
+        }
 
         const auto& symbol = key.start_index();
         const auto version_id = is_new_style_key(key) ? key.version_id() : unknown_version_id;
@@ -295,8 +301,9 @@ auto tail_range(const std::vector<SymbolEntryData>& updated) {
     ++it;
 
     while (it != std::crend(updated) && it->reference_id_ == reference_id) {
-        if (it->action_ != action)
+        if (it->action_ != action) {
             all_same_action = false;
+        }
 
         ++it;
     }
@@ -310,15 +317,17 @@ std::optional<SymbolEntryData> timestamps_too_close(
     timestamp min_allowed_interval,
     bool all_same_action
 ) {
-    if (first == std::crend(updated))
+    if (first == std::crend(updated)) {
         return std::nullopt;
+    }
 
     const auto& latest = *updated.rbegin();
     const bool same_as_updates = all_same_action && latest.action_ == first->action_;
     const auto diff = latest.timestamp_ - first->timestamp_;
 
-    if (same_as_updates || diff >= min_allowed_interval)
+    if (same_as_updates || diff >= min_allowed_interval) {
         return std::nullopt;
+    }
 
     return latest;
 }
@@ -340,19 +349,22 @@ SymbolVectorResult vector_okay(bool all_same_version, bool all_same_action, size
 }
 
 SymbolVectorResult is_problematic_vector(const std::vector<SymbolEntryData>& updated, timestamp min_allowed_interval) {
-    if (contains_unknown_reference_ids(updated))
+    if (contains_unknown_reference_ids(updated)) {
         return cannot_validate_symbol_vector();
+    }
 
     const auto [start, all_same_action] = tail_range(updated);
     const auto latest_id_count = std::distance(std::crbegin(updated), start);
     const auto all_same_version = start == std::crend(updated);
 
     if (auto timestamp_problem = timestamps_too_close(start, updated, min_allowed_interval, all_same_action);
-        timestamp_problem)
+        timestamp_problem) {
         return vector_has_problem(*timestamp_problem);
+    }
 
-    if (latest_id_count <= 2 || all_same_action)
+    if (latest_id_count <= 2 || all_same_action) {
         return vector_okay(all_same_version, all_same_action, latest_id_count);
+    }
 
     return vector_has_problem(*std::crbegin(updated));
 }
@@ -371,30 +383,37 @@ ProblematicResult is_problematic(
     );
 
     const auto& latest = *std::crbegin(updated);
-    if (existing.reference_id_ > latest.reference_id_)
+    if (existing.reference_id_ > latest.reference_id_) {
         return ProblematicResult{existing};
+    }
 
     auto [problematic_result, vector_all_same_version, vector_all_same_action, last_id_count] =
         is_problematic_vector(updated, min_allowed_interval);
-    if (problematic_result)
+    if (problematic_result) {
         return problematic_result;
+    }
 
-    if (problematic_result.contains_unknown_reference_ids_ || has_unknown_reference_id(existing))
+    if (problematic_result.contains_unknown_reference_ids_ || has_unknown_reference_id(existing)) {
         return cannot_determine_validity();
+    }
 
     const bool all_same_action = vector_all_same_action && existing.action_ == latest.action_;
 
-    if (latest.timestamp_ - existing.timestamp_ < min_allowed_interval && !all_same_action)
+    if (latest.timestamp_ - existing.timestamp_ < min_allowed_interval && !all_same_action) {
         return ProblematicResult{latest.reference_id_ > existing.reference_id_ ? latest : existing};
+    }
 
-    if (existing.reference_id_ < latest.reference_id_)
+    if (existing.reference_id_ < latest.reference_id_) {
         return not_a_problem();
+    }
 
-    if (all_same_action)
+    if (all_same_action) {
         return not_a_problem();
+    }
 
-    if (last_id_count == 1)
+    if (last_id_count == 1) {
         return not_a_problem();
+    }
 
     return ProblematicResult{latest};
 }
@@ -416,14 +435,15 @@ CollectionType merge_existing_with_journal_keys(
         const auto& stream_id = previous_entry.stream_id_;
         auto updated = update_map.find(stream_id);
         if (updated == std::end(update_map)) {
-            if (previous_entry.action_ == ActionType::ADD)
+            if (previous_entry.action_ == ActionType::ADD) {
                 symbols.emplace_back(std::move(previous_entry));
-            else
+            } else {
                 util::check(
                     previous_entry.action_ == ActionType::DELETE,
                     "Unknown action type {} in symbol list",
                     static_cast<uint8_t>(previous_entry.action_)
                 );
+            }
         } else {
             util::check(!updated->second.empty(), "Unexpected empty entry for symbol {}", updated->first);
             if (auto problematic_entry = is_problematic(previous_entry, updated->second, min_allowed_interval);
@@ -453,8 +473,9 @@ CollectionType merge_existing_with_journal_keys(
 
     if (!problematic_symbols.empty()) {
         auto symbol_versions = std::make_shared<std::vector<StreamId>>();
-        for (const auto& [symbol, reference_pair] : problematic_symbols)
+        for (const auto& [symbol, reference_pair] : problematic_symbols) {
             symbol_versions->emplace_back(symbol);
+        }
 
         auto versions = batch_check_latest_id_and_status(store, version_map, symbol_versions);
 
@@ -530,22 +551,24 @@ LoadResult attempt_load(
     load_result.symbol_list_keys_ = get_all_symbol_list_keys(store, data);
     load_result.maybe_previous_compaction = last_compaction(load_result.symbol_list_keys_);
 
-    if (load_result.maybe_previous_compaction)
+    if (load_result.maybe_previous_compaction) {
         load_result.symbols_ = load_from_symbol_list_keys(
             version_map, store, load_result.symbol_list_keys_, *load_result.maybe_previous_compaction
         );
-    else {
+    } else {
         load_result.symbols_ = load_from_version_keys(version_map, store, load_result.symbol_list_keys_, data);
         std::unordered_set<StreamId> keys_in_versions;
-        for (const auto& entry : load_result.symbols_)
+        for (const auto& entry : load_result.symbols_) {
             keys_in_versions.emplace(entry.stream_id_);
+        }
 
-        for (const auto& key : load_result.symbol_list_keys_)
+        for (const auto& key : load_result.symbol_list_keys_) {
             util::check(
                 keys_in_versions.find(StreamId{std::get<StringIndex>(key.start_index())}) != keys_in_versions.end(),
                 "Would delete unseen key {}",
                 key
             );
+        }
     }
 
     load_result.timestamp_ = store->current_timestamp();
@@ -719,10 +742,11 @@ SegmentInMemory write_entries_to_symbol_segment(
     SegmentInMemory deleted_segment{delete_symbol_stream_descriptor(stream_id, type_holder)};
 
     for (const auto& entry : symbols) {
-        if (entry.action_ == ActionType::ADD)
+        if (entry.action_ == ActionType::ADD) {
             write_entry(type_holder, added_segment, entry);
-        else
+        } else {
             write_entry(type_holder, deleted_segment, entry);
+        }
     }
 
     if (!deleted_segment.empty()) {
@@ -793,8 +817,9 @@ std::vector<Store::RemoveKeyResultType> delete_keys(
     for (auto& atom_key : to_remove) {
         // Corner case: if the newly written Compaction key (exclude) has the same timestamp as an existing one
         // (e.g. when a previous compaction round failed in the deletion step), we don't want to delete the former
-        if (atom_key != exclude)
+        if (atom_key != exclude) {
             variant_keys.emplace_back(atom_key);
+        }
     }
 
     return store->remove_keys_sync(variant_keys);
@@ -814,10 +839,12 @@ bool has_recent_compaction(
             [&found_last, &has_newer, &last_compaction_key = *maybe_previous_compaction.value()](const VariantKey& key
             ) {
                 const auto& atom = to_atom(key);
-                if (atom == last_compaction_key)
+                if (atom == last_compaction_key) {
                     found_last = true;
-                if (atom.creation_ts() > last_compaction_key.creation_ts())
+                }
+                if (atom.creation_ts() > last_compaction_key.creation_ts()) {
                     has_newer = true;
+                }
             },
             std::get<std::string>(compaction_id)
         );
@@ -865,8 +892,9 @@ std::set<StreamId> SymbolList::load(
 
     std::set<StreamId> output;
     for (const auto& entry : load_result.symbols_) {
-        if (entry.action_ == ActionType::ADD)
+        if (entry.action_ == ActionType::ADD) {
             output.insert(entry.stream_id_);
+        }
     }
 
     return output;

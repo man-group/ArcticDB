@@ -107,10 +107,11 @@ struct formatter<arcticdb::entity::Field> {
 
     template<typename FormatContext>
     auto format(const arcticdb::entity::Field& fd, FormatContext& ctx) const {
-        if (!fd.name().empty())
+        if (!fd.name().empty()) {
             return fmt::format_to(ctx.out(), "FD<name={}, type={}>", fd.name(), fd.type());
-        else
+        } else {
             return fmt::format_to(ctx.out(), "FD<type={}>", fd.type());
+        }
     }
 };
 } // namespace fmt

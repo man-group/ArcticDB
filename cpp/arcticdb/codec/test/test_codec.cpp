@@ -386,8 +386,9 @@ TEST(SegmentEncoderTest, StressTestString) {
 
     for (size_t i = 0; i < NumTests; ++i) {
         agg.start_row(timestamp(i))([&](auto& rb) {
-            for (size_t j = 1; j < NumColumns; ++j)
+            for (size_t j = 1; j < NumColumns; ++j) {
                 rb.set_string(timestamp(j), strings[(i + j) & (VectorSize - 1)]);
+            }
         });
     }
 }

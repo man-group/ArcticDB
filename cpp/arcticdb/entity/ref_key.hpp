@@ -49,8 +49,9 @@ class RefKey {
     friend bool operator<(const RefKey& l, const RefKey& r) { return l.id() < r.id(); }
 
     std::string_view view() const {
-        if (str_.empty())
+        if (str_.empty()) {
             set_string();
+        }
         return std::string_view{str_};
     }
 

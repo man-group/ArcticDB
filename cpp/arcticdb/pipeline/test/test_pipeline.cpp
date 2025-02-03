@@ -50,8 +50,9 @@ class Pipeline {
     ARCTICDB_NO_MOVE_OR_COPY(Pipeline)
 
     auto finalize() {
-        for (auto& stage : stages_)
+        for (auto& stage : stages_) {
             chain_.second = std::move(chain_.second).thenValue(std::move(stage.func_));
+        }
 
         stages_.clear();
     }
@@ -71,8 +72,9 @@ struct TestFilter {
     SegmentInMemory operator()(SegmentInMemory input) {
         SegmentInMemory output{input.descriptor()};
         for (const auto& row : input) {
-            if (filter_func_(row))
+            if (filter_func_(row)) {
                 output.push_back(row);
+            }
         }
         return output;
     }
@@ -123,21 +125,24 @@ struct TestAggregation {
         }
 
         const auto& agg_field_pos = input.descriptor().find_field(field_name_);
-        if (!agg_field_pos)
+        if (!agg_field_pos) {
             util::raise_rte("Field {} not found in aggregation", field_name_);
+        }
 
         const auto& agg_field = input.descriptor().field(agg_field_pos.value());
         if (std::find_if(desc.fields().begin(), desc.fields().end(), [&agg_field](const auto& field) {
                 return agg_field == field;
-            }) == desc.fields().end())
+            }) == desc.fields().end()) {
             desc.add_field(FieldRef{agg_field.type(), agg_field.name()});
+        }
 
         SegmentInMemory output{StreamDescriptor{std::move(desc)}};
         for (const auto& row : input) {
             if (auto maybe_val = aggregation_func_(row[agg_field_pos.value()])) {
                 auto col_num = size_t(0);
-                for (auto i = 0u; i < index_field_count; ++i)
+                for (auto i = 0u; i < index_field_count; ++i) {
                     output.set_value(col_num++, row[i]);
+                }
 
                 output.set_scalar(col_num, maybe_val.value());
                 output.end_row();
@@ -172,12 +177,13 @@ TEST(Pipeline, Basic) {
     Pipeline pipeline(ex);
     TestFilter even_filter{[](const SegmentInMemory::Row& row) {
         return row[0].visit([](auto val) {
-            if constexpr (std::is_same_v<bool, decltype(val)>)
+            if constexpr (std::is_same_v<bool, decltype(val)>) {
                 return val == false;
-            else if constexpr (std::is_integral_v<decltype(val)>)
+            } else if constexpr (std::is_integral_v<decltype(val)>) {
                 return val % 2 == 0;
-            else
+            } else {
                 return false;
+            }
         });
     }};
 

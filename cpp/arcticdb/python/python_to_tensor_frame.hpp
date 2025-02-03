@@ -44,8 +44,9 @@ struct ARCTICDB_VISIBILITY_HIDDEN PyStringWrapper {
     }
 
     ~PyStringWrapper() {
-        if (obj_)
+        if (obj_) {
             Py_DECREF(obj_);
+        }
     }
 };
 

@@ -228,8 +228,9 @@ inline FilterQuery<ContainerType> create_row_filter(RowRange&& range) {
             (*res)[r] = included;
         }
 
-        if (input)
+        if (input) {
             *res &= *input;
+        }
 
         ARCTICDB_DEBUG(log::version(), "Row filter has {} bits set", res->count());
         return res;
@@ -338,10 +339,11 @@ inline void build_col_read_query_filters(
     } else if (pipeline_context->overall_column_bitset_) {
         util::check(!dynamic_schema || column_groups, "Did not expect a column bitset with dynamic schema");
 
-        if (column_groups)
+        if (column_groups) {
             queries.emplace_back(create_dynamic_col_filter(std::move(pipeline_context)));
-        else
+        } else {
             queries.emplace_back(create_static_col_filter(std::move(pipeline_context)));
+        }
     }
 }
 
@@ -418,10 +420,11 @@ inline std::vector<FilterQuery<ContainerType>> build_update_query_filters(
 }
 
 inline FilterRange get_query_index_range(const stream::Index& index, const IndexRange& index_range) {
-    if (std::holds_alternative<stream::TimeseriesIndex>(index))
+    if (std::holds_alternative<stream::TimeseriesIndex>(index)) {
         return index_range;
-    else
+    } else {
         return RowRange{std::get<NumericIndex>(index_range.start_), std::get<NumericIndex>(index_range.end_)};
+    }
 }
 
 inline std::vector<SliceAndKey> strictly_before(const FilterRange& range, const std::vector<SliceAndKey>& input) {

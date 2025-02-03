@@ -247,8 +247,9 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific
                                                   return key_and_snapshot_ids.first.version_id() ==
                                                          sym_versions.at(tombstoned_ver.first);
                                               }
-                                          ))
+                                          )) {
                 (*output)[tombstoned_ver.first] = tombstoned_ver.second;
+            }
         }
     }
 

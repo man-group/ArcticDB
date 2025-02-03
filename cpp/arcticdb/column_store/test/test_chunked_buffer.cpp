@@ -51,7 +51,8 @@ TEST(ChunkedBuffer, Split) {
         const auto where = i % split_size;
         ASSERT_NE(buf, buffers.end());
         ASSERT_EQ(buf->cast<uint8_t>(where), input[i]);
-        if ((i + 1) % split_size == 0)
+        if ((i + 1) % split_size == 0) {
             ++buf;
+        }
     }
 }

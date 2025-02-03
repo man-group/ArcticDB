@@ -18,13 +18,15 @@ class EncodingConversion {
 
   public:
     EncodingConversion(const char* to, const char* from) : iconv_(iconv_open(to, from)) {
-        if (iconv_t(-1) == iconv_)
+        if (iconv_t(-1) == iconv_) {
             util::raise_rte("error from iconv_open()");
+        }
     }
 
     ~EncodingConversion() {
-        if (iconv_t(-1) != iconv_)
+        if (iconv_t(-1) != iconv_) {
             iconv_close(iconv_);
+        }
     }
 
     bool convert(const char* input, size_t input_size, uint8_t* output, size_t& output_size) {

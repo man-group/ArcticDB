@@ -44,17 +44,21 @@ inline void set_id(arcticdb::proto::descriptors::StreamDescriptor& pb_desc, Stre
 
 template<typename SourceType, typename DestType>
 void exchange_timeseries_proto(const SourceType& source, DestType& destination) {
-    if (source.has_normalization())
+    if (source.has_normalization()) {
         *destination.mutable_normalization() = source.normalization();
+    }
 
-    if (source.has_user_meta())
+    if (source.has_user_meta()) {
         *destination.mutable_user_meta() = source.user_meta();
+    }
 
-    if (source.has_next_key())
+    if (source.has_next_key()) {
         *destination.mutable_next_key() = source.next_key();
+    }
 
-    if (source.has_multi_key_meta())
+    if (source.has_multi_key_meta()) {
         *destination.mutable_multi_key_meta() = source.multi_key_meta();
+    }
 }
 
 } // namespace arcticdb

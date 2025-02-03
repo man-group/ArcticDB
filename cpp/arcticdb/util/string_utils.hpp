@@ -19,8 +19,9 @@ namespace arcticdb::util {
 
 inline int64_t num_from_strv(std::string_view strv) {
     uint64_t val = 0;
-    for (auto c : strv)
+    for (auto c : strv) {
         val = val * 10 + (c - '0');
+    }
 
     return *reinterpret_cast<int64_t*>(&val);
 };
@@ -42,11 +43,13 @@ std::array<std::string_view, expected_size> split_to_array(std::string_view strv
     auto count = 0u;
     while (first != strv.end() && count < expected_size) {
         const auto second = std::find(first, last, delim);
-        if (first != second)
+        if (first != second) {
             output[count++] = strv.substr(std::distance(strv.begin(), first), std::distance(first, second));
+        }
 
-        if (second == strv.end())
+        if (second == strv.end()) {
             break;
+        }
 
         first = std::next(second);
     }
@@ -60,11 +63,13 @@ inline std::vector<std::string_view> split_to_vector(std::string_view strv, char
     auto last = strv.cend();
     while (first != strv.end()) {
         const auto second = std::find(first, last, delim);
-        if (first != second)
+        if (first != second) {
             output.emplace_back(strv.substr(std::distance(strv.begin(), first), std::distance(first, second)));
+        }
 
-        if (second == strv.end())
+        if (second == strv.end()) {
             break;
+        }
 
         first = std::next(second);
     }

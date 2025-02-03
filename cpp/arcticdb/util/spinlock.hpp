@@ -25,11 +25,13 @@ struct SpinLock {
 
     void lock() noexcept {
         do {
-            if (!lock_.exchange(true, std::memory_order_acquire))
+            if (!lock_.exchange(true, std::memory_order_acquire)) {
                 return;
+            }
 
-            while (lock_.load(std::memory_order_relaxed))
+            while (lock_.load(std::memory_order_relaxed)) {
                 PAUSE;
+            }
 
         } while (true);
     }

@@ -126,8 +126,9 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             while (!it.finished()) {
                 auto* ptr = reinterpret_cast<PyObject*>(it.value());
                 util::check(ptr != nullptr, "Can't set base object on null item");
-                if (ptr != none.ptr())
+                if (ptr != none.ptr()) {
                     api.PyArray_SetBaseObject_(ptr, anchor.inc_ref().ptr());
+                }
 
                 it.next();
             }

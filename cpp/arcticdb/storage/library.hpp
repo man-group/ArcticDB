@@ -88,8 +88,9 @@ class Library {
 
     void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(LibraryUpdate, 0)
-        if (open_mode() < OpenMode::WRITE)
+        if (open_mode() < OpenMode::WRITE) {
             throw LibraryPermissionException(library_path_, open_mode(), "update");
+        }
 
         storages_->update(std::move(kvs), opts);
     }

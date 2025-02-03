@@ -40,8 +40,9 @@ class LockTable {
     std::shared_ptr<Lock> get_lock_object(const StreamId& stream_id) {
         std::lock_guard lock(mutex_);
 
-        if (auto it = locks_.find(stream_id); it != std::end(locks_))
+        if (auto it = locks_.find(stream_id); it != std::end(locks_)) {
             return it->second;
+        }
 
         return locks_.try_emplace(stream_id, std::make_shared<Lock>()).first->second;
     }

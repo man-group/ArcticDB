@@ -245,12 +245,13 @@ TEST(VersionMap, TestLoadsRefAndIteration) {
 
     ASSERT_EQ(entry_iteration->head_, entry_ref->head_);
     ASSERT_EQ(entry_iteration->keys_.size(), entry_ref->keys_.size());
-    for (size_t idx = 0; idx < entry_iteration->keys_.size(); idx++)
+    for (size_t idx = 0; idx < entry_iteration->keys_.size(); idx++) {
         if (entry_iteration->keys_[idx] != entry_ref->keys_[idx]) {
             util::raise_rte(
                 "Keys Mismatch on idx {}: {} != {}", idx, entry_iteration->keys_[idx], entry_ref->keys_[idx]
             );
         }
+    }
     entry_iteration->validate();
     entry_ref->validate();
 }
@@ -1045,15 +1046,19 @@ TEST(VersionMap, CompactionUpdateCache) {
                                           ) {
         int present_version_keys = 0, present_index_keys = 0, present_tombstone_keys = 0;
         auto all_entry_keys = entry->keys_;
-        if (entry->head_)
+        if (entry->head_) {
             all_entry_keys.push_back(entry->head_.value());
+        }
         for (const auto& key : all_entry_keys) {
-            if (key.type() == KeyType::VERSION)
+            if (key.type() == KeyType::VERSION) {
                 ++present_version_keys;
-            if (key.type() == KeyType::TABLE_INDEX)
+            }
+            if (key.type() == KeyType::TABLE_INDEX) {
                 ++present_index_keys;
-            if (key.type() == KeyType::TOMBSTONE)
+            }
+            if (key.type() == KeyType::TOMBSTONE) {
                 ++present_tombstone_keys;
+            }
         }
         ASSERT_EQ(present_version_keys, expected_version_keys);
         ASSERT_EQ(present_index_keys, expected_index_keys);

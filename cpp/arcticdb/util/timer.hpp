@@ -61,8 +61,9 @@ struct interval {
     }
 
     void end() {
-        if (!running_)
+        if (!running_) {
             return;
+        }
 
         timespec tm{0, 0};
         get_time(tm);
@@ -125,21 +126,24 @@ class interval_timer {
             auto created = new interval();
             intervals_.try_emplace(name, created);
             created->start();
-        } else
+        } else {
             (*it).second->start();
+        }
     }
 
     void stop_timer(const name_type& name = "default") {
         auto it = intervals_.find(name);
-        if (it != intervals_.end())
+        if (it != intervals_.end()) {
             (*it).second->end();
+        }
     }
 
     result_type display_timer(const name_type& name = "default") {
         result_type ret;
         auto it = intervals_.find(name);
-        if (it == intervals_.end())
+        if (it == intervals_.end()) {
             return ret;
+        }
 
         it->second->end();
         interval_results results{};

@@ -106,8 +106,9 @@ void SegmentHeader::deserialize_from_bytes(const uint8_t* data, bool copy_data) 
     data += offsets_buffer.bytes();
     header_fields_ = EncodedFieldCollection{std::move(fields_buffer), std::move(offsets_buffer)};
     auto* offsets = reinterpret_cast<const uint32_t*>(data);
-    for (auto i = 0UL; i < offset_.size(); ++i)
+    for (auto i = 0UL; i < offset_.size(); ++i) {
         offset_[i] = *offsets++;
+    }
 }
 
 size_t SegmentHeader::required_bytes(const SegmentInMemory& in_mem_seg) {

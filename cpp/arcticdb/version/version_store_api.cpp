@@ -75,8 +75,9 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
     );
 
     version_map()->write_version(store(), versioned_item.key_, std::nullopt);
-    if (cfg().symbol_list())
+    if (cfg().symbol_list()) {
         symbol_list().add_symbol(store(), stream_id, version_id);
+    }
 
     return versioned_item;
 }
@@ -203,8 +204,9 @@ void get_snapshot_version_info(
         }
     }
 
-    for (auto& [sid, version_vector] : snapshots_for_symbol)
+    for (auto& [sid, version_vector] : snapshots_for_symbol) {
         std::sort(std::begin(version_vector), std::end(version_vector));
+    }
 }
 
 VersionResultVector get_latest_versions_for_symbols(
@@ -288,16 +290,18 @@ VersionResultVector PythonVersionStore::list_versions(
             store(), snapshots_for_symbol, creation_ts_for_version_symbol, versions_for_snapshots
         );
 
-        if (snap_name)
+        if (snap_name) {
             return list_versions_for_snapshot(stream_ids, snap_name, *versions_for_snapshots, snapshots_for_symbol);
+        }
     }
 
-    if (opt_false(latest_only))
+    if (opt_false(latest_only)) {
         return get_latest_versions_for_symbols(store(), version_map(), stream_ids, snapshots_for_symbol);
-    else
+    } else {
         return get_all_versions_for_symbols(
             store(), version_map(), stream_ids, snapshots_for_symbol, creation_ts_for_version_symbol
         );
+    }
 }
 
 namespace {
@@ -390,8 +394,9 @@ void PythonVersionStore::add_to_snapshot(
         }
     }
 
-    for (auto&& [id, key] : *specific_versions_index_map)
+    for (auto&& [id, key] : *specific_versions_index_map) {
         retained_keys.emplace_back(std::move(key));
+    }
 
     std::sort(std::begin(retained_keys), std::end(retained_keys));
     if (is_delete_keys_immediately) {
@@ -643,8 +648,9 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     auto versioned_item = VersionedItem(to_atom(std::move(multi_key)));
     write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, maybe_prev);
 
-    if (cfg().symbol_list())
+    if (cfg().symbol_list()) {
         symbol_list().add_symbol(store(), stream_id, version_id);
+    }
 
     return versioned_item;
 }
@@ -1031,8 +1037,9 @@ void PythonVersionStore::delete_all_versions(const StreamId& stream_id) {
             log::version().warn("Nothing to delete for symbol '{}'", stream_id);
             return;
         }
-        if (cfg().symbol_list())
+        if (cfg().symbol_list()) {
             symbol_list().remove_symbol(store(), stream_id, version_id);
+        }
 
         ARCTICDB_DEBUG(
             log::version(),
@@ -1093,8 +1100,9 @@ std::pair<VersionedItem, py::object> PythonVersionStore::read_metadata(
     ARCTICDB_SAMPLE(ReadMetadata, 0)
 
     auto metadata = read_metadata_internal(stream_id, version_query);
-    if (!metadata.first.has_value())
+    if (!metadata.first.has_value()) {
         throw NoDataFoundException(fmt::format("read_metadata: version not found for symbol", stream_id));
+    }
 
     auto metadata_proto = metadata.second;
     py::object pyobj = metadata_protobuf_to_pyobject(metadata_proto);
@@ -1172,8 +1180,9 @@ ReadResult PythonVersionStore::read_index(const StreamId& stream_id, const Versi
     ARCTICDB_SAMPLE(ReadIndex, 0)
 
     auto version = get_version_to_read(stream_id, version_query);
-    if (!version)
+    if (!version) {
         throw NoDataFoundException(fmt::format("read_index: version not found for symbol '{}'", stream_id));
+    }
 
     auto res = read_index_impl(store(), *version);
     return read_result_from_single_frame(res, version->key_);

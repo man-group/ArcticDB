@@ -33,8 +33,9 @@ RC_GTEST_PROP(ColumnStore, RapidCheck, (const std::map<std::string, TestDataFram
     for (auto& data_frame : data_frames) {
         std::vector<std::string> errors;
         auto result = check_test_frame(data_frame.second, keys[count++].value(), store, errors);
-        for (auto& err : errors)
+        for (auto& err : errors) {
             log::root().warn(err);
+        }
         RC_ASSERT(result);
     }
 }

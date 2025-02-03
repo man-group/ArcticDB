@@ -115,14 +115,16 @@ size_t StringPool::num_blocks() const { return block_.num_blocks(); }
 
 OffsetString StringPool::get(std::string_view s, bool deduplicate) {
     if (deduplicate) {
-        if (auto it = map_.find(s); it != map_.end())
+        if (auto it = map_.find(s); it != map_.end()) {
             return OffsetString(it->second, this);
+        }
     }
 
     OffsetString str(block_.insert(s.data(), s.size()), this);
 
-    if (deduplicate)
+    if (deduplicate) {
         map_.insert(std::make_pair(block_.at(str.offset()), str.offset()));
+    }
 
     return str;
 }
@@ -130,13 +132,15 @@ OffsetString StringPool::get(std::string_view s, bool deduplicate) {
 OffsetString StringPool::get(const char* data, size_t size, bool deduplicate) {
     StringType s(data, size);
     if (deduplicate) {
-        if (auto it = map_.find(s); it != map_.end())
+        if (auto it = map_.find(s); it != map_.end()) {
             return OffsetString(it->second, this);
+        }
     }
 
     OffsetString str(block_.insert(s.data(), s.size()), this);
-    if (deduplicate)
+    if (deduplicate) {
         map_.insert(std::make_pair(StringType(str), str.offset()));
+    }
 
     return str;
 }
@@ -181,8 +185,9 @@ std::optional<position_t> StringPool::get_offset_for_column(std::string_view str
     }
 
     std::optional<position_t> output;
-    if (auto loc = col_values.find(string); loc != col_values.end())
+    if (auto loc = col_values.find(string); loc != col_values.end()) {
         output = loc->second;
+    }
     return output;
 }
 
@@ -201,8 +206,9 @@ ankerl::unordered_dense::set<position_t> StringPool::get_offsets_for_column(
     ankerl::unordered_dense::set<position_t> output;
     for (const auto& string : *strings) {
         auto loc = col_values.find(string);
-        if (loc != col_values.end())
+        if (loc != col_values.end()) {
             output.insert(loc->second);
+        }
     }
     return output;
 }

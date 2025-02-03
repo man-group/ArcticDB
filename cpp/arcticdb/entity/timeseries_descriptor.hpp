@@ -124,8 +124,9 @@ struct formatter<arcticdb::TimeseriesDescriptor> {
 
     template<typename FormatContext>
     auto format(const arcticdb::TimeseriesDescriptor& tsd, FormatContext& ctx) const {
-        if (!tsd.fields_ptr())
+        if (!tsd.fields_ptr()) {
             return fmt::format_to(ctx.out(), "TimeseriesDescriptor<fields=empty, proto={}>", tsd.proto());
+        }
 
         return fmt::format_to(ctx.out(), "TimeseriesDescriptor<fields={}, proto={}>", tsd.fields(), tsd.proto());
     }

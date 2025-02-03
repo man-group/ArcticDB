@@ -186,8 +186,9 @@ NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types) {
                     }
                     ++current_object;
                 }
-                if (current_object != end)
+                if (current_object != end) {
                     sample = *current_object;
+                }
             }
             if (empty && descr->kind == 'O') {
                 val_type = empty_types ? ValueType::EMPTY : ValueType::UTF_DYNAMIC;
@@ -230,8 +231,9 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
     res->desc.set_id(stream_name);
     res->num_rows = 0u;
     python_util::pb_from_python(norm_meta, res->norm_meta);
-    if (!user_meta.is_none())
+    if (!user_meta.is_none()) {
         python_util::pb_from_python(user_meta, res->user_meta);
+    }
 
     // Fill index
     auto idx_names = item[0].cast<std::vector<std::string>>();

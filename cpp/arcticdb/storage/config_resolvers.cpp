@@ -24,8 +24,9 @@ std::optional<InMemoryConfigResolver::MemoryConfig> InMemoryConfigResolver::get_
     const EnvironmentName& environment_name
 ) const {
     auto env = environments_.find(environment_name);
-    if (env == environments_.end())
+    if (env == environments_.end()) {
         return std::nullopt;
+    }
 
     return env->second;
 }
@@ -46,11 +47,13 @@ std::vector<std::pair<LibraryPath, arcticdb::proto::storage::LibraryDescriptor>>
 ) const {
     auto config = get_environment(environment_name);
     std::vector<std::pair<LibraryPath, arcticdb::proto::storage::LibraryDescriptor>> output;
-    if (!config.has_value())
+    if (!config.has_value()) {
         return output;
+    }
 
-    for (auto& pair : config->libraries_)
+    for (auto& pair : config->libraries_) {
         output.emplace_back(pair);
+    }
 
     return output;
 }
@@ -60,11 +63,13 @@ std::vector<std::pair<StorageName, arcticdb::proto::storage::VariantStorage>> In
 ) const {
     auto config = get_environment(environment_name);
     std::vector<std::pair<StorageName, arcticdb::proto::storage::VariantStorage>> output;
-    if (!config.has_value())
+    if (!config.has_value()) {
         return output;
+    }
 
-    for (auto& pair : config->storages_)
+    for (auto& pair : config->storages_) {
         output.emplace_back(pair);
+    }
 
     return output;
 }

@@ -653,14 +653,16 @@ bool is_compacted(const std::shared_ptr<Store>& store) {
 
 bool all_symbols_match(const std::shared_ptr<Store>& store, SymbolList& symbol_list, std::vector<StreamId>& expected) {
     auto symbols = symbol_list.get_symbols(store, true);
-    if (symbols != expected)
+    if (symbols != expected) {
         return false;
+    }
 
     auto old_symbols = backwards_compat_get_symbols(store);
     std::set<StreamId> expected_set;
     expected_set.insert(std::begin(expected), std::end(expected));
-    if (old_symbols != expected_set)
+    if (old_symbols != expected_set) {
         return false;
+    }
 
     return true;
 }

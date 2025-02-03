@@ -29,10 +29,11 @@ TEST(StringPool, MultipleReadWrite) {
     for (auto& s : strings) {
         OffsetString str = pool.get(std::string_view(s));
         map_t::const_iterator it;
-        if ((it = positions.find(s)) != positions.end())
+        if ((it = positions.find(s)) != positions.end()) {
             ASSERT_EQ(str.offset(), it->second);
-        else
+        } else {
             positions.try_emplace(s, str.offset());
+        }
     }
 
     const size_t NumTests = 100;

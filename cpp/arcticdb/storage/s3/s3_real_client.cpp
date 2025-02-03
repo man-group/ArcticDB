@@ -195,8 +195,9 @@ S3Result<ListObjectsOutput> RealS3Client::list_objects(
     Aws::S3::Model::ListObjectsV2Request request;
     request.WithBucket(bucket_name.c_str());
     request.SetPrefix(name_prefix.c_str());
-    if (continuation_token.has_value())
+    if (continuation_token.has_value()) {
         request.SetContinuationToken(*continuation_token);
+    }
 
     auto outcome = s3_client.ListObjectsV2(request);
 
@@ -208,8 +209,9 @@ S3Result<ListObjectsOutput> RealS3Client::list_objects(
 
     const auto& result = outcome.GetResult();
     auto next_continuation_token = std::optional<std::string>();
-    if (result.GetIsTruncated())
+    if (result.GetIsTruncated()) {
         next_continuation_token = {result.GetNextContinuationToken()};
+    }
 
     auto s3_object_names = std::vector<std::string>();
     for (const auto& s3_object : result.GetContents()) {

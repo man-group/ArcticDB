@@ -48,10 +48,11 @@ FrameAndDescriptor frame_and_descriptor_from_segment(SegmentInMemory&& seg) {
     tsd.set_total_rows(seg.row_count());
     const auto& seg_descriptor = seg.descriptor();
     tsd.set_stream_descriptor(seg_descriptor);
-    if (seg_descriptor.index().type() == IndexDescriptor::Type::ROWCOUNT)
+    if (seg_descriptor.index().type() == IndexDescriptor::Type::ROWCOUNT) {
         ensure_rowcount_norm_meta(*tsd_proto.mutable_normalization(), seg_descriptor.id());
-    else
+    } else {
         ensure_timeseries_norm_meta(*tsd.mutable_proto().mutable_normalization(), seg_descriptor.id(), false);
+    }
     return {SegmentInMemory(std::move(seg)), tsd, {}, {}};
 }
 

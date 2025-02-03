@@ -19,8 +19,9 @@ namespace arcticdb::stream {
 
 inline void convert_descriptor_types(StreamDescriptor& descriptor) {
     for (size_t i = 0; i < descriptor.field_count(); ++i) {
-        if (is_integer_type(descriptor.field(i).type().data_type()))
+        if (is_integer_type(descriptor.field(i).type().data_type())) {
             set_data_type(DataType::FLOAT64, descriptor.mutable_field(i).mutable_type());
+        }
     }
 }
 
@@ -68,8 +69,9 @@ class SegmentAggregator : public Aggregator<Index, Schema, SegmentingPolicy, Den
         segment.reset_timeseries_descriptor();
         AggregatorType::stats().update_many(segment.row_count(), segment.num_bytes());
         // TODO very specific use-case, you probably don't want this
-        if (convert_int_to_float)
+        if (convert_int_to_float) {
             convert_column_types(segment);
+        }
 
         ARCTICDB_DEBUG(log::version(), "Adding segment with descriptor {}", segment.descriptor());
         segments_.push_back(segment);
@@ -83,8 +85,9 @@ class SegmentAggregator : public Aggregator<Index, Schema, SegmentingPolicy, Den
     void finalize() override { commit(); }
 
     void commit() override {
-        if (segments_.empty())
+        if (segments_.empty()) {
             return;
+        }
 
         util::check(
             segments_.size() == slices_.size(),

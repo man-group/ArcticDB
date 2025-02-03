@@ -133,8 +133,9 @@ std::optional<google::protobuf::Any> decode_metadata_from_segment(const Segment&
 
     const auto begin = data;
     if (const auto has_magic_numbers = EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2;
-        has_magic_numbers)
+        has_magic_numbers) {
         util::check_magic<MetadataMagic>(data);
+    }
 
     return decode_metadata(hdr, data, begin);
 }
@@ -272,8 +273,9 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_v1(
     const StreamDescriptor& descriptor
 ) {
     auto maybe_any = decode_metadata(hdr, data, begin);
-    if (!maybe_any)
+    if (!maybe_any) {
         return std::nullopt;
+    }
 
     return unpack_timeseries_descriptor_from_proto(*maybe_any, descriptor, false);
 }
@@ -283,8 +285,9 @@ void skip_descriptor(const uint8_t*& data, const SegmentHeader& hdr) {
     data += sizeof(SegmentDescriptor);
     skip_identifier(data);
     util::check_magic<DescriptorFieldsMagic>(data);
-    if (hdr.has_descriptor_field() && hdr.descriptor_field().has_ndarray())
+    if (hdr.has_descriptor_field() && hdr.descriptor_field().has_ndarray()) {
         data += encoding_sizes::field_compressed_size(hdr.descriptor_field());
+    }
 }
 
 std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_v2(
@@ -296,8 +299,9 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_v2(
     util::check_magic<MetadataMagic>(data);
 
     auto maybe_any = decode_metadata(hdr, data, begin);
-    if (!maybe_any)
+    if (!maybe_any) {
         return std::nullopt;
+    }
 
     auto frame_meta =
         std::make_shared<arcticdb::proto::descriptors::FrameMetadata>(frame_metadata_from_any(*maybe_any));
@@ -323,10 +327,11 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor(
 ) {
     util::check(data != nullptr, "Got null data ptr from segment");
     auto encoding_version = EncodingVersion(hdr.encoding_version());
-    if (encoding_version == EncodingVersion::V1)
+    if (encoding_version == EncodingVersion::V1) {
         return decode_timeseries_descriptor_v1(hdr, data, begin, descriptor);
-    else
+    } else {
         return decode_timeseries_descriptor_v2(hdr, data, begin, end);
+    }
 }
 
 std::optional<TimeseriesDescriptor> decode_timeseries_descriptor(Segment& segment) {
@@ -351,8 +356,9 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_for_incompletes
     auto encoding_version = EncodingVersion(hdr.encoding_version());
     if (encoding_version == EncodingVersion::V1) {
         auto maybe_any = decode_metadata(hdr, data, begin);
-        if (!maybe_any)
+        if (!maybe_any) {
             return std::nullopt;
+        }
 
         return unpack_timeseries_descriptor_from_proto(*maybe_any, desc, true);
     } else {
@@ -378,12 +384,14 @@ std::pair<std::optional<google::protobuf::Any>, StreamDescriptor> decode_metadat
 
     util::check(data != nullptr, "Got null data ptr from segment");
     const uint8_t* begin = data;
-    if (EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2)
+    if (EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2) {
         util::check_magic<MetadataMagic>(data);
+    }
 
     auto maybe_any = decode_metadata(hdr, data, begin);
-    if (EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2)
+    if (EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2) {
         util::check_magic<DescriptorFieldsMagic>(data);
+    }
 
     return std::make_pair(std::move(maybe_any), segment.descriptor());
 }
@@ -575,10 +583,11 @@ void decode_into_memory_segment(
     SegmentInMemory& res,
     const StreamDescriptor& desc
 ) {
-    if (EncodingVersion(segment.header().encoding_version()) == EncodingVersion::V2)
+    if (EncodingVersion(segment.header().encoding_version()) == EncodingVersion::V2) {
         decode_v2(segment, hdr, res, desc);
-    else
+    } else {
         decode_v1(segment, hdr, res, desc);
+    }
 }
 
 SegmentInMemory decode_segment(Segment&& s) {

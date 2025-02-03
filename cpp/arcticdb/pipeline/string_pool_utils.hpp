@@ -49,10 +49,11 @@ inline std::variant<std::string_view, entity::position_t> get_string_from_buffer
     const StringPool& string_pool
 ) {
     auto offset_val = get_offset_string_at(string_pos, src);
-    if (offset_val == nan_placeholder() || offset_val == not_a_string())
+    if (offset_val == nan_placeholder() || offset_val == not_a_string()) {
         return offset_val;
-    else
+    } else {
         return get_string_from_pool(offset_val, string_pool);
+    }
 }
 
 size_t first_context_row(const pipelines::SliceAndKey& slice_and_key, size_t first_row_in_frame);
@@ -73,8 +74,9 @@ inline size_t get_first_string_size(
 
     for (auto row = 0u; row < num_rows; ++row) {
         offset_val = get_offset_string_at(first_row_in_frame + row, src);
-        if (offset_val != nan_placeholder() && offset_val != not_a_string())
+        if (offset_val != nan_placeholder() && offset_val != not_a_string()) {
             return get_string_from_pool(offset_val, string_pool).size();
+        }
     }
 
     return 0u;

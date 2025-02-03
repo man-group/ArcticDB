@@ -17,8 +17,9 @@ std::shared_ptr<BufferPool> BufferPool::instance() {
 }
 
 void BufferPool::destroy_instance() {
-    if (instance_)
+    if (instance_) {
         instance_->clear();
+    }
     instance_.reset();
 }
 

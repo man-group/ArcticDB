@@ -112,8 +112,9 @@ std::shared_ptr<std::unordered_set<std::string>> ValueSet::get_fixed_width_strin
         auto fixed_width_string_set = std::make_shared<std::unordered_set<std::string>>();
         for (const auto& str : *typed_set_string_) {
             auto maybe_padded_str = ascii_to_padded_utf32(str, width);
-            if (maybe_padded_str.has_value())
+            if (maybe_padded_str.has_value()) {
                 fixed_width_string_set->insert(*maybe_padded_str);
+            }
         }
         typed_set_fixed_width_strings_.try_emplace(width, std::move(fixed_width_string_set));
         return typed_set_fixed_width_strings_.at(width);

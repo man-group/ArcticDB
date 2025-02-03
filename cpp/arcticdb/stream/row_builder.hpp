@@ -57,10 +57,11 @@ class RowBuilder {
         if constexpr (sizeof...(Args) > 0 && !std::is_same_v<Index, EmptyIndex>) {
             index().set(
                 [&](std::size_t pos, auto arg) {
-                    if constexpr (std::is_integral_v<decltype(arg)> || std::is_floating_point_v<decltype(arg)>)
+                    if constexpr (std::is_integral_v<decltype(arg)> || std::is_floating_point_v<decltype(arg)>) {
                         set_scalar_impl(pos, arg);
-                    else
+                    } else {
                         set_string_impl(pos, arg);
+                    }
                 },
                 args...
             );

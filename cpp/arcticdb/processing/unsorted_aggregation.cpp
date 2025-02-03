@@ -233,10 +233,11 @@ struct MaybeValue {
 
   private:
     static constexpr T init_value() {
-        if constexpr (E == Extremum::MAX)
+        if constexpr (E == Extremum::MAX) {
             return std::numeric_limits<T>::lowest();
-        else
+        } else {
             return std::numeric_limits<T>::max();
+        }
     }
 };
 

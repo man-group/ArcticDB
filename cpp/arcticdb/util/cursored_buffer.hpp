@@ -77,8 +77,9 @@ struct CursoredBuffer {
     BufferType& buffer() { return buffer_; }
 
     void compact_blocks() {
-        if (buffer_.blocks().size() <= 1)
+        if (buffer_.blocks().size() <= 1) {
             return;
+        }
 
         CursoredBuffer tmp{buffer_.bytes(), entity::AllocationType::DYNAMIC};
         for (const auto& block : buffer_.blocks()) {

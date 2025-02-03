@@ -191,8 +191,9 @@ void do_read_impl(
                 }
             }
         );
-    if (!keys_not_found.empty())
+    if (!keys_not_found.empty()) {
         throw KeyNotFoundException(Composite<VariantKey>{std::move(keys_not_found)});
+    }
 }
 
 struct FailedDelete {

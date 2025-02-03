@@ -34,8 +34,9 @@ TEST(Allocator, Tracing) {
     blocks[0] = new_ptr;
     ASSERT_EQ(AllocType::allocated_bytes(), 130);
 
-    for (auto block : blocks)
+    for (auto block : blocks) {
         AllocType::free(block);
+    }
 
     ASSERT_EQ(AllocType::allocated_bytes(), 0);
     ASSERT_TRUE(AllocType::empty());

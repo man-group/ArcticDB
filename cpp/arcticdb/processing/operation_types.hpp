@@ -181,10 +181,11 @@ struct type_arithmetic_promoted_type {
 struct AbsOperator {
     template<typename T, typename V = typename unary_arithmetic_promoted_type<T, AbsOperator>::type>
     V apply(T t) {
-        if constexpr (std::is_unsigned_v<T>)
+        if constexpr (std::is_unsigned_v<T>) {
             return t;
-        else
+        } else {
             return std::abs(static_cast<V>(t));
+        }
     }
 };
 
@@ -270,24 +271,27 @@ struct EqualsOperator {
     }
     template<typename T>
     bool operator()(T t, std::optional<T> u) const {
-        if (u.has_value())
+        if (u.has_value()) {
             return t == *u;
-        else
+        } else {
             return false;
+        }
     }
     template<typename T>
     bool operator()(std::optional<T> t, T u) const {
-        if (t.has_value())
+        if (t.has_value()) {
             return *t == u;
-        else
+        } else {
             return false;
+        }
     }
     template<typename T>
     bool operator()(std::optional<T> t, std::optional<T> u) const {
-        if (t.has_value() && u.has_value())
+        if (t.has_value() && u.has_value()) {
             return *t == *u;
-        else
+        } else {
             return false;
+        }
     }
     bool operator()(uint64_t t, int64_t u) const { return comparison::equals(t, u); }
     bool operator()(int64_t t, uint64_t u) const { return comparison::equals(t, u); }
@@ -300,24 +304,27 @@ struct NotEqualsOperator {
     }
     template<typename T>
     bool operator()(T t, std::optional<T> u) const {
-        if (u.has_value())
+        if (u.has_value()) {
             return t != *u;
-        else
+        } else {
             return true;
+        }
     }
     template<typename T>
     bool operator()(std::optional<T> t, T u) const {
-        if (t.has_value())
+        if (t.has_value()) {
             return *t != u;
-        else
+        } else {
             return true;
+        }
     }
     template<typename T>
     bool operator()(std::optional<T> t, std::optional<T> u) const {
-        if (t.has_value() && u.has_value())
+        if (t.has_value() && u.has_value()) {
             return *t != *u;
-        else
+        } else {
             return true;
+        }
     }
     bool operator()(uint64_t t, int64_t u) const { return comparison::not_equals(t, u); }
     bool operator()(int64_t t, uint64_t u) const { return comparison::not_equals(t, u); }
@@ -416,16 +423,18 @@ struct IsInOperator : MembershipOperator {
 
     template<typename U, typename = std::enable_if_t<is_signed_int<U>>>
     bool operator()(uint64_t t, const std::unordered_set<U>& u, UInt64SpecialHandlingTag = {}) const {
-        if (t > static_cast<uint64_t>(std::numeric_limits<U>::max()))
+        if (t > static_cast<uint64_t>(std::numeric_limits<U>::max())) {
             return false;
-        else
+        } else {
             return u.count(t) > 0;
+        }
     }
     bool operator()(int64_t t, const std::unordered_set<uint64_t>& u, UInt64SpecialHandlingTag = {}) const {
-        if (t < 0)
+        if (t < 0) {
             return false;
-        else
+        } else {
             return u.count(t) > 0;
+        }
     }
 
 #ifdef _WIN32
@@ -457,16 +466,18 @@ struct IsNotInOperator : MembershipOperator {
 
     template<typename U, typename = std::enable_if_t<is_signed_int<U>>>
     bool operator()(uint64_t t, const std::unordered_set<U>& u, UInt64SpecialHandlingTag = {}) const {
-        if (t > static_cast<uint64_t>(std::numeric_limits<U>::max()))
+        if (t > static_cast<uint64_t>(std::numeric_limits<U>::max())) {
             return true;
-        else
+        } else {
             return u.count(t) == 0;
+        }
     }
     bool operator()(int64_t t, const std::unordered_set<uint64_t>& u, UInt64SpecialHandlingTag = {}) const {
-        if (t < 0)
+        if (t < 0) {
             return true;
-        else
+        } else {
             return u.count(t) == 0;
+        }
     }
 
 #ifdef _WIN32

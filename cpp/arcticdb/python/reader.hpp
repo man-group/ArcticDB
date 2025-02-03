@@ -67,12 +67,14 @@ class TickReader {
                     } else if (T::DataTypeTag::data_type == DataType::ASCII_DYNAMIC64) {
                         auto string_refs = segment_.tensor_at<entity::position_t>(row, col).value();
                         std::vector<std::string_view> output;
-                        for (ssize_t i = 0; i < string_refs.size(); ++i)
+                        for (ssize_t i = 0; i < string_refs.size(); ++i) {
                             output.emplace_back(view_at(string_refs.at(i)));
+                        }
 
                         res.append(output);
-                    } else
+                    } else {
                         res.append(to_py_array(segment_.tensor_at<RawType>(row, col).value()));
+                    }
                 }
             });
         }

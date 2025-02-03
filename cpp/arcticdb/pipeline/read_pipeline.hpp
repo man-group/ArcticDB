@@ -38,8 +38,9 @@ namespace arcticdb::pipelines {
 
 template<class ContainerType>
 std::optional<CombinedQuery<ContainerType>> combine_filter_functions(std::vector<FilterQuery<ContainerType>>& filters) {
-    if (filters.empty())
+    if (filters.empty()) {
         return std::nullopt;
+    }
 
     return [&](const ContainerType& container) mutable {
         auto filter = filters.begin();
@@ -143,10 +144,11 @@ inline std::optional<util::BitSet> clause_column_bitset(
             }
         }
     }
-    if (!column_set.empty())
+    if (!column_set.empty()) {
         return build_column_bitset(desc, column_set);
-    else
+    } else {
         return std::nullopt;
+    }
 }
 
 // Returns std::nullopt if all columns are required, which is the case if requested_columns is std::nullopt
@@ -191,13 +193,15 @@ inline void generate_filtered_field_descriptors(
         const auto& desc = context.descriptor();
         ARCTICDB_DEBUG(log::version(), "Context descriptor: {}", desc);
         for (const auto& field : desc.fields()) {
-            if (column_set.find(field.name()) != column_set.end())
+            if (column_set.find(field.name()) != column_set.end()) {
                 context.filter_columns_->add_field(field.type(), field.name());
+            }
         }
 
         context.filter_columns_set_ = std::unordered_set<std::string_view>{};
-        for (const auto& field : *context.filter_columns_)
+        for (const auto& field : *context.filter_columns_) {
             context.filter_columns_set_->insert(field.name());
+        }
     }
 }
 

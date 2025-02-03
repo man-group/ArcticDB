@@ -141,8 +141,9 @@ class StorageLock {
             total_wait += wait_ms;
             wait_ms *= 2;
             auto read_ts = ttl_not_expired(store);
-            if (!read_ts)
+            if (!read_ts) {
                 break;
+            }
             if (timeout_ms && total_wait > *timeout_ms) {
                 ts_ = 0;
                 log::lock().info("Lock timed out, giving up after {}", wait_ms);

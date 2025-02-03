@@ -140,8 +140,9 @@ arcticdb::proto::descriptors::TimeSeriesDescriptor copy_time_series_descriptor_t
     arcticdb::proto::descriptors::TimeSeriesDescriptor output;
 
     output.set_total_rows(tsd.total_rows());
-    if (tsd.column_groups())
+    if (tsd.column_groups()) {
         output.mutable_column_groups()->set_enabled(true);
+    }
 
     exchange_timeseries_proto(tsd.proto(), output);
 

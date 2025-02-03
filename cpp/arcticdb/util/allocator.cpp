@@ -92,8 +92,9 @@ void TracingData::track_free(AddrIdentifier addr_ts) {
 }
 
 void TracingData::track_realloc(AddrIdentifier old_addr, AddrIdentifier new_addr, size_t size) {
-    if (old_addr.first != 0)
+    if (old_addr.first != 0) {
         track_free(old_addr);
+    }
 
     track_alloc(new_addr, size);
 }
@@ -125,8 +126,9 @@ bool InMemoryTracingPolicy::deallocated() {
     if (!all_freed) {
         log::memory().warn("Allocator has not freed all data, {} bytes counted", get_data.impl_->total_allocs_);
 
-        for (auto alloc : get_data.impl_->allocs_)
+        for (auto alloc : get_data.impl_->allocs_) {
             log::memory().warn("Unfreed allocation: {}", uintptr_t(alloc.first.first));
+        }
     }
     return get_data.all_freed();
 }
@@ -206,9 +208,9 @@ uint8_t* AllocatorImpl<TracingPolicy, ClockType>::internal_realloc(uint8_t* p, s
     auto raw_pointer = reinterpret_cast<SlabAllocatorType::pointer>(p);
     if (use_slab_allocator() && page_size_slab_allocator_->is_addr_in_slab(raw_pointer)) {
         ARCTICDB_TRACE(log::codec(), "Doing slab realloc of address {} and size {}", uintptr_t(p), size);
-        if (size == page_size)
+        if (size == page_size) {
             return p;
-        else {
+        } else {
             page_size_slab_allocator_->deallocate(raw_pointer);
             ret = static_cast<uint8_t*>(std::malloc(size));
         }
@@ -272,8 +274,9 @@ template<class TracingPolicy, class ClockType>
 void AllocatorImpl<TracingPolicy, ClockType>::maybe_trim() {
     static const uint32_t trim_count = ConfigsMap::instance()->get_int("Allocator.TrimCount", 250);
     if (free_count_of<TracingPolicy, ClockType>().readFast() > trim_count &&
-        free_count_of<TracingPolicy, ClockType>().readFastAndReset() > trim_count)
+        free_count_of<TracingPolicy, ClockType>().readFastAndReset() > trim_count) {
         trim();
+    }
 }
 
 template<typename TracingPolicy, typename ClockType>
@@ -312,8 +315,9 @@ std::pair<uint8_t*, entity::timestamp> AllocatorImpl<TracingPolicy, ClockType>::
 
 template<class TracingPolicy, class ClockType>
 void AllocatorImpl<TracingPolicy, ClockType>::free(std::pair<uint8_t*, entity::timestamp> ptr) {
-    if (ptr.first == nullptr)
+    if (ptr.first == nullptr) {
         return;
+    }
 
     TracingPolicy::track_free(std::make_pair(uintptr_t(ptr.first), ptr.second));
     internal_free(ptr.first);

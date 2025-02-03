@@ -175,8 +175,9 @@ void LmdbStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor
             }
         }
     });
-    if (!failed_reads.empty())
+    if (!failed_reads.empty()) {
         throw KeyNotFoundException(Composite<VariantKey>(std::move(failed_reads)));
+    }
 }
 
 bool LmdbStorage::do_key_exists(const VariantKey& key) {
@@ -246,8 +247,9 @@ void LmdbStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) {
     ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
     txn.commit();
 
-    if (!failed_deletes.empty())
+    if (!failed_deletes.empty()) {
         throw KeyNotFoundException(Composite<VariantKey>(std::move(failed_deletes)));
+    }
 }
 
 bool LmdbStorage::do_fast_delete() {

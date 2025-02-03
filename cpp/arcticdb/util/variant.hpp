@@ -45,8 +45,9 @@ auto variant_match(Variant&& v, Ts... ts) {
             std::make_index_sequence<tuple_size>{}, std::forward<Variant>(v), ts...
         ); // For supporting tuple of variants, e.g. variant_match(std::make_tuple(std::variant<...>(...),
            // std::variant<...>(...)), [](auto &&a, auto &&b){...})
-    } else
+    } else {
         return std::visit(overload{ts...}, v);
+    }
 }
 
 template<class Variant, class... Ts>
@@ -55,8 +56,9 @@ auto variant_match(const Variant&& v, Ts... ts) {
         static constexpr auto tuple_size =
             std::tuple_size<std::remove_cv_t<std::remove_reference_t<decltype(v)>>>::value;
         return variant_match(std::make_index_sequence<tuple_size>{}, std::forward<Variant>(v), ts...);
-    } else
+    } else {
         return std::visit(overload{ts...}, v);
+    }
 }
 
 } // namespace arcticdb::util

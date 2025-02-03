@@ -31,8 +31,9 @@ inline void delete_keys_of_type_if(
         store->iterate_type(
             key_type,
             [predicate = std::forward<Predicate>(predicate), store = store, &keys](VariantKey&& key) {
-                if (predicate(key))
+                if (predicate(key)) {
                     keys.emplace_back(std::move(key));
+                }
 
                 if (keys.size() == delete_object_limit) {
                     store->remove_keys(keys).get();
@@ -42,13 +43,15 @@ inline void delete_keys_of_type_if(
             prefix
         );
 
-        if (!keys.empty())
+        if (!keys.empty()) {
             store->remove_keys(keys).get();
+        }
     } catch (const std::exception& ex) {
-        if (continue_on_error)
+        if (continue_on_error) {
             log::storage().warn("Caught exception {} trying to delete key, continuing", ex.what());
-        else
+        } else {
             throw;
+        }
     }
 }
 
@@ -64,16 +67,18 @@ inline void delete_keys_of_type_if_sync(
         store->iterate_type(
             key_type,
             [predicate = std::forward<Predicate>(predicate), store = store](VariantKey&& key) {
-                if (predicate(key))
+                if (predicate(key)) {
                     store->remove_key_sync(key);
+                }
             },
             prefix
         );
     } catch (const std::exception& ex) {
-        if (continue_on_error)
+        if (continue_on_error) {
             log::storage().warn("Caught exception {} trying to delete key, continuing", ex.what());
-        else
+        } else {
             throw;
+        }
     }
 }
 

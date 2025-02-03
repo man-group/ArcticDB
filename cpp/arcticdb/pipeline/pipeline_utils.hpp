@@ -20,8 +20,9 @@ namespace arcticdb::pipelines {
 
 inline void apply_type_handlers(SegmentInMemory seg, std::any& handler_data) {
     DecodePathData shared_data;
-    if (seg.empty())
+    if (seg.empty()) {
         return;
+    }
 
     for (auto i = 0U; i < seg.num_columns(); ++i) {
         auto& column = seg.column(i);

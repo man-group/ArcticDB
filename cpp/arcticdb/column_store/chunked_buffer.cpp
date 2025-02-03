@@ -100,8 +100,9 @@ ChunkedBufferImpl<BlockSize> truncate(const ChunkedBufferImpl<BlockSize>& input,
         log::version(), "Truncating buffer of size {} between bytes {} and {}", input.bytes(), start_byte, end_byte
     );
     const auto output_size = start_byte >= end_byte ? 0 : end_byte - start_byte;
-    if (input.num_blocks() == 0 || output_size == 0)
+    if (input.num_blocks() == 0 || output_size == 0) {
         return {};
+    }
 
     // This is trivially extendable to use presized_in_blocks, but there is no use case for this right now, and
     // copy_frame_data_to_buffer expects a contiguous buffer

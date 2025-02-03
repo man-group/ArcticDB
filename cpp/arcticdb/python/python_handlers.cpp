@@ -26,12 +26,14 @@ namespace arcticdb {
 
 static inline PyObject** fill_with_none(PyObject** ptr_dest, size_t count, SpinLock& spin_lock) {
     auto none = py::none();
-    for (auto i = 0U; i < count; ++i)
+    for (auto i = 0U; i < count; ++i) {
         *ptr_dest++ = none.ptr();
+    }
 
     spin_lock.lock();
-    for (auto i = 0U; i < count; ++i)
+    for (auto i = 0U; i < count; ++i) {
         none.inc_ref();
+    }
     spin_lock.unlock();
     return ptr_dest;
 }
@@ -54,8 +56,9 @@ void EmptyHandler::
     );
     static_assert(get_type_size(DataType::EMPTYVAL) == sizeof(PyObject*));
 
-    if (encoding_version == EncodingVersion::V2)
+    if (encoding_version == EncodingVersion::V2) {
         util::check_magic<ColumnMagic>(input);
+    }
 
     if (field.encoding_case() == EncodedFieldType::NDARRAY) {
         const auto& ndarray_field = field.ndarray();
@@ -329,8 +332,9 @@ void ArrayHandler::convert_type(
     const auto strides = static_cast<stride_t>(get_type_size(source_type_desc.data_type()));
     py::dtype py_dtype = generate_python_dtype(source_type_desc, strides);
 
-    if (source_column.empty())
+    if (source_column.empty()) {
         return;
+    }
 
     auto column_data = source_column.data();
     if (source_column.is_sparse()) {

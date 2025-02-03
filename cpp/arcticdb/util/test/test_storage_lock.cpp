@@ -120,10 +120,11 @@ struct PessimisticLockTask {
 
         for (auto i = size_t(0); i < data_->num_tests_; ++i) {
             try {
-                if (timeout_ms_)
+                if (timeout_ms_) {
                     lock.lock_timeout(data_->store_, *timeout_ms_);
-                else
+                } else {
                     lock.lock(data_->store_);
+                }
 
                 // As of C++20, '++' expression of 'volatile'-qualified type is deprecated.
                 const uint64_t vol_ = data_->vol_ + 1;
@@ -234,12 +235,14 @@ TEST(StorageLock, Timeouts) {
 }
 
 int count_occurrences(std::string search, std::string pattern) {
-    if (search.size() < pattern.size())
+    if (search.size() < pattern.size()) {
         return false;
+    }
     int count = 0;
     for (size_t pos = 0; pos <= search.size() - pattern.size(); pos++) {
-        if (search.substr(pos, pattern.size()) == pattern)
+        if (search.substr(pos, pattern.size()) == pattern) {
             count++;
+        }
     }
     return count;
 }

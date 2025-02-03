@@ -185,16 +185,18 @@ class InMemoryStore : public Store {
             key,
             [&](const RefKey& ref_key) {
                 auto it = seg_by_ref_key_.find(ref_key);
-                if (it == seg_by_ref_key_.end())
+                if (it == seg_by_ref_key_.end()) {
                     throw storage::KeyNotFoundException(Composite<VariantKey>(ref_key));
+                }
                 ARCTICDB_DEBUG(log::storage(), "Mock store returning ref key {}", ref_key);
                 std::pair<VariantKey, arcticdb::SegmentInMemory> res = {it->first, it->second->clone()};
                 return res;
             },
             [&](const AtomKey& atom_key) {
                 auto it = seg_by_atom_key_.find(atom_key);
-                if (it == seg_by_atom_key_.end())
+                if (it == seg_by_atom_key_.end()) {
                     throw storage::KeyNotFoundException(Composite<VariantKey>(atom_key));
+                }
                 ARCTICDB_DEBUG(log::storage(), "Mock store returning atom key {}", atom_key);
                 std::pair<VariantKey, arcticdb::SegmentInMemory> res = {it->first, it->second->clone()};
                 // seg_by_atom_key_.erase(it);
@@ -376,8 +378,9 @@ class InMemoryStore : public Store {
             [&](const AtomKey& ak) {
                 auto it = seg_by_atom_key_.find(ak);
                 // util::check_rte(it != seg_by_atom_key_.end(), "atom key {} not found in remove", ak);
-                if (it == seg_by_atom_key_.end())
+                if (it == seg_by_atom_key_.end()) {
                     throw storage::KeyNotFoundException(Composite<VariantKey>(ak));
+                }
                 ARCTICDB_DEBUG(log::storage(), "Mock store removing data for atom key {}", ak);
                 return std::make_pair(
                     std::make_optional<VariantKey>(key),
@@ -387,8 +390,9 @@ class InMemoryStore : public Store {
             [&](const RefKey& rk) {
                 auto it = seg_by_ref_key_.find(rk);
                 // util::check_rte(it != seg_by_ref_key_.end(), "ref key {} not found in remove", rk);
-                if (it == seg_by_ref_key_.end())
+                if (it == seg_by_ref_key_.end()) {
                     throw storage::KeyNotFoundException(Composite<VariantKey>(rk));
+                }
                 ARCTICDB_DEBUG(log::storage(), "Mock store removing data for ref key {}", rk);
                 return std::make_pair(
                     std::make_optional<VariantKey>(key),
@@ -405,8 +409,9 @@ class InMemoryStore : public Store {
             [&](const AtomKey& ak) {
                 auto it = seg_by_atom_key_.find(ak);
                 // util::check_rte(it != seg_by_atom_key_.end(), "atom key {} not found in remove", ak);
-                if (it == seg_by_atom_key_.end())
+                if (it == seg_by_atom_key_.end()) {
                     throw storage::KeyNotFoundException(Composite<VariantKey>(ak));
+                }
                 ARCTICDB_DEBUG(log::storage(), "Mock store removing data for atom key {}", ak);
                 return std::make_tuple(
                     key, std::make_optional<google::protobuf::Any>(*it->second->metadata()), it->second->descriptor()
@@ -415,8 +420,9 @@ class InMemoryStore : public Store {
             [&](const RefKey& rk) {
                 auto it = seg_by_ref_key_.find(rk);
                 // util::check_rte(it != seg_by_ref_key_.end(), "ref key {} not found in remove", rk);
-                if (it == seg_by_ref_key_.end())
+                if (it == seg_by_ref_key_.end()) {
                     throw storage::KeyNotFoundException(Composite<VariantKey>(rk));
+                }
                 ARCTICDB_DEBUG(log::storage(), "Mock store removing data for ref key {}", rk);
                 return std::make_tuple(
                     key, std::make_optional<google::protobuf::Any>(*it->second->metadata()), it->second->descriptor()
@@ -434,15 +440,17 @@ class InMemoryStore : public Store {
             key,
             [&](const AtomKey& ak) {
                 auto it = seg_by_atom_key_.find(ak);
-                if (it == seg_by_atom_key_.end())
+                if (it == seg_by_atom_key_.end()) {
                     throw storage::KeyNotFoundException(Composite<VariantKey>(ak));
+                }
                 ARCTICDB_DEBUG(log::storage(), "Mock store removing data for atom key {}", ak);
                 return std::make_pair(key, it->second->index_descriptor());
             },
             [&](const RefKey& rk) {
                 auto it = seg_by_ref_key_.find(rk);
-                if (it == seg_by_ref_key_.end())
+                if (it == seg_by_ref_key_.end()) {
                     throw storage::KeyNotFoundException(Composite<VariantKey>(rk));
+                }
                 ARCTICDB_DEBUG(log::storage(), "Mock store removing data for ref key {}", rk);
                 return std::make_pair(key, it->second->index_descriptor());
             }
@@ -457,8 +465,9 @@ class InMemoryStore : public Store {
             key,
             [&](const AtomKey& ak) {
                 auto it = seg_by_atom_key_.find(ak);
-                if (it == seg_by_atom_key_.end())
+                if (it == seg_by_atom_key_.end()) {
                     throw storage::KeyNotFoundException(Composite<VariantKey>(ak));
+                }
                 ARCTICDB_DEBUG(log::storage(), "Mock store read for atom key {}", ak);
                 auto tsd = it->second->index_descriptor();
                 tsd.set_stream_descriptor(it->second->descriptor());

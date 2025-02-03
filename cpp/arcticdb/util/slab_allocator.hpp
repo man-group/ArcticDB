@@ -93,8 +93,9 @@ class SlabAllocator {
 
     void deallocate(pointer p) noexcept {
         util::check(p != nullptr, "Received nullptr in SlabAllocator::deallocate");
-        if (!is_addr_in_slab(p))
+        if (!is_addr_in_slab(p)) {
             return;
+        }
         tagged_value_t curr_next_free_offset = next_free_offset_.load();
         tagged_value_t new_next_free_offset;
         do {
@@ -157,13 +158,15 @@ class SlabAllocator {
                 );
                 std::scoped_lock<std::mutex> lock(mutex_);
                 for (auto& cb : memory_full_cbs_) {
-                    if (cb.second)
+                    if (cb.second) {
                         (cb.first)();
+                    }
                 }
             }
         }
-        if (n / (float)capacity_ >= slab_deactivate_cb_cutoff)
+        if (n / (float)capacity_ >= slab_deactivate_cb_cutoff) {
             try_changing_cb(false);
+        }
     }
 
     bool try_changing_cb(bool activate) {

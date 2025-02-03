@@ -117,8 +117,9 @@ struct TestValue {
     }
 
     bool check(const ssize_t* shapes, const ssize_t* strides, const raw_type* data) const {
-        if (dimensions == Dimension::Dim0)
+        if (dimensions == Dimension::Dim0) {
             return data_[0] == *data;
+        }
 
         return check_impl(dimensions, 0, shapes, strides, data);
     }
@@ -129,10 +130,12 @@ struct TestValue {
         auto stride = strides_[size_t(dim) - 1] / sizeof(raw_type);
         for (int i = 0; i < +shape; ++i) {
             if (dim == Dimension(1)) {
-                if (data[pos + (i * stride)] != pos + i + start_val_)
+                if (data[pos + (i * stride)] != pos + i + start_val_) {
                     return false;
-            } else if (!check_impl(Dimension(size_t(dim) - 1), i * stride, shapes, strides, data))
+                }
+            } else if (!check_impl(Dimension(size_t(dim) - 1), i * stride, shapes, strides, data)) {
                 return false;
+            }
         }
         return true;
     }
@@ -158,8 +161,9 @@ struct TestRow {
           starts_(num_columns),
           values_() {
         std::iota(std::begin(starts_), std::end(starts_), start_val);
-        for (auto& s : starts_)
+        for (auto& s : starts_) {
             values_.emplace_back(TestValue<TDT>{s, num_vals});
+        }
         auto prev_size = bitset_.size();
         bitset_.resize(num_columns + 1);
         bitset_.set_range(prev_size, bitset_.size() - 1, true);

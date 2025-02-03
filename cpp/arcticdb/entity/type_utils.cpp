@@ -11,20 +11,24 @@
 
 namespace arcticdb {
 bool trivially_compatible_types(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right) {
-    if (left == right)
+    if (left == right) {
         return true;
+    }
 
     // Multidimensional types are pointers
-    if (left.dimension() >= entity::Dimension::Dim1 && right.dimension() >= entity::Dimension::Dim1)
+    if (left.dimension() >= entity::Dimension::Dim1 && right.dimension() >= entity::Dimension::Dim1) {
         return true;
+    }
 
     // Multidimensional types are pointers the empty type is pointer as well
-    if (left.dimension() >= entity::Dimension::Dim1 && is_empty_type(right.data_type()))
+    if (left.dimension() >= entity::Dimension::Dim1 && is_empty_type(right.data_type())) {
         return true;
+    }
 
     // Multidimensional types are pointers the empty type is pointer as well
-    if (right.dimension() >= entity::Dimension::Dim1 && is_empty_type(left.data_type()))
+    if (right.dimension() >= entity::Dimension::Dim1 && is_empty_type(left.data_type())) {
         return true;
+    }
 
     if (is_sequence_type(left.data_type()) && is_sequence_type(right.data_type())) {
         // TODO coercion of utf strings is not always safe, should allow safe conversion and reinstate the
@@ -49,13 +53,15 @@ std::optional<entity::TypeDescriptor> has_valid_type_promotion(
         // don't match), e.g. empty type can become int or array of ints. Empty type of higher dimension is used to
         // specify an empty array or an empty matrix, thus it cannot become any other type unless the dimensionality
         // matches
-        if (is_empty_type(source.data_type()) && source.dimension() == entity::Dimension::Dim0)
+        if (is_empty_type(source.data_type()) && source.dimension() == entity::Dimension::Dim0) {
             return target;
+        }
         return std::nullopt;
     }
 
-    if (source == target)
+    if (source == target) {
         return target;
+    }
 
     // Empty type is coercible to any type
     if (is_empty_type(source.data_type())) {
@@ -73,17 +79,20 @@ std::optional<entity::TypeDescriptor> has_valid_type_promotion(
     auto target_size = slice_bit_size(target_type);
 
     if (is_time_type(source_type)) {
-        if (!is_time_type(target_type))
+        if (!is_time_type(target_type)) {
             return std::nullopt;
+        }
     } else if (is_unsigned_type(source_type)) {
         if (is_unsigned_type(target_type)) {
             // UINT->UINT, target_size must be >= source_size
-            if (source_size > target_size)
+            if (source_size > target_size) {
                 return std::nullopt;
+            }
         } else if (is_signed_type(target_type)) {
             // UINT->INT, target_size must be > source_size
-            if (source_size >= target_size)
+            if (source_size >= target_size) {
                 return std::nullopt;
+            }
         } else if (is_floating_point_type(target_type)) {
             // UINT->FLOAT, no restrictions on relative sizes
         } else {
@@ -96,8 +105,9 @@ std::optional<entity::TypeDescriptor> has_valid_type_promotion(
             return std::nullopt;
         } else if (is_signed_type(target_type)) {
             // INT->INT, target_size must be >= source_size
-            if (source_size > target_size)
+            if (source_size > target_size) {
                 return std::nullopt;
+            }
         } else if (is_floating_point_type(target_type)) {
             // INT->FLOAT, no restrictions on relative sizes
         } else {
@@ -110,16 +120,18 @@ std::optional<entity::TypeDescriptor> has_valid_type_promotion(
             return std::nullopt;
         } else if (is_floating_point_type(target_type)) {
             // FLOAT->FLOAT, target_size must be >= source_size
-            if (source_size > target_size)
+            if (source_size > target_size) {
                 return std::nullopt;
+            }
         } else {
             // Non-numeric target type
             return std::nullopt;
         }
     } else if (is_sequence_type(source_type) && is_sequence_type(target_type)) {
         // Only allow promotion with UTF strings, and only to dynamic (never to fixed width)
-        if (!is_utf_type(source_type) || !is_utf_type(target_type) || !is_dynamic_string_type(target_type))
+        if (!is_utf_type(source_type) || !is_utf_type(target_type) || !is_dynamic_string_type(target_type)) {
             return std::nullopt;
+        }
     } else if (is_bool_object_type(source_type)) {
         return std::nullopt;
     } else {

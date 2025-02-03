@@ -106,8 +106,9 @@ std::vector<FrameSlice> HashedSlicer::operator()(const arcticdb::pipelines::Inpu
     std::vector<uint32_t> buckets;
     const auto [index_count, field_count] = get_index_and_field_count(frame);
 
-    for (auto i = index_count; i < field_count; ++i)
+    for (auto i = index_count; i < field_count; ++i) {
         buckets.push_back(bucketize(frame.desc.field(i).name(), num_buckets_));
+    }
 
     std::vector<size_t> indices(buckets.size());
     std::iota(std::begin(indices), std::end(indices), index_count);

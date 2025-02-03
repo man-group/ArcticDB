@@ -121,10 +121,11 @@ inline KeyType key_type_from_segment(const SegmentInMemory& seg, ssize_t row) {
 
 template<typename FieldType>
 inline StreamId stream_id_from_segment(const SegmentInMemory& seg, ssize_t row) {
-    if (const auto& fd = seg.descriptor()[int(FieldType::stream_id)]; is_sequence_type(fd.type().data_type()))
+    if (const auto& fd = seg.descriptor()[int(FieldType::stream_id)]; is_sequence_type(fd.type().data_type())) {
         return std::string(seg.string_at(row, int(FieldType::stream_id)).value());
-    else
+    } else {
         return seg.scalar_at<timestamp>(row, int(FieldType::stream_id)).value();
+    }
 }
 
 template<typename FieldType>
@@ -184,12 +185,14 @@ class KeyRangeIterator : public IndexRangeFilter {
 
     std::optional<typename KeyIt::value_type> next(folly::Duration) {
         while (true) {
-            if (current_ == key_rg_.end())
+            if (current_ == key_rg_.end()) {
                 return std::nullopt;
+            }
             auto res = *current_;
             ++current_;
-            if (key_within_index_range(res))
+            if (key_within_index_range(res)) {
                 return res; // TODO keep track of first / last case
+            }
         }
     }
 
@@ -262,10 +265,12 @@ std::optional<KeyMemSegmentPair> next_non_empty_segment(
     std::optional<KeyMemSegmentPair> ks_pair;
     while (!ks_pair) {
         ks_pair = std::move(iterator_segments.next(timeout));
-        if (!ks_pair)
+        if (!ks_pair) {
             return std::nullopt;
-        if (ks_pair->second.row_count() == 0)
+        }
+        if (ks_pair->second.row_count() == 0) {
             ks_pair.reset();
+        }
     }
     return ks_pair;
 }
@@ -287,15 +292,17 @@ class SegmentIterator : public IndexRangeFilter {
 
     std::optional<KeyMemSegmentPair> next(folly::Duration timeout) {
         while (true) {
-            if (prefetch_buffer_.empty())
+            if (prefetch_buffer_.empty()) {
                 return std::nullopt;
+            }
 
             auto res = std::move(prefetch_buffer_.front()).get(timeout);
             prefetch_buffer_.pop_front();
             enqueue_next_key_read_request(timeout);
 
-            if (key_within_index_range(to_atom(res.first)))
+            if (key_within_index_range(to_atom(res.first))) {
                 return std::make_optional(std::move(res));
+            }
         }
     }
 
@@ -337,16 +344,18 @@ class KeysFromSegIterator : public IndexRangeFilter {
 
     std::optional<entity::AtomKey> next(folly::Duration timeout) {
         while (true) {
-            if (!key_seg_ && !(row_id = 0, key_seg_ = next_non_empty_segment(seg_it_, timeout)))
+            if (!key_seg_ && !(row_id = 0, key_seg_ = next_non_empty_segment(seg_it_, timeout))) {
                 return std::nullopt;
+            }
 
             auto val = read_key_row(key_seg_->second, row_id);
             ++row_id;
             if (row_id == key_seg_.value().second.row_count()) {
                 key_seg_ = std::nullopt;
             }
-            if (key_within_index_range(val))
+            if (key_within_index_range(val)) {
                 return std::optional<entity::AtomKey>{val};
+            }
         }
     }
 
@@ -389,14 +398,16 @@ inline std::vector<std::string> get_index_columns_from_descriptor(const Timeseri
     ssize_t index_till;
     const auto& common = norm_info.df().common();
     if (auto idx_type = common.index_type_case();
-        idx_type == arcticdb::proto::descriptors::NormalizationMetadata_Pandas::kIndex)
+        idx_type == arcticdb::proto::descriptors::NormalizationMetadata_Pandas::kIndex) {
         index_till = common.index().is_physically_stored() ? 1 : stream_descriptor.index().field_count();
-    else
+    } else {
         index_till = 1 + common.multi_index().field_count(); // # The value of field_count is len(index) - 1
+    }
 
     std::vector<std::string> index_columns;
-    for (auto field_idx = 0; field_idx < index_till; ++field_idx)
+    for (auto field_idx = 0; field_idx < index_till; ++field_idx) {
         index_columns.emplace_back(std::string{stream_descriptor.fields(field_idx).name()});
+    }
 
     return index_columns;
 }

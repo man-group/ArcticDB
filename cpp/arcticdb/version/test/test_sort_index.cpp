@@ -41,8 +41,9 @@ TEST(SortIndex, Basic) {
     TimeseriesDescriptor timeseries_desc;
     timeseries_desc.set_stream_descriptor(desc);
     index::IndexWriter<stream::RowCountIndex> index_writer(mock_store, partial_key, std::move(timeseries_desc));
-    for (const auto& [maybe_seg, slice, key] : keys_and_slices)
+    for (const auto& [maybe_seg, slice, key] : keys_and_slices) {
         index_writer.add_unchecked(*key, slice);
+    }
 
     auto key_fut = index_writer.commit();
     auto index_key = std::move(key_fut).get();
@@ -85,8 +86,9 @@ TEST(SortIndex, Nonzero) {
     TimeseriesDescriptor timeseries_desc;
     timeseries_desc.set_stream_descriptor(desc);
     index::IndexWriter<stream::RowCountIndex> index_writer(mock_store, partial_key, std::move(timeseries_desc));
-    for (const auto& [maybe_seg, slice, key] : keys_and_slices)
+    for (const auto& [maybe_seg, slice, key] : keys_and_slices) {
         index_writer.add_unchecked(*key, slice);
+    }
 
     auto key_fut = index_writer.commit();
     auto index_key = std::move(key_fut).get();

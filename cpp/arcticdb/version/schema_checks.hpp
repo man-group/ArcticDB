@@ -113,15 +113,17 @@ inline bool columns_match(const StreamDescriptor& df_in_store_descriptor, const 
     // In case the left index is empty index we want to skip name/type checking of the index fields which are always
     // the first fields.
     for (auto i = 0; i < int(df_in_store_descriptor.fields().size()); ++i) {
-        if (df_in_store_descriptor.fields(i).name() != new_df_descriptor.fields(i + index_field_size).name())
+        if (df_in_store_descriptor.fields(i).name() != new_df_descriptor.fields(i + index_field_size).name()) {
             return false;
+        }
 
         const TypeDescriptor& left_type = df_in_store_descriptor.fields(i).type();
         const TypeDescriptor& right_type = new_df_descriptor.fields(i + index_field_size).type();
 
         if (!trivially_compatible_types(left_type, right_type) &&
-            !(is_empty_type(left_type.data_type()) || is_empty_type(right_type.data_type())))
+            !(is_empty_type(left_type.data_type()) || is_empty_type(right_type.data_type()))) {
             return false;
+        }
     }
     return true;
 }

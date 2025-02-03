@@ -154,8 +154,9 @@ std::string LibraryTool::get_key_path(const VariantKey& key) { return async_stor
 
 std::optional<std::string> LibraryTool::inspect_env_variable(std::string name) {
     auto value = getenv(name.c_str());
-    if (value == nullptr)
+    if (value == nullptr) {
         return std::nullopt;
+    }
     return std::string(value);
 }
 

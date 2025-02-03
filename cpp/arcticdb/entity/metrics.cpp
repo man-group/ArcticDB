@@ -140,8 +140,9 @@ void PrometheusInstance::registerMetric(
 }
 
 void PrometheusInstance::incrementCounter(const std::string& name, double value, const Labels& labels) {
-    if (registry_.use_count() == 0)
+    if (registry_.use_count() == 0) {
         return;
+    }
 
     std::scoped_lock lock{metrics_mutex_};
     if (const auto it = map_counter_.find(name); it != map_counter_.end()) {
@@ -154,8 +155,9 @@ void PrometheusInstance::incrementCounter(const std::string& name, double value,
 }
 
 void PrometheusInstance::incrementCounter(const std::string& name, const Labels& labels) {
-    if (registry_.use_count() == 0)
+    if (registry_.use_count() == 0) {
         return;
+    }
 
     std::scoped_lock lock{metrics_mutex_};
     if (const auto it = map_counter_.find(name); it != map_counter_.end()) {
@@ -168,8 +170,9 @@ void PrometheusInstance::incrementCounter(const std::string& name, const Labels&
 }
 
 void PrometheusInstance::setGauge(const std::string& name, double value, const Labels& labels) {
-    if (registry_.use_count() == 0)
+    if (registry_.use_count() == 0) {
         return;
+    }
 
     std::scoped_lock lock{metrics_mutex_};
     if (const auto it = map_gauge_.find(name); it != map_gauge_.end()) {
@@ -182,8 +185,9 @@ void PrometheusInstance::setGauge(const std::string& name, double value, const L
 }
 
 void PrometheusInstance::setGaugeCurrentTime(const std::string& name, const Labels& labels) {
-    if (registry_.use_count() == 0)
+    if (registry_.use_count() == 0) {
         return;
+    }
 
     std::scoped_lock lock{metrics_mutex_};
     if (const auto it = map_gauge_.find(name); it != map_gauge_.end()) {
@@ -196,8 +200,9 @@ void PrometheusInstance::setGaugeCurrentTime(const std::string& name, const Labe
 }
 
 void PrometheusInstance::observeHistogram(const std::string& name, double value, const Labels& labels) {
-    if (registry_.use_count() == 0)
+    if (registry_.use_count() == 0) {
         return;
+    }
 
     std::scoped_lock lock{metrics_mutex_};
     if (const auto it = map_histogram_.find(name); it != map_histogram_.end()) {
@@ -210,8 +215,9 @@ void PrometheusInstance::observeHistogram(const std::string& name, double value,
 }
 
 void PrometheusInstance::observeSummary(const std::string& name, double value, const Labels& labels) {
-    if (registry_.use_count() == 0)
+    if (registry_.use_count() == 0) {
         return;
+    }
 
     std::scoped_lock lock{metrics_mutex_};
     if (const auto it = map_summary_.find(name); it != map_summary_.end()) {

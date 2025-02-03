@@ -36,27 +36,32 @@ void modify_descriptor(
     const ReadOptions& read_options
 ) {
 
-    if (opt_false(read_options.force_strings_to_object_) || opt_false(read_options.force_strings_to_fixed_))
+    if (opt_false(read_options.force_strings_to_object_) || opt_false(read_options.force_strings_to_fixed_)) {
         pipeline_context->orig_desc_ = pipeline_context->desc_;
+    }
 
     auto& desc = *pipeline_context->desc_;
     if (opt_false(read_options.force_strings_to_object_)) {
         auto& fields = desc.fields();
         for (Field& field_desc : fields) {
-            if (field_desc.type().data_type() == DataType::ASCII_FIXED64)
+            if (field_desc.type().data_type() == DataType::ASCII_FIXED64) {
                 set_data_type(DataType::ASCII_DYNAMIC64, field_desc.mutable_type());
+            }
 
-            if (field_desc.type().data_type() == DataType::UTF_FIXED64)
+            if (field_desc.type().data_type() == DataType::UTF_FIXED64) {
                 set_data_type(DataType::UTF_DYNAMIC64, field_desc.mutable_type());
+            }
         }
     } else if (opt_false(read_options.force_strings_to_fixed_)) {
         auto& fields = desc.fields();
         for (Field& field_desc : fields) {
-            if (field_desc.type().data_type() == DataType::ASCII_DYNAMIC64)
+            if (field_desc.type().data_type() == DataType::ASCII_DYNAMIC64) {
                 set_data_type(DataType::ASCII_FIXED64, field_desc.mutable_type());
+            }
 
-            if (field_desc.type().data_type() == DataType::UTF_DYNAMIC64)
+            if (field_desc.type().data_type() == DataType::UTF_DYNAMIC64) {
                 set_data_type(DataType::UTF_FIXED64, field_desc.mutable_type());
+            }
         }
     }
 }
@@ -93,8 +98,9 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     bool validate_index
 ) {
     ARCTICDB_SAMPLE(DoWrite, 0)
-    if (version_id == 0)
+    if (version_id == 0) {
         verify_symbol_key(frame->desc.id());
+    }
     // Slice the frame according to the write options
     frame->set_bucketize_dynamic(options.bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);
@@ -109,16 +115,17 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
 
 namespace {
 IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, const IndexDescriptorImpl& desc) {
-    if (std::holds_alternative<stream::TimeseriesIndex>(index))
+    if (std::holds_alternative<stream::TimeseriesIndex>(index)) {
         util::check(
             desc.type() == IndexDescriptor::Type::TIMESTAMP || desc.type() == IndexDescriptor::Type::EMPTY,
             "Index mismatch, cannot update a non-timeseries-indexed frame with a timeseries"
         );
-    else
+    } else {
         util::check(
             desc.type() == IndexDescriptorImpl::Type::ROWCOUNT,
             "Index mismatch, cannot update a timeseries with a non-timeseries-indexed frame"
         );
+    }
 
     return desc;
 }
@@ -240,8 +247,9 @@ inline std::pair<std::vector<SliceAndKey>, std::vector<SliceAndKey>> intersectin
             auto front_overlap_key = rewrite_partial_segment(
                 affected_slice_and_key, front_range, version_id, AffectedSegmentPart::START, store
             );
-            if (front_overlap_key)
+            if (front_overlap_key) {
                 intersect_before.push_back(*front_overlap_key);
+            }
         }
 
         if (intersects(affected_range, back_range) && !overlaps(affected_range, back_range) &&
@@ -249,8 +257,9 @@ inline std::pair<std::vector<SliceAndKey>, std::vector<SliceAndKey>> intersectin
             auto back_overlap_key = rewrite_partial_segment(
                 affected_slice_and_key, back_range, version_id, AffectedSegmentPart::END, store
             );
-            if (back_overlap_key)
+            if (back_overlap_key) {
                 intersect_after.push_back(*back_overlap_key);
+            }
         }
     }
     return std::make_pair(std::move(intersect_before), std::move(intersect_after));
@@ -913,14 +922,16 @@ SegmentInMemory read_direct(
 void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc) {
     if (read_query.columns.has_value()) {
         auto index_columns = stream::get_index_columns_from_descriptor(desc);
-        if (index_columns.empty())
+        if (index_columns.empty()) {
             return;
+        }
 
         std::vector<std::string> index_columns_to_add;
         for (const auto& index_column : index_columns) {
             if (std::find(std::begin(*read_query.columns), std::end(*read_query.columns), index_column) ==
-                std::end(*read_query.columns))
+                std::end(*read_query.columns)) {
                 index_columns_to_add.emplace_back(index_column);
+            }
         }
         read_query.columns->insert(
             std::begin(*read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add)
@@ -993,8 +1004,9 @@ void read_indexed_keys_to_pipeline(
     const ReadOptions& read_options
 ) {
     auto maybe_reader = get_index_segment_reader(store, pipeline_context, version_info);
-    if (!maybe_reader)
+    if (!maybe_reader) {
         return;
+    }
 
     auto index_segment_reader = std::move(*maybe_reader);
     ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", index_segment_reader.size());
@@ -1040,8 +1052,9 @@ bool read_incompletes_to_pipeline(
         store, pipeline_context->stream_id_, read_query.row_filter, pipeline_context->last_row(), via_iteration, false
     );
 
-    if (incomplete_segments.empty())
+    if (incomplete_segments.empty()) {
         return false;
+    }
 
     // In order to have the right normalization metadata and descriptor we need to find the first non-empty segment.
     // Picking an empty segment when there are non-empty ones will impact the index type and column namings.
@@ -1340,8 +1353,9 @@ struct CopyToBufferTask : async::BaseTask {
             const auto& field = fields.at(field_col);
             const auto& field_name = field.name();
             auto frame_loc_opt = target_segment_.column_index(field_name);
-            if (!frame_loc_opt)
+            if (!frame_loc_opt) {
                 continue;
+            }
 
             copy_frame_data_to_buffer(
                 target_segment_,
@@ -1605,8 +1619,9 @@ VersionedItem collate_and_write(
     tsd.set_total_rows(pipeline_context->total_rows_);
     auto& tsd_proto = tsd.mutable_proto();
     tsd_proto.mutable_normalization()->CopyFrom(*pipeline_context->norm_meta_);
-    if (user_meta)
+    if (user_meta) {
         tsd_proto.mutable_user_meta()->CopyFrom(*user_meta);
+    }
 
     auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
     return util::variant_match(index, [&store, &pipeline_context, &slices, &keys, &append_after, &tsd](auto idx) {
@@ -1622,8 +1637,9 @@ VersionedItem collate_and_write(
             std::distance(std::begin(pipeline_context->slice_and_keys_), end),
             keys.size()
         );
-        for (auto sk = std::begin(pipeline_context->slice_and_keys_); sk < end; ++sk)
+        for (auto sk = std::begin(pipeline_context->slice_and_keys_); sk < end; ++sk) {
             writer.add(sk->key(), sk->slice());
+        }
 
         for (auto key : folly::enumerate(keys)) {
             writer.add(to_atom(*key), slices[key.index]);
@@ -1952,17 +1968,20 @@ PredefragmentationInfo get_pre_defragmentation_info(
     for (auto it = slice_and_keys.begin(); it != slice_and_keys.end(); ++it) {
         auto& slice = it->slice();
 
-        if (slice.row_range.diff() < segment_size && !compaction_start_info)
+        if (slice.row_range.diff() < segment_size && !compaction_start_info) {
             compaction_start_info = {slice.row_range.start(), segment_idx};
+        }
 
         if (slice.col_range.start() ==
             pipeline_context->descriptor().index().field_count()) { // where data column starts
             first_col_segment_idx.emplace_back(slice.row_range.start(), segment_idx);
-            if (new_segment_row_size == 0)
+            if (new_segment_row_size == 0) {
                 ++num_to_segments_after_compact;
+            }
             new_segment_row_size += slice.row_range.diff();
-            if (new_segment_row_size >= segment_size)
+            if (new_segment_row_size >= segment_size) {
                 new_segment_row_size = 0;
+            }
         }
         ++segment_idx;
         if (compaction_start_info && slice.row_range.start() < compaction_start_info->first) {
@@ -1972,9 +1991,9 @@ PredefragmentationInfo get_pre_defragmentation_info(
                 slice.row_range.start(),
                 [](auto lhs, auto rhs) { return lhs.first < rhs; }
             );
-            if (start_point != first_col_segment_idx.end())
+            if (start_point != first_col_segment_idx.end()) {
                 compaction_start_info = *start_point;
-            else {
+            } else {
                 log::version().warn(
                     "Missing segment containing column 0 for row {}; Resetting compaction starting point to 0",
                     slice.row_range.start()
@@ -2106,7 +2125,7 @@ FrameAndDescriptor read_frame_for_version(
         );
         const auto& query_range = std::get<IndexRange>(read_query.row_filter);
         const auto existing_range = pipeline_context->index_range();
-        if (!existing_range.specified_ || query_range.end_ > existing_range.end_)
+        if (!existing_range.specified_ || query_range.end_ > existing_range.end_) {
             read_incompletes_to_pipeline(
                 store,
                 pipeline_context,
@@ -2117,6 +2136,7 @@ FrameAndDescriptor read_frame_for_version(
                 false,
                 opt_false(read_options.dynamic_schema_)
             );
+        }
     }
 
     if (std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {

@@ -110,8 +110,9 @@ class EncodedFieldCollection {
     [[nodiscard]] size_t size() const { return offsets_.bytes() / sizeof(uint64_t); }
 
     void regenerate_offsets() {
-        if (!offsets_.empty())
+        if (!offsets_.empty()) {
             return;
+        }
 
         auto pos = 0UL;
         count_ = 0UL;

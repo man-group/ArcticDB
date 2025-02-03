@@ -18,8 +18,9 @@ FrameSlice::FrameSlice(const SegmentInMemory& seg)
       desc_(std::make_shared<entity::StreamDescriptor>(seg.descriptor())) {}
 
 void SliceAndKey::ensure_segment(const std::shared_ptr<Store>& store) const {
-    if (!segment_)
+    if (!segment_) {
         segment_ = store->read(*key_).get().second;
+    }
 }
 
 SegmentInMemory& SliceAndKey::segment(const std::shared_ptr<Store>& store) {

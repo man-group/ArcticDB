@@ -13,8 +13,9 @@ namespace arcticdb {
 
 FieldCollection fields_from_proto(const arcticdb::proto::descriptors::StreamDescriptor& desc) {
     FieldCollection output;
-    for (const auto& field : desc.fields())
+    for (const auto& field : desc.fields()) {
         output.add_field(type_desc_from_proto(field.type_desc()), field.name());
+    }
 
     return output;
 }

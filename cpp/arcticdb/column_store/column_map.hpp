@@ -64,9 +64,9 @@ class ColumnMap {
 
     std::optional<std::size_t> column_index(std::string_view name) {
         auto it = column_offsets_.find(name);
-        if (it != column_offsets_.end())
+        if (it != column_offsets_.end()) {
             return it->second;
-        else {
+        } else {
             ARCTICDB_TRACE(log::version(), "Column {} not found in map of size {}", name, column_offsets_.size());
             return std::nullopt;
         }

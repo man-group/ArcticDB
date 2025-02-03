@@ -149,8 +149,9 @@ std::shared_ptr<VersionMapEntry> build_version_map_entry_with_predicate_iteratio
             key_type,
             [&predicate, &read_keys, &store, &output, &perform_read_segment_with_keys](VariantKey&& vk) {
                 const auto& key = to_atom(std::move(vk));
-                if (!predicate(key))
+                if (!predicate(key)) {
                     return;
+                }
 
                 read_keys.push_back(key);
                 ARCTICDB_DEBUG(log::storage(), "Version map iterating key {}", key);
@@ -171,8 +172,9 @@ std::shared_ptr<VersionMapEntry> build_version_map_entry_with_predicate_iteratio
         // output->head_ isnt populated in this case
         return output;
     } else {
-        if (output->keys_.empty())
+        if (output->keys_.empty()) {
             return output;
+        }
         util::check(!read_keys.empty(), "Expected there to be some read keys");
         auto latest_key =
             std::max_element(std::begin(read_keys), std::end(read_keys), [](const auto& left, const auto& right) {
@@ -222,8 +224,9 @@ inline void write_symbol_ref(
 ) {
     check_is_index_or_tombstone(latest_index);
     check_is_version(journal_key);
-    if (previous_key)
+    if (previous_key) {
         check_is_index_or_tombstone(*previous_key);
+    }
 
     ARCTICDB_DEBUG(
         log::version(), "Version map writing symbol ref for latest index: {} journal key {}", latest_index, journal_key
@@ -234,8 +237,9 @@ inline void write_symbol_ref(
         store->write_sync(KeyType::VERSION_REF, latest_index.id(), std::move(segment));
     });
     ref_agg.add_key(latest_index);
-    if (previous_key && is_index_key_type(latest_index.type()))
+    if (previous_key && is_index_key_type(latest_index.type())) {
         ref_agg.add_key(*previous_key);
+    }
 
     ref_agg.add_key(journal_key);
     ref_agg.commit();
@@ -265,9 +269,10 @@ inline bool continue_when_loading_version(
     const LoadProgress& load_progress,
     const std::optional<VersionId>& latest_version
 ) {
-    if (!load_strategy.load_until_version_)
+    if (!load_strategy.load_until_version_) {
         // Should continue when not loading down to a version
         return true;
+    }
 
     if (is_positive_version_query(load_strategy)) {
         if (load_progress.oldest_loaded_index_version_ > static_cast<VersionId>(*load_strategy.load_until_version_)) {
@@ -303,23 +308,26 @@ inline void set_latest_version(
 ) {
     if (!latest_version) {
         auto latest = entry->get_first_index(true).first;
-        if (latest)
+        if (latest) {
             latest_version = latest->version_id();
+        }
     }
 }
 
 static constexpr timestamp nanos_to_seconds(timestamp nanos) { return nanos / timestamp(10000000000); }
 
 inline bool continue_when_loading_from_time(const LoadStrategy& load_strategy, const LoadProgress& load_progress) {
-    if (!load_strategy.load_from_time_)
+    if (!load_strategy.load_from_time_) {
         return true;
+    }
 
     auto loaded_deleted_or_undeleted_timestamp = load_strategy.should_include_deleted()
                                                      ? load_progress.earliest_loaded_timestamp_
                                                      : load_progress.earliest_loaded_undeleted_timestamp_;
 
-    if (loaded_deleted_or_undeleted_timestamp > *load_strategy.load_from_time_)
+    if (loaded_deleted_or_undeleted_timestamp > *load_strategy.load_from_time_) {
         return true;
+    }
 
     ARCTICDB_DEBUG(
         log::version(),
@@ -335,8 +343,9 @@ inline bool continue_when_loading_latest(
     const std::shared_ptr<VersionMapEntry>& entry
 ) {
     if (!(load_strategy.load_type_ == LoadType::LATEST &&
-          entry->get_first_index(load_strategy.should_include_deleted()).first))
+          entry->get_first_index(load_strategy.should_include_deleted()).first)) {
         return true;
+    }
 
     ARCTICDB_DEBUG(
         log::version(),
@@ -391,11 +400,13 @@ inline bool key_exists_in_ref_entry(
 ) {
     // The 3 item ref key bypass can be used only when we are loading undeleted versions
     // because otherwise it might skip versions that are deleted but part of snapshots
-    if (load_strategy.load_objective_ != LoadObjective::UNDELETED_ONLY)
+    if (load_strategy.load_objective_ != LoadObjective::UNDELETED_ONLY) {
         return false;
+    }
 
-    if (load_strategy.load_type_ == LoadType::LATEST && is_index_key_type(ref_entry.keys_[0].type()))
+    if (load_strategy.load_type_ == LoadType::LATEST && is_index_key_type(ref_entry.keys_[0].type())) {
         return true;
+    }
 
     if (cached_penultimate_key && is_partial_load_type(load_strategy.load_type_)) {
         load_strategy.validate();

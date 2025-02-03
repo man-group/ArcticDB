@@ -36,8 +36,9 @@ struct TypedBlockData {
         TypedColumnBlockIterator() : ptr_(nullptr) {}
 
         TypedColumnBlockIterator& operator=(const TypedColumnBlockIterator& other) {
-            if (&other != this)
+            if (&other != this) {
                 ptr_ = other.ptr_;
+            }
 
             return *this;
         }
@@ -339,8 +340,9 @@ struct ColumnData {
     std::optional<TypedBlockData<TDT>> next() {
         MemBlock* block = nullptr;
         do {
-            if (pos_ == num_blocks())
+            if (pos_ == num_blocks()) {
                 return std::nullopt;
+            }
 
             block = data_->blocks().at(pos_++);
         } while (!block);
@@ -350,8 +352,9 @@ struct ColumnData {
 
     template<typename TDT>
     std::optional<TypedBlockData<TDT>> last() {
-        if (data_->blocks().empty())
+        if (data_->blocks().empty()) {
             return std::nullopt;
+        }
 
         pos_ = num_blocks() - 1;
         auto block = data_->blocks().at(pos_);

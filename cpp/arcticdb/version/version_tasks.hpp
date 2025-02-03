@@ -86,10 +86,11 @@ struct AsyncRestoreVersionTask : async::BaseTask {
             auto sk = std::make_shared<std::vector<SliceAndKey>>(std::move(slice_and_keys));
             auto version_id = get_next_version_from_key(maybe_prev_);
             std::vector<folly::Future<VariantKey>> fut_keys;
-            for (const auto& slice_and_key : *sk)
+            for (const auto& slice_and_key : *sk) {
                 fut_keys.emplace_back(
                     store_->copy(slice_and_key.key().type(), stream_id_, version_id, slice_and_key.key())
                 );
+            }
 
             return folly::collect(fut_keys)
                 .via(&async::io_executor())

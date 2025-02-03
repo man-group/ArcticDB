@@ -151,8 +151,9 @@ class DynamicStringReducer {
         for (auto& pair : unique_counts) {
             auto offset = pair.first;
 
-            if (auto it = shared_map.find(get_string_from_pool(offset, string_pool)); it != shared_map.end())
+            if (auto it = shared_map.find(get_string_from_pool(offset, string_pool)); it != shared_map.end()) {
                 output.try_emplace(offset, it->second);
+            }
         }
         return output;
     }
@@ -179,8 +180,9 @@ class DynamicStringReducer {
                     }
 
                     allocated.try_emplace(offset, obj);
-                    for (auto c = 0U; c < count; ++c)
+                    for (auto c = 0U; c < count; ++c) {
                         inc_ref(obj);
+                    }
                 }
             }
         }
@@ -206,8 +208,9 @@ class DynamicStringReducer {
             for (const auto& [offset, count] : unique_counts) {
                 const auto sv = get_string_from_pool(offset, string_pool);
                 auto obj = StringCreator::create(sv, has_type_conversion);
-                for (auto c = 0U; c < count; ++c)
+                for (auto c = 0U; c < count; ++c) {
                     inc_ref(obj);
+                }
 
                 py_strings.insert(std::make_pair(offset, obj));
             }
@@ -217,8 +220,9 @@ class DynamicStringReducer {
 
     void increment_none_refcount(size_t none_count, py::none& none) {
         std::lock_guard lock(handler_data_.spin_lock());
-        for (auto i = 0u; i < none_count; ++i)
+        for (auto i = 0u; i < none_count; ++i) {
             Py_INCREF(none.ptr());
+        }
     }
 
     void increment_none_refcount(size_t none_count, std::unique_ptr<py::none>& none) {
@@ -228,8 +232,9 @@ class DynamicStringReducer {
 
     void increment_nan_refcount(size_t none_count) {
         std::lock_guard lock(handler_data_.spin_lock());
-        for (auto i = 0u; i < none_count; ++i)
+        for (auto i = 0u; i < none_count; ++i) {
             handler_data_.py_nan_->inc_ref();
+        }
     }
 
     std::pair<size_t, size_t> write_strings_to_column_dense(
@@ -312,10 +317,11 @@ class DynamicStringReducer {
         const std::optional<util::BitSet>& bitset,
         bool optimize_for_memory
     ) {
-        if (optimize_for_memory)
+        if (optimize_for_memory) {
             assign_strings_shared<StringCreator>(num_rows, source_column, has_type_conversion, string_pool, bitset);
-        else
+        } else {
             assign_strings_local<StringCreator>(num_rows, source_column, has_type_conversion, string_pool, bitset);
+        }
     }
 };
 

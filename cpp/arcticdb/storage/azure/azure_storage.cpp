@@ -206,8 +206,9 @@ void do_read_impl(
                 }
             }
         });
-    if (!failed_reads.empty())
+    if (!failed_reads.empty()) {
         throw KeyNotFoundException(Composite<VariantKey>{std::move(failed_reads)});
+    }
 }
 
 template<class KeyBucketizer>
@@ -400,8 +401,9 @@ AzureStorage::AzureStorage(const LibraryPath& library_path, OpenMode mode, const
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Azure prefix found, using: {}", conf.prefix());
         auto prefix_path = LibraryPath::from_delim_path(conf.prefix(), '.');
         root_folder_ = object_store_utils::get_root_folder(prefix_path);
-    } else
+    } else {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Azure prefix not found, will use {}", root_folder_);
+    }
     unsigned int max_connections = conf.max_connections() == 0
                                        ? ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", 16)
                                        : conf.max_connections();

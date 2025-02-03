@@ -62,8 +62,9 @@ class Storages {
 
     auto read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts, bool primary_only = true) {
         ARCTICDB_RUNTIME_SAMPLE(StoragesRead, 0)
-        if (primary_only)
+        if (primary_only) {
             return primary().read(std::move(ks), visitor, opts);
+        }
 
         if (auto rg = ks.as_range(); !std::all_of(std::begin(rg), std::end(rg), [](const auto& vk) {
                 return variant_key_type(vk) == KeyType::TABLE_DATA;

@@ -149,8 +149,9 @@ class Segment {
     }
 
     [[nodiscard]] std::size_t calculate_size() {
-        if (!size_.has_value())
+        if (!size_.has_value()) {
             size_ = FIXED_HEADER_SIZE + segment_header_bytes_size() + buffer_bytes();
+        }
 
         return *size_;
     }
@@ -167,8 +168,9 @@ class Segment {
         if (header_.encoding_version() == EncodingVersion::V1) {
             generate_header_proto();
             return proto_size();
-        } else
+        } else {
             return header_.bytes();
+        }
     }
 
     [[nodiscard]] std::size_t buffer_bytes() const { return buffer_.bytes(); }
@@ -197,8 +199,9 @@ class Segment {
     // For external language tools, not efficient
     [[nodiscard]] std::vector<std::string_view> fields_vector() const {
         std::vector<std::string_view> fields;
-        for (const auto& field : desc_.fields())
+        for (const auto& field : desc_.fields()) {
             fields.push_back(field.name());
+        }
 
         return fields;
     }

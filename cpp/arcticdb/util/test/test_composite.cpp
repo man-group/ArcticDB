@@ -34,12 +34,14 @@ TEST(Composite, TestFold) {
 TEST(Composite, IterationSimple) {
     using namespace arcticdb;
     Composite<int> comp;
-    for (auto i = 0; i < 10; ++i)
+    for (auto i = 0; i < 10; ++i) {
         comp.push_back(i);
+    }
 
     int expected = 0;
-    for (auto x : comp.as_range())
+    for (auto x : comp.as_range()) {
         ASSERT_EQ(x, expected++);
+    }
 }
 
 TEST(Composite, Empty) {

@@ -22,8 +22,9 @@ using namespace arcticdb::entity;
 template<class T, template<class> class Tensor>
 inline bool has_funky_strides(Tensor<T>& a) {
     for (ssize_t i = 0; i < a.ndim(); ++i) {
-        if (a.strides(i) < 0 || a.strides(i) % a.itemsize() != 0)
+        if (a.strides(i) < 0 || a.strides(i) % a.itemsize() != 0) {
             return true;
+        }
     }
     return false;
 }
@@ -31,8 +32,9 @@ inline bool has_funky_strides(Tensor<T>& a) {
 template<class T>
 inline bool has_funky_strides(py::array_t<T>& a) {
     for (ssize_t i = 0; i < a.ndim(); ++i) {
-        if (a.strides(i) < 0 || a.strides(i) % a.itemsize() != 0)
+        if (a.strides(i) < 0 || a.strides(i) % a.itemsize() != 0) {
             return true;
+        }
     }
     return false;
 }

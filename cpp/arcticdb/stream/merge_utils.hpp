@@ -55,8 +55,9 @@ inline void merge_string_columns(
         auto& frame_field = segment.field(c);
         const auto& field_type = frame_field.type();
 
-        if (!is_sequence_type(field_type.data_type_))
+        if (!is_sequence_type(field_type.data_type_)) {
             continue;
+        }
 
         auto& src = segment.column(static_cast<position_t>(c)).data().buffer();
         CursoredBuffer<ChunkedBuffer> cursor{src.bytes(), AllocationType::DYNAMIC};

@@ -87,8 +87,9 @@ class SegmentInMemoryImpl {
                 parent_->descriptor().field(column_id_),
                 [this, c = std::forward<Callable>(c)](auto type_desc_tag) {
                     using DTT = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag;
-                    if constexpr (is_sequence_type(DTT::data_type))
+                    if constexpr (is_sequence_type(DTT::data_type)) {
                         return c(parent_->string_at(row_id_, position_t(column_id_)));
+                    }
                 }
             );
         }
@@ -99,20 +100,21 @@ class SegmentInMemoryImpl {
             return entity::visit_field(field, [&field, this, c = std::forward<Callable>(c)](auto type_desc_tag) {
                 using DataTypeTag = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag;
                 using RawType = typename DataTypeTag::raw_type;
-                if constexpr (is_sequence_type(DataTypeTag::data_type))
+                if constexpr (is_sequence_type(DataTypeTag::data_type)) {
                     return c(
                         parent_->string_at(row_id_, position_t(column_id_)),
                         std::string_view{field.name()},
                         type_desc_tag
                     );
-                else if constexpr (is_numeric_type(DataTypeTag::data_type) || is_bool_type(DataTypeTag::data_type))
+                } else if constexpr (is_numeric_type(DataTypeTag::data_type) || is_bool_type(DataTypeTag::data_type)) {
                     return c(
                         parent_->scalar_at<RawType>(row_id_, column_id_), std::string_view{field.name()}, type_desc_tag
                     );
-                else if constexpr (is_empty_type(DataTypeTag::data_type))
+                } else if constexpr (is_empty_type(DataTypeTag::data_type)) {
                     internal::raise<ErrorCode::E_ASSERTION_FAILURE>("visit_field does not support empty-type columns");
-                else
+                } else {
                     internal::raise<ErrorCode::E_ASSERTION_FAILURE>("visit_field called with unexpected column type");
+                }
             });
         }
 
@@ -412,8 +414,9 @@ class SegmentInMemoryImpl {
     void push_back(const Row& row) {
         for (auto it : folly::enumerate(row)) {
             it->visit([&it, that = this](const auto& val) {
-                if (val)
+                if (val) {
                     that->set_scalar(it.index, val.value());
+                }
             });
         }
         end_row();
@@ -421,8 +424,9 @@ class SegmentInMemoryImpl {
 
     void set_value(position_t idx, const Location& loc) {
         loc.visit([that = this, idx](const auto& val) {
-            if (val)
+            if (val) {
                 that->set_scalar(idx, val.value());
+            }
         });
     }
 
@@ -522,13 +526,15 @@ class SegmentInMemoryImpl {
     bool empty() const { return row_count() <= 0 && !metadata(); }
 
     void unsparsify() const {
-        for (const auto& column : columns_)
+        for (const auto& column : columns_) {
             column->unsparsify(row_count());
+        }
     }
 
     void sparsify() const {
-        for (const auto& column : columns_)
+        for (const auto& column : columns_) {
             column->sparsify();
+        }
     }
 
     void append(const SegmentInMemoryImpl& other);
@@ -607,8 +613,9 @@ class SegmentInMemoryImpl {
     }
 
     void compact_blocks() const {
-        for (const auto& column : columns_)
+        for (const auto& column : columns_) {
             column->compact_blocks();
+        }
     }
 
     const auto& fields() const { return descriptor().fields(); }
@@ -634,8 +641,9 @@ class SegmentInMemoryImpl {
 
     void set_row_data(ssize_t rid) {
         set_row_id(rid);
-        for (const auto& column : columns())
+        for (const auto& column : columns()) {
             column->set_row_data(row_id_);
+        }
     }
 
     StringPool& string_pool() { return *string_pool_; } // TODO protected

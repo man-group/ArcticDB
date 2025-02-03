@@ -47,10 +47,11 @@ struct MapStorePair {
 
     void delete_all_versions(const std::string& id) {
         ARCTICDB_DEBUG(log::version(), "MapStorePair, delete_all_versions {}", id);
-        if (tombstones_)
+        if (tombstones_) {
             map_->delete_all_versions(store_, id);
-        else
+        } else {
             backwards_compat_delete_all_versions(store_, map_, id);
+        }
     }
 
     void write_and_prune_previous(const std::string& id) {
@@ -58,12 +59,13 @@ struct MapStorePair {
         auto prev = get_latest_version(store_, map_, id).first;
         auto version_id = prev ? prev->version_id() + 1 : 0;
 
-        if (tombstones_)
+        if (tombstones_) {
             map_->write_and_prune_previous(store_, make_test_index_key(id, version_id, KeyType::TABLE_INDEX), prev);
-        else
+        } else {
             backwards_compat_write_and_prune_previous(
                 store_, map_, make_test_index_key(id, version_id, KeyType::TABLE_INDEX)
             );
+        }
     }
 
     std::shared_ptr<VersionMap> map_ = std::make_shared<VersionMap>();
@@ -125,13 +127,15 @@ struct VersionMapTombstonesModel {
     std::optional<VersionId> get_latest_undeleted_version(const std::string& id) const {
         ARCTICDB_DEBUG(log::version(), "VersionMapTombstonesModel, get_latest_undeleted_version {}", id);
         auto it = data_.find(id);
-        if (it == data_.end())
+        if (it == data_.end()) {
             return std::nullopt;
+        }
 
         auto tombstones = tombstones_.find(id);
         for (auto v : it->second) {
-            if (tombstones == tombstones_.end() || tombstones->second.find(v) == tombstones->second.end())
+            if (tombstones == tombstones_.end() || tombstones->second.find(v) == tombstones->second.end()) {
                 return v;
+            }
         }
         return std::nullopt;
     }
@@ -159,8 +163,9 @@ struct VersionMapTombstonesModel {
     void delete_versions(const std::vector<VersionId>& versions, const std::string& id) {
         ARCTICDB_DEBUG(log::version(), "VersionMapTombstonesModel, delete_versions {}", id);
         auto& tombstones = tombstones_[id];
-        for (auto v : versions)
+        for (auto v : versions) {
             tombstones.insert(v);
+        }
     }
 
     void delete_all_versions(const std::string& id) { delete_versions(get_all_versions(id), id); }

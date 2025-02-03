@@ -156,8 +156,9 @@ class VersionMapImpl {
         if (key_exists_in_ref_entry(load_strategy, ref_entry, cached_penultimate_index)) {
             load_progress = ref_entry.load_progress_;
             entry->keys_.push_back(ref_entry.keys_[0]);
-            if (cached_penultimate_index)
+            if (cached_penultimate_index) {
                 entry->keys_.push_back(*cached_penultimate_index);
+            }
         } else {
             do {
                 ARCTICDB_DEBUG(log::version(), "Loading version key {}", next_key.value());
@@ -185,8 +186,9 @@ class VersionMapImpl {
             try {
                 VersionMapEntry ref_entry;
                 read_symbol_ref(store, stream_id, ref_entry);
-                if (ref_entry.empty())
+                if (ref_entry.empty()) {
                     return;
+                }
 
                 follow_version_chain(store, ref_entry, entry, load_strategy);
                 break;
@@ -205,8 +207,9 @@ class VersionMapImpl {
                 continue;
             }
         }
-        if (validate_)
+        if (validate_) {
             entry->validate();
+        }
     }
 
     void flush() {
@@ -231,8 +234,9 @@ class VersionMapImpl {
             !use_index_keys_for_iteration
         );
 
-        if (validate_)
+        if (validate_) {
             entry->validate();
+        }
     }
 
     void write_version(std::shared_ptr<Store> store, const AtomKey& key, const std::optional<AtomKey>& previous_key) {
@@ -241,10 +245,12 @@ class VersionMapImpl {
 
         do_write(store, key, entry);
         write_symbol_ref(store, key, previous_key, entry->head_.value());
-        if (validate_)
+        if (validate_) {
             entry->validate();
-        if (log_changes_)
+        }
+        if (log_changes_) {
             log_write(store, key.id(), key.version_id());
+        }
     }
 
     /**
@@ -268,11 +274,13 @@ class VersionMapImpl {
         }
         auto output = tombstone_from_key_or_all_internal(store, stream_id, first_key_to_tombstone, entry);
 
-        if (validate_)
+        if (validate_) {
             entry->validate();
+        }
 
-        if (entry->head_)
+        if (entry->head_) {
             write_symbol_ref(store, *entry->keys_.cbegin(), std::nullopt, entry->head_.value());
+        }
 
         return output;
     }
@@ -296,8 +304,9 @@ class VersionMapImpl {
         auto previous_index = do_write(store, key, entry);
         write_symbol_ref(store, *entry->keys_.cbegin(), previous_index, entry->head_.value());
 
-        if (log_changes_)
+        if (log_changes_) {
             log_write(store, key.id(), key.version_id());
+        }
 
         return result;
     }
@@ -338,8 +347,9 @@ class VersionMapImpl {
         ARCTICDB_DEBUG(log::version(), "Version map compacting versions for stream {}", stream_id);
         auto entry =
             check_reload(store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__);
-        if (!requires_compaction(entry))
+        if (!requires_compaction(entry)) {
             return;
+        }
 
         auto latest_version = std::find_if(std::begin(entry->keys_), std::end(entry->keys_), [](const auto& key) {
             return is_index_key_type(key.type());
@@ -349,8 +359,9 @@ class VersionMapImpl {
         auto new_entry = std::make_shared<VersionMapEntry>();
         new_entry->keys_.push_front(*latest_version);
 
-        if (const auto first_is_tombstone = entry->get_tombstone(new_version_id); first_is_tombstone)
+        if (const auto first_is_tombstone = entry->get_tombstone(new_version_id); first_is_tombstone) {
             new_entry->keys_.emplace_front(std::move(*first_is_tombstone));
+        }
 
         std::advance(latest_version, 1);
 
@@ -358,13 +369,14 @@ class VersionMapImpl {
             if (is_index_key_type(key.type())) {
                 const auto tombstone = entry->get_tombstone(key.version_id());
                 if (tombstone) {
-                    if (!store->key_exists(key).get())
+                    if (!store->key_exists(key).get()) {
                         ARCTICDB_DEBUG(log::version(), "Removing deleted key {}", key);
-                    else {
-                        if (tombstone->type() == KeyType::TOMBSTONE_ALL)
+                    } else {
+                        if (tombstone->type() == KeyType::TOMBSTONE_ALL) {
                             new_entry->try_set_tombstone_all(*tombstone);
-                        else
+                        } else {
                             new_entry->tombstones_.insert(std::make_pair(key.version_id(), *tombstone));
+                        }
 
                         new_entry->keys_.push_back(key);
                     }
@@ -375,8 +387,9 @@ class VersionMapImpl {
         }
         new_entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, new_entry);
         remove_entry_version_keys(store, entry, stream_id);
-        if (validate_)
+        if (validate_) {
             new_entry->validate();
+        }
 
         std::swap(*entry, *new_entry);
     }
@@ -398,8 +411,9 @@ class VersionMapImpl {
             journal_key = store->write_sync(pk, std::forward<decltype(segment)>(segment));
         });
         journal_agg.add_key(key);
-        if (prev_journal_key)
+        if (prev_journal_key) {
             journal_agg.add_key(*prev_journal_key);
+        }
 
         journal_agg.commit();
         return journal_key;
@@ -432,8 +446,9 @@ class VersionMapImpl {
         const auto total_symbols ARCTICDB_UNUSED = map.size();
         size_t num_sym_compacted = 0;
         for (const auto& [symbol, size] : map) {
-            if (size < max_blocks)
+            if (size < max_blocks) {
                 continue;
+            }
 
             try {
                 compact(store, symbol);
@@ -460,16 +475,19 @@ class VersionMapImpl {
             return;
         }
 
-        if (entry->keys_.size() < 3)
+        if (entry->keys_.size() < 3) {
             return;
+        }
 
-        if (!requires_compaction(entry))
+        if (!requires_compaction(entry)) {
             return;
+        }
 
         auto new_entry = compact_entry(store, stream_id, entry);
 
-        if (validate_)
+        if (validate_) {
             new_entry->validate();
+        }
 
         std::swap(*entry, *new_entry);
     }
@@ -486,8 +504,9 @@ class VersionMapImpl {
             entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
             auto new_version_id = index_keys[0].version_id();
             entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, entry);
-            if (validate_)
+            if (validate_) {
                 entry->validate();
+            }
         }
         remove_entry_version_keys(store, old_entry, stream_id);
     }
@@ -519,8 +538,9 @@ class VersionMapImpl {
         const AtomKey& key,
         const std::shared_ptr<VersionMapEntry>& entry
     ) {
-        if (validate_)
+        if (validate_) {
             entry->validate();
+        }
 
         util::check(
             key.type() != KeyType::TABLE_INDEX || !entry->head_.has_value() ||
@@ -569,8 +589,9 @@ class VersionMapImpl {
         std::vector<folly::Future<Store::RemoveKeyResultType>> key_futs;
         for (const auto& key : entry.keys_) {
             util::check(key.id() == stream_id, "Id mismatch for entry {} vs symbol {}", key.id(), stream_id);
-            if (key.type() == KeyType::VERSION)
+            if (key.type() == KeyType::VERSION) {
                 key_futs.emplace_back(store->remove_key(key));
+            }
         }
         folly::collect(key_futs).get();
     }
@@ -656,8 +677,9 @@ class VersionMapImpl {
         // For compacting an entry, we compact from the second version key in the chain
         // This makes it concurrent safe (when use_tombstones is enabled)
         // The first version key is in head and the second version key is first in entry.keys_
-        if (validate_)
+        if (validate_) {
             entry->validate();
+        }
         util::check(entry->head_.value().type() == KeyType::VERSION, "Type of head must be version");
         auto new_entry = std::make_shared<VersionMapEntry>(*entry);
 
@@ -693,21 +715,24 @@ class VersionMapImpl {
             std::end(new_entry->keys_)
         );
 
-        if (validate_)
+        if (validate_) {
             new_entry->validate();
+        }
         return new_entry;
     }
 
     void write_to_entry(const std::shared_ptr<VersionMapEntry>& entry, const AtomKey& key, const AtomKey& journal_key)
         const {
-        if (entry->head_)
+        if (entry->head_) {
             entry->unshift_key(entry->head_.value());
+        }
 
         entry->unshift_key(key);
         entry->head_ = journal_key;
 
-        if (validate_)
+        if (validate_) {
             entry->validate();
+        }
     }
 
     bool find_entry(MapType::const_iterator& entry, const StreamId& stream_id) const {
@@ -761,8 +786,9 @@ class VersionMapImpl {
 
     std::shared_ptr<VersionMapEntry>& get_entry(const StreamId& stream_id) {
         std::lock_guard lock(map_mutex_);
-        if (auto result = map_.find(stream_id); result != std::end(map_))
+        if (auto result = map_.find(stream_id); result != std::end(map_)) {
             return result->second;
+        }
 
         return map_.try_emplace(stream_id, std::make_shared<VersionMapEntry>()).first->second;
     }
@@ -823,8 +849,9 @@ class VersionMapImpl {
         entry->load_strategy_ = load_strategy;
 
         util::check(entry->keys_.empty() || entry->head_, "Non-empty VersionMapEntry should set head");
-        if (validate_)
+        if (validate_) {
             entry->validate();
+        }
 
         return entry;
     }
@@ -849,8 +876,9 @@ class VersionMapImpl {
         new_entry->head_ = write_entry_to_storage(store, stream_id, version_id, new_entry);
         remove_entry_version_keys(store, entry, stream_id);
 
-        if (validate_)
+        if (validate_) {
             new_entry->validate();
+        }
 
         return new_entry;
     }
@@ -961,8 +989,9 @@ class VersionMapImpl {
                         "Expected head to be set after load via iteration"
                     );
                     if (!entry->head_ || std::tie(key.id(), key.version_id()) !=
-                                             std::tie(entry->head_.value().id(), entry->head_.value().version_id()))
+                                             std::tie(entry->head_.value().id(), entry->head_.value().version_id())) {
                         missing_versions.push_back(key);
+                    }
                 }
             }
         );
@@ -1005,8 +1034,9 @@ class VersionMapImpl {
             );
         }
 
-        if (!first_key_to_tombstone)
+        if (!first_key_to_tombstone) {
             first_key_to_tombstone = entry->get_first_index(false).first;
+        }
 
         std::vector<AtomKey> output;
         for (const auto& key : entry->keys_) {
@@ -1056,8 +1086,9 @@ class VersionMapImpl {
         const std::shared_ptr<VersionMapEntry>& entry,
         const std::optional<timestamp>& creation_ts = std::nullopt
     ) {
-        if (validate_)
+        if (validate_) {
             entry->validate();
+        }
 
         auto tombstone = util::variant_match(key, [&stream_id, store, &creation_ts](const auto& k) {
             return index_to_tombstone(k, stream_id, creation_ts.value_or(store->current_timestamp()));
@@ -1065,8 +1096,9 @@ class VersionMapImpl {
         do_write(store, tombstone, entry);
         entry->tombstones_.try_emplace(tombstone.version_id(), tombstone);
         maybe_invalidate_cached_undeleted(*entry);
-        if (log_changes_)
+        if (log_changes_) {
             log_tombstone(store, tombstone.id(), tombstone.version_id());
+        }
 
         return tombstone;
     }

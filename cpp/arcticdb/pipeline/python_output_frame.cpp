@@ -32,8 +32,9 @@ PythonOutputFrame::PythonOutputFrame(const SegmentInMemory& frame, std::shared_p
 }
 
 PythonOutputFrame::~PythonOutputFrame() {
-    if (frame_.is_null())
+    if (frame_.is_null()) {
         return;
+    }
 
     for (auto& column : frame_.columns()) {
         auto dt = column->type().data_type();
@@ -65,8 +66,9 @@ PythonOutputFrame::~PythonOutputFrame() {
 }
 
 std::shared_ptr<FrameDataWrapper> PythonOutputFrame::arrays(py::object& ref) {
-    if (auto cached = arrays_.lock())
+    if (auto cached = arrays_.lock()) {
         return cached;
+    }
 
     auto generated = arcticdb::detail::initialize_array(frame_, ref);
     arrays_ = generated;

@@ -168,16 +168,18 @@ std::string make_parent_dir(const std::string& p_str, std::string_view def_p_str
 } // namespace
 
 spdlog::logger& Loggers::Impl::logger_ref(std::unique_ptr<spdlog::logger>& src) {
-    if (ARCTICDB_LIKELY(bool(src)))
+    if (ARCTICDB_LIKELY(bool(src))) {
         return *src;
+    }
 
     return *unconfigured_;
 }
 
 bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig& conf, bool force) {
     auto lock = std::scoped_lock(impl_->config_mutex_);
-    if (!force && impl_->root_)
+    if (!force && impl_->root_) {
         return false;
+    }
 
     // Configure async behavior
     if (conf.has_async()) {
@@ -244,8 +246,9 @@ bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig& conf, bool
         if (auto it = logger_by_id.find(name); it != logger_by_id.end()) {
             impl_->configure_logger(it->second, name, logger);
         } else {
-            if (fallback.empty())
+            if (fallback.empty()) {
                 throw std::invalid_argument(fmt::format("missing conf for logger {} without fallback", name));
+            }
             impl_->configure_logger(logger_by_id.find(fallback)->second, name, logger);
         }
     };
@@ -299,15 +302,17 @@ void Loggers::Impl::configure_logger(
         logger = std::make_unique<spdlog::logger>(fq_name, sink_ptrs.begin(), sink_ptrs.end());
     }
 
-    if (!conf.pattern().empty())
+    if (!conf.pattern().empty()) {
         logger->set_pattern(conf.pattern());
-    else
+    } else {
         logger->set_pattern(DefaultLogPattern);
+    }
 
-    if (conf.level() != 0)
+    if (conf.level() != 0) {
         logger->set_level(static_cast<spdlog::level::level_enum>(conf.level() - 1));
-    else
+    } else {
         logger->set_level(get_default_log_level());
+    }
 }
 
 } // namespace arcticdb::log

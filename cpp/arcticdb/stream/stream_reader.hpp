@@ -42,8 +42,9 @@ class RowsFromSegIterator : public IndexRangeFilter {
         while (true) {
             while (!seg_) {
                 auto key_seg = seg_it_.next(timeout);
-                if (!key_seg)
+                if (!key_seg) {
                     return std::nullopt;
+                }
 
                 row_id = 0;
 
@@ -66,8 +67,9 @@ class RowsFromSegIterator : public IndexRangeFilter {
                 seg_ = std::nullopt;
             }
 
-            if (accept)
+            if (accept) {
                 return res;
+            }
         }
     }
 

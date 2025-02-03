@@ -139,8 +139,9 @@ inline void insert_if_undeleted(
     std::set<StreamId>& res
 ) {
     auto id = variant_key_id(key);
-    if (has_undeleted_version(store, version_map, id))
+    if (has_undeleted_version(store, version_map, id)) {
         res.insert(std::move(id));
+    }
 }
 
 inline std::unordered_map<VersionId, bool> get_all_tombstoned_versions(
@@ -151,8 +152,9 @@ inline std::unordered_map<VersionId, bool> get_all_tombstoned_versions(
     LoadStrategy load_strategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     std::unordered_map<VersionId, bool> result;
-    for (auto key : entry->get_tombstoned_indexes())
+    for (auto key : entry->get_tombstoned_indexes()) {
         result[key.version_id()] = store->key_exists(key).get();
+    }
 
     return result;
 }
@@ -189,12 +191,13 @@ inline version_store::TombstoneVersionResult tombstone_version(
         } else {
             if (!allow_tombstoning_beyond_latest_version) {
                 auto latest_key = get_latest_version(store, version_map, stream_id).first;
-                if (!latest_key || latest_key->version_id() < version_id)
+                if (!latest_key || latest_key->version_id() < version_id) {
                     util::raise_rte(
                         "Can't delete version {} for symbol {} - it's higher than the latest version",
                         stream_id,
                         version_id
                     );
+                }
             }
             // We will write a tombstone key even when the index_key is not found
             version_map->write_tombstone(store, version_id, stream_id, entry, creation_ts);
@@ -203,8 +206,9 @@ inline version_store::TombstoneVersionResult tombstone_version(
         version_map->write_tombstone(store, res.keys_to_delete[0], stream_id, entry, creation_ts);
     }
 
-    if (version_map->validate())
+    if (version_map->validate()) {
         entry->validate();
+    }
 
     res.no_undeleted_left = !entry->get_first_index(false).first.has_value();
     res.latest_version_ = entry->get_first_index(true).first->version_id();
@@ -265,10 +269,11 @@ inline std::set<StreamId> list_streams(
             [&store, &res, &version_map, all_symbols](auto&& vk) {
                 auto key = std::forward<VariantKey&&>(vk);
                 util::check(!variant_key_id_empty(key), "Unexpected empty id in key {}", key);
-                if (all_symbols)
+                if (all_symbols) {
                     res.insert(variant_key_id(key));
-                else
+                } else {
                     insert_if_undeleted(store, version_map, key, res);
+                }
             },
             *prefix
         );
@@ -276,10 +281,11 @@ inline std::set<StreamId> list_streams(
         store->iterate_type(KeyType::VERSION_REF, [&store, &res, &version_map, all_symbols](auto&& vk) {
             const auto key = std::forward<VariantKey>(vk);
             util::check(!variant_key_id_empty(key), "Unexpected empty id in key {}", key);
-            if (all_symbols)
+            if (all_symbols) {
                 res.insert(variant_key_id(key));
-            else
+            } else {
                 insert_if_undeleted(store, version_map, key, res);
+            }
         });
     }
     return res;

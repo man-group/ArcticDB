@@ -144,10 +144,11 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
             output = push_entities(*component_manager_, std::move(proc));
         },
         [&proc, &output, this](const EmptyResult&) {
-            if (expression_context_->dynamic_schema_)
+            if (expression_context_->dynamic_schema_) {
                 output = push_entities(*component_manager_, std::move(proc));
-            else
+            } else {
                 util::raise_rte("Cannot project from empty column with static schema");
+            }
         },
         [](const auto&) { util::raise_rte("Expected column from projection clause"); }
     );
@@ -403,8 +404,9 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
         using col_type_info = ScalarTypeInfo<decltype(data_type_tag)>;
         auto hashes = grouping_map.get<typename col_type_info::RawType>();
         std::vector<std::pair<typename col_type_info::RawType, size_t>> elements;
-        for (const auto& hash : *hashes)
+        for (const auto& hash : *hashes) {
             elements.emplace_back(std::make_pair(hash.first, hash.second));
+        }
 
         std::sort(
             std::begin(elements),
@@ -1059,10 +1061,11 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
             auto input_column_with_strings = std::get<ColumnWithStrings>(input_column);
             agg_data->aggregate(input_column_with_strings);
         } else {
-            if (!processing_config_.dynamic_schema_)
+            if (!processing_config_.dynamic_schema_) {
                 internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
                     "Unable to resolve column denoted by aggregation operator: '{}'", input_column_name
                 );
+            }
         }
     }
 

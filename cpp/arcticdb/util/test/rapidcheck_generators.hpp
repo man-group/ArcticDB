@@ -124,8 +124,9 @@ namespace as = arcticdb::stream;
 
 inline as::FixedSchema schema_from_test_frame(const TestDataFrame& data_frame, ac::StreamId stream_id) {
     arcticdb::FieldCollection fields;
-    for (size_t i = 0; i < data_frame.num_columns_; ++i)
+    for (size_t i = 0; i < data_frame.num_columns_; ++i) {
         fields.add_field(arcticdb::entity::scalar_field(data_frame.types_[i].data_type(), data_frame.column_names_[i]));
+    }
 
     const auto index = as::TimeseriesIndex::default_index();
     return as::FixedSchema{index.create_stream_descriptor(std::move(stream_id), fields), index};
@@ -149,10 +150,11 @@ folly::Future<arcticdb::entity::VariantKey> write_frame_data(const TestDataFrame
                 data_frame.types_[col].visit_tag([&](auto type_desc_tag) {
                     using raw_type = typename decltype(type_desc_tag)::DataTypeTag::raw_type;
                     using data_type_tag = typename decltype(type_desc_tag)::DataTypeTag;
-                    if (is_sequence_type(data_type_tag::data_type))
+                    if (is_sequence_type(data_type_tag::data_type)) {
                         rb.set_string(col + 1, fmt::format("{}", data_frame.data_[col][row]));
-                    else
+                    } else {
                         rb.set_scalar(col + 1, raw_type(data_frame.data_[col][row]));
+                    }
                 });
             }
         });

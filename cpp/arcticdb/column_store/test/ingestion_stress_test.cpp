@@ -36,8 +36,9 @@ TEST(IngestionStress, ScalarInt) {
     const uint64_t SegmentPolicyRows = 1000;
 
     std::vector<FieldRef> columns;
-    for (auto i = 0; i < NumColumns; ++i)
+    for (auto i = 0; i < NumColumns; ++i) {
         columns.emplace_back(scalar_field(DataType::UINT64, "uint64"));
+    }
 
     const auto index = as::TimeseriesIndex::default_index();
     as::FixedSchema schema{
@@ -56,8 +57,9 @@ TEST(IngestionStress, ScalarInt) {
     size_t x = 0;
     for (auto i = 0; i < NumRows; ++i) {
         agg.start_row(timestamp{i})([&](auto& rb) {
-            for (timestamp j = 1u; j <= timestamp(NumColumns); ++j)
+            for (timestamp j = 1u; j <= timestamp(NumColumns); ++j) {
                 rb.set_scalar(j, uint64_t(i + j));
+            }
         });
     }
     timer.stop_timer(timer_name);
@@ -94,8 +96,9 @@ TEST_F(IngestionStressStore, ScalarIntAppend) {
     size_t x = 0;
     for (timestamp i = 0; i < timestamp(NumRows); ++i) {
         agg.start_row(timestamp{i})([&](auto& rb) {
-            for (timestamp j = 1u; j <= timestamp(NumColumns); ++j)
+            for (timestamp j = 1u; j <= timestamp(NumColumns); ++j) {
                 rb.set_scalar_by_name(columns[j - 1].name(), uint64_t(i + j), columns[j - 1].type().data_type());
+            }
         });
     }
     timer.stop_timer(timer_name);
@@ -109,18 +112,20 @@ TEST_F(IngestionStressStore, ScalarIntAppend) {
     auto new_descriptor = index.create_stream_descriptor(symbol, fields_from_range(columns_second));
     for (timestamp i = 0u; i < timestamp(NumRows); ++i) {
         agg.start_row(timestamp(i + NumRows))([&](auto& rb) {
-            for (uint64_t j = 1u; j <= 2; ++j)
+            for (uint64_t j = 1u; j <= 2; ++j) {
                 rb.set_scalar_by_name(
                     columns_second[j - 1].name(), uint64_t(i + j), columns_second[j - 1].type().data_type()
                 );
+            }
         });
     }
     GTEST_COUT << " 2 done";
 
     agg.finalize();
 
-    for (auto& seg : sink.segments_)
+    for (auto& seg : sink.segments_) {
         arcticdb::append_incomplete_segment(test_store_->_test_get_store(), symbol, std::move(seg));
+    }
 
     using namespace arcticdb::pipelines;
 
@@ -166,10 +171,11 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     interval_timer timer(timer_name);
     for (timestamp i = 0; i < timestamp(NumRows); ++i) {
         agg.start_row(timestamp{i})([&](auto& rb) {
-            for (uint64_t j = 1u; j < NumColumnsFirstWrite; ++j)
+            for (uint64_t j = 1u; j < NumColumnsFirstWrite; ++j) {
                 rb.set_scalar_by_name(
                     columns_first[j - 1].name(), uint64_t(i + j), columns_first[j - 1].type().data_type()
                 );
+            }
         });
     }
     timer.stop_timer(timer_name);
@@ -184,10 +190,11 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     // Now write again.
     for (timestamp i = 0; i < NumRows; ++i) {
         agg.start_row(timestamp{i + NumRows})([&](auto& rb) {
-            for (uint64_t j = 1u; j < NumColumnsSecondWrite; ++j)
+            for (uint64_t j = 1u; j < NumColumnsSecondWrite; ++j) {
                 rb.set_scalar_by_name(
                     columns_second[j - 1].name(), uint64_t(i + j), columns_second[j - 1].type().data_type()
                 );
+            }
         });
     }
     GTEST_COUT << " 2 done";
@@ -195,8 +202,9 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     // now write 5 columns
     for (auto i = 0u; i < NumRows; ++i) {
         agg.start_row(timestamp{i + NumRows * 2})([&](auto& rb) {
-            for (uint64_t j = 1u; j < NumColumnsFirstWrite; ++j)
+            for (uint64_t j = 1u; j < NumColumnsFirstWrite; ++j) {
                 rb.set_scalar_by_name(columns_first[j].name(), uint64_t(i + j), columns_first[j].type().data_type());
+            }
         });
     }
     GTEST_COUT << " 3 done";
@@ -204,8 +212,9 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     // now write 10
     for (auto i = 0u; i < NumRows; ++i) {
         agg.start_row(timestamp{i + NumRows * 3})([&](auto& rb) {
-            for (uint64_t j = 1u; j < NumColumnsSecondWrite; ++j)
+            for (uint64_t j = 1u; j < NumColumnsSecondWrite; ++j) {
                 rb.set_scalar_by_name(columns_second[j].name(), uint64_t(i + j), columns_second[j].type().data_type());
+            }
         });
     }
 

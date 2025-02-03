@@ -129,11 +129,13 @@ std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vec
     size_t slice_num_for_column = 0;
     std::optional<size_t> first_row;
     for (const auto& slice : slices) {
-        if (!first_row)
+        if (!first_row) {
             first_row = slice.row_range.first;
+        }
 
-        if (slice.row_range.first == *first_row)
+        if (slice.row_range.first == *first_row) {
             slice_num_for_column = 0;
+        }
 
         slice_and_rowcount.emplace_back(slice, slice_num_for_column);
         ++slice_num_for_column;
@@ -187,8 +189,9 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 ) {
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceFrame)
     auto slices = slice(*frame, slicing);
-    if (slices.empty())
+    if (slices.empty()) {
         return folly::makeFuture(std::vector<SliceAndKey>{});
+    }
 
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)
     return write_slices(frame, std::move(slices), slicing, std::move(key), sink, de_dup_map, sparsify_floats);
@@ -334,8 +337,9 @@ std::vector<SliceAndKey> flatten_and_fix_rows(
     output.reserve(groups.size());
     global_count = 0;
     for (const std::vector<SliceAndKey>& group : groups) {
-        if (group.empty())
+        if (group.empty()) {
             continue;
+        }
 
         auto group_start = group.begin()->slice_.row_range.first;
         auto group_end = std::accumulate(std::begin(group), std::end(group), 0ULL, [](size_t a, const SliceAndKey& sk) {

@@ -25,8 +25,9 @@ template<class Index, class Schema, class SegmentingPolicy, class DensityPolicy>
 inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit_impl(bool final) {
     callback_(std::move(segment_));
     commits_count_++;
-    if (final)
+    if (final) {
         return;
+    }
 
     segment_ = SegmentInMemory(
         schema_policy_.default_descriptor(),

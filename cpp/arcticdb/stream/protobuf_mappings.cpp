@@ -55,8 +55,9 @@ void ensure_timeseries_norm_meta(
         norm_meta.CopyFrom(make_timeseries_norm_meta(stream_id));
     }
 
-    if (set_tz && norm_meta.df().common().index().tz().empty())
+    if (set_tz && norm_meta.df().common().index().tz().empty()) {
         norm_meta.mutable_df()->mutable_common()->mutable_index()->set_tz("UTC");
+    }
 }
 
 void ensure_rowcount_norm_meta(

@@ -20,8 +20,9 @@ template<class Visitor>
 void S3StorageTool::iterate_bucket(Visitor&& visitor, const std::string& prefix) {
     Aws::S3::Model::ListObjectsV2Request objects_request;
     objects_request.WithBucket(bucket_name_.c_str());
-    if (!prefix.empty())
+    if (!prefix.empty()) {
         objects_request.SetPrefix(prefix.c_str());
+    }
 
     bool more;
     do {
@@ -34,8 +35,9 @@ void S3StorageTool::iterate_bucket(Visitor&& visitor, const std::string& prefix)
                 visitor(key.c_str());
             }
             more = list_objects_outcome.GetResult().GetIsTruncated();
-            if (more)
+            if (more) {
                 objects_request.SetContinuationToken(list_objects_outcome.GetResult().GetNextContinuationToken());
+            }
 
         } else {
             const auto& error = list_objects_outcome.GetError();
@@ -95,9 +97,9 @@ void S3StorageTool::delete_object(const std::string& key) {
     object_request.WithBucket(bucket_name_.c_str()).WithKey(key.c_str());
 
     auto delete_object_outcome = s3_client_.DeleteObject(object_request);
-    if (delete_object_outcome.IsSuccess())
+    if (delete_object_outcome.IsSuccess()) {
         ARCTICDB_DEBUG(log::storage(), "Deleted object with key '{}'", key);
-    else {
+    } else {
         const auto& error = delete_object_outcome.GetError();
         log::storage().warn(
             "Failed to delete segment with key '{}': {}",
@@ -119,8 +121,9 @@ std::pair<size_t, size_t> S3StorageTool::get_prefix_info(const std::string& pref
     size_t total_items = 0;
     Aws::S3::Model::ListObjectsV2Request objects_request;
     objects_request.WithBucket(bucket_name_.c_str());
-    if (!prefix.empty())
+    if (!prefix.empty()) {
         objects_request.SetPrefix(prefix.c_str());
+    }
 
     bool more;
     do {
@@ -133,8 +136,9 @@ std::pair<size_t, size_t> S3StorageTool::get_prefix_info(const std::string& pref
                 ++total_items;
             }
             more = list_objects_outcome.GetResult().GetIsTruncated();
-            if (more)
+            if (more) {
                 objects_request.SetContinuationToken(list_objects_outcome.GetResult().GetNextContinuationToken());
+            }
 
         } else {
             const auto& error = list_objects_outcome.GetError();
@@ -175,9 +179,9 @@ void S3StorageTool::delete_bucket(const std::string& prefix) {
             object_request.WithBucket(bucket_name_.c_str()).WithKey(key.c_str());
 
             auto delete_object_outcome = s3_client_.DeleteObject(object_request);
-            if (delete_object_outcome.IsSuccess())
+            if (delete_object_outcome.IsSuccess()) {
                 ARCTICDB_DEBUG(log::storage(), "Deleted object with key '{}'", key);
-            else {
+            } else {
                 const auto& error = delete_object_outcome.GetError();
                 log::storage().warn(
                     "Failed to delete object with key '{}' {}:{}",

@@ -38,10 +38,11 @@ struct Value {
     }
 
     void assign(const Value& other) {
-        if (is_sequence_type(other.data_type_))
+        if (is_sequence_type(other.data_type_)) {
             assign_string(*other.str_data(), other.len_);
-        else
+        } else {
             memcpy(data_, other.data_, 8);
+        }
     }
 
     Value(const Value& other) : data_type_(other.data_type_) { assign(other); }
@@ -129,8 +130,9 @@ struct Value {
     }
 
     ~Value() {
-        if (has_sequence_type())
+        if (has_sequence_type()) {
             delete[] *str_data();
+        }
     }
 
     bool has_sequence_type() const { return is_sequence_type(data_type_); }
@@ -188,8 +190,9 @@ inline Value construct_string_value_from_char(const char* c, size_t len, DataTyp
 }
 
 inline std::optional<std::string> ascii_to_padded_utf32(std::string_view str, size_t width) {
-    if (str.size() * arcticdb::entity::UNICODE_WIDTH > width)
+    if (str.size() * arcticdb::entity::UNICODE_WIDTH > width) {
         return std::nullopt;
+    }
     std::string rv(width, '\0');
     auto input = str.data();
     auto output = rv.data();

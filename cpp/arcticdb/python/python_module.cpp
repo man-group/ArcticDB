@@ -154,12 +154,14 @@ int
 rec_call(int i) {
     if (i < 0) {
         throw std::invalid_argument("Explosion");
-    } else if (i == 0)
+    } else if (i == 0) {
         return 7;
-    if (i % 3 == 0)
+    }
+    if (i % 3 == 0) {
         return rec_call(i - 4);
-    else
+    } else {
         return rec_call(i - 1);
+    }
 }
 
 void register_termination_handler() {
@@ -207,8 +209,9 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
 
     py::register_exception_translator([](std::exception_ptr p) {
         try {
-            if (p)
+            if (p) {
                 std::rethrow_exception(p);
+            }
         } catch (const mongocxx::v_noabi::logic_error& e) {
             user_input_exception(e.what());
         } catch (const UserInputException& e) {

@@ -201,8 +201,9 @@ class MemoryMappedFile {
                 log::storage().warn("Could not sync the file to disk: {}", result);
             } else {
                 result = munmap(data_, length_);
-                if (result == -1)
+                if (result == -1) {
                     log::storage().warn("Error un-mmapping the file");
+                }
             }
         }
     }
@@ -222,8 +223,9 @@ class MemoryMappedFile {
         unmap();
 
         ARCTICDB_DEBUG(log::storage(), "Closing memory-mapped file of length {}", length_);
-        if (fd_ != -1)
+        if (fd_ != -1) {
             close(fd_);
+        }
     }
 
     [[nodiscard]] uint8_t* data() const { return data_; }

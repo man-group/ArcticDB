@@ -165,11 +165,13 @@ class ChunkedBufferImpl {
     // the buffer to stay regular sized for as long as possible, which greatly improves random access performance, and
     // will also be beneficial with the slab allocator.
     uint8_t* ensure(size_t requested_size, bool aligned = false) {
-        if (requested_size != 0 && requested_size <= bytes_)
+        if (requested_size != 0 && requested_size <= bytes_) {
             return last_block().end();
+        }
 
-        if (requested_size == 0)
+        if (requested_size == 0) {
             return nullptr;
+        }
 
         uint8_t* res;
         auto extra_size = requested_size - bytes_;
@@ -244,8 +246,9 @@ class ChunkedBufferImpl {
     };
 
     [[nodiscard]] BlockAndOffset block_and_offset(size_t pos_bytes) const {
-        if (blocks_.size() == 1u)
+        if (blocks_.size() == 1u) {
             return BlockAndOffset(blocks_[0], pos_bytes, 0);
+        }
 
         if (is_regular_sized() || pos_bytes < regular_sized_until_) {
             size_t block_offset = pos_bytes / DefaultBlockSize;
@@ -262,8 +265,9 @@ class ChunkedBufferImpl {
 
         util::check(!block_offsets_.empty(), "Expected an irregular block-sized buffer to have offsets");
         auto block_offset = std::lower_bound(std::begin(block_offsets_), std::end(block_offsets_), pos_bytes);
-        if (block_offset == block_offsets_.end() || *block_offset != pos_bytes)
+        if (block_offset == block_offsets_.end() || *block_offset != pos_bytes) {
             --block_offset;
+        }
 
         auto irregular_block_num = std::distance(block_offsets_.begin(), block_offset);
         auto first_irregular_block = regular_sized_until_ / DefaultBlockSize;
@@ -323,8 +327,9 @@ class ChunkedBufferImpl {
             bytes -= size_to_write;
             if (bytes > 0) {
                 ++block_index;
-                if (block_index == blocks_.size())
+                if (block_index == blocks_.size()) {
                     return;
+                }
 
                 block = blocks_[block_index];
                 pos = 0;
@@ -357,8 +362,9 @@ class ChunkedBufferImpl {
     }
 
     void add_external_block(const uint8_t* data, size_t size, size_t offset) {
-        if (!no_blocks() && last_block().empty())
+        if (!no_blocks() && last_block().empty()) {
             free_last_block();
+        }
 
         auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
         new (ptr) MemBlock(data, size, offset, ts, false);
@@ -367,8 +373,9 @@ class ChunkedBufferImpl {
     }
 
     void add_detachable_block(size_t size) {
-        if (!no_blocks() && last_block().empty())
+        if (!no_blocks() && last_block().empty()) {
             free_last_block();
+        }
 
         auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
         auto* data = reinterpret_cast<uint8_t*>(malloc(size));
@@ -381,8 +388,9 @@ class ChunkedBufferImpl {
 
     void clear() {
         bytes_ = 0;
-        for (auto block : blocks_)
+        for (auto block : blocks_) {
             free_block(block);
+        }
 
         blocks_.clear();
         block_offsets_.clear();

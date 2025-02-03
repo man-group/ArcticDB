@@ -113,10 +113,11 @@ struct FrameSlice {
     RowRange row_range;
 
     [[nodiscard]] std::size_t absolute_field_col(std::size_t col) const {
-        if (indices_)
+        if (indices_) {
             return indices_->at(col) - desc()->index().field_count();
-        else
+        } else {
             return col + col_range.first - desc()->index().field_count();
+        }
     }
 
     [[nodiscard]] const auto& non_index_field(std::size_t pos) const {

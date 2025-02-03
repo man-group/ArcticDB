@@ -38,8 +38,9 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
     std::unique_ptr<util::BitSet>&& input
 ) {
     auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(container.size()));
-    if (container.empty())
+    if (container.empty()) {
         return res;
+    }
 
     using IndexTagType = typename IdxType::TypeDescTag;
 
@@ -120,8 +121,9 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
         for (auto i = 0u; i < container.size(); ++i) {
             const auto intersects = range_intersects<RawType>(range_start, range_end, *start_idx_pos, *end_idx_pos);
             (*res)[i] = intersects;
-            if (intersects)
+            if (intersects) {
                 ARCTICDB_DEBUG(log::version(), "range intersects at {}", i);
+            }
 
             ++start_idx_pos;
             ++end_idx_pos;
@@ -130,8 +132,9 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
         ARCTICDB_DEBUG(log::version(), timer.display_all());
     }
 
-    if (input)
+    if (input) {
         *res &= *input;
+    }
 
     ARCTICDB_DEBUG(log::version(), "Res count = {}", res->count());
     return res;

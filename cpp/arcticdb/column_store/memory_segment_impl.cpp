@@ -41,8 +41,9 @@ SegmentInMemoryImpl::~SegmentInMemoryImpl() { ARCTICDB_TRACE(log::version(), "De
 // retroactively insert and default-initialize or sparsify the new column, but that's not required
 //  at the moment.
 void SegmentInMemoryImpl::append(const SegmentInMemoryImpl& other) {
-    if (other.row_count() == 0)
+    if (other.row_count() == 0) {
         return;
+    }
 
     other.init_column_map();
     for (auto col = 0u; col < num_columns(); ++col) {
@@ -111,8 +112,9 @@ void SegmentInMemoryImpl::create_columns(
 
 void SegmentInMemoryImpl::init_column_map() const {
     std::lock_guard lock{*column_map_mutex_};
-    if (column_map_)
+    if (column_map_) {
         return;
+    }
 
     column_map_ = std::make_shared<ColumnMap>(descriptor().field_count());
     column_map_->set_from_descriptor(descriptor());
@@ -122,8 +124,9 @@ bool SegmentInMemoryImpl::is_index_sorted() const {
     timestamp idx = 0;
     for (auto it = begin(); it != end(); ++it) {
         auto val = it->begin()->value<timestamp>();
-        if (idx > val)
+        if (idx > val) {
             return false;
+        }
 
         idx = val;
     }
@@ -179,8 +182,9 @@ SegmentInMemoryImpl SegmentInMemoryImpl::clone() const {
     }
     output.allow_sparse_ = allow_sparse_;
     output.compacted_ = compacted_;
-    if (tsd_)
+    if (tsd_) {
         output.set_timeseries_descriptor(tsd_->clone());
+    }
 
     return output;
 }
@@ -209,8 +213,9 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(
     filter_bitset.resize(row_count());
     bool is_input_sparse = is_sparse();
     auto num_values = filter_bitset.count();
-    if (num_values == 0)
+    if (num_values == 0) {
         return std::shared_ptr<SegmentInMemoryImpl>{};
+    }
 
     auto output = get_output_segment(num_values);
     auto output_string_pool = filter_down_stringpool ? std::make_shared<StringPool>() : string_pool_;
@@ -269,8 +274,9 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(
             // For dense, we just do +1
             util::BitSetSizeType pos_output = 0;
             while (auto block = input_data.next<TypeDescriptorTag>()) {
-                if (bitset_iter == final_bitset->end())
+                if (bitset_iter == final_bitset->end()) {
                     break;
+                }
                 auto input_ptr = block.value().data();
                 if (sparse_map) {
                     while (bitset_iter != final_bitset->end()) {
@@ -319,8 +325,9 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(
                     const auto bitset_end = final_bitset->end();
                     do {
                         const auto offset = *bitset_iter - row_count_so_far;
-                        if (offset >= row_count)
+                        if (offset >= row_count) {
                             break;
+                        }
 
                         auto value = *(input_ptr + offset);
                         if constexpr (is_sequence_type(DataTypeTag::data_type)) {
@@ -358,12 +365,14 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(
                 }
                 row_count_so_far += block.value().row_count();
             }
-            if (sparse_map && validate)
+            if (sparse_map && validate) {
                 check_output_bitset(output_col.opt_sparse_map().value(), filter_bitset, sparse_map.value());
+            }
         });
     }
-    if (num_values != 0)
+    if (num_values != 0) {
         output->set_row_data(num_values - 1);
+    }
 
     output->set_string_pool(output_string_pool);
     output->set_compacted(compacted_);
@@ -381,10 +390,11 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::get_output_segment(siz
     if (is_sparse()) {
         output = allocate_sparse_segment(descriptor().id(), descriptor().index());
     } else {
-        if (pre_allocate)
+        if (pre_allocate) {
             output = allocate_dense_segment(descriptor(), num_values);
-        else
+        } else {
             output = allocate_dense_segment(StreamDescriptor(descriptor().id(), descriptor().index(), {}), num_values);
+        }
     }
     return output;
 }
@@ -476,11 +486,13 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition
 }
 
 bool operator==(const SegmentInMemoryImpl& left, const SegmentInMemoryImpl& right) {
-    if (*left.descriptor_ != *right.descriptor_ || left.offset_ != right.offset_)
+    if (*left.descriptor_ != *right.descriptor_ || left.offset_ != right.offset_) {
         return false;
+    }
 
-    if (left.columns_.size() != right.columns_.size())
+    if (left.columns_.size() != right.columns_.size()) {
         return false;
+    }
 
     for (auto col = 0u; col < left.columns_.size(); ++col) {
         const auto left_data_type = left.column(col).type().data_type();
@@ -488,21 +500,27 @@ bool operator==(const SegmentInMemoryImpl& left, const SegmentInMemoryImpl& righ
 
             const auto& left_col = left.column(col);
             const auto& right_col = right.column(col);
-            if (left_col.type() != right_col.type())
+            if (left_col.type() != right_col.type()) {
                 return false;
+            }
 
-            if (left_col.row_count() != right_col.row_count())
+            if (left_col.row_count() != right_col.row_count()) {
                 return false;
+            }
 
-            for (auto row = 0u; row < left_col.row_count(); ++row)
-                if (left.string_at(row, col) != right.string_at(row, col))
+            for (auto row = 0u; row < left_col.row_count(); ++row) {
+                if (left.string_at(row, col) != right.string_at(row, col)) {
                     return false;
+                }
+            }
         } else if (is_numeric_type(left_data_type) || is_bool_type(left_data_type)) {
-            if (left.column(col) != right.column(col))
+            if (left.column(col) != right.column(col)) {
                 return false;
+            }
         } else if (is_empty_type(left_data_type)) {
-            if (!is_empty_type(right.column(col).type().data_type()))
+            if (!is_empty_type(right.column(col).type().data_type())) {
                 return false;
+            }
         } else {
             internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected data type in SegmentInMemory equality check");
         }
@@ -580,8 +598,9 @@ void SegmentInMemoryImpl::concatenate(SegmentInMemoryImpl&& other, bool unique_c
 
 position_t SegmentInMemoryImpl::add_column(FieldRef field, size_t num_rows, AllocationType presize) {
     util::check_arg(!field.name().empty(), "Empty name in field: {}", field);
-    if (!column_map_)
+    if (!column_map_) {
         init_column_map();
+    }
 
     columns_.emplace_back(std::make_shared<Column>(field.type(), num_rows, presize, allow_sparse_));
     auto new_field_name = descriptor_->add_field(FieldRef{field.type(), field.name()});
@@ -596,8 +615,9 @@ position_t SegmentInMemoryImpl::add_column(const Field& field, size_t num_rows, 
 }
 
 position_t SegmentInMemoryImpl::add_column(FieldRef field_ref, const std::shared_ptr<Column>& column) {
-    if (!column_map_)
+    if (!column_map_) {
         init_column_map();
+    }
 
     columns_.emplace_back(column);
     auto new_field_name = descriptor_->add_field(field_ref);
@@ -656,10 +676,11 @@ std::optional<std::string_view> SegmentInMemoryImpl::string_at(position_t row, p
     } else {
 
         auto offset = col_ref.scalar_at<entity::position_t>(row);
-        if (offset != std::nullopt && *offset != not_a_string() && *offset != nan_placeholder())
+        if (offset != std::nullopt && *offset != not_a_string() && *offset != nan_placeholder()) {
             return string_pool_->get_view(*offset);
-        else
+        } else {
             return std::nullopt;
+        }
     }
 }
 
@@ -730,8 +751,9 @@ void SegmentInMemoryImpl::reset_metadata() { metadata_.reset(); }
 
 void SegmentInMemoryImpl::set_metadata(google::protobuf::Any&& meta) {
     util::check_arg(!metadata_, "Cannot override previously set metadata");
-    if (meta.ByteSizeLong())
+    if (meta.ByteSizeLong()) {
         metadata_ = std::make_unique<google::protobuf::Any>(std::move(meta));
+    }
 }
 
 bool SegmentInMemoryImpl::has_metadata() const { return static_cast<bool>(metadata_); }

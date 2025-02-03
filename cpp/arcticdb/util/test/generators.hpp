@@ -316,11 +316,13 @@ inline SegmentInMemory get_sparse_timeseries_segment(const std::string& name, si
     for (timestamp i = 0u; i < timestamp(num_rows); ++i) {
         wrapper.aggregator_.start_row(timestamp{i})([&](auto&& rb) {
             rb.set_scalar(1, int8_t(i));
-            if (i % 2 == 1)
+            if (i % 2 == 1) {
                 rb.set_scalar(2, uint64_t(i) * 2);
+            }
 
-            if (i % 3 == 2)
+            if (i % 3 == 2) {
                 rb.set_string(3, fmt::format("string_{}", i));
+            }
         });
     }
     wrapper.aggregator_.commit();
@@ -340,11 +342,13 @@ inline SegmentInMemory get_sparse_timeseries_segment_floats(const std::string& n
     for (timestamp i = 0u; i < timestamp(num_rows); ++i) {
         wrapper.aggregator_.start_row(timestamp{i})([&](auto&& rb) {
             rb.set_scalar(1, double(i));
-            if (i % 2 == 1)
+            if (i % 2 == 1) {
                 rb.set_scalar(2, double(i) * 2);
+            }
 
-            if (i % 3 == 2)
+            if (i % 3 == 2) {
                 rb.set_scalar(3, double(i) / 2);
+            }
         });
     }
     wrapper.aggregator_.commit();
@@ -430,8 +434,9 @@ struct SegmentToInputFrameAdapter {
             }
         }
 
-        while (col < segment_.num_columns())
+        while (col < segment_.num_columns()) {
             input_frame_->field_tensors.emplace_back(tensor_from_column(segment_.column(col++)));
+        }
 
         input_frame_->set_index_range();
     }

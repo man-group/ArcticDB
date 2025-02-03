@@ -136,17 +136,19 @@ inline VariantType variant_type_from_id(const VariantId& id) {
 
 template<typename T>
 inline void serialize_variant_type(VariantId id, CursoredBuffer<T>& output) {
-    if (std::holds_alternative<NumericId>(id))
+    if (std::holds_alternative<NumericId>(id)) {
         serialize_number(std::get<NumericId>(id), output);
-    else
+    } else {
         serialize_string(std::get<std::string>(id), output);
+    }
 }
 
 inline VariantId unserialize_variant_type(VariantType type, const uint8_t*& data) {
-    if (type == VariantType::NUMERIC_TYPE)
+    if (type == VariantType::NUMERIC_TYPE) {
         return VariantId(unserialize_number<timestamp>(data));
-    else
+    } else {
         return VariantId(unserialize_string(data));
+    }
 }
 
 enum class FormatType : char {
@@ -353,40 +355,45 @@ inline RefKey from_tokenized_ref_key(const uint8_t* data, size_t size, KeyType k
 }
 
 inline VariantKey from_tokenized_variant_key(const uint8_t* data, size_t size, KeyType key_type) {
-    if (is_ref_key_class(key_type))
+    if (is_ref_key_class(key_type)) {
         return from_tokenized_ref_key(data, size, key_type);
-    else
+    } else {
         return from_tokenized_atom_key(data, size, key_type);
+    }
 }
 
 inline AtomKey atom_key_from_bytes(const uint8_t* data, size_t size, KeyType key_type) {
-    if (!is_serialized_key(data))
+    if (!is_serialized_key(data)) {
         return key_from_old_style_bytes(data, size, key_type);
+    }
 
     const auto* descr = reinterpret_cast<const KeyDescriptor*>(data);
-    if (descr->format_type == FormatType::OPAQUE)
+    if (descr->format_type == FormatType::OPAQUE) {
         return from_serialized_atom_key(data, key_type);
-    else if (descr->format_type == FormatType::TOKENIZED)
+    } else if (descr->format_type == FormatType::TOKENIZED) {
         return from_tokenized_atom_key(data, size, key_type);
+    }
 
     util::raise_rte("Unrecognized key format '{}", char(descr->format_type));
 }
 
 inline RefKey ref_key_from_bytes(const uint8_t* data, size_t size, KeyType key_type) {
     const auto* descr = reinterpret_cast<const KeyDescriptor*>(data);
-    if (descr->format_type == FormatType::OPAQUE)
+    if (descr->format_type == FormatType::OPAQUE) {
         return from_serialized_ref_key(data, key_type);
-    else if (descr->format_type == FormatType::TOKENIZED)
+    } else if (descr->format_type == FormatType::TOKENIZED) {
         return from_tokenized_ref_key(data, size, key_type);
+    }
 
     util::raise_rte("Unrecognized key format '{}", char(descr->format_type));
 }
 
 inline VariantKey variant_key_from_bytes(const uint8_t* data, size_t size, KeyType key_type) {
-    if (is_ref_key_class(key_type))
+    if (is_ref_key_class(key_type)) {
         return ref_key_from_bytes(data, size, key_type);
-    else
+    } else {
         return atom_key_from_bytes(data, size, key_type);
+    }
 }
 
 } // namespace arcticdb::entity

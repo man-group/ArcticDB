@@ -51,8 +51,9 @@ std::optional<Azure::Core::RequestFailedException> has_failure_trigger(
 ) {
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = blob_name.rfind(failure_string_for_operation);
-    if (position == std::string::npos)
+    if (position == std::string::npos) {
         return std::nullopt;
+    }
 
     try {
         auto start = position + failure_string_for_operation.size();

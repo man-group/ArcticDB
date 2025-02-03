@@ -67,23 +67,26 @@ void TimeseriesIndex::check(const FieldCollection& fields) const {
 }
 
 IndexValue TimeseriesIndex::start_value_for_segment(const SegmentInMemory& segment) {
-    if (segment.row_count() == 0)
+    if (segment.row_count() == 0) {
         return {NumericIndex{min_index_value()}};
+    }
     auto first_ts = segment.template scalar_at<timestamp>(0, 0).value();
     return {first_ts};
 }
 
 IndexValue TimeseriesIndex::end_value_for_segment(const SegmentInMemory& segment) {
     auto row_count = segment.row_count();
-    if (row_count == 0)
+    if (row_count == 0) {
         return {NumericIndex{min_index_value()}};
+    }
     auto last_ts = segment.template scalar_at<timestamp>(row_count - 1, 0).value();
     return {last_ts};
 }
 
 IndexValue TimeseriesIndex::start_value_for_keys_segment(const SegmentInMemory& segment) {
-    if (segment.row_count() == 0)
+    if (segment.row_count() == 0) {
         return {NumericIndex{min_index_value()}};
+    }
     auto start_index_id = int(pipelines::index::Fields::start_index);
     auto first_ts = segment.template scalar_at<timestamp>(0, start_index_id).value();
     return {first_ts};
@@ -91,8 +94,9 @@ IndexValue TimeseriesIndex::start_value_for_keys_segment(const SegmentInMemory& 
 
 IndexValue TimeseriesIndex::end_value_for_keys_segment(const SegmentInMemory& segment) {
     auto row_count = segment.row_count();
-    if (row_count == 0)
+    if (row_count == 0) {
         return {NumericIndex{min_index_value()}};
+    }
     auto end_index_id = int(pipelines::index::Fields::end_index);
     auto last_ts = segment.template scalar_at<timestamp>(row_count - 1, end_index_id).value();
     return {last_ts};
@@ -101,8 +105,9 @@ IndexValue TimeseriesIndex::end_value_for_keys_segment(const SegmentInMemory& se
 const char* TimeseriesIndex::name() const { return name_.c_str(); }
 
 TimeseriesIndex TimeseriesIndex::make_from_descriptor(const StreamDescriptor& desc) {
-    if (desc.field_count() > 0)
+    if (desc.field_count() > 0) {
         return TimeseriesIndex(std::string(desc.fields(0).name()));
+    }
 
     return TimeseriesIndex(DefaultName);
 }
@@ -131,8 +136,9 @@ IndexValue TableIndex::end_value_for_segment(const SegmentInMemory& segment) {
 }
 
 IndexValue TableIndex::start_value_for_keys_segment(const SegmentInMemory& segment) {
-    if (segment.row_count() == 0)
+    if (segment.row_count() == 0) {
         return {NumericIndex{0}};
+    }
     auto start_index_id = int(pipelines::index::Fields::start_index);
     auto string_index = segment.string_at(0, start_index_id).value();
     return {std::string{string_index}};
@@ -140,16 +146,18 @@ IndexValue TableIndex::start_value_for_keys_segment(const SegmentInMemory& segme
 
 IndexValue TableIndex::end_value_for_keys_segment(const SegmentInMemory& segment) {
     auto row_count = segment.row_count();
-    if (row_count == 0)
+    if (row_count == 0) {
         return {NumericIndex{0}};
+    }
     auto end_index_id = int(pipelines::index::Fields::end_index);
     auto string_index = segment.string_at(row_count - 1, end_index_id).value();
     return {std::string{string_index}};
 }
 
 TableIndex TableIndex::make_from_descriptor(const StreamDescriptor& desc) {
-    if (desc.field_count() > 0)
+    if (desc.field_count() > 0) {
         return TableIndex(std::string(desc.field(0).name()));
+    }
 
     return TableIndex(DefaultName);
 }

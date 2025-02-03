@@ -71,11 +71,13 @@ RC_GTEST_PROP(
         auto left = buf->cast<uint8_t>(where);
         auto right = input[i];
         auto& buf_obj = *buf;
-        if (buf_obj.cast<uint8_t>(where) != input[i])
+        if (buf_obj.cast<uint8_t>(where) != input[i]) {
             ARCTICDB_DEBUG(log::version(), "Mismatch at {} ({}), {} != {}", i, where, left, right);
+        }
         RC_ASSERT(left == right);
-        if (((i + 1) % split_size) == 0)
+        if (((i + 1) % split_size) == 0) {
             ++buf;
+        }
     }
 }
 
@@ -107,8 +109,9 @@ RC_GTEST_PROP(ChunkedBuffer, ReadWriteIrregular, (const std::vector<std::vector<
     using namespace arcticdb;
     CursoredBuffer<ChunkedBufferImpl<64>> cb;
     for (auto& vec : inputs) {
-        if (vec.empty())
+        if (vec.empty()) {
             continue;
+        }
 
         auto data_size = vec.size() * sizeof(int64_t);
         cb.ensure_bytes(data_size);
@@ -136,15 +139,17 @@ RC_GTEST_PROP(
     CursoredBuffer<ChunkedBufferImpl<64>> cb;
     for (uint8_t i = 0; i < regular_chunks; ++i) {
         cb.ensure_bytes(64);
-        for (uint8_t j = 0; j < 64; ++j)
+        for (uint8_t j = 0; j < 64; ++j) {
             cb.buffer().cast<uint8_t>((i * 64) + j) = (i * 64) + j;
+        }
 
         cb.commit();
     }
 
     for (auto& vec : inputs) {
-        if (vec.empty())
+        if (vec.empty()) {
             continue;
+        }
 
         auto data_size = vec.size() * sizeof(uint64_t);
         cb.ensure_bytes(data_size);

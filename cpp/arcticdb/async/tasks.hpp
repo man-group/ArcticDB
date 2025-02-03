@@ -520,8 +520,9 @@ struct MemSegmentProcessingTask : BaseTask {
 
             auto next_it = std::next(it);
             if (next_it != clauses_.cend() &&
-                (*it)->clause_info().output_structure_ != (*next_it)->clause_info().input_structure_)
+                (*it)->clause_info().output_structure_ != (*next_it)->clause_info().input_structure_) {
                 break;
+            }
         }
         return std::move(entity_ids_);
     }

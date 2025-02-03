@@ -64,22 +64,25 @@ struct IndexRange {
 
     // N.B. Convenience function, variant construction will be too expensive for tight loops
     friend bool intersects(const IndexRange& left, const IndexRange& right) {
-        if (!left.specified_ || !right.specified_)
+        if (!left.specified_ || !right.specified_) {
             return true;
+        }
 
         return left.start_ <= right.end_ && left.end_ >= right.start_;
     }
 
     friend bool intersects(const IndexRange& rg, const IndexValue& start, const IndexValue& end) {
-        if (!rg.specified_)
+        if (!rg.specified_) {
             return true;
+        }
 
         return rg.start_ <= end && rg.end_ >= start;
     }
 
     friend bool overlaps(const IndexRange& left, const IndexRange& right) {
-        if (!left.specified_ || !right.specified_)
+        if (!left.specified_ || !right.specified_) {
             return true;
+        }
 
         return left.start_ == right.start_ && left.end_ == right.end_;
     }
@@ -139,8 +142,9 @@ namespace arcticdb::entity {
 
 // Note: this needs to be defined after formatters.
 inline bool IndexRange::accept(const IndexValue& index) {
-    if (!specified_)
+    if (!specified_) {
         return true;
+    }
 
     if (index >= start_ && index <= end_) {
         ARCTICDB_DEBUG(log::inmem(), "Returning index {} which is in range {}", index, *this);

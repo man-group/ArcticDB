@@ -21,8 +21,9 @@ namespace arcticdb {
     entity::position_t offset,
     bool strip_fixed_width_trailing_nulls
 ) const {
-    if (UNLIKELY(!column_ || !string_pool_))
+    if (UNLIKELY(!column_ || !string_pool_)) {
         return std::nullopt;
+    }
     util::check(!column_->is_inflated(), "Unexpected inflated column in filtering");
     if (!is_a_string(offset)) {
         return std::nullopt;
@@ -39,8 +40,9 @@ namespace arcticdb {
 }
 
 [[nodiscard]] std::optional<size_t> ColumnWithStrings::get_fixed_width_string_size() const {
-    if (!column_ || !string_pool_)
+    if (!column_ || !string_pool_) {
         return std::nullopt;
+    }
 
     util::check(!column_->is_inflated(), "Unexpected inflated column in filtering");
     for (position_t i = 0; i < column_->row_count(); ++i) {

@@ -55,8 +55,9 @@ std::shared_ptr<Storage> create_storage(
         file::MappedFileStorage::Config mapped_config;
         storage_descriptor.config().UnpackTo(&mapped_config);
         storage = std::make_shared<file::MappedFileStorage>(library_path, mode, mapped_config);
-    } else
+    } else {
         throw std::runtime_error(fmt::format("Unknown config type {}", type_name));
+    }
 
     return storage;
 }

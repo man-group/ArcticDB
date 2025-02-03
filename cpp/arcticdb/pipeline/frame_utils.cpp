@@ -34,14 +34,17 @@ TimeseriesDescriptor make_timeseries_descriptor(
     auto proto = std::make_shared<TimeseriesDescriptor::Proto>();
     proto->mutable_normalization()->CopyFrom(norm_meta);
     auto user_meta = std::move(um);
-    if (user_meta)
+    if (user_meta) {
         *proto->mutable_user_meta() = std::move(*user_meta);
+    }
 
-    if (prev_key)
+    if (prev_key) {
         proto->mutable_next_key()->CopyFrom(key_to_proto(prev_key.value()));
+    }
 
-    if (next_key)
+    if (next_key) {
         proto->mutable_next_key()->CopyFrom(key_to_proto(next_key.value()));
+    }
 
     // TODO maybe need ensure_norm_meta?
     return TimeseriesDescriptor{
@@ -85,8 +88,9 @@ TimeseriesDescriptor index_descriptor_from_frame(
 }
 
 void adjust_slice_rowcounts(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context) {
-    if (pipeline_context->slice_and_keys_.empty())
+    if (pipeline_context->slice_and_keys_.empty()) {
         return;
+    }
 
     pipeline_context->total_rows_ = adjust_slice_rowcounts(pipeline_context->slice_and_keys_);
 }
@@ -96,8 +100,9 @@ size_t adjust_slice_rowcounts(
     const std::optional<size_t>& first_row
 ) {
     using namespace arcticdb::pipelines;
-    if (slice_and_keys.empty())
+    if (slice_and_keys.empty()) {
         return 0u;
+    }
 
     auto offset = first_row.value_or(slice_and_keys[0].slice_.row_range.first);
     auto diff = slice_and_keys[0].slice_.row_range.diff();

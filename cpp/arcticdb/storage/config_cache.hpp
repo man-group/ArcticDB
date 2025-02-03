@@ -33,8 +33,9 @@ class ConfigCache {
     std::optional<LibraryDescriptor> get_descriptor(const LibraryPath& path) {
         std::lock_guard<std::mutex> lock{mutex_};
         auto descriptor = descriptor_map_.find(path);
-        if (descriptor == descriptor_map_.end())
+        if (descriptor == descriptor_map_.end()) {
             return std::nullopt;
+        }
 
         return descriptor->second;
     }
@@ -46,8 +47,9 @@ class ConfigCache {
 
     void add_library_config(const LibraryPath& path, const arcticdb::proto::storage::LibraryConfig lib_cfg) {
         add_library(path, decode_library_descriptor(lib_cfg.lib_desc()));
-        for (const auto& storage : lib_cfg.storage_by_id())
+        for (const auto& storage : lib_cfg.storage_by_id()) {
             add_storage(StorageName{storage.first}, storage.second);
+        }
     }
 
     void add_library(const LibraryPath& path, const LibraryDescriptor& desc) {
@@ -75,8 +77,9 @@ class ConfigCache {
 
     std::shared_ptr<Storages> create_storages(const LibraryPath& path, OpenMode mode) {
         auto maybe_descriptor = get_descriptor(path);
-        if (!maybe_descriptor.has_value())
+        if (!maybe_descriptor.has_value()) {
             throw std::runtime_error(fmt::format("Library {} not found", path));
+        }
 
         auto& descriptor = *maybe_descriptor;
 
@@ -86,14 +89,16 @@ class ConfigCache {
             // Otherwise see if we have the storage config.
             arcticdb::proto::storage::VariantStorage storage_conf;
             auto storage_conf_pos = storage_configs_.find(storage_name);
-            if (storage_conf_pos != storage_configs_.end())
+            if (storage_conf_pos != storage_configs_.end()) {
                 storage_conf = storage_conf_pos->second;
+            }
 
             // As a last resort, get the whole environment config from the resolver.
             refresh_config();
             storage_conf_pos = storage_configs_.find(storage_name);
-            if (storage_conf_pos != storage_configs_.end())
+            if (storage_conf_pos != storage_configs_.end()) {
                 storage_conf = storage_conf_pos->second;
+            }
 
             storages.emplace_back(create_storage(path, mode, storage_conf));
         }

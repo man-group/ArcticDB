@@ -36,8 +36,9 @@ pointer_set<MemoryChunk> call_alloc(MemoryChunk& mc, std::size_t n, int64_t& exe
 
     auto time_begin = std::chrono::high_resolution_clock::now();
 
-    for (size_t i = 0; i < n; ++i)
+    for (size_t i = 0; i < n; ++i) {
         mcps.insert(mc.allocate());
+    }
 
     auto time_end = std::chrono::high_resolution_clock::now();
     execution_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_begin).count();
@@ -47,9 +48,11 @@ pointer_set<MemoryChunk> call_alloc(MemoryChunk& mc, std::size_t n, int64_t& exe
 template<typename MemoryChunk>
 void check_sets(const pointer_set<MemoryChunk>& s1, const pointer_set<MemoryChunk>& s2) {
     auto end = std::cend(s2);
-    for (auto* p : s1)
-        if (s2.find(p) != end)
+    for (auto* p : s1) {
+        if (s2.find(p) != end) {
             throw std::runtime_error("two sets have the same address");
+        }
+    }
 }
 
 template<typename MemoryChunk>
@@ -67,8 +70,9 @@ void run_test(MemoryChunk& mc, unsigned int K) {
                 std::ref(execution_times[i])
             ));
         }
-        for (auto& t : v)
+        for (auto& t : v) {
             t.wait();
+        }
 
         for (size_t i = 0; i < num_threads; ++i) {
             avg += execution_times[i];
@@ -87,8 +91,9 @@ void run_test(MemoryChunk& mc, unsigned int K) {
                 ));
             }
         }
-        for (auto& f : exceptions)
+        for (auto& f : exceptions) {
             f.get();
+        }
 
         for (const auto& pointers : comparisons) {
             for (auto* p : pointers) {
@@ -103,8 +108,9 @@ TEST(SlabAlloc, CacheLine128) {
     SKIP_WIN("Slab allocator not supported");
     SlabAllocator<int, 128> mc128{num_blocks_per_thread * num_threads};
     std::cout << "BEGIN: mc128 tests\n";
-    for (size_t i = 0; i < 5; i++)
+    for (size_t i = 0; i < 5; i++) {
         run_test(mc128, 100);
+    }
     std::cout << "END:   mc128 tests\n\n";
 }
 
@@ -112,8 +118,9 @@ TEST(SlabAlloc, CacheLine32) {
     SKIP_WIN("Slab allocator not supported");
     SlabAllocator<int, 32> mc32{num_blocks_per_thread * num_threads};
     std::cout << "BEGIN: mc32 tests\n";
-    for (size_t i = 0; i < 5; i++)
+    for (size_t i = 0; i < 5; i++) {
         run_test(mc32, 100);
+    }
     std::cout << "END:   mc32 tests\n";
 }
 
@@ -121,8 +128,9 @@ TEST(SlabAlloc, PageSizeMem) {
     SKIP_WIN("Slab allocator not supported");
     SlabAllocator<std::byte[4096], 128> mc_page{num_blocks_per_thread * num_threads};
     std::cout << "BEGIN: mc_page tests\n";
-    for (size_t i = 0; i < 5; i++)
+    for (size_t i = 0; i < 5; i++) {
         run_test(mc_page, 100);
+    }
     std::cout << "END:   mc_page tests\n\n";
 }
 

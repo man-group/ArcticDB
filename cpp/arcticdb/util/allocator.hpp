@@ -97,8 +97,9 @@ constexpr size_t alignment = 64;
 constexpr size_t round_to_alignment(size_t size) {
     constexpr size_t mask = ~(alignment - 1);
     auto new_size = size & mask;
-    if (new_size != size)
+    if (new_size != size) {
         new_size += alignment;
+    }
 
     return new_size;
 }
