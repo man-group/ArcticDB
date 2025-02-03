@@ -18,6 +18,7 @@ import boto3
 import time
 import random
 from datetime import datetime
+import string
 
 import requests
 from typing import Optional, Any, Type
@@ -524,6 +525,9 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self.use_raw_prefix = use_raw_prefix
         self.use_mock_storage_for_testing = use_mock_storage_for_testing
         self.use_internal_client_wrapper_for_testing = use_internal_client_wrapper_for_testing
+        # This is needed because we might have multiple factories in the same test
+        # and we need to make sure the bucket names are unique
+        self.unique_id = "".join(random.choices(string.ascii_letters + string.digits, k=5))
 
     @staticmethod
     def run_server(port, key_file, cert_file):
@@ -676,7 +680,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self._enforcing_permissions = enforcing
 
     def create_fixture(self) -> S3Bucket:
-        bucket = f"test_bucket_{self._bucket_id}"
+        bucket = f"test_bucket_{self.unique_id}_{self._bucket_id}"
         self._s3_admin.create_bucket(Bucket=bucket)
         self._bucket_id += 1
         if self.bucket_versioning:

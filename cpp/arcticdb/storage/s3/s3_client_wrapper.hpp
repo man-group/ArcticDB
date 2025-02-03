@@ -26,15 +26,15 @@
 namespace arcticdb::storage::s3 {
 
 // A wrapper around the actual S3 client which can simulate failures based on the configuration.
-// The S3ClientWrapper delegates to the real client by default, but can intercept operations
+// The S3ClientTestWrapper delegates to the real client by default, but can intercept operations
 // to simulate failures or track operations for testing purposes.
-class S3ClientWrapper : public S3ClientInterface {
+class S3ClientTestWrapper : public S3ClientInterface {
 public:
-    explicit S3ClientWrapper(std::unique_ptr<S3ClientInterface> actual_client) : 
+    explicit S3ClientTestWrapper(std::unique_ptr<S3ClientInterface> actual_client) : 
         actual_client_(std::move(actual_client)) {
     }
 
-    ~S3ClientWrapper() override = default; 
+    ~S3ClientTestWrapper() override = default; 
 
     [[nodiscard]] S3Result<std::monostate> head_object(
         const std::string& s3_object_name,
