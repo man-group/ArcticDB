@@ -158,14 +158,35 @@ def test_read_path_with_dot(lib_name, s3_storage_dots_in_path):
     pd.testing.assert_frame_equal(res, expected)
 
 
-def test_wrapped_s3_storage(lib_name, wrapped_s3_storage_factory):
-    test_bucket = wrapped_s3_storage_factory.create_fixture()
-    lib = test_bucket.create_version_store_factory(lib_name)()
+@pytest.fixture(scope="function")
+def wrapped_s3_storage_bucket(wrapped_s3_storage_factory):
+    with wrapped_s3_storage_factory.create_fixture() as bucket:
+        yield bucket
+
+
+def test_wrapped_s3_storage(lib_name, wrapped_s3_storage_bucket):
+    lib = wrapped_s3_storage_bucket.create_version_store_factory(lib_name)()
     lib.write("s", data=create_df())
+    test_bucket_name = wrapped_s3_storage_bucket.bucket
 
     with config_context("S3ClientWrapper.EnableFailures", 1):
         with pytest.raises(NoDataFoundException, match="Unexpected network error: S3Error#99"):
             lib.read("s")
-        with config_context_string("S3ClientWrapper.FailureBucket", test_bucket.bucket):
+
+        with config_context_string("S3ClientWrapper.FailureBucket", test_bucket_name):
             with pytest.raises(StorageException, match="Unexpected network error: S3Error#99"):
                 lib.write("s", data=create_df())
+
+        with config_context_string("S3ClientWrapper.FailureBucket", f"{test_bucket_name},non_existent_bucket"):
+            with pytest.raises(StorageException, match="Unexpected network error: S3Error#99"):
+                lib.write("s", data=create_df())
+
+        # There should be no failures
+        # given that we should not be simulating any failures for the test bucket
+        with config_context_string("S3ClientWrapper.FailureBucket", "non_existent_bucket"):
+            lib.read("s")
+            lib.write("s", data=create_df())
+
+    # There should be no problems after the failure simulation has been turned off
+    lib.read("s")
+    lib.write("s", data=create_df())
