@@ -5,7 +5,6 @@ import glob
 import platform
 import shutil
 import re
-from pathlib import Path
 from tempfile import mkdtemp
 from setuptools import setup, Command, find_namespace_packages
 from setuptools import Extension, find_packages
