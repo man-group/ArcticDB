@@ -46,23 +46,9 @@ using SortedAggregatorInterface = folly::Poly<ISortedAggregator>;
 template<ResampleBoundary closed_boundary>
 class Bucket {
 public:
-    Bucket(timestamp start, timestamp end):
-            start_(start), end_(end){}
-
-    void set_boundaries(timestamp start, timestamp end) {
-        start_ = start;
-        end_ = end;
-    }
-
-    bool contains(timestamp ts) const {
-        if constexpr (closed_boundary == ResampleBoundary::LEFT) {
-            return ts >= start_ && ts < end_;
-        } else {
-            // closed_boundary == ResampleBoundary::RIGHT
-            return ts > start_ && ts <= end_;
-        }
-    }
-
+    Bucket(timestamp start, timestamp end);
+    void set_boundaries(timestamp start, timestamp end);
+    [[nodiscard]] bool contains(timestamp ts) const;
 private:
     timestamp start_;
     timestamp end_;
@@ -345,14 +331,11 @@ class SortedAggregator
 {
 public:
 
-    explicit SortedAggregator(ColumnName input_column_name, ColumnName output_column_name)
-            : input_column_name_(std::move(input_column_name))
-            , output_column_name_(std::move(output_column_name))
-    {}
+    explicit SortedAggregator(ColumnName input_column_name, ColumnName output_column_name);
     ARCTICDB_MOVE_COPY_DEFAULT(SortedAggregator)
 
-    [[nodiscard]] ColumnName get_input_column_name() const { return input_column_name_; }
-    [[nodiscard]] ColumnName get_output_column_name() const { return output_column_name_; }
+    [[nodiscard]] ColumnName get_input_column_name() const;
+    [[nodiscard]] ColumnName get_output_column_name() const;
 
     [[nodiscard]] Column aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
                                    const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
@@ -364,79 +347,6 @@ private:
     void check_aggregator_supported_with_data_type(DataType data_type) const;
     [[nodiscard]] DataType generate_output_data_type(DataType common_input_data_type) const;
     [[nodiscard]] bool index_value_past_end_of_bucket(timestamp index_value, timestamp bucket_end) const;
-
-    template<DataType input_data_type, typename Aggregator, typename T>
-    void push_to_aggregator(Aggregator& bucket_aggregator, T value, ARCTICDB_UNUSED const ColumnWithStrings& column_with_strings) const {
-        if constexpr(is_time_type(input_data_type) && aggregation_operator == AggregationOperator::COUNT) {
-            bucket_aggregator.template push<timestamp, true>(value);
-        } else if constexpr (is_numeric_type(input_data_type) || is_bool_type(input_data_type)) {
-            bucket_aggregator.push(value);
-        } else if constexpr (is_sequence_type(input_data_type)) {
-            bucket_aggregator.push(column_with_strings.string_at_offset(value));
-        }
-    }
-
-    template<DataType output_data_type, typename Aggregator>
-    [[nodiscard]] auto finalize_aggregator(Aggregator& bucket_aggregator, ARCTICDB_UNUSED StringPool& string_pool) const {
-        if constexpr (is_numeric_type(output_data_type) || is_bool_type(output_data_type) || aggregation_operator == AggregationOperator::COUNT) {
-            return bucket_aggregator.finalize();
-        } else if constexpr (is_sequence_type(output_data_type)) {
-            auto opt_string_view = bucket_aggregator.finalize();
-            if (ARCTICDB_LIKELY(opt_string_view.has_value())) {
-                return string_pool.get(*opt_string_view).offset();
-            } else {
-                return string_none;
-            }
-        }
-    }
-
-    template<typename scalar_type_info>
-    [[nodiscard]] auto get_bucket_aggregator() const {
-        if constexpr (aggregation_operator == AggregationOperator::SUM) {
-            if constexpr (is_bool_type(scalar_type_info::data_type)) {
-                // Sum of bool column is just the count of true values
-                return SumAggregatorSorted<uint64_t>();
-            } else {
-                return SumAggregatorSorted<typename scalar_type_info::RawType>();
-            }
-        } else if constexpr (aggregation_operator == AggregationOperator::MEAN) {
-            if constexpr (is_time_type(scalar_type_info::data_type)) {
-                return MeanAggregatorSorted<typename scalar_type_info::RawType, true>();
-            } else {
-                return MeanAggregatorSorted<typename scalar_type_info::RawType>();
-            }
-        } else if constexpr (aggregation_operator == AggregationOperator::MIN) {
-            if constexpr (is_time_type(scalar_type_info::data_type)) {
-                return MinAggregatorSorted<typename scalar_type_info::RawType, true>();
-            } else {
-                return MinAggregatorSorted<typename scalar_type_info::RawType>();
-            }
-        } else if constexpr (aggregation_operator == AggregationOperator::MAX) {
-            if constexpr (is_time_type(scalar_type_info::data_type)) {
-                return MaxAggregatorSorted<typename scalar_type_info::RawType, true>();
-            } else {
-                return MaxAggregatorSorted<typename scalar_type_info::RawType>();
-            }
-        } else if constexpr (aggregation_operator == AggregationOperator::FIRST) {
-            if constexpr (is_time_type(scalar_type_info::data_type)) {
-                return FirstAggregatorSorted<typename scalar_type_info::RawType, true>();
-            } else if constexpr (is_numeric_type(scalar_type_info::data_type) || is_bool_type(scalar_type_info::data_type)) {
-                return FirstAggregatorSorted<typename scalar_type_info::RawType>();
-            } else if constexpr (is_sequence_type(scalar_type_info::data_type)) {
-                return FirstAggregatorSorted<std::optional<std::string_view>>();
-            }
-        } else if constexpr (aggregation_operator == AggregationOperator::LAST) {
-            if constexpr (is_time_type(scalar_type_info::data_type)) {
-                return LastAggregatorSorted<typename scalar_type_info::RawType, true>();
-            } else if constexpr (is_numeric_type(scalar_type_info::data_type) || is_bool_type(scalar_type_info::data_type)) {
-                return LastAggregatorSorted<typename scalar_type_info::RawType>();
-            } else if constexpr (is_sequence_type(scalar_type_info::data_type)) {
-                return LastAggregatorSorted<std::optional<std::string_view>>();
-            }
-        } else if constexpr (aggregation_operator == AggregationOperator::COUNT) {
-            return CountAggregatorSorted();
-        }
-    }
 
     ColumnName input_column_name_;
     ColumnName output_column_name_;
