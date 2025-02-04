@@ -56,7 +56,7 @@ void MappedFileStorage::init() {
 
 SegmentInMemory MappedFileStorage::read_segment(size_t offset, size_t bytes) const  {
     auto index_segment = Segment::from_bytes(file_.data() + offset, bytes);
-    return decode_segment(std::move(index_segment));
+    return decode_segment(index_segment);
 }
 
 void MappedFileStorage::do_load_header(size_t header_offset, size_t header_size) {
@@ -75,8 +75,7 @@ uint64_t MappedFileStorage::get_data_offset(const Segment& seg) {
     return previous_offset;
 }
 
-uint64_t MappedFileStorage::write_segment(Segment&& seg) {
-    auto segment = std::move(seg);
+uint64_t MappedFileStorage::write_segment(Segment& segment) {
     auto offset = get_data_offset(segment);
     auto* data = file_.data() + offset;
     ARCTICDB_SUBSAMPLE(FileStorageMemCpy, 0)
@@ -85,14 +84,14 @@ uint64_t MappedFileStorage::write_segment(Segment&& seg) {
     return offset;
 }
 
-void MappedFileStorage::do_write(KeySegmentPair&& key_seg) {
+void MappedFileStorage::do_write(KeySegmentPair& key_seg) {
     ARCTICDB_SAMPLE(MappedFileStorageWriteValues, 0)
-    const auto offset = write_segment(std::move(key_seg.segment()));
+    const auto offset = write_segment(*key_seg.segment_ptr());
     const auto size = key_seg.segment().size();
     multi_segment_header_.add_key_and_offset(key_seg.atom_key(), offset, size);
 }
 
-void MappedFileStorage::do_update(KeySegmentPair&&, UpdateOpts) {
+void MappedFileStorage::do_update(KeySegmentPair&, UpdateOpts) {
     util::raise_rte("Update not implemented for file storages");
 }
 
@@ -102,7 +101,7 @@ void MappedFileStorage::do_read(VariantKey&& variant_key, const ReadVisitor& vis
         util::check(maybe_offset.has_value(), "Failed to find key {} in file", variant_key);
         auto [offset, bytes] = std::move(maybe_offset.value());
         auto segment = Segment::from_bytes(file_.data() + offset, bytes);
-        visitor(variant_key, std::move(segment));
+        visitor(variant_key, segment);
 }
 
 KeySegmentPair MappedFileStorage::do_read(VariantKey&& variant_key, storage::ReadKeyOpts) {
@@ -135,7 +134,7 @@ void MappedFileStorage::do_finalize(KeyData key_data)  {
     auto header_segment = encode_dispatch(multi_segment_header_.detach_segment(),
                                           config_.codec_opts(),
                                           EncodingVersion{static_cast<uint16_t>(config_.encoding_version())});
-    write_segment(std::move(header_segment));
+    write_segment(header_segment);
     auto pos = reinterpret_cast<KeyData*>(file_.data() + offset_);
     *pos = key_data;
     ARCTICDB_DEBUG(log::storage(), "Finalizing mapped file, writing key data {}", *pos);

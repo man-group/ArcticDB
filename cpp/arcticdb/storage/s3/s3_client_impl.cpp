@@ -176,7 +176,7 @@ folly::Future<S3Result<Segment>> S3ClientImpl::get_object_async(
 
 S3Result<std::monostate> S3ClientImpl::put_object(
         const std::string &s3_object_name,
-        Segment &&segment,
+        Segment& segment,
         const std::string &bucket_name,
         PutHeader header) {
 

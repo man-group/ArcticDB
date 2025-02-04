@@ -42,18 +42,21 @@ public:
     Storage(Storage&&) = default;
     Storage& operator=(Storage&&) = delete;
 
-    void write(KeySegmentPair&& key_seg) {
+    template<typename T>
+    void write(T&& key_seg) {
         ARCTICDB_SAMPLE(StorageWrite, 0)
-        return do_write(std::move(key_seg));
+        return do_write(key_seg);
     }
 
-    void write_if_none(KeySegmentPair&& kv) {
-        return do_write_if_none(std::move(kv));
+    template<typename T>
+    void write_if_none(T&& kv) {
+        return do_write_if_none(kv);
     }
 
-    void update(KeySegmentPair&& key_seg, UpdateOpts opts) {
+    template<typename T>
+    void update(T&& key_seg, UpdateOpts opts) {
         ARCTICDB_SAMPLE(StorageUpdate, 0)
-        return do_update(std::move(key_seg), opts);
+        return do_update(key_seg, opts);
     }
 
     void read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
@@ -179,11 +182,11 @@ private:
         return atomic_write_works_as_expected;
     }
 
-    virtual void do_write(KeySegmentPair&& key_seg) = 0;
+    virtual void do_write(KeySegmentPair& key_seg) = 0;
 
-    virtual void do_write_if_none(KeySegmentPair&& kv) = 0;
+    virtual void do_write_if_none(KeySegmentPair& kv) = 0;
 
-    virtual void do_update(KeySegmentPair&& key_seg, UpdateOpts opts) = 0;
+    virtual void do_update(KeySegmentPair& key_seg, UpdateOpts opts) = 0;
 
     virtual void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) = 0;
 

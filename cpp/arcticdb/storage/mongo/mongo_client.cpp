@@ -131,12 +131,12 @@ auto build_document(storage::KeySegmentPair &kv) {
     using builder::stream::document;
 
     const auto &key = kv.variant_key();
-    auto &segment = kv.segment();
+    Segment& segment = *kv.segment_ptr();
     const auto total_size = segment.calculate_size();
     /*thread_local*/ std::vector<uint8_t> buffer{};
     buffer.resize(total_size);
     bsoncxx::types::b_binary data = {};
-    kv.segment().write_to(buffer.data());
+    kv.segment_ptr()->write_to(buffer.data());
     data.size = uint32_t(total_size);
     data.bytes = buffer.data();
 
@@ -185,12 +185,12 @@ class MongoClientImpl {
     bool write_segment(
         const std::string &database_name,
         const std::string &collection_name,
-        storage::KeySegmentPair&& key_seg);
+        storage::KeySegmentPair& key_seg);
 
     UpdateResult update_segment(
         const std::string &database_name,
         const std::string &collection_name,
-        storage::KeySegmentPair&& key_seg,
+        storage::KeySegmentPair& key_seg,
         bool upsert);
 
     std::optional<KeySegmentPair> read_segment(
@@ -247,7 +247,7 @@ class MongoClientImpl {
 bool MongoClientImpl::write_segment(
         const std::string &database_name,
         const std::string &collection_name,
-        storage::KeySegmentPair&& key_seg) {
+        storage::KeySegmentPair& key_seg) {
     using namespace bsoncxx::builder::stream;
     using bsoncxx::builder::stream::document;
     ARCTICDB_SUBSAMPLE(MongoStorageWriteGetClient, 0)
@@ -276,7 +276,7 @@ bool MongoClientImpl::write_segment(
 UpdateResult MongoClientImpl::update_segment(
         const std::string &database_name,
         const std::string &collection_name,
-        storage::KeySegmentPair&& key_seg,
+        storage::KeySegmentPair& key_seg,
         bool upsert) {
     using namespace bsoncxx::builder::stream;
     using bsoncxx::builder::stream::document;
@@ -452,16 +452,16 @@ MongoClient::~MongoClient() {
 bool MongoClient::write_segment(
         const std::string &database_name,
         const std::string &collection_name,
-        storage::KeySegmentPair&& key_seg) {
-    return client_->write_segment(database_name, collection_name, std::move(key_seg));
+        storage::KeySegmentPair& key_seg) {
+    return client_->write_segment(database_name, collection_name, key_seg);
 }
 
 UpdateResult MongoClient::update_segment(
         const std::string &database_name,
         const std::string &collection_name,
-        storage::KeySegmentPair&& key_seg,
+        storage::KeySegmentPair& key_seg,
         bool upsert) {
-    return client_->update_segment(database_name, collection_name, std::move(key_seg), upsert);
+    return client_->update_segment(database_name, collection_name, key_seg, upsert);
 }
 
 std::optional<KeySegmentPair> MongoClient::read_segment(

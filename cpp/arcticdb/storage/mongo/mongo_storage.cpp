@@ -74,13 +74,13 @@ std::string MongoStorage::name() const {
     return fmt::format("mongo_storage-{}", db_);
 }
 
-void MongoStorage::do_write(KeySegmentPair &&key_seg) {
+void MongoStorage::do_write(KeySegmentPair &key_seg) {
     ARCTICDB_SAMPLE(MongoStorageWrite, 0)
 
     auto collection = collection_name(key_seg.key_type());
     auto key_view = key_seg.key_view();
     try {
-        auto success = client_->write_segment(db_, collection, std::move(key_seg));
+        auto success = client_->write_segment(db_, collection, key_seg);
         storage::check<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>(success,
                                                             "Mongo did not acknowledge write for key {}",
                                                             key_view);
@@ -90,13 +90,13 @@ void MongoStorage::do_write(KeySegmentPair &&key_seg) {
     }
 }
 
-void MongoStorage::do_update(KeySegmentPair &&key_seg, UpdateOpts opts) {
+void MongoStorage::do_update(KeySegmentPair &key_seg, UpdateOpts opts) {
     ARCTICDB_SAMPLE(MongoStorageWrite, 0)
 
     auto collection = collection_name(key_seg.key_type());
     auto key_view = key_seg.key_view();
     try {
-        auto result = client_->update_segment(db_, collection, std::move(key_seg), opts.upsert_);
+        auto result = client_->update_segment(db_, collection, key_seg, opts.upsert_);
         storage::check<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>(result.modified_count.has_value(),
                                                             "Mongo did not acknowledge write for key {}",
                                                             key_view);
@@ -112,7 +112,7 @@ void MongoStorage::do_update(KeySegmentPair &&key_seg, UpdateOpts opts) {
 
 void MongoStorage::do_read(VariantKey &&variant_key, const ReadVisitor &visitor, ReadKeyOpts opts) {
     auto key_seg = do_read(std::move(variant_key), opts);
-    visitor(key_seg.variant_key(), std::move(key_seg.segment()));
+    visitor(key_seg.variant_key(), *key_seg.segment_ptr());
 }
 
 KeySegmentPair MongoStorage::do_read(VariantKey&& variant_key, ReadKeyOpts opts) {
@@ -126,7 +126,7 @@ KeySegmentPair MongoStorage::do_read(VariantKey&& variant_key, ReadKeyOpts opts)
         if (!kv.has_value()) {
             throw KeyNotFoundException(variant_key);
         } else {
-            return {VariantKey{variant_key}, std::move(kv->segment())};
+            return *kv;
         }
     } catch (const mongocxx::operation_exception &ex) {
         std::string object_name = std::string(variant_key_view(variant_key));
