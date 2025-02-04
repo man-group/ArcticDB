@@ -7,9 +7,10 @@
 
 #pragma once
 
-#include<memory>
+#include <memory>
 #include <optional>
 #include <vector>
+#include <span>
 
 #include <folly/Poly.h>
 
@@ -343,7 +344,20 @@ public:
                                    const Column& output_index_column,
                                    StringPool& string_pool) const;
 private:
-    [[nodiscard]] DataType generate_common_input_type(const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns) const;
+    [[nodiscard]] Column aggregate_static_schema(
+        std::span<const std::shared_ptr<Column>> input_index_columns,
+        std::span<const std::optional<ColumnWithStrings>> input_agg_columns,
+        std::span<const timestamp> bucket_boundaries,
+        const Column& output_index_column,
+        StringPool& string_pool,
+        DataType common_input_type) const;
+    [[nodiscard]] Column aggregate_dynamic_schema(
+        std::span<const std::shared_ptr<Column>> input_index_columns,
+        std::span<const std::optional<ColumnWithStrings>> input_agg_columns,
+        std::span<const timestamp> bucket_boundaries,
+        const Column& output_index_column,
+        StringPool& string_pool) const;
+    [[nodiscard]] std::optional<DataType> generate_common_input_type(const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns) const;
     void check_aggregator_supported_with_data_type(DataType data_type) const;
     [[nodiscard]] DataType generate_output_data_type(DataType common_input_data_type) const;
     [[nodiscard]] bool index_value_past_end_of_bucket(timestamp index_value, timestamp bucket_end) const;
