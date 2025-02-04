@@ -19,6 +19,7 @@ import pandas as pd
 import pickle
 from abc import ABCMeta, abstractmethod
 
+from arcticdb_ext import get_config_string
 from pandas.api.types import is_integer_dtype
 from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetadata, MsgPackSerialization
 from arcticc.pb2.storage_pb2 import VersionStoreConfig
@@ -40,6 +41,7 @@ from typing import Dict, NamedTuple, List, Union, Mapping, Any, TypeVar, Tuple
 
 from arcticdb._msgpack_compat import packb, padded_packb, unpackb, ExtType
 from arcticdb.log import version as log
+from arcticdb_ext.log import LogLevel
 from arcticdb.version_store._common import _column_name_to_strings, TimeFrame
 
 PICKLE_PROTOCOL = 4
@@ -76,6 +78,28 @@ NPDDataFrame = NamedTuple(
 )
 
 NormalizedInput = NamedTuple("NormalizedInput", [("item", NPDDataFrame), ("metadata", NormalizationMetadata)])
+
+
+_PICKLED_METADATA_LOGLEVEL = None # set lazily with function below
+
+
+def get_pickled_metadata_loglevel():
+    global _PICKLED_METADATA_LOGLEVEL
+    if _PICKLED_METADATA_LOGLEVEL:
+        return _PICKLED_METADATA_LOGLEVEL
+
+    log_level = get_config_string("PickledMetadata.LogLevel")
+    expected_settings = ("DEBUG", "INFO", "WARN", "ERROR")
+    if log_level:
+        if log_level.upper() not in expected_settings:
+            log.warn(f"Expected PickledMetadata.LogLevel setting to be in {expected_settings} or absent but was {log_level}")
+            _PICKLED_METADATA_LOGLEVEL = LogLevel.WARN
+        else:
+            _PICKLED_METADATA_LOGLEVEL = getattr(LogLevel, log_level.upper())
+    else:
+        _PICKLED_METADATA_LOGLEVEL = LogLevel.WARN
+
+    return _PICKLED_METADATA_LOGLEVEL
 
 
 # To simplify unit testing of serialization logic. This maps the cpp _FrameData exposed object
@@ -1064,6 +1088,7 @@ class Pickler(object):
 
     @staticmethod
     def write(obj):
+        log.log(get_pickled_metadata_loglevel(), f"Pickling metadata - may not be readable by other clients")
         return pickle.dumps(obj, protocol=PICKLE_PROTOCOL)
 
 
