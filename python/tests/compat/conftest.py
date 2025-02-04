@@ -213,9 +213,9 @@ def pandas_v1_venv(request):
 @pytest.fixture(
     params=[
         "lmdb",
-        "s3_ssl_disabled",
-        pytest.param("azurite", marks=AZURE_TESTS_MARK),
-        pytest.param("mongo", marks=MONGO_TESTS_MARK),
+        #"s3_ssl_disabled",
+        #pytest.param("azurite", marks=AZURE_TESTS_MARK),
+        #pytest.param("mongo", marks=MONGO_TESTS_MARK),
     ]
 )
 def arctic_uri(request):

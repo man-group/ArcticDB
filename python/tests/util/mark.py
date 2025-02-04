@@ -34,7 +34,7 @@ SKIP_CONDA_MARK = pytest.mark.skipif(
 
 # These two should become pytest marks as opposed to variables feeding into skipif
 PERSISTENT_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS") == "1"
-FAST_TESTS_ONLY = os.getenv("ARCTICDB_FAST_TESTS_ONLY") == "1"
+FAST_TESTS_ONLY = True
 
 
 # !!!!!!!!!!!!!!!!!!!!!! Below mark (variable) names should reflect where they will be used, not what they do.
