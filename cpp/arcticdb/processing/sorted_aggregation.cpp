@@ -118,13 +118,15 @@ auto finalize_aggregator(
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
-                                                                          const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
-                                                                          const std::vector<timestamp>& bucket_boundaries,
-                                                                          const Column& output_index_column,
-                                                                          StringPool& string_pool) const {
+[[nodiscard]] Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate_static_schema(
+    std::span<const std::shared_ptr<Column>> input_index_columns,
+    std::span<const std::optional<ColumnWithStrings>> input_agg_columns,
+    std::span<const timestamp> bucket_boundaries,
+    const Column& output_index_column,
+    StringPool& string_pool,
+    DataType common_input_type
+) const {
     using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    auto common_input_type = generate_common_input_type(input_agg_columns);
     Column res(TypeDescriptor(generate_output_data_type(common_input_type), Dimension::Dim0), output_index_column.row_count(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
     details::visit_type(
         res.type().data_type(),
@@ -142,10 +144,10 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
             if constexpr (is_output_type_allowed<aggregation_operator, output_type_info>()) {
                 auto bucket_aggregator = get_bucket_aggregator<aggregation_operator, output_type_info>();
                 bool reached_end_of_buckets{false};
-                auto bucket_start_it = bucket_boundaries.cbegin();
+                auto bucket_start_it = bucket_boundaries.begin();
                 auto bucket_end_it = std::next(bucket_start_it);
                 Bucket<closed_boundary> current_bucket(*bucket_start_it, *bucket_end_it);
-                const auto bucket_boundaries_end = bucket_boundaries.cend();
+                const auto bucket_boundaries_end = bucket_boundaries.end();
                 for (auto [idx, input_agg_column]: folly::enumerate(input_agg_columns)) {
                     // Always true right now due to earlier check
                     if (input_agg_column.has_value()) {
@@ -156,7 +158,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                             &output_end_it,
                             &bucket_aggregator,
                             &agg_column = *input_agg_column,
-                            &input_index_column = input_index_columns.at(idx),
+                            &input_index_column = input_index_columns[idx],
                             &bucket_boundaries_end,
                             &string_pool,
                             &bucket_start_it,
@@ -231,26 +233,52 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-DataType SortedAggregator<aggregation_operator, closed_boundary>::generate_common_input_type(
+[[nodiscard]] Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate_dynamic_schema(
+    [[maybe_unused]] std::span<const std::shared_ptr<Column>> input_index_columns,
+    [[maybe_unused]] std::span<const std::optional<ColumnWithStrings>> input_agg_columns,
+    [[maybe_unused]] std::span<const timestamp> bucket_boundaries,
+    [[maybe_unused]] const Column& output_index_column,
+    [[maybe_unused]] StringPool& string_pool
+) const {
+    return {};
+}
+
+template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
+Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
+                                                                          const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
+                                                                          const std::vector<timestamp>& bucket_boundaries,
+                                                                          const Column& output_index_column,
+                                                                          StringPool& string_pool) const {
+    if (const std::optional<DataType> common_input_type = generate_common_input_type(input_agg_columns)) {
+        return aggregate_static_schema(
+            input_index_columns,
+            input_agg_columns,
+            bucket_boundaries,
+            output_index_column,
+            string_pool,
+            *common_input_type);
+    }
+    return aggregate_dynamic_schema(input_index_columns,
+        input_agg_columns,
+        bucket_boundaries,
+        output_index_column,
+        string_pool);
+
+}
+
+template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
+std::optional<DataType> SortedAggregator<aggregation_operator, closed_boundary>::generate_common_input_type(
         const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns
-        ) const {
+) const {
     std::optional<DataType> common_input_type;
     for (const auto& opt_input_agg_column: input_agg_columns) {
         if (opt_input_agg_column.has_value()) {
-            auto input_data_type = opt_input_agg_column->column_->type().data_type();
+            const auto input_data_type = opt_input_agg_column->column_->type().data_type();
             check_aggregator_supported_with_data_type(input_data_type);
             add_data_type_impl(input_data_type, common_input_type);
-        } else {
-            // Column is missing from this row-slice due to dynamic schema, currently unsupported
-            schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>("Resample: Cannot aggregate column '{}' as it is missing from some row slices",
-                                                                get_input_column_name().value);
         }
     }
-    // Column is missing from all row-slices due to dynamic schema, currently unsupported
-    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(common_input_type.has_value(),
-                                                        "Resample: Cannot aggregate column '{}' as it is missing from some row slices",
-                                                        get_input_column_name().value);
-    return *common_input_type;
+    return common_input_type;
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>

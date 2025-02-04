@@ -844,3 +844,22 @@ def test_min_with_one_infinity_element(lmdb_version_store_v1):
     q = QueryBuilder()
     q = q.resample('1min').agg({"col_min":("col", "min")})
     assert np.isneginf(lib.read(sym, query_builder=q).data['col_min'][0])
+
+class TestDynamicSchema:
+    def test_missing_column_segment_does_not_cross_bucket(self, lmdb_version_store_dynamic_schema_v1):
+        lib = lmdb_version_store_dynamic_schema_v1
+        sym = "sym"
+
+        idx = pd.date_range(pd.Timestamp(0), periods=20, freq='ns')
+        lib.write(sym, pd.DataFrame({"a": range(len(idx))}, index=idx))
+
+        idx = pd.date_range(pd.Timestamp(20), periods=20, freq='ns')
+        lib.append(sym, pd.DataFrame({"a": range(len(idx)), "b": np.array(range(len(idx)), dtype=np.float32)}, index=idx))
+
+        data = lib.read(sym).data
+        print(data)
+        #res = data.resample("10ns").agg(None, **{"col_count":("b", "count")})
+        #print(res)
+        q = QueryBuilder()
+        q = q.resample('10ns').agg({"b_count": ("b", "min")})
+        lib.read(sym, query_builder=q)
