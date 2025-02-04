@@ -47,7 +47,7 @@ Azure::Storage::Blobs::BlobClientOptions RealAzureClient::get_client_options(con
 
 void RealAzureClient::write_blob(
         const std::string& blob_name,
-        Segment&& segment,
+        Segment& segment,
         const Azure::Storage::Blobs::UploadBlockBlobFromOptions& upload_option,
         unsigned int request_timeout) {
 

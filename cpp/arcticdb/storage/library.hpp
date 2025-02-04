@@ -81,29 +81,29 @@ class Library {
         return storages_->scan_for_matching_key(key_type, predicate);
     }
 
-    void write(KeySegmentPair&& key_seg) {
+    void write(KeySegmentPair& key_seg) {
         ARCTICDB_SAMPLE(LibraryWrite, 0)
         if (open_mode() < OpenMode::WRITE) {
             throw LibraryPermissionException(library_path_, open_mode(), "write");
         }
 
-        storages_->write(std::move(key_seg));
+        storages_->write(key_seg);
     }
 
-    void write_if_none(KeySegmentPair&& kv) {
+    void write_if_none(KeySegmentPair& kv) {
         if (open_mode() < OpenMode::WRITE) {
             throw LibraryPermissionException(library_path_, open_mode(), "write");
         }
 
-        storages_->write_if_none(std::move(kv));
+        storages_->write_if_none(kv);
     }
 
-    void update(KeySegmentPair&& key_seg, storage::UpdateOpts opts) {
+    void update(KeySegmentPair& key_seg, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(LibraryUpdate, 0)
         if (open_mode() < OpenMode::WRITE)
             throw LibraryPermissionException(library_path_, open_mode(), "update");
 
-        storages_->update(std::move(key_seg), opts);
+        storages_->update(key_seg, opts);
     }
 
     folly::Future<folly::Unit> read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {

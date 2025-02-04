@@ -16,7 +16,7 @@
 namespace arcticdb::storage::memory {
 
 void add_serialization_fields(KeySegmentPair& kv) {
-    auto& segment = kv.segment();
+    auto& segment = *kv.segment_ptr();
     auto& hdr = segment.header();
     (void) segment.calculate_size();
     if (hdr.encoding_version() == EncodingVersion::V2) {
@@ -29,7 +29,7 @@ std::string MemoryStorage::name() const {
     return "memory_storage-0";
 }
 
-void MemoryStorage::do_write(KeySegmentPair&& key_seg) {
+void MemoryStorage::do_write(KeySegmentPair& key_seg) {
     ARCTICDB_SAMPLE(MemoryStorageWrite, 0)
 
     auto& key_vec = data_[variant_key_type(key_seg.variant_key())];
@@ -40,19 +40,19 @@ void MemoryStorage::do_write(KeySegmentPair&& key_seg) {
                 key_vec.erase(it);
             }
             add_serialization_fields(key_seg);
-            key_vec.try_emplace(key, std::move(key_seg.segment()));
+            key_vec.try_emplace(key, key_seg.segment().clone());
         },
         [&](const AtomKey& key) {
             if (key_vec.find(key) != key_vec.end()) {
                 throw DuplicateKeyException(key);
             }
             add_serialization_fields(key_seg);
-            key_vec.try_emplace(key, std::move(key_seg.segment()));
+            key_vec.try_emplace(key, key_seg.segment().clone());
         }
     );
 }
 
-void MemoryStorage::do_update(KeySegmentPair&& key_seg, UpdateOpts opts) {
+void MemoryStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
     ARCTICDB_SAMPLE(MemoryStorageUpdate, 0)
 
     auto& key_vec = data_[variant_key_type(key_seg.variant_key())];
@@ -74,7 +74,7 @@ void MemoryStorage::do_update(KeySegmentPair&& key_seg, UpdateOpts opts) {
 
 void MemoryStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts) {
     auto key_seg = do_read(std::move(variant_key), ReadKeyOpts{});
-    visitor(key_seg.variant_key(), std::move(key_seg.segment()));
+    visitor(key_seg.variant_key(), *key_seg.segment_ptr());
 }
 
 KeySegmentPair MemoryStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {

@@ -96,7 +96,7 @@ folly::Future<S3Result<Segment>> MockS3Client::get_object_async(
 
 S3Result<std::monostate> MockS3Client::put_object(
         const std::string &s3_object_name,
-        Segment &&segment,
+        Segment& segment,
         const std::string &bucket_name,
         PutHeader header) {
     auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::WRITE);
@@ -113,7 +113,7 @@ S3Result<std::monostate> MockS3Client::put_object(
         return {precondition_failed_error};
     }
 
-    s3_contents.insert_or_assign({bucket_name, s3_object_name}, std::move(segment));
+    s3_contents.insert_or_assign({bucket_name, s3_object_name}, segment.clone());
 
     return {std::monostate()};
 }

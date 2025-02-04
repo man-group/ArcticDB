@@ -182,7 +182,7 @@ struct WriteSegmentTask : BaseTask {
     VariantKey operator()(storage::KeySegmentPair &&key_seg) const {
         ARCTICDB_SAMPLE(WriteSegmentTask, 0)
         auto k = key_seg.variant_key();
-        lib_->write(std::move(key_seg));
+        lib_->write(key_seg);
         return k;
     }
 };
@@ -199,7 +199,7 @@ struct WriteIfNoneTask : BaseTask {
     VariantKey operator()(storage::KeySegmentPair &&key_seg) const {
         ARCTICDB_SAMPLE(WriteSegmentTask, 0)
         auto k = key_seg.variant_key();
-        lib_->write_if_none(std::move(key_seg));
+        lib_->write_if_none(key_seg);
         return k;
     }
 };
@@ -218,7 +218,7 @@ struct UpdateSegmentTask : BaseTask {
     VariantKey operator()(storage::KeySegmentPair &&key_seg) const {
         ARCTICDB_SAMPLE(UpdateSegmentTask, 0)
         auto k = key_seg.variant_key();
-        lib_->update(std::move(key_seg), opts_);
+        lib_->update(key_seg, opts_);
         return k;
     }
 };
@@ -304,9 +304,9 @@ struct CopyCompressedTask : BaseTask {
     VariantKey copy() {
         return std::visit([this](const auto &source_key) {
             auto key_seg = lib_->read_sync(source_key);
-            auto target_key_seg = stream::make_target_key<ClockType>(key_type_, stream_id_, version_id_, source_key, std::move(key_seg.segment()));
+            auto target_key_seg = stream::make_target_key<ClockType>(key_type_, stream_id_, version_id_, source_key, std::move(*key_seg.segment_ptr()));
             auto return_key = target_key_seg.variant_key();
-            lib_->write(std::move(target_key_seg));
+            lib_->write(target_key_seg);
             return return_key;
         }, source_key_);
     }
@@ -430,7 +430,7 @@ struct DecodeSegmentTask : BaseTask {
         ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment with key {}",
                              variant_key_view(key_seg.variant_key()));
 
-        return {key_seg.variant_key(), decode_segment(std::move(key_seg.segment()))};
+        return {key_seg.variant_key(), decode_segment(*key_seg.segment_ptr())};
     }
 };
 
@@ -513,17 +513,10 @@ struct DecodeMetadataTask : BaseTask {
 
     DecodeMetadataTask() = default;
 
-    std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> operator()(storage::KeySegmentPair &&ks) const {
+    std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> operator()(storage::KeySegmentPair &&key_seg) const {
         ARCTICDB_SAMPLE(ReadMetadataTask, 0)
-        auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeMetadataTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
-
-        auto meta = decode_metadata_from_segment(key_seg.segment());
-        std::pair<VariantKey, std::optional<google::protobuf::Any>> output;
-        output.first = key_seg.variant_key();
-        output.second = std::move(meta);
-
-        return output;
+        return std::make_pair<>(key_seg.variant_key(), decode_metadata_from_segment(key_seg.segment()));
     }
 };
 
@@ -532,16 +525,15 @@ struct DecodeTimeseriesDescriptorTask : BaseTask {
 
     DecodeTimeseriesDescriptorTask() = default;
 
-    std::pair<VariantKey, TimeseriesDescriptor> operator()(storage::KeySegmentPair &&ks) const {
+    std::pair<VariantKey, TimeseriesDescriptor> operator()(storage::KeySegmentPair &&key_seg) const {
         ARCTICDB_SAMPLE(DecodeTimeseriesDescriptorTask, 0)
-        auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "DecodeTimeseriesDescriptorTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
 
-        auto maybe_desc = decode_timeseries_descriptor(key_seg.segment());
+        auto maybe_desc = decode_timeseries_descriptor(*key_seg.segment_ptr());
 
         util::check(static_cast<bool>(maybe_desc), "Failed to decode timeseries descriptor");
         return std::make_pair(
-            std::move(key_seg.variant_key()),
+            key_seg.variant_key(),
             std::move(*maybe_desc));
 
     }
@@ -552,15 +544,14 @@ struct DecodeMetadataAndDescriptorTask : BaseTask {
 
     DecodeMetadataAndDescriptorTask() = default;
 
-    std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor> operator()(storage::KeySegmentPair &&ks) const {
+    std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor> operator()(storage::KeySegmentPair &&key_seg) const {
         ARCTICDB_SAMPLE(ReadMetadataAndDescriptorTask, 0)
         ARCTICDB_DEBUG_THROW(5)
-        auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "DecodeMetadataAndDescriptorTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
 
-        auto [any, descriptor] = decode_metadata_and_descriptor_fields(key_seg.segment());
+        auto [any, descriptor] = decode_metadata_and_descriptor_fields(*key_seg.segment_ptr());
         return std::make_tuple(
-            std::move(key_seg.variant_key()),
+            key_seg.variant_key(),
             std::move(any),
             std::move(descriptor)
             );
@@ -593,7 +584,7 @@ struct WriteCompressedTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(WriteCompressedTask)
 
     folly::Future<folly::Unit> write() {
-        lib_->write(std::move(kv_));
+        lib_->write(kv_);
         return folly::makeFuture();
     }
 
@@ -618,7 +609,7 @@ struct WriteCompressedBatchTask : BaseTask {
 
     folly::Future<folly::Unit> write() {
         for(auto&& kv : kvs_)
-            lib_->write(std::move(kv));
+            lib_->write(kv);
 
         return folly::makeFuture();
     }
