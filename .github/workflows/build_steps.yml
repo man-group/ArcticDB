@@ -187,7 +187,9 @@ jobs:
 
       - name: Run C++ Benchmarks
         if: inputs.job_type == 'cpp-tests'
-        run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks
+        # We set a benchmark_min_time=20x because running until a time limit is reached can take a lot of time on
+        # benchmarks which pause the timer.
+        run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=20x
 
       # ========================= build-python-wheels (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
