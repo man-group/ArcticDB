@@ -1737,7 +1737,7 @@
         "warmup_time": 0
     },
     "real_read_write.AWS_ReadWrite.peakmem_read": {
-        "code": "class LMDB_ReadWrite:\n    def peakmem_read(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
+        "code": "class LMDB_ReadWrite:\n    def peakmem_read(self, arctic_url, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, arctic_url, num_rows):\n        ## Construct back from arctic url the object\n        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library()\n        if not lmdb.check_ok():\n            lmdb.setup_all()\n        # make sure that only the proc that sets up database\n        # its arctic url will be used later in other threads\n        return lmdb.arctic_url",
         "name": "real_read_write.AWS_ReadWrite.peakmem_read",
         "param_names": [
             "num_rows"
@@ -1748,14 +1748,14 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:122",
+        "setup_cache_key": "real_read_write:128",
         "timeout": 12000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "40fa0a8d04684d1dc7d01b1af8c74dc51f8ac6650fd1c090b12422853eec361e"
+        "version": "3bfb0f96cb3044c11885b97e876b9f5ba6d48a4a1dfd0709dc03aa2a9cf66658"
     },
     "real_read_write.AWS_ReadWrite.peakmem_write": {
-        "code": "class LMDB_ReadWrite:\n    def peakmem_write(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
+        "code": "class LMDB_ReadWrite:\n    def peakmem_write(self, arctic_url, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, arctic_url, num_rows):\n        ## Construct back from arctic url the object\n        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library()\n        if not lmdb.check_ok():\n            lmdb.setup_all()\n        # make sure that only the proc that sets up database\n        # its arctic url will be used later in other threads\n        return lmdb.arctic_url",
         "name": "real_read_write.AWS_ReadWrite.peakmem_write",
         "param_names": [
             "num_rows"
@@ -1766,14 +1766,14 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:122",
+        "setup_cache_key": "real_read_write:128",
         "timeout": 12000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "88bf7275ec276cd8436c80510af5e6dbecc8ffee332cbee158985d39088ca775"
+        "version": "aba7012ac1f6dde5870b11afcfe7a2793daf03c11dde1b77810ab944a4166d10"
     },
     "real_read_write.AWS_ReadWrite.time_read": {
-        "code": "class LMDB_ReadWrite:\n    def time_read(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
+        "code": "class LMDB_ReadWrite:\n    def time_read(self, arctic_url, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, arctic_url, num_rows):\n        ## Construct back from arctic url the object\n        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library()\n        if not lmdb.check_ok():\n            lmdb.setup_all()\n        # make sure that only the proc that sets up database\n        # its arctic url will be used later in other threads\n        return lmdb.arctic_url",
         "min_run_count": 1,
         "name": "real_read_write.AWS_ReadWrite.time_read",
         "number": 1,
@@ -1789,15 +1789,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:122",
+        "setup_cache_key": "real_read_write:128",
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
-        "version": "95af75150bc582f5c7a7252bccfa463390beef65bce2b9e494834515d2bd27ab",
+        "version": "75ffbcdf787fc2bc41d2ce3c24e8ed461752017e19547f415fcfdbc95842dd78",
         "warmup_time": 0
     },
     "real_read_write.AWS_ReadWrite.time_write": {
-        "code": "class LMDB_ReadWrite:\n    def time_write(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
+        "code": "class LMDB_ReadWrite:\n    def time_write(self, arctic_url, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, arctic_url, num_rows):\n        ## Construct back from arctic url the object\n        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library()\n        if not lmdb.check_ok():\n            lmdb.setup_all()\n        # make sure that only the proc that sets up database\n        # its arctic url will be used later in other threads\n        return lmdb.arctic_url",
         "min_run_count": 1,
         "name": "real_read_write.AWS_ReadWrite.time_write",
         "number": 1,
@@ -1813,51 +1813,51 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:122",
+        "setup_cache_key": "real_read_write:128",
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
-        "version": "37b28ae44bbda5166088454dddbe092cbe046fad59afdada5f135e892cfdbe08",
+        "version": "685ae7346eb8573c8bfc0d84b7628ed5444aae5277f259f2ab382420ca5d7607",
         "warmup_time": 0
     },
     "real_read_write.LMDB_ReadWrite.peakmem_read": {
-        "code": "class LMDB_ReadWrite:\n    def peakmem_read(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
+        "code": "class LMDB_ReadWrite:\n    def peakmem_read(self, arctic_url, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, arctic_url, num_rows):\n        ## Construct back from arctic url the object\n        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library()\n        if not lmdb.check_ok():\n            lmdb.setup_all()\n        # make sure that only the proc that sets up database\n        # its arctic url will be used later in other threads\n        return lmdb.arctic_url",
         "name": "real_read_write.LMDB_ReadWrite.peakmem_read",
         "param_names": [
             "num_rows"
         ],
         "params": [
             [
-                "5000000",
-                "10000000"
+                "2500000",
+                "5000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:122",
+        "setup_cache_key": "real_read_write:128",
         "timeout": 12000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "40fa0a8d04684d1dc7d01b1af8c74dc51f8ac6650fd1c090b12422853eec361e"
+        "version": "3bfb0f96cb3044c11885b97e876b9f5ba6d48a4a1dfd0709dc03aa2a9cf66658"
     },
     "real_read_write.LMDB_ReadWrite.peakmem_write": {
-        "code": "class LMDB_ReadWrite:\n    def peakmem_write(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
+        "code": "class LMDB_ReadWrite:\n    def peakmem_write(self, arctic_url, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, arctic_url, num_rows):\n        ## Construct back from arctic url the object\n        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library()\n        if not lmdb.check_ok():\n            lmdb.setup_all()\n        # make sure that only the proc that sets up database\n        # its arctic url will be used later in other threads\n        return lmdb.arctic_url",
         "name": "real_read_write.LMDB_ReadWrite.peakmem_write",
         "param_names": [
             "num_rows"
         ],
         "params": [
             [
-                "5000000",
-                "10000000"
+                "2500000",
+                "5000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:122",
+        "setup_cache_key": "real_read_write:128",
         "timeout": 12000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "88bf7275ec276cd8436c80510af5e6dbecc8ffee332cbee158985d39088ca775"
+        "version": "aba7012ac1f6dde5870b11afcfe7a2793daf03c11dde1b77810ab944a4166d10"
     },
     "real_read_write.LMDB_ReadWrite.time_read": {
-        "code": "class LMDB_ReadWrite:\n    def time_read(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
+        "code": "class LMDB_ReadWrite:\n    def time_read(self, arctic_url, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, arctic_url, num_rows):\n        ## Construct back from arctic url the object\n        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library()\n        if not lmdb.check_ok():\n            lmdb.setup_all()\n        # make sure that only the proc that sets up database\n        # its arctic url will be used later in other threads\n        return lmdb.arctic_url",
         "min_run_count": 1,
         "name": "real_read_write.LMDB_ReadWrite.time_read",
         "number": 1,
@@ -1866,22 +1866,22 @@
         ],
         "params": [
             [
-                "5000000",
-                "10000000"
+                "2500000",
+                "5000000"
             ]
         ],
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:122",
+        "setup_cache_key": "real_read_write:128",
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
-        "version": "95af75150bc582f5c7a7252bccfa463390beef65bce2b9e494834515d2bd27ab",
+        "version": "75ffbcdf787fc2bc41d2ce3c24e8ed461752017e19547f415fcfdbc95842dd78",
         "warmup_time": 0
     },
     "real_read_write.LMDB_ReadWrite.time_write": {
-        "code": "class LMDB_ReadWrite:\n    def time_write(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
+        "code": "class LMDB_ReadWrite:\n    def time_write(self, arctic_url, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, arctic_url, num_rows):\n        ## Construct back from arctic url the object\n        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library()\n        if not lmdb.check_ok():\n            lmdb.setup_all()\n        # make sure that only the proc that sets up database\n        # its arctic url will be used later in other threads\n        return lmdb.arctic_url",
         "min_run_count": 1,
         "name": "real_read_write.LMDB_ReadWrite.time_write",
         "number": 1,
@@ -1890,18 +1890,18 @@
         ],
         "params": [
             [
-                "5000000",
-                "10000000"
+                "2500000",
+                "5000000"
             ]
         ],
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:122",
+        "setup_cache_key": "real_read_write:128",
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
-        "version": "37b28ae44bbda5166088454dddbe092cbe046fad59afdada5f135e892cfdbe08",
+        "version": "685ae7346eb8573c8bfc0d84b7628ed5444aae5277f259f2ab382420ca5d7607",
         "warmup_time": 0
     },
     "resample.Resample.peakmem_resample": {

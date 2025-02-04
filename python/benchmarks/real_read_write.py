@@ -35,12 +35,12 @@ class ReadBenchmarkLibraries(LibrariesBase):
         Dataframe 20000000 rows stored for 456.6385509967804 sec
     """
 
-    def __init__(self, type:Storage = Storage.LMDB):
-        super().__init__(type)
+    def __init__(self, type: Storage = Storage.LMDB, arctic_url: str = None):
+        super().__init__(type, arctic_url)
         self.ac = self.get_arctic()
         self.lib = self.get_library(1)
 
-    def get_library_names(self, num_symbols) -> List[str]:
+    def get_library_names(self, num_symbols=1) -> List[str]:
         return ["PERM_READ", "MOD_READ"]        
 
     def get_parameter_list(self):
@@ -53,7 +53,7 @@ class ReadBenchmarkLibraries(LibrariesBase):
         # rows = [5_000_000, 10_000_000, 20_000_000]
         rows = [1_000_000, 2_000_000]
         if self.type == Storage.LMDB:
-            rows = [5_000_000, 10_000_000]
+            rows = [2_500_000, 5_000_000]
         return rows
 
     def generate_df(self, row_num:int) -> pd.DataFrame:
@@ -111,40 +111,50 @@ class LMDB_ReadWrite:
 
     timeout = 12000
 
-    SETUP_CLASS = ReadBenchmarkLibraries(Storage.LMDB)
+    SETUP_CLASS: ReadBenchmarkLibraries = ReadBenchmarkLibraries(Storage.LMDB)
 
     params = SETUP_CLASS.get_parameter_list()
     param_names = ["num_rows"]
 
     def get_creator(self):
+        """
+        Needed for inheritance, due to fact that ASV spawns many processes,
+        and accessing SETUP_CLASS is not an option as it will be different in each one
+        Thus the class that inherits must override that method with its own 
+        library creation class
+        """
         return LMDB_ReadWrite.SETUP_CLASS
 
     def setup_cache(self):
-        lmdb = self.get_creator()
-        lmdb.delete_modifyable_library(1)
+        lmdb = self.get_creator() 
+        lmdb.delete_modifyable_library()
         if not lmdb.check_ok():
             lmdb.setup_all()
+        # make sure that only the proc that sets up database
+        # its arctic url will be used later in other threads
+        return lmdb.arctic_url
 
-    def setup(self, num_rows):
-        self.lmdb = self.get_creator()
+    def setup(self, arctic_url, num_rows):
+        ## Construct back from arctic url the object
+        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)
 
         ## Create write cache
         sym = self.lmdb.get_symbol_name(num_rows)
-        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data
+        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data
 
-    def time_read(self, num_rows):
+    def time_read(self, arctic_url, num_rows):
         sym = self.lmdb.get_symbol_name(num_rows)
         self.lmdb.get_library().read(symbol=sym)
 
-    def peakmem_read(self, num_rows):
+    def peakmem_read(self, arctic_url, num_rows):
         sym = self.lmdb.get_symbol_name(num_rows)
         self.lmdb.get_library().read(symbol=sym)
 
-    def time_write(self, num_rows):
+    def time_write(self, arctic_url, num_rows):
         sym = self.lmdb.get_symbol_name(num_rows)
         self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)
 
-    def peakmem_write(self, num_rows):
+    def peakmem_write(self, arctic_url, num_rows):
         sym = self.lmdb.get_symbol_name(num_rows)
         self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)
 
@@ -169,3 +179,4 @@ class AWS_ReadWrite(LMDB_ReadWrite):
 
     def get_creator(self):
         return AWS_ReadWrite.SETUP_CLASS
+
