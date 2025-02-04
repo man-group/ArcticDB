@@ -121,6 +121,12 @@ void do_write_impl(
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
     auto& seg = key_seg.segment();
 
+    int64_t write_sleep = ConfigsMap::instance()->get_int("S3.WriteSleepMs", 0);
+    if (write_sleep > 0) {
+        log::storage().debug("write sleeping for {}", write_sleep);
+        std::this_thread::sleep_for(std::chrono::milliseconds(write_sleep));
+    }
+
     auto put_object_result = s3_client.put_object(s3_object_name, std::move(seg), bucket_name);
 
     if (!put_object_result.is_success()) {

@@ -67,8 +67,9 @@ void print_scheduler_stats(spdlog::level::level_enum level) {
         io_stats.threadCount, io_stats.idleThreadCount, io_stats.activeThreadCount, io_stats.pendingTaskCount, io_stats.totalTaskCount, io_stats.maxIdleTime.count());
 
     auto blocking_cpu_stats = TaskScheduler::instance()->blocking_cpu_exec().getPoolStats();
-    log::schedule().log(level, "Blocking CPU: Threads: {}\tIdle: {}\tActive: {}\tPending: {}\tTotal: {}\tMaxIdleTime: {}",
-                         blocking_cpu_stats.threadCount, blocking_cpu_stats.idleThreadCount, blocking_cpu_stats.activeThreadCount, blocking_cpu_stats.pendingTaskCount, blocking_cpu_stats.totalTaskCount, blocking_cpu_stats.maxIdleTime.count());
+    auto blocking_queue_size = TaskScheduler::instance()->blocking_cpu_exec().getTaskQueueSize();
+    log::schedule().log(level, "Blocking CPU: Threads: {}\tIdle: {}\tActive: {}\tPending: {}\tTotal: {}\tMaxIdleTime: {}\tSize: {}",
+                         blocking_cpu_stats.threadCount, blocking_cpu_stats.idleThreadCount, blocking_cpu_stats.activeThreadCount, blocking_cpu_stats.pendingTaskCount, blocking_cpu_stats.totalTaskCount, blocking_cpu_stats.maxIdleTime.count(), blocking_queue_size);
 }
 
 } // namespace arcticdb
