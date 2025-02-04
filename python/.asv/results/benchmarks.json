@@ -1616,7 +1616,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "real_list_operations:166",
+        "setup_cache_key": "real_list_operations:167",
         "timeout": 12000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1639,7 +1639,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:166",
+        "setup_cache_key": "real_list_operations:167",
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
@@ -1663,7 +1663,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:166",
+        "setup_cache_key": "real_list_operations:167",
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
@@ -1678,11 +1678,11 @@
         ],
         "params": [
             [
-                "5",
-                "6"
+                "25",
+                "50"
             ]
         ],
-        "setup_cache_key": "real_list_operations:208",
+        "setup_cache_key": "real_list_operations:209",
         "timeout": 12000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1698,14 +1698,14 @@
         ],
         "params": [
             [
-                "5",
-                "6"
+                "25",
+                "50"
             ]
         ],
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:208",
+        "setup_cache_key": "real_list_operations:209",
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
@@ -1722,14 +1722,14 @@
         ],
         "params": [
             [
-                "5",
-                "6"
+                "25",
+                "50"
             ]
         ],
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:208",
+        "setup_cache_key": "real_list_operations:209",
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
@@ -1737,7 +1737,7 @@
         "warmup_time": 0
     },
     "real_read_write.AWS_ReadWrite.peakmem_read": {
-        "code": "class LMDB_ReadWrite:\n    def peakmem_read(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
+        "code": "class LMDB_ReadWrite:\n    def peakmem_read(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
         "name": "real_read_write.AWS_ReadWrite.peakmem_read",
         "param_names": [
             "num_rows"
@@ -1752,10 +1752,10 @@
         "timeout": 12000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "06d8acaf651c8c82004e061d726ed5da6a04322fd9b63a1e996f71da301e0a33"
+        "version": "40fa0a8d04684d1dc7d01b1af8c74dc51f8ac6650fd1c090b12422853eec361e"
     },
     "real_read_write.AWS_ReadWrite.peakmem_write": {
-        "code": "class LMDB_ReadWrite:\n    def peakmem_write(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
+        "code": "class LMDB_ReadWrite:\n    def peakmem_write(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
         "name": "real_read_write.AWS_ReadWrite.peakmem_write",
         "param_names": [
             "num_rows"
@@ -1770,10 +1770,10 @@
         "timeout": 12000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "98c1a551dd6770b5706fa182e637e19e804ffc191acb828f1f60a2c28a31c61c"
+        "version": "88bf7275ec276cd8436c80510af5e6dbecc8ffee332cbee158985d39088ca775"
     },
     "real_read_write.AWS_ReadWrite.time_read": {
-        "code": "class LMDB_ReadWrite:\n    def time_read(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
+        "code": "class LMDB_ReadWrite:\n    def time_read(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
         "min_run_count": 1,
         "name": "real_read_write.AWS_ReadWrite.time_read",
         "number": 1,
@@ -1793,11 +1793,11 @@
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
-        "version": "adb8f82688a4eb24c9f0dc5d19df98187ff269ae21ca5a8962be36cbbaaf0a62",
+        "version": "95af75150bc582f5c7a7252bccfa463390beef65bce2b9e494834515d2bd27ab",
         "warmup_time": 0
     },
     "real_read_write.AWS_ReadWrite.time_write": {
-        "code": "class LMDB_ReadWrite:\n    def time_write(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
+        "code": "class LMDB_ReadWrite:\n    def time_write(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
         "min_run_count": 1,
         "name": "real_read_write.AWS_ReadWrite.time_write",
         "number": 1,
@@ -1817,11 +1817,11 @@
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
-        "version": "79dac8785941380d095d5554b460ac24f3118a19c5cdb0fe72a965741ea28750",
+        "version": "37b28ae44bbda5166088454dddbe092cbe046fad59afdada5f135e892cfdbe08",
         "warmup_time": 0
     },
     "real_read_write.LMDB_ReadWrite.peakmem_read": {
-        "code": "class LMDB_ReadWrite:\n    def peakmem_read(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
+        "code": "class LMDB_ReadWrite:\n    def peakmem_read(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
         "name": "real_read_write.LMDB_ReadWrite.peakmem_read",
         "param_names": [
             "num_rows"
@@ -1836,10 +1836,10 @@
         "timeout": 12000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "06d8acaf651c8c82004e061d726ed5da6a04322fd9b63a1e996f71da301e0a33"
+        "version": "40fa0a8d04684d1dc7d01b1af8c74dc51f8ac6650fd1c090b12422853eec361e"
     },
     "real_read_write.LMDB_ReadWrite.peakmem_write": {
-        "code": "class LMDB_ReadWrite:\n    def peakmem_write(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
+        "code": "class LMDB_ReadWrite:\n    def peakmem_write(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
         "name": "real_read_write.LMDB_ReadWrite.peakmem_write",
         "param_names": [
             "num_rows"
@@ -1854,10 +1854,10 @@
         "timeout": 12000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "98c1a551dd6770b5706fa182e637e19e804ffc191acb828f1f60a2c28a31c61c"
+        "version": "88bf7275ec276cd8436c80510af5e6dbecc8ffee332cbee158985d39088ca775"
     },
     "real_read_write.LMDB_ReadWrite.time_read": {
-        "code": "class LMDB_ReadWrite:\n    def time_read(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
+        "code": "class LMDB_ReadWrite:\n    def time_read(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
         "min_run_count": 1,
         "name": "real_read_write.LMDB_ReadWrite.time_read",
         "number": 1,
@@ -1877,11 +1877,11 @@
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
-        "version": "adb8f82688a4eb24c9f0dc5d19df98187ff269ae21ca5a8962be36cbbaaf0a62",
+        "version": "95af75150bc582f5c7a7252bccfa463390beef65bce2b9e494834515d2bd27ab",
         "warmup_time": 0
     },
     "real_read_write.LMDB_ReadWrite.time_write": {
-        "code": "class LMDB_ReadWrite:\n    def time_write(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
+        "code": "class LMDB_ReadWrite:\n    def time_write(self, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, num_rows):\n        self.lmdb = self.get_creator()\n    \n        ## Create write cache\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library(1)\n        if not lmdb.check_ok():\n            lmdb.setup_all()",
         "min_run_count": 1,
         "name": "real_read_write.LMDB_ReadWrite.time_write",
         "number": 1,
@@ -1901,7 +1901,7 @@
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
-        "version": "79dac8785941380d095d5554b460ac24f3118a19c5cdb0fe72a965741ea28750",
+        "version": "37b28ae44bbda5166088454dddbe092cbe046fad59afdada5f135e892cfdbe08",
         "warmup_time": 0
     },
     "resample.Resample.peakmem_resample": {

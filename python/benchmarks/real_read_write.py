@@ -130,7 +130,7 @@ class LMDB_ReadWrite:
 
         ## Create write cache
         sym = self.lmdb.get_symbol_name(num_rows)
-        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data
+        self.to_write_df = self.lmdb.get_library(1).read(symbol=sym).data
 
     def time_read(self, num_rows):
         sym = self.lmdb.get_symbol_name(num_rows)

@@ -100,7 +100,7 @@ class VersionLibraries(SymbolLibraries):
         self.ac = self.get_arctic()
 
     def get_parameter_list(self):
-        return [5, 6]
+        return [25, 50]
     
     def get_library_names(self, num_symbols) -> List[str]:
         return [f"PERM_LIST_OPS_VERSION_{num_symbols}", f"MOD_LIST_OPS_VERSION_{num_symbols}"]  
