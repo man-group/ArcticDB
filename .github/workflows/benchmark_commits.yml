@@ -81,6 +81,7 @@ jobs:
             SUITE='^(?!real_).*'
           else
             SUITE='^(real_).*'
+          fi
           python -m asv run -v --show-stderr --bench $SUITE ${{ inputs.commit }}^!
         
       - name: Benchmark against master
