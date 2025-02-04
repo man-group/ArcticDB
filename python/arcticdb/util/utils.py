@@ -4,6 +4,9 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+from datetime import timedelta
+import random
+import string
 from typing import List, Tuple, Union
 import sys 
 if sys.version_info >= (3, 8): 
@@ -15,6 +18,10 @@ import pandas as pd
 
 from arcticdb.util.test import create_datetime_index, get_sample_dataframe
 from arcticdb.version_store.library import Library
+
+# Type definitions - supported by arctic
+ArcticIntType = Union[np.uint8, np.uint16, np.uint32, np.uint64, np.int8, np.int16, np.int32, np.int64]
+ArcticFloatType = Union[np.float64, np.float32]
 
 class  TimestampNumber:
     """
@@ -331,4 +338,156 @@ def stage_chunks(lib: Library, symbol:str, cachedDF:CachedDFGenerator, start_ind
         num_rows_staged = num_rows_staged + chunk_size
         iter= iter + 1
         total = total + chunk_size
+
+
+class RandomStringPool:
+    """
+    A class that will return a list of randomly selected strings from a string pool
+    with certain sized of each string and limited number of strings in the pool
+    """
+
+    def __init__(self, str_length: int, pool_size: int):
+        self.__pool = ListGenerators.generate_random_string_pool(str_length, pool_size)
+
+    def get_list(self, size: int) -> List[str]:
+        return [random.choice(self.__pool) for _ in range(size)]
+
+
+class ListGenerators:
+    """
+    Specialized class of utility functions for creating random lists of various type
+    """
+
+    @classmethod
+    def generate_random_floats(cls, dtype: ArcticFloatType, 
+                      size: int, minV: float = None, maxV: float = None, round_to: int = None
+                      ) -> List[ArcticFloatType]:
+        finfo = np.finfo(dtype)
+        if minV is None:
+            minV = max(finfo.min, -sys.float_info.max)
+            maxV = min(finfo.max, sys.float_info.max)
+        if round_to is None:
+            return np.random.uniform(minV, maxV, size).astype(dtype)
+        else :
+            return np.round(np.random.uniform(minV, maxV, size), round_to).astype(dtype)
+        
+    @classmethod
+    def generate_random_string_pool(cls, str_length: int, pool_size: int) -> List[str]:
+        unique_values = set()
+        while len(unique_values) < pool_size:
+            unique_values.add(ListGenerators.random_string(str_length))
+        return list(unique_values)
+
+    @classmethod
+    def generate_random_strings(cls, str_size: int, length: int) -> List[str]:
+        return [ListGenerators.random_string(str_size) for _ in range(length)]
+    
+    @classmethod
+    def generate_random_ints(cls, dtype: ArcticIntType, 
+                            size: int, minV: int = None, maxV: int = None
+                            ) -> List[ArcticIntType]:
+        # We do not generate integers outside the int64 range
+        platform_int_info = np.iinfo("int_")
+        iinfo = np.iinfo(dtype)
+        if minV is None:
+            minV = max(iinfo.min, platform_int_info.min)
+            maxV = min(iinfo.max, platform_int_info.max)
+        else:
+            minV = max(iinfo.min, platform_int_info.min, minV)
+            maxV = min(iinfo.max, platform_int_info.max, maxV)
+        return np.random.randint(
+            minV,
+            maxV,
+            size=size,
+            dtype=dtype
+        )
+    
+    @classmethod
+    def generate_random_bools(cls, size: int) -> List[bool]:
+        return np.random.choice([True, False], size=size) 
+    
+    @classmethod
+    def random_string(cls, length: int):
+        return "".join(random.choice(string.ascii_uppercase 
+                                       + string.digits + string.ascii_lowercase + ' ') for _ in range(length))
+
+
+class DFGenerator:
+    """
+    Easy generation of DataFrames, via fluent interface
+    """
+
+    def __init__(self, size: int):
+        self.__size = size
+        self.__data = {}
+        self.__types = {}
+        self.__df = None
+        self.__index = None
+
+    def generate_dataframe(self) -> pd.DataFrame:
+        if self.__df is None:
+            if self.__size == 0:
+                # Apply proper types for dataframe when size is 0
+                self.__df = pd.DataFrame({col: pd.Series(dtype=typ) for col, typ in self.__types.items()})
+            else:
+                self.__df = pd.DataFrame(self.__data)
+            if self.__index is not None:
+                self.__df.index = self.__index
+        return self.__df
+
+    def add_int_col(self, name: str, dtype: ArcticIntType = np.int64) -> 'DFGenerator':
+        list = ListGenerators.generate_random_ints(dtype, self.__size)
+        self.__data[name] = list
+        self.__types[name] = dtype
+        return self
+    
+    def add_int_col_ex(self, name: str, min: int, max: int, dtype: ArcticIntType = np.int64) -> 'DFGenerator':
+        list = ListGenerators.generate_random_ints(dtype, self.__size, min, max)
+        self.__data[name] = list
+        self.__types[name] = dtype
+        return self
+    
+    def add_float_col(self, name: str, dtype: ArcticFloatType = np.float64) -> 'DFGenerator':
+        list = ListGenerators.generate_random_floats(dtype, self.__size)
+        self.__data[name] = list
+        self.__types[name] = dtype
+        return self
+
+    def add_float_col_ex(self, name: str, min: float, max: float, round_at: int, dtype: ArcticFloatType = np.float64
+                         ) -> 'DFGenerator':
+        list = ListGenerators.generate_random_floats(dtype, self.__size, min, max, round_at)
+        self.__data[name] = list
+        self.__types[name] = dtype
+        return self
+
+    def add_string_col(self, name: str, str_size: int, num_unique_values: int = None) -> 'DFGenerator':
+        """
+        Generates a list of strings with length 'str_size', and if 'num_unique_values' values is None
+        the list will be of unique values if 'num_unique_values' is a number then this will be the length
+        pf the string pool of values
+        """
+        list = []
+        if num_unique_values is None:
+            list = ListGenerators.generate_random_strings(str_size, self.__size)
+        else:
+            list = RandomStringPool(str_size, num_unique_values).get_list(self.__size)
+        self.__data[name] = list
+        self.__types[name] = str
+        return self
+    
+    def add_bool_col(self, name: str) -> 'DFGenerator':
+        list = np.random.choice([True, False], size=self.__size) 
+        self.__data[name] = list
+        self.__types[name] = bool
+        return self
+    
+    def add_timestamp_indx(self, name_col:str, freq:Union[str , timedelta , pd.Timedelta , pd.DateOffset], 
+                            start_time: pd.Timestamp = pd.Timestamp(0)) -> 'DFGenerator':
+        self.__index = pd.date_range(start=start_time, periods=self.__size, freq=freq, name=name_col)
+        return self
+    
+    def add_range_indx(self, name_col:str, start:int = 0, step:int = 1, dtype: str = 'int') -> 'DFGenerator':
+        stop = (self.__size + start) * step
+        self.__index = pd.Index(range(start, stop, step), dtype=dtype, name=name_col)
+        return self
 
