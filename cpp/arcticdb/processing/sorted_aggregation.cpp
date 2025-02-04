@@ -8,8 +8,114 @@
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/processing/aggregation_utils.hpp>
 #include <arcticdb/processing/sorted_aggregation.hpp>
+#include <arcticdb/util/type_traits.hpp>
 
 namespace arcticdb {
+
+template<AggregationOperator aggregation_operator, DataType input_data_type, typename Aggregator, typename T>
+void push_to_aggregator(Aggregator& bucket_aggregator, T value, ARCTICDB_UNUSED const ColumnWithStrings& column_with_strings) {
+    if constexpr(is_time_type(input_data_type) && aggregation_operator == AggregationOperator::COUNT) {
+        bucket_aggregator.template push<timestamp, true>(value);
+    } else if constexpr (is_numeric_type(input_data_type) || is_bool_type(input_data_type)) {
+        bucket_aggregator.push(value);
+    } else if constexpr (is_sequence_type(input_data_type)) {
+        bucket_aggregator.push(column_with_strings.string_at_offset(value));
+    }
+}
+
+template<AggregationOperator aggregation_operator, typename scalar_type_info>
+requires arcticdb::util::is_instantiation_of_v<scalar_type_info, ScalarTypeInfo>
+[[nodiscard]] auto get_bucket_aggregator() {
+    if constexpr (aggregation_operator == AggregationOperator::SUM) {
+        if constexpr (is_bool_type(scalar_type_info::data_type)) {
+            // Sum of bool column is just the count of true values
+            return SumAggregatorSorted<uint64_t>();
+        } else {
+            return SumAggregatorSorted<typename scalar_type_info::RawType>();
+        }
+    } else if constexpr (aggregation_operator == AggregationOperator::MEAN) {
+        if constexpr (is_time_type(scalar_type_info::data_type)) {
+            return MeanAggregatorSorted<typename scalar_type_info::RawType, true>();
+        } else {
+            return MeanAggregatorSorted<typename scalar_type_info::RawType>();
+        }
+    } else if constexpr (aggregation_operator == AggregationOperator::MIN) {
+        if constexpr (is_time_type(scalar_type_info::data_type)) {
+            return MinAggregatorSorted<typename scalar_type_info::RawType, true>();
+        } else {
+            return MinAggregatorSorted<typename scalar_type_info::RawType>();
+        }
+    } else if constexpr (aggregation_operator == AggregationOperator::MAX) {
+        if constexpr (is_time_type(scalar_type_info::data_type)) {
+            return MaxAggregatorSorted<typename scalar_type_info::RawType, true>();
+        } else {
+            return MaxAggregatorSorted<typename scalar_type_info::RawType>();
+        }
+    } else if constexpr (aggregation_operator == AggregationOperator::FIRST) {
+        if constexpr (is_time_type(scalar_type_info::data_type)) {
+            return FirstAggregatorSorted<typename scalar_type_info::RawType, true>();
+        } else if constexpr (is_numeric_type(scalar_type_info::data_type) || is_bool_type(scalar_type_info::data_type)) {
+            return FirstAggregatorSorted<typename scalar_type_info::RawType>();
+        } else if constexpr (is_sequence_type(scalar_type_info::data_type)) {
+            return FirstAggregatorSorted<std::optional<std::string_view>>();
+        }
+    } else if constexpr (aggregation_operator == AggregationOperator::LAST) {
+        if constexpr (is_time_type(scalar_type_info::data_type)) {
+            return LastAggregatorSorted<typename scalar_type_info::RawType, true>();
+        } else if constexpr (is_numeric_type(scalar_type_info::data_type) || is_bool_type(scalar_type_info::data_type)) {
+            return LastAggregatorSorted<typename scalar_type_info::RawType>();
+        } else if constexpr (is_sequence_type(scalar_type_info::data_type)) {
+            return LastAggregatorSorted<std::optional<std::string_view>>();
+        }
+    } else if constexpr (aggregation_operator == AggregationOperator::COUNT) {
+        return CountAggregatorSorted();
+    }
+}
+
+template<AggregationOperator aggregation_operator, typename output_type_info>
+requires arcticdb::util::is_instantiation_of_v<output_type_info, ScalarTypeInfo>
+consteval bool is_output_type_allowed() {
+    return is_numeric_type(output_type_info::data_type) ||
+        is_bool_type(output_type_info::data_type) ||
+        (is_sequence_type(output_type_info::data_type) && (aggregation_operator == AggregationOperator::FIRST || aggregation_operator == AggregationOperator::LAST));
+}
+
+template<AggregationOperator aggregation_operator, typename input_type_info, typename output_type_info>
+requires arcticdb::util::is_instantiation_of_v<input_type_info, ScalarTypeInfo> && arcticdb::util::is_instantiation_of_v<output_type_info, ScalarTypeInfo>
+consteval bool are_input_output_operation_allowed() {
+    return (is_numeric_type(input_type_info::data_type) && is_numeric_type(output_type_info::data_type)) ||
+    (is_sequence_type(input_type_info::data_type) && (is_sequence_type(output_type_info::data_type) || aggregation_operator == AggregationOperator::COUNT)) ||
+    (is_bool_type(input_type_info::data_type) && (is_bool_type(output_type_info::data_type) || is_numeric_type(output_type_info::data_type)));
+}
+
+template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
+SortedAggregator<aggregation_operator, closed_boundary>::SortedAggregator(ColumnName input_column_name, ColumnName output_column_name)
+        : input_column_name_(std::move(input_column_name))
+        , output_column_name_(std::move(output_column_name))
+{}
+
+template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
+ColumnName SortedAggregator<aggregation_operator, closed_boundary>::get_input_column_name() const { return input_column_name_; }
+
+template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
+ColumnName SortedAggregator<aggregation_operator, closed_boundary>::get_output_column_name() const { return output_column_name_; }
+
+template<AggregationOperator aggregation_operator, DataType output_data_type, typename Aggregator>
+auto finalize_aggregator(
+    Aggregator& bucket_aggregator,
+    [[maybe_unused]] StringPool& string_pool
+) {
+    if constexpr (is_numeric_type(output_data_type) || is_bool_type(output_data_type) || aggregation_operator == AggregationOperator::COUNT) {
+        return bucket_aggregator.finalize();
+    } else if constexpr (is_sequence_type(output_data_type)) {
+        auto opt_string_view = bucket_aggregator.finalize();
+        if (ARCTICDB_LIKELY(opt_string_view.has_value())) {
+            return string_pool.get(*opt_string_view).offset();
+        } else {
+            return string_none;
+        }
+    }
+}
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
 Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
@@ -33,13 +139,8 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
             auto output_it = output_data.begin<typename output_type_info::TDT>();
             auto output_end_it = output_data.end<typename output_type_info::TDT>();
             // Need this here to only generate valid get_bucket_aggregator code, exception will have been thrown earlier at runtime
-            constexpr bool supported_aggregation_type_combo = is_numeric_type(output_type_info::data_type) ||
-                                                              is_bool_type(output_type_info::data_type) ||
-                                                              (is_sequence_type(output_type_info::data_type) &&
-                                                               (aggregation_operator == AggregationOperator::FIRST ||
-                                                                aggregation_operator == AggregationOperator::LAST));
-            if constexpr (supported_aggregation_type_combo) {
-                auto bucket_aggregator = get_bucket_aggregator<output_type_info>();
+            if constexpr (is_output_type_allowed<aggregation_operator, output_type_info>()) {
+                auto bucket_aggregator = get_bucket_aggregator<aggregation_operator, output_type_info>();
                 bool reached_end_of_buckets{false};
                 auto bucket_start_it = bucket_boundaries.cbegin();
                 auto bucket_end_it = std::next(bucket_start_it);
@@ -64,9 +165,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                             &reached_end_of_buckets](auto input_type_desc_tag) {
                                 using input_type_info = ScalarTypeInfo<decltype(input_type_desc_tag)>;
                                 // Again, only needed to generate valid code below, exception will have been thrown earlier at runtime
-                                if constexpr ((is_numeric_type(input_type_info::data_type) && is_numeric_type(output_type_info::data_type)) ||
-                                              (is_sequence_type(input_type_info::data_type) && (is_sequence_type(output_type_info::data_type) || aggregation_operator == AggregationOperator::COUNT)) ||
-                                              (is_bool_type(input_type_info::data_type) && (is_bool_type(output_type_info::data_type) || is_numeric_type(output_type_info::data_type)))) {
+                                if constexpr (are_input_output_operation_allowed<aggregation_operator, input_type_info, output_type_info>()) {
                                     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
                                             !agg_column.column_->is_sparse() && agg_column.column_->row_count() == input_index_column->row_count(),
                                             "Resample: Cannot aggregate column '{}' as it is sparse",
@@ -78,11 +177,11 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                                     bool bucket_has_values = false;
                                     for (auto index_it = index_data.template cbegin<IndexTDT>(); index_it != index_cend && !reached_end_of_buckets; ++index_it, ++agg_it) {
                                         if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
-                                            push_to_aggregator<input_type_info::data_type>(bucket_aggregator, *agg_it, agg_column);
+                                            push_to_aggregator<aggregation_operator, input_type_info::data_type>(bucket_aggregator, *agg_it, agg_column);
                                             bucket_has_values = true;
                                         } else if (ARCTICDB_LIKELY(index_value_past_end_of_bucket(*index_it, *bucket_end_it)) && output_it != output_end_it) {
                                             if (bucket_has_values) {
-                                                *output_it++ = finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool);
+                                                *output_it++ = finalize_aggregator<aggregation_operator, output_type_info::data_type>(bucket_aggregator, string_pool);
                                             }
                                             // The following code is equivalent to:
                                             // if constexpr (closed_boundary == ResampleBoundary::LEFT) {
@@ -110,7 +209,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                                                 bucket_has_values = false;
                                                 current_bucket.set_boundaries(*bucket_start_it, *bucket_end_it);
                                                 if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
-                                                    push_to_aggregator<input_type_info::data_type>(bucket_aggregator, *agg_it, agg_column);
+                                                    push_to_aggregator<aggregation_operator, input_type_info::data_type>(bucket_aggregator, *agg_it, agg_column);
                                                     bucket_has_values = true;
                                                 }
                                             }
@@ -123,7 +222,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                 }
                 // We were in the middle of aggregating a bucket when we ran out of index values
                 if (output_it != output_end_it) {
-                    *output_it++ = finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool);
+                    *output_it++ = finalize_aggregator<aggregation_operator, output_type_info::data_type>(bucket_aggregator, string_pool);
                 }
             }
         }
@@ -215,4 +314,26 @@ template class SortedAggregator<AggregationOperator::LAST, ResampleBoundary::RIG
 template class SortedAggregator<AggregationOperator::COUNT, ResampleBoundary::LEFT>;
 template class SortedAggregator<AggregationOperator::COUNT, ResampleBoundary::RIGHT>;
 
+template<ResampleBoundary closed_boundary>
+Bucket<closed_boundary>::Bucket(timestamp start, timestamp end):
+        start_(start), end_(end){}
+
+template<ResampleBoundary closed_boundary>
+void Bucket<closed_boundary>::set_boundaries(timestamp start, timestamp end) {
+    start_ = start;
+    end_ = end;
+}
+
+template<ResampleBoundary closed_boundary>
+[[nodiscard]] bool Bucket<closed_boundary>::contains(timestamp ts) const {
+    if constexpr (closed_boundary == ResampleBoundary::LEFT) {
+        return ts >= start_ && ts < end_;
+    } else {
+        // closed_boundary == ResampleBoundary::RIGHT
+        return ts > start_ && ts <= end_;
+    }
+}
+
+template class Bucket<ResampleBoundary::LEFT>;
+template class Bucket<ResampleBoundary::RIGHT>;
 }
