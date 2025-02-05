@@ -563,7 +563,7 @@ TEST_F(SparseTestStore, SegmentWithRangeFilter) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = IndexRange(timestamp{3000}, timestamp{6999});
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data(OutputFormat::PANDAS);
+    auto handler_data = get_type_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
