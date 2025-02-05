@@ -9,8 +9,10 @@
 
 #include <variant>
 #include <vector>
+#include <memory>
 
 #include <arcticdb/processing/clause.hpp>
+#include <arcticdb/processing/grouper.hpp>
 
 namespace arcticdb {
 

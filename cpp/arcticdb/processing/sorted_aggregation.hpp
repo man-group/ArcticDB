@@ -368,31 +368,5 @@ private:
 
 } // namespace arcticdb
 
-namespace fmt {
 template<>
-struct formatter<arcticdb::AggregationOperator> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    auto format(const arcticdb::AggregationOperator& agg, FormatContext &ctx) const {
-        switch(agg) {
-            case arcticdb::AggregationOperator::SUM:
-                return fmt::format_to(ctx.out(), "SUM");
-            case arcticdb::AggregationOperator::MEAN:
-                return fmt::format_to(ctx.out(), "MEAN");
-            case arcticdb::AggregationOperator::MIN:
-                return fmt::format_to(ctx.out(), "MIN");
-            case arcticdb::AggregationOperator::MAX:
-                return fmt::format_to(ctx.out(), "MAX");
-            case arcticdb::AggregationOperator::FIRST:
-                return fmt::format_to(ctx.out(), "FIRST");
-            case arcticdb::AggregationOperator::LAST:
-                return fmt::format_to(ctx.out(), "LAST");
-            case arcticdb::AggregationOperator::COUNT:
-            default:
-                return fmt::format_to(ctx.out(), "COUNT");
-        }
-    }
-};
-} //namespace fmt
+struct fmt::formatter<arcticdb::AggregationOperator>;

@@ -27,8 +27,11 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
+#include <ranges>
 
 namespace arcticdb::version_store {
+
+namespace ranges = std::ranges;
 
 void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, const ReadOptions& read_options) {
 
@@ -895,8 +898,8 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
     const ReadOptions& read_options
     ) {
     auto component_manager = std::make_shared<ComponentManager>();
-    ProcessingConfig processing_config{opt_false(read_options.dynamic_schema_), pipeline_context->rows_};
-    for (auto& clause: read_query->clauses_) {
+    const ProcessingConfig processing_config{opt_false(read_options.dynamic_schema_), pipeline_context->rows_};
+    for (const auto& clause: read_query->clauses_) {
         clause->set_processing_config(processing_config);
         clause->set_component_manager(component_manager);
     }
@@ -920,7 +923,7 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
     .thenValue([component_manager, read_query, pipeline_context](std::vector<EntityId>&& processed_entity_ids) {
         auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
 
-        if (std::any_of(read_query->clauses_.begin(), read_query->clauses_.end(), [](const std::shared_ptr<Clause>& clause) {
+        if (ranges::any_of(read_query->clauses_, [](const std::shared_ptr<Clause>& clause) {
             return clause->clause_info().modifies_output_descriptor_;
         })) {
             set_output_descriptors(proc, read_query->clauses_, pipeline_context);

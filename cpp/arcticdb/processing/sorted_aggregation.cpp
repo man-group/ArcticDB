@@ -127,7 +127,12 @@ template<AggregationOperator aggregation_operator, ResampleBoundary closed_bound
     DataType common_input_type
 ) const {
     using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    Column res(TypeDescriptor(generate_output_data_type(common_input_type), Dimension::Dim0), output_index_column.row_count(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
+    Column res(
+        TypeDescriptor(generate_output_data_type(common_input_type), Dimension::Dim0),
+        output_index_column.row_count(),
+        AllocationType::PRESIZED,
+        Sparsity::NOT_PERMITTED
+    );
     details::visit_type(
         res.type().data_type(),
         [this,
@@ -173,11 +178,11 @@ template<AggregationOperator aggregation_operator, ResampleBoundary closed_bound
                                             "Resample: Cannot aggregate column '{}' as it is sparse",
                                             get_input_column_name().value);
                                     auto index_data = input_index_column->data();
-                                    const auto index_cend = index_data.template cend<IndexTDT>();
+                                    const auto index_cend = index_data.cend<IndexTDT>();
                                     auto agg_data = agg_column.column_->data();
-                                    auto agg_it = agg_data.template cbegin<typename input_type_info::TDT>();
+                                    auto agg_it = agg_data.cbegin<typename input_type_info::TDT>();
                                     bool bucket_has_values = false;
-                                    for (auto index_it = index_data.template cbegin<IndexTDT>(); index_it != index_cend && !reached_end_of_buckets; ++index_it, ++agg_it) {
+                                    for (auto index_it = index_data.cbegin<IndexTDT>(); index_it != index_cend && !reached_end_of_buckets; ++index_it, ++agg_it) {
                                         if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
                                             push_to_aggregator<aggregation_operator, input_type_info::data_type>(bucket_aggregator, *agg_it, agg_column);
                                             bucket_has_values = true;
@@ -365,3 +370,30 @@ template<ResampleBoundary closed_boundary>
 template class Bucket<ResampleBoundary::LEFT>;
 template class Bucket<ResampleBoundary::RIGHT>;
 }
+
+template<>
+struct fmt::formatter<arcticdb::AggregationOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::AggregationOperator& agg, FormatContext &ctx) const {
+        switch(agg) {
+            case arcticdb::AggregationOperator::SUM:
+                return fmt::format_to(ctx.out(), "SUM");
+            case arcticdb::AggregationOperator::MEAN:
+                return fmt::format_to(ctx.out(), "MEAN");
+            case arcticdb::AggregationOperator::MIN:
+                return fmt::format_to(ctx.out(), "MIN");
+            case arcticdb::AggregationOperator::MAX:
+                return fmt::format_to(ctx.out(), "MAX");
+            case arcticdb::AggregationOperator::FIRST:
+                return fmt::format_to(ctx.out(), "FIRST");
+            case arcticdb::AggregationOperator::LAST:
+                return fmt::format_to(ctx.out(), "LAST");
+            case arcticdb::AggregationOperator::COUNT:
+            default:
+                return fmt::format_to(ctx.out(), "COUNT");
+        }
+    }
+};

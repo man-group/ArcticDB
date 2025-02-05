@@ -19,9 +19,8 @@
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/util/test/random_throw.hpp>
 #include <ankerl/unordered_dense.h>
+#include <arcticdb/util/movable_priority_queue.hpp>
 #include <ranges>
-
-
 
 namespace arcticdb {
 
@@ -589,7 +588,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                     idx < expected_fetch_counts.size(),
                     "Index {} in new_structure_offsets out of bounds >{}", idx, expected_fetch_counts.size() - 1);
-            expected_fetch_counts[idx]++;
+            ++expected_fetch_counts[idx];
         }
     }
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -621,7 +620,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     // slice is being computed by the call to process dealing with the row slices above these. Otherwise, this call
     // should do it
     const auto& front_slice = row_slices.front();
-    bool responsible_for_first_overlapping_bucket = front_slice.entity_fetch_count_->at(0) == 1;
+    const bool responsible_for_first_overlapping_bucket = front_slice.entity_fetch_count_->at(0) == 1;
     // Find the iterators into bucket_boundaries_ of the start of the first and the end of the last bucket this call to process is
     // responsible for calculating
     // All segments in a given row slice contain the same index column, so just grab info from the first one
