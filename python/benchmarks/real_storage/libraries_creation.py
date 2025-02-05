@@ -1,15 +1,10 @@
 
 from abc import ABC, abstractmethod
-from datetime import timedelta
-import datetime
 from enum import Enum
 import os
-import random
-import string
-import sys
 import tempfile
 import time
-from typing import Any, List, Union
+from typing import List
 import numpy as np
 import pandas as pd
 
@@ -23,6 +18,11 @@ AWS_URL_TEST = 's3s://s3.eu-west-1.amazonaws.com:arcticdb-asv-real-storage?aws_a
 
 
 class SetupConfig:
+    '''
+    Defined special one time setup for real storages.
+    Place here what is needed for proper initialization
+    of each storage
+    '''
     _instance = None
 
     def __new__(cls, *args, **kwargs):
@@ -50,14 +50,16 @@ class LibrariesBase(ABC):
         """
         Should be initialized with type or arctic url
         """
+        if type is not None:
+            self.type = type
         self.arctic_url = arctic_url
         if self.arctic_url is not None:
-            if "lmdb" in self.arctic_url.lower():
-                self.type = Storage.LMDB
-            if "s3s://" in self.arctic_url.lower():
-                self.type = Storage.AMAZON
-        else:     
-            self.type = type
+            if type is None:
+                if "lmdb" in self.arctic_url.lower():
+                    self.type = Storage.LMDB
+                if "s3s://" in self.arctic_url.lower() or "s3://" in self.arctic_url.lower():
+                    self.type = Storage.AMAZON
+                raise Exception(f"unsupported storage type: {type}")
         self.ac = None
         self.__libraries = set()
         SetupConfig()
@@ -65,11 +67,11 @@ class LibrariesBase(ABC):
     def remove_libraries(self):
         ## Remove only LMDB libs as they need to
         if self.type == Storage.LMDB:
-            ac = self.get_arctic()
+            ac = self.get_arctic_client()
             for lib in self.__libraries:
                 ac.delete_library(lib)
 
-    def get_arctic(self):
+    def get_arctic_client(self):
         if self.ac is None:
             if self.arctic_url is None:
                 if (self.type == Storage.AMAZON):
@@ -90,6 +92,7 @@ class LibrariesBase(ABC):
         """
         return None
     
+    @abstractmethod
     def get_library_names(self, num_symbols: int = 1) -> List[str]:
         """
         In case more than one library is needed define such method.
@@ -102,32 +105,26 @@ class LibrariesBase(ABC):
         """
         Returns one time setup library (permanent)
         """
-        ac = self.get_arctic()
+        ac = self.get_arctic_client()
         lib_opts = self.get_library_options()
         lib_name = self.get_library_names(num_symbols)[0]
         self.__libraries.add(lib_name)
-        if lib_opts is None:
-            return ac.get_library(lib_name, create_if_missing=True)
-        else:
-            return ac.get_library(lib_name, create_if_missing=True, 
-                                  library_options=lib_opts)
+        return ac.get_library(lib_name, create_if_missing=True, 
+                                library_options=lib_opts)
     
     def get_modifyable_library(self, num_symbols: int = 1) -> Library:
         """
         Returns library to read write and delete after done.
         """
-        ac = self.get_arctic()
+        ac = self.get_arctic_client()
         lib_opts = self.get_library_options()
         lib_name = self.get_library_names(num_symbols)[1]
         self.__libraries.add(lib_name)
-        if lib_opts is None:
-            return ac.get_library(lib_name, create_if_missing=True)
-        else:
-            return ac.get_library(lib_name, create_if_missing=True, 
-                                  library_options=lib_opts)
+        return ac.get_library(lib_name, create_if_missing=True, 
+                              library_options=lib_opts)
 
     def delete_modifyable_library(self, num_symbols: int = 1):
-        ac = self.get_arctic()
+        ac = self.get_arctic_client()
         ac.delete_library(self.get_library_names(num_symbols)[1])
 
     def get_symbol_name(self, sym_idx):
@@ -145,6 +142,16 @@ class LibrariesBase(ABC):
         NOTE: it might return different list of values depending on the storage type due to speed
         """
         pass
+
+    @abstractmethod
+    def get_parameter_names_list(self):
+        """
+        Defines parameter names list for benchmarks. Can be used for number of rows, symbols etc.
+
+        NOTE: it might return different list of values depending on the storage type due to speed.
+        Always synchronize with :func:`LibrariesBase.get_parameter_list`
+        """
+        pass        
 
     def check_ok(self):
         """
@@ -166,9 +173,9 @@ class LibrariesBase(ABC):
         Deletes all libraries starting with specified string
         """
         assert confirm, "deletion not confirmed!"
-        ac = self.get_arctic()
-        list = ac.list_libraries()
-        for lib in list:
+        ac = self.get_arctic_client()
+        lib_list = ac.list_libraries()
+        for lib in lib_list:
             if nameStarts in lib:
                 print(f"Deleteing {lib}")
                 ac.delete_library(lib)

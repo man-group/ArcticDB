@@ -17,11 +17,14 @@ class SymbolLibraries(LibrariesBase):
 
     def __init__(self, type:Storage = Storage.LMDB):
         super().__init__(type)
-        self.ac = self.get_arctic()
+        self.ac = self.get_arctic_client()
         self.df = self.generate_df(10)
 
     def get_parameter_list(self):
         return [500, 1000]
+    
+    def get_parameter_names_list(self):
+        return ["num_syms"]
     
     def get_library_options(self):
         return LibraryOptions(rows_per_segment=20, columns_per_segment=20)
@@ -97,7 +100,7 @@ class VersionLibraries(SymbolLibraries):
 
     def __init__(self, type:Storage = Storage.LMDB):
         super().__init__(type)
-        self.ac = self.get_arctic()
+        self.ac = self.get_arctic_client()
 
     def get_parameter_list(self):
         return [25, 50]
@@ -159,7 +162,7 @@ class AWS_ListSymbols:
     SETUP_CLASS = SymbolLibraries(Storage.AMAZON)
 
     params = SETUP_CLASS.get_parameter_list()
-    param_names = ["num_syms"]
+    param_names = SETUP_CLASS.get_parameter_names_list()
 
     def get_creator(self):
         return AWS_ListSymbols.SETUP_CLASS
@@ -201,7 +204,7 @@ class AWS_VersionSymbols:
     SETUP_CLASS = VersionLibraries(Storage.AMAZON)
 
     params = SETUP_CLASS.get_parameter_list()
-    param_names = ["num_syms"]
+    param_names = SETUP_CLASS.get_parameter_names_list()
 
     def get_creator(self):
         return AWS_VersionSymbols.SETUP_CLASS

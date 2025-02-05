@@ -37,7 +37,7 @@ class ReadBenchmarkLibraries(LibrariesBase):
 
     def __init__(self, type: Storage = Storage.LMDB, arctic_url: str = None):
         super().__init__(type, arctic_url)
-        self.ac = self.get_arctic()
+        self.ac = self.get_arctic_client()
         self.lib = self.get_library(1)
 
     def get_library_names(self, num_symbols=1) -> List[str]:
@@ -55,6 +55,9 @@ class ReadBenchmarkLibraries(LibrariesBase):
         if self.type == Storage.LMDB:
             rows = [2_500_000, 5_000_000]
         return rows
+    
+    def get_parameter_names_list(self):
+        return ["num_rows"]
 
     def generate_df(self, row_num:int) -> pd.DataFrame:
         """
@@ -114,7 +117,7 @@ class LMDB_ReadWrite:
     SETUP_CLASS: ReadBenchmarkLibraries = ReadBenchmarkLibraries(Storage.LMDB)
 
     params = SETUP_CLASS.get_parameter_list()
-    param_names = ["num_rows"]
+    param_names = SETUP_CLASS.get_parameter_names_list()
 
     def get_creator(self):
         """
@@ -132,14 +135,19 @@ class LMDB_ReadWrite:
             lmdb.setup_all()
         # make sure that only the proc that sets up database
         # its arctic url will be used later in other threads
+        print("ARCTIC URL for TEMP DATA: ", lmdb.arctic_url)
         return lmdb.arctic_url
 
     def setup(self, arctic_url, num_rows):
         ## Construct back from arctic url the object
         self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)
+        sym = self.lmdb.get_symbol_name(num_rows)
 
         ## Create write cache
-        sym = self.lmdb.get_symbol_name(num_rows)
+        print("ARCTIC_URL: ", arctic_url)
+        print("LIBRARY: ",  self.lmdb.get_library())
+        print("LIST SYMBOLS: ",  self.lmdb.get_library().list_symbols())
+        print("SYMBOLS WE LOOK FOR: ",  sym)
         self.to_write_df = self.lmdb.get_library().read(symbol=sym).data
 
     def time_read(self, arctic_url, num_rows):
@@ -175,7 +183,7 @@ class AWS_ReadWrite(LMDB_ReadWrite):
     SETUP_CLASS = ReadBenchmarkLibraries(Storage.AMAZON)
 
     params = SETUP_CLASS.get_parameter_list()
-    param_names = ["num_rows"]
+    param_names = SETUP_CLASS.get_parameter_names_list()
 
     def get_creator(self):
         return AWS_ReadWrite.SETUP_CLASS
