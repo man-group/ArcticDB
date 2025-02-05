@@ -48,7 +48,7 @@ struct LMDBStore {
     }
 };
 
-static void BM_write_lmdb(benchmark::State& state, bool include_clone_time, bool use_mock) {
+[[maybe_unused]] static void BM_write_lmdb(benchmark::State& state, bool include_clone_time, bool use_mock) {
     auto num_rows = state.range(0);
 
     auto sym = "symbol";
@@ -75,7 +75,8 @@ static void BM_write_lmdb(benchmark::State& state, bool include_clone_time, bool
     }
 }
 
-BENCHMARK_CAPTURE(BM_write_lmdb, mock_with_clone, true, true)->Arg(100'000)->Arg(1'000'000);
-BENCHMARK_CAPTURE(BM_write_lmdb, mock_no_clone, false, true)->Arg(100'000)->Arg(1'000'000);
-BENCHMARK_CAPTURE(BM_write_lmdb, real_with_clone, true, false)->Arg(100'000)->Arg(1'000'000);
-BENCHMARK_CAPTURE(BM_write_lmdb, real_no_clone, false, false)->Arg(100'000)->Arg(1'000'000);
+// TODO: Re-enable real lmdb benchmarks once running on Windows CI is fixed
+// BENCHMARK_CAPTURE(BM_write_lmdb, mock_with_clone, true, true)->Arg(100'000)->Arg(1'000'000);
+// BENCHMARK_CAPTURE(BM_write_lmdb, mock_no_clone, false, true)->Arg(100'000)->Arg(1'000'000);
+// BENCHMARK_CAPTURE(BM_write_lmdb, real_with_clone, true, false)->Arg(100'000)->Arg(1'000'000);
+// BENCHMARK_CAPTURE(BM_write_lmdb, real_no_clone, false, false)->Arg(100'000)->Arg(1'000'000);
