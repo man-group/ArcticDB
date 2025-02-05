@@ -1674,6 +1674,7 @@ VersionedItem sort_merge_impl(
 
     std::vector<FrameSlice> slices;
     std::vector<folly::Future<VariantKey>> fut_vec;
+    auto semaphore = std::make_shared<folly::NativeSemaphore>(n_segments_live_during_compaction());
     auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
     util::variant_match(index,
         [&](const stream::TimeseriesIndex &timeseries_index) {
@@ -1710,13 +1711,12 @@ VersionedItem sort_merge_impl(
                     slices.emplace_back(std::move(slice));
                 },
                 DynamicSchema{*pipeline_context->staged_descriptor_, index},
-                [pipeline_context, &fut_vec, &store](SegmentInMemory &&segment) {
-                    StreamDescriptor only_non_empty_cols;
+                [pipeline_context, &fut_vec, &store, &semaphore](SegmentInMemory &&segment) {
                     const auto local_index_start = TimeseriesIndex::start_value_for_segment(segment);
                     const auto local_index_end = TimeseriesIndex::end_value_for_segment(segment);
                     stream::StreamSink::PartialKey
                     pk{KeyType::TABLE_DATA, pipeline_context->version_id_, pipeline_context->stream_id_, local_index_start, local_index_end};
-                    fut_vec.emplace_back(store->write(pk, std::move(segment)));
+                    fut_vec.emplace_back(store->write_maybe_blocking(pk, std::move(segment), semaphore));
                 },
                 RowCountSegmentPolicy(write_options.segment_row_size)};
 
@@ -2080,6 +2080,16 @@ CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_desc
         };
     }
     return std::monostate{};
+}
+
+size_t n_segments_live_during_compaction() {
+    int64_t default_count = 2 * async::TaskScheduler::instance()->io_thread_count();
+    int64_t res = ConfigsMap::instance()->get_int("VersionStore.NumSegmentsLiveDuringCompaction", default_count);
+    log::version().debug("Allowing up to {} segments to be live during compaction", res);
+    static constexpr auto max_size = static_cast<int64_t>(folly::NativeSemaphore::value_max_v);
+    util::check(res < max_size, "At most {} live segments during compaction supported but were {}, adjust VersionStore.NumSegmentsLiveDuringCompaction", max_size, res);
+    util::check(res > 0, "VersionStore.NumSegmentsLiveDuringCompaction must be strictly positive but was {}", res);
+    return static_cast<size_t>(res);
 }
 
 }
