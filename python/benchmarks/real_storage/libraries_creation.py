@@ -43,6 +43,11 @@ class Storage(Enum):
     AMAZON = 1
     LMDB = 2
 
+class StorageInfo:    
+
+    def __init__(self, type: Storage, url: str):
+        self.type = type
+        self.url = url
 
 class LibrariesBase(ABC):
 
@@ -63,6 +68,13 @@ class LibrariesBase(ABC):
         self.ac = None
         self.__libraries = set()
         SetupConfig()
+
+    @classmethod
+    def fromStorageInfo(cls, data: StorageInfo):
+        return cls(data.type, data.url)
+    
+    def get_storage_info(self) -> StorageInfo:
+        return StorageInfo(self.type, self.arctic_url)
     
     def remove_libraries(self):
         ## Remove only LMDB libs as they need to
@@ -79,6 +91,8 @@ class LibrariesBase(ABC):
                 elif (self.type == Storage.LMDB):
                     ## We create fpr each object unique library in temp dir
                     self.arctic_url = f"lmdb://{tempfile.gettempdir()}/benchmarks_{int(time.time() * 1000)}" 
+                    ## 
+                    # Home dir will be shared dir and will not work well with LMDB actually
                     #home_dir = os.path.expanduser("~")
                     #self.ac = Arctic(f"lmdb://{home_dir}/benchmarks")
                 else:
@@ -151,7 +165,18 @@ class LibrariesBase(ABC):
         NOTE: it might return different list of values depending on the storage type due to speed.
         Always synchronize with :func:`LibrariesBase.get_parameter_list`
         """
-        pass        
+        pass    
+
+    def setup_environment(self) -> 'LibrariesBase':
+        """
+        Responsible for setting up environment if not set for persistent libraries.
+
+        Provides default implementation that can be overridden
+        """
+        self.delete_modifyable_library()
+        if not self.check_ok():
+            self.setup_all()
+        return self
 
     def check_ok(self):
         """
@@ -173,6 +198,7 @@ class LibrariesBase(ABC):
         Deletes all libraries starting with specified string
         """
         assert confirm, "deletion not confirmed!"
+        assert len(nameStarts) > 4, "name starts should be > 4 symbols for safety reasons"
         ac = self.get_arctic_client()
         lib_list = ac.list_libraries()
         for lib in lib_list:

@@ -21,18 +21,6 @@ class ReadBenchmarkLibraries(LibrariesBase):
     It is also responsible for providing 2 libraries: 
     - one that will hold persistent data across runs
     - one that will will hold transient data for operations which data will be wiped out
-
-    From Sofia Wifi RealS3 speed
-        Dataframe 1000000 rows generated for 3.289991617202759 sec
-        Dataframe 1000000 rows stored for 25.995510578155518 sec
-        Dataframe 2000000 rows generated for 6.295953989028931 sec
-        Dataframe 2000000 rows stored for 47.125516176223755 sec
-        Dataframe 5000000 rows generated for 17.274338960647583 sec
-        Dataframe 5000000 rows stored for 117.21490359306335 sec
-        Dataframe 10000000 rows generated for 35.046889543533325 sec
-        Dataframe 10000000 rows stored for 228.07661938667297 sec
-        Dataframe 20000000 rows generated for 72.01222062110901 sec
-        Dataframe 20000000 rows stored for 456.6385509967804 sec
     """
 
     def __init__(self, type: Storage = Storage.LMDB, arctic_url: str = None):
@@ -104,11 +92,18 @@ class ReadBenchmarkLibraries(LibrariesBase):
 class LMDB_ReadWrite:
     """
     This class is responsible for all checks on LMDB storage
+
+        IMPORTANT: 
+        - When we inherit from another test we inherit test, setup and teardown methods
+        - setup_cache() method we inherit it AS IS, thus it will be executed only ONCE for
+          all classes that inherit from the base class. Therefore it is perhaps best to ALWAYS
+          provide implementation in the child class, no matter that it might look like code repeat
+
     """
 
     rounds = 1
-    number = 1 
-    repeat = 3 # On LMDB we repeat at least 3 times
+    number = 3 # invokes 3 times the test runs between each setup-teardown 
+    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
     min_run_count = 1
     warmup_time = 0
 
@@ -119,50 +114,41 @@ class LMDB_ReadWrite:
     params = SETUP_CLASS.get_parameter_list()
     param_names = SETUP_CLASS.get_parameter_names_list()
 
-    def get_creator(self):
-        """
-        Needed for inheritance, due to fact that ASV spawns many processes,
-        and accessing SETUP_CLASS is not an option as it will be different in each one
-        Thus the class that inherits must override that method with its own 
-        library creation class
-        """
-        return LMDB_ReadWrite.SETUP_CLASS
-
     def setup_cache(self):
-        lmdb = self.get_creator() 
-        lmdb.delete_modifyable_library()
-        if not lmdb.check_ok():
-            lmdb.setup_all()
-        # make sure that only the proc that sets up database
-        # its arctic url will be used later in other threads
-        print("ARCTIC URL for TEMP DATA: ", lmdb.arctic_url)
-        return lmdb.arctic_url
+        '''
+        Always provide implementation of setup_cache in
+        the child class
 
-    def setup(self, arctic_url, num_rows):
+        And always return storage info which should 
+        be first parameter for setup, tests and teardowns
+        '''
+        lmdb = LMDB_ReadWrite.SETUP_CLASS.setup_environment() 
+        return lmdb.get_storage_info()
+
+    def setup(self, storage_info, num_rows):
+        '''
+        This setup method for read and writes can be executed only once
+        No need to be executed before each test. That is why we define 
+        `repeat` as 1
+        '''
         ## Construct back from arctic url the object
-        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)
+        self.lmdb = ReadBenchmarkLibraries.fromStorageInfo(storage_info)
         sym = self.lmdb.get_symbol_name(num_rows)
-
-        ## Create write cache
-        print("ARCTIC_URL: ", arctic_url)
-        print("LIBRARY: ",  self.lmdb.get_library())
-        print("LIST SYMBOLS: ",  self.lmdb.get_library().list_symbols())
-        print("SYMBOLS WE LOOK FOR: ",  sym)
         self.to_write_df = self.lmdb.get_library().read(symbol=sym).data
 
-    def time_read(self, arctic_url, num_rows):
+    def time_read(self, storage_info, num_rows):
         sym = self.lmdb.get_symbol_name(num_rows)
         self.lmdb.get_library().read(symbol=sym)
 
-    def peakmem_read(self, arctic_url, num_rows):
+    def peakmem_read(self, storage_info, num_rows):
         sym = self.lmdb.get_symbol_name(num_rows)
         self.lmdb.get_library().read(symbol=sym)
 
-    def time_write(self, arctic_url, num_rows):
+    def time_write(self, storage_info, num_rows):
         sym = self.lmdb.get_symbol_name(num_rows)
         self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)
 
-    def peakmem_write(self, arctic_url, num_rows):
+    def peakmem_write(self, storage_info, num_rows):
         sym = self.lmdb.get_symbol_name(num_rows)
         self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)
 
@@ -170,11 +156,17 @@ class LMDB_ReadWrite:
 class AWS_ReadWrite(LMDB_ReadWrite):
     """
     This class is responsible for all checks on AWS
+
+    IMPORTANT: 
+        - When we inherit from another test we inherit test, setup and teardown methods
+        - setup_cache() method we inherit it AS IS, thus it will be executed only ONCE for
+          all classes that inherit from the base class. Therefore it is perhaps best to ALWAYS
+          provide implementation in the child class, no matter that it might look like code repeat
     """
 
     rounds = 1
-    number = 1 
-    repeat = 1
+    number = 3 # invoke X times the test runs between each setup-teardown 
+    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
     min_run_count = 1
     warmup_time = 0
 
@@ -185,6 +177,14 @@ class AWS_ReadWrite(LMDB_ReadWrite):
     params = SETUP_CLASS.get_parameter_list()
     param_names = SETUP_CLASS.get_parameter_names_list()
 
-    def get_creator(self):
-        return AWS_ReadWrite.SETUP_CLASS
+    def setup_cache(self):
+        '''
+        Always provide implementation of setup_cache in
+        the child class
+
+        And always return storage info which should 
+        be first parameter for setup, tests and teardowns
+        '''
+        aws = AWS_ReadWrite.SETUP_CLASS.setup_environment() 
+        return aws.get_storage_info()
 

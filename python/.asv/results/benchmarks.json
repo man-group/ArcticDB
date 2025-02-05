@@ -1605,7 +1605,7 @@
         "warmup_time": -1
     },
     "real_list_operations.AWS_ListSymbols.peakmem_list_symbols": {
-        "code": "class AWS_ListSymbols:\n    def peakmem_list_symbols(self, num_syms):\n        self.lib.list_symbols()\n\n    def setup(self, num_syms):\n        self.aws = self.get_creator()\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = self.get_creator()\n        if not aws.check_ok():\n            aws.setup_all()\n        else:\n            aws.reset_symbols_cache()",
+        "code": "class AWS_ListSymbols:\n    def peakmem_list_symbols(self, storage_info, num_syms):\n        self.lib.list_symbols()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = SymbolLibraries.fromStorageInfo(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return the arctic url which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws = AWS_ListSymbols.SETUP_CLASS\n        if not aws.check_ok():\n            aws.setup_all()\n        else:\n            aws.reset_symbols_cache()\n        return aws.get_storage_info()",
         "name": "real_list_operations.AWS_ListSymbols.peakmem_list_symbols",
         "param_names": [
             "num_syms"
@@ -1616,17 +1616,17 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "real_list_operations:170",
+        "setup_cache_key": "real_list_operations:173",
         "timeout": 12000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "94f89519d25d078bbca785c17cba4f39c4aca7733e31a93fcaf1e22d335e01d1"
+        "version": "3fbef444a643e05fa205cc0903c9bf13cbde9fb88c1283b8f960bf43a470b3e3"
     },
     "real_list_operations.AWS_ListSymbols.time_has_symbol_nonexisting": {
-        "code": "class AWS_ListSymbols:\n    def time_has_symbol_nonexisting(self, num_syms):\n        self.lib.has_symbol(\"250_sym\")\n\n    def setup(self, num_syms):\n        self.aws = self.get_creator()\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = self.get_creator()\n        if not aws.check_ok():\n            aws.setup_all()\n        else:\n            aws.reset_symbols_cache()",
+        "code": "class AWS_ListSymbols:\n    def time_has_symbol_nonexisting(self, storage_info, num_syms):\n        self.lib.has_symbol(\"250_sym\")\n\n    def setup(self, storage_info, num_syms):\n        self.aws = SymbolLibraries.fromStorageInfo(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return the arctic url which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws = AWS_ListSymbols.SETUP_CLASS\n        if not aws.check_ok():\n            aws.setup_all()\n        else:\n            aws.reset_symbols_cache()\n        return aws.get_storage_info()",
         "min_run_count": 1,
         "name": "real_list_operations.AWS_ListSymbols.time_has_symbol_nonexisting",
-        "number": 1,
+        "number": 3,
         "param_names": [
             "num_syms"
         ],
@@ -1636,21 +1636,21 @@
                 "1000"
             ]
         ],
-        "repeat": 3,
+        "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:170",
+        "setup_cache_key": "real_list_operations:173",
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
-        "version": "3d0462e9614a7c61312a9ba213876679a5598875c85fd5831ea599cdce2a71ca",
+        "version": "7665d4556bba564d28c1e10c6436f81827e4baa7630d48b5907080a63c88ffeb",
         "warmup_time": 0
     },
     "real_list_operations.AWS_ListSymbols.time_list_symbols": {
-        "code": "class AWS_ListSymbols:\n    def time_list_symbols(self, num_syms):\n        self.lib.list_symbols()\n\n    def setup(self, num_syms):\n        self.aws = self.get_creator()\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = self.get_creator()\n        if not aws.check_ok():\n            aws.setup_all()\n        else:\n            aws.reset_symbols_cache()",
+        "code": "class AWS_ListSymbols:\n    def time_list_symbols(self, storage_info, num_syms):\n        self.lib.list_symbols()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = SymbolLibraries.fromStorageInfo(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return the arctic url which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws = AWS_ListSymbols.SETUP_CLASS\n        if not aws.check_ok():\n            aws.setup_all()\n        else:\n            aws.reset_symbols_cache()\n        return aws.get_storage_info()",
         "min_run_count": 1,
         "name": "real_list_operations.AWS_ListSymbols.time_list_symbols",
-        "number": 1,
+        "number": 3,
         "param_names": [
             "num_syms"
         ],
@@ -1660,18 +1660,18 @@
                 "1000"
             ]
         ],
-        "repeat": 3,
+        "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:170",
+        "setup_cache_key": "real_list_operations:173",
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
-        "version": "03a0ffc68c570d4c6f06be180c2656d1b3c0d4d9587a89da2e6851cfb7ceef42",
+        "version": "c9ef76d393a8ecf6f25c957071843e6664fa79bd095c5f09322d6c36b6b9da77",
         "warmup_time": 0
     },
     "real_list_operations.AWS_VersionSymbols.peakmem_list_versions___sum_all": {
-        "code": "class AWS_VersionSymbols:\n    def peakmem_list_versions___sum_all(self, num_syms):\n        '''\n        Returns all versions in the library, which is SUM(1..num_syms)\n        '''\n        self.lib.list_versions()\n\n    def setup(self, num_syms):\n        self.aws = self.get_creator()\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = self.get_creator()\n        if not aws.check_ok():\n            aws.setup_all()",
+        "code": "class AWS_VersionSymbols:\n    def peakmem_list_versions___sum_all(self, storage_info, num_syms):\n        '''\n        Returns all versions in the library, which is SUM(1..num_syms)\n        '''\n        self.lib.list_versions()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = VersionLibraries.fromStorageInfo(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return the arctic url which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws = AWS_VersionSymbols.SETUP_CLASS.setup_environment()\n        return aws.get_storage_info()",
         "name": "real_list_operations.AWS_VersionSymbols.peakmem_list_versions___sum_all",
         "param_names": [
             "num_syms"
@@ -1682,17 +1682,17 @@
                 "50"
             ]
         ],
-        "setup_cache_key": "real_list_operations:212",
+        "setup_cache_key": "real_list_operations:227",
         "timeout": 12000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "9dc3dd23b55de317fd449e98ec02fb705bfa25d29e5fb2d2be184339f703570e"
+        "version": "7c4d2b0dc993a08f2134bbc43982f8e0285c6726a910d64652af6126bc8d9cb9"
     },
     "real_list_operations.AWS_VersionSymbols.time_list_versions___sum_all": {
-        "code": "class AWS_VersionSymbols:\n    def time_list_versions___sum_all(self, num_syms):\n        '''\n        Returns all versions in the library, which is SUM(1..num_syms)\n        '''\n        self.lib.list_versions()\n\n    def setup(self, num_syms):\n        self.aws = self.get_creator()\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = self.get_creator()\n        if not aws.check_ok():\n            aws.setup_all()",
+        "code": "class AWS_VersionSymbols:\n    def time_list_versions___sum_all(self, storage_info, num_syms):\n        '''\n        Returns all versions in the library, which is SUM(1..num_syms)\n        '''\n        self.lib.list_versions()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = VersionLibraries.fromStorageInfo(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return the arctic url which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws = AWS_VersionSymbols.SETUP_CLASS.setup_environment()\n        return aws.get_storage_info()",
         "min_run_count": 1,
         "name": "real_list_operations.AWS_VersionSymbols.time_list_versions___sum_all",
-        "number": 1,
+        "number": 3,
         "param_names": [
             "num_syms"
         ],
@@ -1705,18 +1705,18 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:212",
+        "setup_cache_key": "real_list_operations:227",
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
-        "version": "93c665c17a73c3100de681938651ec25a4a7f98391029236bfe560bca499261e",
+        "version": "b1f0fdda43325b8da0011f4006e83ca62b3d657bb6bdbe5fd0744a225f7fdaee",
         "warmup_time": 0
     },
     "real_list_operations.AWS_VersionSymbols.time_list_versions_one_symbol__max_number": {
-        "code": "class AWS_VersionSymbols:\n    def time_list_versions_one_symbol__max_number(self, num_syms):\n        '''\n        Obtains versions only per one symbol having the same number of versions\n        as the number suggest\n        '''\n        sym=self.aws.get_symbol_name(num_syms-1)\n        self.lib.list_versions(sym)\n\n    def setup(self, num_syms):\n        self.aws = self.get_creator()\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = self.get_creator()\n        if not aws.check_ok():\n            aws.setup_all()",
+        "code": "class AWS_VersionSymbols:\n    def time_list_versions_one_symbol__max_number(self, storage_info, num_syms):\n        '''\n        Obtains versions only per one symbol having the same number of versions\n        as the number suggest\n        '''\n        sym=self.aws.get_symbol_name(num_syms-1)\n        self.lib.list_versions(sym)\n\n    def setup(self, storage_info, num_syms):\n        self.aws = VersionLibraries.fromStorageInfo(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return the arctic url which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws = AWS_VersionSymbols.SETUP_CLASS.setup_environment()\n        return aws.get_storage_info()",
         "min_run_count": 1,
         "name": "real_list_operations.AWS_VersionSymbols.time_list_versions_one_symbol__max_number",
-        "number": 1,
+        "number": 3,
         "param_names": [
             "num_syms"
         ],
@@ -1729,15 +1729,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:212",
+        "setup_cache_key": "real_list_operations:227",
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
-        "version": "536220013ed48fa994a9f2b0ea56d78263f8b834d54f00a702f68d622c96dc50",
+        "version": "5bbe236f05c93e25321d090207555ffa60d8c88328d283c601d7c2b5ba116969",
         "warmup_time": 0
     },
     "real_read_write.AWS_ReadWrite.peakmem_read": {
-        "code": "class LMDB_ReadWrite:\n    def peakmem_read(self, arctic_url, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, arctic_url, num_rows):\n        ## Construct back from arctic url the object\n        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)\n        sym = self.lmdb.get_symbol_name(num_rows)\n    \n        ## Create write cache\n        print(\"ARCTIC_URL: \", arctic_url)\n        print(\"LIBRARY: \",  self.lmdb.get_library())\n        print(\"LIST SYMBOLS: \",  self.lmdb.get_library().list_symbols())\n        print(\"SYMBOLS WE LOOK FOR: \",  sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library()\n        if not lmdb.check_ok():\n            lmdb.setup_all()\n        # make sure that only the proc that sets up database\n        # its arctic url will be used later in other threads\n        print(\"ARCTIC URL for TEMP DATA: \", lmdb.arctic_url)\n        return lmdb.arctic_url",
+        "code": "class LMDB_ReadWrite:\n    def peakmem_read(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadBenchmarkLibraries.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\nclass AWS_ReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws = AWS_ReadWrite.SETUP_CLASS.setup_environment()\n        return aws.get_storage_info()",
         "name": "real_read_write.AWS_ReadWrite.peakmem_read",
         "param_names": [
             "num_rows"
@@ -1748,14 +1748,14 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:131",
+        "setup_cache_key": "real_read_write:180",
         "timeout": 12000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "ca7d77faece4939c514d9e5d2ccc187bd66131f4a7981b92f93ef34c75a14a96"
+        "version": "07a1a00904aaec680b99c4a366a08964f56ef7198024b1b13b287ed43b5dcc54"
     },
     "real_read_write.AWS_ReadWrite.peakmem_write": {
-        "code": "class LMDB_ReadWrite:\n    def peakmem_write(self, arctic_url, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, arctic_url, num_rows):\n        ## Construct back from arctic url the object\n        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)\n        sym = self.lmdb.get_symbol_name(num_rows)\n    \n        ## Create write cache\n        print(\"ARCTIC_URL: \", arctic_url)\n        print(\"LIBRARY: \",  self.lmdb.get_library())\n        print(\"LIST SYMBOLS: \",  self.lmdb.get_library().list_symbols())\n        print(\"SYMBOLS WE LOOK FOR: \",  sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library()\n        if not lmdb.check_ok():\n            lmdb.setup_all()\n        # make sure that only the proc that sets up database\n        # its arctic url will be used later in other threads\n        print(\"ARCTIC URL for TEMP DATA: \", lmdb.arctic_url)\n        return lmdb.arctic_url",
+        "code": "class LMDB_ReadWrite:\n    def peakmem_write(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadBenchmarkLibraries.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\nclass AWS_ReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws = AWS_ReadWrite.SETUP_CLASS.setup_environment()\n        return aws.get_storage_info()",
         "name": "real_read_write.AWS_ReadWrite.peakmem_write",
         "param_names": [
             "num_rows"
@@ -1766,17 +1766,17 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:131",
+        "setup_cache_key": "real_read_write:180",
         "timeout": 12000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "c32c6ab0672b8dfeb95907a5abda3c712354f994fac854bbf2bef9e2260d9bac"
+        "version": "3038f5cca61f492e76ecb646a2f0ceacfc11eba000f11c379cc421586f96c4ff"
     },
     "real_read_write.AWS_ReadWrite.time_read": {
-        "code": "class LMDB_ReadWrite:\n    def time_read(self, arctic_url, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, arctic_url, num_rows):\n        ## Construct back from arctic url the object\n        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)\n        sym = self.lmdb.get_symbol_name(num_rows)\n    \n        ## Create write cache\n        print(\"ARCTIC_URL: \", arctic_url)\n        print(\"LIBRARY: \",  self.lmdb.get_library())\n        print(\"LIST SYMBOLS: \",  self.lmdb.get_library().list_symbols())\n        print(\"SYMBOLS WE LOOK FOR: \",  sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library()\n        if not lmdb.check_ok():\n            lmdb.setup_all()\n        # make sure that only the proc that sets up database\n        # its arctic url will be used later in other threads\n        print(\"ARCTIC URL for TEMP DATA: \", lmdb.arctic_url)\n        return lmdb.arctic_url",
+        "code": "class LMDB_ReadWrite:\n    def time_read(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadBenchmarkLibraries.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\nclass AWS_ReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws = AWS_ReadWrite.SETUP_CLASS.setup_environment()\n        return aws.get_storage_info()",
         "min_run_count": 1,
         "name": "real_read_write.AWS_ReadWrite.time_read",
-        "number": 1,
+        "number": 3,
         "param_names": [
             "num_rows"
         ],
@@ -1789,18 +1789,18 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:131",
+        "setup_cache_key": "real_read_write:180",
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
-        "version": "d00910e49bd44175bd1c36109f560971b70603e056b3e144c77277d84cdb3fe6",
+        "version": "cf15ab8d7968944815a3f9b34b0a707a2f3c667e56805ecfb41b9de5f39938fa",
         "warmup_time": 0
     },
     "real_read_write.AWS_ReadWrite.time_write": {
-        "code": "class LMDB_ReadWrite:\n    def time_write(self, arctic_url, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, arctic_url, num_rows):\n        ## Construct back from arctic url the object\n        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)\n        sym = self.lmdb.get_symbol_name(num_rows)\n    \n        ## Create write cache\n        print(\"ARCTIC_URL: \", arctic_url)\n        print(\"LIBRARY: \",  self.lmdb.get_library())\n        print(\"LIST SYMBOLS: \",  self.lmdb.get_library().list_symbols())\n        print(\"SYMBOLS WE LOOK FOR: \",  sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library()\n        if not lmdb.check_ok():\n            lmdb.setup_all()\n        # make sure that only the proc that sets up database\n        # its arctic url will be used later in other threads\n        print(\"ARCTIC URL for TEMP DATA: \", lmdb.arctic_url)\n        return lmdb.arctic_url",
+        "code": "class LMDB_ReadWrite:\n    def time_write(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadBenchmarkLibraries.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\nclass AWS_ReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws = AWS_ReadWrite.SETUP_CLASS.setup_environment()\n        return aws.get_storage_info()",
         "min_run_count": 1,
         "name": "real_read_write.AWS_ReadWrite.time_write",
-        "number": 1,
+        "number": 3,
         "param_names": [
             "num_rows"
         ],
@@ -1813,15 +1813,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:131",
+        "setup_cache_key": "real_read_write:180",
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
-        "version": "e10cc6a02eab33637d642287e1a0f7084a7841e0e373d6f1a55b2f7ddc43794f",
+        "version": "dc99aa7c039914edf78f78b4ffa1bb152d7b04c219d37bf0d20f38277f24158b",
         "warmup_time": 0
     },
     "real_read_write.LMDB_ReadWrite.peakmem_read": {
-        "code": "class LMDB_ReadWrite:\n    def peakmem_read(self, arctic_url, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, arctic_url, num_rows):\n        ## Construct back from arctic url the object\n        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)\n        sym = self.lmdb.get_symbol_name(num_rows)\n    \n        ## Create write cache\n        print(\"ARCTIC_URL: \", arctic_url)\n        print(\"LIBRARY: \",  self.lmdb.get_library())\n        print(\"LIST SYMBOLS: \",  self.lmdb.get_library().list_symbols())\n        print(\"SYMBOLS WE LOOK FOR: \",  sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library()\n        if not lmdb.check_ok():\n            lmdb.setup_all()\n        # make sure that only the proc that sets up database\n        # its arctic url will be used later in other threads\n        print(\"ARCTIC URL for TEMP DATA: \", lmdb.arctic_url)\n        return lmdb.arctic_url",
+        "code": "class LMDB_ReadWrite:\n    def peakmem_read(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadBenchmarkLibraries.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb = LMDB_ReadWrite.SETUP_CLASS.setup_environment()\n        return lmdb.get_storage_info()",
         "name": "real_read_write.LMDB_ReadWrite.peakmem_read",
         "param_names": [
             "num_rows"
@@ -1832,14 +1832,14 @@
                 "5000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:131",
+        "setup_cache_key": "real_read_write:117",
         "timeout": 12000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "ca7d77faece4939c514d9e5d2ccc187bd66131f4a7981b92f93ef34c75a14a96"
+        "version": "dcb74d0545d36a506db706116a8a35daef98071a94fc6b5559211d247f1fdbd4"
     },
     "real_read_write.LMDB_ReadWrite.peakmem_write": {
-        "code": "class LMDB_ReadWrite:\n    def peakmem_write(self, arctic_url, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, arctic_url, num_rows):\n        ## Construct back from arctic url the object\n        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)\n        sym = self.lmdb.get_symbol_name(num_rows)\n    \n        ## Create write cache\n        print(\"ARCTIC_URL: \", arctic_url)\n        print(\"LIBRARY: \",  self.lmdb.get_library())\n        print(\"LIST SYMBOLS: \",  self.lmdb.get_library().list_symbols())\n        print(\"SYMBOLS WE LOOK FOR: \",  sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library()\n        if not lmdb.check_ok():\n            lmdb.setup_all()\n        # make sure that only the proc that sets up database\n        # its arctic url will be used later in other threads\n        print(\"ARCTIC URL for TEMP DATA: \", lmdb.arctic_url)\n        return lmdb.arctic_url",
+        "code": "class LMDB_ReadWrite:\n    def peakmem_write(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadBenchmarkLibraries.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb = LMDB_ReadWrite.SETUP_CLASS.setup_environment()\n        return lmdb.get_storage_info()",
         "name": "real_read_write.LMDB_ReadWrite.peakmem_write",
         "param_names": [
             "num_rows"
@@ -1850,17 +1850,17 @@
                 "5000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:131",
+        "setup_cache_key": "real_read_write:117",
         "timeout": 12000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "c32c6ab0672b8dfeb95907a5abda3c712354f994fac854bbf2bef9e2260d9bac"
+        "version": "eef93f24f7474e007273d3361f683b8702938713b6db681773d7422062e9bbfa"
     },
     "real_read_write.LMDB_ReadWrite.time_read": {
-        "code": "class LMDB_ReadWrite:\n    def time_read(self, arctic_url, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, arctic_url, num_rows):\n        ## Construct back from arctic url the object\n        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)\n        sym = self.lmdb.get_symbol_name(num_rows)\n    \n        ## Create write cache\n        print(\"ARCTIC_URL: \", arctic_url)\n        print(\"LIBRARY: \",  self.lmdb.get_library())\n        print(\"LIST SYMBOLS: \",  self.lmdb.get_library().list_symbols())\n        print(\"SYMBOLS WE LOOK FOR: \",  sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library()\n        if not lmdb.check_ok():\n            lmdb.setup_all()\n        # make sure that only the proc that sets up database\n        # its arctic url will be used later in other threads\n        print(\"ARCTIC URL for TEMP DATA: \", lmdb.arctic_url)\n        return lmdb.arctic_url",
+        "code": "class LMDB_ReadWrite:\n    def time_read(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadBenchmarkLibraries.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb = LMDB_ReadWrite.SETUP_CLASS.setup_environment()\n        return lmdb.get_storage_info()",
         "min_run_count": 1,
         "name": "real_read_write.LMDB_ReadWrite.time_read",
-        "number": 1,
+        "number": 3,
         "param_names": [
             "num_rows"
         ],
@@ -1870,21 +1870,21 @@
                 "5000000"
             ]
         ],
-        "repeat": 3,
+        "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:131",
+        "setup_cache_key": "real_read_write:117",
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
-        "version": "d00910e49bd44175bd1c36109f560971b70603e056b3e144c77277d84cdb3fe6",
+        "version": "8bb807b325453019822a1288d8b7597cf7f749183ad4c07f89564d2455f09eeb",
         "warmup_time": 0
     },
     "real_read_write.LMDB_ReadWrite.time_write": {
-        "code": "class LMDB_ReadWrite:\n    def time_write(self, arctic_url, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, arctic_url, num_rows):\n        ## Construct back from arctic url the object\n        self.lmdb: ReadBenchmarkLibraries = ReadBenchmarkLibraries(arctic_url=arctic_url)\n        sym = self.lmdb.get_symbol_name(num_rows)\n    \n        ## Create write cache\n        print(\"ARCTIC_URL: \", arctic_url)\n        print(\"LIBRARY: \",  self.lmdb.get_library())\n        print(\"LIST SYMBOLS: \",  self.lmdb.get_library().list_symbols())\n        print(\"SYMBOLS WE LOOK FOR: \",  sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        lmdb = self.get_creator()\n        lmdb.delete_modifyable_library()\n        if not lmdb.check_ok():\n            lmdb.setup_all()\n        # make sure that only the proc that sets up database\n        # its arctic url will be used later in other threads\n        print(\"ARCTIC URL for TEMP DATA: \", lmdb.arctic_url)\n        return lmdb.arctic_url",
+        "code": "class LMDB_ReadWrite:\n    def time_write(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadBenchmarkLibraries.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb = LMDB_ReadWrite.SETUP_CLASS.setup_environment()\n        return lmdb.get_storage_info()",
         "min_run_count": 1,
         "name": "real_read_write.LMDB_ReadWrite.time_write",
-        "number": 1,
+        "number": 3,
         "param_names": [
             "num_rows"
         ],
@@ -1894,14 +1894,14 @@
                 "5000000"
             ]
         ],
-        "repeat": 3,
+        "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:131",
+        "setup_cache_key": "real_read_write:117",
         "timeout": 12000,
         "type": "time",
         "unit": "seconds",
-        "version": "e10cc6a02eab33637d642287e1a0f7084a7841e0e373d6f1a55b2f7ddc43794f",
+        "version": "31365ddb8ce0addc7ad3e0490f197ca88422d067879c57e63dac85df84af2cab",
         "warmup_time": 0
     },
     "resample.Resample.peakmem_resample": {

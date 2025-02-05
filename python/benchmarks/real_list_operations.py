@@ -15,8 +15,8 @@ from benchmarks.real_storage.libraries_creation import LibrariesBase, Storage
 
 class SymbolLibraries(LibrariesBase):
 
-    def __init__(self, type:Storage = Storage.LMDB):
-        super().__init__(type)
+    def __init__(self, type: Storage = Storage.LMDB, arctic_url: str = None):
+        super().__init__(type, arctic_url)
         self.ac = self.get_arctic_client()
         self.df = self.generate_df(10)
 
@@ -98,8 +98,8 @@ class VersionLibraries(SymbolLibraries):
         which is SUM(1..N)
     """
 
-    def __init__(self, type:Storage = Storage.LMDB):
-        super().__init__(type)
+    def __init__(self, type: Storage = Storage.LMDB, arctic_url: str = None):
+        super().__init__(type, arctic_url)
         self.ac = self.get_arctic_client()
 
     def get_parameter_list(self):
@@ -149,11 +149,17 @@ class VersionLibraries(SymbolLibraries):
 class AWS_ListSymbols:
     """
     This class is responsible for all checks on AWS storage
+
+    IMPORTANT: 
+        - When we inherit from another test we inherit test, setup and teardown methods
+        - setup_cache() method we inherit it AS IS, thus it will be executed only ONCE for
+          all classes that inherit from the base class. Therefore it is perhaps best to ALWAYS
+          provide implementation in the child class, no matter that it might look like code repeat
     """
 
     rounds = 1
-    number = 1 
-    repeat = 3 
+    number = 3 # invoke X times the test runs between each setup-teardown 
+    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
     min_run_count = 1
     warmup_time = 0
 
@@ -164,38 +170,50 @@ class AWS_ListSymbols:
     params = SETUP_CLASS.get_parameter_list()
     param_names = SETUP_CLASS.get_parameter_names_list()
 
-    def get_creator(self):
-        return AWS_ListSymbols.SETUP_CLASS
-
     def setup_cache(self):
-        aws = self.get_creator()
+        '''
+        Always provide implementation of setup_cache in
+        the child class
+
+        And always return the arctic url which should 
+        be first parameter for setup, tests and teardowns
+        '''
+        aws = AWS_ListSymbols.SETUP_CLASS
         if not aws.check_ok():
             aws.setup_all()
         else:
             aws.reset_symbols_cache()
+        return aws.get_storage_info()
 
-    def setup(self, num_syms):
-        self.aws = self.get_creator()
+    def setup(self, storage_info, num_syms):
+        self.aws = SymbolLibraries.fromStorageInfo(storage_info)
         self.lib = self.aws.get_library(num_syms)
 
-    def time_list_symbols(self, num_syms):
+    def time_list_symbols(self, storage_info, num_syms):
         self.lib.list_symbols()
 
-    def time_has_symbol_nonexisting(self, num_syms):
+    def time_has_symbol_nonexisting(self, storage_info, num_syms):
         self.lib.has_symbol("250_sym")        
 
-    def peakmem_list_symbols(self, num_syms):
+    def peakmem_list_symbols(self, storage_info, num_syms):
         self.lib.list_symbols()
 
 
 class AWS_VersionSymbols:
     """
     This class is responsible for all checks on AWS storage
+
+    IMPORTANT: 
+        - When we inherit from another test we inherit test, setup and teardown methods
+        - setup_cache() method we inherit it AS IS, thus it will be executed only ONCE for
+          all classes that inherit from the base class. Therefore it is perhaps best to ALWAYS
+          provide implementation in the child class, no matter that it might look like code repeat
+
     """
 
     rounds = 1
-    number = 1 
-    repeat = 1
+    number = 3 # invoke X times the test runs between each setup-teardown 
+    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
     min_run_count = 1
     warmup_time = 0
 
@@ -206,25 +224,28 @@ class AWS_VersionSymbols:
     params = SETUP_CLASS.get_parameter_list()
     param_names = SETUP_CLASS.get_parameter_names_list()
 
-    def get_creator(self):
-        return AWS_VersionSymbols.SETUP_CLASS
-
     def setup_cache(self):
-        aws = self.get_creator()
-        if not aws.check_ok():
-            aws.setup_all()
+        '''
+        Always provide implementation of setup_cache in
+        the child class
 
-    def setup(self, num_syms):
-        self.aws = self.get_creator()
+        And always return the arctic url which should 
+        be first parameter for setup, tests and teardowns
+        '''
+        aws = AWS_VersionSymbols.SETUP_CLASS.setup_environment() 
+        return aws.get_storage_info()
+
+    def setup(self, storage_info, num_syms):
+        self.aws = VersionLibraries.fromStorageInfo(storage_info)
         self.lib = self.aws.get_library(num_syms)
 
-    def time_list_versions___sum_all(self, num_syms):
+    def time_list_versions___sum_all(self, storage_info, num_syms):
         '''
         Returns all versions in the library, which is SUM(1..num_syms)
         '''
         self.lib.list_versions()
 
-    def time_list_versions_one_symbol__max_number(self, num_syms):
+    def time_list_versions_one_symbol__max_number(self, storage_info, num_syms):
         '''
         Obtains versions only per one symbol having the same number of versions
         as the number suggest
@@ -232,7 +253,7 @@ class AWS_VersionSymbols:
         sym=self.aws.get_symbol_name(num_syms-1)
         self.lib.list_versions(sym)
 
-    def peakmem_list_versions___sum_all(self, num_syms):
+    def peakmem_list_versions___sum_all(self, storage_info, num_syms):
         '''
         Returns all versions in the library, which is SUM(1..num_syms)
         '''
