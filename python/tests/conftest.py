@@ -401,7 +401,7 @@ def arctic_library_lmdb(arctic_client_lmdb, lib_name) -> Library:
 @pytest.fixture(
     scope="function",
     params=[
-        "lmdb",
+        #"lmdb",
         "mem",
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
     ],

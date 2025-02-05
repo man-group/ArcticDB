@@ -1,0 +1,1333 @@
+desc: --massif-out-file=massif.%p.sleep_10000_queue_100_chunks_1k.bin
+cmd: python finalize_data.py
+time_unit: i
+#-----------
+snapshot=0
+#-----------
+time=0
+mem_heap_B=0
+mem_heap_extra_B=0
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=1
+#-----------
+time=13484880456
+mem_heap_B=31800907
+mem_heap_extra_B=1030869
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=2
+#-----------
+time=27906240763
+mem_heap_B=33288842
+mem_heap_extra_B=1069990
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=3
+#-----------
+time=39072320210
+mem_heap_B=28089485
+mem_heap_extra_B=1100411
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=4
+#-----------
+time=46541172732
+mem_heap_B=28753763
+mem_heap_extra_B=1121381
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=5
+#-----------
+time=55891404164
+mem_heap_B=35963275
+mem_heap_extra_B=1146837
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=6
+#-----------
+time=64056513025
+mem_heap_B=174776922
+mem_heap_extra_B=1238286
+mem_stacks_B=0
+heap_tree=detailed
+n6: 174776922 (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+ n1: 142259886 0x7667C39: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::internal_alloc(unsigned long) (allocator.cpp:195)
+  n2: 142259886 0x7667FFD: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::aligned_alloc(unsigned long, bool) (allocator.cpp:304)
+   n1: 117322656 0x5A0A9CA: arcticdb::Buffer::resize(unsigned long) (buffer.hpp:232)
+    n2: 117322656 0x5A0A7A1: arcticdb::Buffer::ensure(unsigned long) (buffer.hpp:177)
+     n2: 117316856 0x5A0A367: arcticdb::Buffer::reserve(unsigned long, std::optional<unsigned long> const&) (buffer.hpp:57)
+      n1: 117311552 0x5F47681: arcticdb::Buffer::Buffer(unsigned long, std::optional<unsigned long>) (buffer.hpp:62)
+       n1: 117311552 0x5F92670: decltype (::new ((void*)(0)) arcticdb::Buffer((declval<unsigned long&>)(), (declval<unsigned long const&>)())) std::construct_at<arcticdb::Buffer, unsigned long&, unsigned long const&>(arcticdb::Buffer*, unsigned long&, unsigned long const&) (stl_construct.h:97)
+        n1: 117311552 0x5F926FE: void std::allocator_traits<std::allocator<arcticdb::Buffer> >::construct<arcticdb::Buffer, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>&, arcticdb::Buffer*, unsigned long&, unsigned long const&) (alloc_traits.h:518)
+         n1: 117311552 0x5F91F9A: std::_Sp_counted_ptr_inplace<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&) (shared_ptr_base.h:519)
+          n1: 117311552 0x5F907B8: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(arcticdb::Buffer*&, std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:650)
+           n1: 117311552 0x5F8F15D: std::__shared_ptr<arcticdb::Buffer, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:1342)
+            n1: 117311552 0x5F8E332: std::shared_ptr<arcticdb::Buffer>::shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr.h:409)
+             n1: 117311552 0x5F84E03: std::shared_ptr<arcticdb::Buffer> std::allocate_shared<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer> const&, unsigned long&, unsigned long const&) (shared_ptr.h:863)
+              n1: 117311552 0x5F5A4EF: std::shared_ptr<arcticdb::Buffer> std::make_shared<arcticdb::Buffer, unsigned long&, unsigned long const&>(unsigned long&, unsigned long const&) (shared_ptr.h:879)
+               n1: 117311552 0x5F45DBA: arcticdb::encode_v1(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&) (encode_v1.cpp:127)
+                n1: 117311552 0x5EE6982: arcticdb::encode_dispatch(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&, arcticdb::EncodingVersion) (codec.cpp:49)
+                 n1: 117311552 0x5B920DC: arcticdb::async::EncodeAtomTask::encode() (tasks.hpp:95)
+                  n1: 117311552 0x5B92243: arcticdb::async::EncodeAtomTask::operator()() (tasks.hpp:104)
+                   n1: 117311552 0x5C134EF: std::enable_if<!std::is_same<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<>, void>::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWithNoUnwrap<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:254)
+                    n1: 117311552 0x5BEC44E: std::enable_if<!folly::isTry<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> >::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:276)
+                     n1: 117311552 0x5BCA254: void folly::Promise<arcticdb::storage::KeySegmentPair>::setWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Promise-inl.h:152)
+                      n1: 117311552 0x5BAFC9D: folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}::operator()() (FutureExecutor.h:75)
+                       n1: 117311552 0x5BEC50B: void folly::detail::function::FunctionTraits<void ()>::callBig<folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}>(folly::detail::function::Data&) (Function.h:359)
+                        n1: 117311552 0x5979E2A: folly::detail::function::FunctionTraits<void ()>::operator()() (Function.h:374)
+                         n1: 117311552 0x834C7F5: catch_exception<folly::Function<void()>&, void (&)(char const*) noexcept, char const*&> (Exception.h:285)
+                          n1: 117311552 0x834C7F5: invokeCatchingExns<folly::Function<void()> > (Executor.h:234)
+                           n1: 117311552 0x834C7F5: folly::ThreadPoolExecutor::runTask(std::shared_ptr<folly::ThreadPoolExecutor::Thread> const&, folly::ThreadPoolExecutor::Task&&) (ThreadPoolExecutor.cpp:102)
+                            n1: 117311552 0x8311A65: folly::CPUThreadPoolExecutor::threadRun(std::shared_ptr<folly::ThreadPoolExecutor::Thread>) (CPUThreadPoolExecutor.cpp:333)
+                             n1: 117311552 0x8357908: void std::__invoke_impl<void, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(std::__invoke_memfun_deref, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:74)
+                              n1: 117311552 0x8356BBE: std::__invoke_result<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>::type std::__invoke<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:96)
+                               n1: 117311552 0x8355AEF: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::__call<void, , 0ul, 1ul>(std::tuple<>&&, std::_Index_tuple<0ul, 1ul>) (functional:420)
+                                n0: 117311552 0x83547F6: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::operator()<, void>() (functional:503)
+      n0: 5304 in 2 places, all below massif's threshold (1.00%)
+     n0: 5800 in 5 places, all below massif's threshold (1.00%)
+   n4: 24937230 0x5991525: arcticdb::ChunkedBufferImpl<3968ul>::add_block(unsigned long, unsigned long) (chunked_buffer.hpp:369)
+    n2: 14640558 0x59795DB: arcticdb::ChunkedBufferImpl<3968ul>::ensure(unsigned long, bool) (chunked_buffer.hpp:208)
+     n2: 14607820 0x5A0E290: arcticdb::CursoredBuffer<arcticdb::ChunkedBufferImpl<3968ul> >::ensure_bytes(unsigned long) (cursored_buffer.hpp:57)
+      n1: 11803328 0x5EABB1B: arcticdb::Column::allocate_data(unsigned long) (column.hpp:549)
+       n0: 11803328 in 13 places, all below massif's threshold (1.00%)
+      n1: 2804492 0x6322F28: arcticdb::StringBlock::allocate(unsigned long) (string_pool.cpp:63)
+       n1: 2804492 0x63232C6: arcticdb::StringPool::allocate_data(unsigned long) (string_pool.cpp:122)
+        n1: 2804492 0x5F1FE1A: auto arcticdb::decode_ndarray<arcticdb::StringPool, arcticdb::EncodedFieldImpl>(arcticdb::entity::TypeDescriptor const&, arcticdb::EncodedFieldImpl const&, unsigned char const*, arcticdb::StringPool&, std::optional<bm::bvector<bm::mem_alloc<bm::block_allocator, bm::ptr_allocator, bm::alloc_pool<bm::block_allocator, bm::ptr_allocator> > > >&, arcticdb::EncodingVersion)::{lambda(auto:1)#1}::operator()<arcticdb::entity::TypeDescriptorTag<arcticdb::entity::DataTypeTag<(arcticdb::entity::DataType)9>, arcticdb::entity::DimensionTag<(arcticdb::entity::Dimension)1> > >(arcticdb::entity::TypeDescriptorTag<arcticdb::entity::DataTypeTag<(arcticdb::entity::DataType)9>, arcticdb::entity::DimensionTag<(arcticdb::entity::Dimension)1> >) const (codec-inl.hpp:100)
+         n1: 2804492 0x5F26F66: auto arcticdb::entity::details::visit_dim<arcticdb::entity::DimensionTag<(arcticdb::entity::Dimension)1>, arcticdb::decode_ndarray<arcticdb::StringPool, arcticdb::EncodedFieldImpl>(arcticdb::entity::TypeDescriptor const&, arcticdb::EncodedFieldImpl const&, unsigned char const*, arcticdb::StringPool&, std::optional<bm::bvector<bm::mem_alloc<bm::block_allocator, bm::ptr_allocator, bm::alloc_pool<bm::block_allocator, bm::ptr_allocator> > > >&, arcticdb::EncodingVersion)::{lambda(auto:1)#1}&>(arcticdb::entity::DataType, arcticdb::decode_ndarray<arcticdb::StringPool, arcticdb::EncodedFieldImpl>(arcticdb::entity::TypeDescriptor const&, arcticdb::EncodedFieldImpl const&, unsigned char const*, arcticdb::StringPool&, std::optional<bm::bvector<bm::mem_alloc<bm::block_allocator, bm::ptr_allocator, bm::alloc_pool<bm::block_allocator, bm::ptr_allocator> > > >&, arcticdb::EncodingVersion)::{lambda(auto:1)#1}&) (types-inl.hpp:25)
+          n1: 2804492 0x5F2E58D: auto arcticdb::entity::TypeDescriptor::visit_tag<arcticdb::decode_ndarray<arcticdb::StringPool, arcticdb::EncodedFieldImpl>(arcticdb::entity::TypeDescriptor const&, arcticdb::EncodedFieldImpl const&, unsigned char const*, arcticdb::StringPool&, std::optional<bm::bvector<bm::mem_alloc<bm::block_allocator, bm::ptr_allocator, bm::alloc_pool<bm::block_allocator, bm::ptr_allocator> > > >&, arcticdb::EncodingVersion)::{lambda(auto:1)#1}>(arcticdb::StringPool&&) const (types-inl.hpp:82)
+           n1: 2804492 0x5F2E75A: unsigned long arcticdb::decode_ndarray<arcticdb::StringPool, arcticdb::EncodedFieldImpl>(arcticdb::entity::TypeDescriptor const&, arcticdb::EncodedFieldImpl const&, unsigned char const*, arcticdb::StringPool&, std::optional<bm::bvector<bm::mem_alloc<bm::block_allocator, bm::ptr_allocator, bm::alloc_pool<bm::block_allocator, bm::ptr_allocator> > > >&, arcticdb::EncodingVersion) (codec-inl.hpp:84)
+            n1: 2804492 0x5EE8C1D: arcticdb::decode_string_pool(arcticdb::SegmentHeader const&, unsigned char const*&, unsigned char const*, unsigned char const*, arcticdb::SegmentInMemory&) (codec.cpp:395)
+             n1: 2804492 0x5EE9E64: arcticdb::decode_v1(arcticdb::Segment const&, arcticdb::SegmentHeader const&, arcticdb::SegmentInMemory&, arcticdb::entity::StreamDescriptor const&, bool) (codec.cpp:545)
+              n1: 2804492 0x5EE9F71: arcticdb::decode_into_memory_segment(arcticdb::Segment const&, arcticdb::SegmentHeader&, arcticdb::SegmentInMemory&, arcticdb::entity::StreamDescriptor const&) (codec.cpp:560)
+               n1: 2804492 0x5EEA100: arcticdb::decode_segment(arcticdb::Segment&&) (codec.cpp:572)
+                n1: 2804492 0x5B92F57: arcticdb::async::DecodeSegmentTask::operator()(arcticdb::storage::KeySegmentPair&&) const (tasks.hpp:433)
+                 n1: 2804492 0x5C7AB2D: arcticdb::async::AsyncStore<arcticdb::util::SysClock>::read_sync(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> const&, arcticdb::storage::ReadKeyOpts) (async_store.hpp:234)
+                  n1: 2804492 0x79AE19A: arcticdb::pipelines::SliceAndKey::ensure_segment(std::shared_ptr<arcticdb::Store> const&) const (frame_slice.cpp:23)
+                   n1: 2804492 0x79AE246: arcticdb::pipelines::SliceAndKey::segment(std::shared_ptr<arcticdb::Store> const&) (frame_slice.cpp:27)
+                    n0: 2804492 in 2 places, all below massif's threshold (1.00%)
+     n0: 32738 in 1 place, below massif's threshold (1.00%)
+    n2: 5905760 0x5EAC11F: arcticdb::ChunkedBufferImpl<3968ul>::reserve(unsigned long) (chunked_buffer.hpp:111)
+     n1: 5901664 0x5EB3E38: arcticdb::ChunkedBufferImpl<3968ul>::ChunkedBufferImpl(unsigned long) (chunked_buffer.hpp:95)
+      n1: 5901664 0x5EAD034: arcticdb::CursoredBuffer<arcticdb::ChunkedBufferImpl<3968ul> >::CursoredBuffer(unsigned long, arcticdb::entity::AllocationType) (cursored_buffer.hpp:26)
+       n1: 5901664 0x5EAB79B: arcticdb::Column::Column(arcticdb::entity::TypeDescriptor, unsigned long, arcticdb::entity::AllocationType, arcticdb::entity::Sparsity, arcticdb::entity::DataTypeMode) (column.hpp:236)
+        n1: 5901664 0x6233301: decltype (::new ((void*)(0)) arcticdb::Column((declval<arcticdb::entity::TypeDescriptor const&>)(), (declval<unsigned long&>)(), (declval<arcticdb::entity::AllocationType&>)(), (declval<arcticdb::entity::Sparsity&>)(), (declval<arcticdb::entity::DataTypeMode&>)())) std::construct_at<arcticdb::Column, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::Column*, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (stl_construct.h:97)
+         n1: 5901664 0x62333D1: void std::allocator_traits<std::allocator<arcticdb::Column> >::construct<arcticdb::Column, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::Column>&, arcticdb::Column*, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (alloc_traits.h:518)
+          n1: 5901664 0x61E708E: std::_Sp_counted_ptr_inplace<arcticdb::Column, std::allocator<arcticdb::Column>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::Column>, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:519)
+           n1: 5901664 0x6185C8E: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<arcticdb::Column, std::allocator<arcticdb::Column>, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::Column*&, std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Column> >, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:650)
+            n1: 5901664 0x6145609: std::__shared_ptr<arcticdb::Column, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<arcticdb::Column>, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Column> >, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:1342)
+             n1: 5901664 0x60EEF7A: std::shared_ptr<arcticdb::Column>::shared_ptr<std::allocator<arcticdb::Column>, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Column> >, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:409)
+              n1: 5901664 0x60C82BE: std::shared_ptr<arcticdb::Column> std::allocate_shared<arcticdb::Column, std::allocator<arcticdb::Column>, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::Column> const&, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:863)
+               n1: 5901664 0x60A08C9: std::shared_ptr<arcticdb::Column> std::make_shared<arcticdb::Column, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:879)
+                n1: 5901664 0x605E8C4: arcticdb::SegmentInMemoryImpl::create_columns(unsigned long, unsigned long, arcticdb::entity::AllocationType, arcticdb::entity::Sparsity, arcticdb::entity::DataTypeMode) (memory_segment_impl.cpp:98)
+                 n1: 5901664 0x605EC54: arcticdb::SegmentInMemoryImpl::on_descriptor_change(arcticdb::entity::StreamDescriptor const&, unsigned long, arcticdb::entity::AllocationType, arcticdb::entity::Sparsity, arcticdb::entity::DataTypeMode) (memory_segment_impl.cpp:139)
+                  n1: 5901664 0x605DFF5: arcticdb::SegmentInMemoryImpl::SegmentInMemoryImpl(arcticdb::entity::StreamDescriptor const&, unsigned long, arcticdb::entity::AllocationType, arcticdb::entity::Sparsity, arcticdb::entity::DataTypeMode) (memory_segment_impl.cpp:28)
+                   n1: 5901664 0x59EB32B: decltype (::new ((void*)(0)) arcticdb::SegmentInMemoryImpl((declval<arcticdb::entity::StreamDescriptor>)(), (declval<unsigned long&>)(), (declval<arcticdb::entity::AllocationType&>)(), (declval<arcticdb::entity::Sparsity&>)(), (declval<arcticdb::entity::DataTypeMode&>)())) std::construct_at<arcticdb::SegmentInMemoryImpl, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::SegmentInMemoryImpl*, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (stl_construct.h:97)
+                    n1: 5901664 0x59EB3E7: void std::allocator_traits<std::allocator<arcticdb::SegmentInMemoryImpl> >::construct<arcticdb::SegmentInMemoryImpl, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::SegmentInMemoryImpl>&, arcticdb::SegmentInMemoryImpl*, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (alloc_traits.h:518)
+                     n1: 5901664 0x59E28BA: std::_Sp_counted_ptr_inplace<arcticdb::SegmentInMemoryImpl, std::allocator<arcticdb::SegmentInMemoryImpl>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::SegmentInMemoryImpl>, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:519)
+                      n1: 5901664 0x59D3298: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<arcticdb::SegmentInMemoryImpl, std::allocator<arcticdb::SegmentInMemoryImpl>, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::SegmentInMemoryImpl*&, std::_Sp_alloc_shared_tag<std::allocator<arcticdb::SegmentInMemoryImpl> >, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:650)
+                       n1: 5901664 0x59BF717: std::__shared_ptr<arcticdb::SegmentInMemoryImpl, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<arcticdb::SegmentInMemoryImpl>, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::SegmentInMemoryImpl> >, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:1342)
+                        n1: 5901664 0x59A77E8: std::shared_ptr<arcticdb::SegmentInMemoryImpl>::shared_ptr<std::allocator<arcticdb::SegmentInMemoryImpl>, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::SegmentInMemoryImpl> >, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:409)
+                         n1: 5901664 0x5992F07: std::shared_ptr<arcticdb::SegmentInMemoryImpl> std::allocate_shared<arcticdb::SegmentInMemoryImpl, std::allocator<arcticdb::SegmentInMemoryImpl>, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::SegmentInMemoryImpl> const&, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:863)
+                          n1: 5901664 0x5979BFF: std::shared_ptr<arcticdb::SegmentInMemoryImpl> std::make_shared<arcticdb::SegmentInMemoryImpl, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:879)
+                           n2: 5901664 0x5969F86: arcticdb::SegmentInMemory::SegmentInMemory(arcticdb::entity::StreamDescriptor&&, unsigned long, arcticdb::entity::AllocationType, arcticdb::entity::Sparsity, arcticdb::entity::DataTypeMode) (memory_segment.hpp:48)
+                            n1: 5901664 0x5ADAEF8: arcticdb::stream::Aggregator<arcticdb::stream::TimeseriesIndex, arcticdb::stream::FixedSchema, arcticdb::stream::RowCountSegmentPolicy, arcticdb::stream::DenseColumnPolicy>::commit_impl(bool) (aggregator-inl.hpp:30)
+                             n1: 5901664 0x78918AE: arcticdb::stream::SegmentAggregator<arcticdb::stream::TimeseriesIndex, arcticdb::stream::FixedSchema, arcticdb::stream::RowCountSegmentPolicy, arcticdb::stream::DenseColumnPolicy>::commit() (segment_aggregator.hpp:105)
+                              n0: 5901664 0x78914FB: arcticdb::stream::SegmentAggregator<arcticdb::stream::TimeseriesIndex, arcticdb::stream::FixedSchema, arcticdb::stream::RowCountSegmentPolicy, arcticdb::stream::DenseColumnPolicy>::add_segment(arcticdb::SegmentInMemory&&, arcticdb::pipelines::FrameSlice const&, bool) (segment_aggregator.hpp:71)
+                            n0: 0 in 1 place, below massif's threshold (1.00%)
+     n0: 4096 in 1 place, below massif's threshold (1.00%)
+    n2: 4321280 0x5979572: arcticdb::ChunkedBufferImpl<3968ul>::ensure(unsigned long, bool) (chunked_buffer.hpp:204)
+     n2: 4169728 0x5A0E290: arcticdb::CursoredBuffer<arcticdb::ChunkedBufferImpl<3968ul> >::ensure_bytes(unsigned long) (cursored_buffer.hpp:57)
+      n2: 4112384 0x632C15B: arcticdb::FieldCollection::add_field(arcticdb::entity::TypeDescriptor const&, std::basic_string_view<char, std::char_traits<char> >) (field_collection.cpp:15)
+       n1: 4100096 0x632CAB6: arcticdb::fields_from_proto(arcticc::pb2::descriptors_pb2::StreamDescriptor const&) (field_collection_proto.cpp:16)
+        n2: 4100096 0x5EE7C6C: arcticdb::unpack_timeseries_descriptor_from_proto(google::protobuf::Any const&, arcticdb::entity::StreamDescriptor const&, bool) (codec.cpp:261)
+         n1: 4096000 0x5EE8770: arcticdb::decode_timeseries_descriptor_for_incompletes(arcticdb::SegmentHeader const&, arcticdb::entity::StreamDescriptor const&, unsigned char const*, unsigned char const*, unsigned char const*) (codec.cpp:350)
+          n1: 4096000 0x5EE88F9: arcticdb::decode_timeseries_descriptor_for_incompletes(arcticdb::Segment&) (codec.cpp:365)
+           n1: 4096000 0x7C58BC8: arcticdb::get_descriptor_and_data(std::shared_ptr<arcticdb::stream::StreamSource> const&, arcticdb::entity::AtomKeyImpl const&, bool, arcticdb::storage::ReadKeyOpts) (incompletes.cpp:519)
+            n1: 4096000 0x7C58EF5: arcticdb::entry_from_key(std::shared_ptr<arcticdb::stream::StreamSource> const&, arcticdb::entity::AtomKeyImpl const&, bool) (incompletes.cpp:538)
+             n1: 4096000 0x7C74D36: auto arcticdb::load_via_iteration(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool)::{lambda(auto:1 const&)#1}::operator()<std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> >(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> const&) const (incompletes.cpp:83)
+              n1: 4096000 0x7C79ACC: void std::__invoke_impl<void, arcticdb::load_via_iteration(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool)::{lambda(auto:1 const&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> >(std::__invoke_other, arcticdb::load_via_iteration(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool)::{lambda(auto:1 const&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) (invoke.h:61)
+               n1: 4096000 0x7C7860D: std::enable_if<is_invocable_r_v<void, arcticdb::load_via_iteration(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool)::{lambda(auto:1 const&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> >, void>::type std::__invoke_r<void, arcticdb::load_via_iteration(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool)::{lambda(auto:1 const&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> >(arcticdb::load_via_iteration(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool)::{lambda(auto:1 const&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) (invoke.h:111)
+                n1: 4096000 0x7C76B54: std::_Function_handler<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&), arcticdb::load_via_iteration(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool)::{lambda(auto:1 const&)#1}>::_M_invoke(std::_Any_data const&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) (std_function.h:290)
+                 n1: 4096000 0x5BAB44E: std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)>::operator()(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) const (std_function.h:590)
+                  n1: 4096000 0x5B8C198: arcticdb::storage::Storage::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)#1}::operator()(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) const (storage.hpp:123)
+                   n1: 4096000 0x5C0D872: bool std::__invoke_impl<bool, arcticdb::storage::Storage::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> >(std::__invoke_other, arcticdb::storage::Storage::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) (invoke.h:61)
+                    n1: 4096000 0x5BE7F25: std::enable_if<is_invocable_r_v<bool, arcticdb::storage::Storage::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> >, bool>::type std::__invoke_r<bool, arcticdb::storage::Storage::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> >(arcticdb::storage::Storage::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) (invoke.h:114)
+                     n1: 4096000 0x5BC4E99: std::_Function_handler<bool (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&), arcticdb::storage::Storage::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)#1}>::_M_invoke(std::_Any_data const&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) (std_function.h:290)
+                      n1: 4096000 0x75ECACA: std::function<bool (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)>::operator()(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) const (std_function.h:590)
+                       n1: 4096000 0x7C49184: bool arcticdb::storage::s3::detail::do_iterate_type_impl<arcticdb::storage::object_store_utils::FlatBucketizer, arcticdb::storage::s3::S3Storage::do_iterate_type_until_match(arcticdb::entity::KeyType, std::function<bool (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, arcticdb::entity::KeyDescriptor const&, arcticdb::entity::KeyType)#1}>(arcticdb::entity::KeyType, std::function<bool (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, arcticdb::storage::s3::S3ClientInterface const&, arcticdb::storage::object_store_utils::FlatBucketizer&&, arcticdb::storage::s3::S3Storage::do_iterate_type_until_match(arcticdb::entity::KeyType, std::function<bool (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, arcticdb::entity::KeyDescriptor const&, arcticdb::entity::KeyType)#1}&&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (detail-inl.hpp:409)
+                        n1: 4096000 0x7C47360: arcticdb::storage::s3::S3Storage::do_iterate_type_until_match(arcticdb::entity::KeyType, std::function<bool (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (s3_storage.cpp:96)
+                         n1: 4096000 0x5B8C22E: arcticdb::storage::Storage::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (storage.hpp:126)
+                          n1: 4096000 0x5B8FF9A: arcticdb::storage::Storages::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, bool) (storages.hpp:179)
+                           n1: 4096000 0x5B910D9: arcticdb::storage::Library::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (library.hpp:70)
+                            n1: 4096000 0x5C7A9B9: arcticdb::async::AsyncStore<arcticdb::util::SysClock>::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (async_store.hpp:219)
+                             n1: 4096000 0x7C74F26: arcticdb::load_via_iteration(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool) (incompletes.cpp:78)
+                              n0: 4096000 0x7C59E37: arcticdb::get_incomplete_append_slices_for_stream_id(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool, bool) (incompletes.cpp:633)
+         n0: 4096 in 1 place, below massif's threshold (1.00%)
+       n0: 12288 in 1 place, below massif's threshold (1.00%)
+      n0: 57344 in 2 places, all below massif's threshold (1.00%)
+     n0: 151552 in 2 places, all below massif's threshold (1.00%)
+    n0: 69632 in 1 place, below massif's threshold (1.00%)
+ n0: 12559470 in 1130 places, all below massif's threshold (1.00%)
+ n1: 8596412 0x7667CA0: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::internal_realloc(unsigned char*, unsigned long) (allocator.cpp:246)
+  n1: 8596412 0x76680DB: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::realloc(std::pair<unsigned char*, long>, unsigned long) (allocator.cpp:313)
+   n1: 8596412 0x5A0A9AC: arcticdb::Buffer::resize(unsigned long) (buffer.hpp:230)
+    n2: 8596412 0x5A0A7A1: arcticdb::Buffer::ensure(unsigned long) (buffer.hpp:177)
+     n1: 8387564 0x7C34AA2: arcticdb::storage::s3::S3StreamBuffer::xsputn(char const*, long) (s3_client_impl.cpp:82)
+      n1: 8387564 0xABDA375: std::ostream::write(char const*, long) (in /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.30)
+       n1: 8387564 0x8E9AC26: WriteData(char*, unsigned long, unsigned long, void*) (CurlHttpClient.cpp:231)
+        n1: 8387564 0x8FC21BA: chop_write (sendf.c:321)
+         n1: 8387564 0x8FC255F: Curl_client_write (sendf.c:415)
+          n1: 8387564 0x8FD22E8: readwrite_data (transfer.c:709)
+           n1: 8387564 0x8FD3016: Curl_readwrite (transfer.c:1133)
+            n1: 8387564 0x8FBB174: multi_runsingle (multi.c:2443)
+             n1: 8387564 0x8FBBA9A: curl_multi_perform (multi.c:2740)
+              n1: 8387564 0x8FAA79D: easy_transfer (easy.c:679)
+               n1: 8387564 0x8FAAA22: easy_perform (easy.c:769)
+                n1: 8387564 0x8FAAA8D: curl_easy_perform (easy.c:788)
+                 n1: 8387564 0x8E9E248: Aws::Http::CurlHttpClient::MakeRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::Utils::RateLimits::RateLimiterInterface*, Aws::Utils::RateLimits::RateLimiterInterface*) const (CurlHttpClient.cpp:832)
+                  n1: 8387564 0x8F1F6A9: Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}::operator()() const (AWSClient.cpp:582)
+                   n1: 8387564 0x8F352BA: std::shared_ptr<Aws::Http::HttpResponse> std::__invoke_impl<std::shared_ptr<Aws::Http::HttpResponse>, Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&>(std::__invoke_other, Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&) (invoke.h:61)
+                    n1: 8387564 0x8F31CCA: std::enable_if<std::__and_<std::__not_<std::is_void<std::shared_ptr<Aws::Http::HttpResponse> > >, std::is_convertible<std::__invoke_result<Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&>::type, std::shared_ptr<Aws::Http::HttpResponse> > >::value, std::shared_ptr<Aws::Http::HttpResponse> >::type std::__invoke_r<std::shared_ptr<Aws::Http::HttpResponse>, Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&>(Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&) (invoke.h:143)
+                     n1: 8387564 0x8F2DFB8: std::_Function_handler<std::shared_ptr<Aws::Http::HttpResponse> (), Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}>::_M_invoke(std::_Any_data const&) (std_function.h:291)
+                      n1: 8387564 0x8F6314B: std::function<std::shared_ptr<Aws::Http::HttpResponse> ()>::operator()() const (std_function.h:590)
+                       n1: 8387564 0x8F53484: std::shared_ptr<Aws::Http::HttpResponse> smithy::components::tracing::TracingUtils::MakeCallWithTiming<std::shared_ptr<Aws::Http::HttpResponse> >(std::function<std::shared_ptr<Aws::Http::HttpResponse> ()>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, smithy::components::tracing::Meter const&, std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >&&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (TracingUtils.h:66)
+                        n1: 8387564 0x8F2049F: Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const (AWSClient.cpp:586)
+                         n1: 8387564 0x8F1BDBF: Aws::Client::AWSClient::AttemptExhaustively(Aws::Http::URI const&, Aws::AmazonWebServiceRequest const&, Aws::Http::HttpMethod, char const*, char const*, char const*) const (AWSClient.cpp:297)
+                          n1: 8387564 0x8F2181D: Aws::Client::AWSClient::MakeRequestWithUnparsedResponse(Aws::Http::URI const&, Aws::AmazonWebServiceRequest const&, Aws::Http::HttpMethod, char const*, char const*, char const*) const (AWSClient.cpp:666)
+                           n1: 8387564 0x8F21D0B: Aws::Client::AWSClient::MakeRequestWithUnparsedResponse(Aws::AmazonWebServiceRequest const&, Aws::Endpoint::AWSEndpoint const&, Aws::Http::HttpMethod, char const*, char const*, char const*) const (AWSClient.cpp:716)
+                            n1: 8387564 0x8D41992: Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}::operator()() const (S3Client.cpp:2381)
+                             n1: 8387564 0x8DC67DA: Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> std::__invoke_impl<Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error>, Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&>(std::__invoke_other, Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&) (invoke.h:61)
+                              n0: 8387564 0x8DB5F86: std::enable_if<std::__and_<std::__not_<std::is_void<Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> > >, std::is_convertible<std::__invoke_result<Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&>::type, Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> > >::value, Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> >::type std::__invoke_r<Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error>, Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&>(Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&) (invoke.h:143)
+     n0: 208848 in 2 places, all below massif's threshold (1.00%)
+ n1: 4449951 0x2759AE: UnknownInlinedFun (obmalloc.c:99)
+  n1: 4449951 0x2759AE: UnknownInlinedFun (obmalloc.c:572)
+   n1: 4449951 0x2759AE: UnknownInlinedFun (obmalloc.c:1981)
+    n1: 4449951 0x2759AE: UnknownInlinedFun (obmalloc.c:1974)
+     n1: 4449951 0x2759AE: UnknownInlinedFun (obmalloc.c:685)
+      n1: 4449951 0x2759AE: UnknownInlinedFun (unicodeobject.c:1463)
+       n1: 4449951 0x2759AE: _PyUnicode_FromUCS1.lto_priv.0 (unicodeobject.c:2463)
+        n1: 4449951 0x273C44: UnknownInlinedFun (unicodeobject.c:2534)
+         n2: 4449951 0x273C44: r_object (marshal.c:1153)
+          n1: 3902021 0x2744D0: r_object (marshal.c:1215)
+           n2: 3902021 0x2740B1: r_object (marshal.c:1391)
+            n1: 3650848 0x2745EA: r_object (marshal.c:1215)
+             n2: 3650848 0x2740B1: r_object (marshal.c:1391)
+              n2: 1883861 0x361F1F: read_object.lto_priv.0 (marshal.c:1486)
+               n1: 1880765 0x370974: UnknownInlinedFun (marshal.c:1795)
+                n1: 1880765 0x370974: marshal_loads.lto_priv.0 (marshal.c.h:148)
+                 n1: 1880765 0x292533: cfunction_vectorcall_O.lto_priv.0 (methodobject.c:516)
+                  n1: 1880765 0x282701: UnknownInlinedFun (abstract.h:114)
+                   n1: 1880765 0x282701: UnknownInlinedFun (abstract.h:123)
+                    n1: 1880765 0x282701: UnknownInlinedFun (ceval.c:5893)
+                     n1: 1880765 0x282701: _PyEval_EvalFrameDefault (ceval.c:4181)
+                      n1: 1880765 0x29338B: UnknownInlinedFun (pycore_ceval.h:46)
+                       n1: 1880765 0x29338B: UnknownInlinedFun (ceval.c:5067)
+                        n1: 1880765 0x29338B: _PyFunction_Vectorcall (call.c:342)
+                         n1: 1880765 0x27E9AA: UnknownInlinedFun (abstract.h:114)
+                          n1: 1880765 0x27E9AA: UnknownInlinedFun (abstract.h:123)
+                           n1: 1880765 0x27E9AA: UnknownInlinedFun (ceval.c:5893)
+                            n1: 1880765 0x27E9AA: _PyEval_EvalFrameDefault (ceval.c:4231)
+                             n1: 1880765 0x29338B: UnknownInlinedFun (pycore_ceval.h:46)
+                              n1: 1880765 0x29338B: UnknownInlinedFun (ceval.c:5067)
+                               n1: 1880765 0x29338B: _PyFunction_Vectorcall (call.c:342)
+                                n1: 1880765 0x27D97E: UnknownInlinedFun (abstract.h:114)
+                                 n1: 1880765 0x27D97E: UnknownInlinedFun (abstract.h:123)
+                                  n1: 1880765 0x27D97E: UnknownInlinedFun (ceval.c:5893)
+                                   n1: 1880765 0x27D97E: _PyEval_EvalFrameDefault (ceval.c:4198)
+                                    n1: 1880765 0x29338B: UnknownInlinedFun (pycore_ceval.h:46)
+                                     n1: 1880765 0x29338B: UnknownInlinedFun (ceval.c:5067)
+                                      n1: 1880765 0x29338B: _PyFunction_Vectorcall (call.c:342)
+                                       n1: 1880765 0x27D97E: UnknownInlinedFun (abstract.h:114)
+                                        n1: 1880765 0x27D97E: UnknownInlinedFun (abstract.h:123)
+                                         n1: 1880765 0x27D97E: UnknownInlinedFun (ceval.c:5893)
+                                          n1: 1880765 0x27D97E: _PyEval_EvalFrameDefault (ceval.c:4198)
+                                           n1: 1880765 0x29338B: UnknownInlinedFun (pycore_ceval.h:46)
+                                            n1: 1880765 0x29338B: UnknownInlinedFun (ceval.c:5067)
+                                             n1: 1880765 0x29338B: _PyFunction_Vectorcall (call.c:342)
+                                              n1: 1880765 0x27D78F: UnknownInlinedFun (abstract.h:114)
+                                               n1: 1880765 0x27D78F: UnknownInlinedFun (abstract.h:123)
+                                                n1: 1880765 0x27D78F: UnknownInlinedFun (ceval.c:5893)
+                                                 n1: 1880765 0x27D78F: _PyEval_EvalFrameDefault (ceval.c:4213)
+                                                  n1: 1880765 0x29338B: UnknownInlinedFun (pycore_ceval.h:46)
+                                                   n1: 1880765 0x29338B: UnknownInlinedFun (ceval.c:5067)
+                                                    n1: 1880765 0x29338B: _PyFunction_Vectorcall (call.c:342)
+                                                     n1: 1880765 0x27D78F: UnknownInlinedFun (abstract.h:114)
+                                                      n1: 1880765 0x27D78F: UnknownInlinedFun (abstract.h:123)
+                                                       n1: 1880765 0x27D78F: UnknownInlinedFun (ceval.c:5893)
+                                                        n1: 1880765 0x27D78F: _PyEval_EvalFrameDefault (ceval.c:4213)
+                                                         n1: 1880765 0x29338B: UnknownInlinedFun (pycore_ceval.h:46)
+                                                          n1: 1880765 0x29338B: UnknownInlinedFun (ceval.c:5067)
+                                                           n1: 1880765 0x29338B: _PyFunction_Vectorcall (call.c:342)
+                                                            n1: 1880765 0x2927C4: UnknownInlinedFun (abstract.h:114)
+                                                             n1: 1880765 0x2927C4: object_vacall.lto_priv.0 (call.c:734)
+                                                              n1: 1880765 0x3679CE: _PyObject_CallMethodIdObjArgs (call.c:825)
+                                                               n1: 1880765 0x2A6164: UnknownInlinedFun (import.c:1522)
+                                                                n1: 1880765 0x2A6164: PyImport_ImportModuleLevelObject (import.c:1623)
+                                                                 n0: 1880765 in 4 places, all below massif's threshold (1.00%)
+               n0: 3096 in 1 place, below massif's threshold (1.00%)
+              n0: 1766987 in 4 places, all below massif's threshold (1.00%)
+            n0: 251173 in 8 places, all below massif's threshold (1.00%)
+          n0: 547930 in 6 places, all below massif's threshold (1.00%)
+ n1: 4298827 0x257072: UnknownInlinedFun (obmalloc.c:99)
+  n1: 4298827 0x257072: UnknownInlinedFun (obmalloc.c:572)
+   n1: 4298827 0x257072: UnknownInlinedFun (obmalloc.c:1981)
+    n1: 4298827 0x257072: UnknownInlinedFun (obmalloc.c:1974)
+     n2: 4298827 0x257072: PyObject_Malloc (obmalloc.c:685)
+      n1: 4217080 0x25B5D5: UnknownInlinedFun (dictobject.c:600)
+       n2: 4217080 0x25B5D5: dictresize.lto_priv.0 (dictobject.c:1242)
+        n1: 2561424 0x263703: UnknownInlinedFun (dictobject.c:1060)
+         n1: 2561424 0x263703: insertdict.lto_priv.0 (dictobject.c:1103)
+          n0: 2561424 in 186 places, all below massif's threshold (1.00%)
+        n0: 1655656 in 2 places, all below massif's threshold (1.00%)
+      n0: 81747 in 6 places, all below massif's threshold (1.00%)
+ n1: 2612376 0x262FC8: UnknownInlinedFun (obmalloc.c:99)
+  n1: 2612376 0x262FC8: UnknownInlinedFun (obmalloc.c:572)
+   n1: 2612376 0x262FC8: UnknownInlinedFun (obmalloc.c:1981)
+    n1: 2612376 0x262FC8: UnknownInlinedFun (obmalloc.c:1974)
+     n1: 2612376 0x262FC8: UnknownInlinedFun (obmalloc.c:685)
+      n1: 2612376 0x262FC8: UnknownInlinedFun (gcmodule.c:2280)
+       n1: 2612376 0x262FC8: UnknownInlinedFun (gcmodule.c:2307)
+        n1: 2612376 0x262FC8: PyType_GenericAlloc (typeobject.c:1156)
+         n0: 2612376 in 10 places, all below massif's threshold (1.00%)
+#-----------
+snapshot=7
+#-----------
+time=72142267997
+mem_heap_B=337000337
+mem_heap_extra_B=1359039
+mem_stacks_B=0
+heap_tree=detailed
+n5: 337000337 (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+ n1: 303840646 0x7667C39: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::internal_alloc(unsigned long) (allocator.cpp:195)
+  n2: 303840646 0x7667FFD: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::aligned_alloc(unsigned long, bool) (allocator.cpp:304)
+   n1: 278633080 0x5A0A9CA: arcticdb::Buffer::resize(unsigned long) (buffer.hpp:232)
+    n2: 278633080 0x5A0A7A1: arcticdb::Buffer::ensure(unsigned long) (buffer.hpp:177)
+     n2: 278627104 0x5A0A367: arcticdb::Buffer::reserve(unsigned long, std::optional<unsigned long> const&) (buffer.hpp:57)
+      n1: 278614936 0x5F47681: arcticdb::Buffer::Buffer(unsigned long, std::optional<unsigned long>) (buffer.hpp:62)
+       n1: 278614936 0x5F92670: decltype (::new ((void*)(0)) arcticdb::Buffer((declval<unsigned long&>)(), (declval<unsigned long const&>)())) std::construct_at<arcticdb::Buffer, unsigned long&, unsigned long const&>(arcticdb::Buffer*, unsigned long&, unsigned long const&) (stl_construct.h:97)
+        n1: 278614936 0x5F926FE: void std::allocator_traits<std::allocator<arcticdb::Buffer> >::construct<arcticdb::Buffer, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>&, arcticdb::Buffer*, unsigned long&, unsigned long const&) (alloc_traits.h:518)
+         n1: 278614936 0x5F91F9A: std::_Sp_counted_ptr_inplace<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&) (shared_ptr_base.h:519)
+          n1: 278614936 0x5F907B8: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(arcticdb::Buffer*&, std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:650)
+           n1: 278614936 0x5F8F15D: std::__shared_ptr<arcticdb::Buffer, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:1342)
+            n1: 278614936 0x5F8E332: std::shared_ptr<arcticdb::Buffer>::shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr.h:409)
+             n1: 278614936 0x5F84E03: std::shared_ptr<arcticdb::Buffer> std::allocate_shared<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer> const&, unsigned long&, unsigned long const&) (shared_ptr.h:863)
+              n1: 278614936 0x5F5A4EF: std::shared_ptr<arcticdb::Buffer> std::make_shared<arcticdb::Buffer, unsigned long&, unsigned long const&>(unsigned long&, unsigned long const&) (shared_ptr.h:879)
+               n1: 278614936 0x5F45DBA: arcticdb::encode_v1(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&) (encode_v1.cpp:127)
+                n1: 278614936 0x5EE6982: arcticdb::encode_dispatch(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&, arcticdb::EncodingVersion) (codec.cpp:49)
+                 n1: 278614936 0x5B920DC: arcticdb::async::EncodeAtomTask::encode() (tasks.hpp:95)
+                  n1: 278614936 0x5B92243: arcticdb::async::EncodeAtomTask::operator()() (tasks.hpp:104)
+                   n1: 278614936 0x5C134EF: std::enable_if<!std::is_same<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<>, void>::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWithNoUnwrap<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:254)
+                    n1: 278614936 0x5BEC44E: std::enable_if<!folly::isTry<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> >::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:276)
+                     n1: 278614936 0x5BCA254: void folly::Promise<arcticdb::storage::KeySegmentPair>::setWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Promise-inl.h:152)
+                      n1: 278614936 0x5BAFC9D: folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}::operator()() (FutureExecutor.h:75)
+                       n1: 278614936 0x5BEC50B: void folly::detail::function::FunctionTraits<void ()>::callBig<folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}>(folly::detail::function::Data&) (Function.h:359)
+                        n1: 278614936 0x5979E2A: folly::detail::function::FunctionTraits<void ()>::operator()() (Function.h:374)
+                         n1: 278614936 0x834C7F5: catch_exception<folly::Function<void()>&, void (&)(char const*) noexcept, char const*&> (Exception.h:285)
+                          n1: 278614936 0x834C7F5: invokeCatchingExns<folly::Function<void()> > (Executor.h:234)
+                           n1: 278614936 0x834C7F5: folly::ThreadPoolExecutor::runTask(std::shared_ptr<folly::ThreadPoolExecutor::Thread> const&, folly::ThreadPoolExecutor::Task&&) (ThreadPoolExecutor.cpp:102)
+                            n1: 278614936 0x8311A65: folly::CPUThreadPoolExecutor::threadRun(std::shared_ptr<folly::ThreadPoolExecutor::Thread>) (CPUThreadPoolExecutor.cpp:333)
+                             n1: 278614936 0x8357908: void std::__invoke_impl<void, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(std::__invoke_memfun_deref, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:74)
+                              n1: 278614936 0x8356BBE: std::__invoke_result<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>::type std::__invoke<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:96)
+                               n1: 278614936 0x8355AEF: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::__call<void, , 0ul, 1ul>(std::tuple<>&&, std::_Index_tuple<0ul, 1ul>) (functional:420)
+                                n0: 278614936 0x83547F6: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::operator()<, void>() (functional:503)
+      n0: 12168 in 2 places, all below massif's threshold (1.00%)
+     n0: 5976 in 5 places, all below massif's threshold (1.00%)
+   n4: 25207566 0x5991525: arcticdb::ChunkedBufferImpl<3968ul>::add_block(unsigned long, unsigned long) (chunked_buffer.hpp:369)
+    n2: 14640558 0x59795DB: arcticdb::ChunkedBufferImpl<3968ul>::ensure(unsigned long, bool) (chunked_buffer.hpp:208)
+     n2: 14607820 0x5A0E290: arcticdb::CursoredBuffer<arcticdb::ChunkedBufferImpl<3968ul> >::ensure_bytes(unsigned long) (cursored_buffer.hpp:57)
+      n1: 11803328 0x5EABB1B: arcticdb::Column::allocate_data(unsigned long) (column.hpp:549)
+       n0: 11803328 in 13 places, all below massif's threshold (1.00%)
+      n0: 2804492 in 1 place, below massif's threshold (1.00%)
+     n0: 32738 in 1 place, below massif's threshold (1.00%)
+    n2: 5905760 0x5EAC11F: arcticdb::ChunkedBufferImpl<3968ul>::reserve(unsigned long) (chunked_buffer.hpp:111)
+     n1: 5901664 0x5EB3E38: arcticdb::ChunkedBufferImpl<3968ul>::ChunkedBufferImpl(unsigned long) (chunked_buffer.hpp:95)
+      n1: 5901664 0x5EAD034: arcticdb::CursoredBuffer<arcticdb::ChunkedBufferImpl<3968ul> >::CursoredBuffer(unsigned long, arcticdb::entity::AllocationType) (cursored_buffer.hpp:26)
+       n1: 5901664 0x5EAB79B: arcticdb::Column::Column(arcticdb::entity::TypeDescriptor, unsigned long, arcticdb::entity::AllocationType, arcticdb::entity::Sparsity, arcticdb::entity::DataTypeMode) (column.hpp:236)
+        n1: 5901664 0x6233301: decltype (::new ((void*)(0)) arcticdb::Column((declval<arcticdb::entity::TypeDescriptor const&>)(), (declval<unsigned long&>)(), (declval<arcticdb::entity::AllocationType&>)(), (declval<arcticdb::entity::Sparsity&>)(), (declval<arcticdb::entity::DataTypeMode&>)())) std::construct_at<arcticdb::Column, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::Column*, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (stl_construct.h:97)
+         n1: 5901664 0x62333D1: void std::allocator_traits<std::allocator<arcticdb::Column> >::construct<arcticdb::Column, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::Column>&, arcticdb::Column*, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (alloc_traits.h:518)
+          n1: 5901664 0x61E708E: std::_Sp_counted_ptr_inplace<arcticdb::Column, std::allocator<arcticdb::Column>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::Column>, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:519)
+           n1: 5901664 0x6185C8E: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<arcticdb::Column, std::allocator<arcticdb::Column>, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::Column*&, std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Column> >, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:650)
+            n1: 5901664 0x6145609: std::__shared_ptr<arcticdb::Column, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<arcticdb::Column>, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Column> >, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:1342)
+             n1: 5901664 0x60EEF7A: std::shared_ptr<arcticdb::Column>::shared_ptr<std::allocator<arcticdb::Column>, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Column> >, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:409)
+              n1: 5901664 0x60C82BE: std::shared_ptr<arcticdb::Column> std::allocate_shared<arcticdb::Column, std::allocator<arcticdb::Column>, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::Column> const&, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:863)
+               n1: 5901664 0x60A08C9: std::shared_ptr<arcticdb::Column> std::make_shared<arcticdb::Column, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:879)
+                n1: 5901664 0x605E8C4: arcticdb::SegmentInMemoryImpl::create_columns(unsigned long, unsigned long, arcticdb::entity::AllocationType, arcticdb::entity::Sparsity, arcticdb::entity::DataTypeMode) (memory_segment_impl.cpp:98)
+                 n1: 5901664 0x605EC54: arcticdb::SegmentInMemoryImpl::on_descriptor_change(arcticdb::entity::StreamDescriptor const&, unsigned long, arcticdb::entity::AllocationType, arcticdb::entity::Sparsity, arcticdb::entity::DataTypeMode) (memory_segment_impl.cpp:139)
+                  n1: 5901664 0x605DFF5: arcticdb::SegmentInMemoryImpl::SegmentInMemoryImpl(arcticdb::entity::StreamDescriptor const&, unsigned long, arcticdb::entity::AllocationType, arcticdb::entity::Sparsity, arcticdb::entity::DataTypeMode) (memory_segment_impl.cpp:28)
+                   n1: 5901664 0x59EB32B: decltype (::new ((void*)(0)) arcticdb::SegmentInMemoryImpl((declval<arcticdb::entity::StreamDescriptor>)(), (declval<unsigned long&>)(), (declval<arcticdb::entity::AllocationType&>)(), (declval<arcticdb::entity::Sparsity&>)(), (declval<arcticdb::entity::DataTypeMode&>)())) std::construct_at<arcticdb::SegmentInMemoryImpl, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::SegmentInMemoryImpl*, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (stl_construct.h:97)
+                    n1: 5901664 0x59EB3E7: void std::allocator_traits<std::allocator<arcticdb::SegmentInMemoryImpl> >::construct<arcticdb::SegmentInMemoryImpl, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::SegmentInMemoryImpl>&, arcticdb::SegmentInMemoryImpl*, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (alloc_traits.h:518)
+                     n1: 5901664 0x59E28BA: std::_Sp_counted_ptr_inplace<arcticdb::SegmentInMemoryImpl, std::allocator<arcticdb::SegmentInMemoryImpl>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::SegmentInMemoryImpl>, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:519)
+                      n1: 5901664 0x59D3298: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<arcticdb::SegmentInMemoryImpl, std::allocator<arcticdb::SegmentInMemoryImpl>, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::SegmentInMemoryImpl*&, std::_Sp_alloc_shared_tag<std::allocator<arcticdb::SegmentInMemoryImpl> >, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:650)
+                       n1: 5901664 0x59BF717: std::__shared_ptr<arcticdb::SegmentInMemoryImpl, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<arcticdb::SegmentInMemoryImpl>, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::SegmentInMemoryImpl> >, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:1342)
+                        n1: 5901664 0x59A77E8: std::shared_ptr<arcticdb::SegmentInMemoryImpl>::shared_ptr<std::allocator<arcticdb::SegmentInMemoryImpl>, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::SegmentInMemoryImpl> >, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:409)
+                         n1: 5901664 0x5992F07: std::shared_ptr<arcticdb::SegmentInMemoryImpl> std::allocate_shared<arcticdb::SegmentInMemoryImpl, std::allocator<arcticdb::SegmentInMemoryImpl>, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::SegmentInMemoryImpl> const&, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:863)
+                          n1: 5901664 0x5979BFF: std::shared_ptr<arcticdb::SegmentInMemoryImpl> std::make_shared<arcticdb::SegmentInMemoryImpl, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:879)
+                           n2: 5901664 0x5969F86: arcticdb::SegmentInMemory::SegmentInMemory(arcticdb::entity::StreamDescriptor&&, unsigned long, arcticdb::entity::AllocationType, arcticdb::entity::Sparsity, arcticdb::entity::DataTypeMode) (memory_segment.hpp:48)
+                            n1: 5901664 0x5ADAEF8: arcticdb::stream::Aggregator<arcticdb::stream::TimeseriesIndex, arcticdb::stream::FixedSchema, arcticdb::stream::RowCountSegmentPolicy, arcticdb::stream::DenseColumnPolicy>::commit_impl(bool) (aggregator-inl.hpp:30)
+                             n1: 5901664 0x78918AE: arcticdb::stream::SegmentAggregator<arcticdb::stream::TimeseriesIndex, arcticdb::stream::FixedSchema, arcticdb::stream::RowCountSegmentPolicy, arcticdb::stream::DenseColumnPolicy>::commit() (segment_aggregator.hpp:105)
+                              n0: 5901664 0x78914FB: arcticdb::stream::SegmentAggregator<arcticdb::stream::TimeseriesIndex, arcticdb::stream::FixedSchema, arcticdb::stream::RowCountSegmentPolicy, arcticdb::stream::DenseColumnPolicy>::add_segment(arcticdb::SegmentInMemory&&, arcticdb::pipelines::FrameSlice const&, bool) (segment_aggregator.hpp:71)
+                            n0: 0 in 1 place, below massif's threshold (1.00%)
+     n0: 4096 in 1 place, below massif's threshold (1.00%)
+    n2: 4501504 0x5979572: arcticdb::ChunkedBufferImpl<3968ul>::ensure(unsigned long, bool) (chunked_buffer.hpp:204)
+     n2: 4169728 0x5A0E290: arcticdb::CursoredBuffer<arcticdb::ChunkedBufferImpl<3968ul> >::ensure_bytes(unsigned long) (cursored_buffer.hpp:57)
+      n2: 4112384 0x632C15B: arcticdb::FieldCollection::add_field(arcticdb::entity::TypeDescriptor const&, std::basic_string_view<char, std::char_traits<char> >) (field_collection.cpp:15)
+       n1: 4100096 0x632CAB6: arcticdb::fields_from_proto(arcticc::pb2::descriptors_pb2::StreamDescriptor const&) (field_collection_proto.cpp:16)
+        n2: 4100096 0x5EE7C6C: arcticdb::unpack_timeseries_descriptor_from_proto(google::protobuf::Any const&, arcticdb::entity::StreamDescriptor const&, bool) (codec.cpp:261)
+         n1: 4096000 0x5EE8770: arcticdb::decode_timeseries_descriptor_for_incompletes(arcticdb::SegmentHeader const&, arcticdb::entity::StreamDescriptor const&, unsigned char const*, unsigned char const*, unsigned char const*) (codec.cpp:350)
+          n1: 4096000 0x5EE88F9: arcticdb::decode_timeseries_descriptor_for_incompletes(arcticdb::Segment&) (codec.cpp:365)
+           n1: 4096000 0x7C58BC8: arcticdb::get_descriptor_and_data(std::shared_ptr<arcticdb::stream::StreamSource> const&, arcticdb::entity::AtomKeyImpl const&, bool, arcticdb::storage::ReadKeyOpts) (incompletes.cpp:519)
+            n1: 4096000 0x7C58EF5: arcticdb::entry_from_key(std::shared_ptr<arcticdb::stream::StreamSource> const&, arcticdb::entity::AtomKeyImpl const&, bool) (incompletes.cpp:538)
+             n1: 4096000 0x7C74D36: auto arcticdb::load_via_iteration(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool)::{lambda(auto:1 const&)#1}::operator()<std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> >(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> const&) const (incompletes.cpp:83)
+              n1: 4096000 0x7C79ACC: void std::__invoke_impl<void, arcticdb::load_via_iteration(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool)::{lambda(auto:1 const&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> >(std::__invoke_other, arcticdb::load_via_iteration(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool)::{lambda(auto:1 const&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) (invoke.h:61)
+               n1: 4096000 0x7C7860D: std::enable_if<is_invocable_r_v<void, arcticdb::load_via_iteration(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool)::{lambda(auto:1 const&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> >, void>::type std::__invoke_r<void, arcticdb::load_via_iteration(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool)::{lambda(auto:1 const&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> >(arcticdb::load_via_iteration(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool)::{lambda(auto:1 const&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) (invoke.h:111)
+                n1: 4096000 0x7C76B54: std::_Function_handler<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&), arcticdb::load_via_iteration(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool)::{lambda(auto:1 const&)#1}>::_M_invoke(std::_Any_data const&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) (std_function.h:290)
+                 n1: 4096000 0x5BAB44E: std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)>::operator()(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) const (std_function.h:590)
+                  n1: 4096000 0x5B8C198: arcticdb::storage::Storage::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)#1}::operator()(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) const (storage.hpp:123)
+                   n1: 4096000 0x5C0D872: bool std::__invoke_impl<bool, arcticdb::storage::Storage::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> >(std::__invoke_other, arcticdb::storage::Storage::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) (invoke.h:61)
+                    n1: 4096000 0x5BE7F25: std::enable_if<is_invocable_r_v<bool, arcticdb::storage::Storage::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> >, bool>::type std::__invoke_r<bool, arcticdb::storage::Storage::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey> >(arcticdb::storage::Storage::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)#1}&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) (invoke.h:114)
+                     n1: 4096000 0x5BC4E99: std::_Function_handler<bool (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&), arcticdb::storage::Storage::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)#1}>::_M_invoke(std::_Any_data const&, std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) (std_function.h:290)
+                      n1: 4096000 0x75ECACA: std::function<bool (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)>::operator()(std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&) const (std_function.h:590)
+                       n1: 4096000 0x7C49184: bool arcticdb::storage::s3::detail::do_iterate_type_impl<arcticdb::storage::object_store_utils::FlatBucketizer, arcticdb::storage::s3::S3Storage::do_iterate_type_until_match(arcticdb::entity::KeyType, std::function<bool (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, arcticdb::entity::KeyDescriptor const&, arcticdb::entity::KeyType)#1}>(arcticdb::entity::KeyType, std::function<bool (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, arcticdb::storage::s3::S3ClientInterface const&, arcticdb::storage::object_store_utils::FlatBucketizer&&, arcticdb::storage::s3::S3Storage::do_iterate_type_until_match(arcticdb::entity::KeyType, std::function<bool (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, arcticdb::entity::KeyDescriptor const&, arcticdb::entity::KeyType)#1}&&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (detail-inl.hpp:409)
+                        n1: 4096000 0x7C47360: arcticdb::storage::s3::S3Storage::do_iterate_type_until_match(arcticdb::entity::KeyType, std::function<bool (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (s3_storage.cpp:96)
+                         n1: 4096000 0x5B8C22E: arcticdb::storage::Storage::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (storage.hpp:126)
+                          n1: 4096000 0x5B8FF9A: arcticdb::storage::Storages::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, bool) (storages.hpp:179)
+                           n1: 4096000 0x5B910D9: arcticdb::storage::Library::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (library.hpp:70)
+                            n1: 4096000 0x5C7A9B9: arcticdb::async::AsyncStore<arcticdb::util::SysClock>::iterate_type(arcticdb::entity::KeyType, std::function<void (std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>&&)> const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (async_store.hpp:219)
+                             n1: 4096000 0x7C74F26: arcticdb::load_via_iteration(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool) (incompletes.cpp:78)
+                              n0: 4096000 0x7C59E37: arcticdb::get_incomplete_append_slices_for_stream_id(std::shared_ptr<arcticdb::Store> const&, std::variant<long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, unsigned long> const&, bool, bool) (incompletes.cpp:633)
+         n0: 4096 in 1 place, below massif's threshold (1.00%)
+       n0: 12288 in 1 place, below massif's threshold (1.00%)
+      n0: 57344 in 2 places, all below massif's threshold (1.00%)
+     n0: 331776 in 2 places, all below massif's threshold (1.00%)
+    n0: 159744 in 1 place, below massif's threshold (1.00%)
+ n0: 15814501 in 1131 places, all below massif's threshold (1.00%)
+ n1: 8596412 0x7667CA0: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::internal_realloc(unsigned char*, unsigned long) (allocator.cpp:246)
+  n1: 8596412 0x76680DB: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::realloc(std::pair<unsigned char*, long>, unsigned long) (allocator.cpp:313)
+   n1: 8596412 0x5A0A9AC: arcticdb::Buffer::resize(unsigned long) (buffer.hpp:230)
+    n2: 8596412 0x5A0A7A1: arcticdb::Buffer::ensure(unsigned long) (buffer.hpp:177)
+     n1: 8387564 0x7C34AA2: arcticdb::storage::s3::S3StreamBuffer::xsputn(char const*, long) (s3_client_impl.cpp:82)
+      n1: 8387564 0xABDA375: std::ostream::write(char const*, long) (in /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.30)
+       n1: 8387564 0x8E9AC26: WriteData(char*, unsigned long, unsigned long, void*) (CurlHttpClient.cpp:231)
+        n1: 8387564 0x8FC21BA: chop_write (sendf.c:321)
+         n1: 8387564 0x8FC255F: Curl_client_write (sendf.c:415)
+          n1: 8387564 0x8FD22E8: readwrite_data (transfer.c:709)
+           n1: 8387564 0x8FD3016: Curl_readwrite (transfer.c:1133)
+            n1: 8387564 0x8FBB174: multi_runsingle (multi.c:2443)
+             n1: 8387564 0x8FBBA9A: curl_multi_perform (multi.c:2740)
+              n1: 8387564 0x8FAA79D: easy_transfer (easy.c:679)
+               n1: 8387564 0x8FAAA22: easy_perform (easy.c:769)
+                n1: 8387564 0x8FAAA8D: curl_easy_perform (easy.c:788)
+                 n1: 8387564 0x8E9E248: Aws::Http::CurlHttpClient::MakeRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::Utils::RateLimits::RateLimiterInterface*, Aws::Utils::RateLimits::RateLimiterInterface*) const (CurlHttpClient.cpp:832)
+                  n1: 8387564 0x8F1F6A9: Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}::operator()() const (AWSClient.cpp:582)
+                   n1: 8387564 0x8F352BA: std::shared_ptr<Aws::Http::HttpResponse> std::__invoke_impl<std::shared_ptr<Aws::Http::HttpResponse>, Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&>(std::__invoke_other, Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&) (invoke.h:61)
+                    n1: 8387564 0x8F31CCA: std::enable_if<std::__and_<std::__not_<std::is_void<std::shared_ptr<Aws::Http::HttpResponse> > >, std::is_convertible<std::__invoke_result<Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&>::type, std::shared_ptr<Aws::Http::HttpResponse> > >::value, std::shared_ptr<Aws::Http::HttpResponse> >::type std::__invoke_r<std::shared_ptr<Aws::Http::HttpResponse>, Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&>(Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&) (invoke.h:143)
+                     n1: 8387564 0x8F2DFB8: std::_Function_handler<std::shared_ptr<Aws::Http::HttpResponse> (), Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}>::_M_invoke(std::_Any_data const&) (std_function.h:291)
+                      n1: 8387564 0x8F6314B: std::function<std::shared_ptr<Aws::Http::HttpResponse> ()>::operator()() const (std_function.h:590)
+                       n1: 8387564 0x8F53484: std::shared_ptr<Aws::Http::HttpResponse> smithy::components::tracing::TracingUtils::MakeCallWithTiming<std::shared_ptr<Aws::Http::HttpResponse> >(std::function<std::shared_ptr<Aws::Http::HttpResponse> ()>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, smithy::components::tracing::Meter const&, std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >&&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (TracingUtils.h:66)
+                        n1: 8387564 0x8F2049F: Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const (AWSClient.cpp:586)
+                         n1: 8387564 0x8F1BDBF: Aws::Client::AWSClient::AttemptExhaustively(Aws::Http::URI const&, Aws::AmazonWebServiceRequest const&, Aws::Http::HttpMethod, char const*, char const*, char const*) const (AWSClient.cpp:297)
+                          n1: 8387564 0x8F2181D: Aws::Client::AWSClient::MakeRequestWithUnparsedResponse(Aws::Http::URI const&, Aws::AmazonWebServiceRequest const&, Aws::Http::HttpMethod, char const*, char const*, char const*) const (AWSClient.cpp:666)
+                           n1: 8387564 0x8F21D0B: Aws::Client::AWSClient::MakeRequestWithUnparsedResponse(Aws::AmazonWebServiceRequest const&, Aws::Endpoint::AWSEndpoint const&, Aws::Http::HttpMethod, char const*, char const*, char const*) const (AWSClient.cpp:716)
+                            n1: 8387564 0x8D41992: Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}::operator()() const (S3Client.cpp:2381)
+                             n1: 8387564 0x8DC67DA: Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> std::__invoke_impl<Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error>, Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&>(std::__invoke_other, Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&) (invoke.h:61)
+                              n0: 8387564 0x8DB5F86: std::enable_if<std::__and_<std::__not_<std::is_void<Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> > >, std::is_convertible<std::__invoke_result<Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&>::type, Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> > >::value, Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> >::type std::__invoke_r<Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error>, Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&>(Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&) (invoke.h:143)
+     n0: 208848 in 2 places, all below massif's threshold (1.00%)
+ n1: 4449951 0x2759AE: UnknownInlinedFun (obmalloc.c:99)
+  n1: 4449951 0x2759AE: UnknownInlinedFun (obmalloc.c:572)
+   n1: 4449951 0x2759AE: UnknownInlinedFun (obmalloc.c:1981)
+    n1: 4449951 0x2759AE: UnknownInlinedFun (obmalloc.c:1974)
+     n1: 4449951 0x2759AE: UnknownInlinedFun (obmalloc.c:685)
+      n1: 4449951 0x2759AE: UnknownInlinedFun (unicodeobject.c:1463)
+       n1: 4449951 0x2759AE: _PyUnicode_FromUCS1.lto_priv.0 (unicodeobject.c:2463)
+        n1: 4449951 0x273C44: UnknownInlinedFun (unicodeobject.c:2534)
+         n2: 4449951 0x273C44: r_object (marshal.c:1153)
+          n1: 3902021 0x2744D0: r_object (marshal.c:1215)
+           n2: 3902021 0x2740B1: r_object (marshal.c:1391)
+            n1: 3650848 0x2745EA: r_object (marshal.c:1215)
+             n1: 3650848 0x2740B1: r_object (marshal.c:1391)
+              n0: 3650848 in 5 places, all below massif's threshold (1.00%)
+            n0: 251173 in 8 places, all below massif's threshold (1.00%)
+          n0: 547930 in 6 places, all below massif's threshold (1.00%)
+ n1: 4298827 0x257072: UnknownInlinedFun (obmalloc.c:99)
+  n1: 4298827 0x257072: UnknownInlinedFun (obmalloc.c:572)
+   n1: 4298827 0x257072: UnknownInlinedFun (obmalloc.c:1981)
+    n1: 4298827 0x257072: UnknownInlinedFun (obmalloc.c:1974)
+     n2: 4298827 0x257072: PyObject_Malloc (obmalloc.c:685)
+      n1: 4217080 0x25B5D5: UnknownInlinedFun (dictobject.c:600)
+       n1: 4217080 0x25B5D5: dictresize.lto_priv.0 (dictobject.c:1242)
+        n0: 4217080 in 3 places, all below massif's threshold (1.00%)
+      n0: 81747 in 6 places, all below massif's threshold (1.00%)
+#-----------
+snapshot=8
+#-----------
+time=84295030103
+mem_heap_B=483022049
+mem_heap_extra_B=1453407
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=9
+#-----------
+time=93460491644
+mem_heap_B=601526712
+mem_heap_extra_B=1513616
+mem_stacks_B=0
+heap_tree=detailed
+n3: 601526712 (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+ n1: 568249830 0x7667C39: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::internal_alloc(unsigned long) (allocator.cpp:195)
+  n2: 568249830 0x7667FFD: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::aligned_alloc(unsigned long, bool) (allocator.cpp:304)
+   n1: 542595800 0x5A0A9CA: arcticdb::Buffer::resize(unsigned long) (buffer.hpp:232)
+    n2: 542595800 0x5A0A7A1: arcticdb::Buffer::ensure(unsigned long) (buffer.hpp:177)
+     n2: 542589536 0x5A0A367: arcticdb::Buffer::reserve(unsigned long, std::optional<unsigned long> const&) (buffer.hpp:57)
+      n1: 542565928 0x5F47681: arcticdb::Buffer::Buffer(unsigned long, std::optional<unsigned long>) (buffer.hpp:62)
+       n1: 542565928 0x5F92670: decltype (::new ((void*)(0)) arcticdb::Buffer((declval<unsigned long&>)(), (declval<unsigned long const&>)())) std::construct_at<arcticdb::Buffer, unsigned long&, unsigned long const&>(arcticdb::Buffer*, unsigned long&, unsigned long const&) (stl_construct.h:97)
+        n1: 542565928 0x5F926FE: void std::allocator_traits<std::allocator<arcticdb::Buffer> >::construct<arcticdb::Buffer, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>&, arcticdb::Buffer*, unsigned long&, unsigned long const&) (alloc_traits.h:518)
+         n1: 542565928 0x5F91F9A: std::_Sp_counted_ptr_inplace<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&) (shared_ptr_base.h:519)
+          n1: 542565928 0x5F907B8: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(arcticdb::Buffer*&, std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:650)
+           n1: 542565928 0x5F8F15D: std::__shared_ptr<arcticdb::Buffer, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:1342)
+            n1: 542565928 0x5F8E332: std::shared_ptr<arcticdb::Buffer>::shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr.h:409)
+             n1: 542565928 0x5F84E03: std::shared_ptr<arcticdb::Buffer> std::allocate_shared<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer> const&, unsigned long&, unsigned long const&) (shared_ptr.h:863)
+              n1: 542565928 0x5F5A4EF: std::shared_ptr<arcticdb::Buffer> std::make_shared<arcticdb::Buffer, unsigned long&, unsigned long const&>(unsigned long&, unsigned long const&) (shared_ptr.h:879)
+               n1: 542565928 0x5F45DBA: arcticdb::encode_v1(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&) (encode_v1.cpp:127)
+                n1: 542565928 0x5EE6982: arcticdb::encode_dispatch(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&, arcticdb::EncodingVersion) (codec.cpp:49)
+                 n1: 542565928 0x5B920DC: arcticdb::async::EncodeAtomTask::encode() (tasks.hpp:95)
+                  n1: 542565928 0x5B92243: arcticdb::async::EncodeAtomTask::operator()() (tasks.hpp:104)
+                   n1: 542565928 0x5C134EF: std::enable_if<!std::is_same<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<>, void>::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWithNoUnwrap<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:254)
+                    n1: 542565928 0x5BEC44E: std::enable_if<!folly::isTry<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> >::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:276)
+                     n1: 542565928 0x5BCA254: void folly::Promise<arcticdb::storage::KeySegmentPair>::setWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Promise-inl.h:152)
+                      n1: 542565928 0x5BAFC9D: folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}::operator()() (FutureExecutor.h:75)
+                       n1: 542565928 0x5BEC50B: void folly::detail::function::FunctionTraits<void ()>::callBig<folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}>(folly::detail::function::Data&) (Function.h:359)
+                        n1: 542565928 0x5979E2A: folly::detail::function::FunctionTraits<void ()>::operator()() (Function.h:374)
+                         n1: 542565928 0x834C7F5: catch_exception<folly::Function<void()>&, void (&)(char const*) noexcept, char const*&> (Exception.h:285)
+                          n1: 542565928 0x834C7F5: invokeCatchingExns<folly::Function<void()> > (Executor.h:234)
+                           n1: 542565928 0x834C7F5: folly::ThreadPoolExecutor::runTask(std::shared_ptr<folly::ThreadPoolExecutor::Thread> const&, folly::ThreadPoolExecutor::Task&&) (ThreadPoolExecutor.cpp:102)
+                            n1: 542565928 0x8311A65: folly::CPUThreadPoolExecutor::threadRun(std::shared_ptr<folly::ThreadPoolExecutor::Thread>) (CPUThreadPoolExecutor.cpp:333)
+                             n1: 542565928 0x8357908: void std::__invoke_impl<void, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(std::__invoke_memfun_deref, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:74)
+                              n1: 542565928 0x8356BBE: std::__invoke_result<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>::type std::__invoke<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:96)
+                               n1: 542565928 0x8355AEF: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::__call<void, , 0ul, 1ul>(std::tuple<>&&, std::_Index_tuple<0ul, 1ul>) (functional:420)
+                                n0: 542565928 0x83547F6: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::operator()<, void>() (functional:503)
+      n0: 23608 in 2 places, all below massif's threshold (1.00%)
+     n0: 6264 in 5 places, all below massif's threshold (1.00%)
+   n2: 25654030 0x5991525: arcticdb::ChunkedBufferImpl<3968ul>::add_block(unsigned long, unsigned long) (chunked_buffer.hpp:369)
+    n2: 14640558 0x59795DB: arcticdb::ChunkedBufferImpl<3968ul>::ensure(unsigned long, bool) (chunked_buffer.hpp:208)
+     n2: 14607820 0x5A0E290: arcticdb::CursoredBuffer<arcticdb::ChunkedBufferImpl<3968ul> >::ensure_bytes(unsigned long) (cursored_buffer.hpp:57)
+      n1: 11803328 0x5EABB1B: arcticdb::Column::allocate_data(unsigned long) (column.hpp:549)
+       n0: 11803328 in 13 places, all below massif's threshold (1.00%)
+      n0: 2804492 in 1 place, below massif's threshold (1.00%)
+     n0: 32738 in 1 place, below massif's threshold (1.00%)
+    n0: 11013472 in 3 places, all below massif's threshold (1.00%)
+ n0: 24680470 in 1133 places, all below massif's threshold (1.00%)
+ n1: 8596412 0x7667CA0: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::internal_realloc(unsigned char*, unsigned long) (allocator.cpp:246)
+  n1: 8596412 0x76680DB: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::realloc(std::pair<unsigned char*, long>, unsigned long) (allocator.cpp:313)
+   n1: 8596412 0x5A0A9AC: arcticdb::Buffer::resize(unsigned long) (buffer.hpp:230)
+    n2: 8596412 0x5A0A7A1: arcticdb::Buffer::ensure(unsigned long) (buffer.hpp:177)
+     n1: 8387564 0x7C34AA2: arcticdb::storage::s3::S3StreamBuffer::xsputn(char const*, long) (s3_client_impl.cpp:82)
+      n1: 8387564 0xABDA375: std::ostream::write(char const*, long) (in /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.30)
+       n1: 8387564 0x8E9AC26: WriteData(char*, unsigned long, unsigned long, void*) (CurlHttpClient.cpp:231)
+        n1: 8387564 0x8FC21BA: chop_write (sendf.c:321)
+         n1: 8387564 0x8FC255F: Curl_client_write (sendf.c:415)
+          n1: 8387564 0x8FD22E8: readwrite_data (transfer.c:709)
+           n1: 8387564 0x8FD3016: Curl_readwrite (transfer.c:1133)
+            n1: 8387564 0x8FBB174: multi_runsingle (multi.c:2443)
+             n1: 8387564 0x8FBBA9A: curl_multi_perform (multi.c:2740)
+              n1: 8387564 0x8FAA79D: easy_transfer (easy.c:679)
+               n1: 8387564 0x8FAAA22: easy_perform (easy.c:769)
+                n1: 8387564 0x8FAAA8D: curl_easy_perform (easy.c:788)
+                 n1: 8387564 0x8E9E248: Aws::Http::CurlHttpClient::MakeRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::Utils::RateLimits::RateLimiterInterface*, Aws::Utils::RateLimits::RateLimiterInterface*) const (CurlHttpClient.cpp:832)
+                  n1: 8387564 0x8F1F6A9: Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}::operator()() const (AWSClient.cpp:582)
+                   n1: 8387564 0x8F352BA: std::shared_ptr<Aws::Http::HttpResponse> std::__invoke_impl<std::shared_ptr<Aws::Http::HttpResponse>, Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&>(std::__invoke_other, Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&) (invoke.h:61)
+                    n1: 8387564 0x8F31CCA: std::enable_if<std::__and_<std::__not_<std::is_void<std::shared_ptr<Aws::Http::HttpResponse> > >, std::is_convertible<std::__invoke_result<Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&>::type, std::shared_ptr<Aws::Http::HttpResponse> > >::value, std::shared_ptr<Aws::Http::HttpResponse> >::type std::__invoke_r<std::shared_ptr<Aws::Http::HttpResponse>, Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&>(Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&) (invoke.h:143)
+                     n1: 8387564 0x8F2DFB8: std::_Function_handler<std::shared_ptr<Aws::Http::HttpResponse> (), Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}>::_M_invoke(std::_Any_data const&) (std_function.h:291)
+                      n1: 8387564 0x8F6314B: std::function<std::shared_ptr<Aws::Http::HttpResponse> ()>::operator()() const (std_function.h:590)
+                       n1: 8387564 0x8F53484: std::shared_ptr<Aws::Http::HttpResponse> smithy::components::tracing::TracingUtils::MakeCallWithTiming<std::shared_ptr<Aws::Http::HttpResponse> >(std::function<std::shared_ptr<Aws::Http::HttpResponse> ()>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, smithy::components::tracing::Meter const&, std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >&&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (TracingUtils.h:66)
+                        n1: 8387564 0x8F2049F: Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const (AWSClient.cpp:586)
+                         n1: 8387564 0x8F1BDBF: Aws::Client::AWSClient::AttemptExhaustively(Aws::Http::URI const&, Aws::AmazonWebServiceRequest const&, Aws::Http::HttpMethod, char const*, char const*, char const*) const (AWSClient.cpp:297)
+                          n1: 8387564 0x8F2181D: Aws::Client::AWSClient::MakeRequestWithUnparsedResponse(Aws::Http::URI const&, Aws::AmazonWebServiceRequest const&, Aws::Http::HttpMethod, char const*, char const*, char const*) const (AWSClient.cpp:666)
+                           n1: 8387564 0x8F21D0B: Aws::Client::AWSClient::MakeRequestWithUnparsedResponse(Aws::AmazonWebServiceRequest const&, Aws::Endpoint::AWSEndpoint const&, Aws::Http::HttpMethod, char const*, char const*, char const*) const (AWSClient.cpp:716)
+                            n1: 8387564 0x8D41992: Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}::operator()() const (S3Client.cpp:2381)
+                             n1: 8387564 0x8DC67DA: Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> std::__invoke_impl<Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error>, Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&>(std::__invoke_other, Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&) (invoke.h:61)
+                              n0: 8387564 0x8DB5F86: std::enable_if<std::__and_<std::__not_<std::is_void<Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> > >, std::is_convertible<std::__invoke_result<Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&>::type, Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> > >::value, Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> >::type std::__invoke_r<Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error>, Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&>(Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&) (invoke.h:143)
+     n0: 208848 in 2 places, all below massif's threshold (1.00%)
+#-----------
+snapshot=10
+#-----------
+time=103065981776
+mem_heap_B=710684834
+mem_heap_extra_B=1580142
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=11
+#-----------
+time=112660429916
+mem_heap_B=792588198
+mem_heap_extra_B=1623722
+mem_stacks_B=0
+heap_tree=peak
+n3: 792588198 (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+ n1: 759208910 0x7667C39: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::internal_alloc(unsigned long) (allocator.cpp:195)
+  n2: 759208910 0x7667FFD: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::aligned_alloc(unsigned long, bool) (allocator.cpp:304)
+   n1: 733235392 0x5A0A9CA: arcticdb::Buffer::resize(unsigned long) (buffer.hpp:232)
+    n2: 733235392 0x5A0A7A1: arcticdb::Buffer::ensure(unsigned long) (buffer.hpp:177)
+     n2: 733228920 0x5A0A367: arcticdb::Buffer::reserve(unsigned long, std::optional<unsigned long> const&) (buffer.hpp:57)
+      n1: 733197200 0x5F47681: arcticdb::Buffer::Buffer(unsigned long, std::optional<unsigned long>) (buffer.hpp:62)
+       n1: 733197200 0x5F92670: decltype (::new ((void*)(0)) arcticdb::Buffer((declval<unsigned long&>)(), (declval<unsigned long const&>)())) std::construct_at<arcticdb::Buffer, unsigned long&, unsigned long const&>(arcticdb::Buffer*, unsigned long&, unsigned long const&) (stl_construct.h:97)
+        n1: 733197200 0x5F926FE: void std::allocator_traits<std::allocator<arcticdb::Buffer> >::construct<arcticdb::Buffer, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>&, arcticdb::Buffer*, unsigned long&, unsigned long const&) (alloc_traits.h:518)
+         n1: 733197200 0x5F91F9A: std::_Sp_counted_ptr_inplace<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&) (shared_ptr_base.h:519)
+          n1: 733197200 0x5F907B8: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(arcticdb::Buffer*&, std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:650)
+           n1: 733197200 0x5F8F15D: std::__shared_ptr<arcticdb::Buffer, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:1342)
+            n1: 733197200 0x5F8E332: std::shared_ptr<arcticdb::Buffer>::shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr.h:409)
+             n1: 733197200 0x5F84E03: std::shared_ptr<arcticdb::Buffer> std::allocate_shared<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer> const&, unsigned long&, unsigned long const&) (shared_ptr.h:863)
+              n1: 733197200 0x5F5A4EF: std::shared_ptr<arcticdb::Buffer> std::make_shared<arcticdb::Buffer, unsigned long&, unsigned long const&>(unsigned long&, unsigned long const&) (shared_ptr.h:879)
+               n1: 733197200 0x5F45DBA: arcticdb::encode_v1(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&) (encode_v1.cpp:127)
+                n1: 733197200 0x5EE6982: arcticdb::encode_dispatch(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&, arcticdb::EncodingVersion) (codec.cpp:49)
+                 n1: 733197200 0x5B920DC: arcticdb::async::EncodeAtomTask::encode() (tasks.hpp:95)
+                  n1: 733197200 0x5B92243: arcticdb::async::EncodeAtomTask::operator()() (tasks.hpp:104)
+                   n1: 733197200 0x5C134EF: std::enable_if<!std::is_same<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<>, void>::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWithNoUnwrap<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:254)
+                    n1: 733197200 0x5BEC44E: std::enable_if<!folly::isTry<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> >::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:276)
+                     n1: 733197200 0x5BCA254: void folly::Promise<arcticdb::storage::KeySegmentPair>::setWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Promise-inl.h:152)
+                      n1: 733197200 0x5BAFC9D: folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}::operator()() (FutureExecutor.h:75)
+                       n1: 733197200 0x5BEC50B: void folly::detail::function::FunctionTraits<void ()>::callBig<folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}>(folly::detail::function::Data&) (Function.h:359)
+                        n1: 733197200 0x5979E2A: folly::detail::function::FunctionTraits<void ()>::operator()() (Function.h:374)
+                         n1: 733197200 0x834C7F5: catch_exception<folly::Function<void()>&, void (&)(char const*) noexcept, char const*&> (Exception.h:285)
+                          n1: 733197200 0x834C7F5: invokeCatchingExns<folly::Function<void()> > (Executor.h:234)
+                           n1: 733197200 0x834C7F5: folly::ThreadPoolExecutor::runTask(std::shared_ptr<folly::ThreadPoolExecutor::Thread> const&, folly::ThreadPoolExecutor::Task&&) (ThreadPoolExecutor.cpp:102)
+                            n1: 733197200 0x8311A65: folly::CPUThreadPoolExecutor::threadRun(std::shared_ptr<folly::ThreadPoolExecutor::Thread>) (CPUThreadPoolExecutor.cpp:333)
+                             n1: 733197200 0x8357908: void std::__invoke_impl<void, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(std::__invoke_memfun_deref, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:74)
+                              n1: 733197200 0x8356BBE: std::__invoke_result<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>::type std::__invoke<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:96)
+                               n1: 733197200 0x8355AEF: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::__call<void, , 0ul, 1ul>(std::tuple<>&&, std::_Index_tuple<0ul, 1ul>) (functional:420)
+                                n0: 733197200 0x83547F6: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::operator()<, void>() (functional:503)
+      n0: 31720 in 2 places, all below massif's threshold (1.00%)
+     n0: 6472 in 5 places, all below massif's threshold (1.00%)
+   n2: 25973518 0x5991525: arcticdb::ChunkedBufferImpl<3968ul>::add_block(unsigned long, unsigned long) (chunked_buffer.hpp:369)
+    n2: 14640558 0x59795DB: arcticdb::ChunkedBufferImpl<3968ul>::ensure(unsigned long, bool) (chunked_buffer.hpp:208)
+     n2: 14607820 0x5A0E290: arcticdb::CursoredBuffer<arcticdb::ChunkedBufferImpl<3968ul> >::ensure_bytes(unsigned long) (cursored_buffer.hpp:57)
+      n1: 11803328 0x5EABB1B: arcticdb::Column::allocate_data(unsigned long) (column.hpp:549)
+       n0: 11803328 in 13 places, all below massif's threshold (1.00%)
+      n0: 2804492 in 1 place, below massif's threshold (1.00%)
+     n0: 32738 in 1 place, below massif's threshold (1.00%)
+    n0: 11332960 in 3 places, all below massif's threshold (1.00%)
+ n0: 24782876 in 1133 places, all below massif's threshold (1.00%)
+ n1: 8596412 0x7667CA0: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::internal_realloc(unsigned char*, unsigned long) (allocator.cpp:246)
+  n1: 8596412 0x76680DB: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::realloc(std::pair<unsigned char*, long>, unsigned long) (allocator.cpp:313)
+   n1: 8596412 0x5A0A9AC: arcticdb::Buffer::resize(unsigned long) (buffer.hpp:230)
+    n2: 8596412 0x5A0A7A1: arcticdb::Buffer::ensure(unsigned long) (buffer.hpp:177)
+     n1: 8387564 0x7C34AA2: arcticdb::storage::s3::S3StreamBuffer::xsputn(char const*, long) (s3_client_impl.cpp:82)
+      n1: 8387564 0xABDA375: std::ostream::write(char const*, long) (in /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.30)
+       n1: 8387564 0x8E9AC26: WriteData(char*, unsigned long, unsigned long, void*) (CurlHttpClient.cpp:231)
+        n1: 8387564 0x8FC21BA: chop_write (sendf.c:321)
+         n1: 8387564 0x8FC255F: Curl_client_write (sendf.c:415)
+          n1: 8387564 0x8FD22E8: readwrite_data (transfer.c:709)
+           n1: 8387564 0x8FD3016: Curl_readwrite (transfer.c:1133)
+            n1: 8387564 0x8FBB174: multi_runsingle (multi.c:2443)
+             n1: 8387564 0x8FBBA9A: curl_multi_perform (multi.c:2740)
+              n1: 8387564 0x8FAA79D: easy_transfer (easy.c:679)
+               n1: 8387564 0x8FAAA22: easy_perform (easy.c:769)
+                n1: 8387564 0x8FAAA8D: curl_easy_perform (easy.c:788)
+                 n1: 8387564 0x8E9E248: Aws::Http::CurlHttpClient::MakeRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::Utils::RateLimits::RateLimiterInterface*, Aws::Utils::RateLimits::RateLimiterInterface*) const (CurlHttpClient.cpp:832)
+                  n1: 8387564 0x8F1F6A9: Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}::operator()() const (AWSClient.cpp:582)
+                   n1: 8387564 0x8F352BA: std::shared_ptr<Aws::Http::HttpResponse> std::__invoke_impl<std::shared_ptr<Aws::Http::HttpResponse>, Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&>(std::__invoke_other, Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&) (invoke.h:61)
+                    n1: 8387564 0x8F31CCA: std::enable_if<std::__and_<std::__not_<std::is_void<std::shared_ptr<Aws::Http::HttpResponse> > >, std::is_convertible<std::__invoke_result<Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&>::type, std::shared_ptr<Aws::Http::HttpResponse> > >::value, std::shared_ptr<Aws::Http::HttpResponse> >::type std::__invoke_r<std::shared_ptr<Aws::Http::HttpResponse>, Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&>(Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}&) (invoke.h:143)
+                     n1: 8387564 0x8F2DFB8: std::_Function_handler<std::shared_ptr<Aws::Http::HttpResponse> (), Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const::{lambda()#3}>::_M_invoke(std::_Any_data const&) (std_function.h:291)
+                      n1: 8387564 0x8F6314B: std::function<std::shared_ptr<Aws::Http::HttpResponse> ()>::operator()() const (std_function.h:590)
+                       n1: 8387564 0x8F53484: std::shared_ptr<Aws::Http::HttpResponse> smithy::components::tracing::TracingUtils::MakeCallWithTiming<std::shared_ptr<Aws::Http::HttpResponse> >(std::function<std::shared_ptr<Aws::Http::HttpResponse> ()>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, smithy::components::tracing::Meter const&, std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >&&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) (TracingUtils.h:66)
+                        n1: 8387564 0x8F2049F: Aws::Client::AWSClient::AttemptOneRequest(std::shared_ptr<Aws::Http::HttpRequest> const&, Aws::AmazonWebServiceRequest const&, char const*, char const*, char const*) const (AWSClient.cpp:586)
+                         n1: 8387564 0x8F1BDBF: Aws::Client::AWSClient::AttemptExhaustively(Aws::Http::URI const&, Aws::AmazonWebServiceRequest const&, Aws::Http::HttpMethod, char const*, char const*, char const*) const (AWSClient.cpp:297)
+                          n1: 8387564 0x8F2181D: Aws::Client::AWSClient::MakeRequestWithUnparsedResponse(Aws::Http::URI const&, Aws::AmazonWebServiceRequest const&, Aws::Http::HttpMethod, char const*, char const*, char const*) const (AWSClient.cpp:666)
+                           n1: 8387564 0x8F21D0B: Aws::Client::AWSClient::MakeRequestWithUnparsedResponse(Aws::AmazonWebServiceRequest const&, Aws::Endpoint::AWSEndpoint const&, Aws::Http::HttpMethod, char const*, char const*, char const*) const (AWSClient.cpp:716)
+                            n1: 8387564 0x8D41992: Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}::operator()() const (S3Client.cpp:2381)
+                             n1: 8387564 0x8DC67DA: Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> std::__invoke_impl<Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error>, Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&>(std::__invoke_other, Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&) (invoke.h:61)
+                              n0: 8387564 0x8DB5F86: std::enable_if<std::__and_<std::__not_<std::is_void<Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> > >, std::is_convertible<std::__invoke_result<Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&>::type, Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> > >::value, Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> >::type std::__invoke_r<Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error>, Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&>(Aws::S3::S3Client::GetObject(Aws::S3::Model::GetObjectRequest const&) const::{lambda()#1}&) (invoke.h:143)
+     n0: 208848 in 2 places, all below massif's threshold (1.00%)
+#-----------
+snapshot=12
+#-----------
+time=127478826631
+mem_heap_B=762350856
+mem_heap_extra_B=1619408
+mem_stacks_B=0
+heap_tree=detailed
+n2: 762350856 (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+ n1: 737159686 0x7667C39: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::internal_alloc(unsigned long) (allocator.cpp:195)
+  n2: 737159686 0x7667FFD: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::aligned_alloc(unsigned long, bool) (allocator.cpp:304)
+   n1: 718567872 0x5A0A9CA: arcticdb::Buffer::resize(unsigned long) (buffer.hpp:232)
+    n2: 718567872 0x5A0A7A1: arcticdb::Buffer::ensure(unsigned long) (buffer.hpp:177)
+     n2: 718564248 0x5A0A367: arcticdb::Buffer::reserve(unsigned long, std::optional<unsigned long> const&) (buffer.hpp:57)
+      n1: 718533256 0x5F47681: arcticdb::Buffer::Buffer(unsigned long, std::optional<unsigned long>) (buffer.hpp:62)
+       n1: 718533256 0x5F92670: decltype (::new ((void*)(0)) arcticdb::Buffer((declval<unsigned long&>)(), (declval<unsigned long const&>)())) std::construct_at<arcticdb::Buffer, unsigned long&, unsigned long const&>(arcticdb::Buffer*, unsigned long&, unsigned long const&) (stl_construct.h:97)
+        n1: 718533256 0x5F926FE: void std::allocator_traits<std::allocator<arcticdb::Buffer> >::construct<arcticdb::Buffer, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>&, arcticdb::Buffer*, unsigned long&, unsigned long const&) (alloc_traits.h:518)
+         n1: 718533256 0x5F91F9A: std::_Sp_counted_ptr_inplace<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&) (shared_ptr_base.h:519)
+          n1: 718533256 0x5F907B8: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(arcticdb::Buffer*&, std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:650)
+           n1: 718533256 0x5F8F15D: std::__shared_ptr<arcticdb::Buffer, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:1342)
+            n1: 718533256 0x5F8E332: std::shared_ptr<arcticdb::Buffer>::shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr.h:409)
+             n1: 718533256 0x5F84E03: std::shared_ptr<arcticdb::Buffer> std::allocate_shared<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer> const&, unsigned long&, unsigned long const&) (shared_ptr.h:863)
+              n1: 718533256 0x5F5A4EF: std::shared_ptr<arcticdb::Buffer> std::make_shared<arcticdb::Buffer, unsigned long&, unsigned long const&>(unsigned long&, unsigned long const&) (shared_ptr.h:879)
+               n1: 718533256 0x5F45DBA: arcticdb::encode_v1(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&) (encode_v1.cpp:127)
+                n1: 718533256 0x5EE6982: arcticdb::encode_dispatch(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&, arcticdb::EncodingVersion) (codec.cpp:49)
+                 n1: 718533256 0x5B920DC: arcticdb::async::EncodeAtomTask::encode() (tasks.hpp:95)
+                  n1: 718533256 0x5B92243: arcticdb::async::EncodeAtomTask::operator()() (tasks.hpp:104)
+                   n1: 718533256 0x5C134EF: std::enable_if<!std::is_same<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<>, void>::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWithNoUnwrap<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:254)
+                    n1: 718533256 0x5BEC44E: std::enable_if<!folly::isTry<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> >::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:276)
+                     n1: 718533256 0x5BCA254: void folly::Promise<arcticdb::storage::KeySegmentPair>::setWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Promise-inl.h:152)
+                      n1: 718533256 0x5BAFC9D: folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}::operator()() (FutureExecutor.h:75)
+                       n1: 718533256 0x5BEC50B: void folly::detail::function::FunctionTraits<void ()>::callBig<folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}>(folly::detail::function::Data&) (Function.h:359)
+                        n1: 718533256 0x5979E2A: folly::detail::function::FunctionTraits<void ()>::operator()() (Function.h:374)
+                         n1: 718533256 0x834C7F5: catch_exception<folly::Function<void()>&, void (&)(char const*) noexcept, char const*&> (Exception.h:285)
+                          n1: 718533256 0x834C7F5: invokeCatchingExns<folly::Function<void()> > (Executor.h:234)
+                           n1: 718533256 0x834C7F5: folly::ThreadPoolExecutor::runTask(std::shared_ptr<folly::ThreadPoolExecutor::Thread> const&, folly::ThreadPoolExecutor::Task&&) (ThreadPoolExecutor.cpp:102)
+                            n1: 718533256 0x8311A65: folly::CPUThreadPoolExecutor::threadRun(std::shared_ptr<folly::ThreadPoolExecutor::Thread>) (CPUThreadPoolExecutor.cpp:333)
+                             n1: 718533256 0x8357908: void std::__invoke_impl<void, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(std::__invoke_memfun_deref, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:74)
+                              n1: 718533256 0x8356BBE: std::__invoke_result<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>::type std::__invoke<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:96)
+                               n1: 718533256 0x8355AEF: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::__call<void, , 0ul, 1ul>(std::tuple<>&&, std::_Index_tuple<0ul, 1ul>) (functional:420)
+                                n0: 718533256 0x83547F6: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::operator()<, void>() (functional:503)
+      n0: 30992 in 2 places, all below massif's threshold (1.00%)
+     n0: 3624 in 5 places, all below massif's threshold (1.00%)
+   n1: 18591814 0x5991525: arcticdb::ChunkedBufferImpl<3968ul>::add_block(unsigned long, unsigned long) (chunked_buffer.hpp:369)
+    n0: 18591814 in 4 places, all below massif's threshold (1.00%)
+ n0: 25191170 in 1134 places, all below massif's threshold (1.00%)
+#-----------
+snapshot=13
+#-----------
+time=139100910009
+mem_heap_B=749756527
+mem_heap_extra_B=1614705
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=14
+#-----------
+time=147733106332
+mem_heap_B=740465008
+mem_heap_extra_B=1604336
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=15
+#-----------
+time=157877501150
+mem_heap_B=769707580
+mem_heap_extra_B=1618716
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=16
+#-----------
+time=165326817100
+mem_heap_B=747712069
+mem_heap_extra_B=1606179
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=17
+#-----------
+time=173983678148
+mem_heap_B=777059946
+mem_heap_extra_B=1624582
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=18
+#-----------
+time=181192263263
+mem_heap_B=777051349
+mem_heap_extra_B=1624299
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=19
+#-----------
+time=190209265729
+mem_heap_B=719112816
+mem_heap_extra_B=1600120
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=20
+#-----------
+time=197007051029
+mem_heap_B=769736090
+mem_heap_extra_B=1621238
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=21
+#-----------
+time=208382460694
+mem_heap_B=784412814
+mem_heap_extra_B=1627738
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=22
+#-----------
+time=217302237888
+mem_heap_B=733597768
+mem_heap_extra_B=1601280
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=23
+#-----------
+time=226216830090
+mem_heap_B=769815052
+mem_heap_extra_B=1624796
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=24
+#-----------
+time=232930936225
+mem_heap_B=691220190
+mem_heap_extra_B=1597962
+mem_stacks_B=0
+heap_tree=detailed
+n2: 691220190 (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+ n1: 663713886 0x7667C39: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::internal_alloc(unsigned long) (allocator.cpp:195)
+  n2: 663713886 0x7667FFD: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::aligned_alloc(unsigned long, bool) (allocator.cpp:304)
+   n1: 645244952 0x5A0A9CA: arcticdb::Buffer::resize(unsigned long) (buffer.hpp:232)
+    n2: 645244952 0x5A0A7A1: arcticdb::Buffer::ensure(unsigned long) (buffer.hpp:177)
+     n2: 645241408 0x5A0A367: arcticdb::Buffer::reserve(unsigned long, std::optional<unsigned long> const&) (buffer.hpp:57)
+      n1: 645213536 0x5F47681: arcticdb::Buffer::Buffer(unsigned long, std::optional<unsigned long>) (buffer.hpp:62)
+       n1: 645213536 0x5F92670: decltype (::new ((void*)(0)) arcticdb::Buffer((declval<unsigned long&>)(), (declval<unsigned long const&>)())) std::construct_at<arcticdb::Buffer, unsigned long&, unsigned long const&>(arcticdb::Buffer*, unsigned long&, unsigned long const&) (stl_construct.h:97)
+        n1: 645213536 0x5F926FE: void std::allocator_traits<std::allocator<arcticdb::Buffer> >::construct<arcticdb::Buffer, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>&, arcticdb::Buffer*, unsigned long&, unsigned long const&) (alloc_traits.h:518)
+         n1: 645213536 0x5F91F9A: std::_Sp_counted_ptr_inplace<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&) (shared_ptr_base.h:519)
+          n1: 645213536 0x5F907B8: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(arcticdb::Buffer*&, std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:650)
+           n1: 645213536 0x5F8F15D: std::__shared_ptr<arcticdb::Buffer, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:1342)
+            n1: 645213536 0x5F8E332: std::shared_ptr<arcticdb::Buffer>::shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr.h:409)
+             n1: 645213536 0x5F84E03: std::shared_ptr<arcticdb::Buffer> std::allocate_shared<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer> const&, unsigned long&, unsigned long const&) (shared_ptr.h:863)
+              n1: 645213536 0x5F5A4EF: std::shared_ptr<arcticdb::Buffer> std::make_shared<arcticdb::Buffer, unsigned long&, unsigned long const&>(unsigned long&, unsigned long const&) (shared_ptr.h:879)
+               n1: 645213536 0x5F45DBA: arcticdb::encode_v1(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&) (encode_v1.cpp:127)
+                n1: 645213536 0x5EE6982: arcticdb::encode_dispatch(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&, arcticdb::EncodingVersion) (codec.cpp:49)
+                 n1: 645213536 0x5B920DC: arcticdb::async::EncodeAtomTask::encode() (tasks.hpp:95)
+                  n1: 645213536 0x5B92243: arcticdb::async::EncodeAtomTask::operator()() (tasks.hpp:104)
+                   n1: 645213536 0x5C134EF: std::enable_if<!std::is_same<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<>, void>::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWithNoUnwrap<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:254)
+                    n1: 645213536 0x5BEC44E: std::enable_if<!folly::isTry<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> >::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:276)
+                     n1: 645213536 0x5BCA254: void folly::Promise<arcticdb::storage::KeySegmentPair>::setWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Promise-inl.h:152)
+                      n1: 645213536 0x5BAFC9D: folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}::operator()() (FutureExecutor.h:75)
+                       n1: 645213536 0x5BEC50B: void folly::detail::function::FunctionTraits<void ()>::callBig<folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}>(folly::detail::function::Data&) (Function.h:359)
+                        n1: 645213536 0x5979E2A: folly::detail::function::FunctionTraits<void ()>::operator()() (Function.h:374)
+                         n1: 645213536 0x834C7F5: catch_exception<folly::Function<void()>&, void (&)(char const*) noexcept, char const*&> (Exception.h:285)
+                          n1: 645213536 0x834C7F5: invokeCatchingExns<folly::Function<void()> > (Executor.h:234)
+                           n1: 645213536 0x834C7F5: folly::ThreadPoolExecutor::runTask(std::shared_ptr<folly::ThreadPoolExecutor::Thread> const&, folly::ThreadPoolExecutor::Task&&) (ThreadPoolExecutor.cpp:102)
+                            n1: 645213536 0x8311A65: folly::CPUThreadPoolExecutor::threadRun(std::shared_ptr<folly::ThreadPoolExecutor::Thread>) (CPUThreadPoolExecutor.cpp:333)
+                             n1: 645213536 0x8357908: void std::__invoke_impl<void, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(std::__invoke_memfun_deref, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:74)
+                              n1: 645213536 0x8356BBE: std::__invoke_result<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>::type std::__invoke<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:96)
+                               n1: 645213536 0x8355AEF: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::__call<void, , 0ul, 1ul>(std::tuple<>&&, std::_Index_tuple<0ul, 1ul>) (functional:420)
+                                n0: 645213536 0x83547F6: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::operator()<, void>() (functional:503)
+      n0: 27872 in 2 places, all below massif's threshold (1.00%)
+     n0: 3544 in 5 places, all below massif's threshold (1.00%)
+   n2: 18468934 0x5991525: arcticdb::ChunkedBufferImpl<3968ul>::add_block(unsigned long, unsigned long) (chunked_buffer.hpp:369)
+    n0: 11165024 in 3 places, all below massif's threshold (1.00%)
+    n2: 7303910 0x59795DB: arcticdb::ChunkedBufferImpl<3968ul>::ensure(unsigned long, bool) (chunked_buffer.hpp:208)
+     n1: 7303910 0x5A0E290: arcticdb::CursoredBuffer<arcticdb::ChunkedBufferImpl<3968ul> >::ensure_bytes(unsigned long) (cursored_buffer.hpp:57)
+      n0: 7303910 in 2 places, all below massif's threshold (1.00%)
+     n0: 0 in 1 place, below massif's threshold (1.00%)
+ n0: 27506304 in 1134 places, all below massif's threshold (1.00%)
+#-----------
+snapshot=25
+#-----------
+time=241988404876
+mem_heap_B=748273349
+mem_heap_extra_B=1620851
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=26
+#-----------
+time=255546921346
+mem_heap_B=742274883
+mem_heap_extra_B=1615421
+mem_stacks_B=0
+heap_tree=detailed
+n2: 742274883 (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+ n1: 716531024 0x7667C39: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::internal_alloc(unsigned long) (allocator.cpp:195)
+  n2: 716531024 0x7667FFD: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::aligned_alloc(unsigned long, bool) (allocator.cpp:304)
+   n1: 696573828 0x5A0A9CA: arcticdb::Buffer::resize(unsigned long) (buffer.hpp:232)
+    n2: 696573828 0x5A0A7A1: arcticdb::Buffer::ensure(unsigned long) (buffer.hpp:177)
+     n2: 696567396 0x5A0A367: arcticdb::Buffer::reserve(unsigned long, std::optional<unsigned long> const&) (buffer.hpp:57)
+      n1: 696537340 0x5F47681: arcticdb::Buffer::Buffer(unsigned long, std::optional<unsigned long>) (buffer.hpp:62)
+       n1: 696537340 0x5F92670: decltype (::new ((void*)(0)) arcticdb::Buffer((declval<unsigned long&>)(), (declval<unsigned long const&>)())) std::construct_at<arcticdb::Buffer, unsigned long&, unsigned long const&>(arcticdb::Buffer*, unsigned long&, unsigned long const&) (stl_construct.h:97)
+        n1: 696537340 0x5F926FE: void std::allocator_traits<std::allocator<arcticdb::Buffer> >::construct<arcticdb::Buffer, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>&, arcticdb::Buffer*, unsigned long&, unsigned long const&) (alloc_traits.h:518)
+         n1: 696537340 0x5F91F9A: std::_Sp_counted_ptr_inplace<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&) (shared_ptr_base.h:519)
+          n1: 696537340 0x5F907B8: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(arcticdb::Buffer*&, std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:650)
+           n1: 696537340 0x5F8F15D: std::__shared_ptr<arcticdb::Buffer, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:1342)
+            n1: 696537340 0x5F8E332: std::shared_ptr<arcticdb::Buffer>::shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr.h:409)
+             n1: 696537340 0x5F84E03: std::shared_ptr<arcticdb::Buffer> std::allocate_shared<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer> const&, unsigned long&, unsigned long const&) (shared_ptr.h:863)
+              n1: 696537340 0x5F5A4EF: std::shared_ptr<arcticdb::Buffer> std::make_shared<arcticdb::Buffer, unsigned long&, unsigned long const&>(unsigned long&, unsigned long const&) (shared_ptr.h:879)
+               n1: 696537340 0x5F45DBA: arcticdb::encode_v1(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&) (encode_v1.cpp:127)
+                n1: 696537340 0x5EE6982: arcticdb::encode_dispatch(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&, arcticdb::EncodingVersion) (codec.cpp:49)
+                 n1: 696537340 0x5B920DC: arcticdb::async::EncodeAtomTask::encode() (tasks.hpp:95)
+                  n1: 696537340 0x5B92243: arcticdb::async::EncodeAtomTask::operator()() (tasks.hpp:104)
+                   n1: 696537340 0x5C134EF: std::enable_if<!std::is_same<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<>, void>::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWithNoUnwrap<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:254)
+                    n1: 696537340 0x5BEC44E: std::enable_if<!folly::isTry<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> >::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:276)
+                     n1: 696537340 0x5BCA254: void folly::Promise<arcticdb::storage::KeySegmentPair>::setWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Promise-inl.h:152)
+                      n1: 696537340 0x5BAFC9D: folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}::operator()() (FutureExecutor.h:75)
+                       n1: 696537340 0x5BEC50B: void folly::detail::function::FunctionTraits<void ()>::callBig<folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}>(folly::detail::function::Data&) (Function.h:359)
+                        n1: 696537340 0x5979E2A: folly::detail::function::FunctionTraits<void ()>::operator()() (Function.h:374)
+                         n1: 696537340 0x834C7F5: catch_exception<folly::Function<void()>&, void (&)(char const*) noexcept, char const*&> (Exception.h:285)
+                          n1: 696537340 0x834C7F5: invokeCatchingExns<folly::Function<void()> > (Executor.h:234)
+                           n1: 696537340 0x834C7F5: folly::ThreadPoolExecutor::runTask(std::shared_ptr<folly::ThreadPoolExecutor::Thread> const&, folly::ThreadPoolExecutor::Task&&) (ThreadPoolExecutor.cpp:102)
+                            n1: 696537340 0x8311A65: folly::CPUThreadPoolExecutor::threadRun(std::shared_ptr<folly::ThreadPoolExecutor::Thread>) (CPUThreadPoolExecutor.cpp:333)
+                             n1: 696537340 0x8357908: void std::__invoke_impl<void, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(std::__invoke_memfun_deref, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:74)
+                              n1: 696537340 0x8356BBE: std::__invoke_result<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>::type std::__invoke<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:96)
+                               n1: 696537340 0x8355AEF: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::__call<void, , 0ul, 1ul>(std::tuple<>&&, std::_Index_tuple<0ul, 1ul>) (functional:420)
+                                n0: 696537340 0x83547F6: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::operator()<, void>() (functional:503)
+      n0: 30056 in 2 places, all below massif's threshold (1.00%)
+     n0: 6432 in 5 places, all below massif's threshold (1.00%)
+   n2: 19957196 0x5991525: arcticdb::ChunkedBufferImpl<3968ul>::add_block(unsigned long, unsigned long) (chunked_buffer.hpp:369)
+    n2: 14607820 0x59795DB: arcticdb::ChunkedBufferImpl<3968ul>::ensure(unsigned long, bool) (chunked_buffer.hpp:208)
+     n2: 14607820 0x5A0E290: arcticdb::CursoredBuffer<arcticdb::ChunkedBufferImpl<3968ul> >::ensure_bytes(unsigned long) (cursored_buffer.hpp:57)
+      n1: 11803328 0x5EABB1B: arcticdb::Column::allocate_data(unsigned long) (column.hpp:549)
+       n0: 11803328 in 13 places, all below massif's threshold (1.00%)
+      n0: 2804492 in 1 place, below massif's threshold (1.00%)
+     n0: 0 in 1 place, below massif's threshold (1.00%)
+    n0: 5349376 in 3 places, all below massif's threshold (1.00%)
+ n0: 25743859 in 1134 places, all below massif's threshold (1.00%)
+#-----------
+snapshot=27
+#-----------
+time=266778316105
+mem_heap_B=747858733
+mem_heap_extra_B=1613747
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=28
+#-----------
+time=280227821575
+mem_heap_B=741835631
+mem_heap_extra_B=1609833
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=29
+#-----------
+time=289190105090
+mem_heap_B=721344722
+mem_heap_extra_B=1598702
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=30
+#-----------
+time=301386117272
+mem_heap_B=683145077
+mem_heap_extra_B=1594043
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=31
+#-----------
+time=308881730638
+mem_heap_B=676684669
+mem_heap_extra_B=1581059
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=32
+#-----------
+time=320366141977
+mem_heap_B=630483750
+mem_heap_extra_B=1543618
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=33
+#-----------
+time=331657280323
+mem_heap_B=631226833
+mem_heap_extra_B=1556383
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=34
+#-----------
+time=339160467980
+mem_heap_B=777368603
+mem_heap_extra_B=1632533
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=35
+#-----------
+time=350405430718
+mem_heap_B=691157130
+mem_heap_extra_B=1584462
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=36
+#-----------
+time=361882371284
+mem_heap_B=615924730
+mem_heap_extra_B=1549854
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=37
+#-----------
+time=369395165874
+mem_heap_B=771658749
+mem_heap_extra_B=1641603
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=38
+#-----------
+time=380634193303
+mem_heap_B=771666984
+mem_heap_extra_B=1641744
+mem_stacks_B=0
+heap_tree=detailed
+n2: 771666984 (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+ n1: 745909344 0x7667C39: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::internal_alloc(unsigned long) (allocator.cpp:195)
+  n2: 745909344 0x7667FFD: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::aligned_alloc(unsigned long, bool) (allocator.cpp:304)
+   n1: 725902996 0x5A0A9CA: arcticdb::Buffer::resize(unsigned long) (buffer.hpp:232)
+    n2: 725902996 0x5A0A7A1: arcticdb::Buffer::ensure(unsigned long) (buffer.hpp:177)
+     n2: 725896532 0x5A0A367: arcticdb::Buffer::reserve(unsigned long, std::optional<unsigned long> const&) (buffer.hpp:57)
+      n1: 725865228 0x5F47681: arcticdb::Buffer::Buffer(unsigned long, std::optional<unsigned long>) (buffer.hpp:62)
+       n1: 725865228 0x5F92670: decltype (::new ((void*)(0)) arcticdb::Buffer((declval<unsigned long&>)(), (declval<unsigned long const&>)())) std::construct_at<arcticdb::Buffer, unsigned long&, unsigned long const&>(arcticdb::Buffer*, unsigned long&, unsigned long const&) (stl_construct.h:97)
+        n1: 725865228 0x5F926FE: void std::allocator_traits<std::allocator<arcticdb::Buffer> >::construct<arcticdb::Buffer, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>&, arcticdb::Buffer*, unsigned long&, unsigned long const&) (alloc_traits.h:518)
+         n1: 725865228 0x5F91F9A: std::_Sp_counted_ptr_inplace<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&) (shared_ptr_base.h:519)
+          n1: 725865228 0x5F907B8: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(arcticdb::Buffer*&, std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:650)
+           n1: 725865228 0x5F8F15D: std::__shared_ptr<arcticdb::Buffer, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:1342)
+            n1: 725865228 0x5F8E332: std::shared_ptr<arcticdb::Buffer>::shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr.h:409)
+             n1: 725865228 0x5F84E03: std::shared_ptr<arcticdb::Buffer> std::allocate_shared<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer> const&, unsigned long&, unsigned long const&) (shared_ptr.h:863)
+              n1: 725865228 0x5F5A4EF: std::shared_ptr<arcticdb::Buffer> std::make_shared<arcticdb::Buffer, unsigned long&, unsigned long const&>(unsigned long&, unsigned long const&) (shared_ptr.h:879)
+               n1: 725865228 0x5F45DBA: arcticdb::encode_v1(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&) (encode_v1.cpp:127)
+                n1: 725865228 0x5EE6982: arcticdb::encode_dispatch(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&, arcticdb::EncodingVersion) (codec.cpp:49)
+                 n1: 725865228 0x5B920DC: arcticdb::async::EncodeAtomTask::encode() (tasks.hpp:95)
+                  n1: 725865228 0x5B92243: arcticdb::async::EncodeAtomTask::operator()() (tasks.hpp:104)
+                   n1: 725865228 0x5C134EF: std::enable_if<!std::is_same<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<>, void>::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWithNoUnwrap<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:254)
+                    n1: 725865228 0x5BEC44E: std::enable_if<!folly::isTry<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> >::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:276)
+                     n1: 725865228 0x5BCA254: void folly::Promise<arcticdb::storage::KeySegmentPair>::setWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Promise-inl.h:152)
+                      n1: 725865228 0x5BAFC9D: folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}::operator()() (FutureExecutor.h:75)
+                       n1: 725865228 0x5BEC50B: void folly::detail::function::FunctionTraits<void ()>::callBig<folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}>(folly::detail::function::Data&) (Function.h:359)
+                        n1: 725865228 0x5979E2A: folly::detail::function::FunctionTraits<void ()>::operator()() (Function.h:374)
+                         n1: 725865228 0x834C7F5: catch_exception<folly::Function<void()>&, void (&)(char const*) noexcept, char const*&> (Exception.h:285)
+                          n1: 725865228 0x834C7F5: invokeCatchingExns<folly::Function<void()> > (Executor.h:234)
+                           n1: 725865228 0x834C7F5: folly::ThreadPoolExecutor::runTask(std::shared_ptr<folly::ThreadPoolExecutor::Thread> const&, folly::ThreadPoolExecutor::Task&&) (ThreadPoolExecutor.cpp:102)
+                            n1: 725865228 0x8311A65: folly::CPUThreadPoolExecutor::threadRun(std::shared_ptr<folly::ThreadPoolExecutor::Thread>) (CPUThreadPoolExecutor.cpp:333)
+                             n1: 725865228 0x8357908: void std::__invoke_impl<void, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(std::__invoke_memfun_deref, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:74)
+                              n1: 725865228 0x8356BBE: std::__invoke_result<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>::type std::__invoke<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:96)
+                               n1: 725865228 0x8355AEF: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::__call<void, , 0ul, 1ul>(std::tuple<>&&, std::_Index_tuple<0ul, 1ul>) (functional:420)
+                                n0: 725865228 0x83547F6: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::operator()<, void>() (functional:503)
+      n0: 31304 in 2 places, all below massif's threshold (1.00%)
+     n0: 6464 in 5 places, all below massif's threshold (1.00%)
+   n2: 20006348 0x5991525: arcticdb::ChunkedBufferImpl<3968ul>::add_block(unsigned long, unsigned long) (chunked_buffer.hpp:369)
+    n2: 14607820 0x59795DB: arcticdb::ChunkedBufferImpl<3968ul>::ensure(unsigned long, bool) (chunked_buffer.hpp:208)
+     n2: 14607820 0x5A0E290: arcticdb::CursoredBuffer<arcticdb::ChunkedBufferImpl<3968ul> >::ensure_bytes(unsigned long) (cursored_buffer.hpp:57)
+      n1: 11803328 0x5EABB1B: arcticdb::Column::allocate_data(unsigned long) (column.hpp:549)
+       n0: 11803328 in 13 places, all below massif's threshold (1.00%)
+      n0: 2804492 in 1 place, below massif's threshold (1.00%)
+     n0: 0 in 1 place, below massif's threshold (1.00%)
+    n0: 5398528 in 3 places, all below massif's threshold (1.00%)
+ n0: 25757640 in 1134 places, all below massif's threshold (1.00%)
+#-----------
+snapshot=39
+#-----------
+time=391931325442
+mem_heap_B=704172568
+mem_heap_extra_B=1601368
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=40
+#-----------
+time=399581965929
+mem_heap_B=602973698
+mem_heap_extra_B=1544702
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=41
+#-----------
+time=407112919524
+mem_heap_B=755564631
+mem_heap_extra_B=1630081
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=42
+#-----------
+time=422161178584
+mem_heap_B=727295389
+mem_heap_extra_B=1614995
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=43
+#-----------
+time=429821688806
+mem_heap_B=605093844
+mem_heap_extra_B=1581540
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=44
+#-----------
+time=437285066045
+mem_heap_B=777641699
+mem_heap_extra_B=1643917
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=45
+#-----------
+time=448649237103
+mem_heap_B=696898413
+mem_heap_extra_B=1601603
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=46
+#-----------
+time=456247877314
+mem_heap_B=567839868
+mem_heap_extra_B=1546420
+mem_stacks_B=0
+heap_tree=detailed
+n2: 567839868 (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+ n1: 538856026 0x7667C39: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::internal_alloc(unsigned long) (allocator.cpp:195)
+  n2: 538856026 0x7667FFD: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::aligned_alloc(unsigned long, bool) (allocator.cpp:304)
+   n1: 520595988 0x5A0A9CA: arcticdb::Buffer::resize(unsigned long) (buffer.hpp:232)
+    n2: 520595988 0x5A0A7A1: arcticdb::Buffer::ensure(unsigned long) (buffer.hpp:177)
+     n2: 520592580 0x5A0A367: arcticdb::Buffer::reserve(unsigned long, std::optional<unsigned long> const&) (buffer.hpp:57)
+      n1: 520570012 0x5F47681: arcticdb::Buffer::Buffer(unsigned long, std::optional<unsigned long>) (buffer.hpp:62)
+       n1: 520570012 0x5F92670: decltype (::new ((void*)(0)) arcticdb::Buffer((declval<unsigned long&>)(), (declval<unsigned long const&>)())) std::construct_at<arcticdb::Buffer, unsigned long&, unsigned long const&>(arcticdb::Buffer*, unsigned long&, unsigned long const&) (stl_construct.h:97)
+        n1: 520570012 0x5F926FE: void std::allocator_traits<std::allocator<arcticdb::Buffer> >::construct<arcticdb::Buffer, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>&, arcticdb::Buffer*, unsigned long&, unsigned long const&) (alloc_traits.h:518)
+         n1: 520570012 0x5F91F9A: std::_Sp_counted_ptr_inplace<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&) (shared_ptr_base.h:519)
+          n1: 520570012 0x5F907B8: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(arcticdb::Buffer*&, std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:650)
+           n1: 520570012 0x5F8F15D: std::__shared_ptr<arcticdb::Buffer, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:1342)
+            n1: 520570012 0x5F8E332: std::shared_ptr<arcticdb::Buffer>::shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr.h:409)
+             n1: 520570012 0x5F84E03: std::shared_ptr<arcticdb::Buffer> std::allocate_shared<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer> const&, unsigned long&, unsigned long const&) (shared_ptr.h:863)
+              n1: 520570012 0x5F5A4EF: std::shared_ptr<arcticdb::Buffer> std::make_shared<arcticdb::Buffer, unsigned long&, unsigned long const&>(unsigned long&, unsigned long const&) (shared_ptr.h:879)
+               n1: 520570012 0x5F45DBA: arcticdb::encode_v1(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&) (encode_v1.cpp:127)
+                n1: 520570012 0x5EE6982: arcticdb::encode_dispatch(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&, arcticdb::EncodingVersion) (codec.cpp:49)
+                 n1: 520570012 0x5B920DC: arcticdb::async::EncodeAtomTask::encode() (tasks.hpp:95)
+                  n1: 520570012 0x5B92243: arcticdb::async::EncodeAtomTask::operator()() (tasks.hpp:104)
+                   n1: 520570012 0x5C134EF: std::enable_if<!std::is_same<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<>, void>::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWithNoUnwrap<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:254)
+                    n1: 520570012 0x5BEC44E: std::enable_if<!folly::isTry<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> >::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:276)
+                     n1: 520570012 0x5BCA254: void folly::Promise<arcticdb::storage::KeySegmentPair>::setWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Promise-inl.h:152)
+                      n1: 520570012 0x5BAFC9D: folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}::operator()() (FutureExecutor.h:75)
+                       n1: 520570012 0x5BEC50B: void folly::detail::function::FunctionTraits<void ()>::callBig<folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}>(folly::detail::function::Data&) (Function.h:359)
+                        n1: 520570012 0x5979E2A: folly::detail::function::FunctionTraits<void ()>::operator()() (Function.h:374)
+                         n1: 520570012 0x834C7F5: catch_exception<folly::Function<void()>&, void (&)(char const*) noexcept, char const*&> (Exception.h:285)
+                          n1: 520570012 0x834C7F5: invokeCatchingExns<folly::Function<void()> > (Executor.h:234)
+                           n1: 520570012 0x834C7F5: folly::ThreadPoolExecutor::runTask(std::shared_ptr<folly::ThreadPoolExecutor::Thread> const&, folly::ThreadPoolExecutor::Task&&) (ThreadPoolExecutor.cpp:102)
+                            n1: 520570012 0x8311A65: folly::CPUThreadPoolExecutor::threadRun(std::shared_ptr<folly::ThreadPoolExecutor::Thread>) (CPUThreadPoolExecutor.cpp:333)
+                             n1: 520570012 0x8357908: void std::__invoke_impl<void, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(std::__invoke_memfun_deref, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:74)
+                              n1: 520570012 0x8356BBE: std::__invoke_result<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>::type std::__invoke<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:96)
+                               n1: 520570012 0x8355AEF: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::__call<void, , 0ul, 1ul>(std::tuple<>&&, std::_Index_tuple<0ul, 1ul>) (functional:420)
+                                n0: 520570012 0x83547F6: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::operator()<, void>() (functional:503)
+      n0: 22568 in 2 places, all below massif's threshold (1.00%)
+     n0: 3408 in 5 places, all below massif's threshold (1.00%)
+   n3: 18260038 0x5991525: arcticdb::ChunkedBufferImpl<3968ul>::add_block(unsigned long, unsigned long) (chunked_buffer.hpp:369)
+    n2: 7303910 0x59795DB: arcticdb::ChunkedBufferImpl<3968ul>::ensure(unsigned long, bool) (chunked_buffer.hpp:208)
+     n2: 7303910 0x5A0E290: arcticdb::CursoredBuffer<arcticdb::ChunkedBufferImpl<3968ul> >::ensure_bytes(unsigned long) (cursored_buffer.hpp:57)
+      n1: 5901664 0x5EABB1B: arcticdb::Column::allocate_data(unsigned long) (column.hpp:549)
+       n0: 5901664 in 13 places, all below massif's threshold (1.00%)
+      n0: 1402246 in 1 place, below massif's threshold (1.00%)
+     n0: 0 in 1 place, below massif's threshold (1.00%)
+    n2: 5901664 0x5EAC11F: arcticdb::ChunkedBufferImpl<3968ul>::reserve(unsigned long) (chunked_buffer.hpp:111)
+     n1: 5901664 0x5EB3E38: arcticdb::ChunkedBufferImpl<3968ul>::ChunkedBufferImpl(unsigned long) (chunked_buffer.hpp:95)
+      n1: 5901664 0x5EAD034: arcticdb::CursoredBuffer<arcticdb::ChunkedBufferImpl<3968ul> >::CursoredBuffer(unsigned long, arcticdb::entity::AllocationType) (cursored_buffer.hpp:26)
+       n1: 5901664 0x5EAB79B: arcticdb::Column::Column(arcticdb::entity::TypeDescriptor, unsigned long, arcticdb::entity::AllocationType, arcticdb::entity::Sparsity, arcticdb::entity::DataTypeMode) (column.hpp:236)
+        n1: 5901664 0x6233301: decltype (::new ((void*)(0)) arcticdb::Column((declval<arcticdb::entity::TypeDescriptor const&>)(), (declval<unsigned long&>)(), (declval<arcticdb::entity::AllocationType&>)(), (declval<arcticdb::entity::Sparsity&>)(), (declval<arcticdb::entity::DataTypeMode&>)())) std::construct_at<arcticdb::Column, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::Column*, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (stl_construct.h:97)
+         n1: 5901664 0x62333D1: void std::allocator_traits<std::allocator<arcticdb::Column> >::construct<arcticdb::Column, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::Column>&, arcticdb::Column*, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (alloc_traits.h:518)
+          n1: 5901664 0x61E708E: std::_Sp_counted_ptr_inplace<arcticdb::Column, std::allocator<arcticdb::Column>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::Column>, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:519)
+           n1: 5901664 0x6185C8E: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<arcticdb::Column, std::allocator<arcticdb::Column>, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::Column*&, std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Column> >, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:650)
+            n1: 5901664 0x6145609: std::__shared_ptr<arcticdb::Column, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<arcticdb::Column>, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Column> >, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:1342)
+             n1: 5901664 0x60EEF7A: std::shared_ptr<arcticdb::Column>::shared_ptr<std::allocator<arcticdb::Column>, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Column> >, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:409)
+              n1: 5901664 0x60C82BE: std::shared_ptr<arcticdb::Column> std::allocate_shared<arcticdb::Column, std::allocator<arcticdb::Column>, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::Column> const&, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:863)
+               n1: 5901664 0x60A08C9: std::shared_ptr<arcticdb::Column> std::make_shared<arcticdb::Column, arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::entity::TypeDescriptor const&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:879)
+                n1: 5901664 0x605E8C4: arcticdb::SegmentInMemoryImpl::create_columns(unsigned long, unsigned long, arcticdb::entity::AllocationType, arcticdb::entity::Sparsity, arcticdb::entity::DataTypeMode) (memory_segment_impl.cpp:98)
+                 n1: 5901664 0x605EC54: arcticdb::SegmentInMemoryImpl::on_descriptor_change(arcticdb::entity::StreamDescriptor const&, unsigned long, arcticdb::entity::AllocationType, arcticdb::entity::Sparsity, arcticdb::entity::DataTypeMode) (memory_segment_impl.cpp:139)
+                  n1: 5901664 0x605DFF5: arcticdb::SegmentInMemoryImpl::SegmentInMemoryImpl(arcticdb::entity::StreamDescriptor const&, unsigned long, arcticdb::entity::AllocationType, arcticdb::entity::Sparsity, arcticdb::entity::DataTypeMode) (memory_segment_impl.cpp:28)
+                   n1: 5901664 0x59EB32B: decltype (::new ((void*)(0)) arcticdb::SegmentInMemoryImpl((declval<arcticdb::entity::StreamDescriptor>)(), (declval<unsigned long&>)(), (declval<arcticdb::entity::AllocationType&>)(), (declval<arcticdb::entity::Sparsity&>)(), (declval<arcticdb::entity::DataTypeMode&>)())) std::construct_at<arcticdb::SegmentInMemoryImpl, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::SegmentInMemoryImpl*, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (stl_construct.h:97)
+                    n1: 5901664 0x59EB3E7: void std::allocator_traits<std::allocator<arcticdb::SegmentInMemoryImpl> >::construct<arcticdb::SegmentInMemoryImpl, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::SegmentInMemoryImpl>&, arcticdb::SegmentInMemoryImpl*, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (alloc_traits.h:518)
+                     n1: 5901664 0x59E28BA: std::_Sp_counted_ptr_inplace<arcticdb::SegmentInMemoryImpl, std::allocator<arcticdb::SegmentInMemoryImpl>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::SegmentInMemoryImpl>, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:519)
+                      n1: 5901664 0x59D3298: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<arcticdb::SegmentInMemoryImpl, std::allocator<arcticdb::SegmentInMemoryImpl>, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::SegmentInMemoryImpl*&, std::_Sp_alloc_shared_tag<std::allocator<arcticdb::SegmentInMemoryImpl> >, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:650)
+                       n1: 5901664 0x59BF717: std::__shared_ptr<arcticdb::SegmentInMemoryImpl, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<arcticdb::SegmentInMemoryImpl>, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::SegmentInMemoryImpl> >, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr_base.h:1342)
+                        n1: 5901664 0x59A77E8: std::shared_ptr<arcticdb::SegmentInMemoryImpl>::shared_ptr<std::allocator<arcticdb::SegmentInMemoryImpl>, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::SegmentInMemoryImpl> >, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:409)
+                         n1: 5901664 0x5992F07: std::shared_ptr<arcticdb::SegmentInMemoryImpl> std::allocate_shared<arcticdb::SegmentInMemoryImpl, std::allocator<arcticdb::SegmentInMemoryImpl>, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(std::allocator<arcticdb::SegmentInMemoryImpl> const&, arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:863)
+                          n1: 5901664 0x5979BFF: std::shared_ptr<arcticdb::SegmentInMemoryImpl> std::make_shared<arcticdb::SegmentInMemoryImpl, arcticdb::entity::StreamDescriptor, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&>(arcticdb::entity::StreamDescriptor&&, unsigned long&, arcticdb::entity::AllocationType&, arcticdb::entity::Sparsity&, arcticdb::entity::DataTypeMode&) (shared_ptr.h:879)
+                           n2: 5901664 0x5969F86: arcticdb::SegmentInMemory::SegmentInMemory(arcticdb::entity::StreamDescriptor&&, unsigned long, arcticdb::entity::AllocationType, arcticdb::entity::Sparsity, arcticdb::entity::DataTypeMode) (memory_segment.hpp:48)
+                            n1: 5901664 0x5ADAEF8: arcticdb::stream::Aggregator<arcticdb::stream::TimeseriesIndex, arcticdb::stream::FixedSchema, arcticdb::stream::RowCountSegmentPolicy, arcticdb::stream::DenseColumnPolicy>::commit_impl(bool) (aggregator-inl.hpp:30)
+                             n1: 5901664 0x78918AE: arcticdb::stream::SegmentAggregator<arcticdb::stream::TimeseriesIndex, arcticdb::stream::FixedSchema, arcticdb::stream::RowCountSegmentPolicy, arcticdb::stream::DenseColumnPolicy>::commit() (segment_aggregator.hpp:105)
+                              n0: 5901664 0x78914FB: arcticdb::stream::SegmentAggregator<arcticdb::stream::TimeseriesIndex, arcticdb::stream::FixedSchema, arcticdb::stream::RowCountSegmentPolicy, arcticdb::stream::DenseColumnPolicy>::add_segment(arcticdb::SegmentInMemory&&, arcticdb::pipelines::FrameSlice const&, bool) (segment_aggregator.hpp:71)
+                            n0: 0 in 1 place, below massif's threshold (1.00%)
+     n0: 0 in 1 place, below massif's threshold (1.00%)
+    n0: 5054464 in 2 places, all below massif's threshold (1.00%)
+ n0: 28983842 in 1134 places, all below massif's threshold (1.00%)
+#-----------
+snapshot=47
+#-----------
+time=467504532509
+mem_heap_B=566011784
+mem_heap_extra_B=1515136
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=48
+#-----------
+time=475039295576
+mem_heap_B=661405696
+mem_heap_extra_B=1580984
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=49
+#-----------
+time=482680459983
+mem_heap_B=567011699
+mem_heap_extra_B=1532565
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=50
+#-----------
+time=485231318007
+mem_heap_B=568621080
+mem_heap_extra_B=1561032
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=51
+#-----------
+time=487650611221
+mem_heap_B=617217201
+mem_heap_extra_B=1560031
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=52
+#-----------
+time=490146460016
+mem_heap_B=711616015
+mem_heap_extra_B=1609465
+mem_stacks_B=0
+heap_tree=detailed
+n2: 711616015 (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+ n1: 685709788 0x7667C39: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::internal_alloc(unsigned long) (allocator.cpp:195)
+  n2: 685709788 0x7667FFD: arcticdb::AllocatorImpl<arcticdb::NullTracingPolicy, arcticdb::util::LinearClock>::aligned_alloc(unsigned long, bool) (allocator.cpp:304)
+   n1: 659912368 0x5A0A9CA: arcticdb::Buffer::resize(unsigned long) (buffer.hpp:232)
+    n2: 659912368 0x5A0A7A1: arcticdb::Buffer::ensure(unsigned long) (buffer.hpp:177)
+     n2: 659905976 0x5A0A367: arcticdb::Buffer::reserve(unsigned long, std::optional<unsigned long> const&) (buffer.hpp:57)
+      n1: 659877480 0x5F47681: arcticdb::Buffer::Buffer(unsigned long, std::optional<unsigned long>) (buffer.hpp:62)
+       n1: 659877480 0x5F92670: decltype (::new ((void*)(0)) arcticdb::Buffer((declval<unsigned long&>)(), (declval<unsigned long const&>)())) std::construct_at<arcticdb::Buffer, unsigned long&, unsigned long const&>(arcticdb::Buffer*, unsigned long&, unsigned long const&) (stl_construct.h:97)
+        n1: 659877480 0x5F926FE: void std::allocator_traits<std::allocator<arcticdb::Buffer> >::construct<arcticdb::Buffer, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>&, arcticdb::Buffer*, unsigned long&, unsigned long const&) (alloc_traits.h:518)
+         n1: 659877480 0x5F91F9A: std::_Sp_counted_ptr_inplace<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&) (shared_ptr_base.h:519)
+          n1: 659877480 0x5F907B8: std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(arcticdb::Buffer*&, std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:650)
+           n1: 659877480 0x5F8F15D: std::__shared_ptr<arcticdb::Buffer, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr_base.h:1342)
+            n1: 659877480 0x5F8E332: std::shared_ptr<arcticdb::Buffer>::shared_ptr<std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::_Sp_alloc_shared_tag<std::allocator<arcticdb::Buffer> >, unsigned long&, unsigned long const&) (shared_ptr.h:409)
+             n1: 659877480 0x5F84E03: std::shared_ptr<arcticdb::Buffer> std::allocate_shared<arcticdb::Buffer, std::allocator<arcticdb::Buffer>, unsigned long&, unsigned long const&>(std::allocator<arcticdb::Buffer> const&, unsigned long&, unsigned long const&) (shared_ptr.h:863)
+              n1: 659877480 0x5F5A4EF: std::shared_ptr<arcticdb::Buffer> std::make_shared<arcticdb::Buffer, unsigned long&, unsigned long const&>(unsigned long&, unsigned long const&) (shared_ptr.h:879)
+               n1: 659877480 0x5F45DBA: arcticdb::encode_v1(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&) (encode_v1.cpp:127)
+                n1: 659877480 0x5EE6982: arcticdb::encode_dispatch(arcticdb::SegmentInMemory&&, arcticc::pb2::encoding_pb2::VariantCodec const&, arcticdb::EncodingVersion) (codec.cpp:49)
+                 n1: 659877480 0x5B920DC: arcticdb::async::EncodeAtomTask::encode() (tasks.hpp:95)
+                  n1: 659877480 0x5B92243: arcticdb::async::EncodeAtomTask::operator()() (tasks.hpp:104)
+                   n1: 659877480 0x5C134EF: std::enable_if<!std::is_same<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<>, void>::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWithNoUnwrap<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:254)
+                    n1: 659877480 0x5BEC44E: std::enable_if<!folly::isTry<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> >::value, folly::Try<folly::invoke_detail::traits<arcticdb::async::EncodeAtomTask>::result<> > >::type folly::makeTryWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Try-inl.h:276)
+                     n1: 659877480 0x5BCA254: void folly::Promise<arcticdb::storage::KeySegmentPair>::setWith<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask&&) (Promise-inl.h:152)
+                      n1: 659877480 0x5BAFC9D: folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}::operator()() (FutureExecutor.h:75)
+                       n1: 659877480 0x5BEC50B: void folly::detail::function::FunctionTraits<void ()>::callBig<folly::FutureExecutor<folly::CPUThreadPoolExecutor>::addFuture<arcticdb::async::EncodeAtomTask>(arcticdb::async::EncodeAtomTask)::{lambda()#1}>(folly::detail::function::Data&) (Function.h:359)
+                        n1: 659877480 0x5979E2A: folly::detail::function::FunctionTraits<void ()>::operator()() (Function.h:374)
+                         n1: 659877480 0x834C7F5: catch_exception<folly::Function<void()>&, void (&)(char const*) noexcept, char const*&> (Exception.h:285)
+                          n1: 659877480 0x834C7F5: invokeCatchingExns<folly::Function<void()> > (Executor.h:234)
+                           n1: 659877480 0x834C7F5: folly::ThreadPoolExecutor::runTask(std::shared_ptr<folly::ThreadPoolExecutor::Thread> const&, folly::ThreadPoolExecutor::Task&&) (ThreadPoolExecutor.cpp:102)
+                            n1: 659877480 0x8311A65: folly::CPUThreadPoolExecutor::threadRun(std::shared_ptr<folly::ThreadPoolExecutor::Thread>) (CPUThreadPoolExecutor.cpp:333)
+                             n1: 659877480 0x8357908: void std::__invoke_impl<void, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(std::__invoke_memfun_deref, void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:74)
+                              n1: 659877480 0x8356BBE: std::__invoke_result<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>::type std::__invoke<void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&>(void (folly::ThreadPoolExecutor::*&)(std::shared_ptr<folly::ThreadPoolExecutor::Thread>), folly::ThreadPoolExecutor*&, std::shared_ptr<folly::ThreadPoolExecutor::Thread>&) (invoke.h:96)
+                               n1: 659877480 0x8355AEF: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::__call<void, , 0ul, 1ul>(std::tuple<>&&, std::_Index_tuple<0ul, 1ul>) (functional:420)
+                                n0: 659877480 0x83547F6: void std::_Bind<void (folly::ThreadPoolExecutor::*(folly::ThreadPoolExecutor*, std::shared_ptr<folly::ThreadPoolExecutor::Thread>))(std::shared_ptr<folly::ThreadPoolExecutor::Thread>)>::operator()<, void>() (functional:503)
+      n0: 28496 in 2 places, all below massif's threshold (1.00%)
+     n0: 6392 in 5 places, all below massif's threshold (1.00%)
+   n2: 25797420 0x5991525: arcticdb::ChunkedBufferImpl<3968ul>::add_block(unsigned long, unsigned long) (chunked_buffer.hpp:369)
+    n2: 14607820 0x59795DB: arcticdb::ChunkedBufferImpl<3968ul>::ensure(unsigned long, bool) (chunked_buffer.hpp:208)
+     n2: 14607820 0x5A0E290: arcticdb::CursoredBuffer<arcticdb::ChunkedBufferImpl<3968ul> >::ensure_bytes(unsigned long) (cursored_buffer.hpp:57)
+      n1: 11803328 0x5EABB1B: arcticdb::Column::allocate_data(unsigned long) (column.hpp:549)
+       n0: 11803328 in 13 places, all below massif's threshold (1.00%)
+      n0: 2804492 in 1 place, below massif's threshold (1.00%)
+     n0: 0 in 1 place, below massif's threshold (1.00%)
+    n0: 11189600 in 3 places, all below massif's threshold (1.00%)
+ n0: 25906227 in 1134 places, all below massif's threshold (1.00%)
+#-----------
+snapshot=53
+#-----------
+time=492623379140
+mem_heap_B=771832480
+mem_heap_extra_B=1647208
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=54
+#-----------
+time=495122737146
+mem_heap_B=565983461
+mem_heap_extra_B=1516411
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=55
+#-----------
+time=497562140451
+mem_heap_B=567834791
+mem_heap_extra_B=1547025
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=56
+#-----------
+time=500025449626
+mem_heap_B=579385464
+mem_heap_extra_B=1534312
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=57
+#-----------
+time=502530587572
+mem_heap_B=580390488
+mem_heap_extra_B=1560280
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=58
+#-----------
+time=504966836098
+mem_heap_B=398592337
+mem_heap_extra_B=1450495
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=59
+#-----------
+time=507512902102
+mem_heap_B=400022282
+mem_heap_extra_B=1478486
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=60
+#-----------
+time=509939922867
+mem_heap_B=227784750
+mem_heap_extra_B=1331866
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=61
+#-----------
+time=512480330136
+mem_heap_B=178179907
+mem_heap_extra_B=1320429
+mem_stacks_B=0
+heap_tree=empty
