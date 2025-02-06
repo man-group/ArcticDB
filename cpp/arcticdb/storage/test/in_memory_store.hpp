@@ -166,6 +166,16 @@ public:
         return folly::makeFuture(key);
     }
 
+    folly::Future<VariantKey> write_maybe_blocking(PartialKey pk, SegmentInMemory &&segment, std::shared_ptr<folly::NativeSemaphore> semaphore) override {
+        semaphore->wait();
+        return write(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index, std::move(segment))
+            .thenTryInline([semaphore](folly::Try<VariantKey> keyTry) {
+                semaphore->post();
+                keyTry.throwUnlessValue();
+                return keyTry.value();
+            });
+    }
+
     folly::Future<VariantKey> copy(
             arcticdb::entity::KeyType,
             const StreamId&,

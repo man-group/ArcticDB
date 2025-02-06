@@ -23,12 +23,17 @@ from arcticdb.util.test import (
     random_strings_of_length,
     random_integers,
     random_floats,
-    random_dates,
+    random_dates
 )
 from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb.version_store.library import Library
 from arcticdb_ext.storage import KeyType
 
 from arcticdb import util
+
+from arcticdb.util.test import config_context_multi
+
+import arcticdb_ext.cpp_async as adb_async
 
 
 def get_append_keys(lib, sym):
@@ -104,32 +109,47 @@ def test_remove_incomplete(basic_store):
     lib.remove_incomplete(sym3)
 
 
-def test_parallel_write(basic_store):
-    sym = "parallel"
-    basic_store.remove_incomplete(sym)
+@pytest.mark.parametrize("num_segments_live_during_compaction, num_io_threads, num_cpu_threads", [
+    (1, 1, 1),
+    (10, 1, 1),
+    (None, None, None)
+])
+def test_parallel_write(basic_store_tiny_segment, num_segments_live_during_compaction, num_io_threads, num_cpu_threads):
+    with config_context_multi({"VersionStore.NumSegmentsLiveDuringCompaction": num_segments_live_during_compaction,
+                               "VersionStore.NumIOThreads": num_io_threads,
+                               "VersionStore.NumCPUThreads": num_cpu_threads}):
+        adb_async.reinit_task_scheduler()
+        if num_io_threads:
+            assert adb_async.io_thread_count() == num_io_threads
+        if num_cpu_threads:
+            assert adb_async.cpu_thread_count() == num_cpu_threads
 
-    num_rows = 1111
-    dtidx = pd.date_range("1970-01-01", periods=num_rows)
-    test = pd.DataFrame(
-        {
-            "uint8": random_integers(num_rows, np.uint8),
-            "uint32": random_integers(num_rows, np.uint32),
-        },
-        index=dtidx,
-    )
-    chunk_size = 100
-    list_df = [test[i : i + chunk_size] for i in range(0, test.shape[0], chunk_size)]
-    random.shuffle(list_df)
+        store = basic_store_tiny_segment
+        sym = "parallel"
+        store.remove_incomplete(sym)
 
-    for df in list_df:
-        basic_store.write(sym, df, parallel=True)
+        num_rows = 1111
+        dtidx = pd.date_range("1970-01-01", periods=num_rows)
+        test = pd.DataFrame(
+            {
+                "uint8": random_integers(num_rows, np.uint8),
+                "uint32": random_integers(num_rows, np.uint32),
+            },
+            index=dtidx,
+        )
+        chunk_size = 100
+        list_df = [test[i : i + chunk_size] for i in range(0, test.shape[0], chunk_size)]
+        random.shuffle(list_df)
 
-    user_meta = {"thing": 7}
-    basic_store.compact_incomplete(sym, False, False, metadata=user_meta)
-    vit = basic_store.read(sym)
-    assert_frame_equal(test, vit.data)
-    assert vit.metadata["thing"] == 7
-    assert len(get_append_keys(basic_store, sym)) == 0
+        for df in list_df:
+            store.write(sym, df, parallel=True)
+
+        user_meta = {"thing": 7}
+        store.compact_incomplete(sym, False, False, metadata=user_meta)
+        vit = store.read(sym)
+        assert_frame_equal(test, vit.data)
+        assert vit.metadata["thing"] == 7
+        assert len(get_append_keys(store, sym)) == 0
 
 
 @pytest.mark.parametrize("index, expect_ordered", [
@@ -243,49 +263,57 @@ def test_floats_to_nans(lmdb_version_store_dynamic_schema):
     assert_frame_equal(vit.data, df)
 
 
-@pytest.mark.parametrize("prune_previous_versions", [True, False])
-def test_write_parallel_sort_merge(basic_arctic_library, prune_previous_versions):
-    lib = basic_arctic_library
+@pytest.mark.parametrize("num_segments_live_during_compaction, num_io_threads, num_cpu_threads", [
+    (1, 1, 1),
+    (10, 1, 1),
+    (None, None, None)
+])
+@pytest.mark.parametrize("prune_previous_versions", (True, False))
+def test_parallel_write_sort_merge(basic_store_tiny_segment, prune_previous_versions, num_segments_live_during_compaction, num_io_threads, num_cpu_threads):
+    with config_context_multi({"VersionStore.NumSegmentsLiveDuringCompaction": num_segments_live_during_compaction,
+                               "VersionStore.NumIOThreads": num_io_threads,
+                               "VersionStore.NumCPUThreads": num_cpu_threads}):
+        lib = Library("test_lib", basic_store_tiny_segment)
 
-    num_rows_per_day = 10
-    num_days = 10
-    num_columns = 4
-    column_length = 8
-    dt = datetime.datetime(2019, 4, 8, 0, 0, 0)
-    cols = random_strings_of_length(num_columns, column_length, True)
-    symbol = "test_write_parallel_sort_merge"
-    dataframes = []
-    df = pd.DataFrame()
+        num_rows_per_day = 10
+        num_days = 10
+        num_columns = 4
+        column_length = 8
+        dt = datetime.datetime(2019, 4, 8, 0, 0, 0)
+        cols = random_strings_of_length(num_columns, column_length, True)
+        symbol = "test_write_parallel_sort_merge"
+        dataframes = []
+        df = pd.DataFrame()
 
-    for _ in range(num_days):
-        index = pd.Index(
-            [dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)]
+        for _ in range(num_days):
+            index = pd.Index(
+                [dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)]
+            )
+            vals = {c: random_floats(num_rows_per_day) for c in cols}
+            new_df = pd.DataFrame(data=vals, index=index)
+
+            dataframes.append(new_df)
+            df = pd.concat((df, new_df))
+            dt = dt + datetime.timedelta(days=1)
+
+        random.shuffle(dataframes)
+        lib.write(symbol, dataframes[0])
+        for d in dataframes:
+            lib.write(symbol, d, staged=True)
+        lib.sort_and_finalize_staged_data(
+            symbol, prune_previous_versions=prune_previous_versions
         )
-        vals = {c: random_floats(num_rows_per_day) for c in cols}
-        new_df = pd.DataFrame(data=vals, index=index)
-
-        dataframes.append(new_df)
-        df = pd.concat((df, new_df))
-        dt = dt + datetime.timedelta(days=1)
-
-    random.shuffle(dataframes)
-    lib.write(symbol, dataframes[0])
-    for d in dataframes:
-        lib.write(symbol, d, staged=True)
-    lib.sort_and_finalize_staged_data(
-        symbol, prune_previous_versions=prune_previous_versions
-    )
-    vit = lib.read(symbol)
-    df.sort_index(axis=1, inplace=True)
-    result = vit.data
-    result.sort_index(axis=1, inplace=True)
-    assert_frame_equal(vit.data, df)
-    if prune_previous_versions:
-        assert 0 not in [
-            version["version"] for version in lib._nvs.list_versions(symbol)
-        ]
-    else:
-        assert_frame_equal(lib.read(symbol, as_of=0).data, dataframes[0])
+        vit = lib.read(symbol)
+        df.sort_index(axis=1, inplace=True)
+        result = vit.data
+        result.sort_index(axis=1, inplace=True)
+        assert_frame_equal(vit.data, df)
+        if prune_previous_versions:
+            assert 0 not in [
+                version["version"] for version in lib._nvs.list_versions(symbol)
+            ]
+        else:
+            assert_frame_equal(lib.read(symbol, as_of=0).data, dataframes[0])
 
 
 @pytest.mark.parametrize("prune_previous_versions", [True, False])

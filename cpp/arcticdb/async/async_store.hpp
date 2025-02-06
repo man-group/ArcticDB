@@ -110,6 +110,18 @@ folly::Future<entity::VariantKey> write(
         .thenValue(WriteSegmentTask{library_});
 }
 
+folly::Future<VariantKey> write_maybe_blocking(PartialKey pk, SegmentInMemory &&segment, std::shared_ptr<folly::NativeSemaphore> semaphore) override {
+    log::version().debug("Waiting for semaphore for write_maybe_blocking {}", pk);
+    semaphore->wait();
+    log::version().debug("Starting write_maybe_blocking {}", pk);
+    return write(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index, std::move(segment))
+        .thenTryInline([semaphore](folly::Try<VariantKey> keyTry) {
+            semaphore->post();
+            keyTry.throwUnlessValue();
+            return keyTry.value();
+        });
+}
+
 entity::VariantKey write_sync(
     stream::KeyType key_type,
     VersionId version_id,
