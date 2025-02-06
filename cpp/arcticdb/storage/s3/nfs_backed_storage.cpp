@@ -154,14 +154,14 @@ std::string NfsBackedStorage::name() const {
     return fmt::format("nfs_backed_storage-{}/{}/{}", region_, bucket_name_, root_folder_);
 }
 
-void NfsBackedStorage::do_write(KeySegmentPair&& key_seg) {
+void NfsBackedStorage::do_write(KeySegmentPair& key_seg) {
     auto enc = KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
-    s3::detail::do_write_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
+    s3::detail::do_write_impl(enc, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
-void NfsBackedStorage::do_update(KeySegmentPair&& key_seg, UpdateOpts) {
+void NfsBackedStorage::do_update(KeySegmentPair& key_seg, UpdateOpts) {
     auto enc = KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
-    s3::detail::do_update_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
+    s3::detail::do_update_impl(enc, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
 void NfsBackedStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {

@@ -78,12 +78,12 @@ public:
     bool write_segment(
             const std::string& database_name,
             const std::string& collection_name,
-            storage::KeySegmentPair&& key_seg) override;
+            storage::KeySegmentPair& key_seg) override;
 
     UpdateResult update_segment(
             const std::string& database_name,
             const std::string& collection_name,
-            storage::KeySegmentPair&& key_seg,
+            storage::KeySegmentPair& key_seg,
             bool upsert) override;
 
     std::optional<KeySegmentPair> read_segment(

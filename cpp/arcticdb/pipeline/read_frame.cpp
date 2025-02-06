@@ -488,12 +488,11 @@ void check_data_left_for_subsequent_fields(
 void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
-    Segment &&s,
+    const Segment& seg,
     const DecodePathData& shared_data,
     std::any& handler_data,
     const ReadQuery& read_query,
     const ReadOptions& read_options) {
-    auto seg = std::move(s);
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     const uint8_t *data = seg.buffer().data();
     const uint8_t *begin = data;
@@ -626,14 +625,13 @@ void handle_type_promotion(
 void decode_into_frame_dynamic(
     SegmentInMemory& frame,
     PipelineContextRow& context,
-    Segment&& s,
+    const Segment& seg,
     const DecodePathData& shared_data,
     std::any& handler_data,
     const ReadQuery& read_query,
     const ReadOptions& read_options
 ) {
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
-    auto seg = std::move(s);
     const uint8_t *data = seg.buffer().data();
     const uint8_t *begin = data;
     const uint8_t *end = begin + seg.buffer().bytes();
@@ -887,9 +885,9 @@ folly::Future<SegmentInMemory> fetch_data(
             [row=row, frame=frame, dynamic_schema=dynamic_schema, shared_data, &handler_data, read_query, read_options](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
                 if(dynamic_schema) {
-                    decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), shared_data, handler_data, read_query, read_options);
+                    decode_into_frame_dynamic(frame, row, key_seg.segment(), shared_data, handler_data, read_query, read_options);
                 } else {
-                    decode_into_frame_static(frame, row, std::move(key_seg.segment()), shared_data, handler_data, read_query, read_options);
+                    decode_into_frame_static(frame, row, key_seg.segment(), shared_data, handler_data, read_query, read_options);
                 }
 
                 return key_seg.variant_key();

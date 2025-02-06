@@ -79,7 +79,7 @@ void tombstone_snapshot(
 
 void tombstone_snapshot(
         const std::shared_ptr<StreamSink>& store,
-        storage::KeySegmentPair&& key_segment_pair,
+        storage::KeySegmentPair& key_segment_pair,
         bool log_changes) {
     store->remove_key(key_segment_pair.ref_key()).get(); // Make the snapshot "disappear" to normal APIs
     if (log_changes) {

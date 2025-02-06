@@ -99,7 +99,7 @@ bool MockMongoClient::has_key(const MongoKey& key) {
 bool MockMongoClient::write_segment(
         const std::string& database_name,
         const std::string& collection_name,
-        storage::KeySegmentPair&& key_seg) {
+        storage::KeySegmentPair& key_seg) {
     auto key = MongoKey(database_name, collection_name, key_seg.variant_key());
 
     auto failure = has_failure_trigger(key, StorageOperation::WRITE);
@@ -108,14 +108,14 @@ bool MockMongoClient::write_segment(
         return false;
     }
 
-    mongo_contents.insert_or_assign(std::move(key), std::move(key_seg.segment()));
+    mongo_contents.insert_or_assign(std::move(key), key_seg.segment().clone());
     return true;
 }
 
 UpdateResult MockMongoClient::update_segment(
         const std::string& database_name,
         const std::string& collection_name,
-        storage::KeySegmentPair&& key_seg,
+        storage::KeySegmentPair& key_seg,
         bool upsert) {
     auto key = MongoKey(database_name, collection_name, key_seg.variant_key());
 
@@ -130,7 +130,7 @@ UpdateResult MockMongoClient::update_segment(
         return {0}; // upsert is false, don't update and return 0 as modified_count
     }
 
-    mongo_contents.insert_or_assign(std::move(key), std::move(key_seg.segment()));
+    mongo_contents.insert_or_assign(std::move(key), key_seg.segment().clone());
     return {key_found ? 1 : 0};
 }
 

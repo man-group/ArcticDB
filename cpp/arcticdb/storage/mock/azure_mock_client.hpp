@@ -23,7 +23,7 @@ class MockAzureClient : public AzureClientWrapper {
 public:
     void write_blob(
         const std::string& blob_name,
-        Segment&& segment,
+        Segment& segment,
         const Azure::Storage::Blobs::UploadBlockBlobFromOptions& upload_option,
         unsigned int request_timeout) override;
 

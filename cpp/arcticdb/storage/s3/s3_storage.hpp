@@ -49,11 +49,11 @@ class S3Storage final : public Storage, AsyncStorage {
     }
 
   private:
-    void do_write(KeySegmentPair&& key_seg) final;
+    void do_write(KeySegmentPair& key_seg) final;
 
-    void do_write_if_none(KeySegmentPair&& kv) final;
+    void do_write_if_none(KeySegmentPair& kv) final;
 
-    void do_update(KeySegmentPair&& key_seg, UpdateOpts opts) final;
+    void do_update(KeySegmentPair& key_seg, UpdateOpts opts) final;
 
     void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 

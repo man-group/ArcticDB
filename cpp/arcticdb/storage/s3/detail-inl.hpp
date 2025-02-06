@@ -122,7 +122,7 @@ inline void raise_if_unexpected_error(const Aws::S3::S3Error& err, const std::st
 
 template<class KeyBucketizer>
 void do_write_impl(
-    KeySegmentPair&& key_seg,
+    KeySegmentPair& key_seg,
     const std::string& root_folder,
     const std::string& bucket_name,
     S3ClientInterface& s3_client,
@@ -135,9 +135,9 @@ void do_write_impl(
     ARCTICDB_SUBSAMPLE(S3StorageWriteValues, 0)
     auto& k = key_seg.variant_key();
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
-    auto& seg = key_seg.segment();
+    auto seg = key_seg.segment_ptr();
 
-    auto put_object_result = s3_client.put_object(s3_object_name, std::move(seg), bucket_name);
+    auto put_object_result = s3_client.put_object(s3_object_name, *seg, bucket_name);
 
     if (!put_object_result.is_success()) {
         auto& error = put_object_result.get_error();
@@ -148,13 +148,13 @@ void do_write_impl(
 
 template<class KeyBucketizer>
 void do_update_impl(
-    KeySegmentPair&& key_seg,
+    KeySegmentPair& key_seg,
     const std::string& root_folder,
     const std::string& bucket_name,
     S3ClientInterface& s3_client,
     KeyBucketizer&& bucketizer) {
     // s3 updates the key if it already exists. We skip the check for key not found to save a round-trip.
-    do_write_impl(std::move(key_seg), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer));
+    do_write_impl(key_seg, root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer));
 }
 
 template<class KeyBucketizer, class KeyDecoder>
@@ -225,7 +225,7 @@ void do_read_impl(
     KeyDecoder&& key_decoder,
     ReadKeyOpts opts) {
     auto key_seg = do_read_impl(std::move(variant_key), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer), std::forward<KeyDecoder>(key_decoder), opts);
-    visitor(key_seg.variant_key(), std::move(key_seg.segment()));
+    visitor(key_seg.variant_key(), std::move(*key_seg.segment_ptr()));
 }
 
 struct FailedDelete {
@@ -315,7 +315,7 @@ void do_remove_impl(
 
 template<class KeyBucketizer>
 void do_write_if_none_impl(
-                KeySegmentPair &&kv,
+                KeySegmentPair &kv,
                 const std::string &root_folder,
                 const std::string &bucket_name,
                 S3ClientInterface &s3_client,
@@ -324,9 +324,9 @@ void do_write_if_none_impl(
             auto key_type_dir = key_type_folder(root_folder, kv.key_type());
             auto &k = kv.variant_key();
             auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
-            auto &seg = kv.segment();
+            auto& seg = *kv.segment_ptr();
 
-            auto put_object_result = s3_client.put_object(s3_object_name, std::move(seg), bucket_name, PutHeader::IF_NONE_MATCH);
+            auto put_object_result = s3_client.put_object(s3_object_name, seg, bucket_name, PutHeader::IF_NONE_MATCH);
 
             if (!put_object_result.is_success()) {
                 auto& error = put_object_result.get_error();

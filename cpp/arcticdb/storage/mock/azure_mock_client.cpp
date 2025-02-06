@@ -54,7 +54,7 @@ std::optional<Azure::Core::RequestFailedException> has_failure_trigger(const std
 
 void MockAzureClient::write_blob(
         const std::string& blob_name,
-        arcticdb::Segment&& segment,
+        arcticdb::Segment& segment,
         const Azure::Storage::Blobs::UploadBlockBlobFromOptions&,
         unsigned int) {
 
@@ -63,7 +63,7 @@ void MockAzureClient::write_blob(
         throw *maybe_exception;
     }
 
-    azure_contents.insert_or_assign(blob_name, std::move(segment));
+    azure_contents.insert_or_assign(blob_name, segment.clone());
 }
 
 Segment MockAzureClient::read_blob(

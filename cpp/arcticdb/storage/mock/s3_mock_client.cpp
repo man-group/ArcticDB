@@ -99,7 +99,7 @@ folly::Future<S3Result<Segment>> MockS3Client::get_object_async(
 
 S3Result<std::monostate> MockS3Client::put_object(
         const std::string &s3_object_name,
-        Segment &&segment,
+        Segment& segment,
         const std::string &bucket_name,
         PutHeader header) {
     std::scoped_lock<std::mutex> lock(mutex_);
@@ -121,7 +121,7 @@ S3Result<std::monostate> MockS3Client::put_object(
     // When we write Segments we occasionally don't fill in the size_. This is fine as it's not needed for writing.
     // However, it is required when reading so we need to calculate it. It's easier to do on write.
     [[maybe_unused]] auto size = segment.calculate_size();
-    s3_contents_.insert_or_assign({bucket_name, s3_object_name}, std::make_optional<Segment>(std::move(segment)));
+    s3_contents_.insert_or_assign({bucket_name, s3_object_name}, std::make_optional<Segment>(segment.clone()));
 
     return {std::monostate()};
 }

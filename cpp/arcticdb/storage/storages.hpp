@@ -41,18 +41,18 @@ public:
         storages_(std::move(storages)), mode_(mode) {
     }
 
-    void write(KeySegmentPair&& key_seg) {
+    void write(KeySegmentPair& key_seg) {
         ARCTICDB_SAMPLE(StoragesWrite, 0)
-        primary().write(std::move(key_seg));
+        primary().write(key_seg);
     }
 
-    void write_if_none(KeySegmentPair&& kv) {
-        primary().write_if_none(std::move(kv));
+    void write_if_none(KeySegmentPair& kv) {
+        primary().write_if_none(kv);
     }
 
-    void update(KeySegmentPair&& key_seg, storage::UpdateOpts opts) {
+    void update(KeySegmentPair& key_seg, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(StoragesUpdate, 0)
-        primary().update(std::move(key_seg), opts);
+        primary().update(key_seg, opts);
     }
 
     [[nodiscard]] bool supports_prefix_matching() const {

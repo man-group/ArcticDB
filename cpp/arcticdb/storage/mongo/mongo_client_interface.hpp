@@ -42,12 +42,12 @@ public:
     virtual bool write_segment(
             const std::string &database_name,
             const std::string &collection_name,
-            storage::KeySegmentPair&& key_seg) = 0;
+            storage::KeySegmentPair& key_seg) = 0;
 
     virtual UpdateResult update_segment(
             const std::string &database_name,
             const std::string &collection_name,
-            storage::KeySegmentPair&& key_seg,
+            storage::KeySegmentPair& key_seg,
             bool upsert) = 0;
 
     virtual std::optional<KeySegmentPair> read_segment(
