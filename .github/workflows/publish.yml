@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       environment: { type: environment, required: true }
-      run_id: { type: string, required: true }
+      run_id: { type: number, required: true }
 run-name: Publish ${{github.ref}} to ${{inputs.environment}}
 env:
   RUN_ID: ${{ inputs.run_id || github.run_id }}
@@ -22,10 +22,10 @@ jobs:
         with:
             pattern: "build-metadata-build-python-wheels-*"
             run-id: ${{ env.RUN_ID }}
+            github-token: ${{github.token}}
 
       - id: compress
         name: Compress metadata
-        if: steps.download.outcome == 'success'
         run: |
           for file in build-metadata-build-python-wheels-*; do
             identifier=$(echo "$file" | sed -E 's/build-metadata-build-python-wheels-(.*)/\1/')
@@ -56,7 +56,7 @@ jobs:
 
             ---
             > The wheels are on [PyPI](https://pypi.org/project/arcticdb/). Below are for debugging:
-          files: ${{steps.compress.outcome == 'success' && '/tmp/symbols*.tar.zst' || ''}}
+          files: ${{steps.compress.outcome == 'success' && '/tmp/build-metadata-*.tar.zst' || ''}}
 
 
   pypi:
@@ -67,9 +67,10 @@ jobs:
         id: gather-wheels
         uses: actions/download-artifact@v4
         with:
-            pattern: "build-metadata-build-python-wheels-*"
+            pattern: "wheel-cp*"
             merge-multiple: true
             run-id: ${{ env.RUN_ID }}
+            github-token: ${{github.token}}
       - name: Upload to Pypi
         run: |
             ls
