@@ -362,11 +362,11 @@ class ListGenerators:
     def generate_random_floats(cls, dtype: ArcticFloatType, 
                       size: int, minV: float = None, maxV: float = None, round_to: int = None
                       ) -> List[ArcticFloatType]:
-        finfo = np.finfo(dtype)
+        # Higher numbers will trigger overflow in numpy uniform (-1e307 - 1e307)
         if minV is None:
-            minV = max(finfo.min, -sys.float_info.max)
+            minV = max(-1e307, sys.float_info.max)
         if maxV is None:    
-            maxV = min(finfo.max, sys.float_info.max)
+            maxV = min(1e307, sys.float_info.max)
         if round_to is None:
             return np.random.uniform(minV, maxV, size).astype(dtype)
         else :
@@ -449,7 +449,16 @@ class DFGenerator:
         self.__data[name] = list
         self.__types[name] = str
         return self
-    
+
+    def add_string_enum_col(self, name: str, pool = RandomStringPool) -> 'DFGenerator':
+        """
+        Generates a list of random values based on string pool, simulating enum
+        """
+        list = pool.get_list(self.__size)
+        self.__data[name] = list
+        self.__types[name] = str
+        return self
+
     def add_bool_col(self, name: str) -> 'DFGenerator':
         list = np.random.choice([True, False], size=self.__size) 
         self.__data[name] = list
