@@ -6,7 +6,7 @@ on:
         type: boolean
         default: false
       dev_image_tag:
-        description: Tag of the ArcticCB development image to use for benchmark and code coverage flows
+        description: Tag of the ArcticDB development image to use for benchmark and code coverage flows
         type: string
         default: latest
       lmdb_suite_to_run:
@@ -58,8 +58,8 @@ jobs:
 
   publish_benchmark_results_to_gh_pages:  
     name: Publish benchmark results to gh-pages
-    if: github.ref == 'refs/heads/master'
-    needs: [benchmark_commits]  
+    if: ${{ github.event_name != 'pull_request_target' }} # only publish for the scheduled master builds
+    needs: [benchmark_commits]
     runs-on: ubuntu-22.04
     container:
       image: ubuntu:22.04 # Native runner doesn't allow setting up the ca softlinks required below

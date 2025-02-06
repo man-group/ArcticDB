@@ -10,6 +10,7 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/util/variant.hpp>
+#include <arcticdb/entity/output_format.hpp>
 #include <arcticdb/log/log.hpp>
 #include <google/protobuf/util/message_differencer.h>
 #include "arcticdb/storage/memory_layout.hpp"
@@ -212,6 +213,7 @@ enum class DataType : uint8_t {
     UTF_DYNAMIC64 = detail::combine_val_bits(ValueType::UTF_DYNAMIC, SizeBits::S64),
     EMPTYVAL = detail::combine_val_bits(ValueType::EMPTY, SizeBits::S64),
     BOOL_OBJECT8 = detail::combine_val_bits(ValueType::BOOL_OBJECT, SizeBits::S8),
+    UTF_DYNAMIC32 = detail::combine_val_bits(ValueType::UTF_DYNAMIC, SizeBits::S32),
 #undef DT_COMBINE
     UNKNOWN = 0,
 };
@@ -500,7 +502,9 @@ inline void set_data_type(DataType data_type, TypeDescriptor &type_desc) {
     type_desc.data_type_ = data_type;
 }
 
-std::size_t data_type_size(const TypeDescriptor& td, DataTypeMode mode);
+std::size_t internal_data_type_size(const TypeDescriptor& td);
+
+std::size_t data_type_size(const TypeDescriptor& td, OutputFormat output_format, DataTypeMode mode);
 
 inline TypeDescriptor make_scalar_type(DataType dt) {
     return TypeDescriptor{dt, Dimension::Dim0};

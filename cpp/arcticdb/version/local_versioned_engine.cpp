@@ -21,6 +21,7 @@
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/container_filter_wrapper.hpp>
 #include <arcticdb/util/allocation_tracing.hpp>
+#include <bitset>
 
 namespace arcticdb::version_store {
 
@@ -64,6 +65,65 @@ void LocalVersionedEngine::initialize(const std::shared_ptr<storage::Library>& l
 template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<storage::Library>& library, const util::SysClock&);
 template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<Store>& library, const util::SysClock&);
 template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<storage::Library>& library, const util::ManualClock&);
+
+struct TransformBatchResultsFlags {
+    /// If true processing of batch results will throw exception on the first error it observes and stop processing
+    /// further results (V1 Library API behavior)
+    /// If false it will create a DataError recording the exception information and continue processing further results
+    /// (V2 Library API behavior)
+    bool throw_on_error_{false};
+    /// Applies only if TransformBatchResultsFlags::throw_on_error_ is true
+    /// For historical reasons batch reading of metadata in V1 Library API does not throw when the symbol version is
+    /// missing even if throw on error is true. Every other operation must throw in this case.
+    bool throw_on_missing_symbol_{true};
+    /// Applies only if TransformBatchResultsFlags::throw_on_error_ is true
+    /// Used only by batch read in order to preserve the API. For historical reasons batch_read converts
+    /// ErrorCategory::MISSING_DATA to ErrorCode::E_KEY_NOT_FOUND
+    bool convert_no_data_found_to_key_not_found_{false};
+};
+
+/// Used by batch_[append/update/read/append] methods to process the individual results of a batch query.
+/// @param throw_on_error The V1 Library API aborts on the first exception while V2 processes everything and converts
+///     exceptions to DataError
+/// @param stream_ids i-th element of stream_ids corresponds to i-th element of batch_request_versions
+/// @param versoin_queries i-th element corresponds to the i-th element of batch_request_versions. Use to record the
+///     the version query in the DataError for a batch read request
+template<typename ResultValueType>
+std::vector<std::variant<ResultValueType, DataError>> transform_batch_items_or_throw(
+    std::vector<folly::Try<ResultValueType>>&& batch_request_versions,
+    std::span<const StreamId> stream_ids,
+    TransformBatchResultsFlags flags,
+    std::span<const VersionQuery> versoin_queries = {}
+) {
+    std::vector<std::variant<ResultValueType, DataError>> result;
+    result.reserve(batch_request_versions.size());
+    for (auto&& [idx, version_or_exception]: enumerate(batch_request_versions)) {
+        if (version_or_exception.hasValue()) {
+            result.emplace_back(std::move(version_or_exception.value()));
+        } else {
+            auto exception = version_or_exception.exception();
+            const bool is_missing_version_exception = exception.template is_compatible_with<NoSuchVersionException>();
+            const bool throw_on_missing_symbol = (is_missing_version_exception && flags.throw_on_missing_symbol_);
+            if (flags.throw_on_error_ && (!is_missing_version_exception || throw_on_missing_symbol)) {
+                version_or_exception.throwUnlessValue();
+            } else {
+                DataError data_error = versoin_queries.empty() ?
+                    DataError(stream_ids[idx], exception.what().toStdString()) :
+                    DataError(stream_ids[idx], exception.what().toStdString(), versoin_queries[idx].content_);
+                if (exception.template is_compatible_with<NoSuchVersionException>()) {
+                    data_error.set_error_code(ErrorCode::E_NO_SUCH_VERSION);
+                } else if (exception.template is_compatible_with<storage::KeyNotFoundException>()) {
+                    data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
+                } else if(flags.convert_no_data_found_to_key_not_found_ &&
+                        exception.template is_compatible_with<storage::NoDataFoundException>()) {
+                    data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
+                }
+                result.emplace_back(std::move(data_error));
+            }
+        }
+    }
+    return result;
+}
 
 folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_indexes(
         std::vector<AtomKey>&& pruned_indexes,
@@ -348,7 +408,7 @@ std::variant<VersionedItem, StreamId> get_version_identifier(
         const ReadOptions& read_options,
         const std::optional<VersionedItem>& version) {
     if (!version) {
-        if (opt_false(read_options.incompletes_)) {
+        if (opt_false(read_options.incompletes())) {
             log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", stream_id);
             return stream_id;
         } else {
@@ -438,7 +498,7 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
     const std::vector<VersionQuery>& version_queries,
     const ReadOptions& read_options) {
 
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error().has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
 
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
@@ -447,28 +507,10 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
         descriptor_futures.emplace_back(
             get_descriptor_async(std::move(opt_index_key_fut), stream_ids[idx], version_queries[idx]));
     }
-    auto descriptors = folly::collectAll(descriptor_futures).get();
-    std::vector<std::variant<DescriptorItem, DataError>> descriptors_or_errors;
-    descriptors_or_errors.reserve(descriptors.size());
-    for (auto&& [idx, descriptor]: folly::enumerate(descriptors)) {
-        if (descriptor.hasValue()) {
-            descriptors_or_errors.emplace_back(std::move(descriptor.value()));
-        } else {
-            if (*read_options.batch_throw_on_error_) {
-                descriptor.throwUnlessValue();
-            } else {
-                auto exception = descriptor.exception();
-                DataError data_error(stream_ids[idx], exception.what().toStdString(), version_queries[idx].content_);
-                if (exception.is_compatible_with<NoSuchVersionException>()) {
-                    data_error.set_error_code(ErrorCode::E_NO_SUCH_VERSION);
-                } else if (exception.is_compatible_with<storage::KeyNotFoundException>()) {
-                    data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
-                }
-                descriptors_or_errors.emplace_back(std::move(data_error));
-            }
-        }
-    }
-    return descriptors_or_errors;
+    auto descriptors = collectAll(descriptor_futures).get();
+    TransformBatchResultsFlags flags;
+    flags.throw_on_error_ = *read_options.batch_throw_on_error();
+    return transform_batch_items_or_throw(std::move(descriptors), stream_ids, flags, version_queries);
 }
 
 void LocalVersionedEngine::flush_version_map() {
@@ -669,26 +711,10 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
             }));
     }
 
-    auto write_metadata_versions = folly::collectAll(write_metadata_versions_futs).get();
-    std::vector<std::variant<VersionedItem, DataError>> write_metadata_versions_or_errors;
-    write_metadata_versions_or_errors.reserve(write_metadata_versions.size());
-    for (auto&& [idx, write_metadata_version]: folly::enumerate(write_metadata_versions)) {
-        if (write_metadata_version.hasValue()) {
-            write_metadata_versions_or_errors.emplace_back(std::move(write_metadata_version.value()));
-        } else {
-            if (throw_on_error) {
-                write_metadata_version.throwUnlessValue();
-            } else {
-                auto exception = write_metadata_version.exception();
-                DataError data_error(stream_ids[idx], exception.what().toStdString());
-                if (exception.is_compatible_with<storage::KeyNotFoundException>()) {
-                    data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
-                }
-                write_metadata_versions_or_errors.emplace_back(std::move(data_error));
-            }
-        }
-    }
-    return write_metadata_versions_or_errors;
+    auto write_metadata_versions = collectAll(write_metadata_versions_futs).get();
+    TransformBatchResultsFlags flags;
+    flags.throw_on_error_ = throw_on_error;
+    return transform_batch_items_or_throw(std::move(write_metadata_versions), stream_ids, flags);
 }
 
 VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
@@ -1066,7 +1092,7 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
 }
 
 std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(const std::vector<AtomKey> &keys) {
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     py::gil_scoped_release release_gil;
     std::vector<folly::Future<ReadVersionOutput>> res;
     res.reserve(keys.size());
@@ -1085,7 +1111,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
     std::any& handler_data) {
     py::gil_scoped_release release_gil;
     // This read option should always be set when calling batch_read
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error().has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<ReadVersionOutput>> read_versions_futs;
@@ -1108,7 +1134,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
                     if (opt_index_key.has_value()) {
                         version_info = VersionedItem(std::move(*opt_index_key));
                     } else {
-                        if (opt_false(read_options.incompletes_)) {
+                        if (opt_false(read_options.incompletes())) {
                             log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", stream_ids[idx]);
                             version_info = stream_ids[idx];
                         } else {
@@ -1132,28 +1158,10 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
         all_results.insert(all_results.end(), std::make_move_iterator(read_versions.begin()), std::make_move_iterator(read_versions.end()));
     }
 
-    std::vector<std::variant<ReadVersionOutput, DataError>> read_versions_or_errors;
-    read_versions_or_errors.reserve(all_results.size());
-    for (auto&& [idx, read_version]: folly::enumerate(all_results)) {
-        if (read_version.hasValue()) {
-            read_versions_or_errors.emplace_back(std::move(read_version.value()));
-        } else {
-            if (*read_options.batch_throw_on_error_) {
-                read_version.throwUnlessValue();
-            } else {
-                auto exception = read_version.exception();
-                DataError data_error(stream_ids[idx], exception.what().toStdString(), version_queries[idx].content_);
-                if (exception.is_compatible_with<NoSuchVersionException>()) {
-                    data_error.set_error_code(ErrorCode::E_NO_SUCH_VERSION);
-                } else if (exception.is_compatible_with<storage::KeyNotFoundException>() ||
-                           exception.is_compatible_with<storage::NoDataFoundException>()) {
-                    data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
-                }
-                read_versions_or_errors.emplace_back(std::move(data_error));
-            }
-        }
-    }
-    return read_versions_or_errors;
+    TransformBatchResultsFlags flags;
+    flags.convert_no_data_found_to_key_not_found_ = true;
+    flags.throw_on_error_ = *read_options.batch_throw_on_error();
+    return transform_batch_items_or_throw(std::move(all_results), stream_ids, flags, version_queries);
 }
 
 void LocalVersionedEngine::write_version_and_prune_previous(
@@ -1280,24 +1288,9 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
         );
     }
     auto write_versions = folly::collectAll(version_futures).get();
-    std::vector<std::variant<VersionedItem, DataError>> write_versions_or_errors;
-    write_versions_or_errors.reserve(write_versions.size());
-    for (auto&& [idx, write_version]: folly::enumerate(write_versions)) {
-        if (write_version.hasValue()) {
-            write_versions_or_errors.emplace_back(std::move(write_version.value()));
-        } else {
-            if (throw_on_error) {
-                write_version.throwUnlessValue();
-            }
-            auto exception = write_version.exception();
-            DataError data_error(stream_ids[idx], exception.what().toStdString());
-            if (exception.is_compatible_with<storage::KeyNotFoundException>()) {
-                data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
-            }
-            write_versions_or_errors.emplace_back(std::move(data_error));
-        }
-    }
-    return write_versions_or_errors;
+    TransformBatchResultsFlags flags;
+    flags.throw_on_error_ = throw_on_error;
+    return transform_batch_items_or_throw(std::move(write_versions), stream_ids, flags);
 }
 
 
@@ -1392,29 +1385,69 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
             })
         );
     }
-
     auto append_versions = folly::collectAll(append_versions_futs).get();
-    std::vector<std::variant<VersionedItem, DataError>> append_versions_or_errors;
-    append_versions_or_errors.reserve(append_versions.size());
-    for (auto&& [idx, append_version]: folly::enumerate(append_versions)) {
-        if (append_version.hasValue()) {
-            append_versions_or_errors.emplace_back(std::move(append_version.value()));
-        } else {
-            if (throw_on_error) {
-                append_version.throwUnlessValue();
-            } else {
-                auto exception = append_version.exception();
-                DataError data_error(stream_ids[idx], exception.what().toStdString());
-                if (exception.is_compatible_with<NoSuchVersionException>()) {
-                    data_error.set_error_code(ErrorCode::E_NO_SUCH_VERSION);
-                } else if (exception.is_compatible_with<storage::KeyNotFoundException>()) {
-                    data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
+    TransformBatchResultsFlags flags;
+    flags.throw_on_error_ = throw_on_error;
+    return transform_batch_items_or_throw(std::move(append_versions), stream_ids, flags);
+}
+
+std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_update_internal(
+    const std::vector<StreamId>& stream_ids,
+    std::vector<std::shared_ptr<InputTensorFrame>>&& frames,
+    const std::vector<UpdateQuery>& update_queries,
+    bool prune_previous_versions,
+    bool upsert
+) {
+    py::gil_scoped_release release_gil;
+
+    auto stream_update_info_futures = batch_get_latest_undeleted_version_and_next_version_id_async(store(), version_map(),stream_ids);
+    std::vector<folly::Future<VersionedItem>> update_versions_futs;
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(stream_ids.size() == stream_update_info_futures.size(), "stream_ids and stream_update_info_futures must be of the same size");
+    for (const auto&& [idx, stream_update_info_fut] : enumerate(stream_update_info_futures)) {
+        update_versions_futs.push_back(
+            std::move(stream_update_info_fut)
+            .thenValue([this, frame = std::move(frames[idx]), stream_id = stream_ids[idx], update_query = update_queries[idx], upsert](auto&& update_info) {
+                auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
+                auto write_options = get_write_options();
+                if (update_info.previous_index_key_.has_value()) {
+                    const bool dynamic_schema = cfg().write_options().dynamic_schema();
+                    const bool empty_types = cfg().write_options().empty_types();
+                    index_key_fut = async_update_impl(
+                        store(),
+                        update_info,
+                        update_query,
+                        std::move(frame),
+                        std::move(write_options),
+                        dynamic_schema,
+                        empty_types);
+                } else {
+                    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                        upsert,
+                        "Cannot update non-existent symbol {}."
+                        "Using \"upsert=True\" will create create the symbol instead of throwing this exception.",
+                        stream_id);
+                    index_key_fut = async_write_dataframe_impl(
+                        store(),
+                        0,
+                        std::move(frame),
+                        std::move(write_options),
+                        std::make_shared<DeDupMap>(),
+                        false,
+                        true);
                 }
-                append_versions_or_errors.emplace_back(std::move(data_error));
-            }
-        }
+                return std::move(index_key_fut).thenValueInline([update_info = std::move(update_info)](auto&& index_key) mutable {
+                    return IndexKeyAndUpdateInfo{std::move(index_key), std::move(update_info)};
+                });
+            })
+            .thenValue([this, prune_previous_versions](auto&& index_key_and_update_info) {
+                auto&& [index_key, update_info] = index_key_and_update_info;
+                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions);
+            })
+        );
     }
-    return append_versions_or_errors;
+
+    auto update_versions = collectAll(update_versions_futs).get();
+    return transform_batch_items_or_throw(std::move(update_versions), stream_ids, TransformBatchResultsFlags{});
 }
 
 struct WarnVersionTypeNotHandled {
@@ -1564,7 +1597,7 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
     const ReadOptions& read_options
     ) {
     // This read option should always be set when calling batch_read_metadata
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error().has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>>> metadata_futures;
@@ -1573,28 +1606,11 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
     }
 
     auto metadatas = folly::collectAll(metadata_futures).get();
-    std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::Any>>, DataError>> metadatas_or_errors;
-    metadatas_or_errors.reserve(metadatas.size());
-    for (auto&& [idx, metadata]: folly::enumerate(metadatas)) {
-        if (metadata.hasValue()) {
-            metadatas_or_errors.emplace_back(std::move(metadata.value()));
-        } else {
-            auto exception = metadata.exception();
-            // For historical reasons, batch_read_metadata does not raise if the version does not exist (unlike batch_read)
-            if (*read_options.batch_throw_on_error_ && !exception.is_compatible_with<NoSuchVersionException>()) {
-                metadata.throwUnlessValue();
-            } else {
-                DataError data_error(stream_ids[idx], exception.what().toStdString(), version_queries[idx].content_);
-                if (exception.is_compatible_with<NoSuchVersionException>()) {
-                    data_error.set_error_code(ErrorCode::E_NO_SUCH_VERSION);
-                } else if (exception.is_compatible_with<storage::KeyNotFoundException>()) {
-                    data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
-                }
-                metadatas_or_errors.emplace_back(std::move(data_error));
-            }
-        }
-    }
-    return metadatas_or_errors;
+    // For legacy reason read_metadata_batch is not throwing if the symbol is missing
+    TransformBatchResultsFlags flags;
+    flags.throw_on_missing_symbol_ = false;
+    flags.throw_on_error_ = *read_options.batch_throw_on_error();
+    return transform_batch_items_or_throw(std::move(metadatas), stream_ids, flags, version_queries);
 }
 
 std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> LocalVersionedEngine::read_metadata_internal(

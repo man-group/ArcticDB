@@ -10,31 +10,21 @@
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/index.hpp>
-#include <arcticdb/util/timeouts.hpp>
-#include <arcticdb/util/variant.hpp>
 #include <pybind11/pybind11.h>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/version/symbol_list.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
-#include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/pipeline/read_pipeline.hpp>
-#include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/entity/read_result.hpp>
-#include <arcticdb/version/version_log.hpp>
-
-#include <type_traits>
-#include <iostream>
 
 namespace arcticdb::version_store {
 
@@ -296,8 +286,16 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
-        const ReadOptions& read_options,
-        std::any& handler_data);
+        const ReadOptions& read_options);
+
+    std::vector<std::variant<VersionedItem, DataError>> batch_update(
+        const std::vector<StreamId>& stream_ids,
+        const std::vector<py::tuple>& items,
+        const std::vector<py::object>& norms,
+        const std::vector<py::object>& user_metas,
+        const std::vector<UpdateQuery>& update_qeries,
+        bool prune_previous_versions,
+        bool upsert);
 
     std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> batch_read_metadata(
         const std::vector<StreamId>& stream_ids,
@@ -350,7 +348,7 @@ ReadResult read_dataframe_from_file(
     const StreamId &stream_id,
     const std::string& path,
     const std::shared_ptr<ReadQuery>& read_query,
-    std::any& handler_data);
+    const ReadOptions& read_options);
 
 struct ManualClockVersionStore : PythonVersionStore {
     ManualClockVersionStore(const std::shared_ptr<storage::Library>& library) :
@@ -361,7 +359,7 @@ inline std::vector<std::variant<ReadResult, DataError>> frame_to_read_result(std
     std::vector<std::variant<ReadResult, DataError>> read_results;
     read_results.reserve(keys_frame_and_descriptors.size());
     for (auto& read_version_output : keys_frame_and_descriptors) {
-        read_results.emplace_back(create_python_read_result(read_version_output.versioned_item_, std::move(read_version_output.frame_and_descriptor_)));
+        read_results.emplace_back(create_python_read_result(read_version_output.versioned_item_, OutputFormat::PANDAS, std::move(read_version_output.frame_and_descriptor_)));
     }
     return read_results;
 }
