@@ -115,7 +115,13 @@ class ArcticMemoryConfig(ArcticConfig):
     def __getitem__(self, lib_path):
         # type: (LibName)->NativeVersionStore
         lib_cfg = extract_lib_config(self._cfg.env_by_id[self._env], lib_path)
-        return NativeVersionStore.create_store_from_config((self._cfg, self._native_cfg), self._env, lib_cfg.lib_desc.name, OpenMode.DELETE, lib_cfg.lib_desc.version.encoding_version)
+        return NativeVersionStore.create_store_from_config(
+            (self._cfg, self._native_cfg),
+            self._env,
+            lib_cfg.lib_desc.name,
+            OpenMode.DELETE,
+            lib_cfg.lib_desc.version.encoding_version,
+        )
 
     @property
     def cfg(self):
@@ -230,6 +236,7 @@ def get_s3_proto(
     region,
     use_virtual_addressing,
     use_mock_storage_for_testing,
+    use_internal_client_wrapper_for_testing,
     ca_cert_path,
     ca_cert_dir,
     ssl,
@@ -277,13 +284,22 @@ def get_s3_proto(
         s3.ca_cert_dir = ca_cert_dir
     if ssl is not None:
         s3.ssl = ssl
-    
+
     if aws_auth == AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER or aws_profile:
         if is_nfs_layout:
             raise UserInputException("aws_auth and aws_profile can only be set for S3")
         if aws_auth != AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER or not aws_profile:
             raise UserInputException("STS credential provider and aws_profile must be set together")
-        native_cfg.update(NativeS3Settings(aws_auth, aws_profile))
+
+    if use_internal_client_wrapper_for_testing:
+        assert native_cfg is not None, (
+            "use_internal_client_wrapper_for_testing can only be set if native_cfg is provided"
+        )
+
+    if native_cfg:
+        aws_auth = AWSAuthMethod.DISABLED if aws_auth is None else aws_auth
+        aws_profile = "" if aws_profile is None else aws_profile
+        native_cfg.update(NativeS3Settings(aws_auth, aws_profile, use_internal_client_wrapper_for_testing))
 
     sid, storage = get_storage_for_lib_name(s3.prefix, env)
     storage.config.Pack(s3, type_url_prefix="cxx.arctic.org")
@@ -304,6 +320,7 @@ def add_s3_library_to_env(
     region=None,
     use_virtual_addressing=False,
     use_mock_storage_for_testing=None,
+    use_internal_client_wrapper_for_testing=None,
     ca_cert_path=None,
     ca_cert_dir=None,
     ssl=False,
@@ -333,6 +350,7 @@ def add_s3_library_to_env(
         region=region,
         use_virtual_addressing=use_virtual_addressing,
         use_mock_storage_for_testing=use_mock_storage_for_testing,
+        use_internal_client_wrapper_for_testing=use_internal_client_wrapper_for_testing,
         ca_cert_path=ca_cert_path,
         ca_cert_dir=ca_cert_dir,
         ssl=ssl,

@@ -495,6 +495,8 @@ set(arcticdb_srcs
         storage/mock/s3_mock_client.cpp
         storage/s3/s3_storage.cpp
         storage/s3/s3_storage_tool.cpp
+        storage/s3/s3_client_wrapper.cpp
+        storage/s3/s3_client_wrapper.hpp
         storage/storage_factory.cpp
         storage/storage_utils.cpp
         stream/aggregator.cpp
