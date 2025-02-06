@@ -24,9 +24,13 @@ namespace arcticdb::toolbox::apy{
 
 namespace arcticdb::async {
 
-std::pair<VariantKey, std::optional<Segment>> lookup_match_in_dedup_map(
+using ExistingObject = entity::VariantKey;
+using NewObject = storage::KeySegmentPair;
+using DeDupLookupResult = std::variant<ExistingObject, NewObject>;
+
+DeDupLookupResult lookup_match_in_dedup_map(
     const std::shared_ptr<DeDupMap> &de_dup_map,
-    storage::KeySegmentPair&& key_seg);
+    storage::KeySegmentPair& key_seg);
 
 template <typename Callable>
 auto read_and_continue(const VariantKey& key, std::shared_ptr<storage::Library> library, const storage::ReadKeyOpts& opts, Callable&& c) {
@@ -173,7 +177,7 @@ folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair ks) override
 }
 
 void write_compressed_sync(storage::KeySegmentPair ks) override {
-    library_->write(std::move(ks));
+    library_->write(ks);
 }
 
 folly::Future<entity::VariantKey> update(const entity::VariantKey &key,
@@ -375,7 +379,6 @@ std::vector<folly::Future<bool>> batch_key_exists(
 folly::Future<SliceAndKey> async_write(
             folly::Future<std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>> &&input_fut,
             const std::shared_ptr<DeDupMap> &de_dup_map) override {
-        using KeyOptSegment = std::pair<VariantKey, std::optional<Segment>>;
         return std::move(input_fut).thenValue([this] (auto&& input) {
             auto [key, seg, slice] = std::forward<decltype(input)>(input);
             auto key_seg = EncodeAtomTask{
@@ -386,17 +389,20 @@ folly::Future<SliceAndKey> async_write(
                 encoding_version_}();
             return std::pair<storage::KeySegmentPair, FrameSlice>(std::move(key_seg), std::move(slice));
         })
-        .thenValue([de_dup_map](auto &&ks) -> std::pair<KeyOptSegment, pipelines::FrameSlice> {
-            auto [key_seg, slice] = std::forward<decltype(ks)>(ks);
-            return std::make_pair(lookup_match_in_dedup_map(de_dup_map, std::move(key_seg)), std::move(slice));
+        .thenValue([de_dup_map](auto &&ks) -> std::pair<DeDupLookupResult, pipelines::FrameSlice> {
+            auto& [key_seg, slice] = ks;
+            return std::make_pair<>(lookup_match_in_dedup_map(de_dup_map, key_seg), std::move(slice));
         })
         .via(&async::io_executor())
-        .thenValue([lib=library_](auto &&item) {
-            auto [key_opt_segment, slice] = std::forward<decltype(item)>(item);
-            if (key_opt_segment.second)
-                lib->write({VariantKey{key_opt_segment.first}, std::move(*key_opt_segment.second)});
-
-            return SliceAndKey{slice, to_atom(key_opt_segment.first)};
+        .thenValue([lib=library_](auto&& item) {
+            auto& [dedup_lookup, slice] = item;
+            return util::variant_match(dedup_lookup,
+               [&](NewObject& obj) {
+                   lib->write(obj);
+                   return SliceAndKey{slice, obj.atom_key()};
+               }, [&](ExistingObject& obj) {
+                    return SliceAndKey{slice, to_atom(std::move(obj))};
+               });
         });
     }
 
