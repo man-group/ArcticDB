@@ -153,16 +153,19 @@ private:
         // We use the configs map to get a custom suffix to allow inserting a fail trigger for tests
         auto dummy_key_suffix = ConfigsMap::instance()->get_string("Storage.AtomicSupportTestSuffix", "");
         auto dummy_key = RefKey(fmt::format("ATOMIC_TEST_{}_{}{}", dist(e2), dist(e2), dummy_key_suffix), KeyType::ATOMIC_LOCK);
-        auto dummy_segment = [&](){
-            auto descriptor = stream_descriptor("test", stream::RowCountIndex(), {});
-            return Segment::initialize(SegmentHeader{}, std::make_shared<Buffer>(), descriptor.data_ptr(), descriptor.fields_ptr(), descriptor.id());
-        };
+        auto descriptor = stream_descriptor("test", stream::RowCountIndex(), {});
+        auto dummy_segment = Segment::initialize(
+                SegmentHeader{},
+                std::make_shared<Buffer>(),
+                descriptor.data_ptr(),
+                descriptor.fields_ptr(),
+                descriptor.id());
         try {
             // First write should succeed (as we've chosen a unique random key, previously not written to the storage).
-            write_if_none(KeySegmentPair{dummy_key, dummy_segment()});
+            write_if_none(KeySegmentPair{dummy_key, dummy_segment.clone()});
             try {
                 // Second write should fail with an AtomicOperationFailed because the key is already written.
-                write_if_none(KeySegmentPair{dummy_key, dummy_segment()});
+                write_if_none(KeySegmentPair{dummy_key, dummy_segment.clone()});
                 // If second write succeeded then storage ignores the IfNoneMatch headers and doesn't support atomic writes. (e.g. Vast)
                 atomic_write_works_as_expected = false;
             } catch (AtomicOperationFailedException&) {
