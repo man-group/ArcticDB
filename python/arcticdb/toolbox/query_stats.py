@@ -6,37 +6,19 @@ from arcticdb.exceptions import UserInputException
 
 class QueryStatsTools:
     # For demo
-    _stats = [{
-        "arcticdb_call": "read",
-        "stage": "list",
-        "key_type": "ref",
-        "library": "a",
-        "storage_op": "list",
-        "count": 1,
-        "max_time": 1,
-        "min_time": 1,
-        "avg_time": 1,
-        "uncompressed_size": 10,
-        "compressed_size": 10,
-        "retries": 0,
-        },
-        {"arcticdb_call": "write",
-        "stage": "write",
-        "key_type": "d",
-        "library": "a1",
-        "storage_op": "write",
-        "count": 5,
-        "max_time": 10,
-        "min_time": 20,
-        "avg_time": 15,
-        "uncompressed_size": 1000,
-        "compressed_size": 20,
-        "retries": 0,
-        }
+    _stats = [
+        {"arcticdb_call": "list_symbols", "stage": None, "key_type": None, "storage_op": None, "parallelized": False, "count": 1, "ver": None, "tindex": None, "tdata": None, "tall": None, "uncompressed_size": None, "compressed_size": None, "bandwidth": None, "time_count_30": 1, "time_count_50": None, "time_count_80": None, "time_count_100": None, "time_count_130": None, "time_count_300": None, "time_count_350": None, "time_count_780": None},
+        {"arcticdb_call": "list_symbols", "stage": "list", "key_type": None, "storage_op": None, "parallelized": False, "count": 1, "ver": None, "tindex": None, "tdata": None, "tall": None, "uncompressed_size": None, "compressed_size": None, "bandwidth": None, "time_count_30": 1, "time_count_50": None, "time_count_80": None, "time_count_100": None, "time_count_130": None, "time_count_300": None, "time_count_350": None, "time_count_780": None},
+        {"arcticdb_call": "list_symbols", "stage": "list", "key_type": "sl", "storage_op": "ListObjectsV2", "parallelized": False, "count": 1, "ver": None, "tindex": None, "tdata": None, "tall": None, "uncompressed_size": None, "compressed_size": None, "bandwidth": None, "time_count_30": 1, "time_count_50": None, "time_count_80": None, "time_count_100": None, "time_count_130": None, "time_count_300": None, "time_count_350": None, "time_count_780": None},
+        {"arcticdb_call": "read", "stage": None, "key_type": None, "storage_op": None, "parallelized": False, "count": 1, "ver": None, "tindex": None, "tdata": None, "tall": None, "uncompressed_size": None, "compressed_size": None, "bandwidth": None, "time_count_30": None, "time_count_50": None, "time_count_80": None, "time_count_100": 1, "time_count_130": None, "time_count_300": None, "time_count_350": None, "time_count_780": None},
+        {"arcticdb_call": "read", "stage": "find_version", "key_type": None, "storage_op": None, "parallelized": False, "count": 1, "ver": None, "tindex": None, "tdata": None, "tall": None, "uncompressed_size": None, "compressed_size": None, "bandwidth": None, "time_count_30": None, "time_count_50": 1, "time_count_80": None, "time_count_100": None, "time_count_130": None, "time_count_300": None, "time_count_350": None, "time_count_780": None},
+        {"arcticdb_call": "read", "stage": "find_version", "key_type": "vref", "storage_op": "GetObject", "parallelized": False, "count": 1, "ver": 1, "tindex": 1, "tdata": None, "tall": None, "uncompressed_size": 15, "compressed_size": None, "bandwidth": 260, "time_count_30": None, "time_count_50": 1, "time_count_80": None, "time_count_100": None, "time_count_130": None, "time_count_300": None, "time_count_350": None, "time_count_780": None},
+        {"arcticdb_call": "read", "stage": "read", "key_type": None, "storage_op": None, "parallelized": False, "count": 1, "ver": None, "tindex": None, "tdata": None, "tall": None, "uncompressed_size": None, "compressed_size": None, "bandwidth": None, "time_count_30": None, "time_count_50": None, "time_count_80": 1, "time_count_100": None, "time_count_130": None, "time_count_300": None, "time_count_350": None, "time_count_780": None},
+        {"arcticdb_call": "read", "stage": "read", "key_type": "tdata", "storage_op": "GetObject", "parallelized": True, "count": 1, "ver": None, "tindex": None, "tdata": None, "tall": None, "uncompressed_size": 2000, "compressed_size": 200, "bandwidth": 5714, "time_count_30": 1, "time_count_50": None, "time_count_80": None, "time_count_100": None, "time_count_130": None, "time_count_300": None, "time_count_350": None, "time_count_780": None},
+        {"arcticdb_call": "read", "stage": "read", "key_type": "tindex", "storage_op": "GetObject", "parallelized": False, "count": 1, "ver": None, "tindex": None, "tdata": 1, "tall": None, "uncompressed_size": 16, "compressed_size": None, "bandwidth": 301, "time_count_30": None, "time_count_50": 1, "time_count_80": None, "time_count_100": None, "time_count_130": None, "time_count_300": None, "time_count_350": None, "time_count_780": None},
     ]
 
-    def __init__(self, nvs):
-        self._nvs = nvs
+    def __init__(self):
         self._create_time = datetime.now()
         self._is_context_manager = False
 
@@ -47,10 +29,10 @@ class QueryStatsTools:
         return pd.DataFrame(self._stats)
     
     @classmethod
-    def context_manager(cls, lib):
+    def context_manager(cls):
         @contextmanager
         def _func():
-            query_stats_tools = cls(lib._nvs)
+            query_stats_tools = cls()
             query_stats_tools._is_context_manager = True
             yield query_stats_tools
             query_stats_tools._end_time = datetime.now()
@@ -64,4 +46,4 @@ class QueryStatsTools:
     
     @classmethod
     def reset_stats(cls):
-        pass
+        pass # This is not implemented in the demo code
