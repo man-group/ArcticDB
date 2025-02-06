@@ -1904,6 +1904,98 @@
         "version": "f0d46fb3e691f59ad9bfa9ceb6cefea3ac94e235deca77438a642edad99490cc",
         "warmup_time": 0
     },
+    "real_read_write_wide.AWS_GeneralReadWriteTests.peakmem_read_wide": {
+        "code": "class AWS_GeneralReadWriteTests:\n    def peakmem_read_wide(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, params):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = VaryingSizeSymbolLibrary.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(params)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb = AWS_GeneralReadWriteTests.SETUP_CLASS.setup_environment()\n        info = lmdb.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "name": "real_read_write_wide.AWS_GeneralReadWriteTests.peakmem_read_wide",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'15000-cols__2500-rows'",
+                "'15000-cols__5000-rows'",
+                "'30000-cols__2500-rows'",
+                "'30000-cols__5000-rows'"
+            ]
+        ],
+        "setup_cache_key": "real_read_write_wide:144",
+        "timeout": 12000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "e606e8fc370076cc8069ddd945f4ec04be63e73661ff295b13c12f5e79e5f06a"
+    },
+    "real_read_write_wide.AWS_GeneralReadWriteTests.peakmem_write_wide": {
+        "code": "class AWS_GeneralReadWriteTests:\n    def peakmem_write_wide(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, params):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = VaryingSizeSymbolLibrary.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(params)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb = AWS_GeneralReadWriteTests.SETUP_CLASS.setup_environment()\n        info = lmdb.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "name": "real_read_write_wide.AWS_GeneralReadWriteTests.peakmem_write_wide",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'15000-cols__2500-rows'",
+                "'15000-cols__5000-rows'",
+                "'30000-cols__2500-rows'",
+                "'30000-cols__5000-rows'"
+            ]
+        ],
+        "setup_cache_key": "real_read_write_wide:144",
+        "timeout": 12000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "6f647a4107a5fd8fa8f874230d6c7c8465dd2a6336bba1afba37304753a828fa"
+    },
+    "real_read_write_wide.AWS_GeneralReadWriteTests.time_read_wide": {
+        "code": "class AWS_GeneralReadWriteTests:\n    def time_read_wide(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, params):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = VaryingSizeSymbolLibrary.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(params)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb = AWS_GeneralReadWriteTests.SETUP_CLASS.setup_environment()\n        info = lmdb.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "min_run_count": 1,
+        "name": "real_read_write_wide.AWS_GeneralReadWriteTests.time_read_wide",
+        "number": 3,
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'15000-cols__2500-rows'",
+                "'15000-cols__5000-rows'",
+                "'30000-cols__2500-rows'",
+                "'30000-cols__5000-rows'"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write_wide:144",
+        "timeout": 12000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "049790766386931ddd2d15f95d9e3307e9e6ec4e35ed8c67e3a069a4d117a638",
+        "warmup_time": 0
+    },
+    "real_read_write_wide.AWS_GeneralReadWriteTests.time_write_wide": {
+        "code": "class AWS_GeneralReadWriteTests:\n    def time_write_wide(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, params):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = VaryingSizeSymbolLibrary.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(params)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb = AWS_GeneralReadWriteTests.SETUP_CLASS.setup_environment()\n        info = lmdb.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "min_run_count": 1,
+        "name": "real_read_write_wide.AWS_GeneralReadWriteTests.time_write_wide",
+        "number": 3,
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'15000-cols__2500-rows'",
+                "'15000-cols__5000-rows'",
+                "'30000-cols__2500-rows'",
+                "'30000-cols__5000-rows'"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write_wide:144",
+        "timeout": 12000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "68595b0f711561f2ebb28079bbb70203d3b294bb388529468dcbed9a7bfa496f",
+        "warmup_time": 0
+    },
     "resample.Resample.peakmem_resample": {
         "code": "class Resample:\n    def peakmem_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        if col_type == \"datetime\" and aggregation == \"sum\" or col_type == \"str\" and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]:\n            pass\n            # Use this when upgrading to ASV 0.6.0 or later\n            # raise SkipNotImplemented(f\"{aggregation} not supported on columns of type {col_type}\")\n        else:\n            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        ac = Arctic(self.CONNECTION_STRING)\n        ac.delete_library(self.LIB_NAME)\n        lib = ac.create_library(self.LIB_NAME)\n        rng = np.random.default_rng()\n        col_types = self.params[2]\n        rows = max(self.params[0])\n        for col_type in col_types:\n            if col_type == \"str\":\n                num_unique_strings = 100\n                unique_strings = random_strings_of_length(num_unique_strings, 10, True)\n            sym = col_type\n            num_segments = rows // self.ROWS_PER_SEGMENT\n            for idx in range(num_segments):\n                index = pd.date_range(pd.Timestamp(idx * self.ROWS_PER_SEGMENT, unit=\"us\"), freq=\"us\", periods=self.ROWS_PER_SEGMENT)\n                if col_type == \"int\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                elif col_type == \"bool\":\n                    col_data = rng.integers(0, 2, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(bool)\n                elif col_type == \"float\":\n                    col_data = 100_000 * rng.random(self.ROWS_PER_SEGMENT)\n                elif col_type == \"datetime\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(\"datetime64[s]\")\n                elif col_type == \"str\":\n                    col_data = np.random.choice(unique_strings, self.ROWS_PER_SEGMENT)\n                df = pd.DataFrame({\"col\": col_data}, index=index)\n                lib.append(sym, df)",
         "name": "resample.Resample.peakmem_resample",

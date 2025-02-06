@@ -10,7 +10,8 @@ from abc import ABC, abstractmethod
 from enum import Enum
 import tempfile
 import time
-from typing import List
+import re
+from typing import List, Union
 
 from arcticdb.arctic import Arctic
 from arcticdb.storage_fixtures.s3 import S3Bucket, real_s3_from_environment_variables
@@ -252,6 +253,33 @@ class LibrariesBase(ABC):
         return True
     
     #region Helper Methods
+
+    @classmethod
+    def get_parameter_from_string(cls, string: str, param_indx: int, param_type: Union[int, str] = int) -> Union[int, str]:
+        """
+        A way to handle composite parameter list.
+
+        Instead of having multiple sets of parameter we keep the parameter to just one list
+        of string with encoded several values for 2 or more parameters delimited with "__"
+
+        For example following value contains 3 parameters: "w180__h200__value1234"
+
+        We can treat first parameter either as string or as integer with description:
+        - get_parameter_from_string('w180__h200__value1234', 0, str) will return 'w180' string
+        - get_parameter_from_string('w180__h200__value1234', 0, int) will extract int and return '180' as int value
+
+        """
+        params = string.split("__")
+        value = params[param_indx]
+        if param_type is str:
+            pass
+        elif param_type is int:
+            match = re.search(r'\d+', value)
+            if match:
+                value = int(match.group())
+        else:
+            raise Exception(f"Unsupported type {param_type}")
+        return value
 
     def setup_library_with_symbols(self, num_syms: int, data_frame = None, metadata = None):
         """
