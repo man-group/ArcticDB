@@ -364,7 +364,7 @@ class ListGenerators:
                       ) -> List[ArcticFloatType]:
         # Higher numbers will trigger overflow in numpy uniform (-1e307 - 1e307)
         if minV is None:
-            minV = max(-1e307, sys.float_info.max)
+            minV = max(-1e307, -sys.float_info.max)
         if maxV is None:    
             maxV = min(1e307, sys.float_info.max)
         if round_to is None:
@@ -449,7 +449,7 @@ class DFGenerator:
         self.__data[name] = list
         self.__types[name] = str
         return self
-
+    
     def add_string_enum_col(self, name: str, pool = RandomStringPool) -> 'DFGenerator':
         """
         Generates a list of random values based on string pool, simulating enum
@@ -458,11 +458,17 @@ class DFGenerator:
         self.__data[name] = list
         self.__types[name] = str
         return self
-
+    
     def add_bool_col(self, name: str) -> 'DFGenerator':
         list = np.random.choice([True, False], size=self.__size) 
         self.__data[name] = list
         self.__types[name] = bool
+        return self
+    
+    def add_timestamp_col(self, name: str, start_date = "2020-1-1", freq = 's') -> 'DFGenerator':
+        list = pd.date_range(start=start_date, periods=self.__size, freq=freq) 
+        self.__data[name] = list
+        self.__types[name] = pd.Timestamp
         return self
     
     def add_timestamp_indx(self, name_col:str, freq:Union[str , timedelta , pd.Timedelta , pd.DateOffset], 

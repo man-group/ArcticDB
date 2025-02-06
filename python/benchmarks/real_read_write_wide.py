@@ -99,8 +99,8 @@ class VaryingSizeSymbolLibrary(LibrariesBase):
         Sets up single read library with specified parameter set.
         """
         symbol = self.get_symbol_name(param)
-        rows = self.get_number_rows()
-        cols = self.get_number_columns()
+        rows = self.get_number_rows(param)
+        cols = self.get_number_columns(param)
         df = self.generate_df(cols=cols, rows=rows)
         print("Dataframe storage started.")
         st = time.time()
@@ -187,3 +187,11 @@ class AWS_GeneralReadWriteTests:
     def peakmem_write_wide(self, storage_info, params):
         sym = self.lmdb.get_symbol_name(params)
         self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)        
+
+    def time_write_staged(self, rows):
+        self.fresh_lib.write(f"sym", self.df, staged=True)
+        self.fresh_lib._nvs.compact_incomplete(f"sym", False, False)
+
+    def peakmem_write_staged(self, rows):
+        self.fresh_lib.write(f"sym", self.df, staged=True)
+        self.fresh_lib._nvs.compact_incomplete(f"sym", False, False)     
