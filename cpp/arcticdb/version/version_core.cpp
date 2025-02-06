@@ -921,8 +921,9 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
         std::make_shared<std::vector<std::shared_ptr<Clause>>>(read_query->clauses_))
     .via(&async::cpu_executor())
     .thenValue([component_manager, read_query, pipeline_context](std::vector<EntityId>&& processed_entity_ids) {
-        auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
-
+        auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+            *component_manager,
+            std::move(processed_entity_ids));
         if (ranges::any_of(read_query->clauses_, [](const std::shared_ptr<Clause>& clause) {
             return clause->clause_info().modifies_output_descriptor_;
         })) {
@@ -940,7 +941,7 @@ void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDes
 
         std::vector<std::string> index_columns_to_add;
         for(const auto& index_column : index_columns) {
-            if(std::find(std::begin(*read_query.columns), std::end(*read_query.columns), index_column) == std::end(*read_query.columns))
+            if(ranges::find(*read_query.columns, index_column) == std::end(*read_query.columns))
                 index_columns_to_add.emplace_back(index_column);
         }
         read_query.columns->insert(std::begin(*read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add));

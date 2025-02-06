@@ -641,7 +641,7 @@ folly::Future<folly::Unit> reduce_and_fix_columns(
     if(frame.empty())
         return folly::Unit{};
 
-    bool dynamic_schema = opt_false(read_options.dynamic_schema_);
+    const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
     auto slice_map = std::make_shared<FrameSliceMap>(context, dynamic_schema);
     DecodePathData shared_data;
 

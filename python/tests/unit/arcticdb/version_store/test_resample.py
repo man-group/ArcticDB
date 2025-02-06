@@ -6,6 +6,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 from functools import partial
+from typing import Union
+
 import numpy as np
 import pandas as pd
 import datetime as dt
@@ -17,11 +19,25 @@ from arcticdb.util.test import assert_frame_equal, generic_resample_test
 from packaging.version import Version
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
 import itertools
+from pandas.api.types import is_float_dtype
 
 pytestmark = pytest.mark.pipeline
 
 
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
+
+def default_aggregation_value(aggregation: str, dtype: Union[np.dtype, str]):
+    assert aggregation in ALL_AGGREGATIONS
+    if is_float_dtype(dtype):
+        return 0 if aggregation == "count" else np.nan
+    elif np.issubdtype(dtype, np.integer):
+        return np.nan if aggregation == "mean" else 0
+    elif np.issubdtype(dtype, np.datetime64):
+        pass
+    elif np.issubdtype(dtype, np.str_):
+        pass
+    else:
+        raise "Unknown dtype"
 
 def all_aggregations_dict(col):
     return {f"to_{agg}": (col, agg) for agg in ALL_AGGREGATIONS}
@@ -846,20 +862,36 @@ def test_min_with_one_infinity_element(lmdb_version_store_v1):
     assert np.isneginf(lib.read(sym, query_builder=q).data['col_min'][0])
 
 class TestDynamicSchema:
-    def test_missing_column_segment_does_not_cross_bucket(self, lmdb_version_store_dynamic_schema_v1):
+    @pytest.mark.parametrize("dtype", [np.float32, np.float64, np.uint32, np.int32, np.int64])
+    def test_missing_column_segment_does_not_cross_bucket(self, lmdb_version_store_dynamic_schema_v1, dtype):
+        pd.set_option('display.max_columns', None)
+        pd.set_option('display.max_rows', None)
+        pd.set_option('display.width', None)
+        pd.set_option('display.max_columns', None)
+
         lib = lmdb_version_store_dynamic_schema_v1
         sym = "sym"
 
         idx = pd.date_range(pd.Timestamp(0), periods=20, freq='ns')
-        lib.write(sym, pd.DataFrame({"a": range(len(idx))}, index=idx))
+        initial_df = pd.DataFrame({"a": range(len(idx))}, index=idx)
+        lib.write(sym, initial_df)
 
-        idx = pd.date_range(pd.Timestamp(20), periods=20, freq='ns')
-        lib.append(sym, pd.DataFrame({"a": range(len(idx)), "b": np.array(range(len(idx)), dtype=np.float32)}, index=idx))
+        idx_to_append = pd.date_range(pd.Timestamp(40), periods=20, freq='ns')
+        df_to_append = pd.DataFrame({"a": range(len(idx)), "b": np.array(range(len(idx)), dtype=dtype)}, index=idx_to_append)
+        lib.append(sym, df_to_append)
 
-        data = lib.read(sym).data
-        print(data)
-        #res = data.resample("10ns").agg(None, **{"col_count":("b", "count")})
-        #print(res)
         q = QueryBuilder()
-        q = q.resample('10ns').agg({"b_count": ("b", "min")})
-        lib.read(sym, query_builder=q)
+        q = q.resample('10ns').agg(all_aggregations_dict("b"))
+        arctic_resampled = lib.read(sym, query_builder=q).data
+        arctic_resampled = arctic_resampled.reindex(columns=sorted(arctic_resampled.columns))
+
+        expected_slice_with_missing_column_idx = [pd.Timestamp(0), pd.Timestamp(10)]
+        expected_slice_with_missing_column = pd.DataFrame({
+            f"to_{agg}": [default_aggregation_value(agg, dtype) for _ in range(len(expected_slice_with_missing_column_idx))] for agg in ALL_AGGREGATIONS
+        }, index=expected_slice_with_missing_column_idx)
+        expected_slice_containing_column = df_to_append.resample('10ns').agg(None, **all_aggregations_dict("b"))
+        expected = pd.concat([expected_slice_with_missing_column, expected_slice_containing_column])
+        expected = expected.reindex(columns=sorted(expected.columns))
+        assert_frame_equal(arctic_resampled, expected, check_dtype=False)
+
+

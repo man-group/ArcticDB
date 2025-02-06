@@ -652,7 +652,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
 
     ARCTICDB_DEBUG_THROW(5)
     for (const auto& aggregator: aggregators_) {
-        std::vector<std::optional<ColumnWithStrings>> input_agg_columns;
+        std::vector<ColumnWithStrings> input_agg_columns;
         input_agg_columns.reserve(row_slices.size());
         for (auto& row_slice: row_slices) {
             auto variant_data = row_slice.get(aggregator.get_input_column_name());
@@ -660,18 +660,20 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
                                 [&input_agg_columns](const ColumnWithStrings& column_with_strings) {
                                     input_agg_columns.emplace_back(column_with_strings);
                                 },
-                                [&input_agg_columns](const EmptyResult&) {
+                                [](const EmptyResult&) {
                                     // Dynamic schema, missing column from this row-slice
                                     // Not currently supported, but will be, hence the argument to aggregate being a vector of optionals
-                                    input_agg_columns.emplace_back();
                                 },
                                 [](const auto&) {
                                     internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected return type from ProcessingUnit::get, expected column-like");
                                 }
             );
         }
-        auto aggregated_column = std::make_shared<Column>(aggregator.aggregate(input_index_columns, input_agg_columns, bucket_boundaries, *output_index_column, string_pool));
-        seg.add_column(scalar_field(aggregated_column->type().data_type(), aggregator.get_output_column_name().value), aggregated_column);
+        if (!input_agg_columns.empty()) {
+            auto aggregated_column = std::make_shared<Column>(aggregator.aggregate(input_index_columns, input_agg_columns, bucket_boundaries, *output_index_column, string_pool));
+            const auto field = scalar_field(aggregated_column->type().data_type(), aggregator.get_output_column_name().value);
+            seg.add_column(field, std::move(aggregated_column));
+        }
     }
     seg.set_row_data(output_index_column->row_count() - 1);
     return push_entities(*component_manager_, ProcessingUnit(std::move(seg), std::move(output_row_range)));

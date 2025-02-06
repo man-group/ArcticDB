@@ -30,7 +30,7 @@ struct ISortedAggregator {
         [[nodiscard]] ColumnName get_input_column_name() const { return folly::poly_call<0>(*this); };
         [[nodiscard]] ColumnName get_output_column_name() const { return folly::poly_call<1>(*this); };
         [[nodiscard]] Column aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
-                                       const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
+                                       const std::vector<ColumnWithStrings>& input_agg_columns,
                                        const std::vector<timestamp>& bucket_boundaries,
                                        const Column& output_index_column,
                                        StringPool& string_pool) const {
@@ -339,25 +339,12 @@ public:
     [[nodiscard]] ColumnName get_output_column_name() const;
 
     [[nodiscard]] Column aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
-                                   const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
+                                   const std::vector<ColumnWithStrings>& input_agg_columns,
                                    const std::vector<timestamp>& bucket_boundaries,
                                    const Column& output_index_column,
                                    StringPool& string_pool) const;
 private:
-    [[nodiscard]] Column aggregate_static_schema(
-        std::span<const std::shared_ptr<Column>> input_index_columns,
-        std::span<const std::optional<ColumnWithStrings>> input_agg_columns,
-        std::span<const timestamp> bucket_boundaries,
-        const Column& output_index_column,
-        StringPool& string_pool,
-        DataType common_input_type) const;
-    [[nodiscard]] Column aggregate_dynamic_schema(
-        std::span<const std::shared_ptr<Column>> input_index_columns,
-        std::span<const std::optional<ColumnWithStrings>> input_agg_columns,
-        std::span<const timestamp> bucket_boundaries,
-        const Column& output_index_column,
-        StringPool& string_pool) const;
-    [[nodiscard]] std::optional<DataType> generate_common_input_type(const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns) const;
+    [[nodiscard]] std::optional<DataType> generate_common_input_type(std::span<const ColumnWithStrings> input_agg_columns) const;
     void check_aggregator_supported_with_data_type(DataType data_type) const;
     [[nodiscard]] DataType generate_output_data_type(DataType common_input_data_type) const;
     [[nodiscard]] bool index_value_past_end_of_bucket(timestamp index_value, timestamp bucket_end) const;

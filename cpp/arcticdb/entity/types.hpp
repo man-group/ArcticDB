@@ -607,17 +607,9 @@ struct FieldRef {
     TypeDescriptor type_;
     std::string_view name_;
 
-    [[nodiscard]] TypeDescriptor type() const {
-        return type_;
-    }
-
-    [[nodiscard]] std::string_view name() const {
-        return name_;
-    }
-
-    friend bool operator==(const FieldRef &left, const FieldRef &right) {
-        return left.type_ == right.type_ && left.name_ == right.name_;
-    }
+    [[nodiscard]] TypeDescriptor type() const;
+    [[nodiscard]] std::string_view name() const;
+    friend bool operator==(const FieldRef &left, const FieldRef &right);
 };
 
 #pragma pack(push, 1)
@@ -690,45 +682,23 @@ public:
 
 struct FieldWrapper {
     std::vector<uint8_t> data_;
-    FieldWrapper(TypeDescriptor type, std::string_view name) :
-        data_(Field::calc_size(name)) {
-        mutable_field().set(type, name);
-    }
-
-    const Field &field() const {
-        return *reinterpret_cast<const Field *>(data_.data());
-    }
-
-    const TypeDescriptor& type() const {
-        return field().type();
-    }
-
-    const std::string_view name() const {
-        return field().name();
-    }
-
+    FieldWrapper(TypeDescriptor type, std::string_view name);
+    const Field &field() const;
+    const TypeDescriptor& type() const;
+    std::string_view name() const;
 private:
-    Field &mutable_field() {
-        return *reinterpret_cast<Field *>(data_.data());
-    }
+    Field &mutable_field();
 };
 
-inline FieldRef scalar_field(DataType type, std::string_view name) {
-    return {TypeDescriptor{type, Dimension::Dim0}, name};
-}
+FieldRef scalar_field(DataType type, std::string_view name);
 
 template<typename Callable>
 auto visit_field(const Field &field, Callable &&c) {
     return field.type().visit_tag(std::forward<Callable>(c));
 }
 
-inline bool operator==(const Field &l, const Field &r) {
-    return l.type() == r.type() && l.name() == r.name();
-}
-
-inline bool operator!=(const Field &l, const Field &r) {
-    return !(l == r);
-}
+bool operator==(const Field &l, const Field &r);
+bool operator!=(const Field &l, const Field &r);
 
 } // namespace entity
 

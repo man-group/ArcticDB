@@ -118,17 +118,15 @@ auto finalize_aggregator(
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-[[nodiscard]] Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate_static_schema(
-    std::span<const std::shared_ptr<Column>> input_index_columns,
-    std::span<const std::optional<ColumnWithStrings>> input_agg_columns,
-    std::span<const timestamp> bucket_boundaries,
-    const Column& output_index_column,
-    StringPool& string_pool,
-    DataType common_input_type
-) const {
+Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
+                                                                          const std::vector<ColumnWithStrings>& input_agg_columns,
+                                                                          const std::vector<timestamp>& bucket_boundaries,
+                                                                          const Column& output_index_column,
+                                                                          StringPool& string_pool) const {
+    std::optional<DataType> common_input_type = generate_common_input_type(input_agg_columns);
     using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     Column res(
-        TypeDescriptor(generate_output_data_type(common_input_type), Dimension::Dim0),
+        TypeDescriptor(generate_output_data_type(*common_input_type), Dimension::Dim0),
         output_index_column.row_count(),
         AllocationType::PRESIZED,
         Sparsity::NOT_PERMITTED
@@ -154,78 +152,75 @@ template<AggregationOperator aggregation_operator, ResampleBoundary closed_bound
                 Bucket<closed_boundary> current_bucket(*bucket_start_it, *bucket_end_it);
                 const auto bucket_boundaries_end = bucket_boundaries.end();
                 for (auto [idx, input_agg_column]: folly::enumerate(input_agg_columns)) {
-                    // Always true right now due to earlier check
-                    if (input_agg_column.has_value()) {
-                        details::visit_type(
-                            input_agg_column->column_->type().data_type(),
-                            [this,
-                            &output_it,
-                            &output_end_it,
-                            &bucket_aggregator,
-                            &agg_column = *input_agg_column,
-                            &input_index_column = input_index_columns[idx],
-                            &bucket_boundaries_end,
-                            &string_pool,
-                            &bucket_start_it,
-                            &bucket_end_it,
-                            &current_bucket,
-                            &reached_end_of_buckets](auto input_type_desc_tag) {
-                                using input_type_info = ScalarTypeInfo<decltype(input_type_desc_tag)>;
-                                // Again, only needed to generate valid code below, exception will have been thrown earlier at runtime
-                                if constexpr (are_input_output_operation_allowed<aggregation_operator, input_type_info, output_type_info>()) {
-                                    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                                            !agg_column.column_->is_sparse() && agg_column.column_->row_count() == input_index_column->row_count(),
-                                            "Resample: Cannot aggregate column '{}' as it is sparse",
-                                            get_input_column_name().value);
-                                    auto index_data = input_index_column->data();
-                                    const auto index_cend = index_data.cend<IndexTDT>();
-                                    auto agg_data = agg_column.column_->data();
-                                    auto agg_it = agg_data.cbegin<typename input_type_info::TDT>();
-                                    bool bucket_has_values = false;
-                                    for (auto index_it = index_data.cbegin<IndexTDT>(); index_it != index_cend && !reached_end_of_buckets; ++index_it, ++agg_it) {
-                                        if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
-                                            push_to_aggregator<aggregation_operator, input_type_info::data_type>(bucket_aggregator, *agg_it, agg_column);
-                                            bucket_has_values = true;
-                                        } else if (ARCTICDB_LIKELY(index_value_past_end_of_bucket(*index_it, *bucket_end_it)) && output_it != output_end_it) {
-                                            if (bucket_has_values) {
-                                                *output_it++ = finalize_aggregator<aggregation_operator, output_type_info::data_type>(bucket_aggregator, string_pool);
-                                            }
-                                            // The following code is equivalent to:
-                                            // if constexpr (closed_boundary == ResampleBoundary::LEFT) {
-                                            //     bucket_end_it = std::upper_bound(bucket_end_it, bucket_boundaries_end, *index_it);
-                                            // } else {
-                                            //     bucket_end_it = std::upper_bound(bucket_end_it, bucket_boundaries_end, *index_it, std::less_equal{});
-                                            // }
-                                            // bucket_start_it = std::prev(bucket_end_it);
-                                            // reached_end_of_buckets = bucket_end_it == bucket_boundaries_end;
-                                            // The above code will be more performant when the vast majority of buckets are empty
-                                            // See comment in  ResampleClause::advance_boundary_past_value for mathematical and experimental bounds
-                                            ++bucket_start_it;
-                                            if (ARCTICDB_UNLIKELY(++bucket_end_it == bucket_boundaries_end)) {
-                                                reached_end_of_buckets = true;
-                                            } else {
-                                                while (ARCTICDB_UNLIKELY(index_value_past_end_of_bucket(*index_it, *bucket_end_it))) {
-                                                    ++bucket_start_it;
-                                                    if (ARCTICDB_UNLIKELY(++bucket_end_it == bucket_boundaries_end)) {
-                                                        reached_end_of_buckets = true;
-                                                        break;
-                                                    }
+                    details::visit_type(
+                        input_agg_column.column_->type().data_type(),
+                        [this,
+                        &output_it,
+                        &output_end_it,
+                        &bucket_aggregator,
+                        &agg_column = input_agg_column,
+                        &input_index_column = input_index_columns[idx],
+                        &bucket_boundaries_end,
+                        &string_pool,
+                        &bucket_start_it,
+                        &bucket_end_it,
+                        &current_bucket,
+                        &reached_end_of_buckets](auto input_type_desc_tag) {
+                            using input_type_info = ScalarTypeInfo<decltype(input_type_desc_tag)>;
+                            // Again, only needed to generate valid code below, exception will have been thrown earlier at runtime
+                            if constexpr (are_input_output_operation_allowed<aggregation_operator, input_type_info, output_type_info>()) {
+                                schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+                                        !agg_column.column_->is_sparse() && agg_column.column_->row_count() == input_index_column->row_count(),
+                                        "Resample: Cannot aggregate column '{}' as it is sparse",
+                                        get_input_column_name().value);
+                                auto index_data = input_index_column->data();
+                                const auto index_cend = index_data.cend<IndexTDT>();
+                                auto agg_data = agg_column.column_->data();
+                                auto agg_it = agg_data.cbegin<typename input_type_info::TDT>();
+                                bool bucket_has_values = false;
+                                for (auto index_it = index_data.cbegin<IndexTDT>(); index_it != index_cend && !reached_end_of_buckets; ++index_it, ++agg_it) {
+                                    if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
+                                        push_to_aggregator<aggregation_operator, input_type_info::data_type>(bucket_aggregator, *agg_it, agg_column);
+                                        bucket_has_values = true;
+                                    } else if (ARCTICDB_LIKELY(index_value_past_end_of_bucket(*index_it, *bucket_end_it)) && output_it != output_end_it) {
+                                        if (bucket_has_values) {
+                                            *output_it++ = finalize_aggregator<aggregation_operator, output_type_info::data_type>(bucket_aggregator, string_pool);
+                                        }
+                                        // The following code is equivalent to:
+                                        // if constexpr (closed_boundary == ResampleBoundary::LEFT) {
+                                        //     bucket_end_it = std::upper_bound(bucket_end_it, bucket_boundaries_end, *index_it);
+                                        // } else {
+                                        //     bucket_end_it = std::upper_bound(bucket_end_it, bucket_boundaries_end, *index_it, std::less_equal{});
+                                        // }
+                                        // bucket_start_it = std::prev(bucket_end_it);
+                                        // reached_end_of_buckets = bucket_end_it == bucket_boundaries_end;
+                                        // The above code will be more performant when the vast majority of buckets are empty
+                                        // See comment in  ResampleClause::advance_boundary_past_value for mathematical and experimental bounds
+                                        ++bucket_start_it;
+                                        if (ARCTICDB_UNLIKELY(++bucket_end_it == bucket_boundaries_end)) {
+                                            reached_end_of_buckets = true;
+                                        } else {
+                                            while (ARCTICDB_UNLIKELY(index_value_past_end_of_bucket(*index_it, *bucket_end_it))) {
+                                                ++bucket_start_it;
+                                                if (ARCTICDB_UNLIKELY(++bucket_end_it == bucket_boundaries_end)) {
+                                                    reached_end_of_buckets = true;
+                                                    break;
                                                 }
                                             }
-                                            if (ARCTICDB_LIKELY(!reached_end_of_buckets)) {
-                                                bucket_has_values = false;
-                                                current_bucket.set_boundaries(*bucket_start_it, *bucket_end_it);
-                                                if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
-                                                    push_to_aggregator<aggregation_operator, input_type_info::data_type>(bucket_aggregator, *agg_it, agg_column);
-                                                    bucket_has_values = true;
-                                                }
+                                        }
+                                        if (ARCTICDB_LIKELY(!reached_end_of_buckets)) {
+                                            bucket_has_values = false;
+                                            current_bucket.set_boundaries(*bucket_start_it, *bucket_end_it);
+                                            if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
+                                                push_to_aggregator<aggregation_operator, input_type_info::data_type>(bucket_aggregator, *agg_it, agg_column);
+                                                bucket_has_values = true;
                                             }
                                         }
                                     }
                                 }
                             }
-                        );
-                    }
+                        }
+                    );
                 }
                 // We were in the middle of aggregating a bucket when we ran out of index values
                 if (output_it != output_end_it) {
@@ -238,50 +233,14 @@ template<AggregationOperator aggregation_operator, ResampleBoundary closed_bound
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-[[nodiscard]] Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate_dynamic_schema(
-    [[maybe_unused]] std::span<const std::shared_ptr<Column>> input_index_columns,
-    [[maybe_unused]] std::span<const std::optional<ColumnWithStrings>> input_agg_columns,
-    [[maybe_unused]] std::span<const timestamp> bucket_boundaries,
-    [[maybe_unused]] const Column& output_index_column,
-    [[maybe_unused]] StringPool& string_pool
-) const {
-    return {};
-}
-
-template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
-                                                                          const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
-                                                                          const std::vector<timestamp>& bucket_boundaries,
-                                                                          const Column& output_index_column,
-                                                                          StringPool& string_pool) const {
-    if (const std::optional<DataType> common_input_type = generate_common_input_type(input_agg_columns)) {
-        return aggregate_static_schema(
-            input_index_columns,
-            input_agg_columns,
-            bucket_boundaries,
-            output_index_column,
-            string_pool,
-            *common_input_type);
-    }
-    return aggregate_dynamic_schema(input_index_columns,
-        input_agg_columns,
-        bucket_boundaries,
-        output_index_column,
-        string_pool);
-
-}
-
-template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
 std::optional<DataType> SortedAggregator<aggregation_operator, closed_boundary>::generate_common_input_type(
-        const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns
+    std::span<const ColumnWithStrings> input_agg_columns
 ) const {
     std::optional<DataType> common_input_type;
     for (const auto& opt_input_agg_column: input_agg_columns) {
-        if (opt_input_agg_column.has_value()) {
-            const auto input_data_type = opt_input_agg_column->column_->type().data_type();
-            check_aggregator_supported_with_data_type(input_data_type);
-            add_data_type_impl(input_data_type, common_input_type);
-        }
+        const auto input_data_type = opt_input_agg_column.column_->type().data_type();
+        check_aggregator_supported_with_data_type(input_data_type);
+        add_data_type_impl(input_data_type, common_input_type);
     }
     return common_input_type;
 }
