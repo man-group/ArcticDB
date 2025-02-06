@@ -8,11 +8,10 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import os
 from contextlib import contextmanager
-from typing import Mapping, Any, Optional, NamedTuple, List, AnyStr, Union
+from typing import Mapping, Any, Optional, NamedTuple, List, AnyStr, Union, Dict
 import numpy as np
 import pandas as pd
-from pandas.core.series import Series
-from pandas import DateOffset, Index, Timedelta
+from pandas import DateOffset, Timedelta
 from pandas._typing import Scalar
 import datetime as dt
 import string
@@ -37,7 +36,6 @@ from arcticdb.config import _DEFAULT_ENVS_PATH
 from arcticdb_ext import set_config_int, get_config_int, unset_config_int
 from packaging.version import Version
 
-from arcticdb import log
 
 def create_df(start=0, columns=1) -> pd.DataFrame:
     data = {}
@@ -294,8 +292,8 @@ def get_lib_by_name(lib_name, env, conf_path=_DEFAULT_ENVS_PATH):
 
 @contextmanager
 def config_context(name, value):
+    initial = get_config_int(name)
     try:
-        initial = get_config_int(name)
         set_config_int(name, value)
         yield
     finally:
@@ -303,6 +301,26 @@ def config_context(name, value):
             set_config_int(name, initial)
         else:
             unset_config_int(name)
+
+
+@contextmanager
+def config_context_multi(config: Dict[str, int]):
+    """Call set_config_int for each entry in the dict."""
+    initial = dict()
+    try:
+        for name, value in config.items():
+            initial[name] = get_config_int(name)
+            if value is None:
+                unset_config_int(name)
+            else:
+                set_config_int(name, value)
+        yield
+    finally:
+        for name, value in config.items():
+            if name in initial and initial[name]:
+                set_config_int(name, initial[name])
+            else:
+                unset_config_int(name)
 
 
 CustomThing = NamedTuple(

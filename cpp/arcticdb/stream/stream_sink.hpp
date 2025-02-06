@@ -15,6 +15,7 @@
 #include <arcticdb/version/de_dup_map.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 
+#include <folly/synchronization/NativeSemaphore.h>
 #include <folly/futures/Future.h>
 // FIXME: winnt.h is included by folly/futures/Future.h at some point and adds unwanted macros
 #ifdef DELETE
@@ -89,6 +90,13 @@ struct StreamSink {
     [[nodiscard]] virtual folly::Future<entity::VariantKey> write(
         PartialKey pk,
         SegmentInMemory &&segment) = 0;
+
+    // shared_ptr for semaphore as executing futures need guarantees it is in a valid state, so need to participate
+    // in ownership
+    [[nodiscard]] virtual folly::Future<entity::VariantKey> write_maybe_blocking(
+        PartialKey pk,
+        SegmentInMemory&& segment,
+        std::shared_ptr<folly::NativeSemaphore> semaphore) = 0;
 
     virtual entity::VariantKey write_sync(
         PartialKey pk,
