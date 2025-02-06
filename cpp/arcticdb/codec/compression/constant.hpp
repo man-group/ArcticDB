@@ -1,7 +1,7 @@
 #pragma once
 
-#include <arcticdb/log/log.hpp>
-#include <arcticdb/util/preconditions.hpp>
+#include "arcticdb/log/log.hpp"
+#include "arcticdb/util/preconditions.hpp"
 
 #include <cstdint>
 

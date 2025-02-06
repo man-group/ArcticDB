@@ -10,6 +10,49 @@
 #include <utility>
 #include <limits>
 
+
+#if defined(__clang__)
+#define ALWAYS_INLINE __attribute__((always_inline))
+    #define VECTOR_HINT __attribute__((vectorcall))
+    #define RESTRICT __restrict__
+    #define ASSUME_ALIGNED(ptr, alignment) __builtin_assume_aligned(ptr, alignment)
+    #define VECTORIZE_LOOP _Pragma("clang loop vectorize(enable) interleave(enable)")
+    #define ALIGNED_ACCESS _Pragma("clang loop vectorize_predicate(enable)")
+    #define HOT_FUNCTION __attribute__((hot))
+    #define ALIGN_HINT(x) alignas(x)
+    #define EXPECT(expr, val) __builtin_expect(expr, val)
+#elif defined(__GNUC__)
+    #define ALWAYS_INLINE __attribute__((always_inline))
+    #define VECTOR_HINT __attribute__((vector_size(32)))
+    #define RESTRICT __restrict
+    #define ASSUME_ALIGNED(ptr, alignment) __builtin_assume_aligned(ptr, alignment)
+    #define VECTORIZE_LOOP _Pragma("GCC ivdep")
+    #define ALIGNED_ACCESS
+    #define HOT_FUNCTION __attribute__((hot))
+    #define ALIGN_HINT(x) alignas(x)
+    #define EXPECT(expr, val) __builtin_expect(expr, val)
+#elif defined(_MSC_VER)
+#define ALWAYS_INLINE __forceinline
+    #define VECTOR_HINT __vectorcall
+    #define RESTRICT __restrict
+    #define ASSUME_ALIGNED(ptr, alignment) ptr
+    #define VECTORIZE_LOOP
+    #define ALIGNED_ACCESS
+    #define HOT_FUNCTION
+    #define ALIGN_HINT(x) __declspec(align(x))
+    #define EXPECT(expr, val) (expr)
+#else
+#define ALWAYS_INLINE
+#define VECTOR_HINT
+#define RESTRICT
+#define ASSUME_ALIGNED(ptr, alignment) ptr
+#define VECTORIZE_LOOP
+#define ALIGNED_ACCESS
+#define HOT_FUNCTION
+#define ALIGN_HINT(x)
+#define EXPECT(expr, val) (expr)
+#endif
+
 namespace arcticdb {
 namespace fastlanes {
 

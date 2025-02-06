@@ -119,6 +119,18 @@ struct FieldStats {
     bool unused_ = false;
 };
 
+enum class EncodingType : uint8_t {
+    PLAIN,
+    FFOR ,
+    DELTA,
+    FREQUENCY,
+    CONSTANT,
+    RLE,
+    ALP,
+    BITPACK,
+    COUNT
+};
+
 static_assert(sizeof(FieldStats) == 24);
 
 // Each encoded field will have zero or one shapes blocks,

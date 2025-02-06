@@ -2,12 +2,12 @@
 #include <cstddef>
 
 
-#include <arcticdb/codec/fastlanes_common.hpp>
-#include <arcticdb/log/log.hpp>
+#include "fastlanes_common.hpp"
+#include "arcticdb/log/log.hpp"
 
 namespace arcticdb {
 
-
+/*
 template<typename T, size_t bit_width>
 constexpr T construct_mask() {
     if constexpr (bit_width == type_bits<T>())
@@ -146,5 +146,5 @@ struct BitUnpackFused : public BitPackHelper<T, bit_width> {
         }
     }
 };
-
+*/
 } // namespace arcticdb

@@ -106,7 +106,7 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
 
         agg.end_block_write(rows_to_write);
 
-        if(ConfigsMap().instance()->get_int("Statistics.GenerateOnWrite", 0) == 1)
+        if(ConfigsMap().instance()->get_int("Statistics.GenerateOnWrite", 0) == 1 || block_codec_.type_ == Codec::ADAPTIVE)
             agg.segment().calculate_statistics();
 
         agg.finalize();

@@ -13,7 +13,7 @@
 #include <numeric>
 #include <algorithm>
 
-#include <arcticdb/codec/fastlanes_common.hpp>
+#include "arcticdb/codec/compression/fastlanes_common.hpp"
 #include <arcticdb/log/log.hpp>
 
 #include <cstddef>
@@ -21,7 +21,7 @@
 #include <numeric>
 #include <algorithm>
 
-#include <arcticdb/codec/fastlanes_common.hpp>
+#include "arcticdb/codec/compression/fastlanes_common.hpp"
 #include <arcticdb/log/log.hpp>
 #include <immintrin.h>
 #include <ankerl/unordered_dense.h>

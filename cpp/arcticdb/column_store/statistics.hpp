@@ -67,21 +67,29 @@ struct FieldStatsImpl : public FieldStats {
     };
 
     template <typename T>
-    T get_max() {
+    T get_max() const {
         T value;
         get_value<T>(max_, value);
         return value;
     }
 
     template <typename T>
-    T get_min() {
+    T get_min() const {
         T value;
         get_value<T>(min_, value);
         return value;
     }
 
-    size_t get_unique_count() const {
+    [[nodiscard]] size_t get_unique_count() const {
         return unique_count_;
+    }
+
+    void set_sorted(SortedValue value) {
+        sorted_ = value;
+    }
+
+    [[nodiscard]] SortedValue get_sorted() const {
+        return sorted_;
     }
 
     FieldStatsImpl(FieldStats base) {
@@ -89,6 +97,7 @@ struct FieldStatsImpl : public FieldStats {
         max_ = base.max_;
         unique_count_ = base.unique_count_;
         unique_count_precision_ = base.unique_count_precision_;
+        sorted_ = base.sorted_;
         set_ = base.set_;
     }
 
@@ -97,10 +106,12 @@ struct FieldStatsImpl : public FieldStats {
         T min,
         T max,
         uint32_t unique_count,
-        UniqueCountType unique_count_precision) {
+        UniqueCountType unique_count_precision,
+        SortedValue sorted) {
         set_min(min);
         set_max(max);
         set_unique(unique_count, unique_count_precision);
+        set_sorted(sorted);
     }
 
     FieldStatsImpl(
@@ -151,6 +162,9 @@ struct FieldStatsImpl : public FieldStats {
                 unique_count_ += other.unique_count_;
             }
         }
+
+        if(other.get_sorted() != SortedValue::ASCENDING || get_sorted() != SortedValue::ASCENDING)
+            sorted_ = SortedValue::UNKNOWN;
     }
 };
 
@@ -164,7 +178,11 @@ FieldStatsImpl generate_numeric_statistics(std::span<const T> data) {
     for(auto val : data) {
         unique.emplace(val);
     }
-    FieldStatsImpl field_stats(*col_min, *col_max, unique.size(), UniqueCountType::PRECISE);
+
+    //TODO decide whether to check for sorted descending
+    auto sorted_value = std::is_sorted(std::begin(data), std::end(data)) ? SortedValue::ASCENDING : SortedValue::UNKNOWN;
+
+    FieldStatsImpl field_stats(*col_min, *col_max, unique.size(), UniqueCountType::PRECISE, sorted_value);
     return field_stats;
 }
 

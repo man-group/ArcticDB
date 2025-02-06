@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
-#include <arcticdb/codec/bitpack_fused.hpp>
+#include "arcticdb/codec/compression/bitpack_fused.hpp"
+#include <random>
+
+namespace arcticdb {
 
 static uint64_t rand_arr_70_b11_w64_arr[1024] =
     {403UL, 1272UL, 863UL, 2026UL, 1646UL, 1274UL, 1737UL, 1105UL, 939UL, 311UL, 292UL, 183UL, 938UL, 1939UL, 1185UL,
@@ -71,49 +74,175 @@ static uint64_t rand_arr_70_b11_w64_arr[1024] =
      1297UL, 1482UL, 1047UL, 469UL, 743UL, 1819UL, 942UL, 631UL, 670UL, 2042UL, 728UL, 1279UL, 325UL, 1997UL, 1281UL,
      2018UL, 1476UL, 866UL, 1210UL, 1358UL, 851UL, 826UL, 632UL, 1573UL, 1401UL, 1891UL, 297UL, 1015UL, 1743UL,};
 
+uint8_t rand_arr_3_b3_w8_arr[1024] =
+    {2UL, 4UL, 2UL, 5UL, 4UL, 2UL, 2UL, 7UL, 7UL, 4UL, 5UL, 0UL, 0UL, 2UL, 7UL, 6UL, 2UL, 5UL, 7UL, 5UL, 2UL, 1UL, 1UL,
+     3UL, 5UL, 5UL, 0UL, 3UL, 7UL, 0UL, 0UL, 7UL, 3UL, 6UL, 6UL, 0UL, 3UL, 4UL, 3UL, 6UL, 3UL, 1UL, 6UL, 0UL, 6UL, 2UL,
+     2UL, 5UL, 2UL, 3UL, 3UL, 5UL, 0UL, 1UL, 5UL, 3UL, 3UL, 6UL, 6UL, 5UL, 7UL, 0UL, 6UL, 1UL, 0UL, 0UL, 2UL, 7UL, 4UL,
+     5UL, 2UL, 6UL, 4UL, 7UL, 4UL, 3UL, 6UL, 6UL, 0UL, 7UL, 2UL, 4UL, 5UL, 4UL, 3UL, 7UL, 4UL, 0UL, 0UL, 3UL, 4UL, 3UL,
+     1UL, 4UL, 6UL, 3UL, 7UL, 0UL, 7UL, 7UL, 5UL, 7UL, 4UL, 5UL, 3UL, 6UL, 4UL, 2UL, 6UL, 7UL, 7UL, 6UL, 7UL, 1UL, 1UL,
+     7UL, 6UL, 0UL, 6UL, 3UL, 6UL, 6UL, 5UL, 6UL, 3UL, 1UL, 4UL, 7UL, 1UL, 1UL, 2UL, 3UL, 3UL, 3UL, 0UL, 4UL, 0UL, 3UL,
+     6UL, 5UL, 6UL, 2UL, 6UL, 2UL, 2UL, 1UL, 3UL, 7UL, 6UL, 7UL, 1UL, 0UL, 0UL, 6UL, 1UL, 3UL, 4UL, 3UL, 3UL, 7UL, 3UL,
+     5UL, 4UL, 3UL, 5UL, 3UL, 4UL, 3UL, 0UL, 0UL, 3UL, 3UL, 5UL, 6UL, 1UL, 5UL, 0UL, 6UL, 4UL, 0UL, 6UL, 3UL, 3UL, 2UL,
+     7UL, 6UL, 1UL, 1UL, 4UL, 4UL, 7UL, 7UL, 5UL, 4UL, 1UL, 7UL, 0UL, 7UL, 1UL, 2UL, 3UL, 4UL, 6UL, 7UL, 2UL, 7UL, 0UL,
+     1UL, 1UL, 3UL, 3UL, 1UL, 7UL, 6UL, 4UL, 1UL, 2UL, 6UL, 6UL, 4UL, 1UL, 5UL, 7UL, 0UL, 7UL, 7UL, 1UL, 3UL, 1UL, 5UL,
+     7UL, 0UL, 7UL, 0UL, 1UL, 0UL, 7UL, 4UL, 5UL, 6UL, 3UL, 7UL, 6UL, 7UL, 0UL, 6UL, 6UL, 0UL, 5UL, 1UL, 7UL, 5UL, 0UL,
+     6UL, 2UL, 4UL, 6UL, 5UL, 3UL, 5UL, 1UL, 1UL, 7UL, 2UL, 4UL, 1UL, 0UL, 6UL, 4UL, 6UL, 1UL, 2UL, 3UL, 3UL, 7UL, 2UL,
+     6UL, 4UL, 2UL, 3UL, 4UL, 1UL, 3UL, 7UL, 0UL, 4UL, 0UL, 4UL, 3UL, 2UL, 2UL, 0UL, 3UL, 1UL, 1UL, 2UL, 6UL, 3UL, 4UL,
+     3UL, 5UL, 0UL, 7UL, 6UL, 3UL, 2UL, 5UL, 3UL, 0UL, 4UL, 2UL, 6UL, 4UL, 0UL, 2UL, 2UL, 4UL, 0UL, 6UL, 6UL, 4UL, 2UL,
+     0UL, 3UL, 7UL, 2UL, 2UL, 0UL, 4UL, 4UL, 6UL, 1UL, 0UL, 0UL, 7UL, 3UL, 1UL, 7UL, 4UL, 1UL, 7UL, 1UL, 0UL, 1UL, 6UL,
+     2UL, 1UL, 1UL, 6UL, 6UL, 3UL, 5UL, 0UL, 0UL, 3UL, 7UL, 5UL, 6UL, 5UL, 5UL, 3UL, 2UL, 3UL, 5UL, 6UL, 0UL, 4UL, 5UL,
+     2UL, 7UL, 3UL, 0UL, 7UL, 5UL, 2UL, 2UL, 1UL, 7UL, 3UL, 6UL, 1UL, 7UL, 1UL, 5UL, 2UL, 0UL, 6UL, 2UL, 3UL, 0UL, 6UL,
+     3UL, 3UL, 5UL, 5UL, 5UL, 1UL, 5UL, 0UL, 3UL, 7UL, 7UL, 6UL, 2UL, 4UL, 1UL, 6UL, 0UL, 6UL, 0UL, 0UL, 0UL, 4UL, 2UL,
+     4UL, 1UL, 1UL, 7UL, 1UL, 6UL, 1UL, 2UL, 2UL, 3UL, 1UL, 1UL, 5UL, 7UL, 6UL, 7UL, 1UL, 1UL, 2UL, 5UL, 5UL, 5UL, 6UL,
+     5UL, 6UL, 4UL, 5UL, 3UL, 5UL, 5UL, 2UL, 7UL, 2UL, 6UL, 1UL, 1UL, 0UL, 2UL, 5UL, 5UL, 4UL, 7UL, 6UL, 1UL, 7UL, 3UL,
+     6UL, 0UL, 6UL, 7UL, 6UL, 4UL, 1UL, 6UL, 7UL, 2UL, 6UL, 1UL, 5UL, 2UL, 0UL, 0UL, 7UL, 5UL, 1UL, 6UL, 6UL, 3UL, 6UL,
+     4UL, 4UL, 0UL, 2UL, 0UL, 3UL, 1UL, 5UL, 4UL, 6UL, 1UL, 3UL, 6UL, 7UL, 6UL, 6UL, 2UL, 0UL, 4UL, 0UL, 4UL, 3UL, 3UL,
+     7UL, 4UL, 0UL, 5UL, 0UL, 0UL, 5UL, 2UL, 4UL, 4UL, 6UL, 2UL, 0UL, 2UL, 1UL, 2UL, 1UL, 7UL, 2UL, 6UL, 1UL, 7UL, 2UL,
+     7UL, 4UL, 0UL, 7UL, 2UL, 6UL, 2UL, 0UL, 4UL, 4UL, 5UL, 3UL, 4UL, 6UL, 7UL, 0UL, 3UL, 3UL, 1UL, 0UL, 3UL, 5UL, 7UL,
+     5UL, 6UL, 7UL, 5UL, 5UL, 2UL, 2UL, 4UL, 6UL, 3UL, 7UL, 0UL, 0UL, 0UL, 6UL, 7UL, 5UL, 6UL, 5UL, 0UL, 7UL, 3UL, 6UL,
+     2UL, 1UL, 7UL, 1UL, 5UL, 5UL, 7UL, 6UL, 2UL, 0UL, 4UL, 4UL, 3UL, 2UL, 2UL, 3UL, 4UL, 5UL, 3UL, 1UL, 0UL, 4UL, 6UL,
+     2UL, 6UL, 1UL, 7UL, 1UL, 4UL, 1UL, 5UL, 5UL, 3UL, 5UL, 7UL, 7UL, 0UL, 4UL, 3UL, 7UL, 1UL, 1UL, 1UL, 7UL, 2UL, 5UL,
+     1UL, 3UL, 5UL, 0UL, 6UL, 3UL, 1UL, 3UL, 0UL, 2UL, 2UL, 6UL, 6UL, 6UL, 2UL, 5UL, 6UL, 7UL, 2UL, 2UL, 1UL, 3UL, 5UL,
+     3UL, 1UL, 5UL, 1UL, 3UL, 4UL, 3UL, 5UL, 2UL, 7UL, 0UL, 1UL, 5UL, 0UL, 7UL, 0UL, 1UL, 2UL, 6UL, 6UL, 6UL, 0UL, 6UL,
+     0UL, 4UL, 4UL, 4UL, 0UL, 4UL, 3UL, 2UL, 3UL, 5UL, 5UL, 0UL, 1UL, 1UL, 0UL, 1UL, 2UL, 1UL, 3UL, 4UL, 6UL, 4UL, 7UL,
+     0UL, 0UL, 0UL, 5UL, 6UL, 5UL, 0UL, 7UL, 2UL, 1UL, 7UL, 7UL, 2UL, 5UL, 7UL, 0UL, 7UL, 2UL, 7UL, 7UL, 1UL, 3UL, 4UL,
+     5UL, 0UL, 5UL, 5UL, 4UL, 3UL, 0UL, 1UL, 5UL, 1UL, 3UL, 5UL, 3UL, 6UL, 4UL, 0UL, 7UL, 1UL, 6UL, 5UL, 1UL, 2UL, 6UL,
+     7UL, 2UL, 7UL, 4UL, 3UL, 0UL, 6UL, 3UL, 6UL, 4UL, 2UL, 0UL, 0UL, 3UL, 2UL, 0UL, 7UL, 7UL, 1UL, 5UL, 6UL, 1UL, 5UL,
+     7UL, 2UL, 4UL, 1UL, 3UL, 3UL, 3UL, 0UL, 2UL, 5UL, 4UL, 3UL, 5UL, 5UL, 6UL, 5UL, 4UL, 5UL, 0UL, 5UL, 4UL, 1UL, 2UL,
+     5UL, 6UL, 5UL, 4UL, 1UL, 6UL, 4UL, 6UL, 0UL, 0UL, 2UL, 6UL, 5UL, 7UL, 4UL, 1UL, 0UL, 1UL, 2UL, 3UL, 1UL, 0UL, 2UL,
+     5UL, 5UL, 7UL, 6UL, 1UL, 2UL, 2UL, 2UL, 4UL, 2UL, 2UL, 5UL, 5UL, 0UL, 6UL, 2UL, 3UL, 6UL, 1UL, 1UL, 2UL, 6UL, 7UL,
+     5UL, 2UL, 4UL, 1UL, 3UL, 1UL, 1UL, 4UL, 2UL, 2UL, 5UL, 4UL, 2UL, 0UL, 7UL, 0UL, 4UL, 1UL, 0UL, 4UL, 0UL, 3UL, 1UL,
+     4UL, 1UL, 1UL, 3UL, 2UL, 5UL, 5UL, 6UL, 5UL, 2UL, 2UL, 7UL, 7UL, 6UL, 7UL, 2UL, 7UL, 1UL, 1UL, 3UL, 0UL, 3UL, 3UL,
+     7UL, 2UL, 1UL, 4UL, 3UL, 4UL, 3UL, 0UL, 6UL, 5UL, 0UL, 3UL, 0UL, 6UL, 0UL, 0UL, 0UL, 4UL, 4UL, 5UL, 0UL, 6UL, 3UL,
+     4UL, 3UL, 6UL, 4UL, 2UL, 7UL, 7UL, 1UL, 1UL, 4UL, 2UL, 0UL, 0UL, 1UL, 7UL, 3UL, 6UL, 4UL, 5UL, 0UL, 2UL, 2UL, 3UL,
+     5UL, 6UL, 0UL, 5UL, 5UL, 4UL, 2UL, 0UL, 0UL, 0UL, 4UL, 4UL, 1UL, 6UL, 7UL, 6UL, 4UL, 4UL, 3UL, 7UL, 3UL, 3UL, 6UL,
+     2UL, 1UL, 6UL, 6UL, 1UL, 0UL, 4UL, 3UL, 1UL, 6UL, 1UL, 7UL, 0UL, 5UL, 1UL, 3UL, 3UL, 7UL, 3UL, 0UL, 2UL, 2UL, 5UL,
+     4UL, 4UL, 3UL, 7UL, 0UL, 7UL, 7UL, 0UL, 2UL, 0UL, 1UL, 3UL, 7UL, 7UL, 2UL, 2UL, 1UL, 6UL, 2UL, 1UL, 0UL, 4UL, 5UL,
+     1UL, 2UL, 6UL, 5UL, 6UL, 6UL, 4UL, 0UL, 4UL, 3UL, 3UL, 7UL, 3UL, 7UL, 0UL, 7UL, 7UL, 3UL, 5UL, 0UL, 1UL, 6UL, 3UL,
+     3UL, 7UL, 2UL, 5UL, 0UL, 3UL, 1UL, 5UL, 2UL, 4UL, 3UL, 3UL,};
 
-struct CompressIdentity{
-    uint64_t operator()(const uint64_t t) { return t; }
+template<typename T>
+struct CompressIdentity {
+    T operator()(T t, size_t) { return t; }  // Removed initial_values parameter
 };
 
-struct UncompressIdentity{
-    uint64_t operator()(uint64_t value) { return value; }
+template<typename T>
+struct UncompressIdentity {
+    T operator()(T value, size_t) { return value; }  // Removed initial_values parameter
 };
 
 TEST(BitPackFused, Roundtrip64to11) {
-    using namespace arcticdb;
-    auto *base64 = new uint8_t[1]();
-    *base64 = 0;
     std::vector<uint64_t> local_packed64(1024);
-    struct CompressIdentity{
-        uint64_t operator()(const uint64_t t) { return t; }
-    };
+    CompressIdentity<uint64_t> compress;
+    UncompressIdentity<uint64_t> uncompress;
 
-    BitPackFused<uint64_t, 11>::go(rand_arr_70_b11_w64_arr, local_packed64.data(), CompressIdentity{});
+    size_t compressed_size [[maybe_unused]] = dispatch_bitwidth<uint64_t, BitPackFused>(
+        rand_arr_70_b11_w64_arr,
+        local_packed64.data(),
+        11,
+        compress
+    );
+
     std::vector<uint64_t> local_unpacked64(1024);
+    dispatch_bitwidth<uint64_t, BitUnpackFused>(
+        local_packed64.data(),
+        local_unpacked64.data(),
+        11,
+        uncompress
+    );
 
-    struct UncompressIdentity{
-        uint64_t operator()(uint64_t value) { return value; }
-    };
+    for (auto i = 0U; i < 1024; ++i) {
+        if (rand_arr_70_b11_w64_arr[i] != local_unpacked64[i])
+            std::cerr << "Mismatch at index " << i << ": "
+                      << rand_arr_70_b11_w64_arr[i] << " != "
+                      << local_unpacked64[i] << std::endl;
 
-    BitUnpackFused<uint64_t, 11>::go(local_packed64.data(), local_unpacked64.data(), UncompressIdentity{});
-    for(auto i = 0U; i < 1024; ++i) {
         ASSERT_EQ(rand_arr_70_b11_w64_arr[i], local_unpacked64[i]);
     }
 }
 
-uint8_t rand_arr_3_b3_w8_arr[1024] =
-    {2UL,4UL,2UL,5UL,4UL,2UL,2UL,7UL,7UL,4UL,5UL,0UL,0UL,2UL,7UL,6UL,2UL,5UL,7UL,5UL,2UL,1UL,1UL,3UL,5UL,5UL,0UL,3UL,7UL,0UL,0UL,7UL,3UL,6UL,6UL,0UL,3UL,4UL,3UL,6UL,3UL,1UL,6UL,0UL,6UL,2UL,2UL,5UL,2UL,3UL,3UL,5UL,0UL,1UL,5UL,3UL,3UL,6UL,6UL,5UL,7UL,0UL,6UL,1UL,0UL,0UL,2UL,7UL,4UL,5UL,2UL,6UL,4UL,7UL,4UL,3UL,6UL,6UL,0UL,7UL,2UL,4UL,5UL,4UL,3UL,7UL,4UL,0UL,0UL,3UL,4UL,3UL,1UL,4UL,6UL,3UL,7UL,0UL,7UL,7UL,5UL,7UL,4UL,5UL,3UL,6UL,4UL,2UL,6UL,7UL,7UL,6UL,7UL,1UL,1UL,7UL,6UL,0UL,6UL,3UL,6UL,6UL,5UL,6UL,3UL,1UL,4UL,7UL,1UL,1UL,2UL,3UL,3UL,3UL,0UL,4UL,0UL,3UL,6UL,5UL,6UL,2UL,6UL,2UL,2UL,1UL,3UL,7UL,6UL,7UL,1UL,0UL,0UL,6UL,1UL,3UL,4UL,3UL,3UL,7UL,3UL,5UL,4UL,3UL,5UL,3UL,4UL,3UL,0UL,0UL,3UL,3UL,5UL,6UL,1UL,5UL,0UL,6UL,4UL,0UL,6UL,3UL,3UL,2UL,7UL,6UL,1UL,1UL,4UL,4UL,7UL,7UL,5UL,4UL,1UL,7UL,0UL,7UL,1UL,2UL,3UL,4UL,6UL,7UL,2UL,7UL,0UL,1UL,1UL,3UL,3UL,1UL,7UL,6UL,4UL,1UL,2UL,6UL,6UL,4UL,1UL,5UL,7UL,0UL,7UL,7UL,1UL,3UL,1UL,5UL,7UL,0UL,7UL,0UL,1UL,0UL,7UL,4UL,5UL,6UL,3UL,7UL,6UL,7UL,0UL,6UL,6UL,0UL,5UL,1UL,7UL,5UL,0UL,6UL,2UL,4UL,6UL,5UL,3UL,5UL,1UL,1UL,7UL,2UL,4UL,1UL,0UL,6UL,4UL,6UL,1UL,2UL,3UL,3UL,7UL,2UL,6UL,4UL,2UL,3UL,4UL,1UL,3UL,7UL,0UL,4UL,0UL,4UL,3UL,2UL,2UL,0UL,3UL,1UL,1UL,2UL,6UL,3UL,4UL,3UL,5UL,0UL,7UL,6UL,3UL,2UL,5UL,3UL,0UL,4UL,2UL,6UL,4UL,0UL,2UL,2UL,4UL,0UL,6UL,6UL,4UL,2UL,0UL,3UL,7UL,2UL,2UL,0UL,4UL,4UL,6UL,1UL,0UL,0UL,7UL,3UL,1UL,7UL,4UL,1UL,7UL,1UL,0UL,1UL,6UL,2UL,1UL,1UL,6UL,6UL,3UL,5UL,0UL,0UL,3UL,7UL,5UL,6UL,5UL,5UL,3UL,2UL,3UL,5UL,6UL,0UL,4UL,5UL,2UL,7UL,3UL,0UL,7UL,5UL,2UL,2UL,1UL,7UL,3UL,6UL,1UL,7UL,1UL,5UL,2UL,0UL,6UL,2UL,3UL,0UL,6UL,3UL,3UL,5UL,5UL,5UL,1UL,5UL,0UL,3UL,7UL,7UL,6UL,2UL,4UL,1UL,6UL,0UL,6UL,0UL,0UL,0UL,4UL,2UL,4UL,1UL,1UL,7UL,1UL,6UL,1UL,2UL,2UL,3UL,1UL,1UL,5UL,7UL,6UL,7UL,1UL,1UL,2UL,5UL,5UL,5UL,6UL,5UL,6UL,4UL,5UL,3UL,5UL,5UL,2UL,7UL,2UL,6UL,1UL,1UL,0UL,2UL,5UL,5UL,4UL,7UL,6UL,1UL,7UL,3UL,6UL,0UL,6UL,7UL,6UL,4UL,1UL,6UL,7UL,2UL,6UL,1UL,5UL,2UL,0UL,0UL,7UL,5UL,1UL,6UL,6UL,3UL,6UL,4UL,4UL,0UL,2UL,0UL,3UL,1UL,5UL,4UL,6UL,1UL,3UL,6UL,7UL,6UL,6UL,2UL,0UL,4UL,0UL,4UL,3UL,3UL,7UL,4UL,0UL,5UL,0UL,0UL,5UL,2UL,4UL,4UL,6UL,2UL,0UL,2UL,1UL,2UL,1UL,7UL,2UL,6UL,1UL,7UL,2UL,7UL,4UL,0UL,7UL,2UL,6UL,2UL,0UL,4UL,4UL,5UL,3UL,4UL,6UL,7UL,0UL,3UL,3UL,1UL,0UL,3UL,5UL,7UL,5UL,6UL,7UL,5UL,5UL,2UL,2UL,4UL,6UL,3UL,7UL,0UL,0UL,0UL,6UL,7UL,5UL,6UL,5UL,0UL,7UL,3UL,6UL,2UL,1UL,7UL,1UL,5UL,5UL,7UL,6UL,2UL,0UL,4UL,4UL,3UL,2UL,2UL,3UL,4UL,5UL,3UL,1UL,0UL,4UL,6UL,2UL,6UL,1UL,7UL,1UL,4UL,1UL,5UL,5UL,3UL,5UL,7UL,7UL,0UL,4UL,3UL,7UL,1UL,1UL,1UL,7UL,2UL,5UL,1UL,3UL,5UL,0UL,6UL,3UL,1UL,3UL,0UL,2UL,2UL,6UL,6UL,6UL,2UL,5UL,6UL,7UL,2UL,2UL,1UL,3UL,5UL,3UL,1UL,5UL,1UL,3UL,4UL,3UL,5UL,2UL,7UL,0UL,1UL,5UL,0UL,7UL,0UL,1UL,2UL,6UL,6UL,6UL,0UL,6UL,0UL,4UL,4UL,4UL,0UL,4UL,3UL,2UL,3UL,5UL,5UL,0UL,1UL,1UL,0UL,1UL,2UL,1UL,3UL,4UL,6UL,4UL,7UL,0UL,0UL,0UL,5UL,6UL,5UL,0UL,7UL,2UL,1UL,7UL,7UL,2UL,5UL,7UL,0UL,7UL,2UL,7UL,7UL,1UL,3UL,4UL,5UL,0UL,5UL,5UL,4UL,3UL,0UL,1UL,5UL,1UL,3UL,5UL,3UL,6UL,4UL,0UL,7UL,1UL,6UL,5UL,1UL,2UL,6UL,7UL,2UL,7UL,4UL,3UL,0UL,6UL,3UL,6UL,4UL,2UL,0UL,0UL,3UL,2UL,0UL,7UL,7UL,1UL,5UL,6UL,1UL,5UL,7UL,2UL,4UL,1UL,3UL,3UL,3UL,0UL,2UL,5UL,4UL,3UL,5UL,5UL,6UL,5UL,4UL,5UL,0UL,5UL,4UL,1UL,2UL,5UL,6UL,5UL,4UL,1UL,6UL,4UL,6UL,0UL,0UL,2UL,6UL,5UL,7UL,4UL,1UL,0UL,1UL,2UL,3UL,1UL,0UL,2UL,5UL,5UL,7UL,6UL,1UL,2UL,2UL,2UL,4UL,2UL,2UL,5UL,5UL,0UL,6UL,2UL,3UL,6UL,1UL,1UL,2UL,6UL,7UL,5UL,2UL,4UL,1UL,3UL,1UL,1UL,4UL,2UL,2UL,5UL,4UL,2UL,0UL,7UL,0UL,4UL,1UL,0UL,4UL,0UL,3UL,1UL,4UL,1UL,1UL,3UL,2UL,5UL,5UL,6UL,5UL,2UL,2UL,7UL,7UL,6UL,7UL,2UL,7UL,1UL,1UL,3UL,0UL,3UL,3UL,7UL,2UL,1UL,4UL,3UL,4UL,3UL,0UL,6UL,5UL,0UL,3UL,0UL,6UL,0UL,0UL,0UL,4UL,4UL,5UL,0UL,6UL,3UL,4UL,3UL,6UL,4UL,2UL,7UL,7UL,1UL,1UL,4UL,2UL,0UL,0UL,1UL,7UL,3UL,6UL,4UL,5UL,0UL,2UL,2UL,3UL,5UL,6UL,0UL,5UL,5UL,4UL,2UL,0UL,0UL,0UL,4UL,4UL,1UL,6UL,7UL,6UL,4UL,4UL,3UL,7UL,3UL,3UL,6UL,2UL,1UL,6UL,6UL,1UL,0UL,4UL,3UL,1UL,6UL,1UL,7UL,0UL,5UL,1UL,3UL,3UL,7UL,3UL,0UL,2UL,2UL,5UL,4UL,4UL,3UL,7UL,0UL,7UL,7UL,0UL,2UL,0UL,1UL,3UL,7UL,7UL,2UL,2UL,1UL,6UL,2UL,1UL,0UL,4UL,5UL,1UL,2UL,6UL,5UL,6UL,6UL,4UL,0UL,4UL,3UL,3UL,7UL,3UL,7UL,0UL,7UL,7UL,3UL,5UL,0UL,1UL,6UL,3UL,3UL,7UL,2UL,5UL,0UL,3UL,1UL,5UL,2UL,4UL,3UL,3UL,};
-
-TEST(BitPack, Roundtrip8to3) {
-    using namespace arcticdb;
-    auto *base64 = new uint8_t[1]();
-    *base64 = 0;
+TEST(BitPackFused, Roundtrip8to3) {
     std::vector<uint8_t> local_packed8(1024);
-    BitPackFused<uint8_t, 3>::go(rand_arr_3_b3_w8_arr, local_packed8.data(), CompressIdentity{});
+
+    CompressIdentity<uint8_t> compress;
+    UncompressIdentity<uint8_t> uncompress;
+
+    size_t compressed_size [[maybe_unused]] = dispatch_bitwidth<uint8_t, BitPackFused>(
+        rand_arr_3_b3_w8_arr,
+        local_packed8.data(),
+        3,
+        compress
+    );
+
     std::vector<uint8_t> local_unpacked8(1024);
-    BitUnpackFused<uint8_t, 3>::go(local_packed8.data(), local_unpacked8.data(), UncompressIdentity{});
-    for(auto i = 0U; i < 1024; ++i) {
+    dispatch_bitwidth<uint8_t, BitUnpackFused>(
+        local_packed8.data(),
+        local_unpacked8.data(),
+        3,
+        uncompress
+    );
+
+    for (auto i = 0U; i < 1024; ++i) {
         ASSERT_EQ(rand_arr_3_b3_w8_arr[i], local_unpacked8[i]);
     }
 }
+
+std::vector<uint32_t> generate_14bit_random(size_t count) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<uint32_t> dist(0, (1 << 14) - 1);
+
+    std::vector<uint32_t> result(count);
+    for (auto &val : result) {
+        val = dist(gen);
+    }
+    return result;
+}
+
+TEST(BitPackFused, Roundtrip32to14) {
+    auto data = generate_14bit_random(1024);
+    std::vector<uint32_t> local_packed32(1024);
+    CompressIdentity<uint32_t> compress;
+    UncompressIdentity<uint32_t> uncompress;
+
+    size_t compressed_size [[maybe_unused]] = dispatch_bitwidth<uint32_t, BitPackFused>(
+        data.data(),
+        local_packed32.data(),
+        14,
+        compress
+    );
+
+    std::vector<uint32_t> local_unpacked32(1024);
+    dispatch_bitwidth<uint32_t, BitUnpackFused>(
+        local_packed32.data(),
+        local_unpacked32.data(),
+        14,
+        uncompress
+    );
+
+    for (auto i = 0U; i < 1024; ++i) {
+        ASSERT_EQ(data[i], local_unpacked32[i]);
+    }
+}
+
+// Add a test for the compression size calculation
+TEST(BitPackFused, CompressedSize) {
+    auto data = generate_14bit_random(1024);
+    std::vector<uint32_t> local_packed32(1024);
+
+    CompressIdentity<uint32_t> kernel;
+
+    size_t compressed_size = dispatch_bitwidth<uint32_t, BitPackFused>(
+        data.data(),
+        local_packed32.data(),
+        14,
+        kernel
+    );
+
+    // Calculate expected size:
+    // (1024 values * 14 bits per value + 31) / 32 words
+    size_t expected_size = (1024 * 14 + 31) / 32;
+    ASSERT_EQ(compressed_size, expected_size);
+}
+
+} // namespace arcticdb

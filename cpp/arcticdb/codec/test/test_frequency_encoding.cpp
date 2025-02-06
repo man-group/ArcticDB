@@ -6,7 +6,7 @@
  */
 
 #include <gtest/gtest.h>
-#include <arcticdb/codec/frequency_encoding.hpp>
+#include "arcticdb/codec/compression/frequency.hpp"
 #include <arcticdb/codec/test/encoding_test_common.hpp>
 #include <arcticdb/util/timer.hpp>
 

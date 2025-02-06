@@ -184,12 +184,12 @@ set(arcticdb_srcs
         codec/magic_words.hpp
         codec/passthrough.hpp
         codec/protobuf_mappings.hpp
-        codec/frequency_encoding.hpp
-        codec/constant_encoding.hpp
+        codec/compression/frequency.hpp
+        codec/compression/constant.hpp
         codec/calculate_stats.hpp
-        codec/fastlanes_common.hpp
-        codec/delta.hpp codec/ffor.hpp
-        codec/bitpack_fused.hpp
+        codec/compression/fastlanes_common.hpp
+        codec/compression/delta.hpp codec/compression/ffor.hpp
+        codec/compression/bitpack_fused.hpp
         codec/adaptive.hpp
         codec/adaptive.hpp
         codec/slice_data_sink.hpp
@@ -413,12 +413,12 @@ set(arcticdb_srcs
         async/task_scheduler.cpp
         async/tasks.cpp
         codec/codec.cpp
-        codec/frequency_encoding.hpp
-        codec/constant_encoding.hpp
+        codec/compression/frequency.hpp
+        codec/compression/constant.hpp
         codec/calculate_stats.hpp
-        codec/fastlanes_common.hpp
-        codec/delta.hpp codec/ffor.hpp
-        codec/bitpack_fused.hpp
+        codec/compression/fastlanes_common.hpp
+        codec/compression/delta.hpp codec/compression/ffor.hpp
+        codec/compression/bitpack_fused_old.hpp
         codec/adaptive.hpp
         codec/adaptive.hpp
         codec/scanner.hpp
@@ -546,7 +546,7 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-        util/buffer_holder.cpp)
+        util/buffer_holder.cpp codec/compression/encoders.hpp codec/compression/estimators.hpp codec/compression/bitpack_fused.hpp codec/compression/rle.hpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -1012,7 +1012,7 @@ if(${TEST})
             version/test/version_map_model.hpp
             python/python_handlers.cpp
             storage/test/common.hpp
-            version/test/test_sort_index.cpp)
+            version/test/test_sort_index.cpp codec/test/test_delta.cpp codec/test/test_rle.cpp codec/test/test_estimators.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

@@ -480,7 +480,7 @@ public:
     size_t shape_pos_ = 0;
     TypeDescriptor type_;
     const util::BitMagic* bit_vector_ = nullptr;
-    const FieldStatsImpl* statistics_ = nullptr;
+    const FieldStatsImpl* statistics_ [[maybe_unused]] = nullptr;
 };
 
 

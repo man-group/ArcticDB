@@ -3,11 +3,9 @@
 #include <cstddef>
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include "util/hash.hpp"
+#include <arcticdb/util/hash.hpp>
 
 namespace arcticdb::detail {
-
-//Placeholder class for BtrBlocks encoding, just copies the data for now.
 
 template<template<typename> class BlockType, class TD>
 struct AdaptiveEncoderV1 {

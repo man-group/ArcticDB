@@ -71,7 +71,8 @@ TEST(FieldStatsTest, FieldStatsImplFullConstruction) {
         static_cast<int64_t>(1),
         static_cast<int64_t>(100),
         50u,
-        UniqueCountType::PRECISE
+        UniqueCountType::PRECISE,
+        SortedValue::ASCENDING
     );
 
     EXPECT_TRUE(stats.has_min());
@@ -82,6 +83,7 @@ TEST(FieldStatsTest, FieldStatsImplFullConstruction) {
     EXPECT_EQ(stats.get_max<int64_t>(), 100);
     EXPECT_EQ(stats.get_min<int64_t>(), 1);
     EXPECT_EQ(stats.unique_count_, 50u);
+    EXPECT_EQ(stats.sorted_, SortedValue::ASCENDING);
 }
 
 TEST(FieldStatsTest, EmptyStringStatistics) {
