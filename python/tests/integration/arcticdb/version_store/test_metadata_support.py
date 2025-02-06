@@ -33,6 +33,24 @@ def test_rt_df_with_small_meta(object_and_mem_and_lmdb_version_store):
     assert meta == vit.metadata
 
 
+class A:
+    def __init__(self, attrib):
+        self.attrib = attrib
+
+    def __eq__(self, other):
+        return self.attrib == other.attrib
+
+
+def test_rt_df_with_custom_meta(object_and_mem_and_lmdb_version_store):
+    lib = object_and_mem_and_lmdb_version_store
+
+    df = DataFrame(data=["A", "B", "C"])
+    meta = {"a_key": A("bananabread")}
+    lib.write("pandas", df, metadata=meta)
+    vit = lib.read("pandas")
+    assert meta == vit.metadata
+
+
 @pytest.mark.parametrize("log_level", ("error", "warn", "debug", "info", "ERROR", "eRror", "", None))
 def test_pickled_metadata_warning(lmdb_version_store_v1, log_level):
     import arcticdb.version_store._normalization as norm
