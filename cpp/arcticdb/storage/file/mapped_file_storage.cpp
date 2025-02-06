@@ -101,7 +101,7 @@ void MappedFileStorage::do_read(VariantKey&& variant_key, const ReadVisitor& vis
         util::check(maybe_offset.has_value(), "Failed to find key {} in file", variant_key);
         auto [offset, bytes] = std::move(maybe_offset.value());
         auto segment = Segment::from_bytes(file_.data() + offset, bytes);
-        visitor(variant_key, segment);
+        visitor(variant_key, std::move(segment));
 }
 
 KeySegmentPair MappedFileStorage::do_read(VariantKey&& variant_key, storage::ReadKeyOpts) {

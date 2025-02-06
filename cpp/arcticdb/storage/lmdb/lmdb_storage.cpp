@@ -179,7 +179,7 @@ void LmdbStorage::do_read(VariantKey&& key, const ReadVisitor& visitor, storage:
             ARCTICDB_SUBSAMPLE(LmdbStorageVisitSegment, 0)
             segment->set_keepalive(std::any{LmdbKeepalive{lmdb_instance_, std::move(txn)}});
             ARCTICDB_DEBUG(log::storage(), "Read key {}: {}, with {} bytes of data",variant_key_type(key), variant_key_view(key), segment->size());
-            visitor(key, *segment);
+            visitor(key, std::move(*segment));
         } else {
             ARCTICDB_DEBUG(log::storage(), "Failed to find segment for key {}", variant_key_view(key));
             failed_read.emplace(key);

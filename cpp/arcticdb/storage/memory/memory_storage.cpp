@@ -74,7 +74,7 @@ void MemoryStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
 
 void MemoryStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts) {
     auto key_seg = do_read(std::move(variant_key), ReadKeyOpts{});
-    visitor(key_seg.variant_key(), *key_seg.segment_ptr());
+    visitor(key_seg.variant_key(), std::move(*key_seg.segment_ptr()));
 }
 
 KeySegmentPair MemoryStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {

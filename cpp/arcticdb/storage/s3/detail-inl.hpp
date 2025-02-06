@@ -225,7 +225,7 @@ void do_read_impl(
     KeyDecoder&& key_decoder,
     ReadKeyOpts opts) {
     auto key_seg = do_read_impl(std::move(variant_key), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer), std::forward<KeyDecoder>(key_decoder), opts);
-    visitor(key_seg.variant_key(), *key_seg.segment_ptr());
+    visitor(key_seg.variant_key(), std::move(*key_seg.segment_ptr()));
 }
 
 struct FailedDelete {

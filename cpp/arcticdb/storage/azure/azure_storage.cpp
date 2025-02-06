@@ -154,7 +154,7 @@ void do_read_impl(
     auto blob_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
     try {
         Segment segment = azure_client.read_blob(blob_name, download_option, request_timeout);
-        visitor(variant_key, segment);
+        visitor(variant_key, std::move(segment));
         ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(variant_key), variant_key_view(variant_key));
     }
     catch (const Azure::Core::RequestFailedException& e) {

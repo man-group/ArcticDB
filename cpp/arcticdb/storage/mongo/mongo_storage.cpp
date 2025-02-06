@@ -112,7 +112,7 @@ void MongoStorage::do_update(KeySegmentPair &key_seg, UpdateOpts opts) {
 
 void MongoStorage::do_read(VariantKey &&variant_key, const ReadVisitor &visitor, ReadKeyOpts opts) {
     auto key_seg = do_read(std::move(variant_key), opts);
-    visitor(key_seg.variant_key(), *key_seg.segment_ptr());
+    visitor(key_seg.variant_key(), std::move(*key_seg.segment_ptr()));
 }
 
 KeySegmentPair MongoStorage::do_read(VariantKey&& variant_key, ReadKeyOpts opts) {

@@ -136,7 +136,7 @@ auto build_document(storage::KeySegmentPair &kv) {
     /*thread_local*/ std::vector<uint8_t> buffer{};
     buffer.resize(total_size);
     bsoncxx::types::b_binary data = {};
-    kv.segment_ptr()->write_to(buffer.data());
+    segment.write_to(buffer.data());
     data.size = uint32_t(total_size);
     data.bytes = buffer.data();
 

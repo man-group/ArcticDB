@@ -63,7 +63,7 @@ void MockAzureClient::write_blob(
         throw *maybe_exception;
     }
 
-    azure_contents.insert_or_assign(blob_name, std::move(segment));
+    azure_contents.insert_or_assign(blob_name, segment.clone());
 }
 
 Segment MockAzureClient::read_blob(

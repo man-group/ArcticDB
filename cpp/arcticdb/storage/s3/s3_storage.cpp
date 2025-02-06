@@ -70,7 +70,7 @@ KeySegmentPair S3Storage::do_read(VariantKey&& variant_key, ReadKeyOpts opts) {
 folly::Future<folly::Unit> S3Storage::do_async_read(entity::VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
     auto identity = [](auto&& k) { return k; };		
     return detail::do_async_read_impl(std::move(variant_key), root_folder_, bucket_name_, client(), FlatBucketizer{}, std::move(identity), opts).thenValue([&visitor] (auto&& key_seg) {
-        visitor(key_seg.variant_key(), *key_seg.segment_ptr());
+        visitor(key_seg.variant_key(), std::move(*key_seg.segment_ptr()));
         return folly::Unit{};
     });
 }
