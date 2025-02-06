@@ -1,4 +1,10 @@
+"""
+Copyright 2025 Man Group Operations Limited
 
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+"""
 
 import time
 from typing import List
@@ -43,38 +49,25 @@ class SymbolLibraries(LibrariesBase):
             .add_int_col("int16", np.int16)
             .add_int_col("int32", np.int32)
             .add_int_col("int64")
-            .add_int_col_ex("uint8", 1, 20, np.uint64)
-            .add_int_col_ex("uint64", 100, 1999, np.uint64)
+            .add_int_col("uint8", np.uint64, min=1, max=20)
+            .add_int_col("uint64", np.uint64, min=100, max=1999)
             .add_float_col("float16",np.float32)
-            .add_float_col_ex("float64",-100.0, 200.0, 4)
-            .add_string_col("string100", 100, 200)
-            .add_string_col("string2", 2)
+            .add_float_col("float64", min=-100.0, max=200.0, round_at=4)
+            .add_string_col("string100", str_size=100, num_unique_values=200)
+            .add_string_col("string2", str_size=2)
             .add_bool_col("bool")
             .add_timestamp_indx("time", 's', pd.Timestamp("2000-1-1"))
             ).generate_dataframe()
         print(f"Dataframe {row_num} rows generated for {time.time() - st} sec")
         return df
 
-    def setup_library_with_symbols(self, num_syms):
-        """
-        Sets up required number of symbols per that library
-        """
-        self.lib = self.get_library(num_syms) 
-        print(f"Started creating library for {num_syms} symbols.")
-        st = time.time()
-        for num in range(num_syms):
-            sym = self.get_symbol_name(num)
-            self.lib.write(sym, self.df, metadata=self.df)
-            print(f"created {sym}")
-        print(f"Library '{self.lib}' created {num_syms} symbols COMPLETED for :{time.time() - st} sec")
-
-    def reset_symbols_cache(self):
+    def clear_symbols_cache(self):
         pass #TBD
 
     def setup_all(self):
         st = time.time()
         for sym in self.get_parameter_list():
-            self.setup_library_with_symbols(sym)
+            self.setup_library_with_symbols(sym, self.df, self.df)
         print(f"Total time {time.time() - st}")
 
     def check_ok(self) -> bool:
@@ -87,7 +80,7 @@ class SymbolLibraries(LibrariesBase):
         return True
         
 
-class VersionLibraries(SymbolLibraries):
+class VersionLibraries(LibrariesBase):
     """
     A library for list versions testings is composed of X symbols.
     Symbols are sym_name_[0,X)
@@ -102,27 +95,45 @@ class VersionLibraries(SymbolLibraries):
         super().__init__(type, arctic_url)
         self.ac = self.get_arctic_client()
 
+    def generate_df(self, row_num:int) -> pd.DataFrame:
+        """
+        Dataframe that will be used in list
+        """
+        st = time.time()
+        print("Dataframe generation started.")
+        df = (DFGenerator(row_num)
+            .add_int_col("int64")
+            .add_int_col("uint64", np.uint64, min=10000, max=19999999)
+            .add_float_col("float64", min=-100000.0, max=2000000.0, round_at=2)
+            .add_string_col("string100", str_size=10, num_unique_values=200)
+            .add_timestamp_indx("time", 's', pd.Timestamp("2000-1-1"))
+            ).generate_dataframe()
+        print(f"Dataframe {row_num} rows generated for {time.time() - st} sec")
+        return df
+
     def get_parameter_list(self):
         return [25, 50]
+    
+    def get_parameter_names_list(self):
+        return ["num_syms"]
     
     def get_library_names(self, num_symbols) -> List[str]:
         return [f"PERM_LIST_OPS_VERSION_{num_symbols}", f"MOD_LIST_OPS_VERSION_{num_symbols}"]  
 
     def setup_symbols_with_versions(self, num_symbols):
         self.lib = self.get_library(num_symbols)
+        df = self.generate_df(10)
         for sym_num in range(num_symbols):
             sym = self.get_symbol_name(sym_num)
             print(f"Generating {sym_num} versions for symbol [{sym}].")
             st = time.time()
-            if sym_num > 0:
-                for num in range(sym_num):
-                    self.lib.write(sym, self.df, metadata=self.df)
+            for num in range(sym_num + 1):
+                self.lib.write(sym, df, metadata=df)
             print(f"Generating {sym_num} versions for symbol [{sym}]. COMPLETED for :{time.time() - st} sec")
-    
+
     def setup_all(self):
         st = time.time()
         for sym in self.get_parameter_list():
-            self.setup_library_with_symbols(sym)
             self.setup_symbols_with_versions(sym)
         print(f"Total time {time.time() - st}")
         
@@ -131,7 +142,7 @@ class VersionLibraries(SymbolLibraries):
         def expected_version(n):
             return  int((n*(n+1)) /2)
         
-        if not super().check_ok():
+        if not self.check_libraries_have_specified_number_symbols():
             return False
         for num in self.get_parameter_list():
             lib = self.get_library(num)
@@ -182,7 +193,7 @@ class AWS_ListSymbols:
         if not aws.check_ok():
             aws.setup_all()
         else:
-            aws.reset_symbols_cache()
+            aws.clear_symbols_cache()
         return aws.get_storage_info()
 
     def setup(self, storage_info, num_syms):
@@ -258,3 +269,4 @@ class AWS_VersionSymbols:
         Returns all versions in the library, which is SUM(1..num_syms)
         '''
         self.lib.list_versions()
+

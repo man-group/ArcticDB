@@ -1,20 +1,24 @@
+"""
+Copyright 2025 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+"""
 
 from abc import ABC, abstractmethod
 from enum import Enum
-import os
 import tempfile
 import time
 from typing import List
-import numpy as np
-import pandas as pd
-
 
 from arcticdb.arctic import Arctic
+from arcticdb.storage_fixtures.s3 import S3Bucket, real_s3_from_environment_variables
 from arcticdb.version_store.library import Library
 
 
 ## Amazon s3 storage URL
-AWS_URL_TEST = 's3s://s3.eu-west-1.amazonaws.com:arcticdb-asv-real-storage?aws_auth=true'
+AWS_S3_DEFAULT_BUCKET = 'arcticdb-asv-real-storage'
 
 
 class SetupConfig:
@@ -24,6 +28,7 @@ class SetupConfig:
     of each storage
     '''
     _instance = None
+    _aws_s3_bucket: S3Bucket = None
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
@@ -33,15 +38,23 @@ class SetupConfig:
             ## AWS S3 variable setup
             ## Copy needed environments variables from GH Job env vars
             ## Will only throw exceptions if real tests are executed
-            os.environ['AWS_ACCESS_KEY_ID'] = os.environ['ARCTICDB_REAL_S3_ACCESS_KEY']
-            os.environ['AWS_SECRET_ACCESS_KEY'] = os.environ['ARCTICDB_REAL_S3_SECRET_KEY']
-            os.environ['AWS_DEFAULT_REGION'] = os.environ['ARCTICDB_REAL_S3_BUCKET']
+            factory = real_s3_from_environment_variables(shared_path=True)
+            factory.default_prefix = None
+            factory.default_bucket = AWS_S3_DEFAULT_BUCKET
+            factory.clean_bucket_on_fixture_exit = False
+            SetupConfig._aws_s3_bucket = factory.create_fixture()
         return 
+    
+    @classmethod
+    def get_aws_s3_arctic_uri(cls) -> str:
+        assert SetupConfig._aws_s3_bucket, "Environment variables not initialized (ARCTICDB_REAL_S3_ACCESS_KEY,ARCTICDB_REAL_S3_SECRET_KEY)"
+        return SetupConfig._aws_s3_bucket.arctic_uri
 
 
 class Storage(Enum):
     AMAZON = 1
     LMDB = 2
+
 
 class StorageInfo:    
 
@@ -50,6 +63,31 @@ class StorageInfo:
         self.url = url
 
 class LibrariesBase(ABC):
+    """
+    Defines base class for benchmark scenario setup and teardown
+    You need to create your own class inheriting from this one for each ASV benchmark class.
+    It will be responsible for setting up environment and providing tear down
+
+    The base class supports most common scenarios for arcticdb tests:
+     (A) :func:`LibrariesBase.get_parameter_list` is list of row numbers in the needed library
+        (A.1) in this case :func:`get_library` may not use in the lib names passed index number
+        (A.2) default behavior of method is for this usage scenario
+     (B) :func:`LibrariesBase.get_parameter_list` is list of symbols sizes for needed libraries
+        (A.2) in this case :func:`get_library` may not use in the lib names passed index number
+        (A.2) this is mot default behavior and you might want to override some methods later
+
+    Implement all abstract methods. Follow instructions in docs strings
+
+    Consider generating UNIQUE dataframes for each new child class. Dataframes generation is now much simpler 
+    and each class should own the logic of generating its dataframe. That creates code duplication,
+    but eliminates accidental change in common dataframe that will affect others 
+
+    Use default :func:`LibrariesBase.setup_environment` for setup (primarily in setup_cache method of ASV class)
+
+    See :class:`SymbolLibraries` and :class:`ReadBenchmarkLibraries` for examples
+    Also check how each of those classes is bound exactly to one ASV class that contains tests
+
+    """
 
     def __init__(self, type: Storage = Storage.LMDB, arctic_url: str = None):
         """
@@ -71,7 +109,7 @@ class LibrariesBase(ABC):
 
     @classmethod
     def fromStorageInfo(cls, data: StorageInfo):
-        return cls(data.type, data.url)
+        return cls(type=data.type, arctic_url=data.url)
     
     def get_storage_info(self) -> StorageInfo:
         return StorageInfo(self.type, self.arctic_url)
@@ -87,7 +125,7 @@ class LibrariesBase(ABC):
         if self.ac is None:
             if self.arctic_url is None:
                 if (self.type == Storage.AMAZON):
-                    self.arctic_url = AWS_URL_TEST
+                    self.arctic_url = SetupConfig.get_aws_s3_arctic_uri()
                 elif (self.type == Storage.LMDB):
                     ## We create fpr each object unique library in temp dir
                     self.arctic_url = f"lmdb://{tempfile.gettempdir()}/benchmarks_{int(time.time() * 1000)}" 
@@ -167,23 +205,43 @@ class LibrariesBase(ABC):
         """
         pass    
 
-    def setup_environment(self) -> 'LibrariesBase':
+    @abstractmethod
+    def setup_all(self) -> 'LibrariesBase':
+        '''
+        Provide implementation that will setup needed data assuming storage does not contain 
+        any previous data for this scenario
+        '''
+        pass
+
+    def setup_environment(self, parameters_is_index_for_lib_name=False) -> 'LibrariesBase':
         """
         Responsible for setting up environment if not set for persistent libraries.
 
         Provides default implementation that can be overridden
         """
-        self.delete_modifyable_library()
+        indexes = [1] # by default there will be one lib
+        if parameters_is_index_for_lib_name:
+            indexes = self.get_parameter_list()
+        for i in indexes:
+            self.delete_modifyable_library(i)
         if not self.check_ok():
+            ac = self.get_arctic_client()
+            ## Delete all PERSISTENT libraries before setting up them
+            for i in indexes:
+                lib = self.get_library_names(i)[0]
+                print("REMOVING LIBRARY: ", lib)
+                ac.delete_library(lib)
             self.setup_all()
         return self
 
     def check_ok(self):
         """
+        NOTE: Override as needed by ht logic!
         Checks if library contains all needed data to run tests.
         if OK, setting things up can be skipped
 
-        Default implementation just checks if all symbols that should be there are there
+        Default implementation assumes that parameter list is list of rows
+        and thus check that the lbrary has the symbols with specified rows
         """
         symbols = self.get_library(1).list_symbols()
         for rows in self.get_parameter_list():
@@ -193,18 +251,52 @@ class LibrariesBase(ABC):
                 return False
         return True
     
+    #region Helper Methods
+
+    def setup_library_with_symbols(self, num_syms: int, data_frame = None, metadata = None):
+        """
+        Sets up the labrary with index defined by `num_syms` such amount of symbols.
+        Each symbol will have the dataframe and metadata specified.
+        Can be used in child classes at :func:`LibrariesBase.setup_all` call
+        NOTE: assumes parameter list is list of number of symbols per library
+        """
+        print(f"Started creating library for {num_syms} symbols.")
+        lib = self.get_library(num_syms)
+        st = time.time()
+        for num in range(num_syms):
+            sym = self.get_symbol_name(num)
+            lib.write(sym, data=data_frame, metadata=metadata)
+            print(f"created {sym}")
+        print(f"Library '{lib}' created {num_syms} symbols COMPLETED for :{time.time() - st} sec")
+
+    def check_libraries_have_specified_number_symbols(self) -> bool:
+        """
+        Predefined check to assure each library has been created with specified number os symbols.
+        You can use it in :func:`LibrariesBase.check_ok` child methods to replace default logic
+        NOTE: assumes parameter list is list of number of symbols per library
+        """
+        for num in self.get_parameter_list():
+            lib = self.get_library(num)
+            list = lib.list_symbols()
+            print(f"number symbols {len(list)} in library {lib}")
+            if len(list) != num:
+                return False
+        return True
+    
     def delete_libraries(self, nameStarts: str, confirm=False):
         """
-        Deletes all libraries starting with specified string
+        Deletes all libraries starting with specified string.
+        Dangerous method use with care
         """
         assert confirm, "deletion not confirmed!"
         assert len(nameStarts) > 4, "name starts should be > 4 symbols for safety reasons"
         ac = self.get_arctic_client()
         lib_list = ac.list_libraries()
+        lib_list = [lib for lib in ac.list_libraries() if lib.startswith(nameStarts)]
         for lib in lib_list:
-            if nameStarts in lib:
-                print(f"Deleteing {lib}")
-                ac.delete_library(lib)
+            print(f"Deleteing {lib}")
+            ac.delete_library(lib)
+    #endregion
 
 
 

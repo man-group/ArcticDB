@@ -347,13 +347,17 @@ def populate_db(version_store):
     version_store.write("rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True)
 
 
-def random_integers(size, dtype):
+def random_integers(size, dtype, minV: int = None, maxV: int = None):
     # We do not generate integers outside the int64 range
     platform_int_info = np.iinfo("int_")
     iinfo = np.iinfo(dtype)
+    if minV is None:
+        minV = max(iinfo.min, platform_int_info.min)
+    if maxV is None:
+        maxV = min(iinfo.max, platform_int_info.max)
     return np.random.randint(
-        max(iinfo.min, platform_int_info.min),
-        min(iinfo.max, platform_int_info.max),
+        minV,
+        maxV,
         size=size,
         dtype=dtype
     )

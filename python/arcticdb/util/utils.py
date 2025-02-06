@@ -16,7 +16,7 @@ else:
 import numpy as np
 import pandas as pd
 
-from arcticdb.util.test import create_datetime_index, get_sample_dataframe
+from arcticdb.util.test import create_datetime_index, get_sample_dataframe, random_integers
 from arcticdb.version_store.library import Library
 
 # Type definitions - supported by arctic
@@ -365,6 +365,7 @@ class ListGenerators:
         finfo = np.finfo(dtype)
         if minV is None:
             minV = max(finfo.min, -sys.float_info.max)
+        if maxV is None:    
             maxV = min(finfo.max, sys.float_info.max)
         if round_to is None:
             return np.random.uniform(minV, maxV, size).astype(dtype)
@@ -386,21 +387,7 @@ class ListGenerators:
     def generate_random_ints(cls, dtype: ArcticIntType, 
                             size: int, minV: int = None, maxV: int = None
                             ) -> List[ArcticIntType]:
-        # We do not generate integers outside the int64 range
-        platform_int_info = np.iinfo("int_")
-        iinfo = np.iinfo(dtype)
-        if minV is None:
-            minV = max(iinfo.min, platform_int_info.min)
-            maxV = min(iinfo.max, platform_int_info.max)
-        else:
-            minV = max(iinfo.min, platform_int_info.min, minV)
-            maxV = min(iinfo.max, platform_int_info.max, maxV)
-        return np.random.randint(
-            minV,
-            maxV,
-            size=size,
-            dtype=dtype
-        )
+        return random_integers(size=size, dtype=dtype, minV=minV, maxV=maxV)
     
     @classmethod
     def generate_random_bools(cls, size: int) -> List[bool]:
@@ -435,26 +422,14 @@ class DFGenerator:
                 self.__df.index = self.__index
         return self.__df
 
-    def add_int_col(self, name: str, dtype: ArcticIntType = np.int64) -> 'DFGenerator':
-        list = ListGenerators.generate_random_ints(dtype, self.__size)
-        self.__data[name] = list
-        self.__types[name] = dtype
-        return self
-    
-    def add_int_col_ex(self, name: str, min: int, max: int, dtype: ArcticIntType = np.int64) -> 'DFGenerator':
+    def add_int_col(self, name: str, dtype: ArcticIntType = np.int64, min: int = None, max: int = None) -> 'DFGenerator':
         list = ListGenerators.generate_random_ints(dtype, self.__size, min, max)
         self.__data[name] = list
         self.__types[name] = dtype
         return self
     
-    def add_float_col(self, name: str, dtype: ArcticFloatType = np.float64) -> 'DFGenerator':
-        list = ListGenerators.generate_random_floats(dtype, self.__size)
-        self.__data[name] = list
-        self.__types[name] = dtype
-        return self
-
-    def add_float_col_ex(self, name: str, min: float, max: float, round_at: int, dtype: ArcticFloatType = np.float64
-                         ) -> 'DFGenerator':
+    def add_float_col(self, name: str, dtype: ArcticFloatType = np.float64, min: float = None, max: float = None, 
+                      round_at: int = None ) -> 'DFGenerator':
         list = ListGenerators.generate_random_floats(dtype, self.__size, min, max, round_at)
         self.__data[name] = list
         self.__types[name] = dtype
@@ -490,4 +465,3 @@ class DFGenerator:
         stop = (self.__size + start) * step
         self.__index = pd.Index(range(start, stop, step), dtype=dtype, name=name_col)
         return self
-
