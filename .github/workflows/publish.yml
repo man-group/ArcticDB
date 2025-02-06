@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       environment: { type: environment, required: true }
-      run_id: { type: number, required: true }
+      run_id: { type: string, required: true }
 run-name: Publish ${{github.ref}} to ${{inputs.environment}}
 jobs:
   # GitHub Composite Actions cannot access secrets and Reusable Workflows cannot return artifacts, so duplicate for now:
@@ -99,42 +99,13 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Gather wheels from run ${{inputs.run_id}}
-        if: inputs.run_id > 0
-        run: |
-          gh run download ${{inputs.run_id}} -p 'wheel-cp*'
-          mv wheel-cp*/* .
         env:
+          RUN_ID: ${{ inputs.run_id || github.run_id }}
           GH_TOKEN: ${{github.token}}
           GH_REPO: ${{github.repository}}
-
-      # Above `gh` command don't work on the current run, so will have to hack:
-      - uses: actions/setup-node@v3.8.2
-        if: inputs.run_id <= 0
-        with:
-          node-version: 16
-      - run: npm install @actions/artifact@1
-        if: inputs.run_id <= 0
-      - name: Fetch wheel artifacts
-        if: inputs.run_id <= 0
-        uses: actions/github-script@v6.4.1
-        with:
-          script: |
-            const dhc = require("./node_modules/@actions/artifact/lib/internal/download-http-client.js");
-            const ds = require("./node_modules/@actions/artifact/lib/internal/download-specification.js");
-
-            const cwd = process.cwd();
-            const client = new dhc.DownloadHttpClient();
-            const artifactsResponse = await client.listArtifacts();
-            for (const artifact of artifactsResponse.value) {
-                if (artifact.name.startsWith("wheel-cp")) {
-                  console.log(`Downloading ${artifact.name} to ${cwd}`);
-                  const itemsResponse = await client.getContainerItems(artifact.name, artifact.fileContainerResourceUrl);
-                  const downloadSpecs = ds.getDownloadSpecification(artifact.name, itemsResponse.value, cwd, false);
-                  await client.downloadSingleArtifact(downloadSpecs.filesToDownload);
-                } else {
-                  console.log(`Ignoring ${artifact.name}`);
-                }
-            }
+        run: |
+          gh run download $RUN_ID -p 'wheel-cp*'
+          mv wheel-cp*/* .
 
       - name: Upload to Pypi
         run: |
