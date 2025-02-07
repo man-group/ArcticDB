@@ -160,7 +160,6 @@ class AWSGeneralReadWriteTests:
         '''
         lmdb_setup = AWSGeneralReadWriteTests.SETUP_CLASS.setup_environment() 
         info = lmdb_setup.get_storage_info()
-        print("STORAGE INFO: ", info)
         return info
 
     def setup(self, storage_info, params):
@@ -172,11 +171,6 @@ class AWSGeneralReadWriteTests:
         ## Construct back from arctic url the object
         self.lmdb = VaryingSizeSymbolLibrary.fromStorageInfo(storage_info)
         sym = self.lmdb.get_symbol_name(params)
-        print("STORAGE INFO: ", storage_info)
-        print("ARCTIC :", self.lmdb.get_arctic_client())
-        print("Library :", self.lmdb.get_library())
-        print("Symbols :", self.lmdb.get_library().list_symbols())
-        print("Looking for :", sym)
         self.to_write_df = self.lmdb.get_library().read(symbol=sym).data
 
     def time_read_wide(self, storage_info, params):

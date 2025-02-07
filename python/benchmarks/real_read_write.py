@@ -36,8 +36,7 @@ class ReadWriteBenchmarkSettings(EnvConfigurationBase):
         self.ac = self.get_arctic_client()
 
     def get_library_names(self, num_symbols=1) -> List[str]:
-        #return ["PERM_READ", "MOD_READ"]        
-        return ["xxxxPERM_READ", "xxxxMOD_READ"]       
+        return ["PERM_READ", "MOD_READ"]        
 
     def get_parameter_list(self):
         """
@@ -51,8 +50,7 @@ class ReadWriteBenchmarkSettings(EnvConfigurationBase):
             rows = [2_500_000, 5_000_000]
         else:
             rows = [1_000_000, 2_000_000]
-        #return rows
-        return [1000,2000]
+        return rows
     
     def get_last_x_percent_date_range(self, row_num, percents):
         """
@@ -149,7 +147,6 @@ class LMDBReadWrite:
         '''
         lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment() 
         info = lmdb_setup.get_storage_info()
-        print("STORAGE INFO: ", info)
         return info
 
     def setup(self, storage_info, num_rows):
@@ -161,11 +158,6 @@ class LMDBReadWrite:
         ## Construct back from arctic url the object
         self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)
         sym = self.lmdb.get_symbol_name(num_rows)
-        print("STORAGE INFO: ", storage_info)
-        print("ARCTIC :", self.lmdb.get_arctic_client())
-        print("Library :", self.lmdb.get_library())
-        print("Symbols :", self.lmdb.get_library().list_symbols())
-        print("Looking for :", sym)
         self.to_write_df = self.lmdb.get_library().read(symbol=sym).data
         self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)
 

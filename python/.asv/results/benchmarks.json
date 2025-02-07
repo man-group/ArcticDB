@@ -1737,115 +1737,115 @@
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.peakmem_read": {
-        "code": "class LMDBReadWrite:\n    def peakmem_read(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "code": "class LMDBReadWrite:\n    def peakmem_read(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
         "name": "real_read_write.AWSReadWrite.peakmem_read",
         "param_names": [
             "num_rows"
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "1000000",
+                "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:250",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "4c39d731e6ab091893ad947b75172591b3b4d768c39720464081a7881b9a02e6"
+        "version": "b9009fb81bb52e16ea5a236504f7d64ab0686ddafd528df5ece7b8dd1dd6eea9"
     },
     "real_read_write.AWSReadWrite.peakmem_read_with_column_float": {
-        "code": "class LMDBReadWrite:\n    def peakmem_read_with_column_float(self, storage_info, params):\n        COLS = [\"float2\"]\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "code": "class LMDBReadWrite:\n    def peakmem_read_with_column_float(self, storage_info, params):\n        COLS = [\"float2\"]\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
         "name": "real_read_write.AWSReadWrite.peakmem_read_with_column_float",
         "param_names": [
             "num_rows"
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "1000000",
+                "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:250",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "7d2f70ea4f00754f31e7fb14e3d882a1fa6765adb8331f454e0362f505bb374f"
+        "version": "16c6fa8d252c6e47e24e4a75ef805cc3b8a4560836c0e4d2cf212f0510eda037"
     },
     "real_read_write.AWSReadWrite.peakmem_read_with_columns_all_types": {
-        "code": "class LMDBReadWrite:\n    def peakmem_read_with_columns_all_types(self, storage_info, params):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "code": "class LMDBReadWrite:\n    def peakmem_read_with_columns_all_types(self, storage_info, params):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
         "name": "real_read_write.AWSReadWrite.peakmem_read_with_columns_all_types",
         "param_names": [
             "num_rows"
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "1000000",
+                "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:250",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "06da1dc074552ad85fb2d9767d26bf20194b22c37e8d14655f5464326296b051"
+        "version": "27d67c9385d46fac7d9cef8b7b4a4a3e78a753727710fd27e9d7e17c3e630f6c"
     },
     "real_read_write.AWSReadWrite.peakmem_read_with_date_ranges_last20_percent_rows": {
-        "code": "class LMDBReadWrite:\n    def peakmem_read_with_date_ranges_last20_percent_rows(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, date_range=self.last_20).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "code": "class LMDBReadWrite:\n    def peakmem_read_with_date_ranges_last20_percent_rows(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, date_range=self.last_20).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
         "name": "real_read_write.AWSReadWrite.peakmem_read_with_date_ranges_last20_percent_rows",
         "param_names": [
             "num_rows"
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "1000000",
+                "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:250",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "ed09d01f779be6afdff99fa2cddb5e3c8a933df01fd9f45b1f8afdc522781772"
+        "version": "3773ed76a074b88762aa818d325600eb8ba87deaa1cec63ebf8c24223e59251b"
     },
     "real_read_write.AWSReadWrite.peakmem_write": {
-        "code": "class LMDBReadWrite:\n    def peakmem_write(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "code": "class LMDBReadWrite:\n    def peakmem_write(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
         "name": "real_read_write.AWSReadWrite.peakmem_write",
         "param_names": [
             "num_rows"
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "1000000",
+                "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:250",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "7713b34ca71b8e7145d41f48d56072cece08af8804a6fef7ccacfcec99f06340"
+        "version": "312e5c84e011daac69e361a0bd2f82474be7d9f0a870dc0cd6054800ff176f90"
     },
     "real_read_write.AWSReadWrite.peakmem_write_staged": {
-        "code": "class LMDBReadWrite:\n    def peakmem_write_staged(self, storage_info, params):\n        lib = self.lmdb.get_modifyable_library()\n        lib.write(f\"sym\", self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(f\"sym\", False, False)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "code": "class LMDBReadWrite:\n    def peakmem_write_staged(self, storage_info, params):\n        lib = self.lmdb.get_modifyable_library()\n        lib.write(f\"sym\", self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(f\"sym\", False, False)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
         "name": "real_read_write.AWSReadWrite.peakmem_write_staged",
         "param_names": [
             "num_rows"
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "1000000",
+                "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:250",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "e6b533fbd82b07ffd50e661b3fecab461fb77687c764016b88d832b978a1da06"
+        "version": "5cb53b63e1f4de51f722f925736cb530eff512a0577b67d7f8bc72131b5d406a"
     },
     "real_read_write.AWSReadWrite.time_read": {
-        "code": "class LMDBReadWrite:\n    def time_read(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "code": "class LMDBReadWrite:\n    def time_read(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWrite.time_read",
         "number": 3,
@@ -1854,22 +1854,22 @@
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "1000000",
+                "2000000"
             ]
         ],
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:250",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "304b3470f89be53245017ca59d7b7b8aeb095598062f420ece305264828afd7e",
+        "version": "30b4ca7f156d75d002cc073ff2a784f9a2ee88dfe856fc7af30862c3f65207ea",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.time_read_with_column_float": {
-        "code": "class LMDBReadWrite:\n    def time_read_with_column_float(self, storage_info, params):\n        COLS = [\"float2\"]\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "code": "class LMDBReadWrite:\n    def time_read_with_column_float(self, storage_info, params):\n        COLS = [\"float2\"]\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWrite.time_read_with_column_float",
         "number": 3,
@@ -1878,22 +1878,22 @@
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "1000000",
+                "2000000"
             ]
         ],
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:250",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "fda9b0df23c02d70fd0db0a98eee70324def0a984011bdca66a9ba98241febb6",
+        "version": "a0e8a3e34310811369243097334cb001f47b102c3e0bf1ff213f2c9bfeebdd35",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.time_read_with_columns_all_types": {
-        "code": "class LMDBReadWrite:\n    def time_read_with_columns_all_types(self, storage_info, params):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "code": "class LMDBReadWrite:\n    def time_read_with_columns_all_types(self, storage_info, params):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWrite.time_read_with_columns_all_types",
         "number": 3,
@@ -1902,22 +1902,22 @@
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "1000000",
+                "2000000"
             ]
         ],
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:250",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "6605da74ea273ee038e78e2de4851e8ecef2b343bd33c60bd505f4497c7a511c",
+        "version": "fcfd2aa9bf2ed5e6aa27686aba4ea3a011faaf5237b6be9f5288ce5676505fbf",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.time_read_with_date_ranges_last20_percent_rows": {
-        "code": "class LMDBReadWrite:\n    def time_read_with_date_ranges_last20_percent_rows(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, date_range=self.last_20).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "code": "class LMDBReadWrite:\n    def time_read_with_date_ranges_last20_percent_rows(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, date_range=self.last_20).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWrite.time_read_with_date_ranges_last20_percent_rows",
         "number": 3,
@@ -1926,22 +1926,22 @@
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "1000000",
+                "2000000"
             ]
         ],
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:250",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "8bed8d7c482de6eedf94685d11cca7c30b7ef473cd7af5d17e24d4b7d4d42060",
+        "version": "e3fcc911e4ce5c636c9eed4f1f3d542d8ca3f9ee28e60d8b98a024db3a51e185",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.time_write": {
-        "code": "class LMDBReadWrite:\n    def time_write(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "code": "class LMDBReadWrite:\n    def time_write(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWrite.time_write",
         "number": 3,
@@ -1950,22 +1950,22 @@
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "1000000",
+                "2000000"
             ]
         ],
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:250",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "c057954a47cc2cd1070d0f1b9430cdfab72bc3bb145bf4a5afaa381a1518998c",
+        "version": "cb4b453afd0cee22358bc51cde39c8e7a42c0689d9a0ed772d78858117cf8dc3",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.time_write_staged": {
-        "code": "class LMDBReadWrite:\n    def time_write_staged(self, storage_info, params):\n        lib = self.lmdb.get_modifyable_library()\n        lib.write(f\"sym\", self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(f\"sym\", False, False)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "code": "class LMDBReadWrite:\n    def time_write_staged(self, storage_info, params):\n        lib = self.lmdb.get_modifyable_library()\n        lib.write(f\"sym\", self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(f\"sym\", False, False)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWrite.time_write_staged",
         "number": 3,
@@ -1974,130 +1974,130 @@
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "1000000",
+                "2000000"
             ]
         ],
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:250",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "6f43f14c5dcf39cfa90f4d5a8d09477d50e1c3064e6fdad673447dd67b2cc02c",
+        "version": "dd9f5641d29f029a942cfcb265b1864277e98c745e30bf9bd28adfcb3e18456e",
         "warmup_time": 0
     },
     "real_read_write.LMDBReadWrite.peakmem_read": {
-        "code": "class LMDBReadWrite:\n    def peakmem_read(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "code": "class LMDBReadWrite:\n    def peakmem_read(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        return info",
         "name": "real_read_write.LMDBReadWrite.peakmem_read",
         "param_names": [
             "num_rows"
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "2500000",
+                "5000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:142",
+        "setup_cache_key": "real_read_write:140",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "2c6878a7fa544e4fda3b4527e2730e432ceea65ddb1baa57a0ac09831320688a"
+        "version": "fa9a1c72d2a9c78bc6fe2b9f2622fdf5e2f48110861c3df2f3faa3b676032ebc"
     },
     "real_read_write.LMDBReadWrite.peakmem_read_with_column_float": {
-        "code": "class LMDBReadWrite:\n    def peakmem_read_with_column_float(self, storage_info, params):\n        COLS = [\"float2\"]\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "code": "class LMDBReadWrite:\n    def peakmem_read_with_column_float(self, storage_info, params):\n        COLS = [\"float2\"]\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        return info",
         "name": "real_read_write.LMDBReadWrite.peakmem_read_with_column_float",
         "param_names": [
             "num_rows"
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "2500000",
+                "5000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:142",
+        "setup_cache_key": "real_read_write:140",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "27b5fb4e03fb75e213faba2c41fbdb994c7a5b6af1b9ae151830255ce7f0a0fa"
+        "version": "434f2ee84b1529a184db87c033a51434597499b570d5c03d41567e2941997a28"
     },
     "real_read_write.LMDBReadWrite.peakmem_read_with_columns_all_types": {
-        "code": "class LMDBReadWrite:\n    def peakmem_read_with_columns_all_types(self, storage_info, params):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "code": "class LMDBReadWrite:\n    def peakmem_read_with_columns_all_types(self, storage_info, params):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        return info",
         "name": "real_read_write.LMDBReadWrite.peakmem_read_with_columns_all_types",
         "param_names": [
             "num_rows"
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "2500000",
+                "5000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:142",
+        "setup_cache_key": "real_read_write:140",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "c1243a547c2459abf5aee292755d14b35f27894142fa7533298dab607b2017a5"
+        "version": "696e49c2bc6e31d2242f5513d1c983c9eb4948d87e794214cc697efca7020a90"
     },
     "real_read_write.LMDBReadWrite.peakmem_read_with_date_ranges_last20_percent_rows": {
-        "code": "class LMDBReadWrite:\n    def peakmem_read_with_date_ranges_last20_percent_rows(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, date_range=self.last_20).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "code": "class LMDBReadWrite:\n    def peakmem_read_with_date_ranges_last20_percent_rows(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, date_range=self.last_20).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        return info",
         "name": "real_read_write.LMDBReadWrite.peakmem_read_with_date_ranges_last20_percent_rows",
         "param_names": [
             "num_rows"
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "2500000",
+                "5000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:142",
+        "setup_cache_key": "real_read_write:140",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "92c2ce54d0390905e3cef6159e3165d45484628b8a992d2edb13ff9c2c3a02b7"
+        "version": "bf592e0f74c7c79dfcd8a40832478c6271632c9abd4f5913642c85eb54148cc1"
     },
     "real_read_write.LMDBReadWrite.peakmem_write": {
-        "code": "class LMDBReadWrite:\n    def peakmem_write(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "code": "class LMDBReadWrite:\n    def peakmem_write(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        return info",
         "name": "real_read_write.LMDBReadWrite.peakmem_write",
         "param_names": [
             "num_rows"
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "2500000",
+                "5000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:142",
+        "setup_cache_key": "real_read_write:140",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "2cd950a1c80bdb2d8d1612ff89ef034c6ab870d4887e95da0291294dfe7a13d1"
+        "version": "4fa6b0fab606d0b4dddcce2efdf36002824f292cb5e48938e5375b168d551f2b"
     },
     "real_read_write.LMDBReadWrite.peakmem_write_staged": {
-        "code": "class LMDBReadWrite:\n    def peakmem_write_staged(self, storage_info, params):\n        lib = self.lmdb.get_modifyable_library()\n        lib.write(f\"sym\", self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(f\"sym\", False, False)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "code": "class LMDBReadWrite:\n    def peakmem_write_staged(self, storage_info, params):\n        lib = self.lmdb.get_modifyable_library()\n        lib.write(f\"sym\", self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(f\"sym\", False, False)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        return info",
         "name": "real_read_write.LMDBReadWrite.peakmem_write_staged",
         "param_names": [
             "num_rows"
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "2500000",
+                "5000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:142",
+        "setup_cache_key": "real_read_write:140",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "9a4dd4f08c2be614f39d4a5a938a3c8184ced76f69177cbb5a54a5f1fa86a614"
+        "version": "836fbdd0a3743f404945cf361805838895374abad41a51cbd1096f0c0ab424d2"
     },
     "real_read_write.LMDBReadWrite.time_read": {
-        "code": "class LMDBReadWrite:\n    def time_read(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "code": "class LMDBReadWrite:\n    def time_read(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        return info",
         "min_run_count": 1,
         "name": "real_read_write.LMDBReadWrite.time_read",
         "number": 3,
@@ -2106,22 +2106,22 @@
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "2500000",
+                "5000000"
             ]
         ],
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:142",
+        "setup_cache_key": "real_read_write:140",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "f524cca9c124f81913566267722291d29c3060801fe4f08f7f8e0a9f5edf2b0d",
+        "version": "e8e1616c395a77f89038b747da87435ab70b7e6a91be1d76a06e3631bd4d1a7f",
         "warmup_time": 0
     },
     "real_read_write.LMDBReadWrite.time_read_with_column_float": {
-        "code": "class LMDBReadWrite:\n    def time_read_with_column_float(self, storage_info, params):\n        COLS = [\"float2\"]\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "code": "class LMDBReadWrite:\n    def time_read_with_column_float(self, storage_info, params):\n        COLS = [\"float2\"]\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        return info",
         "min_run_count": 1,
         "name": "real_read_write.LMDBReadWrite.time_read_with_column_float",
         "number": 3,
@@ -2130,22 +2130,22 @@
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "2500000",
+                "5000000"
             ]
         ],
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:142",
+        "setup_cache_key": "real_read_write:140",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "84ce2ab29ab5cd677fb504ae955decff2600eea9dbf1f990e2a863a3c2cfa171",
+        "version": "508c03958bfcdb8563d8fc40537e8451ca9bb751823246f36714feec5b73475d",
         "warmup_time": 0
     },
     "real_read_write.LMDBReadWrite.time_read_with_columns_all_types": {
-        "code": "class LMDBReadWrite:\n    def time_read_with_columns_all_types(self, storage_info, params):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "code": "class LMDBReadWrite:\n    def time_read_with_columns_all_types(self, storage_info, params):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        return info",
         "min_run_count": 1,
         "name": "real_read_write.LMDBReadWrite.time_read_with_columns_all_types",
         "number": 3,
@@ -2154,22 +2154,22 @@
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "2500000",
+                "5000000"
             ]
         ],
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:142",
+        "setup_cache_key": "real_read_write:140",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "51252362e5855e6ca33a91de2f79788beb61fc70f42ea4b044b8d21c581f13ff",
+        "version": "6aa30e54b629a6b9e862148224b3cb3987ed4114a5236480bebfac1c96c793db",
         "warmup_time": 0
     },
     "real_read_write.LMDBReadWrite.time_read_with_date_ranges_last20_percent_rows": {
-        "code": "class LMDBReadWrite:\n    def time_read_with_date_ranges_last20_percent_rows(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, date_range=self.last_20).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "code": "class LMDBReadWrite:\n    def time_read_with_date_ranges_last20_percent_rows(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym, date_range=self.last_20).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        return info",
         "min_run_count": 1,
         "name": "real_read_write.LMDBReadWrite.time_read_with_date_ranges_last20_percent_rows",
         "number": 3,
@@ -2178,22 +2178,22 @@
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "2500000",
+                "5000000"
             ]
         ],
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:142",
+        "setup_cache_key": "real_read_write:140",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "441b631f727f2a97cb4e9ec7aeeb889021dd020d2dadc8f2e5b8cbc54d54b7fd",
+        "version": "ccbfaa5e37bf0da31b3756acc0b79fba73b10ffc259e15d711a5007a50b28d9f",
         "warmup_time": 0
     },
     "real_read_write.LMDBReadWrite.time_write": {
-        "code": "class LMDBReadWrite:\n    def time_write(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "code": "class LMDBReadWrite:\n    def time_write(self, storage_info, num_rows):\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        return info",
         "min_run_count": 1,
         "name": "real_read_write.LMDBReadWrite.time_write",
         "number": 3,
@@ -2202,22 +2202,22 @@
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "2500000",
+                "5000000"
             ]
         ],
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:142",
+        "setup_cache_key": "real_read_write:140",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "00e6188e62549853b65855b841f2e14a61368cc982a349933f16dc62f4b3eb56",
+        "version": "70fc6019722116d1632d7ee544babc263c60ce9deaae5b1e255b161bb5131f36",
         "warmup_time": 0
     },
     "real_read_write.LMDBReadWrite.time_write_staged": {
-        "code": "class LMDBReadWrite:\n    def time_write_staged(self, storage_info, params):\n        lib = self.lmdb.get_modifyable_library()\n        lib.write(f\"sym\", self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(f\"sym\", False, False)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "code": "class LMDBReadWrite:\n    def time_write_staged(self, storage_info, params):\n        lib = self.lmdb.get_modifyable_library()\n        lib.write(f\"sym\", self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(f\"sym\", False, False)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(num_rows)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        return info",
         "min_run_count": 1,
         "name": "real_read_write.LMDBReadWrite.time_write_staged",
         "number": 3,
@@ -2226,22 +2226,22 @@
         ],
         "params": [
             [
-                "1000",
-                "2000"
+                "2500000",
+                "5000000"
             ]
         ],
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:142",
+        "setup_cache_key": "real_read_write:140",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "d3d922cdb05e16a5129362bcb04ece6256e7175ef4dcca4e2e9384785c133b66",
+        "version": "f6aeb16f6abed16e4d18531f00e511d226be1920f4bd59097f25640ce1e306ff",
         "warmup_time": 0
     },
     "real_read_write_wide.AWSGeneralReadWriteTests.peakmem_read_wide": {
-        "code": "class AWSGeneralReadWriteTests:\n    def peakmem_read_wide(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, params):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = VaryingSizeSymbolLibrary.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(params)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = AWSGeneralReadWriteTests.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "code": "class AWSGeneralReadWriteTests:\n    def peakmem_read_wide(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, params):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = VaryingSizeSymbolLibrary.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(params)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = AWSGeneralReadWriteTests.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        return info",
         "name": "real_read_write_wide.AWSGeneralReadWriteTests.peakmem_read_wide",
         "param_names": [
             "params"
@@ -2258,10 +2258,10 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "c7cf1ee48be24f5096c32bd56aae09545dd66d5babf02dd95e009f49ec5882ad"
+        "version": "a8379962bd3ee0aed31d08830c24618d0642cc849223719dbb2264b18ab00707"
     },
     "real_read_write_wide.AWSGeneralReadWriteTests.peakmem_write_wide": {
-        "code": "class AWSGeneralReadWriteTests:\n    def peakmem_write_wide(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, params):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = VaryingSizeSymbolLibrary.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(params)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = AWSGeneralReadWriteTests.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "code": "class AWSGeneralReadWriteTests:\n    def peakmem_write_wide(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, params):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = VaryingSizeSymbolLibrary.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(params)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = AWSGeneralReadWriteTests.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        return info",
         "name": "real_read_write_wide.AWSGeneralReadWriteTests.peakmem_write_wide",
         "param_names": [
             "params"
@@ -2278,10 +2278,10 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "45f732fdc2258f77a3a422890970f83a97fe963af6fa5beb8ab4571bb784fdc1"
+        "version": "92920faec86e37ddc719ec937e404d4e7fadce3d6c0f29e78442052496084e92"
     },
     "real_read_write_wide.AWSGeneralReadWriteTests.time_read_wide": {
-        "code": "class AWSGeneralReadWriteTests:\n    def time_read_wide(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, params):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = VaryingSizeSymbolLibrary.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(params)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = AWSGeneralReadWriteTests.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "code": "class AWSGeneralReadWriteTests:\n    def time_read_wide(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, params):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = VaryingSizeSymbolLibrary.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(params)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = AWSGeneralReadWriteTests.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        return info",
         "min_run_count": 1,
         "name": "real_read_write_wide.AWSGeneralReadWriteTests.time_read_wide",
         "number": 3,
@@ -2303,11 +2303,11 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "8da2dec3515cb4cc2632c497d96a429a961c4b645959b12230561add160dd92f",
+        "version": "44caab7b379e3f1ddc207bb122f205d3fb8f4fcabeb56731b4f901a7e8e4d436",
         "warmup_time": 0
     },
     "real_read_write_wide.AWSGeneralReadWriteTests.time_write_wide": {
-        "code": "class AWSGeneralReadWriteTests:\n    def time_write_wide(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, params):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = VaryingSizeSymbolLibrary.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(params)\n        print(\"STORAGE INFO: \", storage_info)\n        print(\"ARCTIC :\", self.lmdb.get_arctic_client())\n        print(\"Library :\", self.lmdb.get_library())\n        print(\"Symbols :\", self.lmdb.get_library().list_symbols())\n        print(\"Looking for :\", sym)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = AWSGeneralReadWriteTests.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        print(\"STORAGE INFO: \", info)\n        return info",
+        "code": "class AWSGeneralReadWriteTests:\n    def time_write_wide(self, storage_info, params):\n        sym = self.lmdb.get_symbol_name(params)\n        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, params):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.lmdb = VaryingSizeSymbolLibrary.fromStorageInfo(storage_info)\n        sym = self.lmdb.get_symbol_name(params)\n        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = AWSGeneralReadWriteTests.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        return info",
         "min_run_count": 1,
         "name": "real_read_write_wide.AWSGeneralReadWriteTests.time_write_wide",
         "number": 3,
@@ -2329,7 +2329,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "070ca420b23165a8de718f4cf8b978023b3226b9709eafa8064172336912b999",
+        "version": "6d11ad12e65f30adf9b2d89dc8bb845b76e5ccadf3e4acceb5bc777760c93368",
         "warmup_time": 0
     },
     "resample.Resample.peakmem_resample": {
