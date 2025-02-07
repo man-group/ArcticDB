@@ -105,23 +105,30 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
 
     enum class S3SettingsPickleOrder : uint32_t {
         AWS_AUTH = 0,
-        AWS_PROFILE = 1
+        AWS_PROFILE = 1,
+        USE_INTERNAL_CLIENT_WRAPPER_FOR_TESTING = 2
     };
 
     py::class_<s3::S3Settings>(storage, "S3Settings")
-        .def(py::init<s3::AWSAuthMethod, const std::string&>())
+        .def(py::init<s3::AWSAuthMethod, const std::string&, bool>())
         .def(py::pickle(
             [](const s3::S3Settings &settings) {
-                return py::make_tuple(settings.aws_auth(), settings.aws_profile());
+                return py::make_tuple(settings.aws_auth(), settings.aws_profile(), settings.use_internal_client_wrapper_for_testing());
             },
             [](py::tuple t) {
-                util::check(t.size() == 2, "Invalid S3Settings pickle objects");
-                s3::S3Settings settings(t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>(), t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_PROFILE)].cast<std::string>());
+                util::check(t.size() == 3, "Invalid S3Settings pickle objects");
+                s3::S3Settings settings(t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>(),
+                    t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_PROFILE)].cast<std::string>(),
+                    t[static_cast<uint32_t>(S3SettingsPickleOrder::USE_INTERNAL_CLIENT_WRAPPER_FOR_TESTING)].cast<bool>()
+                );
                 return settings;
             }
         ))
         .def_property_readonly("aws_profile", [](const s3::S3Settings &settings) { return settings.aws_profile(); })
-        .def_property_readonly("aws_auth", [](const s3::S3Settings &settings) { return settings.aws_auth(); });
+        .def_property_readonly("aws_auth", [](const s3::S3Settings &settings) { return settings.aws_auth(); })
+        .def_property_readonly("use_internal_client_wrapper_for_testing", [](const s3::S3Settings &settings) {
+            return settings.use_internal_client_wrapper_for_testing();
+        });
 
     py::class_<NativeVariantStorage>(storage, "NativeVariantStorage")
         .def(py::init<>())
@@ -130,7 +137,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
             [](const NativeVariantStorage &settings) {
                 return util::variant_match(settings.variant(),
                     [] (const s3::S3Settings& settings) {
-                        return py::make_tuple(settings.aws_auth(), settings.aws_profile());
+                        return py::make_tuple(settings.aws_auth(), settings.aws_profile(), settings.use_internal_client_wrapper_for_testing());
                     },
                     [](const auto &) {
                         util::raise_rte("Invalid native storage setting type");
@@ -139,8 +146,11 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
                 );
             },
             [](py::tuple t) {
-                util::check(t.size() == 2, "Invalid S3Settings pickle objects");
-                s3::S3Settings settings(t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>(), t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_PROFILE)].cast<std::string>());
+                util::check(t.size() == 3, "Invalid S3Settings pickle objects");
+                s3::S3Settings settings(t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>(),
+                    t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_PROFILE)].cast<std::string>(),
+                    t[static_cast<uint32_t>(S3SettingsPickleOrder::USE_INTERNAL_CLIENT_WRAPPER_FOR_TESTING)].cast<bool>()
+                );
                 return NativeVariantStorage(std::move(settings));
             }
         ))

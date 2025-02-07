@@ -14,6 +14,7 @@
 
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
+#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 #include <arcticdb/util/buffer_pool.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/storage_options.hpp>
@@ -134,6 +135,11 @@ void S3Storage::create_s3_client(const S3Settings &conf, const Aws::Auth::AWSCre
     } else {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using provided auth credentials");
         s3_client_ = std::make_unique<S3ClientImpl>(creds, get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
+    }
+
+    if (conf.use_internal_client_wrapper_for_testing()){
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using internal client wrapper for testing");
+        s3_client_ = std::make_unique<S3ClientTestWrapper>(std::move(s3_client_));
     }
 }
 
