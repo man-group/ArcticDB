@@ -102,7 +102,7 @@ folly::Future<S3Result<Segment>> S3ClientTestWrapper::get_object_async(
 
 S3Result<std::monostate> S3ClientTestWrapper::put_object(
         const std::string &s3_object_name,
-        Segment &&segment,
+        Segment &segment,
         const std::string &bucket_name,
         PutHeader header) {
     auto maybe_error = has_failure_trigger(bucket_name);
@@ -110,7 +110,7 @@ S3Result<std::monostate> S3ClientTestWrapper::put_object(
         return {*maybe_error};
     }
 
-    return actual_client_->put_object(s3_object_name, std::move(segment), bucket_name, header);
+    return actual_client_->put_object(s3_object_name, segment, bucket_name, header);
 }
 
 S3Result<DeleteOutput> S3ClientTestWrapper::delete_objects(
