@@ -397,18 +397,9 @@ private:
                 key_segment_pair.set_key(*key_to_write_);
             }
 
-            for (auto it = target_stores_.begin(); it != target_stores_.end(); ++it) {
-                auto& target_store = *it;
+            for (auto& target_store : target_stores_) {
                 try {
-                    auto key_segment_pair_copy = key_segment_pair;
-                    if (it != std::prev(target_stores_.end())) {
-                        // If this is not the last target we want to do a deep copy because write_compressed_sync will
-                        // move out of the underlying segment.
-                        auto key_copy = key_segment_pair.variant_key();
-                        auto segment_copy = key_segment_pair.segment().clone();
-                        key_segment_pair_copy = storage::KeySegmentPair(std::move(key_copy), std::move(segment_copy));
-                    }
-                    target_store->write_compressed_sync(key_segment_pair_copy);
+                    target_store->write_compressed_sync(key_segment_pair);
                 } catch (const storage::DuplicateKeyException& e) {
                     log::storage().debug("Key {} already exists on the target: {}", variant_key_view(key_to_read_), e.what());
                 } catch (const std::exception& e) {
