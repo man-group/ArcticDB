@@ -25,6 +25,7 @@ pytestmark = pytest.mark.pipeline
 
 
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
+DATETIME_AGGREGATIONS = ["mean", "min", "max", "first", "last", "count"]
 
 def default_aggregation_value(aggregation: str, dtype: Union[np.dtype, str]):
     assert aggregation in ALL_AGGREGATIONS
@@ -33,14 +34,19 @@ def default_aggregation_value(aggregation: str, dtype: Union[np.dtype, str]):
     elif np.issubdtype(dtype, np.integer):
         return np.nan if aggregation == "mean" else 0
     elif np.issubdtype(dtype, np.datetime64):
-        pass
+        return 0 if aggregation == "count" else pd.NaT
     elif np.issubdtype(dtype, np.str_):
         pass
+    elif pd.api.types.is_bool_dtype(dtype):
+        return np.nan if aggregation == "mean" else 0
     else:
         raise "Unknown dtype"
 
 def all_aggregations_dict(col):
     return {f"to_{agg}": (col, agg) for agg in ALL_AGGREGATIONS}
+
+def datetime_aggregations_dict(col):
+    return {f"to_{agg}": (col, agg) for agg in DATETIME_AGGREGATIONS}
 
 # Pandas recommended way to resample and exclude buckets with no index values, which is our behaviour
 # See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#sparse-resampling
@@ -862,13 +868,8 @@ def test_min_with_one_infinity_element(lmdb_version_store_v1):
     assert np.isneginf(lib.read(sym, query_builder=q).data['col_min'][0])
 
 class TestDynamicSchema:
-    @pytest.mark.parametrize("dtype", [np.float32, np.float64, np.uint32, np.int32, np.int64])
+    @pytest.mark.parametrize("dtype", [np.float32, np.float64, np.uint32, np.int32, np.int64, bool])
     def test_missing_column_segment_does_not_cross_bucket(self, lmdb_version_store_dynamic_schema_v1, dtype):
-        pd.set_option('display.max_columns', None)
-        pd.set_option('display.max_rows', None)
-        pd.set_option('display.width', None)
-        pd.set_option('display.max_columns', None)
-
         lib = lmdb_version_store_dynamic_schema_v1
         sym = "sym"
 
@@ -877,7 +878,8 @@ class TestDynamicSchema:
         lib.write(sym, initial_df)
 
         idx_to_append = pd.date_range(pd.Timestamp(40), periods=20, freq='ns')
-        df_to_append = pd.DataFrame({"a": range(len(idx)), "b": np.array(range(len(idx)), dtype=dtype)}, index=idx_to_append)
+        data_to_append = {"a": range(len(idx_to_append)), "b": np.array(range(len(idx_to_append)), dtype=dtype)}
+        df_to_append = pd.DataFrame(data_to_append, index=idx_to_append)
         lib.append(sym, df_to_append)
 
         q = QueryBuilder()
@@ -894,4 +896,80 @@ class TestDynamicSchema:
         expected = expected.reindex(columns=sorted(expected.columns))
         assert_frame_equal(arctic_resampled, expected, check_dtype=False)
 
+    def test_missing_column_segment_does_not_cross_bucket_date(self, lmdb_version_store_dynamic_schema_v1):
+        # Datetime types do not support all aggregation types that is why they are separated in a separate test
+        lib = lmdb_version_store_dynamic_schema_v1
+        sym = "sym"
 
+        idx = pd.date_range(pd.Timestamp(0), periods=20, freq='ns')
+        initial_df = pd.DataFrame({"a": range(len(idx))}, index=idx)
+        lib.write(sym, initial_df)
+
+        idx_to_append = pd.date_range(pd.Timestamp(40), periods=20, freq='ns')
+        data_to_append = {"a": range(len(idx_to_append)), "b": np.array([pd.Timestamp(i) for i in range(len(idx_to_append))])}
+        df_to_append = pd.DataFrame(data_to_append, index=idx_to_append)
+        lib.append(sym, df_to_append)
+
+        q = QueryBuilder()
+        q = q.resample('10ns').agg(datetime_aggregations_dict("b"))
+        arctic_resampled = lib.read(sym, query_builder=q).data
+        arctic_resampled = arctic_resampled.reindex(columns=sorted(arctic_resampled.columns))
+
+        expected_slice_with_missing_column_idx = [pd.Timestamp(0), pd.Timestamp(10)]
+        expected_slice_with_missing_column = pd.DataFrame({
+            f"to_{agg}": [default_aggregation_value(agg, np.datetime64) for _ in range(len(expected_slice_with_missing_column_idx))] for agg in DATETIME_AGGREGATIONS
+        }, index=expected_slice_with_missing_column_idx)
+        expected_slice_containing_column = df_to_append.resample('10ns').agg(None, **datetime_aggregations_dict("b"))
+        expected = pd.concat([expected_slice_with_missing_column, expected_slice_containing_column])
+        expected = expected.reindex(columns=sorted(expected.columns))
+        assert_frame_equal(arctic_resampled, expected, check_dtype=False)
+    @pytest.mark.parametrize("dtype", [np.float32, np.float64, np.uint32, np.int32, np.int64, bool])
+    def test_date_range_select_missing_column(self, lmdb_version_store_dynamic_schema_v1, dtype):
+        lib = lmdb_version_store_dynamic_schema_v1
+        sym = "sym"
+
+        idx = pd.date_range(pd.Timestamp(0), periods=20, freq='ns')
+        initial_df = pd.DataFrame({"a": range(len(idx))}, index=idx)
+        lib.write(sym, initial_df)
+
+        idx_to_append = pd.date_range(pd.Timestamp(40), periods=20, freq='ns')
+        data_to_append = {"a": range(len(idx_to_append)), "b": np.array(range(len(idx_to_append)), dtype=dtype)}
+        df_to_append = pd.DataFrame(data_to_append, index=idx_to_append)
+        lib.append(sym, df_to_append)
+
+        q = QueryBuilder()
+        q = q.resample('10ns').agg(all_aggregations_dict("b"))
+        arctic_resampled = lib.read(sym, query_builder=q, date_range=(None, pd.Timestamp(20))).data
+        arctic_resampled = arctic_resampled.reindex(columns=sorted(arctic_resampled.columns))
+        expected = pd.DataFrame({}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(10)]))
+        assert_frame_equal(arctic_resampled, expected)
+
+    @pytest.mark.parametrize("dtype", [np.float32])
+    def test_bucket_spans_two_segments(self, lmdb_version_store_dynamic_schema_v1, dtype):
+
+        pd.set_option('display.max_rows', None)
+        pd.set_option('display.max_columns', None)
+        pd.set_option('display.width', None)
+        pd.set_option('display.max_colwidth', None)
+
+        lib = lmdb_version_store_dynamic_schema_v1
+        sym = "sym"
+
+        idx = pd.date_range(pd.Timestamp(1), periods=5, freq='ns')
+        initial_df = pd.DataFrame({"a": range(len(idx))}, index=idx)
+        lib.write(sym, initial_df)
+
+        idx_to_append = pd.date_range(pd.Timestamp(6), periods=4, freq='ns')
+        data_to_append = {"a": range(len(idx_to_append)), "b": np.array(range(-len(idx_to_append),0), dtype=dtype)}
+        df_to_append = pd.DataFrame(data_to_append, index=idx_to_append)
+        lib.append(sym, df_to_append)
+
+        print()
+        print(lib.read(sym).data)
+
+        q = QueryBuilder()
+        q = q.resample('10ns').agg({"mx": ("b", "max")})
+        arctic_resampled = lib.read(sym, query_builder=q).data
+        arctic_resampled = arctic_resampled.reindex(columns=sorted(arctic_resampled.columns))
+        print()
+        print(arctic_resampled)
