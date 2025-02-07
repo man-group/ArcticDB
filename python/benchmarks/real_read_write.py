@@ -11,13 +11,13 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-from arcticdb.util.utils import DFGenerator
-from benchmarks.real_storage.libraries_creation import LibrariesBase, Storage
+from arcticdb.util.utils import DFGenerator, TimestampNumber
+from benchmarks.real_storage.libraries_creation import EnvConfigurationBase, Storage
 
 
 #region Setup classes
 
-class ReadBenchmarkLibraries(LibrariesBase):
+class ReadWriteBenchmarkSettings(EnvConfigurationBase):
     """
     Setup Read Tests Library for different storages.
     Its aim is to have at one place the responsibility for setting up any supported storage
@@ -28,12 +28,16 @@ class ReadBenchmarkLibraries(LibrariesBase):
     - one that will will hold transient data for operations which data will be wiped out
     """
 
+    START_DATE_INDEX = pd.Timestamp("2000-1-1")
+    INDEX_FREQ = 's'
+
     def __init__(self, type: Storage = Storage.LMDB, arctic_url: str = None):
         super().__init__(type, arctic_url)
         self.ac = self.get_arctic_client()
 
     def get_library_names(self, num_symbols=1) -> List[str]:
-        return ["PERM_READ", "MOD_READ"]        
+        #return ["PERM_READ", "MOD_READ"]        
+        return ["xxxxPERM_READ", "xxxxMOD_READ"]       
 
     def get_parameter_list(self):
         """
@@ -41,12 +45,27 @@ class ReadBenchmarkLibraries(LibrariesBase):
             speed of storage. LMDB as fastest might be the only different than any other
         """
         # Initially tried with those values but turn out they are too slow for Amazon s3
-        # Still they are avail in the storage
+        # Still they are available in the storage
         # rows = [5_000_000, 10_000_000, 20_000_000]
-        rows = [1_000_000, 2_000_000]
         if self.type == Storage.LMDB:
             rows = [2_500_000, 5_000_000]
-        return rows
+        else:
+            rows = [1_000_000, 2_000_000]
+        #return rows
+        return [1000,2000]
+    
+    def get_last_x_percent_date_range(self, row_num, percents):
+        """
+        Returns a date range selecting last X% of rows of dataframe
+        pass percents as 0.0-1.0
+        """
+        start = TimestampNumber.from_timestamp(
+            ReadWriteBenchmarkSettings.START_DATE_INDEX, ReadWriteBenchmarkSettings.INDEX_FREQ)
+        percent_5 = int(row_num * percents)
+        end_range = start + row_num
+        start_range = end_range - percent_5
+        range = pd.date_range(start=start_range.to_timestamp(), end=end_range.to_timestamp(), freq="s")
+        return range
     
     def get_parameter_names_list(self):
         return ["num_rows"]
@@ -68,7 +87,7 @@ class ReadBenchmarkLibraries(LibrariesBase):
             .add_string_col("string10", str_size=10)
             .add_string_col("string20", str_size=20, num_unique_values=20000)
             .add_bool_col("bool")
-            .add_timestamp_indx("time", 's', pd.Timestamp("2000-1-1"))
+            .add_timestamp_index("time", ReadWriteBenchmarkSettings.INDEX_FREQ, ReadWriteBenchmarkSettings.START_DATE_INDEX)
             ).generate_dataframe()
         print(f"Dataframe {row_num} rows generated for {time.time() - st} sec")
         return df
@@ -95,7 +114,7 @@ class ReadBenchmarkLibraries(LibrariesBase):
 
 #endregion
 
-class LMDB_ReadWrite:
+class LMDBReadWrite:
     """
     This class is responsible for all checks on LMDB storage
 
@@ -113,9 +132,9 @@ class LMDB_ReadWrite:
     min_run_count = 1
     warmup_time = 0
 
-    timeout = 12000
+    timeout = 1200
 
-    SETUP_CLASS: ReadBenchmarkLibraries = ReadBenchmarkLibraries(Storage.LMDB)
+    SETUP_CLASS = ReadWriteBenchmarkSettings(Storage.LMDB)
 
     params = SETUP_CLASS.get_parameter_list()
     param_names = SETUP_CLASS.get_parameter_names_list()
@@ -128,8 +147,8 @@ class LMDB_ReadWrite:
         And always return storage info which should 
         be first parameter for setup, tests and teardowns
         '''
-        lmdb = LMDB_ReadWrite.SETUP_CLASS.setup_environment() 
-        info = lmdb.get_storage_info()
+        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment() 
+        info = lmdb_setup.get_storage_info()
         print("STORAGE INFO: ", info)
         return info
 
@@ -140,7 +159,7 @@ class LMDB_ReadWrite:
         `repeat` as 1
         '''
         ## Construct back from arctic url the object
-        self.lmdb = ReadBenchmarkLibraries.fromStorageInfo(storage_info)
+        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)
         sym = self.lmdb.get_symbol_name(num_rows)
         print("STORAGE INFO: ", storage_info)
         print("ARCTIC :", self.lmdb.get_arctic_client())
@@ -148,6 +167,7 @@ class LMDB_ReadWrite:
         print("Symbols :", self.lmdb.get_library().list_symbols())
         print("Looking for :", sym)
         self.to_write_df = self.lmdb.get_library().read(symbol=sym).data
+        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)
 
     def time_read(self, storage_info, num_rows):
         sym = self.lmdb.get_symbol_name(num_rows)
@@ -165,8 +185,45 @@ class LMDB_ReadWrite:
         sym = self.lmdb.get_symbol_name(num_rows)
         self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)
 
+    def time_read_with_column_float(self, storage_info, params):
+        COLS = ["float2"]
+        sym = self.lmdb.get_symbol_name(params)
+        self.lmdb.get_library().read(symbol=sym, columns=COLS).data
 
-class AWS_ReadWrite(LMDB_ReadWrite):
+    def peakmem_read_with_column_float(self, storage_info, params):
+        COLS = ["float2"]
+        sym = self.lmdb.get_symbol_name(params)
+        self.lmdb.get_library().read(symbol=sym, columns=COLS).data           
+
+    def time_read_with_columns_all_types(self, storage_info, params):
+        COLS = ["float2","string10","bool", "int64","uint64"]
+        sym = self.lmdb.get_symbol_name(params)
+        self.lmdb.get_library().read(symbol=sym, columns=COLS).data
+
+    def peakmem_read_with_columns_all_types(self, storage_info, params):
+        COLS = ["float2","string10","bool", "int64","uint64"]
+        sym = self.lmdb.get_symbol_name(params)
+        self.lmdb.get_library().read(symbol=sym, columns=COLS).data           
+
+    def time_write_staged(self, storage_info, params):
+        lib = self.lmdb.get_modifyable_library()
+        lib.write(f"sym", self.to_write_df, staged=True)
+        lib._nvs.compact_incomplete(f"sym", False, False)
+
+    def peakmem_write_staged(self, storage_info, params):
+        lib = self.lmdb.get_modifyable_library()
+        lib.write(f"sym", self.to_write_df, staged=True)
+        lib._nvs.compact_incomplete(f"sym", False, False)
+
+    def time_read_with_date_ranges_last20_percent_rows(self, storage_info, params):
+        sym = self.lmdb.get_symbol_name(params)
+        self.lmdb.get_library().read(symbol=sym, date_range=self.last_20).data
+
+    def peakmem_read_with_date_ranges_last20_percent_rows(self, storage_info, params):
+        sym = self.lmdb.get_symbol_name(params)
+        self.lmdb.get_library().read(symbol=sym, date_range=self.last_20).data
+
+class AWSReadWrite(LMDBReadWrite):
     """
     This class is responsible for all checks on AWS
 
@@ -183,9 +240,9 @@ class AWS_ReadWrite(LMDB_ReadWrite):
     min_run_count = 1
     warmup_time = 0
 
-    timeout = 12000
+    timeout = 1200
 
-    SETUP_CLASS = ReadBenchmarkLibraries(Storage.AMAZON)
+    SETUP_CLASS = ReadWriteBenchmarkSettings(Storage.AMAZON)
 
     params = SETUP_CLASS.get_parameter_list()
     param_names = SETUP_CLASS.get_parameter_names_list()
@@ -198,6 +255,6 @@ class AWS_ReadWrite(LMDB_ReadWrite):
         And always return storage info which should 
         be first parameter for setup, tests and teardowns
         '''
-        aws = AWS_ReadWrite.SETUP_CLASS.setup_environment() 
-        return aws.get_storage_info()
+        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment() 
+        return aws_setup.get_storage_info()
 

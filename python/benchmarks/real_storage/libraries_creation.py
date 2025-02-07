@@ -63,7 +63,7 @@ class StorageInfo:
         self.type = type
         self.url = url
 
-class LibrariesBase(ABC):
+class EnvConfigurationBase(ABC):
     """
     Defines base class for benchmark scenario setup and teardown
     You need to create your own class inheriting from this one for each ASV benchmark class.
@@ -115,12 +115,14 @@ class LibrariesBase(ABC):
     def get_storage_info(self) -> StorageInfo:
         return StorageInfo(self.type, self.arctic_url)
     
-    def remove_libraries(self):
-        ## Remove only LMDB libs as they need to
-        if self.type == Storage.LMDB:
-            ac = self.get_arctic_client()
-            for lib in self.__libraries:
-                ac.delete_library(lib)
+    def remove_all_created_libraries(self, confirm=False):
+        """
+        Removes all libraries that this instance created
+        """
+        assert confirm, "Deletion of all libraries must be confirmed"
+        ac = self.get_arctic_client()
+        for lib in self.__libraries:
+            ac.delete_library(lib)
 
     def get_arctic_client(self):
         if self.ac is None:
@@ -207,14 +209,14 @@ class LibrariesBase(ABC):
         pass    
 
     @abstractmethod
-    def setup_all(self) -> 'LibrariesBase':
+    def setup_all(self) -> 'EnvConfigurationBase':
         '''
         Provide implementation that will setup needed data assuming storage does not contain 
         any previous data for this scenario
         '''
         pass
 
-    def setup_environment(self, parameters_is_index_for_lib_name=False) -> 'LibrariesBase':
+    def setup_environment(self, parameters_is_index_for_lib_name=False) -> 'EnvConfigurationBase':
         """
         Responsible for setting up environment if not set for persistent libraries.
 

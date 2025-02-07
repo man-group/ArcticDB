@@ -343,7 +343,7 @@ def stage_chunks(lib: Library, symbol:str, cachedDF:CachedDFGenerator, start_ind
 class RandomStringPool:
     """
     A class that will return a list of randomly selected strings from a string pool
-    with certain sized of each string and limited number of strings in the pool
+    with certain size of each string and limited number of strings in the pool
     """
 
     def __init__(self, str_length: int, pool_size: int):
@@ -360,17 +360,17 @@ class ListGenerators:
 
     @classmethod
     def generate_random_floats(cls, dtype: ArcticFloatType, 
-                      size: int, minV: float = None, maxV: float = None, round_to: int = None
+                      size: int, min_value: float = None, max_value: float = None, round_to: int = None
                       ) -> List[ArcticFloatType]:
         # Higher numbers will trigger overflow in numpy uniform (-1e307 - 1e307)
-        if minV is None:
-            minV = max(-1e307, -sys.float_info.max)
-        if maxV is None:    
-            maxV = min(1e307, sys.float_info.max)
+        if min_value is None:
+            min_value = max(-1e307, -sys.float_info.max)
+        if max_value is None:    
+            max_value = min(1e307, sys.float_info.max)
         if round_to is None:
-            return np.random.uniform(minV, maxV, size).astype(dtype)
+            return np.random.uniform(min_value, max_value, size).astype(dtype)
         else :
-            return np.round(np.random.uniform(minV, maxV, size), round_to).astype(dtype)
+            return np.round(np.random.uniform(min_value, max_value, size), round_to).astype(dtype)
         
     @classmethod
     def generate_random_string_pool(cls, str_length: int, pool_size: int) -> List[str]:
@@ -387,7 +387,7 @@ class ListGenerators:
     def generate_random_ints(cls, dtype: ArcticIntType, 
                             size: int, minV: int = None, maxV: int = None
                             ) -> List[ArcticIntType]:
-        return random_integers(size=size, dtype=dtype, minV=minV, maxV=maxV)
+        return random_integers(size=size, dtype=dtype, min_value=minV, max_value=maxV)
     
     @classmethod
     def generate_random_bools(cls, size: int) -> List[bool]:
@@ -471,12 +471,12 @@ class DFGenerator:
         self.__types[name] = pd.Timestamp
         return self
     
-    def add_timestamp_indx(self, name_col:str, freq:Union[str , timedelta , pd.Timedelta , pd.DateOffset], 
+    def add_timestamp_index(self, name_col:str, freq:Union[str , timedelta , pd.Timedelta , pd.DateOffset], 
                             start_time: pd.Timestamp = pd.Timestamp(0)) -> 'DFGenerator':
         self.__index = pd.date_range(start=start_time, periods=self.__size, freq=freq, name=name_col)
         return self
     
-    def add_range_indx(self, name_col:str, start:int = 0, step:int = 1, dtype: str = 'int') -> 'DFGenerator':
+    def add_range_index(self, name_col:str, start:int = 0, step:int = 1, dtype: str = 'int') -> 'DFGenerator':
         stop = (self.__size + start) * step
         self.__index = pd.Index(range(start, stop, step), dtype=dtype, name=name_col)
         return self

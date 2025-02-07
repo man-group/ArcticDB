@@ -14,12 +14,12 @@ import pandas as pd
 from arcticdb.options import LibraryOptions
 from arcticdb.util.utils import DFGenerator
 from arcticdb.version_store.library import Library
-from benchmarks.real_storage.libraries_creation import LibrariesBase, Storage
+from benchmarks.real_storage.libraries_creation import EnvConfigurationBase, Storage
 
 
 #region Setup classes
 
-class SymbolLibraries(LibrariesBase):
+class SymbolLibraries(EnvConfigurationBase):
 
     def __init__(self, type: Storage = Storage.LMDB, arctic_url: str = None):
         super().__init__(type, arctic_url)
@@ -56,7 +56,7 @@ class SymbolLibraries(LibrariesBase):
             .add_string_col("string100", str_size=100, num_unique_values=200)
             .add_string_col("string2", str_size=2)
             .add_bool_col("bool")
-            .add_timestamp_indx("time", 's', pd.Timestamp("2000-1-1"))
+            .add_timestamp_index("time", 's', pd.Timestamp("2000-1-1"))
             ).generate_dataframe()
         print(f"Dataframe {row_num} rows generated for {time.time() - st} sec")
         return df
@@ -80,7 +80,7 @@ class SymbolLibraries(LibrariesBase):
         return True
         
 
-class VersionLibraries(LibrariesBase):
+class VersionLibraries(EnvConfigurationBase):
     """
     A library for list versions testings is composed of X symbols.
     Symbols are sym_name_[0,X)
@@ -106,7 +106,7 @@ class VersionLibraries(LibrariesBase):
             .add_int_col("uint64", np.uint64, min=10000, max=19999999)
             .add_float_col("float64", min=-100000.0, max=2000000.0, round_at=2)
             .add_string_col("string100", str_size=10, num_unique_values=200)
-            .add_timestamp_indx("time", 's', pd.Timestamp("2000-1-1"))
+            .add_timestamp_index("time", 's', pd.Timestamp("2000-1-1"))
             ).generate_dataframe()
         print(f"Dataframe {row_num} rows generated for {time.time() - st} sec")
         return df
@@ -157,7 +157,7 @@ class VersionLibraries(LibrariesBase):
 
 #endregion
 
-class AWS_ListSymbols:
+class AWSListSymbols:
     """
     This class is responsible for all checks on AWS storage
 
@@ -189,12 +189,12 @@ class AWS_ListSymbols:
         And always return the arctic url which should 
         be first parameter for setup, tests and teardowns
         '''
-        aws = AWS_ListSymbols.SETUP_CLASS
-        if not aws.check_ok():
-            aws.setup_all()
+        aws_setup = AWSListSymbols.SETUP_CLASS
+        if aws_setup.check_ok():
+            aws_setup.clear_symbols_cache()
         else:
-            aws.clear_symbols_cache()
-        return aws.get_storage_info()
+            aws_setup.setup_all()
+        return aws_setup.get_storage_info()
 
     def setup(self, storage_info, num_syms):
         self.aws = SymbolLibraries.fromStorageInfo(storage_info)
@@ -210,7 +210,7 @@ class AWS_ListSymbols:
         self.lib.list_symbols()
 
 
-class AWS_VersionSymbols:
+class AWSVersionSymbols:
     """
     This class is responsible for all checks on AWS storage
 
@@ -228,7 +228,7 @@ class AWS_VersionSymbols:
     min_run_count = 1
     warmup_time = 0
 
-    timeout = 12000
+    timeout = 1200
 
     SETUP_CLASS = VersionLibraries(Storage.AMAZON)
 
@@ -243,7 +243,7 @@ class AWS_VersionSymbols:
         And always return the arctic url which should 
         be first parameter for setup, tests and teardowns
         '''
-        aws = AWS_VersionSymbols.SETUP_CLASS.setup_environment() 
+        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment() 
         return aws.get_storage_info()
 
     def setup(self, storage_info, num_syms):

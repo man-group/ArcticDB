@@ -1,3 +1,10 @@
+"""
+Copyright 2025 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+"""
 
 import time
 from typing import List
@@ -5,12 +12,12 @@ import numpy as np
 import pandas as pd
 from arcticdb.options import LibraryOptions
 from arcticdb.util.utils import DFGenerator, RandomStringPool
-from benchmarks.real_storage.libraries_creation import LibrariesBase, Storage
+from benchmarks.real_storage.libraries_creation import EnvConfigurationBase, Storage
 
 
 #region Setup classes
 
-class VaryingSizeSymbolLibrary(LibrariesBase):
+class VaryingSizeSymbolLibrary(EnvConfigurationBase):
     """
     Setup Read Tests Library for different storages.
     Its aim is to have at one place the responsibility for setting up any supported storage
@@ -90,7 +97,7 @@ class VaryingSizeSymbolLibrary(LibrariesBase):
                 .add_int_col(f"uint32_{i}", np.uint32)
                 )
             #print(f"Iteration {i} completed")
-        df = gen.add_timestamp_indx("index", "s", pd.Timestamp(0)).generate_dataframe()
+        df = gen.add_timestamp_index("index", "s", pd.Timestamp(0)).generate_dataframe()
         print(f"Dataframe rows {rows} cols {cols} generated for {time.time() - st} sec")
         return df
 
@@ -118,7 +125,7 @@ class VaryingSizeSymbolLibrary(LibrariesBase):
 
 #endregion
 
-class AWS_GeneralReadWriteTests:
+class AWSGeneralReadWriteTests:
     """
     This class is responsible for all checks on AWS storage
 
@@ -136,7 +143,7 @@ class AWS_GeneralReadWriteTests:
     min_run_count = 1
     warmup_time = 0
 
-    timeout = 12000
+    timeout = 1200
 
     SETUP_CLASS = VaryingSizeSymbolLibrary(Storage.AMAZON)
 
@@ -151,8 +158,8 @@ class AWS_GeneralReadWriteTests:
         And always return storage info which should 
         be first parameter for setup, tests and teardowns
         '''
-        lmdb = AWS_GeneralReadWriteTests.SETUP_CLASS.setup_environment() 
-        info = lmdb.get_storage_info()
+        lmdb_setup = AWSGeneralReadWriteTests.SETUP_CLASS.setup_environment() 
+        info = lmdb_setup.get_storage_info()
         print("STORAGE INFO: ", info)
         return info
 
@@ -187,11 +194,4 @@ class AWS_GeneralReadWriteTests:
     def peakmem_write_wide(self, storage_info, params):
         sym = self.lmdb.get_symbol_name(params)
         self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)        
-
-    def time_write_staged(self, rows):
-        self.fresh_lib.write(f"sym", self.df, staged=True)
-        self.fresh_lib._nvs.compact_incomplete(f"sym", False, False)
-
-    def peakmem_write_staged(self, rows):
-        self.fresh_lib.write(f"sym", self.df, staged=True)
-        self.fresh_lib._nvs.compact_incomplete(f"sym", False, False)     
+ 
