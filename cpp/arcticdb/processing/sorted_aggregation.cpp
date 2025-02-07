@@ -118,11 +118,25 @@ auto finalize_aggregator(
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
-                                                                          const std::vector<ColumnWithStrings>& input_agg_columns,
-                                                                          const std::vector<timestamp>& bucket_boundaries,
-                                                                          const Column& output_index_column,
-                                                                          StringPool& string_pool) const {
+Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(
+    [[maybe_unused]] const std::vector<std::shared_ptr<Column>>& input_index_columns,
+    [[maybe_unused]] const std::vector<ColumnWithStrings>& input_agg_columns,
+    [[maybe_unused]] const std::vector<timestamp>& bucket_boundaries,
+    [[maybe_unused]] const Column& output_index_column,
+    [[maybe_unused]] StringPool& string_pool
+) const {
+    return {};
+}
+
+template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
+Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(
+    const std::vector<std::shared_ptr<Column>>& input_index_columns,
+    const std::vector<ColumnWithStrings>& input_agg_columns,
+    const std::vector<timestamp>& bucket_boundaries,
+    const Column& output_index_column,
+    StringPool& string_pool,
+    const bm::bvector<>& existing_columns
+) const {
     std::optional<DataType> common_input_type = generate_common_input_type(input_agg_columns);
     using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     Column res(
@@ -138,6 +152,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
         &input_agg_columns,
         &bucket_boundaries,
         &string_pool,
+        &existing_columns,
         &res](auto output_type_desc_tag) {
             using output_type_info = ScalarTypeInfo<decltype(output_type_desc_tag)>;
             auto output_data = res.data();
@@ -151,15 +166,18 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                 auto bucket_end_it = std::next(bucket_start_it);
                 Bucket<closed_boundary> current_bucket(*bucket_start_it, *bucket_end_it);
                 const auto bucket_boundaries_end = bucket_boundaries.end();
-                for (auto [idx, input_agg_column]: folly::enumerate(input_agg_columns)) {
+                auto existing_columns_begin = existing_columns.first();
+                auto existing_columns_end = existing_columns.end();
+                auto input_agg_column_it = input_agg_columns.begin();
+                while (existing_columns_begin != existing_columns_end) {
                     details::visit_type(
-                        input_agg_column.column_->type().data_type(),
+                        input_agg_column_it->column_->type().data_type(),
                         [this,
                         &output_it,
                         &output_end_it,
                         &bucket_aggregator,
-                        &agg_column = input_agg_column,
-                        &input_index_column = input_index_columns[idx],
+                        &agg_column = *input_agg_column_it,
+                        &input_index_column = input_index_columns[*existing_columns_begin],
                         &bucket_boundaries_end,
                         &string_pool,
                         &bucket_start_it,
@@ -221,6 +239,8 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                             }
                         }
                     );
+                    ++input_agg_column_it;
+                    ++existing_columns_begin;
                 }
                 // We were in the middle of aggregating a bucket when we ran out of index values
                 if (output_it != output_end_it) {

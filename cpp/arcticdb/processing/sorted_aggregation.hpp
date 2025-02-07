@@ -36,10 +36,32 @@ struct ISortedAggregator {
                                        StringPool& string_pool) const {
             return folly::poly_call<2>(*this, input_index_columns, input_agg_columns, bucket_boundaries, output_index_column, string_pool);
         }
+        [[nodiscard]] Column aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
+                                       const std::vector<ColumnWithStrings>& input_agg_columns,
+                                       const std::vector<timestamp>& bucket_boundaries,
+                                       const Column& output_index_column,
+                                       StringPool& string_pool,
+                                       const bm::bvector<>& existing_columns) const {
+            return folly::poly_call<3>(*this, input_index_columns, input_agg_columns, bucket_boundaries, output_index_column, string_pool, existing_columns);
+        }
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::get_input_column_name, &T::get_output_column_name, &T::aggregate>;
+    using Members = folly::PolyMembers<
+        &T::get_input_column_name,
+        &T::get_output_column_name,
+        folly::sig<Column(const std::vector<std::shared_ptr<Column>>& input_index_columns,
+            const std::vector<ColumnWithStrings>& input_agg_columns,
+            const std::vector<timestamp>& bucket_boundaries,
+            const Column& output_index_column,
+            StringPool& string_pool)>(&T::aggregate),
+        folly::sig<Column(const std::vector<std::shared_ptr<Column>>& input_index_columns,
+            const std::vector<ColumnWithStrings>& input_agg_columns,
+            const std::vector<timestamp>& bucket_boundaries,
+            const Column& output_index_column,
+            StringPool& string_pool,
+            const bm::bvector<>& existing_columns)>(&T::aggregate)
+    >;
 };
 
 using SortedAggregatorInterface = folly::Poly<ISortedAggregator>;
@@ -337,6 +359,24 @@ public:
 
     [[nodiscard]] ColumnName get_input_column_name() const;
     [[nodiscard]] ColumnName get_output_column_name() const;
+
+    /// @brief Aggregate a single column over many row slices using a single aggregator defined by aggregation_operator
+    /// @param input_index_columns The index column for each segment. There will always be one column per segment
+    /// @param input_agg_columns The column which will be aggregated. For static schema there will be one column per
+    ///     segment, thus the size of @p input_index_columns will be the same as @p input_agg_columns and i-th element
+    ///     of @p input_index_columns will be the index for the i-th element of @p input_agg_columns. In case of dynamic
+    ///     schema there might be less @p input_agg_columns than @p input_index_columns. In that case
+    ///     @p existing_columns is used to pair existing columns and indexes
+    /// @param bucket_boundaries list of bucket boundaries where the i-th bucket is defined by bucket_boundaries[i] and
+    ///     bucket_boundaries[i+1]
+    /// @param existing_columns bitset having the same size as @p input_index_columns, i-th bit is 1 if the column
+    ///     exists in the i-th segment. The count of bits with value 1 is same as the size of @p input_agg_columns
+    [[nodiscard]] Column aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
+                                   const std::vector<ColumnWithStrings>& input_agg_columns,
+                                   const std::vector<timestamp>& bucket_boundaries,
+                                   const Column& output_index_column,
+                                   StringPool& string_pool,
+                                   const bm::bvector<>& existing_columns) const;
 
     [[nodiscard]] Column aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
                                    const std::vector<ColumnWithStrings>& input_agg_columns,

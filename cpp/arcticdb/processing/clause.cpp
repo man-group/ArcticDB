@@ -654,11 +654,16 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     for (const auto& aggregator: aggregators_) {
         std::vector<ColumnWithStrings> input_agg_columns;
         input_agg_columns.reserve(row_slices.size());
+        size_t slice_index = 0;
+        bm::bvector<> existing_columns;
+        existing_columns.init();
+        existing_columns.resize(row_slices.size());
         for (auto& row_slice: row_slices) {
             auto variant_data = row_slice.get(aggregator.get_input_column_name());
             util::variant_match(variant_data,
-                                [&input_agg_columns](const ColumnWithStrings& column_with_strings) {
+                                [&input_agg_columns, &existing_columns, &slice_index](const ColumnWithStrings& column_with_strings) {
                                     input_agg_columns.emplace_back(column_with_strings);
+                                    existing_columns.set(slice_index);
                                 },
                                 [](const EmptyResult&) {
                                     // Dynamic schema, missing column from this row-slice
@@ -668,9 +673,13 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
                                     internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected return type from ProcessingUnit::get, expected column-like");
                                 }
             );
+            ++slice_index;
         }
         if (!input_agg_columns.empty()) {
-            auto aggregated_column = std::make_shared<Column>(aggregator.aggregate(input_index_columns, input_agg_columns, bucket_boundaries, *output_index_column, string_pool));
+            const bool has_missing_columns = existing_columns.is_all_one_range(0, row_slices.size());
+            auto aggregated_column = has_missing_columns ?
+                std::make_shared<Column>(aggregator.aggregate(input_index_columns, input_agg_columns, bucket_boundaries, *output_index_column, string_pool, existing_columns)) :
+                std::make_shared<Column>(aggregator.aggregate(input_index_columns, input_agg_columns, bucket_boundaries, *output_index_column, string_pool));
             const auto field = scalar_field(aggregated_column->type().data_type(), aggregator.get_output_column_name().value);
             seg.add_column(field, std::move(aggregated_column));
         }
