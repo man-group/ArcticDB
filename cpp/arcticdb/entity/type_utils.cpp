@@ -39,6 +39,33 @@ namespace arcticdb {
         return false;
     }
 
+    constexpr bool is_mixed_float_and_integer(entity::DataType left, entity::DataType right) {
+        return (is_integer_type(left) && is_floating_point_type(right)) || (is_floating_point_type(left) && is_integer_type(right));
+    }
+
+    std::optional<entity::TypeDescriptor> common_type_float_integer(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right) {
+        auto dimension = left.dimension();
+        auto left_type = left.data_type();
+        auto right_type = right.data_type();
+        auto left_size = slice_bit_size(left_type);
+        auto right_size = slice_bit_size(right_type);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(is_mixed_float_and_integer(left_type, right_type),
+                                                        "Expected one int and one float in common_type_floats_integer");
+
+        auto target_size = entity::SizeBits::UNKNOWN_SIZE_BITS;
+        auto floating_size = is_floating_point_type(left_type) ? left_size : right_size;
+        auto integral_size = is_floating_point_type(left_type) ? right_size : left_size;
+        if (floating_size == entity::SizeBits::S64 || integral_size >= entity::SizeBits::S32) {
+            // (u)int64 up to float64 will lose precision, we accept that
+            target_size = entity::SizeBits::S64;
+        } else {
+            // (u)int(8/16) can fit in float32 since float32 has 24 precision bits
+            target_size = entity::SizeBits::S32;
+        }
+
+        return std::make_optional<entity::TypeDescriptor>(combine_data_type(entity::ValueType::FLOAT, target_size), dimension);
+    }
+
     std::optional<entity::TypeDescriptor> has_valid_type_promotion(
         const entity::TypeDescriptor& source,
         const entity::TypeDescriptor& target
@@ -85,7 +112,9 @@ namespace arcticdb {
                 if (source_size >= target_size)
                     return std::nullopt;
             } else if (is_floating_point_type(target_type)) {
-                // UINT->FLOAT, no restrictions on relative sizes
+                // UINT->FLOAT
+                // TODO aseaton is it OK to put this here? Where else is is_valid_type_promotion used? What will I break?
+                return common_type_float_integer(source, target);
             } else {
                 // Non-numeric target type
                 return std::nullopt;
@@ -99,7 +128,9 @@ namespace arcticdb {
                 if (source_size > target_size)
                     return std::nullopt;
             } else if (is_floating_point_type(target_type)) {
-                // INT->FLOAT, no restrictions on relative sizes
+                // INT->FLOAT
+                // TODO aseaton is it OK to put this here? Where else is is_valid_type_promotion used? What will I break?
+                return common_type_float_integer(source, target);
             } else {
                 // Non-numeric target type
                 return std::nullopt;
@@ -130,44 +161,47 @@ namespace arcticdb {
         return target;
     }
 
-    std::optional<entity::TypeDescriptor> has_valid_common_type(
-        const entity::TypeDescriptor& left,
-        const entity::TypeDescriptor& right
-    ) {
-        auto maybe_common_type = has_valid_type_promotion(left, right);
-        if (!maybe_common_type) {
-            maybe_common_type = has_valid_type_promotion(right, left);
+    std::optional<entity::TypeDescriptor> common_type_mixed_sign_ints(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right) {
+        auto dimension = left.dimension();
+        auto left_type = left.data_type();
+        auto right_type = right.data_type();
+        auto left_size = slice_bit_size(left_type);
+        auto right_size = slice_bit_size(right_type);
+        // To get here we must have one signed and one unsigned type, with the width of the signed type <= the width of the unsigned type
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(is_signed_type(left_type) ^ is_signed_type(right_type),
+                                                        "Expected one signed and one unsigned int in has_valid_common_type");
+        if (is_signed_type(left_type)) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(left_size <= right_size,
+                                                            "Expected left_size <= right_size in has_valid_common_type");
+        } else {
+            // is_signed_type(right_type)
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(right_size <= left_size,
+                                                            "Expected right_size <= left_size in has_valid_common_type");
         }
-        // has_valid_type_promotion checks if the second type can represent all values of the first type
-        // We also want to handle cases where there is a third type that can represent both
-        // In practice, this is only the case when there is one signed and one unsigned integer right now
-        if (!maybe_common_type &&
-            left.dimension() == right.dimension() &&
-            is_integer_type(left.data_type()) &&
-            is_integer_type(right.data_type())) {
-            auto dimension = left.dimension();
-            auto left_type = left.data_type();
-            auto right_type = right.data_type();
-            auto left_size = slice_bit_size(left_type);
-            auto right_size = slice_bit_size(right_type);
-            // To get here we must have one signed and one unsigned type, with the width of the signed type <= the width of the unsigned type
-            internal::check<ErrorCode::E_ASSERTION_FAILURE>(is_signed_type(left_type) ^ is_signed_type(right_type),
-                                                            "Expected one signed and one unsigned int in has_valid_common_type");
-            if (is_signed_type(left_type)) {
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(left_size <= right_size,
-                                                                "Expected left_size <= right_size in has_valid_common_type");
-            } else {
-                // is_signed_type(right_type)
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(right_size <= left_size,
-                                                                "Expected right_size <= left_size in has_valid_common_type");
-            }
-            auto target_size = entity::SizeBits(uint8_t(std::max(left_size, right_size)) + 1);
-            if (target_size < entity::SizeBits::COUNT) {
-                maybe_common_type = entity::TypeDescriptor{
-                        combine_data_type(entity::ValueType::INT, target_size),
-                        dimension};
-            }
+
+        auto target_size = entity::SizeBits(uint8_t(std::max(left_size, right_size)) + 1);
+        if (target_size < entity::SizeBits::COUNT) {
+            return std::make_optional<entity::TypeDescriptor>(combine_data_type(entity::ValueType::INT, target_size), dimension);
+        } else {
+            return std::nullopt;
         }
-        return maybe_common_type;
     }
+
+    std::optional<entity::TypeDescriptor> has_valid_common_type(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right) {
+            auto maybe_common_type = has_valid_type_promotion(left, right);
+            if (!maybe_common_type) {
+                maybe_common_type = has_valid_type_promotion(right, left);
+            }
+            // has_valid_type_promotion checks if the second type can represent all values of the first type
+            // We also want to handle cases where there is a third type that can represent both
+            if (!maybe_common_type && left.dimension() == right.dimension()) {
+                if (is_integer_type(left.data_type()) && is_integer_type(right.data_type())) {
+                    maybe_common_type = common_type_mixed_sign_ints(left, right);
+                } else if (is_mixed_float_and_integer(left.data_type(), right.data_type())) {
+                    maybe_common_type = common_type_float_integer(left, right);
+                }
+            }
+            return maybe_common_type;
+    }
+
 }
