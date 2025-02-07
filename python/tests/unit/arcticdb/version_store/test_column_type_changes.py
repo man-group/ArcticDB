@@ -8,6 +8,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 import pandas as pd
 import pytest
+from arcticdb.supported_types import float_types
+from arcticdb.version_store.library import Library
 
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.storage import KeyType
@@ -123,3 +125,103 @@ def test_type_promotion_stored_in_index_key(lmdb_version_store_dynamic_schema):
     result_df = lib.read(sym).data
     expected_df = pd.concat([df_write, df_append_1, df_append_2])
     assert_frame_equal(result_df, expected_df)
+
+
+@pytest.mark.parametrize("int_type", [np.int64, np.uint64, np.int32, np.uint32])
+@pytest.mark.parametrize("float_type", float_types)
+@pytest.mark.parametrize("second_append_type", [np.int64, np.uint64, np.int32, np.uint32])
+@pytest.mark.parametrize("int_first", (True, False))
+def test_type_promotion_ints_and_floats_up_to_float64(lmdb_version_store_dynamic_schema, int_type, float_type, second_append_type, int_first):
+    lib = lmdb_version_store_dynamic_schema
+
+    if int_first:
+        original_data = pd.DataFrame({"a": np.array([1, 2, 3], int_type)}, index=[0, 1, 2])
+        first_append = pd.DataFrame({"a": np.array([4.0, 5.0, 6.0], float_type)}, index=[3, 4, 5])
+    else:
+        original_data = pd.DataFrame({"a": np.array([1, 2, 3], float_type)}, index=[0, 1, 2])
+        first_append = pd.DataFrame({"a": np.array([4.0, 5.0, 6.0], int_type)}, index=[3, 4, 5])
+
+    second_append = pd.DataFrame({"a": np.array([7, 8, 9], second_append_type)}, index=[5, 6, 7])
+    lib.write("test", original_data)
+    lib.append("test", first_append)
+    lib.append("test", second_append)
+
+    data = lib.read("test").data
+    expected_result = pd.concat([original_data, first_append, second_append]).astype({"a": "float64"})
+    assert_frame_equal(data, expected_result)
+
+    adb_lib = Library("desc", lib)
+    info = adb_lib.get_description("test")
+    assert len(info.columns) == 1
+    name, dtype = info.columns[0]
+    assert name == "a"
+    # We promote 32 bit int + 32 bit float => float64 so we don't lose precision needlessly
+    assert dtype.data_type() == DataType.FLOAT64
+
+
+@pytest.mark.parametrize("original_type", [np.int8, np.uint8, np.int16, np.uint16])
+@pytest.mark.parametrize("second_append_type", [np.int8, np.uint8, np.int16, np.uint16])
+def test_type_promotion_ints_and_floats_up_to_float32(lmdb_version_store_dynamic_schema, original_type, second_append_type):
+    """Cases where we promote an integral type and a float32 to a float32"""
+    lib = lmdb_version_store_dynamic_schema
+
+    original_data = pd.DataFrame({"a": np.array([1, 2, 3], original_type)}, index=[0, 1, 2])
+    first_append = pd.DataFrame({"a": np.array([4.0, 5.0, 6.0], np.float32)}, index=[3, 4, 5])
+    second_append = pd.DataFrame({"a": np.array([7, 8, 9], second_append_type)}, index=[5, 6, 7])
+    lib.write("test", original_data)
+    lib.append("test", first_append)
+    lib.append("test", second_append)
+
+    data = lib.read("test").data
+    expected_result = pd.concat([original_data, first_append, second_append]).astype({"a": "float32"})
+    assert_frame_equal(data, expected_result)
+
+    adb_lib = Library("desc", lib)
+    info = adb_lib.get_description("test")
+    assert len(info.columns) == 1
+    name, dtype = info.columns[0]
+    assert name == "a"
+    assert dtype.data_type() == DataType.FLOAT32
+
+
+@pytest.mark.parametrize("original_type", [np.int32, np.uint32])
+def test_type_promotion_int32_and_float32_up_to_float64(lmdb_version_store_dynamic_schema, original_type):
+    """We promote int32 and float32 up to float64 so we can save the int32 without a loss of precision. """
+    lib = lmdb_version_store_dynamic_schema
+
+    original_data = pd.DataFrame({"a": np.array([0, np.iinfo(original_type).min, np.iinfo(original_type).max], original_type)}, index=[0, 1, 2])
+    first_append = pd.DataFrame({"a": np.array([0, np.finfo(np.float32).min, np.finfo(np.float32).max], np.float32)}, index=[3, 4, 5])
+    lib.write("test", original_data)
+    lib.append("test", first_append)
+
+    data = lib.read("test").data
+    expected_result = pd.concat([original_data, first_append]).astype({"a": "float64"})
+    assert_frame_equal(data, expected_result)
+    assert data.iloc[1, 0] == np.iinfo(original_type).min
+    assert data.iloc[2, 0] == np.iinfo(original_type).max
+    assert data.iloc[4, 0] == np.finfo(np.float32).min
+    assert data.iloc[5, 0] == np.finfo(np.float32).max
+
+
+def test_type_promotion_int64_and_float64_up_to_float64(lmdb_version_store_dynamic_schema):
+    """We unavoidably lose precision in this case, this test just shows what happens when we do."""
+    lib = lmdb_version_store_dynamic_schema
+    original_type = np.int64
+
+    original_data = pd.DataFrame({"a": np.array([
+        np.iinfo(original_type).min + 1,
+        np.iinfo(original_type).max - 1,
+        2 ** 53 - 1,
+        2 ** 53,
+        2 ** 53 + 1
+    ], original_type)}, index=[0, 1, 2, 3, 4])
+    append = pd.DataFrame({"a": np.array([np.finfo(np.float64).min, np.finfo(np.float64).max], np.float64)}, index=[5, 6])
+    lib.write("test", original_data)
+    lib.append("test", append)
+
+    data = lib.read("test").data.astype(original_type)
+    assert data.iloc[0, 0] == np.iinfo(original_type).min  # out by one compared to original
+    assert data.iloc[1, 0] == np.iinfo(original_type).min  # overflowed
+    assert data.iloc[2, 0] == 2 ** 53 - 1  # fine, this fits in float64 which has an 11 bit exponent
+    assert data.iloc[3, 0] == 2 ** 53  # also fine
+    assert data.iloc[4, 0] == 2 ** 53  # off by one, should be 2 ** 53 + 1 but we lost precision

@@ -61,7 +61,7 @@ TEST(HasValidTypePromotion, UintFloat) {
     TypeDescriptor source(ValueType::UINT, SizeBits::S64, Dimension::Dim0);
     TypeDescriptor float32(ValueType::FLOAT, SizeBits::S32, Dimension::Dim0);
     TypeDescriptor float64(ValueType::FLOAT, SizeBits::S64, Dimension::Dim0);
-    ASSERT_EQ(has_valid_type_promotion(source, float32), float32);
+    ASSERT_EQ(has_valid_type_promotion(source, float32), float64);
     ASSERT_EQ(has_valid_type_promotion(source, float64), float64);
 }
 
@@ -91,7 +91,7 @@ TEST(HasValidTypePromotion, IntFloat) {
     TypeDescriptor source(ValueType::INT, SizeBits::S64, Dimension::Dim0);
     TypeDescriptor float32(ValueType::FLOAT, SizeBits::S32, Dimension::Dim0);
     TypeDescriptor float64(ValueType::FLOAT, SizeBits::S64, Dimension::Dim0);
-    ASSERT_EQ(has_valid_type_promotion(source, float32), float32);
+    ASSERT_EQ(has_valid_type_promotion(source, float32), float64);
     ASSERT_EQ(has_valid_type_promotion(source, float64), float64);
 }
 
