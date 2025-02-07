@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import re
 import time
 from multiprocessing import Queue, Process
@@ -14,16 +15,19 @@ import pandas as pd
 import sys
 
 from arcticdb_ext.exceptions import StorageException
+from arcticdb_ext.storage import NoDataFoundException
+
 from arcticdb_ext import set_config_string
 from arcticdb.util.test import create_df, assert_frame_equal
 
 from arcticdb.storage_fixtures.s3 import MotoNfsBackedS3StorageFixtureFactory
 from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory
 
+from arcticdb.util.test import config_context, config_context_string
 
 pytestmark = pytest.mark.skipif(
     sys.version_info.major == 3 and sys.version_info.minor == 6 and sys.platform == "linux",
-    reason="Test setup segfaults"
+    reason="Test setup segfaults",
 )
 
 
@@ -134,11 +138,7 @@ def s3_storage_dots_in_path(request):
     prefix = "some_path/.thing_with_a_dot/even.more.dots/end"
 
     with request.param(
-            use_ssl=False,
-            ssl_test_support=False,
-            bucket_versioning=False,
-            default_prefix=prefix,
-            use_raw_prefix=True
+        use_ssl=False, ssl_test_support=False, bucket_versioning=False, default_prefix=prefix, use_raw_prefix=True
     ) as f:
         with f.create_fixture() as g:
             yield g
@@ -156,3 +156,37 @@ def test_read_path_with_dot(lib_name, s3_storage_dots_in_path):
     # Then - should be readable
     res = lib.read("s").data
     pd.testing.assert_frame_equal(res, expected)
+
+
+@pytest.fixture(scope="function")
+def wrapped_s3_storage_bucket(wrapped_s3_storage_factory):
+    with wrapped_s3_storage_factory.create_fixture() as bucket:
+        yield bucket
+
+
+def test_wrapped_s3_storage(lib_name, wrapped_s3_storage_bucket):
+    lib = wrapped_s3_storage_bucket.create_version_store_factory(lib_name)()
+    lib.write("s", data=create_df())
+    test_bucket_name = wrapped_s3_storage_bucket.bucket
+
+    with config_context("S3ClientTestWrapper.EnableFailures", 1):
+        with pytest.raises(NoDataFoundException, match="Unexpected network error: S3Error#99"):
+            lib.read("s")
+
+        with config_context_string("S3ClientTestWrapper.FailureBucket", test_bucket_name):
+            with pytest.raises(StorageException, match="Unexpected network error: S3Error#99"):
+                lib.write("s", data=create_df())
+
+        with config_context_string("S3ClientTestWrapper.FailureBucket", f"{test_bucket_name},non_existent_bucket"):
+            with pytest.raises(StorageException, match="Unexpected network error: S3Error#99"):
+                lib.write("s", data=create_df())
+
+        # There should be no failures
+        # given that we should not be simulating any failures for the test bucket
+        with config_context_string("S3ClientTestWrapper.FailureBucket", "non_existent_bucket"):
+            lib.read("s")
+            lib.write("s", data=create_df())
+
+    # There should be no problems after the failure simulation has been turned off
+    lib.read("s")
+    lib.write("s", data=create_df())
