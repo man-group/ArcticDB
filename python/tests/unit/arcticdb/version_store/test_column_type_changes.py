@@ -336,11 +336,11 @@ def test_querybuilder_project_int_lt_16_float(lmdb_version_store_tiny_segment, i
     assert_frame_equal(expected, received)
 
 
-@pytest.mark.parametrize("original_type", [np.int32, np.uint32, np.int64, np.uint64])
+@pytest.mark.parametrize("original_type", [np.int16, np.uint16, np.int32, np.uint32, np.int64, np.uint64])
 @pytest.mark.parametrize("append_type", [np.float32, np.float64])
-def test_type_promotion_ints_and_floats_then_project(lmdb_version_store_dynamic_schema, original_type, append_type):
+def test_type_promotion_ints_and_floats_then_project_float64_result(lmdb_version_store_dynamic_schema_v1, original_type, append_type):
     # Given
-    lib = lmdb_version_store_dynamic_schema
+    lib = lmdb_version_store_dynamic_schema_v1
 
     original_data = pd.DataFrame({"a": np.array([1, 2, 3], original_type)}, index=[0, 1, 2])
     original_data["b"] = original_data["a"]
@@ -358,6 +358,37 @@ def test_type_promotion_ints_and_floats_then_project(lmdb_version_store_dynamic_
     df = pd.concat([original_data, first_append])
     expected = df
     expected["new_col"] = expected["a"] + expected["b"]
-    assert expected.dtypes["new_col"] == np.float64
+    if append_type == np.float32 and original_type in (np.int16, np.uint16):
+        # We don't match Pandas here because we promote the sum of the 16 bit columns to 32 bit
+        assert expected.dtypes["new_col"] == np.float32
+    else:
+        assert expected.dtypes["new_col"] == np.float64
+
     assert received.dtypes["new_col"] == np.float64
+    assert_frame_equal(expected, received, check_dtype=False)
+
+
+@pytest.mark.parametrize("original_type", [np.int8, np.uint8])
+def test_type_promotion_ints_and_floats_then_project_float32_result(lmdb_version_store_dynamic_schema_v1, original_type):
+    # Given
+    lib = lmdb_version_store_dynamic_schema_v1
+
+    original_data = pd.DataFrame({"a": np.array([1, 2, 3], original_type)}, index=[0, 1, 2])
+    original_data["b"] = original_data["a"]
+    first_append = pd.DataFrame({"a": np.array([4.0, 5.0, 6.0], np.float32)}, index=[3, 4, 5])
+    first_append["b"] = first_append["a"]
+    lib.write("test", original_data)
+    lib.append("test", first_append)
+
+    # When
+    q = QueryBuilder()
+    q = q.apply("new_col", q["a"] + q["b"])
+
+    # Then
+    received = lib.read("test", query_builder=q).data
+    df = pd.concat([original_data, first_append])
+    expected = df
+    expected["new_col"] = expected["a"] + expected["b"]
+    assert expected.dtypes["new_col"] == np.float32
+    assert received.dtypes["new_col"] == np.float32
     assert_frame_equal(expected, received)

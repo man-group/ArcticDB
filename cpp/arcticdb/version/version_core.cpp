@@ -1253,7 +1253,7 @@ void copy_frame_data_to_buffer(
             util::default_initialize<decltype(dst_desc_tag)>(dst_ptr, num_rows * dst_rawtype_size);
         });
     // Do not use src_column.is_sparse() here, as that misses columns that are dense, but have fewer than num_rows values
-    } else if (src_column.opt_sparse_map().has_value() && has_valid_type_promotion(src_column.type(), dst_column.type())) {  // TODO aseaton is this one valid
+    } else if (src_column.opt_sparse_map().has_value() && is_valid_type_promotion_to_target(src_column.type(), dst_column.type())) {
         details::visit_type(dst_column.type().data_type(), [&](auto dst_tag) {
             using dst_type_info = ScalarTypeInfo<decltype(dst_tag)>;
             util::default_initialize<typename dst_type_info::TDT>(dst_ptr, num_rows * dst_rawtype_size);
@@ -1275,7 +1275,7 @@ void copy_frame_data_to_buffer(
                 dst_ptr += row_count * sizeof(SourceType);
             }
         });
-    } else if (has_valid_type_promotion(src_column.type(), dst_column.type())) {  // TODO aseaton is this one valid
+    } else if (is_valid_type_promotion_to_target(src_column.type(), dst_column.type())) {
         details::visit_type(dst_column.type().data_type() ,[&src_data, &dst_ptr, &src_column, &type_promotion_error_msg] (auto dest_desc_tag) {
             using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
             auto typed_dst_ptr = reinterpret_cast<DestinationType *>(dst_ptr);
