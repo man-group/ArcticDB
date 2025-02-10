@@ -21,7 +21,7 @@ namespace entity {
 /// n elements of left type from one buffer to n elements of type right in another buffer and get the same result
 [[nodiscard]] bool trivially_compatible_types(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right);
 
-[[nodiscard]] std::optional<entity::TypeDescriptor> has_valid_type_promotion(
+[[nodiscard]] bool is_valid_type_promotion_to_target(
     const entity::TypeDescriptor& source,
     const entity::TypeDescriptor& target
 );

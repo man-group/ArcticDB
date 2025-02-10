@@ -66,32 +66,29 @@ namespace arcticdb {
         return std::make_optional<entity::TypeDescriptor>(combine_data_type(entity::ValueType::FLOAT, target_size), dimension);
     }
 
-    std::optional<entity::TypeDescriptor> has_valid_type_promotion(
+    bool is_valid_type_promotion_to_target(
         const entity::TypeDescriptor& source,
         const entity::TypeDescriptor& target
     ) {
-
         if (source.dimension() != target.dimension()) {
             // Empty of dimension 0 means lack of any given type and can be promoted to anything (even if the dimensions
             // don't match), e.g. empty type can become int or array of ints. Empty type of higher dimension is used to
             // specify an empty array or an empty matrix, thus it cannot become any other type unless the dimensionality
             // matches
-            if (is_empty_type(source.data_type()) && source.dimension() == entity::Dimension::Dim0)
-                return target;
-            return std::nullopt;
+            return is_empty_type(source.data_type()) && source.dimension() == entity::Dimension::Dim0;
         }
 
         if (source == target)
-            return target;
+            return true;
 
         // Empty type is coercible to any type
         if (is_empty_type(source.data_type())) {
-            return target;
+            return true;
         }
 
         // Nothing is coercible to the empty type.
         if (is_empty_type(target.data_type())) {
-            return std::nullopt;
+            return false;
         }
 
         auto source_type = source.data_type();
@@ -100,66 +97,55 @@ namespace arcticdb {
         auto target_size = slice_bit_size(target_type);
 
         if (is_time_type(source_type)) {
-            if (!is_time_type(target_type))
-                return std::nullopt;
+            return is_time_type(target_type);
         } else if (is_unsigned_type(source_type)) {
             if (is_unsigned_type(target_type)) {
-                // UINT->UINT, target_size must be >= source_size
-                if (source_size > target_size)
-                    return std::nullopt;
+                // UINT->UINT
+                return target_size >= source_size;
             } else if (is_signed_type(target_type)) {
-                // UINT->INT, target_size must be > source_size
-                if (source_size >= target_size)
-                    return std::nullopt;
+                // UINT->INT
+                return target_size > source_size;
             } else if (is_floating_point_type(target_type)) {
                 // UINT->FLOAT
-                // TODO aseaton is it OK to put this here? Where else is has_valid_type_promotion used? What will I break?
-                // TODO put assertions in the places has_valid_type_promotion is used so I can see which code paths use it
-                return common_type_float_integer(source, target);
+                return target_size == entity::SizeBits::S64 || source_size < entity::SizeBits::S32;
             } else {
                 // Non-numeric target type
-                return std::nullopt;
+                return false;
             }
         } else if (is_signed_type(source_type)) {
             if (is_unsigned_type(target_type)) {
                 // INT->UINT never promotable
-                return std::nullopt;
+                return false;
             } else if (is_signed_type(target_type)) {
-                // INT->INT, target_size must be >= source_size
-                if (source_size > target_size)
-                    return std::nullopt;
+                // INT->INT
+                return target_size >= source_size;
             } else if (is_floating_point_type(target_type)) {
                 // INT->FLOAT
-                // TODO aseaton is it OK to put this here? Where else is is_valid_type_promotion used? What will I break?
-                return common_type_float_integer(source, target);
+                return target_size == entity::SizeBits::S64 || source_size < entity::SizeBits::S32;
             } else {
                 // Non-numeric target type
-                return std::nullopt;
+                return false;
             }
         } else if (is_floating_point_type(source_type)) {
             if (is_unsigned_type(target_type) || is_signed_type(target_type)) {
                 // FLOAT->U/INT never promotable
-                return std::nullopt;
+                return false;
             } else if (is_floating_point_type(target_type)) {
-                // FLOAT->FLOAT, target_size must be >= source_size
-                if (source_size > target_size)
-                    return std::nullopt;
+                // FLOAT->FLOAT
+                return target_size >= source_size;
             } else {
                 // Non-numeric target type
-                return std::nullopt;
+                return false;
             }
         } else if (is_sequence_type(source_type) && is_sequence_type(target_type)) {
             // Only allow promotion with UTF strings, and only to dynamic (never to fixed width)
-            if (!is_utf_type(source_type) || !is_utf_type(target_type) || !is_dynamic_string_type(target_type))
-                return std::nullopt;
+            return is_utf_type(source_type) && is_utf_type(target_type) && is_dynamic_string_type(target_type);
         } else if (is_bool_object_type(source_type)) {
-            return std::nullopt;
+            return false;
         } else {
             // Non-numeric source type
-            return std::nullopt;
+            return false;
         }
-
-        return target;
     }
 
     std::optional<entity::TypeDescriptor> common_type_mixed_sign_ints(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right) {
@@ -189,20 +175,23 @@ namespace arcticdb {
     }
 
     std::optional<entity::TypeDescriptor> has_valid_common_type(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right) {
-            auto maybe_common_type = has_valid_type_promotion(left, right);
-            if (!maybe_common_type) {
-                maybe_common_type = has_valid_type_promotion(right, left);
-            }
-            // has_valid_type_promotion checks if the second type can represent all values of the first type
-            // We also want to handle cases where there is a third type that can represent both
-            if (!maybe_common_type && left.dimension() == right.dimension()) {
-                if (is_integer_type(left.data_type()) && is_integer_type(right.data_type())) {
-                    maybe_common_type = common_type_mixed_sign_ints(left, right);
-                } else if (is_mixed_float_and_integer(left.data_type(), right.data_type())) {
-                    maybe_common_type = common_type_float_integer(left, right);
-                }
-            }
-            return maybe_common_type;
+        if (is_valid_type_promotion_to_target(left, right)) {
+            return right;
+        } else if (is_valid_type_promotion_to_target(right, left)) {
+            return left;
+        }
+
+        if (left.dimension() != right.dimension()) {
+            return std::nullopt;
+        }
+
+        if (is_integer_type(left.data_type()) && is_integer_type(right.data_type())) {
+            return common_type_mixed_sign_ints(left, right);
+        } else if (is_mixed_float_and_integer(left.data_type(), right.data_type())) {
+            return common_type_float_integer(left, right);
+        } else {
+            return std::nullopt;
+        }
     }
 
 }
