@@ -23,7 +23,9 @@ from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError, OutputFormat
+from arcticdb_ext.types import DataType
 import pandas as pd
+import pyarrow as pa
 import numpy as np
 import logging
 from arcticdb.version_store._normalization import normalize_metadata
@@ -270,6 +272,7 @@ class ReadRequest(NamedTuple):
     row_range: Optional[Tuple[int, int]] = None
     columns: Optional[List[str]] = None
     query_builder: Optional[QueryBuilder] = None
+    output_format: Optional[OutputFormat] = None
 
     def __repr__(self):
         res = f"ReadRequest(symbol={self.symbol}"
@@ -278,6 +281,7 @@ class ReadRequest(NamedTuple):
         res += f", row_range={self.row_range}" if self.row_range is not None else ""
         res += f", columns={self.columns}" if self.columns is not None else ""
         res += f", query_builder={self.query_builder}" if self.query_builder is not None else ""
+        res += f", output_format={self.output_format}" if self.output_format is not None else ""
         res += ")"
         return res
 
@@ -365,9 +369,12 @@ class LazyDataFrame(QueryBuilder):
         self.lib = lib
         self.read_request = read_request._replace(query_builder=None)
 
-    def _to_read_request(self) -> ReadRequest:
+    def _to_read_request(self, output_format=None) -> ReadRequest:
         """
         Convert this object into a ReadRequest, including any queries applied to this object since the read call.
+
+        output_format: OutputFormat, default=OutputFormat.PANDAS:
+            What format to return the output in. One of PANDAS or ARROW.
 
         Returns
         -------
@@ -383,18 +390,89 @@ class LazyDataFrame(QueryBuilder):
             row_range=self.read_request.row_range,
             columns=self.read_request.columns,
             query_builder=q,
+            output_format=output_format,
         )
 
-    def collect(self) -> VersionedItem:
+
+    # TODO: Make this actually good:
+    # - Needs to work with QueryBuilder
+    # - Needs to work by calling an underlying c++ function
+    # - Needs to work with PANDAS output format
+    # - Write better docs
+    def collect_schema(self, output_format=None) -> Union[pa.Schema | SymbolDescription]:
+        """
+        Compute only the schema of the output
+
+        output_format: OutputFormat, default=OutputFormat.PANDAS:
+            What format to return the output in. One of PANDAS or ARROW.
+
+        Returns
+        -------
+        Union[pa.Schema | SymbolDescription]
+            The schema in the specified output format
+        """
+        read_request = self._to_read_request(output_format=output_format)
+        description = self.lib.get_description(read_request.symbol, as_of=read_request.as_of)
+        if output_format == OutputFormat.PANDAS:
+            return description
+
+        def to_arrow_type(typ):
+            dt = typ.data_type()
+            if dt == DataType.UINT8:
+                return pa.uint8()
+            if dt == DataType.UINT16:
+                return pa.uint16()
+            if dt == DataType.UINT32:
+                return pa.uint32()
+            if dt == DataType.UINT64:
+                return pa.uint64()
+            if dt == DataType.INT8:
+                return pa.int8()
+            if dt == DataType.INT16:
+                return pa.int16()
+            if dt == DataType.INT32:
+                return pa.int32()
+            if dt == DataType.INT64:
+                return pa.int64()
+            if dt == DataType.FLOAT32:
+                return pa.float32()
+            if dt == DataType.FLOAT64:
+                return pa.float64()
+            if dt == DataType.BOOL8:
+                return pa.bool_()
+            if dt == DataType.NANOSECONDS_UTC64:
+                return pa.time64('ns')
+            if dt == DataType.ASCII_FIXED64:
+                return pa.string()
+            if dt == DataType.ASCII_DYNAMIC64:
+                return pa.string()
+            if dt == DataType.UTF_FIXED64:
+                return pa.string()
+            if dt == DataType.UTF_DYNAMIC64:
+                return pa.string()
+            raise ValueError("Unexpected data type")
+
+        def parse_index_name(index_name):
+            # Very hacky.. Will be better with full Arrow backend support
+            return "__index_level_0__"
+
+        all_columns = [(parse_index_name(col_name), to_arrow_type(typ)) for (col_name, typ) in description.index]
+        all_columns += [(col_name, to_arrow_type(typ)) for (col_name, typ) in description.columns]
+        return pa.schema(all_columns)
+
+    def collect(self, output_format=None) -> VersionedItem:
         """
         Read the data and execute any queries applied to this object since the read call.
+
+        output_format: OutputFormat, default=OutputFormat.PANDAS:
+            What format to return the output in. One of PANDAS or ARROW.
 
         Returns
         -------
         VersionedItem
             Object that contains a .data and .metadata element.
         """
-        return self.lib.read(**self._to_read_request()._asdict())
+        return self.lib.read(**self._to_read_request(output_format=output_format)._asdict())
 
     def __str__(self) -> str:
         query_builder_repr = super().__str__()
@@ -403,6 +481,20 @@ class LazyDataFrame(QueryBuilder):
     # Needs to be explicitly defined for lists of these objects in LazyDataFrameCollection to render correctly
     def __repr__(self) -> str:
         return self.__str__()
+
+
+    def select_columns(self, columns):
+        read_request = self._to_read_request()
+        read_request_with_columns = ReadRequest(
+            symbol=read_request.symbol,
+            as_of=read_request.as_of,
+            date_range=read_request.date_range,
+            row_range=read_request.row_range,
+            columns=columns,
+            query_builder=read_request.query_builder,
+            output_format=OutputFormat.PANDAS, # TODO: This is ugly
+        )
+        return LazyDataFrame(self.lib, read_request_with_columns)
 
 
 class LazyDataFrameCollection(QueryBuilder):
@@ -1527,6 +1619,7 @@ class Library:
         row_range: Optional[Tuple[int, int]] = None,
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
+        output_format : Optional[OutputFormat] = None,
         lazy: bool = False
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
@@ -1626,6 +1719,7 @@ class Library:
                 row_range=row_range,
                 columns=columns,
                 query_builder=query_builder,
+                output_format=output_format,
                 implement_read_index=True,
                 iterate_snapshots_if_tombstoned=False
             )
@@ -1634,6 +1728,7 @@ class Library:
         self,
         symbols: List[Union[str, ReadRequest]],
         query_builder: Optional[QueryBuilder] = None,
+        output_format: Optional[OutputFormat] = None,
         lazy: bool = False,
     ) -> Union[List[Union[VersionedItem, DataError]], LazyDataFrameCollection]:
         """
@@ -1651,6 +1746,9 @@ class Library:
         lazy: bool, default=False:
             Defer query execution until `collect` is called on the returned `LazyDataFrameCollection` object. See
             documentation on `LazyDataFrameCollection` for more details.
+
+        output_format: OutputFormat, default=OutputFormat.PANDAS:
+            What format to return the output in. One of PANDAS or ARROW.
 
         Returns
         -------
@@ -1704,6 +1802,7 @@ class Library:
         row_ranges = []
         columns = []
         query_builders = []
+        # TODO: Allow using the output_formats from the read_requests. This will probably be needed for a batch lazy_df read
 
         def handle_read_request(s_):
             symbol_strings.append(s_.symbol)
@@ -1767,6 +1866,7 @@ class Library:
                 throw_on_error,
                 implement_read_index=True,
                 iterate_snapshots_if_tombstoned=False,
+                output_format=output_format,
             )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
