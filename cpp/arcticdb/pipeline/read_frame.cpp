@@ -567,7 +567,7 @@ void decode_into_frame_static(
 
 void check_mapping_type_compatibility(const ColumnMapping& m) {
     util::check(
-        static_cast<bool>(has_valid_type_promotion(m.source_type_desc_, m.dest_type_desc_)),
+        is_valid_type_promotion_to_target(m.source_type_desc_, m.dest_type_desc_),
         "Can't promote type {} to type {} in field {}",
         m.source_type_desc_,
         m.dest_type_desc_,

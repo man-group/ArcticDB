@@ -169,7 +169,6 @@ std::vector<std::vector<EntityId>> offsets_to_entity_ids(const std::vector<std::
  * On entry to a clause, construct ProcessingUnits from the input entity IDs. These will be provided by the
  * structure_for_processing method for the first clause in the pipeline and for clauses whose expected input structure
  * differs from the previous clause's output structure. Otherwise, these come directly from the previous clause.
- * clauses.
  */
 template<class... Args>
 ProcessingUnit gather_entities(ComponentManager& component_manager, const std::vector<EntityId>& entity_ids) {
