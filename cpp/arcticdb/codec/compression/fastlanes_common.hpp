@@ -108,4 +108,10 @@ static_assert(transposed_index(1022) == 959);
 static_assert(index(1, 0) == 128);
 static_assert(transposed_index(57) == 624);
 static_assert(transposed_index(1022) == 959);
+
+template<typename HeaderType, typename T>
+static constexpr size_t header_size_in_t() {
+    return (sizeof(HeaderType) + sizeof(T) - 1) / sizeof(T);
+}
+
 } // namespace arcticdb

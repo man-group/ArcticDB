@@ -8,6 +8,7 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/codec/compression/bitpack_fused.hpp>
 #include <arcticdb/util/preprocess.hpp>
+#include "util/magic_num.hpp"
 
 namespace arcticdb {
 
@@ -50,118 +51,111 @@ struct FForHeader {
     uint32_t num_rows;
 };
 
+struct FForRemainderMetadata {
+    uint32_t size;
+    uint32_t bit_width;
+    util::SmallMagicNum<'F','r'> magic_;
+};
+
+template<typename T>
+static size_t calculate_remainder_data_size(size_t count, size_t bit_width) {
+    static constexpr size_t t_bit = Helper<T>::num_bits;
+    return sizeof(FForRemainderMetadata)/sizeof(T) +
+        1 + (count * bit_width + t_bit - 1) / t_bit;
+}
 
 template<typename T>
 size_t compress_remainder(const T* input, size_t count, T* output, size_t bit_width, T reference) {
-    assert(count < 1024);
+    auto* metadata [[maybe_unused]] = new (output) FForRemainderMetadata{
+        static_cast<uint32_t>(count),
+        static_cast<uint32_t>(bit_width),
+        {}
+    };
 
-    // Store metadata
-    output[0] = static_cast<T>((bit_width << 8) | count);
+    T* data_out = output + header_size_in_t<FForRemainderMetadata, T>();
+    *data_out++ = reference;
 
-    T* compressed = output + 1;
-    T accumulator = 0;
-    size_t bits_used = 0;
+    size_t bit_pos = 0;
+    T current_word = 0;
 
-    // Compress values
-    for (size_t i = 0; i < count; i++) {
+    for (size_t i = 0; i < count; ++i) {
         T delta = input[i] - reference;
-        accumulator |= (delta << bits_used);
-        bits_used += bit_width;
-
-        if (bits_used >= sizeof(T) * 8) {
-            *compressed++ = accumulator;
-            accumulator = delta >> (sizeof(T) * 8 - bits_used);
-            bits_used -= sizeof(T) * 8;
-        }
+        scalar_pack(delta, bit_width, bit_pos, current_word, data_out);
     }
 
-    // Write final word if needed
-    if (bits_used > 0) {
-        *compressed++ = accumulator;
+    if (bit_pos > 0) {
+        *data_out++ = current_word;
     }
 
-    return compressed - output;
+    return calculate_remainder_data_size<T>(count, bit_width);
 }
 
-// Helper function for remainder decompression
 template<typename T>
-size_t decompress_remainder(const T* input, T* output, T reference) {
-    const T metadata = input[0];
-    const size_t bit_width = metadata >> 8;
-    const size_t count = metadata & 0xFF;
+size_t decompress_remainder(const T* input, T* output) {
+    const auto* metadata = reinterpret_cast<const FForRemainderMetadata*>(input);
+    metadata->magic_.check();
+    const uint32_t count = metadata->size;
+    const uint32_t bit_width = metadata->bit_width;
 
-    const T* compressed = input + 1;
-    T current_word = *compressed++;
-    size_t bits_available = sizeof(T) * 8;
-    const T mask = (T(1) << bit_width) - 1;
+    const T* data_in = input + header_size_in_t<FForRemainderMetadata, T>();
+    const T reference = *data_in++;
 
-    for (size_t i = 0; i < count; i++) {
-        T delta;
-        if (bits_available >= bit_width) {
-            delta = current_word & mask;
-            current_word >>= bit_width;
-            bits_available -= bit_width;
-        } else {
-            delta = current_word;
-            current_word = *compressed++;
-            delta |= (current_word << bits_available) & mask;
-            current_word >>= (bit_width - bits_available);
-            bits_available = sizeof(T) * 8 - (bit_width - bits_available);
-        }
+    T current_word = *data_in;
+    size_t bit_pos = 0;
+
+    for (size_t i = 0; i < count; ++i) {
+        T delta = scalar_unpack(bit_width, bit_pos, current_word, data_in);
         output[i] = delta + reference;
     }
 
-    return count;
+    return calculate_remainder_data_size<T>(count, bit_width);
 }
 
 template<typename T>
 size_t encode_ffor_with_header(const T* in, T* out, size_t count) {
     if (count == 0) return 0;
 
-    // Find reference value
     T reference = in[0];
+    log::codec().info("Encoding {} rows FFOR with reference {}", count, reference);
     for (size_t i = 1; i < count; ++i) {
         reference = std::min(reference, in[i]);
     }
 
-    // Calculate max delta
     T max_delta = 0;
     for (size_t i = 0; i < count; ++i) {
         max_delta = std::max(max_delta, in[i] - reference);
     }
-
     size_t bits_needed = std::bit_width(static_cast<std::make_unsigned_t<T>>(max_delta));
+    log::codec().info("Max delta {} requires {} bits", max_delta, bits_needed);
 
-    // Write header
     auto* header [[maybe_unused]] = new (out) FForHeader<T>{
         reference,
         static_cast<uint32_t>(bits_needed),
         static_cast<uint32_t>(count)
     };
 
-    T* out_ptr = out + sizeof(FForHeader<T>)/sizeof(T);
+    T* out_ptr = out + header_size_in_t<FForHeader<T>, T>();
 
-    // Process full blocks of 1024
     const size_t num_full_blocks = count / 1024;
-    size_t compressed_size = sizeof(FForHeader<T>)/sizeof(T);
+    size_t compressed_size = sizeof(FForHeader<T>) / sizeof(T);
 
     FForCompressKernel<T> kernel(reference);
 
-    // Compress full blocks
     for (size_t block = 0; block < num_full_blocks; ++block) {
         compressed_size += dispatch_bitwidth<T, BitPackFused>(
             in + block * 1024,
-            out_ptr + compressed_size - sizeof(FForHeader<T>)/sizeof(T),
+            out_ptr + compressed_size - header_size_in_t<FForHeader<T>, T>(),
             bits_needed,
             kernel
         );
     }
+    log::codec().info("Encoded {} full blocks to {} bytes", num_full_blocks, compressed_size * sizeof(T));
 
-    // Handle remaining values
     size_t remaining = count % 1024;
+    log::codec().info("Compressing {} remainder values", remaining);
     if (remaining > 0) {
         const T* remaining_in = in + num_full_blocks * 1024;
-        T* remaining_out = out_ptr + compressed_size - sizeof(FForHeader<T>)/sizeof(T);
+        T* remaining_out = out_ptr + compressed_size - header_size_in_t<FForHeader<T>, T>();
 
         compressed_size += compress_remainder(
             remaining_in,
@@ -171,46 +165,55 @@ size_t encode_ffor_with_header(const T* in, T* out, size_t count) {
             reference
         );
     }
+    log::codec().info("Compressed size including remainder: {} from {} bytes",
+      compressed_size * sizeof(T),
+      count * sizeof(T));
 
     return compressed_size;
 }
 
 template<typename T>
 size_t decode_ffor_with_header(const T* in, T* out) {
+    static constexpr size_t BLOCK_SIZE = 1024;
     const auto* header = reinterpret_cast<const FForHeader<T>*>(in);
     const size_t count = header->num_rows;
-    if (count == 0) return 0;
+    if (count == 0)
+        return 0;
 
     const T reference = header->reference;
     const size_t bits_needed = header->bits_needed;
 
-    const T* in_ptr = in + sizeof(FForHeader<T>)/sizeof(T);
+    log::codec().info("Decompressing FFOR data packed to {} bits with reference {}", bits_needed, reference);
+
+    const T* in_ptr = in + header_size_in_t<FForHeader<T>, T>();
     size_t input_offset = 0;
 
-    // Process full blocks
-    const size_t num_full_blocks = count / 1024;
+    const size_t num_full_blocks = count / BLOCK_SIZE;
     FForUncompressKernel<T> kernel(reference);
 
-    // Decompress full blocks
-    for (size_t block = 0; block < num_full_blocks; ++block) {
-        input_offset += dispatch_bitwidth<T, BitUnpackFused>(
-            in_ptr + input_offset,
-            out + block * 1024,
-            bits_needed,
-            kernel
-        );
+    if(bits_needed == 0) {
+        std::fill(out, out + num_full_blocks * BLOCK_SIZE, reference);
+        input_offset += num_full_blocks * BLOCK_SIZE ;
+    } else {
+        for (size_t block = 0; block < num_full_blocks; ++block) {
+            input_offset += dispatch_bitwidth<T, BitUnpackFused>(
+                in_ptr + input_offset,
+                out + block * 1024,
+                bits_needed,
+                kernel
+            );
+        }
     }
 
-    // Handle remaining values
+    log::codec().info("Decompressed {} full blocks to offset {}", num_full_blocks, input_offset);
     size_t remaining = count % 1024;
     if (remaining > 0) {
-        decompress_remainder(
+        input_offset += decompress_remainder(
             in_ptr + input_offset,
-            out + num_full_blocks * 1024,
-            reference
+            out + num_full_blocks * 1024
         );
     }
-
+    log::codec().info("Decompresed {} remaining values to offset {}", remaining, input_offset * sizeof(T) + sizeof(FForHeader<T>));
     return count;
 }
 

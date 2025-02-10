@@ -1,219 +1,154 @@
-//
-// Created by root on 1/31/25.
-//
-#include <chrono>
-#include <iomanip>
-#include <iostream>
-#include <numeric>
-#include <random>
-
 #include <gtest/gtest.h>
+#include <vector>
+#include <cstdint>
+#include <limits>
 #include <arcticdb/codec/compression/rle.hpp>
 
+
 namespace arcticdb {
-/*
-TEST_F(FastlanesCodecTest, RunLength) {
-    using T = int32_t;
-    const size_t block_size = calc_block_size<T>();
-    const size_t num_blocks = 4;
-    std::vector<T> data(block_size * num_blocks);
 
-    // Create data with runs
-    size_t i = 0;
-    while (i < data.size()) {
-        T value = i / 3;  // Create runs of length 3
-        size_t run_length = std::min<size_t>(3, data.size() - i);
-        std::fill_n(data.begin() + i, run_length, value);
-        i += run_length;
-    }
-
-    std::vector<T> compressed(data.size());
-    std::vector<T> decompressed(data.size());
-
-    // Calculate bits needed
-    T max_run = 3;  // We know our maximum run length
-    size_t bits_needed = std::bit_width(static_cast<std::make_unsigned_t<T>>(max_run));
-
-    // Encode
-    encode_rle(data.data(), compressed.data(), data.size());
-
-    // Decode
-    decode_rle(compressed.data(), decompressed.data(), data.size(), bits_needed);
-
-    // Verify
-    for (size_t i = 0; i < data.size(); ++i) {
-        EXPECT_EQ(data[i], decompressed[i])
-                    << "Mismatch at index " << i;
-    }
-}
-
-
-class Timer {
-    using Clock = std::chrono::high_resolution_clock;
-    using TimePoint = Clock::time_point;
-    using Duration = std::chrono::nanoseconds;
-
-    TimePoint start_;
-    std::string name_;
-
-public:
-    explicit Timer(std::string name) : start_(Clock::now()), name_(std::move(name)) {}
-
-    ~Timer() {
-        auto end = Clock::now();
-        auto duration = std::chrono::duration_cast<Duration>(end - start_);
-        double ms = duration.count() / 1e6;
-        std::cout << std::fixed << std::setprecision(3)
-                  << name_ << ": " << ms << "ms" << std::endl;
-    }
+class RLETest : public ::testing::Test {
+protected:
+    void SetUp() override {}
+    void TearDown() override {}
 };
 
-void run_rle_stress_test() {
-    using T = uint32_t;
-    static constexpr size_t values_per_block = 1024 / (sizeof(T) * 8);
-    static constexpr size_t num_blocks = 1000;
-    static constexpr size_t total_values = values_per_block * num_blocks;
-    static constexpr size_t num_iterations = 1000000;
+TEST_F(RLETest, EmptyInput) {
+    std::vector<int> dict;
+    std::vector<uint16_t> runs;
+    std::vector<int> output;
 
-    // Allocate and initialize data
-    std::cout << "Initializing " << total_values << " values..." << std::endl;
-    std::vector<T> original(total_values);
-    std::vector<T> compressed(total_values);
-    std::vector<T> decompressed(total_values);
+    const int *input = nullptr;
+    rle_compress(input, 0, dict, runs);
 
-    // Generate test data with runs
-    {
-        Timer t("Data generation");
-        std::mt19937 rng(42);
-        std::geometric_distribution<int> run_length_dist(0.3); // Mean run length ~3.3
+    EXPECT_TRUE(dict.empty());
+    EXPECT_TRUE(runs.empty());
 
-        size_t i = 0;
-        while (i < total_values) {
-            // Generate a value
-            T value = static_cast<T>(i / values_per_block); // Different value per block
+    rle_decompress(dict, runs, output);
+    EXPECT_TRUE(output.empty());
+}
 
-            // Generate run length (minimum 1, maximum 16)
-            size_t run_length = 1 + (run_length_dist(rng) % 15);
-            run_length = std::min(run_length, total_values - i);
+TEST_F(RLETest, SingleValue) {
+    std::vector<int> dict;
+    std::vector<uint16_t> runs;
+    std::vector<int> output;
 
-            // Fill run
-            std::fill_n(original.begin() + i, run_length, value);
-            i += run_length;
-        }
+    const int input[] = {42};
+    rle_compress(input, 1, dict, runs);
+
+    EXPECT_EQ(dict.size(), 1);
+    EXPECT_EQ(runs.size(), 1);
+    EXPECT_EQ(dict[0], 42);
+    EXPECT_EQ(runs[0], 0);
+
+    rle_decompress(dict, runs, output);
+    EXPECT_EQ(output.size(), 1);
+    EXPECT_EQ(output[0], 42);
+}
+
+TEST_F(RLETest, RepeatedValues) {
+    std::vector<int> dict;
+    std::vector<uint16_t> runs;
+    std::vector<int> output;
+
+    const int input[] = {1, 1, 1, 1, 1};
+    rle_compress(input, 5, dict, runs);
+
+    EXPECT_EQ(dict.size(), 1);
+    EXPECT_EQ(runs.size(), 5);
+    EXPECT_EQ(dict[0], 1);
+    for (const auto &run : runs) {
+        EXPECT_EQ(run, 0);
     }
 
-    // Calculate bits needed
-    size_t bits_needed;
-    {
-        Timer t("Bits calculation");
-        T max_run = 0;
-        size_t current_run = 1;
-
-        for (size_t i = 1; i < total_values; ++i) {
-            if (original[i] == original[i-1]) {
-                current_run++;
-            } else {
-                max_run = std::max(max_run, static_cast<T>(current_run));
-                current_run = 1;
-            }
-        }
-        max_run = std::max(max_run, static_cast<T>(current_run));
-
-        bits_needed = std::bit_width(static_cast<std::make_unsigned_t<T>>(max_run));
-        std::cout << "Max run length: " << max_run << ", bits needed: " << bits_needed << std::endl;
-    }
-
-    // Initial compression and verification
-    {
-        Timer t("Initial compression and verification");
-        encode_rle(original.data(), compressed.data(), total_values);
-        decode_rle(compressed.data(), decompressed.data(), total_values, bits_needed);
-
-        for (size_t i = 0; i < total_values; ++i) {
-            if (original[i] != decompressed[i]) {
-                std::cerr << "Verification failed at index " << i
-                          << ": " << original[i] << " != " << decompressed[i] << std::endl;
-                return;
-            }
-        }
-    }
-
-    // Stress test compression
-    {
-        Timer t("Compression stress test");
-        std::vector<double> compression_times;
-        compression_times.reserve(num_iterations);
-
-        for (size_t i = 0; i < num_iterations; ++i) {
-            auto start = std::chrono::high_resolution_clock::now();
-            encode_rle(original.data(), compressed.data(), total_values);
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
-            compression_times.push_back(duration.count() / 1e6); // Convert to ms
-        }
-
-        // Calculate statistics
-        double avg_compression = std::accumulate(compression_times.begin(),
-                                                 compression_times.end(), 0.0) / num_iterations;
-
-        std::sort(compression_times.begin(), compression_times.end());
-        double median_compression = compression_times[num_iterations / 2];
-        double p95_compression = compression_times[num_iterations * 95 / 100];
-        double p99_compression = compression_times[num_iterations * 99 / 100];
-
-        std::cout << "\nCompression Statistics (ms):\n"
-                  << "  Average: " << std::fixed << std::setprecision(3) << avg_compression << "\n"
-                  << "  Median:  " << median_compression << "\n"
-                  << "  P95:     " << p95_compression << "\n"
-                  << "  P99:     " << p99_compression << "\n"
-                  << "  Throughput: " << std::fixed << std::setprecision(2)
-                  << (total_values / avg_compression / 1000) << " M values/s\n";
-    }
-
-    // Stress test decompression
-    {
-        Timer t("Decompression stress test");
-        std::vector<double> decompression_times;
-        decompression_times.reserve(num_iterations);
-
-        for (size_t i = 0; i < num_iterations; ++i) {
-            auto start = std::chrono::high_resolution_clock::now();
-            decode_rle(compressed.data(), decompressed.data(), total_values, bits_needed);
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
-            decompression_times.push_back(duration.count() / 1e6); // Convert to ms
-        }
-
-        // Calculate statistics
-        double avg_decompression = std::accumulate(decompression_times.begin(),
-                                                   decompression_times.end(), 0.0) / num_iterations;
-
-        std::sort(decompression_times.begin(), decompression_times.end());
-        double median_decompression = decompression_times[num_iterations / 2];
-        double p95_decompression = decompression_times[num_iterations * 95 / 100];
-        double p99_decompression = decompression_times[num_iterations * 99 / 100];
-
-        std::cout << "\nDecompression Statistics (ms):\n"
-                  << "  Average: " << std::fixed << std::setprecision(3) << avg_decompression << "\n"
-                  << "  Median:  " << median_decompression << "\n"
-                  << "  P95:     " << p95_decompression << "\n"
-                  << "  P99:     " << p99_decompression << "\n"
-                  << "  Throughput: " << std::fixed << std::setprecision(2)
-                  << (total_values / avg_decompression / 1000) << " M values/s\n";
-    }
-
-    // Calculate compression ratio
-    {
-        size_t original_bits = total_values * sizeof(T) * 8;
-        size_t compressed_bits = total_values * bits_needed;
-        double compression_ratio = static_cast<double>(compressed_bits) / original_bits;
-
-        std::cout << "\nCompression Statistics:\n"
-                  << "  Original size:    " << original_bits / 8 << " bytes\n"
-                  << "  Compressed size:  " << compressed_bits / 8 << " bytes\n"
-                  << "  Compression ratio: " << std::fixed << std::setprecision(3)
-                  << compression_ratio * 100 << "%\n";
+    rle_decompress(dict, runs, output);
+    EXPECT_EQ(output.size(), 5);
+    for (const auto &val : output) {
+        EXPECT_EQ(val, 1);
     }
 }
- */
-}  // namespace arcticdb
+
+TEST_F(RLETest, AlternatingValues) {
+    std::vector<int> dict;
+    std::vector<uint16_t> runs;
+    std::vector<int> output;
+
+    const int input[] = {1, 2, 1, 2, 1};
+    rle_compress(input, 5, dict, runs);
+
+    // Should create a new dictionary entry each time the value changes
+    EXPECT_EQ(dict.size(), 5);
+    EXPECT_EQ(runs.size(), 5);
+
+    // Dictionary should contain each value in sequence when it changes
+    std::vector<int> expected_dict = {1, 2, 1, 2, 1};
+    EXPECT_EQ(dict, expected_dict);
+
+    // Runs should increment each time we add to dictionary
+    std::vector<uint16_t> expected_runs = {0, 1, 2, 3, 4};
+    EXPECT_EQ(runs, expected_runs);
+
+    rle_decompress(dict, runs, output);
+    EXPECT_EQ(output.size(), 5);
+    for (size_t i = 0; i < output.size(); ++i) {
+        EXPECT_EQ(output[i], input[i]);
+    }
+}
+
+
+TEST_F(RLETest, MixedPattern) {
+    std::vector<int> dict;
+    std::vector<uint16_t> runs;
+    std::vector<int> output;
+
+    const int input[] = {1, 1, 2, 2, 2, 3, 4, 4, 4, 1};
+    rle_compress(input, 10, dict, runs);
+
+    EXPECT_EQ(dict.size(), 5);
+    EXPECT_EQ(runs.size(), 10);
+
+    std::vector<int> expected_dict = {1, 2, 3, 4, 1};
+    std::vector<uint16_t> expected_runs = {0, 0, 1, 1, 1, 2, 3, 3, 3, 4};
+
+    EXPECT_EQ(dict, expected_dict);
+    EXPECT_EQ(runs, expected_runs);
+
+    rle_decompress(dict, runs, output);
+    EXPECT_EQ(output.size(), 10);
+    for (size_t i = 0; i < output.size(); ++i) {
+        EXPECT_EQ(output[i], input[i]);
+    }
+}
+
+TEST_F(RLETest, InvalidInput) {
+    std::vector<int> dict;
+    std::vector<uint16_t> runs;
+    std::vector<int> output;
+
+    // Test null pointer with non-zero size
+    EXPECT_THROW(rle_compress<int>(nullptr, 1, dict, runs), std::invalid_argument);
+
+    // Test decompression with empty dictionary but non-empty runs
+    runs.push_back(0);
+    EXPECT_THROW(rle_decompress(dict, runs, output), std::invalid_argument);
+}
+
+TEST_F(RLETest, DifferentTypes) {
+    // Test with double
+    std::vector<double> dict_d;
+    std::vector<uint16_t> runs_d;
+    std::vector<double> output_d;
+
+    const double input_d[] = {1.5, 1.5, 2.7, 3.14};
+    rle_compress(input_d, 4, dict_d, runs_d);
+
+    EXPECT_EQ(dict_d.size(), 3);
+    EXPECT_EQ(runs_d.size(), 4);
+
+    rle_decompress(dict_d, runs_d, output_d);
+    for (size_t i = 0; i < 4; ++i) {
+        EXPECT_DOUBLE_EQ(output_d[i], input_d[i]);
+    }
+}
+
+} // namespace arcticdb

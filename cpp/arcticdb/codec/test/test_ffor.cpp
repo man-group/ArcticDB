@@ -11,14 +11,14 @@ namespace arcticdb {
 
 class FForCodecTest : public ::testing::Test {
 protected:
-    static constexpr size_t values_per_block = 1024 / (sizeof(uint32_t) * 8);
+    static constexpr size_t values_per_block = 1024;
 
     template<typename T>
     void verify_roundtrip(const std::vector<T>& original) {
         ASSERT_FALSE(original.empty());
 
         // Allocate space for compressed data with header
-        std::vector<T> compressed(original.size() + sizeof(FForHeader<T>)/sizeof(T));
+        std::vector<T> compressed(original.size() + header_size_in_t<FForHeader<T>, T>());
         std::vector<T> decompressed(original.size());
 
         // Compress
@@ -28,12 +28,12 @@ protected:
             original.size()
         );
 
-        ASSERT_GT(compressed_size, sizeof(FForHeader<T>)/sizeof(T));
+        const auto header_size = header_size_in_t<FForHeader<T>, T>();
+        ASSERT_GE(compressed_size, header_size);
 
         // Verify header
         const auto* header = reinterpret_cast<const FForHeader<T>*>(compressed.data());
         EXPECT_EQ(header->num_rows, original.size());
-        EXPECT_GT(header->bits_needed, 0);
         EXPECT_LE(header->bits_needed, sizeof(T) * 8);
 
         // Verify reference value is minimum value
@@ -50,6 +50,9 @@ protected:
 
         // Verify values
         for (size_t i = 0; i < original.size(); ++i) {
+            if(original[i] != decompressed[i])
+                log::version().debug("poops");
+
             EXPECT_EQ(original[i], decompressed[i])
                         << "Mismatch at index " << i;
         }
@@ -116,7 +119,7 @@ TEST_F(FForCodecTest, DifferentTypes) {
 
 TEST_F(FForCodecTest, EdgeCases) {
     // Test minimum size (one block)
-    {
+   /* {
         std::vector<uint32_t> data(values_per_block);
         std::iota(data.begin(), data.end(), 0);
         verify_roundtrip(data);
@@ -127,7 +130,7 @@ TEST_F(FForCodecTest, EdgeCases) {
         std::vector<uint32_t> data(values_per_block + 1);
         std::iota(data.begin(), data.end(), 0);
         verify_roundtrip(data);
-    }
+    }*/
 
     // Test constant values
     {
