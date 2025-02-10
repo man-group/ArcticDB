@@ -105,7 +105,7 @@ struct ColumnExpression {
     ColumnExpression(const IterableContainer& left, const IterableContainer& right) :
         left_(left),
         right_(right) {
-        auto promoted_type = has_valid_type_promotion(left_->type(), right_->type());
+        auto promoted_type = has_valid_type_promotion(left_->type(), right_->type());  // TODO aseaton is this usage broken?
         util::check(static_cast<bool>(promoted_type), "Cannot promote from type {} and type {} in column expression", left_->type(), right_->type());
         type_ = promoted_type.value();
     }
