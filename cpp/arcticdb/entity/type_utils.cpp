@@ -113,7 +113,8 @@ namespace arcticdb {
                     return std::nullopt;
             } else if (is_floating_point_type(target_type)) {
                 // UINT->FLOAT
-                // TODO aseaton is it OK to put this here? Where else is is_valid_type_promotion used? What will I break?
+                // TODO aseaton is it OK to put this here? Where else is has_valid_type_promotion used? What will I break?
+                // TODO put assertions in the places has_valid_type_promotion is used so I can see which code paths use it
                 return common_type_float_integer(source, target);
             } else {
                 // Non-numeric target type
