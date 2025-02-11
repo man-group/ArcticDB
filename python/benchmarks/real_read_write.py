@@ -90,7 +90,7 @@ class LMDBReadWrite:
 
     timeout = 1200
 
-    SETUP_CLASS = ReadWriteBenchmarkSettings(Storage.LMDB).set_params([100,200])
+    SETUP_CLASS = ReadWriteBenchmarkSettings(Storage.LMDB).set_params([2_500_000, 5_000_000])
 
     params = SETUP_CLASS.get_parameter_list()
     param_names = ["num_rows"]
@@ -202,7 +202,7 @@ class AWSReadWrite(LMDBReadWrite):
     SETUP_CLASS = ReadWriteBenchmarkSettings(Storage.AMAZON, 
                                              # Define UNIQUE STRING for persistent libraries names 
                                              # as well as name of unique storage prefix
-                                             prefix="READ_WRITE").set_params([100,200])
+                                             prefix="READ_WRITE").set_params([1_000_000, 2_000_000])
 
     params = SETUP_CLASS.get_parameter_list()
     param_names = LMDBReadWrite.param_names

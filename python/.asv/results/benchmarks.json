@@ -1840,8 +1840,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "1000000",
+                "2000000"
             ]
         ],
         "setup_cache_key": "real_read_write:210",
@@ -1858,8 +1858,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "1000000",
+                "2000000"
             ]
         ],
         "setup_cache_key": "real_read_write:210",
@@ -1876,8 +1876,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "1000000",
+                "2000000"
             ]
         ],
         "setup_cache_key": "real_read_write:210",
@@ -1894,8 +1894,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "1000000",
+                "2000000"
             ]
         ],
         "setup_cache_key": "real_read_write:210",
@@ -1912,8 +1912,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "1000000",
+                "2000000"
             ]
         ],
         "setup_cache_key": "real_read_write:210",
@@ -1930,8 +1930,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "1000000",
+                "2000000"
             ]
         ],
         "setup_cache_key": "real_read_write:210",
@@ -1950,8 +1950,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "1000000",
+                "2000000"
             ]
         ],
         "repeat": 1,
@@ -1974,8 +1974,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "1000000",
+                "2000000"
             ]
         ],
         "repeat": 1,
@@ -1998,8 +1998,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "1000000",
+                "2000000"
             ]
         ],
         "repeat": 1,
@@ -2022,8 +2022,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "1000000",
+                "2000000"
             ]
         ],
         "repeat": 1,
@@ -2046,8 +2046,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "1000000",
+                "2000000"
             ]
         ],
         "repeat": 1,
@@ -2070,8 +2070,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "1000000",
+                "2000000"
             ]
         ],
         "repeat": 1,
@@ -2092,8 +2092,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "2500000",
+                "5000000"
             ]
         ],
         "setup_cache_key": "real_read_write:98",
@@ -2110,8 +2110,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "2500000",
+                "5000000"
             ]
         ],
         "setup_cache_key": "real_read_write:98",
@@ -2128,8 +2128,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "2500000",
+                "5000000"
             ]
         ],
         "setup_cache_key": "real_read_write:98",
@@ -2146,8 +2146,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "2500000",
+                "5000000"
             ]
         ],
         "setup_cache_key": "real_read_write:98",
@@ -2164,8 +2164,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "2500000",
+                "5000000"
             ]
         ],
         "setup_cache_key": "real_read_write:98",
@@ -2182,8 +2182,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "2500000",
+                "5000000"
             ]
         ],
         "setup_cache_key": "real_read_write:98",
@@ -2202,8 +2202,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "2500000",
+                "5000000"
             ]
         ],
         "repeat": 1,
@@ -2226,8 +2226,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "2500000",
+                "5000000"
             ]
         ],
         "repeat": 1,
@@ -2250,8 +2250,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "2500000",
+                "5000000"
             ]
         ],
         "repeat": 1,
@@ -2274,8 +2274,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "2500000",
+                "5000000"
             ]
         ],
         "repeat": 1,
@@ -2298,8 +2298,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "2500000",
+                "5000000"
             ]
         ],
         "repeat": 1,
@@ -2322,8 +2322,8 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "2500000",
+                "5000000"
             ]
         ],
         "repeat": 1,
@@ -2337,7 +2337,7 @@
         "warmup_time": 0
     },
     "real_read_write_wide.AWSWideDataFrameTests.peakmem_read_wide": {
-        "code": "class AWSWideDataFrameTests:\n    def peakmem_read_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.storage.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifyable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        return info",
+        "code": "class AWSWideDataFrameTests:\n    def peakmem_read_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.storage.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifyable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        setup_env.logger().info(f\"storage info object: {info}\")\n        return info",
         "name": "real_read_write_wide.AWSWideDataFrameTests.peakmem_read_wide",
         "param_names": [
             "num_rows",
@@ -2345,22 +2345,22 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "2500",
+                "3000"
             ],
             [
-                "500",
-                "600"
+                "15000",
+                "30000"
             ]
         ],
         "setup_cache_key": "real_read_write_wide:51",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "9a42cc499907cca04e7172909d4732cf721a1839c529f635de5f519f49964e73"
+        "version": "45e57d7a6d7956a9bb89f9e52753e1438399a4428705cb7e711725d21abb3d67"
     },
     "real_read_write_wide.AWSWideDataFrameTests.peakmem_write_wide": {
-        "code": "class AWSWideDataFrameTests:\n    def peakmem_write_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.write_library.write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifyable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        return info",
+        "code": "class AWSWideDataFrameTests:\n    def peakmem_write_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.write_library.write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifyable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        setup_env.logger().info(f\"storage info object: {info}\")\n        return info",
         "name": "real_read_write_wide.AWSWideDataFrameTests.peakmem_write_wide",
         "param_names": [
             "num_rows",
@@ -2368,22 +2368,22 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "2500",
+                "3000"
             ],
             [
-                "500",
-                "600"
+                "15000",
+                "30000"
             ]
         ],
         "setup_cache_key": "real_read_write_wide:51",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "bcb0a9afdcbbf385735355f668f92a576769e7000a754c6b1933c657db593f1c"
+        "version": "e5c5315d9a60ab412f221e45ff06e824e44cd3592187dd6f1611f5e2eb3910bf"
     },
     "real_read_write_wide.AWSWideDataFrameTests.time_read_wide": {
-        "code": "class AWSWideDataFrameTests:\n    def time_read_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.storage.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifyable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        return info",
+        "code": "class AWSWideDataFrameTests:\n    def time_read_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.storage.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifyable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        setup_env.logger().info(f\"storage info object: {info}\")\n        return info",
         "min_run_count": 1,
         "name": "real_read_write_wide.AWSWideDataFrameTests.time_read_wide",
         "number": 3,
@@ -2393,12 +2393,12 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "2500",
+                "3000"
             ],
             [
-                "500",
-                "600"
+                "15000",
+                "30000"
             ]
         ],
         "repeat": 1,
@@ -2408,11 +2408,11 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "60a55bb36984cdfb4e5be31604b18d790709c1d101651b531d85e82b52f52da7",
+        "version": "d8cc3bebf4cab8196a214e43981dea453bf0b87be75b4e8a4bfb5a5d6ca0581c",
         "warmup_time": 0
     },
     "real_read_write_wide.AWSWideDataFrameTests.time_write_wide": {
-        "code": "class AWSWideDataFrameTests:\n    def time_write_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.write_library.write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifyable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        return info",
+        "code": "class AWSWideDataFrameTests:\n    def time_write_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.write_library.write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifyable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        setup_env.logger().info(f\"storage info object: {info}\")\n        return info",
         "min_run_count": 1,
         "name": "real_read_write_wide.AWSWideDataFrameTests.time_write_wide",
         "number": 3,
@@ -2422,12 +2422,12 @@
         ],
         "params": [
             [
-                "100",
-                "200"
+                "2500",
+                "3000"
             ],
             [
-                "500",
-                "600"
+                "15000",
+                "30000"
             ]
         ],
         "repeat": 1,
@@ -2437,7 +2437,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "f587ee71cf11ec4e624af56790648fcbe3cb23621db4b03304089f77f4355a26",
+        "version": "b97514e15584f1268e26c4206ef83103bcdf5a6923041899205842d324934b6b",
         "warmup_time": 0
     },
     "resample.Resample.peakmem_resample": {

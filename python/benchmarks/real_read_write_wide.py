@@ -42,8 +42,8 @@ class AWSWideDataFrameTests:
                                                   prefix="WIDE_TESTS", 
                                                   library_options=LibraryOptions(rows_per_segment=1000, columns_per_segment=1000))
                     .set_params([
-                        [100, 200],
-                        [500, 600]]))
+                        [2500, 3000],
+                        [15000, 30000]]))
 
     params = SETUP_CLASS.get_parameter_list()
     param_names = ["num_rows", "num_cols"]
