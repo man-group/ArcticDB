@@ -201,6 +201,18 @@ class NfsS3Bucket(S3Bucket):
         return cfg
 
 
+class GcpS3Bucket(S3Bucket):
+
+    def __init__(
+            self,
+            factory: "BaseS3StorageFixtureFactory",
+            bucket: str,
+            native_config: Optional[NativeVariantStorage] = None,
+    ):
+        super().__init__(factory, bucket, native_config=native_config)
+        self.arctic_uri = self.arctic_uri.replace("s3", "gcpxml", 1)
+
+
 class BaseS3StorageFixtureFactory(StorageFixtureFactory):
     """Logic and fields common to real and mock S3"""
 
@@ -778,3 +790,11 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
         )
         self._p.start()
         wait_for_server_to_come_up(self.endpoint, "moto", self._p)
+
+    def create_fixture(self) -> GcpS3Bucket:
+        bucket = f"test_bucket_{self._bucket_id}"
+        self._s3_admin.create_bucket(Bucket=bucket)
+        self._bucket_id += 1
+        out = GcpS3Bucket(self, bucket)
+        self._live_buckets.append(out)
+        return out

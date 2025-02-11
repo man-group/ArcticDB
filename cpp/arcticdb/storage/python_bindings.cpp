@@ -130,6 +130,9 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
             return settings.use_internal_client_wrapper_for_testing();
         });
 
+    py::class_<s3::GCPXMLSettings>(storage, "GCPXMLSettings")
+        .def(py::init<s3::S3Settings>());
+
     py::class_<NativeVariantStorage>(storage, "NativeVariantStorage")
         .def(py::init<>())
         .def(py::init<NativeVariantStorage::VariantStorageConfig>())
@@ -204,6 +207,10 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def_property("ca_cert_dir", &S3Override::ca_cert_dir, &S3Override::set_ca_cert_dir)
         .def_property("https", &S3Override::https, &S3Override::set_https)
         .def_property("ssl", &S3Override::ssl, &S3Override::set_ssl);
+
+    py::class_<GCPXMLOverride>(storage, "GCPXMLOverride")
+        .def(py::init<S3Override>())
+        .def_property("s3_override", &GCPXMLOverride::s3_override, &GCPXMLOverride::set_s3_override);
 
     py::class_<AzureOverride>(storage, "AzureOverride")
         .def(py::init<>())

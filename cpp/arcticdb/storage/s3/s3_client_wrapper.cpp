@@ -113,7 +113,7 @@ S3Result<std::monostate> S3ClientTestWrapper::put_object(
     return actual_client_->put_object(s3_object_name, segment, bucket_name, header);
 }
 
-S3Result<DeleteOutput> S3ClientTestWrapper::delete_objects(
+S3Result<DeleteObjectsOutput> S3ClientTestWrapper::delete_objects(
         const std::vector<std::string>& s3_object_names,
         const std::string& bucket_name) {
     auto maybe_error = has_failure_trigger(bucket_name);

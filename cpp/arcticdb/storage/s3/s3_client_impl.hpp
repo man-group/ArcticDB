@@ -49,8 +49,13 @@ public:
             const std::string& bucket_name,
             PutHeader header = PutHeader::NONE) override;
 
-    S3Result<DeleteOutput> delete_objects(
+    S3Result<DeleteObjectsOutput> delete_objects(
         const std::vector<std::string>& s3_object_names,
+        const std::string& bucket_name) override;
+
+    // TODO aseaton define DeleteObjectOutput
+    S3Result<DeleteObjectOutput> delete_object(
+        const std::string& s3_object_names,
         const std::string& bucket_name) override;
 
     S3Result<ListObjectsOutput> list_objects(

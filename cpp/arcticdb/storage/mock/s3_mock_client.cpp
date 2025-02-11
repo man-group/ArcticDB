@@ -126,7 +126,7 @@ S3Result<std::monostate> MockS3Client::put_object(
     return {std::monostate()};
 }
 
-S3Result<DeleteOutput> MockS3Client::delete_objects(
+S3Result<DeleteObjectsOutput> MockS3Client::delete_objects(
         const std::vector<std::string>& s3_object_names,
         const std::string& bucket_name) {
     std::scoped_lock<std::mutex> lock(mutex_);
@@ -137,7 +137,7 @@ S3Result<DeleteOutput> MockS3Client::delete_objects(
         }
     }
 
-    DeleteOutput output;
+    DeleteObjectsOutput output;
     for (auto& s3_object_name : s3_object_names) {
         auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL);
         if (maybe_error.has_value()) {

@@ -151,4 +151,19 @@ public:
         return use_raw_prefix_;
     }
 };
+
+class GCPXMLSettings {
+public:
+    explicit GCPXMLSettings(S3Settings s3_settings) : s3_settings_(std::move(s3_settings)) {
+
+    }
+
+    GCPXMLSettings update(const arcticc::pb2::s3_storage_pb2::Config& config){
+        s3_settings_.update(config);
+        return *this;
+    }
+
+private:
+    S3Settings s3_settings_;
+};
 }

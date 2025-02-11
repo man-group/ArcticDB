@@ -19,8 +19,8 @@ from arcticdb.adapters.lmdb_library_adapter import LMDBLibraryAdapter
 from arcticdb.adapters.azure_library_adapter import AzureLibraryAdapter
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.adapters.in_memory_library_adapter import InMemoryLibraryAdapter
+from arcticdb.adapters.gcpxml_library_adapter import GCPXMLLibraryAdapter
 from arcticdb.encoding_version import EncodingVersion
-from arcticdb.exceptions import UnsupportedLibraryOptionValue, UnknownLibraryOption
 from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
 
 
@@ -35,6 +35,7 @@ class Arctic:
 
     _LIBRARY_ADAPTERS = [
         S3LibraryAdapter,
+        GCPXMLLibraryAdapter,
         LMDBLibraryAdapter,
         AzureLibraryAdapter,
         MongoLibraryAdapter,

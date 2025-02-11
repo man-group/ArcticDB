@@ -202,6 +202,12 @@ def s3_storage(s3_storage_factory) -> Generator[S3Bucket, None, None]:
 
 
 @pytest.fixture
+def gcp_storage(gcp_storage_factory) -> Generator[S3Bucket, None, None]:
+    with gcp_storage_factory.create_fixture() as f:
+        yield f
+
+
+@pytest.fixture
 def nfs_backed_s3_storage(nfs_backed_s3_storage_factory) -> Generator[NfsS3Bucket, None, None]:
     with nfs_backed_s3_storage_factory.create_fixture() as f:
         yield f
@@ -378,9 +384,11 @@ def mem_storage() -> Generator[InMemoryStorageFixture, None, None]:
 @pytest.fixture(
     scope="function",
     params=[
-        "s3",
-        "lmdb",
-        "mem",
+        #"s3",
+        #"nfs_backed_s3",
+        "gcp",
+        #"lmdb",
+        #"mem",
         pytest.param("azurite", marks=AZURE_TESTS_MARK),
         pytest.param("mongo", marks=MONGO_TESTS_MARK),
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),

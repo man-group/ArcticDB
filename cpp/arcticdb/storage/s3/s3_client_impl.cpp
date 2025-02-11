@@ -204,7 +204,7 @@ S3Result<std::monostate> S3ClientImpl::put_object(
     return {std::monostate()};
 }
 
-S3Result<DeleteOutput> S3ClientImpl::delete_objects(
+S3Result<DeleteObjectsOutput> S3ClientImpl::delete_objects(
         const std::vector<std::string>& s3_object_names,
         const std::string& bucket_name) {
     Aws::S3::Model::DeleteObjectsRequest request;
@@ -230,7 +230,7 @@ S3Result<DeleteOutput> S3ClientImpl::delete_objects(
         failed_deletes.emplace_back(failed_key.GetKey(), failed_key.GetMessage());
     }
 
-    DeleteOutput result = {failed_deletes};
+    DeleteObjectsOutput result = {failed_deletes};
     return {result};
 }
 

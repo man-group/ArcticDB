@@ -127,6 +127,27 @@ public:
     }
 };
 
+class GCPXMLOverride {
+    S3Override s3_override_;
+public:
+    explicit GCPXMLOverride(S3Override s3_override) : s3_override_(std::move(s3_override)) {
+
+    }
+
+    [[nodiscard]] S3Override s3_override() const {
+        return s3_override_;
+    }
+
+    void set_s3_override(S3Override s3_override) {
+        s3_override_ = s3_override;
+    }
+
+    void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage,
+                               bool override_https) const {
+        return s3_override_.modify_storage_config(storage, override_https);
+    };
+};
+
 class AzureOverride {
     std::string container_name_;
     std::string endpoint_;

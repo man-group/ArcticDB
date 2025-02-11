@@ -303,14 +303,53 @@ void do_remove_impl(
 }
 
 template<class KeyBucketizer>
-void do_remove_impl(
+void do_remove_no_batching_impl(
+    std::span<VariantKey> ks,
+    const std::string& root_folder,
+    const std::string& bucket_name,
+    S3ClientInterface& s3_client,
+    KeyBucketizer&& bucketizer) {
+    ARCTICDB_SUBSAMPLE(S3StorageDeleteNoBatching, 0)
+    auto fmt_db = [](auto&& k) { return variant_key_type(k); };
+    std::vector<std::string> to_delete;
+    boost::container::small_vector<FailedDelete, 1> failed_deletes;
+
+    for (auto& k : ks) {
+        auto key_type_dir = key_type_folder(root_folder, variant_key_type(k));
+        auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
+        auto delete_object_result = s3_client.delete_object(s3_object_name, bucket_name);
+
+        if (delete_object_result.is_success()) {
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted object with key '{}'",
+                                   to_delete.size(),
+                                   variant_key_view(k));
+            for (auto& bad_key : delete_object_result.get_output().failed_deletes) {
+                auto bad_key_name = bad_key.s3_object_name.substr(key_type_dir.size(),
+                                                                  std::string::npos);
+                failed_deletes.emplace_back(
+                    variant_key_from_bytes(
+                        reinterpret_cast<const uint8_t *>(bad_key_name.data()),
+                        bad_key_name.size(), key_type_dir),
+                    std::move(bad_key.error_message));
+            }
+        } else {
+            // TODO aseaton we should try to do the others even if one fails, eg races with another deletion process
+            // And better consistency with the other method
+            auto& error = delete_object_result.get_error();
+            raise_s3_exception(error, s3_object_name);
+        }
+    }
+}
+
+template<class KeyBucketizer>
+void do_remove_no_batching_impl(
     VariantKey&& variant_key,
     const std::string& root_folder,
     const std::string& bucket_name,
     S3ClientInterface& s3_client,
     KeyBucketizer&& bucketizer) {
     std::array<VariantKey, 1> arr{std::move(variant_key)};
-    do_remove_impl(std::span(arr), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer));
+    do_remove_no_batching_impl(std::span(arr), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer));
 }
 
 template<class KeyBucketizer>
