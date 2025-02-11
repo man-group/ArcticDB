@@ -82,6 +82,7 @@ jobs:
           else
             SUITE='^(real_).*'
           fi
+          ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX="_github_"
           python -m asv run -v --show-stderr --bench $SUITE ${{ inputs.commit }}^!
         
       - name: Benchmark against master
