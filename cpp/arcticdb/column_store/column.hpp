@@ -497,7 +497,7 @@ public:
         return data_.bytes();
     }
 
-    ColumnData data() const {
+    ColumnData  data() const {
         return ColumnData(&data_.buffer(), &shapes_.buffer(), type_, sparse_map_ ? &*sparse_map_ : nullptr);
     }
 

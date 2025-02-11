@@ -166,16 +166,18 @@ public:
         ssize_t idx_{0};
         RawType* ptr_{nullptr};
 
-        [[nodiscard]] inline ssize_t idx() const {
+        Enumeration() = default;
+
+        [[nodiscard]] ssize_t idx() const {
             return idx_;
         }
 
-        inline RawType& value() {
+        RawType& value() {
             debug::check<ErrorCode::E_ASSERTION_FAILURE>(ptr_ != nullptr, "Dereferencing nullptr in enumerating ColumnDataIterator");
             return *ptr_;
         };
 
-        inline const RawType& value() const {
+        const RawType& value() const {
             debug::check<ErrorCode::E_ASSERTION_FAILURE>(ptr_ != nullptr, "Dereferencing nullptr in enumerating ColumnDataIterator");
             return *ptr_;
         };
@@ -188,14 +190,14 @@ public:
     };
 
     template <class T, IteratorType iterator_type>
-    using IteratorValueType_t = typename std::conditional_t<
+    using IteratorValueType_t = std::conditional_t<
             iterator_type == IteratorType::ENUMERATED,
             Enumeration<T>,
             PointerWrapper<T>
     >;
 
     template <class T, IteratorType iterator_type, bool constant>
-    using IteratorReferenceType_t = typename std::conditional_t<
+    using IteratorReferenceType_t = std::conditional_t<
         iterator_type == IteratorType::ENUMERATED,
             std::conditional_t<constant, const Enumeration<T>, Enumeration<T>>,
             std::conditional_t<constant, const T, T>
@@ -217,8 +219,7 @@ public:
         using base_type = base_iterator_type<TDT, iterator_type, iterator_density, constant>;
         using RawType = typename TDT::DataTypeTag::raw_type;
     public:
-        ColumnDataIterator() = delete;
-
+        ColumnDataIterator() = default;
         // Used to construct [c]begin iterators
         explicit ColumnDataIterator(ColumnData* parent):
         parent_(parent)
