@@ -25,7 +25,7 @@ AlwaysBreakBeforeMultilineStrings: false
 AttributeMacros:
   - __capability
 BinPackArguments: false
-BinPackParameters: false
+BinPackParameters: true
 BraceWrapping:
   AfterCaseLabel:  false
   AfterClass:      false
@@ -54,16 +54,16 @@ BreakFunctionDefinitionParameters: false
 BreakInheritanceList: BeforeColon
 BreakBeforeTernaryOperators: true
 BreakConstructorInitializersBeforeComma: false
-BreakConstructorInitializers: BeforeColon
+BreakConstructorInitializers: AfterColon
 BreakAfterJavaFieldAnnotations: false
 BreakStringLiterals: true
 BreakTemplateDeclarations: Yes
 ColumnLimit:     120
-CommentPragmas:  '^ IWYU pragma:'
+CommentPragmas: '^(util\:\:check| IWYU pragma:)'
 QualifierAlignment: Leave
 CompactNamespaces: false
 ConstructorInitializerIndentWidth: 4
-ContinuationIndentWidth: 4
+ContinuationIndentWidth: 8
 Cpp11BracedListStyle: true
 DeriveLineEnding: true
 DerivePointerAlignment: false
@@ -107,7 +107,7 @@ IndentExternBlock: AfterExternBlock
 IndentRequires:  false
 IndentWidth:     4
 IndentWrappedFunctionNames: false
-InsertBraces: true
+InsertBraces: false
 InsertTrailingCommas: None
 JavaScriptQuotes: Leave
 JavaScriptWrapImports: true
@@ -179,6 +179,9 @@ Standard:        Latest
 StatementAttributeLikeMacros:
   - Q_EMIT
 StatementMacros:
+  - ARCTICDB_DEBUG
+  - ARCTICDB_TRACE
+  - ARCTICDB_RUNTIME_DEBUG
   - Q_UNUSED
   - QT_REQUIRE_VERSION
 TabWidth:        8
