@@ -23,6 +23,9 @@ import string
 import requests
 from typing import Optional, Any, Type
 
+import werkzeug
+from moto.moto_server.werkzeug_app import DomainDispatcherApplication, create_backend_app
+
 from .api import *
 from .utils import (
     get_ephemeral_port,
@@ -235,7 +238,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
             aws_access_key_id=key.id,
             aws_secret_access_key=key.secret,
             verify=self.client_cert_file if self.client_cert_file else False,
-        )  # verify=False cannot skip verification on buggy boto3 in py3.6
+        )
 
     def create_fixture(self) -> S3Bucket:
         return S3Bucket(self, self.default_bucket, self.native_config)
@@ -490,6 +493,97 @@ def mock_s3_with_error_simulation():
     return out
 
 
+class HostDispatcherApplication(DomainDispatcherApplication):
+    _reqs_till_rate_limit = -1
+
+    def get_backend_for_host(self, host):
+        """The stand-alone server needs a way to distinguish between S3 and IAM. We use the host for that"""
+        if host is None:
+            return None
+        if "s3" in host or host == "localhost":
+            return "s3"
+        elif host == "127.0.0.1":
+            return "iam"
+        elif host == "moto_api":
+            return "moto_api"
+        else:
+            raise RuntimeError(f"Unknown host {host}")
+
+    def __call__(self, environ, start_response):
+        path_info: bytes = environ.get("PATH_INFO", "")
+
+        with self.lock:
+            # Mock ec2 imds responses for testing
+            if path_info in (
+                    "/latest/dynamic/instance-identity/document",
+                    b"/latest/dynamic/instance-identity/document",
+            ):
+                start_response("200 OK", [("Content-Type", "text/plain")])
+                return [b"Something to prove imds is reachable"]
+
+            # Allow setting up a rate limit
+            if path_info in ("/rate_limit", b"/rate_limit"):
+                length = int(environ["CONTENT_LENGTH"])
+                body = environ["wsgi.input"].read(length).decode("ascii")
+                self._reqs_till_rate_limit = int(body)
+                start_response("200 OK", [("Content-Type", "text/plain")])
+                return [b"Limit accepted"]
+
+            if self._reqs_till_rate_limit == 0:
+                response_body = (
+                    b'<?xml version="1.0" encoding="UTF-8"?><Error><Code>SlowDown</Code><Message>Please reduce your request rate.</Message>'
+                    b"<RequestId>176C22715A856A29</RequestId><HostId>9Gjjt1m+cjU4OPvX9O9/8RuvnG41MRb/18Oux2o5H5MY7ISNTlXN+Dz9IG62/ILVxhAGI0qyPfg=</HostId></Error>"
+                )
+                start_response(
+                    "503 Slow Down", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
+                )
+                return [response_body]
+            else:
+                self._reqs_till_rate_limit -= 1
+
+        return super().__call__(environ, start_response)
+
+
+class GcpHostDispatcherApplication(HostDispatcherApplication):
+    """GCP's S3 implementation does not have batch delete."""
+
+    def __call__(self, environ, start_response):
+        if environ["REQUEST_METHOD"] == "POST" and environ["QUERY_STRING"] == "delete":
+            response_body = (
+                b'<?xml version="1.0" encoding="UTF-8"?>'
+                b'<Error>'
+                    b'<Code>NotImplemented</Code>'
+                    b'<Message>A header or query you provided requested a function that is not implemented.</Message>'
+                    b'<Details>POST ?delete is not implemented for objects.</Details>'
+                b'</Error>'
+            )
+            start_response(
+                "503 Slow Down", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
+            )
+            return [response_body]
+        return super().__call__(environ, start_response)
+
+
+def run_s3_server(port, key_file, cert_file):
+    werkzeug.run_simple(
+        "0.0.0.0",
+        port,
+        HostDispatcherApplication(create_backend_app),
+        threaded=True,
+        ssl_context=(cert_file, key_file) if cert_file and key_file else None,
+    )
+
+
+def run_gcp_server(port, key_file, cert_file):
+    werkzeug.run_simple(
+        "0.0.0.0",
+        port,
+        GcpHostDispatcherApplication(create_backend_app),
+        threaded=True,
+        ssl_context=(cert_file, key_file) if cert_file and key_file else None,
+    )
+
+
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     default_key = Key(id="awd", secret="awd", user_name="dummy")
     _RO_POLICY: str
@@ -529,69 +623,6 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         # and we need to make sure the bucket names are unique
         self.unique_id = "".join(random.choices(string.ascii_letters + string.digits, k=5))
 
-    @staticmethod
-    def run_server(port, key_file, cert_file):
-        import werkzeug
-        from moto.server import DomainDispatcherApplication, create_backend_app
-
-        class _HostDispatcherApplication(DomainDispatcherApplication):
-            _reqs_till_rate_limit = -1
-
-            def get_backend_for_host(self, host):
-                """The stand-alone server needs a way to distinguish between S3 and IAM. We use the host for that"""
-                if host is None:
-                    return None
-                if "s3" in host or host == "localhost":
-                    return "s3"
-                elif host == "127.0.0.1":
-                    return "iam"
-                elif host == "moto_api":
-                    return "moto_api"
-                else:
-                    raise RuntimeError(f"Unknown host {host}")
-
-            def __call__(self, environ, start_response):
-                path_info: bytes = environ.get("PATH_INFO", "")
-
-                with self.lock:
-                    # Mock ec2 imds responses for testing
-                    if path_info in (
-                        "/latest/dynamic/instance-identity/document",
-                        b"/latest/dynamic/instance-identity/document",
-                    ):
-                        start_response("200 OK", [("Content-Type", "text/plain")])
-                        return [b"Something to prove imds is reachable"]
-
-                    # Allow setting up a rate limit
-                    if path_info in ("/rate_limit", b"/rate_limit"):
-                        length = int(environ["CONTENT_LENGTH"])
-                        body = environ["wsgi.input"].read(length).decode("ascii")
-                        self._reqs_till_rate_limit = int(body)
-                        start_response("200 OK", [("Content-Type", "text/plain")])
-                        return [b"Limit accepted"]
-
-                    if self._reqs_till_rate_limit == 0:
-                        response_body = (
-                            b'<?xml version="1.0" encoding="UTF-8"?><Error><Code>SlowDown</Code><Message>Please reduce your request rate.</Message>'
-                            b"<RequestId>176C22715A856A29</RequestId><HostId>9Gjjt1m+cjU4OPvX9O9/8RuvnG41MRb/18Oux2o5H5MY7ISNTlXN+Dz9IG62/ILVxhAGI0qyPfg=</HostId></Error>"
-                        )
-                        start_response(
-                            "503 Slow Down", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
-                        )
-                        return [response_body]
-                    else:
-                        self._reqs_till_rate_limit -= 1
-
-                return super().__call__(environ, start_response)
-
-        werkzeug.run_simple(
-            "0.0.0.0",
-            port,
-            _HostDispatcherApplication(create_backend_app),
-            threaded=True,
-            ssl_context=(cert_file, key_file) if cert_file and key_file else None,
-        )
-
     def _start_server(self):
         port = self.port = get_ephemeral_port(2)
         self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
@@ -614,7 +645,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
             "spawn"
         )  # In py3.7, multiprocess with forking will lead to seg fault in moto, possibly due to the handling of file descriptors
         self._p = spawn_context.Process(
-            target=self.run_server,
+            target=run_s3_server,
             args=(
                 port,
                 self.key_file if self.http_protocol == "https" else None,
@@ -713,3 +744,37 @@ class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
         out = NfsS3Bucket(self, bucket)
         self._live_buckets.append(out)
         return out
+
+
+class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
+    def _start_server(self):
+        port = self.port = get_ephemeral_port(2)
+        self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
+        self.working_dir = mkdtemp(suffix="MotoGcpS3StorageFixtureFactory")
+        self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
+
+        self.ssl = (
+                self.http_protocol == "https"
+        )  # In real world, using https protocol doesn't necessarily mean ssl will be verified
+        if self.ssl_test_support:
+            self.ca, self.key_file, self.cert_file, self.client_cert_file = get_ca_cert_for_testing(self.working_dir)
+        else:
+            self.ca = ""
+            self.key_file = ""
+            self.cert_file = ""
+            self.client_cert_file = ""
+        self.client_cert_dir = self.working_dir
+
+        spawn_context = multiprocessing.get_context(
+            "spawn"
+        )  # In py3.7, multiprocess with forking will lead to seg fault in moto, possibly due to the handling of file descriptors
+        self._p = spawn_context.Process(
+            target=run_gcp_server,
+            args=(
+                port,
+                self.key_file if self.http_protocol == "https" else None,
+                self.cert_file if self.http_protocol == "https" else None,
+            ),
+        )
+        self._p.start()
+        wait_for_server_to_come_up(self.endpoint, "moto", self._p)
