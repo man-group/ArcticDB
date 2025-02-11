@@ -113,7 +113,7 @@ S3Result<std::monostate> S3ClientTestWrapper::put_object(
     return actual_client_->put_object(s3_object_name, segment, bucket_name, header);
 }
 
-S3Result<DeleteOutput> S3ClientTestWrapper::delete_objects(
+S3Result<DeleteObjectsOutput> S3ClientTestWrapper::delete_objects(
         const std::vector<std::string>& s3_object_names,
         const std::string& bucket_name) {
     auto maybe_error = has_failure_trigger(bucket_name);
@@ -123,6 +123,17 @@ S3Result<DeleteOutput> S3ClientTestWrapper::delete_objects(
 
 
     return actual_client_->delete_objects(s3_object_names, bucket_name);
+}
+
+folly::Future<S3Result<std::monostate>> S3ClientTestWrapper::delete_object(
+    const std::string& s3_object_name,
+    const std::string& bucket_name) {
+    auto maybe_error = has_failure_trigger(bucket_name);
+    if (maybe_error.has_value()) {
+        return folly::makeFuture<S3Result<std::monostate>>({*maybe_error});
+    }
+
+    return actual_client_->delete_object(s3_object_name, bucket_name);
 }
 
 // Using a fixed page size since it's only being used for simple tests.

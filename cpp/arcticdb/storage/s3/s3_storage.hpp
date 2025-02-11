@@ -31,7 +31,7 @@ namespace arcticdb::storage::s3 {
 
 const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
 
-class S3Storage final : public Storage, AsyncStorage {
+class S3Storage : public Storage, AsyncStorage {
   public:
 
     S3Storage(const LibraryPath &lib, OpenMode mode, const S3Settings &conf);
@@ -48,7 +48,7 @@ class S3Storage final : public Storage, AsyncStorage {
         return dynamic_cast<AsyncStorage*>(this);
     }
 
-  private:
+  protected:
     void do_write(KeySegmentPair& key_seg) final;
 
     void do_write_if_none(KeySegmentPair& kv) final;
@@ -63,9 +63,9 @@ class S3Storage final : public Storage, AsyncStorage {
 
     folly::Future<KeySegmentPair> do_async_read(entity::VariantKey&& variant_key, ReadKeyOpts opts) final;
 
-    void do_remove(VariantKey&& variant_key, RemoveOpts opts) final;
+    void do_remove(VariantKey&& variant_key, RemoveOpts opts);
 
-    void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) final;
+    void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts);
 
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
 
@@ -99,6 +99,14 @@ class S3Storage final : public Storage, AsyncStorage {
     std::string root_folder_;
     std::string bucket_name_;
     std::string region_;
+};
+
+class GCPXMLStorage : public S3Storage {
+public:
+    GCPXMLStorage(const LibraryPath &lib, OpenMode mode, const GCPXMLSettings &conf);
+protected:
+    void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) override;
+    void do_remove(VariantKey&& variant_key, RemoveOpts opts) override;
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &bucket_name) {
