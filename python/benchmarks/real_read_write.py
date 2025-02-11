@@ -6,18 +6,19 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import os
 import time
 from typing import List
 import numpy as np
 import pandas as pd
 
 from arcticdb.util.utils import DFGenerator, TimestampNumber
-from benchmarks.real_storage.libraries_creation import EnvConfigurationBase, Storage
+from arcticdb.util.environment_setup import GeneralSetupLibraryWithSymbols, Storage
 
 
 #region Setup classes
 
-class ReadWriteBenchmarkSettings(EnvConfigurationBase):
+class ReadWriteBenchmarkSettings(GeneralSetupLibraryWithSymbols):
     """
     Setup Read Tests Library for different storages.
     Its aim is to have at one place the responsibility for setting up any supported storage
@@ -31,27 +32,6 @@ class ReadWriteBenchmarkSettings(EnvConfigurationBase):
     START_DATE_INDEX = pd.Timestamp("2000-1-1")
     INDEX_FREQ = 's'
 
-    def __init__(self, type: Storage = Storage.LMDB, arctic_url: str = None):
-        super().__init__(type, arctic_url)
-        self.ac = self.get_arctic_client()
-
-    def get_library_names(self, num_symbols=1) -> List[str]:
-        return ["PERM_READ", "MOD_READ"]        
-
-    def get_parameter_list(self):
-        """
-            We might need to have different number of rows per different types of storages depending on the
-            speed of storage. LMDB as fastest might be the only different than any other
-        """
-        # Initially tried with those values but turn out they are too slow for Amazon s3
-        # Still they are available in the storage
-        # rows = [5_000_000, 10_000_000, 20_000_000]
-        if self.type == Storage.LMDB:
-            rows = [2_500_000, 5_000_000]
-        else:
-            rows = [1_000_000, 2_000_000]
-        return rows
-    
     def get_last_x_percent_date_range(self, row_num, percents):
         """
         Returns a date range selecting last X% of rows of dataframe
@@ -65,15 +45,13 @@ class ReadWriteBenchmarkSettings(EnvConfigurationBase):
         range = pd.date_range(start=start_range.to_timestamp(), end=end_range.to_timestamp(), freq="s")
         return range
     
-    def get_parameter_names_list(self):
-        return ["num_rows"]
-
-    def generate_df(self, row_num:int) -> pd.DataFrame:
+    def generate_dataframe(self, row_num:int, col_num: int) -> pd.DataFrame:
         """
         Dataframe that will be used in read and write tests
         """
         st = time.time()
-        print("Dataframe generation started.")
+        # NOTE: Use only setup environment logger!
+        self.logger().info("Dataframe generation started.")
         df = (DFGenerator(row_num)
             .add_int_col("int8", np.int8)
             .add_int_col("int16", np.int16)
@@ -87,28 +65,8 @@ class ReadWriteBenchmarkSettings(EnvConfigurationBase):
             .add_bool_col("bool")
             .add_timestamp_index("time", ReadWriteBenchmarkSettings.INDEX_FREQ, ReadWriteBenchmarkSettings.START_DATE_INDEX)
             ).generate_dataframe()
-        print(f"Dataframe {row_num} rows generated for {time.time() - st} sec")
+        self.logger().info(f"Dataframe {row_num} rows generated for {time.time() - st} sec")
         return df
-
-    def setup_read_library(self, num_rows):
-        """
-        Sets up single read library
-        """
-        symbol = f"sym_{num_rows}_rows"
-        df = self.generate_df(num_rows)
-        print("Dataframe storage started.")
-        st = time.time()
-        lib = self.get_library()
-        print("Library", lib)
-        lib.write(symbol, df)
-        print(f"Dataframe {num_rows} rows stored for {time.time() - st} sec")
-
-    def setup_all(self):
-        """
-        Responsible for setting up all needed libraries for specific storage
-        """
-        for rows in self.get_parameter_list():
-            self.setup_read_library(rows)
 
 #endregion
 
@@ -132,10 +90,10 @@ class LMDBReadWrite:
 
     timeout = 1200
 
-    SETUP_CLASS = ReadWriteBenchmarkSettings(Storage.LMDB)
+    SETUP_CLASS = ReadWriteBenchmarkSettings(Storage.LMDB).set_params([100,200])
 
     params = SETUP_CLASS.get_parameter_list()
-    param_names = SETUP_CLASS.get_parameter_names_list()
+    param_names = ["num_rows"]
 
     def setup_cache(self):
         '''
@@ -147,6 +105,8 @@ class LMDBReadWrite:
         '''
         lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment() 
         info = lmdb_setup.get_storage_info()
+        # NOTE: use only logger defined by setup class
+        lmdb_setup.logger().info(f"storage info object: {info}")
         return info
 
     def setup(self, storage_info, num_rows):
@@ -156,64 +116,69 @@ class LMDBReadWrite:
         `repeat` as 1
         '''
         ## Construct back from arctic url the object
-        self.lmdb = ReadWriteBenchmarkSettings.fromStorageInfo(storage_info)
-        sym = self.lmdb.get_symbol_name(num_rows)
-        self.to_write_df = self.lmdb.get_library().read(symbol=sym).data
-        self.last_20 = self.lmdb.get_last_x_percent_date_range(num_rows, 20)
+        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)
+        sym = self.setup_env.get_symbol_name(num_rows, None)
+        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data
+        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)
+        ##
+        ## Writing into library that has suffix same as process
+        ## will protect ASV processes from writing on one and same symbol
+        ## this way each one is going to have its unique library
+        self.write_library = self.setup_env.get_modifyable_library(os.getpid())
 
     def time_read(self, storage_info, num_rows):
-        sym = self.lmdb.get_symbol_name(num_rows)
-        self.lmdb.get_library().read(symbol=sym)
+        sym = self.setup_env.get_symbol_name(num_rows, None)
+        self.setup_env.get_library().read(symbol=sym)
 
     def peakmem_read(self, storage_info, num_rows):
-        sym = self.lmdb.get_symbol_name(num_rows)
-        self.lmdb.get_library().read(symbol=sym)
+        sym = self.setup_env.get_symbol_name(num_rows, None)
+        self.setup_env.get_library().read(symbol=sym)
 
     def time_write(self, storage_info, num_rows):
-        sym = self.lmdb.get_symbol_name(num_rows)
-        self.lmdb.get_modifyable_library(1).write(symbol=sym, data=self.to_write_df)
+        sym = self.setup_env.get_symbol_name(num_rows, None)
+        self.write_library.write(symbol=sym, data=self.to_write_df)
 
     def peakmem_write(self, storage_info, num_rows):
-        sym = self.lmdb.get_symbol_name(num_rows)
-        self.lmdb.get_modifyable_library().write(symbol=sym, data=self.to_write_df)
+        sym = self.setup_env.get_symbol_name(num_rows, None)
+        self.write_library.write(symbol=sym, data=self.to_write_df)
 
-    def time_read_with_column_float(self, storage_info, params):
+    def time_read_with_column_float(self, storage_info, num_rows):
         COLS = ["float2"]
-        sym = self.lmdb.get_symbol_name(params)
-        self.lmdb.get_library().read(symbol=sym, columns=COLS).data
+        sym = self.setup_env.get_symbol_name(num_rows, None)
+        self.setup_env.get_library().read(symbol=sym, columns=COLS).data
 
-    def peakmem_read_with_column_float(self, storage_info, params):
+    def peakmem_read_with_column_float(self, storage_info, num_rows):
         COLS = ["float2"]
-        sym = self.lmdb.get_symbol_name(params)
-        self.lmdb.get_library().read(symbol=sym, columns=COLS).data           
+        sym = self.setup_env.get_symbol_name(num_rows, None)
+        self.setup_env.get_library().read(symbol=sym, columns=COLS).data           
 
-    def time_read_with_columns_all_types(self, storage_info, params):
+    def time_read_with_columns_all_types(self, storage_info, num_rows):
         COLS = ["float2","string10","bool", "int64","uint64"]
-        sym = self.lmdb.get_symbol_name(params)
-        self.lmdb.get_library().read(symbol=sym, columns=COLS).data
+        sym = self.setup_env.get_symbol_name(num_rows, None)
+        self.setup_env.get_library().read(symbol=sym, columns=COLS).data
 
-    def peakmem_read_with_columns_all_types(self, storage_info, params):
+    def peakmem_read_with_columns_all_types(self, storage_info, num_rows):
         COLS = ["float2","string10","bool", "int64","uint64"]
-        sym = self.lmdb.get_symbol_name(params)
-        self.lmdb.get_library().read(symbol=sym, columns=COLS).data           
+        sym = self.setup_env.get_symbol_name(num_rows, None)
+        self.setup_env.get_library().read(symbol=sym, columns=COLS).data           
 
-    def time_write_staged(self, storage_info, params):
-        lib = self.lmdb.get_modifyable_library()
+    def time_write_staged(self, storage_info, num_rows):
+        lib = self.write_library
         lib.write(f"sym", self.to_write_df, staged=True)
         lib._nvs.compact_incomplete(f"sym", False, False)
 
-    def peakmem_write_staged(self, storage_info, params):
-        lib = self.lmdb.get_modifyable_library()
+    def peakmem_write_staged(self, storage_info, num_rows):
+        lib = self.write_library
         lib.write(f"sym", self.to_write_df, staged=True)
         lib._nvs.compact_incomplete(f"sym", False, False)
 
-    def time_read_with_date_ranges_last20_percent_rows(self, storage_info, params):
-        sym = self.lmdb.get_symbol_name(params)
-        self.lmdb.get_library().read(symbol=sym, date_range=self.last_20).data
+    def time_read_with_date_ranges_last20_percent_rows(self, storage_info, num_rows):
+        sym = self.setup_env.get_symbol_name(num_rows, None)
+        self.setup_env.get_library().read(symbol=sym, date_range=self.last_20).data
 
-    def peakmem_read_with_date_ranges_last20_percent_rows(self, storage_info, params):
-        sym = self.lmdb.get_symbol_name(params)
-        self.lmdb.get_library().read(symbol=sym, date_range=self.last_20).data
+    def peakmem_read_with_date_ranges_last20_percent_rows(self, storage_info, num_rows):
+        sym = self.setup_env.get_symbol_name(num_rows, None)
+        self.setup_env.get_library().read(symbol=sym, date_range=self.last_20).data
 
 class AWSReadWrite(LMDBReadWrite):
     """
@@ -234,10 +199,13 @@ class AWSReadWrite(LMDBReadWrite):
 
     timeout = 1200
 
-    SETUP_CLASS = ReadWriteBenchmarkSettings(Storage.AMAZON)
+    SETUP_CLASS = ReadWriteBenchmarkSettings(Storage.AMAZON, 
+                                             # Define UNIQUE STRING for persistent libraries names 
+                                             # as well as name of unique storage prefix
+                                             prefix="READ_WRITE").set_params([100,200])
 
     params = SETUP_CLASS.get_parameter_list()
-    param_names = SETUP_CLASS.get_parameter_names_list()
+    param_names = LMDBReadWrite.param_names
 
     def setup_cache(self):
         '''

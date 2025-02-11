@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 from datetime import timedelta
 import random
 import string
-from typing import List, Tuple, Union
+from typing import Any, List, Tuple, Union, get_args
 import sys 
 if sys.version_info >= (3, 8): 
     from typing import Literal 
@@ -19,9 +19,10 @@ import pandas as pd
 from arcticdb.util.test import create_datetime_index, get_sample_dataframe, random_integers
 from arcticdb.version_store.library import Library
 
-# Type definitions - supported by arctic
+# Types supported by arctic
 ArcticIntType = Union[np.uint8, np.uint16, np.uint32, np.uint64, np.int8, np.int16, np.int32, np.int64]
 ArcticFloatType = Union[np.float64, np.float32]
+ArcticTypes = Union[ArcticIntType, ArcticFloatType, str]
 
 class  TimestampNumber:
     """
@@ -360,43 +361,66 @@ class ListGenerators:
 
     @classmethod
     def generate_random_floats(cls, dtype: ArcticFloatType, 
-                      size: int, min_value: float = None, max_value: float = None, round_to: int = None
-                      ) -> List[ArcticFloatType]:
+                      size: int, min_value: float = None, max_value: float = None, round_to: int = None,
+                      seed = 1) -> List[ArcticFloatType]:
         # Higher numbers will trigger overflow in numpy uniform (-1e307 - 1e307)
+        # Get the minimum and maximum values for np.float32
+        info = np.finfo(np.float32)
+        _max = info.max
+        _min = info.min
+        np.random.seed(seed)
         if min_value is None:
-            min_value = max(-1e307, -sys.float_info.max)
+            min_value = max(-1e307, -sys.float_info.max, _min)
         if max_value is None:    
-            max_value = min(1e307, sys.float_info.max)
+            max_value = min(1e307, sys.float_info.max, _max)
         if round_to is None:
             return np.random.uniform(min_value, max_value, size).astype(dtype)
         else :
             return np.round(np.random.uniform(min_value, max_value, size), round_to).astype(dtype)
         
     @classmethod
-    def generate_random_string_pool(cls, str_length: int, pool_size: int) -> List[str]:
+    def generate_random_string_pool(cls, str_length: int, pool_size: int, seed = 1) -> List[str]:
+        np.random.seed(seed)
         unique_values = set()
         while len(unique_values) < pool_size:
             unique_values.add(ListGenerators.random_string(str_length))
         return list(unique_values)
 
     @classmethod
-    def generate_random_strings(cls, str_size: int, length: int) -> List[str]:
+    def generate_random_strings(cls, str_size: int, length: int, seed = 1) -> List[str]:
+        np.random.seed(seed)
         return [ListGenerators.random_string(str_size) for _ in range(length)]
     
     @classmethod
     def generate_random_ints(cls, dtype: ArcticIntType, 
-                            size: int, minV: int = None, maxV: int = None
+                            size: int, min_value: int = None, max_value: int = None, seed = 1
                             ) -> List[ArcticIntType]:
-        return random_integers(size=size, dtype=dtype, min_value=minV, max_value=maxV)
+        np.random.seed(seed)
+        return random_integers(size=size, dtype=dtype, min_value=min_value, max_value=max_value)
     
     @classmethod
-    def generate_random_bools(cls, size: int) -> List[bool]:
+    def generate_random_bools(cls, size: int, seed = 1) -> List[bool]:
+        np.random.seed(seed)
         return np.random.choice([True, False], size=size) 
     
     @classmethod
-    def random_string(cls, length: int):
+    def random_string(cls, length: int, seed = 1):
+        np.random.seed(seed)
         return "".join(random.choice(string.ascii_uppercase 
                                        + string.digits + string.ascii_lowercase + ' ') for _ in range(length))
+    
+    @classmethod
+    def generate_random_list_with_mean(cls, number_elements, specified_mean, value_range=(0, 100), 
+                                       dtype: ArcticIntType = np.int64, seed = 345) -> List[int]:
+        np.random.seed(seed)
+        random_list = np.random.randint(value_range[0], value_range[1], number_elements)
+
+        current_mean = np.mean(random_list)
+        
+        adjustment = specified_mean - current_mean
+        adjusted_list = (random_list + adjustment).astype(dtype)
+        
+        return adjusted_list.tolist()
 
 
 class DFGenerator:
@@ -404,7 +428,8 @@ class DFGenerator:
     Easy generation of DataFrames, via fluent interface
     """
 
-    def __init__(self, size: int):
+    def __init__(self, size: int, seed = 1):
+        self.__seed = seed
         self.__size = size
         self.__data = {}
         self.__types = {}
@@ -423,14 +448,14 @@ class DFGenerator:
         return self.__df
 
     def add_int_col(self, name: str, dtype: ArcticIntType = np.int64, min: int = None, max: int = None) -> 'DFGenerator':
-        list = ListGenerators.generate_random_ints(dtype, self.__size, min, max)
+        list = ListGenerators.generate_random_ints(dtype, self.__size, min, max, self.__seed)
         self.__data[name] = list
         self.__types[name] = dtype
         return self
     
     def add_float_col(self, name: str, dtype: ArcticFloatType = np.float64, min: float = None, max: float = None, 
                       round_at: int = None ) -> 'DFGenerator':
-        list = ListGenerators.generate_random_floats(dtype, self.__size, min, max, round_at)
+        list = ListGenerators.generate_random_floats(dtype, self.__size, min, max, round_at, self.__seed)
         self.__data[name] = list
         self.__types[name] = dtype
         return self
@@ -460,7 +485,7 @@ class DFGenerator:
         return self
     
     def add_bool_col(self, name: str) -> 'DFGenerator':
-        list = np.random.choice([True, False], size=self.__size) 
+        list = ListGenerators.generate_random_bools(self.__size, self.__seed)
         self.__data[name] = list
         self.__types[name] = bool
         return self
@@ -471,6 +496,11 @@ class DFGenerator:
         self.__types[name] = pd.Timestamp
         return self
     
+    def add_col(self, name: str, dtype: ArcticTypes, list: List[ArcticTypes] ) -> 'DFGenerator':
+        self.__data[name] = list
+        self.__types[name] = dtype
+        return self
+
     def add_timestamp_index(self, name_col:str, freq:Union[str , timedelta , pd.Timedelta , pd.DateOffset], 
                             start_time: pd.Timestamp = pd.Timestamp(0)) -> 'DFGenerator':
         self.__index = pd.date_range(start=start_time, periods=self.__size, freq=freq, name=name_col)
@@ -480,3 +510,33 @@ class DFGenerator:
         stop = (self.__size + start) * step
         self.__index = pd.Index(range(start, stop, step), dtype=dtype, name=name_col)
         return self
+    
+    @classmethod
+    def generate_random_dataframe(cls, rows: int, cols: int, indexed: bool = True, seed = 123):
+        """
+        Generates random dataframe with specified number of rows and cols.
+        The column order is also random and chosen among arctic supported
+        types
+        `indexed` defined if the generated dataframe will have index
+        """
+        cols=int(cols)
+        rows=int(rows)
+        np.random.seed(seed)
+        dtypes = np.random.choice(list(get_args(ArcticTypes)), cols)
+        gen = DFGenerator(size=rows, seed=seed) 
+        for i in range(cols):
+                dtype = dtypes[i]
+                if 'int' in str(dtype):
+                    gen.add_int_col(f"col_{i}", dtype)
+                    pass
+                elif 'bool' in str(dtype):
+                    gen.add_bool_col(f"col_{i}")
+                elif 'float' in str(dtype):
+                    gen.add_float_col(f"col_{i}", dtype)
+                elif 'str' in str(dtype):
+                    gen.add_string_col(f"col_{i}", 10)
+                else:
+                    return f"Unsupported type {dtype}"
+        if indexed:
+            gen.add_timestamp_index("index", "s", pd.Timestamp(0))
+        return gen.generate_dataframe()
