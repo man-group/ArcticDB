@@ -9,8 +9,7 @@
 #include <arcticdb/arrow/arrow_output_frame.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/util/preprocess.hpp>
-#include <sparrow/sparrow.hpp>
-#include <sparrow/record_batch.hpp>
+#include <arcticdb/arrow/include_sparrow.hpp>
 
 #include <string_view>
 #include <vector>

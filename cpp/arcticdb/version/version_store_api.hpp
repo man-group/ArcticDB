@@ -297,6 +297,15 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<StreamId>& id,
         const std::vector<VersionQuery>& version_query);
 
+    std::vector<std::variant<VersionedItem, DataError>> batch_update(
+        const std::vector<StreamId>& stream_ids,
+        const std::vector<py::tuple>& items,
+        const std::vector<py::object>& norms,
+        const std::vector<py::object>& user_metas,
+        const std::vector<UpdateQuery>& update_qeries,
+        bool prune_previous_versions,
+        bool upsert);
+
     std::vector<std::variant<ReadResult, DataError>> batch_read(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,

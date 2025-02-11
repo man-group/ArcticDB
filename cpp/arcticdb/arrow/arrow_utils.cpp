@@ -10,13 +10,11 @@
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 
-#include <sparrow/sparrow.hpp>
+#include <arcticdb/arrow/include_sparrow.hpp>
 
 #include <span>
 
 namespace arcticdb {
-
-
 
 
 template <typename TagType>
@@ -32,7 +30,7 @@ sparrow::array arrow_array_from_block(TypedBlockData<TagType>& block) {
 void arrow_arrays_from_column(const Column& column, std::vector<sparrow::array>& vec) {
     auto column_data = column.data();
     vec.reserve(column.num_blocks());
-    column.type().visit_tag([&](auto &&impl) -> std::vector<sparrow::array> {
+    column.type().visit_tag([&vec, &column_data](auto &&impl) {
         using TagType = std::decay_t<decltype(impl)>;
         while (auto block = column_data.next<TagType>()) {
             vec.emplace_back(arrow_array_from_block<TagType>(*block));

@@ -493,7 +493,6 @@ void decode_into_frame_static(
     std::any& handler_data,
     const ReadQuery& read_query,
     const ReadOptions& read_options) {
-    auto seg = std::move(s);
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     const uint8_t *data = seg.buffer().data();
     const uint8_t *begin = data;

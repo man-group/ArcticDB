@@ -8,8 +8,7 @@
 
 #include <arcticdb/arrow/arrow_utils.hpp>
 
-#include <sparrow/sparrow.hpp>
-#include <sparrow/record_batch.hpp>
+#include <arcticdb/arrow/include_sparrow.hpp>
 
 #include <vector>
 #include <memory>

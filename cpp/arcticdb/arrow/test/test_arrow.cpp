@@ -43,5 +43,5 @@ TEST(Arrow, ConvertSegment) {
     }
 
     auto vec = segment_to_arrow_data(segment);
-    ASSERT_EQ(vec.size(), 2);
+    ASSERT_EQ(vec->size(), 2);
 }

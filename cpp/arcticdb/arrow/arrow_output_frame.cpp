@@ -30,8 +30,27 @@ size_t ArrowOutputFrame::num_blocks() const {
 
 std::vector<RecordBatchData> ArrowOutputFrame::record_batches() {
     std::vector<RecordBatchData> output;
-    for(auto& batch : *data_)
-        output.emplace_back({batch.})
+    output.reserve(data_->size());
+
+    // Store views to keep the Arrow structures alive
+    std::vector<sparrow::struct_array> views;
+    views.reserve(data_->size());
+
+    for(auto& batch : *data_) {
+        auto struct_array = batch.extract_struct_array();
+        views.push_back(struct_array.slice_view(0, struct_array.size()));
+
+        if (auto wrapper = views.back().raw_child(0)) {
+            const auto& proxy = wrapper->get_arrow_proxy();
+
+            output.push_back(RecordBatchData{
+                .array_ = reinterpret_cast<uintptr_t>(&proxy.array()),
+                .schema_ = reinterpret_cast<uintptr_t>(&proxy.schema())
+            });
+        }
+    }
+
+    return output;
 }
 
 std::vector<std::string> ArrowOutputFrame::names() const {

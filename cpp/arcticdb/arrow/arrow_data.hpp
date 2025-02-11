@@ -9,8 +9,7 @@
 
 #include <arcticdb/column_store/memory_segment.hpp>
 
-#include <sparrow/sparrow.hpp>
-#include <sparrow/record_batch.hpp>
+#include <arcticdb/arrow/include_sparrow.hpp>
 
 namespace arcticdb {
 

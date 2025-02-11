@@ -343,7 +343,7 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaIndexed) {
     auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data();
+    auto handler_data = get_type_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = read_result.frame_data.frame();
 
@@ -421,7 +421,7 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaRowCountIndex) {
     auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data();
+    auto handler_data = get_type_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = read_result.frame_data.frame();
     ASSERT_EQ(seg.row_count(), num_rows_per_incomplete * num_incompletes);

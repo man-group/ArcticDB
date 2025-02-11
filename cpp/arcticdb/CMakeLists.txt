@@ -540,7 +540,9 @@ set(arcticdb_srcs
         pipeline/read_query.hpp
         pipeline/read_query.cpp
         pipeline/read_query.cpp
-        pipeline/read_pipeline.cpp)
+        pipeline/read_pipeline.cpp
+        arrow/include_sparrow.hpp
+        )
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -694,6 +696,10 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
+        sparrow
+        date::date
+        date::date-tz
+        CURL::libcurl
 )
 
 if(${ARCTICDB_COUNT_ALLOCATIONS})
