@@ -72,14 +72,13 @@ class ReadWriteBenchmarkSettings(GeneralSetupLibraryWithSymbols):
 
 class LMDBReadWrite:
     """
-    This class is responsible for all checks on LMDB storage
+    This class is for general read write tests on LMDB
 
         IMPORTANT: 
         - When we inherit from another test we inherit test, setup and teardown methods
         - setup_cache() method we inherit it AS IS, thus it will be executed only ONCE for
           all classes that inherit from the base class. Therefore it is perhaps best to ALWAYS
           provide implementation in the child class, no matter that it might look like code repeat
-
     """
 
     rounds = 1
@@ -182,13 +181,8 @@ class LMDBReadWrite:
 
 class AWSReadWrite(LMDBReadWrite):
     """
-    This class is responsible for all checks on AWS
-
-    IMPORTANT: 
-        - When we inherit from another test we inherit test, setup and teardown methods
-        - setup_cache() method we inherit it AS IS, thus it will be executed only ONCE for
-          all classes that inherit from the base class. Therefore it is perhaps best to ALWAYS
-          provide implementation in the child class, no matter that it might look like code repeat
+    This class is for general read write tests on AWS. It inherits its all tests from from
+    the LMDB class but makes sure it does its own setup for the environment 
     """
 
     rounds = 1

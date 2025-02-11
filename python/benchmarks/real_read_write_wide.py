@@ -17,7 +17,7 @@ from arcticdb.util.environment_setup import GeneralSetupLibraryWithSymbols, Stor
 
 class AWSWideDataFrameTests:
     """
-    This class is responsible of setting up environment with wide symbols profile
+    This is ASV class for testing arcticdb with wide dataframe
 
 
         IMPORTANT: 
