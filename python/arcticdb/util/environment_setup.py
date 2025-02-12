@@ -109,6 +109,7 @@ class StorageInfo:
             value = f"{value}\n {key}: {val}"
         return value
 
+
 class EnvConfigurationBase(ABC):
     """
     Defines base class for benchmark scenario setup and teardown
@@ -174,7 +175,7 @@ class EnvConfigurationBase(ABC):
 
     def set_test_mode(self):
         """
-        Makes the setup run in test mode. Will write data in separate storage space instead on persistent 
+        Makes the setup run in test mode. Will write data in separate storage space. Instead on persistent 
         storage space on test storage space.
         Has effect on persistent storages
         """
@@ -183,7 +184,7 @@ class EnvConfigurationBase(ABC):
     
     def is_test_mode(self) -> bool:
         """
-        Checks if we work in test mode (in separate test storage space)
+        Checks if setup to work in test mode (in separate test storage space)
         """
         return TEST_LIBS_PREFIX in self.get_arctic_client_persistent().get_uri()
 
@@ -192,9 +193,15 @@ class EnvConfigurationBase(ABC):
         
     @classmethod
     def from_storage_info(cls, data: StorageInfo):
+        """
+        Constructs the class out of serialized data
+        """
         return cls(storage=data.storage, uris_cache=data.uris_cache, library_options=data.library_options, prefix=data.prefix)
     
     def get_storage_info(self) -> StorageInfo:
+        """
+        Serializes the class information in order to be reconstructed back later
+        """
         return StorageInfo(storage=self.storage, 
                            uris_cache=list(self.ac_cache.keys()), library_options=self.__library_options, prefix=self.__storage_test_env_prefix)
     
@@ -284,6 +291,11 @@ class EnvConfigurationBase(ABC):
                              self.get_library_names(library_suffix)[1])
 
     def delete_modifyable_library(self, library_suffix: Union[str, int] = None):
+        """
+        Use this method to delete previously created library on modifyable storage 
+        space
+        NOTE: will assert if library is not delete
+        """
         ac = self.get_arctic_client_modifyable()
         name = self.get_library_names(library_suffix)[1]
         logger.info(f"Deleting modifyable library {name}")
@@ -293,12 +305,16 @@ class EnvConfigurationBase(ABC):
     def set_params(self, params):
         """
         Sets parameters for environment generator class. 
-        The expectations for parameters is same as ASV class
+        The expectations for parameters is same as ASV class.
+        To be used in concrete classes
         """
         self._params = params
         return self
 
     def get_parameter_list(self):
+        """
+        Returns the parameter list. Use it to set the `params` variable of ASV test
+        """
         return self._params
 
     def is_multi_params_list(self):
@@ -403,9 +419,9 @@ class GeneralSetupLibraryWithSymbols(EnvConfigurationBase):
         if cols is None:
             cols = 1
         st = time.time()
-        logger.info("Dataframe generation started.")
+        self.logger().info("Dataframe generation started.")
         df: pd.DataFrame = DFGenerator.generate_random_dataframe(rows=rows, cols=cols)
-        logger.info(f"Dataframe rows {rows} cols {cols} generated for {time.time() - st} sec")
+        self.logger().info(f"Dataframe rows {rows} cols {cols} generated for {time.time() - st} sec")
         return df
     
     def get_symbol_name(self, rows, cols) -> str:
@@ -440,22 +456,20 @@ class GeneralSetupLibraryWithSymbols(EnvConfigurationBase):
         """
         Sets up in default library a number of symbols which is combination of parameters
         for number of rows and columns
-        At least `EnvConfigurationBase.PARAM_NAME_NUMBER_ROWS` must be defined
-        `EnvConfigurationBase.PARAM_NAME_NUMBER_COLUMNS` may not be defined
         For each of symbols it will generate dataframe based on `generate_dataframe` function
         """
         (list_rows, list_cols) = self._get_symbol_bounds()
         start = time.time()
         lib = self.get_library()
-        logger.info(f"Library: {lib}")
+        self.logger().info(f"Library: {lib}")
         for row in list_rows:
             for col in list_cols:
                 st = time.time()
                 df = self.generate_dataframe(row, col)
                 symbol = self.get_symbol_name(row, col)
                 lib.write(symbol, df)
-                logger.info(f"Dataframe stored at {symbol} for {time.time() - st} sec")
-        logger.info(f"TOTAL TIME (setup of one library with specified rows and column symbols): {time.time() - start} sec")
+                self.logger().info(f"Dataframe stored at {symbol} for {time.time() - st} sec")
+        self.logger().info(f"TOTAL TIME (setup of one library with specified rows and column symbols): {time.time() - start} sec")
         return GeneralSetupLibraryWithSymbols
     
     def check_ok(self):
@@ -466,11 +480,11 @@ class GeneralSetupLibraryWithSymbols(EnvConfigurationBase):
         (list_rows, list_cols) = self._get_symbol_bounds()
         lib = self.get_library()
         symbols = lib.list_symbols()
-        logger.info(f"Symbols {lib.list_symbols()}")
+        self.logger().info(f"Symbols {lib.list_symbols()}")
         for rows in list_rows:
             for cols in list_cols:
                 symbol = self.get_symbol_name(rows, cols)
-                logger.info(f"Check symbol {symbol}")
+                self.logger().info(f"Check symbol {symbol}")
                 if not symbol in symbols:
                     return False
         return True
@@ -556,7 +570,7 @@ class GeneralSetupSymbolsVersionsSnapshots(EnvConfigurationBase):
         lib = self.get_library(number_symbols)
         df = self.generate_dataframe(10)
         meta = self.generate_metadata()
-        logger.info(f"METADATA: {meta}")
+        self.logger().info(f"METADATA: {meta}")
         versions_list = self.get_versions_list(number_symbols)
         index = 0
         for sym_num in range(number_symbols):
@@ -565,7 +579,7 @@ class GeneralSetupSymbolsVersionsSnapshots(EnvConfigurationBase):
                                        number_versions=versions,
                                        with_metadata=self.with_metadata,
                                        with_snapshot=self.with_snapshot)
-            logger.info(f"Generating symbol {symbol}.")
+            self.logger().info(f"Generating symbol {symbol}.")
             st = time.time()
             for num in range(versions):
                 if self.with_metadata:
@@ -582,7 +596,7 @@ class GeneralSetupSymbolsVersionsSnapshots(EnvConfigurationBase):
                         self.first_snapshot_taken = True
                 else: 
                     lib.snapshot(snap)
-            logger.info(f"Generation of {symbol} symbol COMPLETED for :{time.time() - st} sec")
+            self.logger().info(f"Generation of {symbol} symbol COMPLETED for :{time.time() - st} sec")
             index += 1
         return self
 
@@ -591,14 +605,14 @@ class GeneralSetupSymbolsVersionsSnapshots(EnvConfigurationBase):
         st = time.time()
         for num_symbols in self.get_parameter_list():
             self.setup_library(num_symbols)
-        logger.info(f"Total time {time.time() - st}")    
+        self.logger().info(f"Total time {time.time() - st}")    
 
     def check_ok(self) -> bool:
 
         for num_symbols in self.get_parameter_list():
             lib = self.get_library(num_symbols)
             symbols = lib.list_symbols()
-            logger.info(f"Check library: {lib}")
+            self.logger().info(f"Check library: {lib}")
             versions_list = self.get_versions_list(num_symbols)
             index = 0
             for sym_num in range(num_symbols):
@@ -607,7 +621,7 @@ class GeneralSetupSymbolsVersionsSnapshots(EnvConfigurationBase):
                             with_metadata=self.with_metadata,
                             with_snapshot=self.with_snapshot)
                 if not (symbol in symbols):
-                    logger.info(f"Symbol {symbol} not found")
+                    self.logger().info(f"Symbol {symbol} not found")
                     return False
                 index += 1
 
@@ -615,6 +629,7 @@ class GeneralSetupSymbolsVersionsSnapshots(EnvConfigurationBase):
     
     def clear_symbols_cache(self):
         pass #TBD
+
 
 class GeneralSetupLibraryWithSymbolsTests:
     """
