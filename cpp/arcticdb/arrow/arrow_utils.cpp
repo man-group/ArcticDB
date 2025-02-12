@@ -15,17 +15,47 @@
 #include <span>
 
 namespace arcticdb {
+template <class T>
+void release_external_common_arrow(T* t)
+{
+    if (t->dictionary)
+    {
+        delete t->dictionary;
+        t->dictionary = nullptr;
+    }
 
+    for (std::int64_t i = 0; i < t->n_children; ++i)
+    {
+        t->children[i]->release(t->children[i]);
+        delete t->children[i];
+    }
+    delete[] t->children;
+    t->children = nullptr;
+
+    t->release = nullptr;
+}
 
 template <typename TagType>
 sparrow::array arrow_array_from_block(TypedBlockData<TagType>& block) {
-    using DataType = TagType::DataTypeTag;
-    using RawType = DataType::raw_type;
-    auto *tmp = const_cast<RawType*>(block.release());
-    sparrow::primitive_array<RawType> raw_array(std::span(tmp, block.row_count()), std::nullopt, std::nullopt);
-    return sparrow::array{std::move(raw_array)};
-}
+    using DataType = typename TagType::DataTypeTag;
+    using RawType = typename DataType::raw_type;
 
+    auto* data_ptr = block.release();
+    const auto size = block.row_count();
+
+    std::span<const RawType> data_span(
+        reinterpret_cast<const RawType*>(data_ptr),
+        size
+    );
+
+    sparrow::primitive_array<RawType> prim_array(
+        data_span,
+        std::nullopt,
+        std::nullopt
+    );
+
+    return sparrow::array{std::move(prim_array)};
+}
 
 void arrow_arrays_from_column(const Column& column, std::vector<sparrow::array>& vec) {
     auto column_data = column.data();
@@ -55,32 +85,34 @@ auto strided_range(R&& range, size_t stride, size_t start) {
 }
 
 std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(SegmentInMemory& segment) {
-    std::vector<sparrow::array> arrays;
     const auto num_blocks = segment.num_blocks();
     const auto num_columns = segment.num_columns();
-    arrays.reserve(segment.num_columns() * num_blocks);
-
-    for (auto i = 0UL; i < num_columns; ++i) {
-        auto& column = segment.column(static_cast<position_t>(i));
-        if (is_sequence_type(column.type().data_type())) {
-            //output.emplace_back(arrow_data_from_string_column(column, segment.field(i).name()));
-        } else {
-            arrow_arrays_from_column(segment.column(static_cast<position_t>(i)), arrays);
-        }
-    }
 
     auto output = std::make_shared<std::vector<sparrow::record_batch>>();
-    output->reserve(num_columns);
+    output->reserve(num_blocks);
 
     for(auto i = 0UL; i < num_blocks; ++i) {
-        auto batch_data = strided_range(std::span(arrays), num_columns, i);
-        output->emplace_back(sparrow::record_batch(names_from_segment(segment), std::move(batch_data)));
+        output->emplace_back(sparrow::record_batch{});
+    }
+
+    for (auto i = 0UL; i < num_columns; ++i) {
+        std::vector<sparrow::array> column_arrays;
+        auto& column = segment.column(static_cast<position_t>(i));
+
+        if (is_sequence_type(column.type().data_type())) {
+            // Handle sequence types if needed
+            //output.emplace_back(arrow_data_from_string_column(column, segment.field(i).name()));
+        } else {
+            arrow_arrays_from_column(column, column_arrays);
+
+            for(auto block_idx = 0UL; block_idx < num_blocks; ++block_idx) {
+                (*output)[block_idx].add_column(static_cast<std::string>(segment.field(i).name()), std::move(column_arrays[block_idx]));
+            }
+        }
     }
 
     return output;
 }
-
-
 ArrowReadResult create_arrow_read_result(
     const VersionedItem& version,
     FrameAndDescriptor&& fd) {
