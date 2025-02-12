@@ -91,7 +91,7 @@ void GCPXMLStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts) {
 }
 
 void S3Storage::do_remove(VariantKey&& variant_key, RemoveOpts) {
-    detail::do_remove_no_batching_impl(std::move(variant_key), root_folder_, bucket_name_, client(), FlatBucketizer{});
+    detail::do_remove_impl(std::move(variant_key), root_folder_, bucket_name_, client(), FlatBucketizer{});
 }
 
 bool S3Storage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix) {

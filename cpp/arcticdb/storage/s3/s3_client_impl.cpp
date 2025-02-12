@@ -234,20 +234,42 @@ S3Result<DeleteObjectsOutput> S3ClientImpl::delete_objects(
     return {result};
 }
 
-S3Result<std::monostate> S3ClientImpl::delete_object(
+struct DeleteObjectAsyncHandler {
+    std::shared_ptr<folly::Promise<S3Result<std::monostate>>> promise_;
+    timestamp start_;
+
+    DeleteObjectAsyncHandler(std::shared_ptr<folly::Promise<S3Result<std::monostate>>>&& promise) :
+        promise_(std::move(promise)),
+        start_(util::SysClock::coarse_nanos_since_epoch()){
+    }
+
+    ARCTICDB_MOVE_COPY_DEFAULT(DeleteObjectAsyncHandler)
+
+    void operator()(
+        const Aws::S3::S3Client*,
+        const Aws::S3::Model::DeleteObjectRequest&,
+        const Aws::S3::Model::DeleteObjectOutcome& outcome,
+        const std::shared_ptr<const Aws::Client::AsyncCallerContext>&) {
+        if (outcome.IsSuccess()) {
+            promise_->setValue<S3Result<std::monostate>>({});
+        } else {
+            promise_->setValue<S3Result<std::monostate>>({outcome.GetError()});
+        }
+    }
+};
+
+folly::Future<S3Result<std::monostate>> S3ClientImpl::delete_object(
     const std::string& s3_object_name,
     const std::string& bucket_name) {
-    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Removing s3 object with key {}", s3_object_name);
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Removing s3 object with key {} (async)", s3_object_name);
+    auto promise = std::make_shared<folly::Promise<S3Result<std::monostate>>>();
+    auto future = promise->getFuture().via(&async::io_executor());
     Aws::S3::Model::DeleteObjectRequest request;
     request.WithBucket(bucket_name.c_str());
     request.WithKey(s3_object_name);
 
-    auto outcome = s3_client.DeleteObject(request);
-    if (outcome.IsSuccess()) {
-        return {};
-    } else {
-        return {outcome.GetError()};
-    }
+    s3_client.DeleteObjectAsync(request, DeleteObjectAsyncHandler{std::move(promise)});
+    return future;
 }
 
 S3Result<ListObjectsOutput> S3ClientImpl::list_objects(

@@ -125,12 +125,12 @@ S3Result<DeleteObjectsOutput> S3ClientTestWrapper::delete_objects(
     return actual_client_->delete_objects(s3_object_names, bucket_name);
 }
 
-S3Result<std::monostate> S3ClientTestWrapper::delete_object(
+folly::Future<S3Result<std::monostate>> S3ClientTestWrapper::delete_object(
     const std::string& s3_object_name,
     const std::string& bucket_name) {
     auto maybe_error = has_failure_trigger(bucket_name);
     if (maybe_error.has_value()) {
-        return {*maybe_error};
+        return folly::makeFuture<S3Result<std::monostate>>({*maybe_error});
     }
 
     return actual_client_->delete_object(s3_object_name, bucket_name);

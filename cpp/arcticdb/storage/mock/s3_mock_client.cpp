@@ -154,22 +154,26 @@ S3Result<DeleteObjectsOutput> MockS3Client::delete_objects(
     return {output};
 }
 
-S3Result<std::monostate> MockS3Client::delete_object(
+folly::Future<S3Result<std::monostate>> MockS3Client::delete_object(
     const std::string& s3_object_name,
     const std::string& bucket_name) {
     std::scoped_lock<std::mutex> lock(mutex_);
     if (auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::DELETE); maybe_error) {
-        return {*maybe_error};
+        S3Result<std::monostate> res{*maybe_error};
+        return folly::makeFuture(res);
     } else if (auto maybe_local_error = has_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL); maybe_local_error) {
-        return {*maybe_local_error};
+        S3Result<std::monostate> res{*maybe_local_error};
+        return folly::makeFuture(res);
     }
 
     auto pos = s3_contents_.find({bucket_name, s3_object_name});
     if (pos == s3_contents_.end() || !pos->second.has_value()) {
-        return {not_found_error};
+        S3Result<std::monostate> res{not_found_error};
+        return folly::makeFuture(res);
     } else {
         pos->second = std::nullopt;
-        return {};
+        S3Result<std::monostate> res{};
+        return folly::makeFuture(res);
     }
 }
 
