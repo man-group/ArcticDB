@@ -15,6 +15,7 @@ import sys
 
 from arcticdb_ext.exceptions import StorageException
 from arcticdb_ext import set_config_string
+from arcticdb_ext.storage import KeyType
 from arcticdb.util.test import create_df, assert_frame_equal
 
 from arcticdb.storage_fixtures.s3 import MotoNfsBackedS3StorageFixtureFactory
@@ -84,6 +85,32 @@ def test_nfs_backed_s3_storage(lib_name, nfs_backed_s3_storage):
     for o in objects:
         assert re.match(bucketized_pattern, o.key), f"Object {o.key} does not match pattern {bucketized_pattern}"
 
+@pytest.mark.parametrize("storage_factory",
+                         [MotoNfsBackedS3StorageFixtureFactory,
+                          MotoS3StorageFixtureFactory])
+def test_library_get_key_path(lib_name, storage_factory):
+
+    prefix = "test_bucket_prefix"
+    with storage_factory(
+            use_ssl=False,
+            ssl_test_support=False,
+            bucket_versioning=False,
+            default_prefix=prefix
+    ) as factory:
+        lib = factory.create_fixture().create_version_store_factory(lib_name)()
+        lib.write("s", data=create_df())
+        lib_tool = lib.library_tool()
+
+        keys_count = 0
+        for key_type in KeyType.__members__.values():
+            keys = lib_tool.find_keys(key_type)
+            keys_count += len(keys)
+            for key in keys:
+                path = lib_tool.get_key_path(key)
+                assert path != ""
+                assert path.startswith(prefix)
+
+        assert keys_count > 0
 
 def read_repeatedly(version_store, queue: Queue):
     while True:

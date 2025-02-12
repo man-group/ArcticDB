@@ -269,8 +269,24 @@ TEST_F(S3StorageFixture, test_key_exists) {
     ASSERT_TRUE(exists_in_store(store, "symbol"));
     ASSERT_FALSE(exists_in_store(store, "symbol-not-present"));
     ASSERT_THROW(
-        exists_in_store(store, MockS3Client::get_failure_trigger("symbol", StorageOperation::EXISTS, Aws::S3::S3Errors::NETWORK_CONNECTION, false)),
-        UnexpectedS3ErrorException);
+            exists_in_store(store, MockS3Client::get_failure_trigger("symbol", StorageOperation::EXISTS,
+                                                                     Aws::S3::S3Errors::NETWORK_CONNECTION, false)),
+            UnexpectedS3ErrorException);
+}
+
+TEST_P(S3AndNfsStorageFixture, test_key_path) {
+    std::vector<VariantKey> res;
+
+    auto store = get_storage();
+    store->iterate_type(KeyType::TABLE_DATA, [&](VariantKey &&found_key) {
+        res.emplace_back(found_key);
+    }, "");
+
+    for(auto vk : res) {
+        auto key_path = store->key_path(vk);
+        ASSERT_TRUE(key_path.size() > 0);
+        ASSERT_TRUE(key_path.starts_with(get_root_folder(store->library_path())));
+    }
 }
 
 TEST_F(S3StorageFixture, test_read){
