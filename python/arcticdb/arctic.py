@@ -97,7 +97,7 @@ class Arctic:
 
         storage_override = self._library_adapter.get_storage_override()
         lib = NativeVersionStore(
-            self._library_manager.get_library(lib_mgr_name, storage_override, native_storage_map=self._library_adapter._native_cfg),
+            self._library_manager.get_library(lib_mgr_name, storage_override, native_storage_config=self._library_adapter.native_config()),
             repr(self._library_adapter),
             lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
         )
@@ -318,7 +318,7 @@ class Arctic:
         storage_override = self._library_adapter.get_storage_override()
         new_cfg = self._library_manager.get_library_config(lib_mgr_name, storage_override)
         library._nvs._initialize(
-            self._library_manager.get_library(lib_mgr_name, storage_override, ignore_cache=True, native_storage_map=self._library_adapter._native_cfg),
+            self._library_manager.get_library(lib_mgr_name, storage_override, ignore_cache=True, native_storage_config=self._library_adapter.native_config()),
             library._nvs.env,
             new_cfg,
             library._nvs._custom_normalizer,

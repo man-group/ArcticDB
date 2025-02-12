@@ -157,7 +157,9 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
                 return NativeVariantStorage(std::move(settings));
             }
         ))
-        .def("update", &NativeVariantStorage::update);
+        .def("update", &NativeVariantStorage::update)
+        .def("__repr__", &NativeVariantStorage::to_string);
+
     py::implicitly_convertible<NativeVariantStorage::VariantStorageConfig, NativeVariantStorage>();
 
     storage.def("create_mem_config_resolver", [](const py::object & env_config_map_py) -> std::shared_ptr<ConfigResolver> {
@@ -228,7 +230,8 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def(py::init<>())
         .def("set_s3_override", &StorageOverride::set_s3_override)
         .def("set_azure_override", &StorageOverride::set_azure_override)
-        .def("set_lmdb_override", &StorageOverride::set_lmdb_override);
+        .def("set_lmdb_override", &StorageOverride::set_lmdb_override)
+        .def("set_gcpxml_override", &StorageOverride::set_gcpxml_override);
 
     py::class_<LibraryManager, std::shared_ptr<LibraryManager>>(storage, "LibraryManager")
         .def(py::init<std::shared_ptr<storage::Library>>())
@@ -269,7 +272,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
              py::arg("library_path"),
              py::arg("storage_override") = StorageOverride{},
              py::arg("ignore_cache") = false,
-             py::arg("native_storage_map") = std::nullopt
+             py::arg("native_storage_config") = std::nullopt
         )
         .def("cleanup_library_if_open", [](LibraryManager& library_manager, std::string_view library_path) {
             return library_manager.cleanup_library_if_open(LibraryPath{library_path, '.'});

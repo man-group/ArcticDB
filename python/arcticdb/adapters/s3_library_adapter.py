@@ -110,7 +110,8 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
         super().__init__(uri, self._encoding_version)
 
-        self._native_cfg = NativeVariantStorage(NativeS3Settings(AWSAuthMethod.DISABLED, "", False))
+    def native_config(self):
+        return NativeVariantStorage(NativeS3Settings(AWSAuthMethod.DISABLED, "", False))
 
     def __repr__(self):
         return "S3(endpoint=%s, bucket=%s)" % (self._endpoint, self._bucket)
@@ -149,11 +150,11 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             ssl=self._ssl,
             aws_auth=self._query_params.aws_auth,
             aws_profile=self._query_params.aws_profile,
-            native_cfg=self._native_cfg,
+            native_cfg=self.native_config(),
         )
 
         lib = NativeVersionStore.create_store_from_config(
-            (env_cfg, self._native_cfg), _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
+            (env_cfg, self.native_config()), _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
         )
 
         return lib._library
@@ -273,7 +274,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             ssl=self._ssl,
             aws_auth=self._query_params.aws_auth,
             aws_profile=self._query_params.aws_profile,
-            native_cfg=self._native_cfg,
+            native_cfg=self.native_config(),
         )
 
     def _configure_aws(self):

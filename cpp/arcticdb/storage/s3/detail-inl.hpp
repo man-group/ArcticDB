@@ -46,6 +46,10 @@ static const size_t DELETE_OBJECTS_LIMIT = 1000;
 template<class It>
 using Range = folly::Range<It>;
 
+inline bool is_not_found_error(const Aws::S3::S3Errors& error) {
+    return error == Aws::S3::S3Errors::NO_SUCH_KEY || error == Aws::S3::S3Errors::RESOURCE_NOT_FOUND;
+}
+
 [[noreturn]] inline void raise_s3_exception(const Aws::S3::S3Error& err, const std::string& object_name) {
     std::string error_message;
     auto type = err.GetErrorType();
@@ -57,7 +61,7 @@ using Range = folly::Range<It>;
                                             object_name);
 
     // s3_client.HeadObject returns RESOURCE_NOT_FOUND if a key is not found.
-    if (type == Aws::S3::S3Errors::NO_SUCH_KEY || type == Aws::S3::S3Errors::RESOURCE_NOT_FOUND) {
+    if (is_not_found_error(type)) {
         throw KeyNotFoundException(fmt::format("Key Not Found Error: {}",
                                                error_message_suffix));
     }
@@ -110,8 +114,7 @@ using Range = folly::Range<It>;
 }
 
 inline bool is_expected_error_type(Aws::S3::S3Errors err) {
-    return err == Aws::S3::S3Errors::NO_SUCH_KEY || err == Aws::S3::S3Errors::RESOURCE_NOT_FOUND
-        || err == Aws::S3::S3Errors::NO_SUCH_BUCKET;
+    return is_not_found_error(err) || err == Aws::S3::S3Errors::NO_SUCH_BUCKET;
 }
 
 inline void raise_if_unexpected_error(const Aws::S3::S3Error& err, const std::string& object_name) {
@@ -326,8 +329,7 @@ void do_remove_no_batching_impl(
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted object with key '{}'",
                                    to_delete.size(),
                                    variant_key_view(k));
-        } else {
-            auto& error = delete_object_result.get_error();
+        } else if (const auto& error = delete_object_result.get_error(); !is_not_found_error(error.GetErrorType())) {
             auto bad_key_name = s3_object_name.substr(key_type_dir.size(), std::string::npos);
             auto error_message = error.GetMessage();
             failed_deletes.emplace_back(
@@ -336,9 +338,9 @@ void do_remove_no_batching_impl(
                     bad_key_name.size(), variant_key_type(k)),
                 std::move(error_message));
         }
-
-        raise_if_failed_deletes(failed_deletes);
     }
+
+    raise_if_failed_deletes(failed_deletes);
 }
 
 template<class KeyBucketizer>

@@ -14,7 +14,6 @@ from arcticdb_ext.storage import (
     GCPXMLSettings as NativeGCPXMLSettings,
     S3Settings as NativeS3Settings
 )
-from arcticdb.encoding_version import EncodingVersion
 from collections import namedtuple
 
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
@@ -29,13 +28,12 @@ class GCPXMLLibraryAdapter(S3LibraryAdapter):
     def supports_uri(uri: str) -> bool:
         return uri.startswith("gcpxml://") or uri.startswith("gcpxmls://")
 
-    def __init__(self, uri: str, encoding_version: EncodingVersion, *args, **kwargs):
-        super().__init__(uri, encoding_version, *args, **kwargs)
-        native_s3_settings = NativeS3Settings(AWSAuthMethod.DISABLED, "", False)
-        self._native_cfg = NativeVariantStorage(NativeGCPXMLSettings(native_s3_settings))
-
     def __repr__(self):
         return "GCPXML(endpoint=%s, bucket=%s)" % (self._endpoint, self._bucket)
+
+    def native_config(self):
+        native_s3_settings = NativeS3Settings(AWSAuthMethod.DISABLED, "", False)
+        return NativeVariantStorage(NativeGCPXMLSettings(native_s3_settings))
 
     def get_storage_override(self) -> StorageOverride:
         storage_override = StorageOverride()

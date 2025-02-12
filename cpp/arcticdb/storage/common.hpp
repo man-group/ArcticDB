@@ -84,6 +84,17 @@ public:
     void update(const s3::S3Settings& config) {
         config_ = config;
     }
+
+    std::string to_string() {
+        return util::variant_match(config_, [](std::monostate) {
+            return "empty";
+        }, [](s3::S3Settings) {
+            return "s3";
+        }, [](s3::GCPXMLSettings) {
+            return "gcpxml";
+        });
+    }
+
 private:
     VariantStorageConfig config_;
 };
