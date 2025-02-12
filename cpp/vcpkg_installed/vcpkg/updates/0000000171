@@ -1,0 +1,8 @@
+Package: aws-c-io
+Version: 0.14.18
+Depends: aws-c-cal, aws-c-common, s2n, vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 536a742db09c414ebfc73e653df3c3f3a38e16a900bd13287df55fb7b69cb637
+Description: Handles all IO and TLS work for application protocols.
+Status: install ok installed

@@ -1,0 +1,132 @@
+{
+  "$schema": "https://raw.githubusercontent.com/spdx/spdx-spec/v2.2.1/schemas/spdx-schema.json",
+  "spdxVersion": "SPDX-2.2",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "documentNamespace": "https://spdx.org/spdxdocs/boost-thread-x64-linux-1.84.0-a0be7af0-4ab5-43d0-89f7-61ba5ece3016",
+  "name": "boost-thread:x64-linux@1.84.0 96ea000dd2a89b19072f6eb5a216e54ca63dc37c53b9eba43eba3ba5729a2177",
+  "creationInfo": {
+    "creators": [
+      "Tool: vcpkg-2024-12-09-1005b78fa1bf1dde1a20c2734cba4ea61ca94d9a"
+    ],
+    "created": "2025-01-13T11:09:04Z"
+  },
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "GENERATES",
+      "relatedSpdxElement": "SPDXRef-binary"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-0"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-1"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-2"
+    },
+    {
+      "spdxElementId": "SPDXRef-binary",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-0",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-1",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-2",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    }
+  ],
+  "packages": [
+    {
+      "name": "boost-thread",
+      "SPDXID": "SPDXRef-port",
+      "versionInfo": "1.84.0",
+      "downloadLocation": "git+https://github.com/Microsoft/vcpkg@f7aa0651df5b4e391357cfc58db1b87f11af97e5",
+      "homepage": "https://github.com/boostorg/thread",
+      "licenseConcluded": "BSL-1.0",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "description": "Boost thread module",
+      "comment": "This is the port (recipe) consumed by vcpkg."
+    },
+    {
+      "name": "boost-thread:x64-linux",
+      "SPDXID": "SPDXRef-binary",
+      "versionInfo": "96ea000dd2a89b19072f6eb5a216e54ca63dc37c53b9eba43eba3ba5729a2177",
+      "downloadLocation": "NONE",
+      "licenseConcluded": "BSL-1.0",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "comment": "This is a binary package built by vcpkg."
+    },
+    {
+      "SPDXID": "SPDXRef-resource-0",
+      "name": "boostorg/thread",
+      "downloadLocation": "git+https://github.com/boostorg/thread@boost-1.84.0",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "9cf5afffb4ecfd9fd9c264c6ad8f06d3ea71dd459cd68555dfcb2b904b6e5cc491cd5cc5e9774b0c6697ceaf13567ce78e1f7e77ac1fc9121ea04a34ac3df26a"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "fileName": ".//opt/arcticdb/arcticdb_link/cpp/vcpkg/buildtrees/versioning_/versions/boost-thread/f7aa0651df5b4e391357cfc58db1b87f11af97e5/portfile.cmake",
+      "SPDXID": "SPDXRef-file-0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "efa014e3606d98eeaa042012c25c15e40fee33e20852fd83176f6d22e9c782af"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//opt/arcticdb/arcticdb_link/cpp/vcpkg/buildtrees/versioning_/versions/boost-thread/f7aa0651df5b4e391357cfc58db1b87f11af97e5/vcpkg.json",
+      "SPDXID": "SPDXRef-file-1",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "a9806d3f65f03c1e1aafeb11502d68e7161ba8319a6ad21cbfb5331a76bcfdc5"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//opt/arcticdb/arcticdb_link/cpp/vcpkg/buildtrees/versioning_/versions/boost-thread/f7aa0651df5b4e391357cfc58db1b87f11af97e5/b2-options.cmake",
+      "SPDXID": "SPDXRef-file-2",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "6ae0abe671e00b5aac5bb0b8537f601de5ccf9996941e0de68af4fba5cc2bd96"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    }
+  ]
+}

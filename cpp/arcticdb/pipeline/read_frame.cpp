@@ -885,9 +885,9 @@ folly::Future<SegmentInMemory> fetch_data(
             [row=row, frame=frame, dynamic_schema=dynamic_schema, shared_data, &handler_data, read_query, read_options](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
                 if(dynamic_schema) {
-                    decode_into_frame_dynamic(frame, row, key_seg.segment(), shared_data, handler_data, read_query, read_options);
+                    decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), shared_data, handler_data, read_query, read_options);
                 } else {
-                    decode_into_frame_static(frame, row, key_seg.segment(), shared_data, handler_data, read_query, read_options);
+                    decode_into_frame_static(frame, row, std::move(key_seg.segment()), shared_data, handler_data, read_query, read_options);
                 }
 
                 return key_seg.variant_key();

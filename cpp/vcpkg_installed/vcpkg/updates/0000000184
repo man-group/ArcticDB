@@ -1,0 +1,8 @@
+Package: aws-c-mqtt
+Version: 0.9.9
+Depends: aws-c-http, aws-c-io, s2n, vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 8bfc45b5ec0539e9a7e2c0d1bcf3a193886bad0ed05d3262c641aa08412db2b6
+Description: C99 implementation of the MQTT 3.1.1 specification.
+Status: install ok half-installed

@@ -1,0 +1,6 @@
+Package: aws-sdk-cpp
+Feature: identity-management
+Architecture: x64-linux
+Multi-Arch: same
+Description: C++ SDK for the AWS identity-management service
+Status: install ok installed

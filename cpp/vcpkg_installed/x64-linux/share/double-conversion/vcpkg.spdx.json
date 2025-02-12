@@ -1,0 +1,110 @@
+{
+  "$schema": "https://raw.githubusercontent.com/spdx/spdx-spec/v2.2.1/schemas/spdx-schema.json",
+  "spdxVersion": "SPDX-2.2",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "documentNamespace": "https://spdx.org/spdxdocs/double-conversion-x64-linux-3.2.1-b1a42269-b3e9-40a6-8bb0-2a8a473a5698",
+  "name": "double-conversion:x64-linux@3.2.1 f0182c426a77e93de9ca3d2ba27a01de8cf2cc98b3fc70681fb3a715e55a07c7",
+  "creationInfo": {
+    "creators": [
+      "Tool: vcpkg-2024-12-09-1005b78fa1bf1dde1a20c2734cba4ea61ca94d9a"
+    ],
+    "created": "2025-01-13T11:16:32Z"
+  },
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "GENERATES",
+      "relatedSpdxElement": "SPDXRef-binary"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-0"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-1"
+    },
+    {
+      "spdxElementId": "SPDXRef-binary",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-0",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-1",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    }
+  ],
+  "packages": [
+    {
+      "name": "double-conversion",
+      "SPDXID": "SPDXRef-port",
+      "versionInfo": "3.2.1",
+      "downloadLocation": "git+https://github.com/Microsoft/vcpkg@16b23d889f831b492aaa819cfde4d5d263be5bed",
+      "homepage": "https://github.com/google/double-conversion",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "description": "Efficient binary-decimal and decimal-binary conversion routines for IEEE doubles.",
+      "comment": "This is the port (recipe) consumed by vcpkg."
+    },
+    {
+      "name": "double-conversion:x64-linux",
+      "SPDXID": "SPDXRef-binary",
+      "versionInfo": "f0182c426a77e93de9ca3d2ba27a01de8cf2cc98b3fc70681fb3a715e55a07c7",
+      "downloadLocation": "NONE",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "comment": "This is a binary package built by vcpkg."
+    },
+    {
+      "SPDXID": "SPDXRef-resource-0",
+      "name": "google/double-conversion",
+      "downloadLocation": "git+https://github.com/google/double-conversion@af09fd65fcf24eee95dc62813ba9123414635428",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "721d736a2d065b8ff6058345afe6990ab568174e202361abc7ce36c16931c05128df4fd5034f98f114a7b01972eda3b98bfc209ef45394d0b5d4bbce8140b28a"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "fileName": ".//opt/arcticdb/arcticdb_link/cpp/vcpkg/buildtrees/versioning_/versions/double-conversion/16b23d889f831b492aaa819cfde4d5d263be5bed/portfile.cmake",
+      "SPDXID": "SPDXRef-file-0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "edce84f20b4fd1b710f98168389d535baa8b062b02c56a2f25ae14a0517e3bbf"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//opt/arcticdb/arcticdb_link/cpp/vcpkg/buildtrees/versioning_/versions/double-conversion/16b23d889f831b492aaa819cfde4d5d263be5bed/vcpkg.json",
+      "SPDXID": "SPDXRef-file-1",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "b6fd1f30151516513cd325741e83abeba22c0d65b1293bd63d5673de717a7f24"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    }
+  ]
+}

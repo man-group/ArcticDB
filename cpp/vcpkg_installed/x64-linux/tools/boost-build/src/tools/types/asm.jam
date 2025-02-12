@@ -1,0 +1,14 @@
+# Copyright Craig Rodrigues 2005. Distributed under the Boost
+# Software License, Version 1.0. (See accompanying
+# file LICENSE.txt or copy at https://www.bfgroup.xyz/b2/LICENSE.txt)
+import scanner ;
+import type ;
+import types/cpp ;
+
+type ASM_CPP : s S asm ;
+type ASM : : ASM_CPP ;
+
+# FIXME: Scan for MASM/ARMASM includes
+type.set-scanner ASM_CPP : c-scanner ;
+
+type.set-generated-target-suffix ASM : <target-os>windows : asm ;

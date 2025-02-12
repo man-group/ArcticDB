@@ -1,0 +1,7 @@
+Package: protobuf
+Feature: zlib
+Depends: zlib
+Architecture: x64-linux
+Multi-Arch: same
+Description: ZLib based features like Gzip streams
+Status: install ok half-installed

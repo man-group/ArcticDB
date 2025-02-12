@@ -1,0 +1,110 @@
+{
+  "$schema": "https://raw.githubusercontent.com/spdx/spdx-spec/v2.2.1/schemas/spdx-schema.json",
+  "spdxVersion": "SPDX-2.2",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "documentNamespace": "https://spdx.org/spdxdocs/aws-c-s3-x64-linux-0.6.6-0980add3-ac3b-42d8-a040-45e8e50b9d85",
+  "name": "aws-c-s3:x64-linux@0.6.6 6779a09f363caaeff89a4f807057ab01e1c58da719bb8606e8b9a80409b04c92",
+  "creationInfo": {
+    "creators": [
+      "Tool: vcpkg-2024-12-09-1005b78fa1bf1dde1a20c2734cba4ea61ca94d9a"
+    ],
+    "created": "2025-01-13T11:14:02Z"
+  },
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "GENERATES",
+      "relatedSpdxElement": "SPDXRef-binary"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-0"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-1"
+    },
+    {
+      "spdxElementId": "SPDXRef-binary",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-0",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-1",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    }
+  ],
+  "packages": [
+    {
+      "name": "aws-c-s3",
+      "SPDXID": "SPDXRef-port",
+      "versionInfo": "0.6.6",
+      "downloadLocation": "git+https://github.com/Microsoft/vcpkg@f97ac587659b22375a6dc1b16a87adda99d4662b",
+      "homepage": "https://github.com/awslabs/aws-c-s3",
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "description": "C99 library implementation for communicating with the S3 service, designed for maximizing throughput on high bandwidth EC2 instances.",
+      "comment": "This is the port (recipe) consumed by vcpkg."
+    },
+    {
+      "name": "aws-c-s3:x64-linux",
+      "SPDXID": "SPDXRef-binary",
+      "versionInfo": "6779a09f363caaeff89a4f807057ab01e1c58da719bb8606e8b9a80409b04c92",
+      "downloadLocation": "NONE",
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "comment": "This is a binary package built by vcpkg."
+    },
+    {
+      "SPDXID": "SPDXRef-resource-0",
+      "name": "awslabs/aws-c-s3",
+      "downloadLocation": "git+https://github.com/awslabs/aws-c-s3@v0.6.6",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "20e364b50fdbf9cc0c9c515ccf15410c5771c545d585274db97e77f0459b05b3d7af82863a926d373d93590276020778345744db7e7ca575e686cd9bc627f8e2"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "fileName": ".//opt/arcticdb/arcticdb_link/cpp/vcpkg/buildtrees/versioning_/versions/aws-c-s3/f97ac587659b22375a6dc1b16a87adda99d4662b/portfile.cmake",
+      "SPDXID": "SPDXRef-file-0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "115bba1565e2a8dddb49f21873759324ffdef3014f3954b350e7d944dddd3e99"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//opt/arcticdb/arcticdb_link/cpp/vcpkg/buildtrees/versioning_/versions/aws-c-s3/f97ac587659b22375a6dc1b16a87adda99d4662b/vcpkg.json",
+      "SPDXID": "SPDXRef-file-1",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "e7243a88557949c7fa99a523736f38c1a003a55fbf3ec3457956165a15217bd5"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    }
+  ]
+}

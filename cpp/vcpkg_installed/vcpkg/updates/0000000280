@@ -1,0 +1,7 @@
+Package: prometheus-cpp
+Feature: push
+Depends: curl
+Architecture: x64-linux
+Multi-Arch: same
+Description: Support push gateway
+Status: install ok half-installed

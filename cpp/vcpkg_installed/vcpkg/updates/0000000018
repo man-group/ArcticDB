@@ -1,0 +1,10 @@
+Package: libevent
+Version: 2.1.12
+Port-Version: 7
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 03bbb8b6225b46d909b510345f06a93ede12a3d9222a138724c65b1f52da1994
+Description: An event notification library
+Default-Features: thread
+Status: install ok installed

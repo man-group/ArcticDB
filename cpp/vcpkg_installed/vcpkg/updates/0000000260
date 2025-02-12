@@ -1,0 +1,9 @@
+Package: folly
+Version: 2023.09.25.00
+Depends: boost-chrono, boost-context, boost-conversion, boost-crc, boost-date-time, boost-filesystem, boost-multi-index, boost-program-options, boost-regex, boost-smart-ptr, boost-system, boost-thread, boost-variant, double-conversion, fmt, gflags, glog, libevent, openssl, vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 5f7c22d3f2d303ef716121f2fdaec7335f45947d06e94fc2481853e043859f8b
+Description: An open-source C++ library developed and used at Facebook. The library is UNSTABLE on Windows
+Default-Features: zlib
+Status: install ok half-installed

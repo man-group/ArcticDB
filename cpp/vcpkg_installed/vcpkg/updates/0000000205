@@ -1,0 +1,6 @@
+Package: aws-sdk-cpp
+Feature: sts
+Architecture: x64-linux
+Multi-Arch: same
+Description: C++ SDK for the AWS sts service
+Status: install ok installed

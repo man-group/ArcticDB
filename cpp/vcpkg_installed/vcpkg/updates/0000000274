@@ -1,0 +1,9 @@
+Package: pcre
+Version: 8.45
+Port-Version: 5
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 42259b381a2e2942accea76c06efa616a644c05ec59f2c3beb48e8ada7357b83
+Description: Perl Compatible Regular Expressions
+Status: install ok half-installed

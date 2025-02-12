@@ -1,0 +1,6 @@
+Package: aws-sdk-cpp
+Feature: s3
+Architecture: x64-linux
+Multi-Arch: same
+Description: C++ SDK for the AWS s3 service
+Status: install ok installed

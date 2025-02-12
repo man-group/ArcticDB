@@ -1,0 +1,9 @@
+x64-linux/
+x64-linux/share/
+x64-linux/share/boost-vcpkg-helpers/
+x64-linux/share/boost-vcpkg-helpers/boost-modular-headers.cmake
+x64-linux/share/boost-vcpkg-helpers/boost_LICENSE_1_0.txt
+x64-linux/share/boost-vcpkg-helpers/copyright
+x64-linux/share/boost-vcpkg-helpers/usage
+x64-linux/share/boost-vcpkg-helpers/vcpkg.spdx.json
+x64-linux/share/boost-vcpkg-helpers/vcpkg_abi_info.txt

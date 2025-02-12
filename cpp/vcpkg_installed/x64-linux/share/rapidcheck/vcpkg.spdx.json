@@ -1,0 +1,110 @@
+{
+  "$schema": "https://raw.githubusercontent.com/spdx/spdx-spec/v2.2.1/schemas/spdx-schema.json",
+  "spdxVersion": "SPDX-2.2",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "documentNamespace": "https://spdx.org/spdxdocs/rapidcheck-x64-linux-2023-12-14-3c97d33c-75c9-4003-be7a-7a6b76c34ba7",
+  "name": "rapidcheck:x64-linux@2023-12-14 6e6d1c1901e11d2d3a7db39a96756f9247fbcf082f4a967339cc40cbb42e175e",
+  "creationInfo": {
+    "creators": [
+      "Tool: vcpkg-2024-12-09-1005b78fa1bf1dde1a20c2734cba4ea61ca94d9a"
+    ],
+    "created": "2025-01-13T11:19:03Z"
+  },
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "GENERATES",
+      "relatedSpdxElement": "SPDXRef-binary"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-0"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-1"
+    },
+    {
+      "spdxElementId": "SPDXRef-binary",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-0",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-1",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    }
+  ],
+  "packages": [
+    {
+      "name": "rapidcheck",
+      "SPDXID": "SPDXRef-port",
+      "versionInfo": "2023-12-14",
+      "downloadLocation": "git+https://github.com/Microsoft/vcpkg@ae0c6ab09dc7d61410a0e349cad8e93eb5df7cd8",
+      "homepage": "https://github.com/emil-e/rapidcheck",
+      "licenseConcluded": "BSD-2-Clause",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "description": "A property-based testing library for C++ (a la QuickCheck) with the goal of being simple to use with as little boilerplate as possible.",
+      "comment": "This is the port (recipe) consumed by vcpkg."
+    },
+    {
+      "name": "rapidcheck:x64-linux",
+      "SPDXID": "SPDXRef-binary",
+      "versionInfo": "6e6d1c1901e11d2d3a7db39a96756f9247fbcf082f4a967339cc40cbb42e175e",
+      "downloadLocation": "NONE",
+      "licenseConcluded": "BSD-2-Clause",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "comment": "This is a binary package built by vcpkg."
+    },
+    {
+      "SPDXID": "SPDXRef-resource-0",
+      "name": "emil-e/rapidcheck",
+      "downloadLocation": "git+https://github.com/emil-e/rapidcheck@ff6af6fc683159deb51c543b065eba14dfcf329b",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "79f1e869a3c55f62d3609cc4b3a56977f720c3eacf5e1792aa3a9bd5ab90aa077371bc0902d6c31503885f9ebcc633ed242ae6995866cb46fd12afdf425500e3"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "fileName": ".//opt/arcticdb/arcticdb_link/cpp/vcpkg/buildtrees/versioning_/versions/rapidcheck/ae0c6ab09dc7d61410a0e349cad8e93eb5df7cd8/portfile.cmake",
+      "SPDXID": "SPDXRef-file-0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "b67afdd923feef42ff53ec2079b4c3e9dfd5b73076c54575a753e20f9e627a5f"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//opt/arcticdb/arcticdb_link/cpp/vcpkg/buildtrees/versioning_/versions/rapidcheck/ae0c6ab09dc7d61410a0e349cad8e93eb5df7cd8/vcpkg.json",
+      "SPDXID": "SPDXRef-file-1",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "bbc72212df81408de0bbcd48dde7e85985197a959acb0d369982757951f43e57"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+Package: libbson
+Version: 1.28.0
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: ea49b70a26e4408627e1dc4f67564f27c5d786b62234dec9e8802380a1459cc4
+Description: libbson is a library providing useful routines related to building, parsing, and iterating BSON documents.
+Status: install ok installed

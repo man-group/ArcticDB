@@ -1,0 +1,8 @@
+Package: aws-c-auth
+Version: 0.7.31
+Depends: aws-c-cal, aws-c-http, aws-c-sdkutils, s2n, vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: e39e120495639b068ad09e59fab00beadd0304843706d000108122939de1e3db
+Description: C99 library implementation of AWS client-side authentication: standard credentials providers and signing.
+Status: install ok installed

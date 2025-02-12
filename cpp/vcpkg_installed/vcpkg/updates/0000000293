@@ -1,0 +1,8 @@
+Package: unordered-dense
+Version: 4.1.2
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 92de42f9290b412cb66ba456bf56e82f0f6087266a9a076c117eacecef35e413
+Description: A fast & densely stored hashmap and hashset based on robin-hood backward shift deletion
+Status: install ok installed
