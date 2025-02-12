@@ -24,10 +24,11 @@ from arcticdb.util.utils import DFGenerator, ListGenerators
 from arcticdb.version_store.library import Library
 
 #ASV captures console output thus we create console handler
+logLevel = logging.INFO
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logLevel)
 console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
+console_handler.setLevel(logLevel)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)

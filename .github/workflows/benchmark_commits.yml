@@ -6,7 +6,7 @@ on:
       commit:             {required: true, type: string, description: commit hash that will be benchmarked}
       run_on_pr_head:     {required: false, default: false, type: boolean, description: Specifies if the benchmark should run on PR head branch}
       dev_image_tag:      {required: false, default: 'latest', type: string, description: Tag of the ArcticDB development image}
-      lmdb_suite_to_run:  {required: true, type: boolean, default: true, description: Default LMDB benchmark (if false will run real storage)}
+      suite_to_run:       {required: true, type: string, default: 'LMDB', description: Default benchmark on 'LMDB' storage (or 'REAL' storage)}
 jobs:
   start_ec2_runner:
     uses: ./.github/workflows/ec2_runner_jobs.yml
@@ -77,7 +77,7 @@ jobs:
         shell: bash -el {0}
         run: | 
           git config --global --add safe.directory .
-          if [ "${{ github.event.inputs.lmdb_suite_to_run }}" == "true" ]; then
+          if [ "${{ github.event.inputs.suite_to_run }}" == "REAL" ]; then
             SUITE='^(?!real_).*'
           else
             SUITE='^(real_).*'

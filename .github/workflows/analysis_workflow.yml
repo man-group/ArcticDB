@@ -9,10 +9,14 @@ on:
         description: Tag of the ArcticDB development image to use for benchmark and code coverage flows
         type: string
         default: latest
-      lmdb_suite_to_run:
-        description: Run LMDB suite (true) and real storage (false)
-        type: boolean
-        default: true
+      suite_to_run:
+          description: Run LMDB suite or REAL storage
+          type: choice
+          options:
+            - 'LMDB'
+            - 'REAL'
+          default: 'LMDB'
+  
 
   schedule: # Schedule the job to run at 12 a.m. daily
     - cron: '0 0 * * *'
@@ -54,7 +58,7 @@ jobs:
       run_all_benchmarks: ${{ inputs.run_all_benchmarks || false }}
       run_on_pr_head: ${{ github.event_name == 'pull_request_target' }}
       dev_image_tag: ${{ inputs.dev_image_tag || 'latest' }}
-      lmdb_suite_to_run: ${{ inputs.lmdb_suite_to_run || true}}
+      suite_to_run: ${{ inputs.suite_to_run || 'LMDB'}}
 
   publish_benchmark_results_to_gh_pages:  
     name: Publish benchmark results to gh-pages
