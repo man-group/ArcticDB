@@ -766,7 +766,9 @@ class DataFrameNormalizer(_PandasNormalizer):
                 cols = Index(cols)
 
             mgr = BlockManagerUnconsolidated(blocks=blocks, axes=[cols, ind])
-            return pd.DataFrame(mgr, copy=False)
+            # TODO: Use better workaround the warning which causes polars errors
+            return pd.DataFrame._from_mgr(mgr, axes=mgr.axes)
+            # return pd.DataFrame(mgr, copy=False)
 
         return df_from_arrays(item.data, columns, index, n_indexes)
 
