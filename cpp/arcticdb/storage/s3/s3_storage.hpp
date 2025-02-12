@@ -101,7 +101,10 @@ class S3Storage : public Storage, AsyncStorage {
     std::string region_;
 };
 
-class GCPXMLStorage : protected S3Storage {
+class GCPXMLStorage : public S3Storage {
+public:
+    GCPXMLStorage(const LibraryPath &lib, OpenMode mode, const GCPXMLSettings &conf);
+
 protected:
     void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) override;
 };

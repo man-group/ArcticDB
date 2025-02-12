@@ -94,7 +94,7 @@ public:
         const std::vector<std::string>& s3_object_names,
         const std::string& bucket_name) = 0;
 
-    virtual S3Result<DeleteObjectOutput> delete_object(
+    virtual S3Result<std::monostate> delete_object(
         const std::string& s3_object_name,
         const std::string& bucket_name) = 0;
 

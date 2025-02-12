@@ -58,6 +58,10 @@ public:
         const std::vector<std::string>& s3_object_names,
         const std::string& bucket_name) override;
 
+    S3Result<std::monostate> delete_object(
+        const std::string& s3_object_names,
+        const std::string& bucket_name) override;
+
     S3Result<ListObjectsOutput> list_objects(
         const std::string& prefix,
         const std::string& bucket_name,

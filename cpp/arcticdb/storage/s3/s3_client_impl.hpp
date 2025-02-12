@@ -53,9 +53,8 @@ public:
         const std::vector<std::string>& s3_object_names,
         const std::string& bucket_name) override;
 
-    // TODO aseaton define DeleteObjectOutput
-    S3Result<DeleteObjectOutput> delete_object(
-        const std::string& s3_object_names,
+    S3Result<std::monostate> delete_object(
+        const std::string& s3_object_name,
         const std::string& bucket_name) override;
 
     S3Result<ListObjectsOutput> list_objects(

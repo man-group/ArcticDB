@@ -125,6 +125,17 @@ S3Result<DeleteObjectsOutput> S3ClientTestWrapper::delete_objects(
     return actual_client_->delete_objects(s3_object_names, bucket_name);
 }
 
+S3Result<std::monostate> S3ClientTestWrapper::delete_object(
+    const std::string& s3_object_name,
+    const std::string& bucket_name) {
+    auto maybe_error = has_failure_trigger(bucket_name);
+    if (maybe_error.has_value()) {
+        return {*maybe_error};
+    }
+
+    return actual_client_->delete_object(s3_object_name, bucket_name);
+}
+
 // Using a fixed page size since it's only being used for simple tests.
 // If we ever need to configure it we should move it to the s3 proto config instead.
 constexpr auto page_size = 10;

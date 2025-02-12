@@ -237,6 +237,21 @@ struct FailedDelete {
         error_message(error_message) {}
 };
 
+inline void raise_if_failed_deletes(const boost::container::small_vector<FailedDelete, 1>& failed_deletes) {
+    if (!failed_deletes.empty()) {
+        auto failed_deletes_message = std::ostringstream();
+        for (auto i = 0u; i < failed_deletes.size(); ++i) {
+            auto& failed = failed_deletes[i];
+            failed_deletes_message << fmt::format("'{}' failed with '{}'", to_serialized_key(failed.failed_key), failed.error_message);
+            if (i != failed_deletes.size()) {
+                failed_deletes_message << ", ";
+            }
+        }
+        auto error_message = fmt::format("Failed to delete some of the objects: {}.", failed_deletes_message.str());
+        raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(error_message);
+    }
+}
+
 template<class KeyBucketizer>
 void do_remove_impl(
     std::span<VariantKey> ks,
@@ -288,18 +303,7 @@ void do_remove_impl(
         });
 
     util::check(to_delete.empty(), "Have {} segment that have not been removed", to_delete.size());
-    if (!failed_deletes.empty()) {
-        auto failed_deletes_message = std::ostringstream();
-        for (auto i = 0u; i < failed_deletes.size(); ++i) {
-            auto& failed = failed_deletes[i];
-            failed_deletes_message << fmt::format("'{}' failed with '{}'", to_serialized_key(failed.failed_key), failed.error_message);
-            if (i != failed_deletes.size()) {
-                failed_deletes_message << ", ";
-            }
-        }
-        auto error_message = fmt::format("Failed to delete some of the objects: {}.", failed_deletes_message.str());
-        raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(error_message);
-    }
+    raise_if_failed_deletes(failed_deletes);
 }
 
 template<class KeyBucketizer>
@@ -310,7 +314,6 @@ void do_remove_no_batching_impl(
     S3ClientInterface& s3_client,
     KeyBucketizer&& bucketizer) {
     ARCTICDB_SUBSAMPLE(S3StorageDeleteNoBatching, 0)
-    auto fmt_db = [](auto&& k) { return variant_key_type(k); };
     std::vector<std::string> to_delete;
     boost::container::small_vector<FailedDelete, 1> failed_deletes;
 
@@ -323,21 +326,18 @@ void do_remove_no_batching_impl(
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted object with key '{}'",
                                    to_delete.size(),
                                    variant_key_view(k));
-            for (auto& bad_key : delete_object_result.get_output().failed_deletes) {
-                auto bad_key_name = bad_key.s3_object_name.substr(key_type_dir.size(),
-                                                                  std::string::npos);
-                failed_deletes.emplace_back(
-                    variant_key_from_bytes(
-                        reinterpret_cast<const uint8_t *>(bad_key_name.data()),
-                        bad_key_name.size(), key_type_dir),
-                    std::move(bad_key.error_message));
-            }
         } else {
-            // TODO aseaton we should try to do the others even if one fails, eg races with another deletion process
-            // And better consistency with the other method
             auto& error = delete_object_result.get_error();
-            raise_s3_exception(error, s3_object_name);
+            auto bad_key_name = s3_object_name.substr(key_type_dir.size(), std::string::npos);
+            auto error_message = error.GetMessage();
+            failed_deletes.emplace_back(
+                variant_key_from_bytes(
+                    reinterpret_cast<const uint8_t *>(bad_key_name.data()),
+                    bad_key_name.size(), variant_key_type(k)),
+                std::move(error_message));
         }
+
+        raise_if_failed_deletes(failed_deletes);
     }
 }
 

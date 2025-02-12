@@ -177,4 +177,10 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const S3Set
     ARCTICDB_DEBUG(log::storage(), "Opened S3 backed storage at {}", root_folder_);
 }
 
+GCPXMLStorage::GCPXMLStorage(const arcticdb::storage::LibraryPath& lib,
+                             arcticdb::storage::OpenMode mode,
+                             const arcticdb::storage::s3::GCPXMLSettings& conf) : S3Storage(lib, mode, conf.s3_settings()) {
+
+}
+
 } // namespace arcticdb::storage::s3

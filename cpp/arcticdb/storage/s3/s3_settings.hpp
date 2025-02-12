@@ -163,6 +163,10 @@ public:
         return *this;
     }
 
+    S3Settings s3_settings() const {
+        return s3_settings_;
+    }
+
 private:
     S3Settings s3_settings_;
 };

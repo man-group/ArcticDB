@@ -234,6 +234,24 @@ S3Result<DeleteObjectsOutput> S3ClientImpl::delete_objects(
     return {result};
 }
 
+S3Result<std::monostate> S3ClientImpl::delete_object(
+    const std::string& s3_object_name,
+    const std::string& bucket_name) {
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Removing s3 object with key {}", s3_object_name);
+    Aws::S3::Model::DeleteObjectRequest request;
+    request.WithBucket(bucket_name.c_str());
+    request.WithKey(s3_object_name);
+
+    auto outcome = s3_client.DeleteObject(request);
+    if (outcome.IsSuccess()) {
+        return {};
+    } else {
+        // TODO aseaton how does deleting a non-existent object behave - test with s5cmd?
+        // We do not want to give an error in that case
+        return {outcome.GetError()};
+    }
+}
+
 S3Result<ListObjectsOutput> S3ClientImpl::list_objects(
         const std::string& name_prefix,
         const std::string& bucket_name,
