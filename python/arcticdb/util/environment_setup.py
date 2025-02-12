@@ -470,7 +470,7 @@ class GeneralSetupLibraryWithSymbols(EnvConfigurationBase):
                 lib.write(symbol, df)
                 self.logger().info(f"Dataframe stored at {symbol} for {time.time() - st} sec")
         self.logger().info(f"TOTAL TIME (setup of one library with specified rows and column symbols): {time.time() - start} sec")
-        return GeneralSetupLibraryWithSymbols
+        return self
     
     def check_ok(self):
         """
