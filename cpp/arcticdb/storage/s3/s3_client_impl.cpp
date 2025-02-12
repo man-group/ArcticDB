@@ -246,8 +246,6 @@ S3Result<std::monostate> S3ClientImpl::delete_object(
     if (outcome.IsSuccess()) {
         return {};
     } else {
-        // TODO aseaton how does deleting a non-existent object behave - test with s5cmd?
-        // We do not want to give an error in that case
         return {outcome.GetError()};
     }
 }

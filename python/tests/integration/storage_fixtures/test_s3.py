@@ -68,5 +68,5 @@ def test_s3_has_batch_delete(s3_storage_factory: MotoS3StorageFixtureFactory):
     ]})
 
     # Then
-    # We're checking that our simulator doesn't handle batch deletes (like GCP does not)
+    # We're checking that our simulator does handle batch deletes (like AWS does)
     assert [k.key for k in boto_bucket.objects.all()] == []
