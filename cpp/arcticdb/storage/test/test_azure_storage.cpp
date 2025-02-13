@@ -84,3 +84,17 @@ TEST_F(AzureMockStorageFixture, test_matching_key_type_prefix_list) {
 
     ASSERT_EQ(list_in_store(store, entity::KeyType::LOG), log_symbols);
 }
+
+TEST_F(AzureMockStorageFixture, test_key_path) {
+    std::vector<VariantKey> res;
+
+    store.iterate_type(KeyType::TABLE_DATA, [&](VariantKey &&found_key) {
+        res.emplace_back(found_key);
+    }, "");
+
+    for(auto vk: res) {
+        auto key_path = store.key_path(vk);
+        ASSERT_TRUE(key_path.size() > 0);
+        ASSERT_TRUE(key_path.starts_with(store.library_path().to_delim_path('/')));
+    }
+}

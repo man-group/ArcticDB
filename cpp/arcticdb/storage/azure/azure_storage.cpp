@@ -391,6 +391,12 @@ bool AzureStorage::do_key_exists(const VariantKey& key) {
     return detail::do_key_exists_impl(key, root_folder_, *azure_client_);
 }
 
+std::string AzureStorage::do_key_path(const VariantKey& key) const {
+    auto b = FlatBucketizer{};
+    auto key_type_dir = key_type_folder(root_folder_, variant_key_type(key));
+    return object_path(b.bucketize(key_type_dir, key), key);
+}
+
 } // namespace azure
 
 } // namespace arcticdb::storage
