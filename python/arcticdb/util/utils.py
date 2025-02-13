@@ -309,7 +309,7 @@ class CachedDFGenerator:
 
 
 def stage_chunks(lib: Library, symbol:str, cachedDF:CachedDFGenerator, start_index:TimestampNumber, 
-                 array_chunk_number_rows:List[np.uint32], reverse_order:bool=False) -> pd.DataFrame:
+                 array_chunk_number_rows:List[np.uint32], reverse_order:bool=False, verbose: bool = False) -> pd.DataFrame:
     
     """
         Stages dataframes to specified symbol in specified library. Will use a cached dataframe to obtain as fast as possible
@@ -322,6 +322,7 @@ def stage_chunks(lib: Library, symbol:str, cachedDF:CachedDFGenerator, start_ind
     size = len(array_chunk_number_rows)
     total_rows_to_stage = sum(array_chunk_number_rows)
     final_index = total_rows_to_stage + total
+    print(f"Start staging {size} chunks")
     for chunk_size in array_chunk_number_rows:
         if (reverse_order):
             # In this case we start from the end of datetime range
@@ -332,13 +333,15 @@ def stage_chunks(lib: Library, symbol:str, cachedDF:CachedDFGenerator, start_ind
         else:
             df = cachedDF.generate_dataframe_timestamp_indexed(chunk_size, total, cachedDF.TIME_UNIT)
         lib.write(symbol, data=df, validate_index=True, staged=True)
-        print()
-        print(f"Staging iteration {iter} / {size}")
-        print(f"Staged DataFrame has {df.shape[0]} rows {len(df.columns.to_list())} cols")
-        print(f"Total number of rows staged {num_rows_staged}")
+        if verbose:
+            print()
+            print(f"Staging iteration {iter} / {size}")
+            print(f"Staged DataFrame has {df.shape[0]} rows {len(df.columns.to_list())} cols")
+            print(f"Total number of rows staged {num_rows_staged}")
         num_rows_staged = num_rows_staged + chunk_size
         iter= iter + 1
         total = total + chunk_size
+    print(f"End staging {size} chunks")
 
 
 class RandomStringPool:
