@@ -90,10 +90,10 @@ class ConfigCache {
                     storages.emplace_back(create_storage(path, mode, s3::S3Settings(settings).update(s3_storage)));
                 },
                 [&storage_conf, &storages, &path, mode] (const s3::GCPXMLSettings& settings) {
-                    util::check(storage_conf.config().Is<arcticdb::proto::s3_storage::Config>(), "Only support S3 native settings");
-                    arcticdb::proto::s3_storage::Config s3_storage;
-                    storage_conf.config().UnpackTo(&s3_storage);
-                    storages.emplace_back(create_storage(path, mode, s3::GCPXMLSettings(settings).update(s3_storage)));
+                    util::check(storage_conf.config().Is<arcticdb::proto::gcp_storage::Config>(), "Only support S3 native settings");
+                    arcticdb::proto::gcp_storage::Config gcp_storage;
+                    storage_conf.config().UnpackTo(&gcp_storage);
+                    storages.emplace_back(create_storage(path, mode, s3::GCPXMLSettings(settings).update(gcp_storage)));
                 },
                 [&storage_conf, &storages, &path, mode](const auto &) {
                     storages.emplace_back(create_storage(path, mode, storage_conf));

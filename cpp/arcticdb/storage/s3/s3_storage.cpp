@@ -179,7 +179,8 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const S3Set
 
 GCPXMLStorage::GCPXMLStorage(const arcticdb::storage::LibraryPath& lib,
                              arcticdb::storage::OpenMode mode,
-                             const arcticdb::storage::s3::GCPXMLSettings& conf) : S3Storage(lib, mode, conf.s3_settings()) {
+                             const arcticdb::storage::s3::GCPXMLSettings& conf) :
+                             S3Storage(lib, mode, S3Settings{AWSAuthMethod::DISABLED, "", false}.update(conf)) {
 
 }
 

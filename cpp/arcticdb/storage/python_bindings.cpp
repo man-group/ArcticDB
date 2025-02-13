@@ -131,7 +131,27 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         });
 
     py::class_<s3::GCPXMLSettings>(storage, "GCPXMLSettings")
-        .def(py::init<s3::S3Settings>());
+        .def(py::init<>())
+        .def(py::pickle(
+            [](const s3::GCPXMLSettings &settings) {
+                return py::make_tuple(settings.aws_auth(), settings.aws_profile());
+            },
+            [](py::tuple t) {
+                util::check(t.size() == 2, "Invalid GCPSMLSettings pickle objects");
+                s3::GCPXMLSettings settings(t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>(),
+                    t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_PROFILE)].cast<std::string>()
+                );
+                return settings;
+            }
+        ))
+        .def_property("bucket", &s3::GCPXMLSettings::bucket, &s3::GCPXMLSettings::set_bucket)
+        .def_property("endpoint", &s3::GCPXMLSettings::endpoint, &s3::GCPXMLSettings::set_endpoint)
+        .def_property("access", &s3::GCPXMLSettings::access, &s3::GCPXMLSettings::set_access)
+        .def_property("secret", &s3::GCPXMLSettings::secret, &s3::GCPXMLSettings::set_secret)
+        .def_property("prefix", &s3::GCPXMLSettings::prefix, &s3::GCPXMLSettings::set_prefix)
+        .def_property("aws_auth", &s3::GCPXMLSettings::aws_auth, &s3::GCPXMLSettings::set_aws_auth)
+        .def_property("aws_profile", &s3::GCPXMLSettings::aws_profile, &s3::GCPXMLSettings::set_aws_profile)
+        ;
 
     py::class_<NativeVariantStorage>(storage, "NativeVariantStorage")
         .def(py::init<>())
@@ -211,8 +231,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def_property("ssl", &S3Override::ssl, &S3Override::set_ssl);
 
     py::class_<GCPXMLOverride>(storage, "GCPXMLOverride")
-        .def(py::init<S3Override>())
-        .def_property("s3_override", &GCPXMLOverride::s3_override, &GCPXMLOverride::set_s3_override);
+        .def(py::init<>());
 
     py::class_<AzureOverride>(storage, "AzureOverride")
         .def(py::init<>())
