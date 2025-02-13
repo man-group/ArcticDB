@@ -4,7 +4,7 @@
     workflow_dispatch:
     schedule:
       - cron: "0 3 * * *"
-
+    pull_request:
   jobs:
     polaris-scan:
       name: Polaris Coverity Static Analysis
@@ -71,3 +71,11 @@
             polaris_reports_sarif_groupSCAIssues: true
             polaris_upload_sarif_report: true
             polaris_prComment_severities: "high,critical,medium,low"
+
+        - name: Upload .bridge artifact
+          uses: actions/upload-artifact@v4
+          with:
+            name: Bridge Logs
+            path: ${{github.workspace}}/.bridge
+            if-no-files-found: error
+            include-hidden-files: true
