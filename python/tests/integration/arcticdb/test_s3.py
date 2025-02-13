@@ -198,7 +198,7 @@ def test_prefix():
     return "test_bucket_prefix"
 
 
-@pytest.fixture(scope="session",
+@pytest.fixture(scope="function",
                 params=[MotoNfsBackedS3StorageFixtureFactory,
                         MotoS3StorageFixtureFactory])
 def storage_bucket(test_prefix, request):
