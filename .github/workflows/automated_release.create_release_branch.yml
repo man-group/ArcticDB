@@ -10,10 +10,6 @@ jobs:
   create-next-release-branch:
     name: Parse PRs labels and create next release branch
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      repository-projects: write
     outputs:
       new_branch: ${{ steps.get-next-version.outputs[steps.get_increment_type.outputs.increment_type] }}
     steps:
