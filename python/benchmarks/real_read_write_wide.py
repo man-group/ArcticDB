@@ -76,7 +76,7 @@ class AWSWideDataFrameTests:
         ## Writing into library that has suffix same as process
         ## will protect ASV processes from writing on one and same symbol
         ## this way each one is going to have its unique library
-        self.write_library = self.storage.get_modifyable_library(os.getpid())
+        self.write_library = self.storage.get_modifiable_library(os.getpid())
 
     def time_read_wide(self, storage_info, num_rows, num_cols):
         sym = self.storage.get_symbol_name(num_rows, num_cols)
