@@ -69,20 +69,11 @@ class AWSVersionSymbols:
     timeout = 1200
 
     SETUP_CLASS = (GeneralSetupSymbolsVersionsSnapshots(storage=Storage.AMAZON, prefix="LIST_VERSIONS")
-        .set_mean_number_versions_per_sym(35)
+        .set_mean_number_versions_per_sym(35) # change to lower for testing
         .set_max_number_versions(50) # number versions is approx = num_syms * mean_number_versions
         .set_with_metadata_for_each_version()
         .set_with_snapshot_for_each_version()
-        .set_params([25, 50]))
-
-    '''
-    # FOR TEST PURPOSES
-    .set_mean_number_versions_per_sym(3)
-    .set_max_number_versions(5) # number versions is approx = num_syms * mean_number_versions
-    .set_with_metadata_for_each_version()
-    .set_with_snapshot_for_each_version()
-    .set_params([5, 6]))
-    '''
+        .set_params([25, 50])) # for test purposes: .set_params([5, 6]))
 
     params = SETUP_CLASS.get_parameter_list()
     param_names = ["num_syms"]
