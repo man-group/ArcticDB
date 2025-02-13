@@ -1050,7 +1050,7 @@ class MsgPackNormalizer(Normalizer):
             # If stored in Python2 we want to use raw while unpacking.
             # https://github.com/msgpack/msgpack-python/blob/master/msgpack/_unpacker.pyx#L230
             data = unpackb(data, raw=True)
-                return Pickler.read(data)
+            return Pickler.read(data)
 
         if code == MsgPackSerialization.PY_PICKLE_3:
             data = unpackb(data, raw=False)
