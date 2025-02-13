@@ -16,7 +16,7 @@
         VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
       steps:
         - name: Get number of CPU cores
-          uses: SimenB/github-actions-cpu-cores@97ba232459a8e02ff6121db9362b09661c875ab8
+          uses: SimenB/github-actions-cpu-cores@v2
           id: cpu-cores
 
         - name: Checkout Source
@@ -53,7 +53,7 @@
           run: cp ${{github.workspace}}/coverity.yaml ${{github.workspace}}/cpp/out/linux-release-build
 
         - name: Polaris PR Scan
-          uses: synopsys-sig/synopsys-action@v1.13.0
+          uses: blackduck-inc/black-duck-security-scan@v2.0.0
           with:
             polaris_server_url: ${{ vars.POLARIS_SERVER_URL }}
             polaris_access_token: ${{ secrets.POLARIS_ACCESS_TOKEN }}
