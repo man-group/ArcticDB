@@ -1819,6 +1819,18 @@ VersionedItem compact_incomplete_impl(
     std::optional<SegmentInMemory> last_indexed;
     std::optional<SortedValue> previous_sorted_value;
 
+    // INTENTIONAL
+    std::vector<int> use_after_move = {1, 2, 3};
+    std::vector<int> moved = std::move(use_after_move);
+    for (auto i : use_after_move) {
+        std::cout<<i<<std::endl;
+    }
+
+    int* use_after_free = new int(0);
+    delete use_after_free;
+    std::cout<<*use_after_free<<std::endl;
+
+
     if(options.append_ && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, read_options);
         if (!write_options.dynamic_schema) {
