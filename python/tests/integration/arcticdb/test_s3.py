@@ -89,32 +89,6 @@ def test_nfs_backed_s3_storage(lib_name, nfs_backed_s3_storage):
     for o in objects:
         assert re.match(bucketized_pattern, o.key), f"Object {o.key} does not match pattern {bucketized_pattern}"
 
-@pytest.mark.parametrize("storage_factory",
-                         [MotoNfsBackedS3StorageFixtureFactory,
-                          MotoS3StorageFixtureFactory])
-def test_library_get_key_path(lib_name, storage_factory):
-
-    prefix = "test_bucket_prefix"
-    with storage_factory(
-            use_ssl=False,
-            ssl_test_support=False,
-            bucket_versioning=False,
-            default_prefix=prefix
-    ) as factory:
-        lib = factory.create_fixture().create_version_store_factory(lib_name)()
-        lib.write("s", data=create_df())
-        lib_tool = lib.library_tool()
-
-        keys_count = 0
-        for key_type in KeyType.__members__.values():
-            keys = lib_tool.find_keys(key_type)
-            keys_count += len(keys)
-            for key in keys:
-                path = lib_tool.get_key_path(key)
-                assert path != ""
-                assert path.startswith(prefix)
-
-        assert keys_count > 0
 
 def read_repeatedly(version_store, queue: Queue):
     while True:
@@ -217,3 +191,40 @@ def test_wrapped_s3_storage(lib_name, wrapped_s3_storage_bucket):
     # There should be no problems after the failure simulation has been turned off
     lib.read("s")
     lib.write("s", data=create_df())
+
+
+@pytest.fixture(scope="session")
+def test_prefix():
+    return "test_bucket_prefix"
+
+
+@pytest.fixture(scope="session",
+                params=[MotoNfsBackedS3StorageFixtureFactory,
+                        MotoS3StorageFixtureFactory])
+def storage_bucket(test_prefix, request):
+    with request.param(
+            use_ssl=False,
+            ssl_test_support=False,
+            bucket_versioning=False,
+            default_prefix=test_prefix
+    ) as factory:
+        with factory.create_fixture() as bucket:
+            yield bucket
+
+
+def test_library_get_key_path(lib_name, storage_bucket, test_prefix):
+    lib = storage_bucket.create_version_store_factory(lib_name)()
+    lib.write("s", data=create_df())
+    lib_tool = lib.library_tool()
+
+    keys_count = 0
+    for key_type in KeyType.__members__.values():
+        keys = lib_tool.find_keys(key_type)
+        keys_count += len(keys)
+        for key in keys:
+            path = lib_tool.get_key_path(key)
+            assert path != ""
+            assert path.startswith(test_prefix)
+
+    assert keys_count > 0
+
