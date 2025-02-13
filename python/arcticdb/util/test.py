@@ -8,11 +8,10 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import os
 from contextlib import contextmanager
-from typing import Mapping, Any, Optional, NamedTuple, List, AnyStr, Union
+from typing import Mapping, Any, Optional, NamedTuple, List, AnyStr, Union, Dict
 import numpy as np
 import pandas as pd
-from pandas.core.series import Series
-from pandas import DateOffset, Index, Timedelta
+from pandas import DateOffset, Timedelta
 from pandas._typing import Scalar
 import datetime as dt
 import string
@@ -34,10 +33,16 @@ from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
 from arcticc.pb2.storage_pb2 import LibraryDescriptor, VersionStoreConfig
 from arcticdb.version_store.helper import ArcticFileConfig
 from arcticdb.config import _DEFAULT_ENVS_PATH
-from arcticdb_ext import set_config_int, get_config_int, unset_config_int
+from arcticdb_ext import (
+    set_config_int,
+    get_config_int,
+    unset_config_int,
+    get_config_string,
+    set_config_string,
+    unset_config_string,
+)
 from packaging.version import Version
 
-from arcticdb import log
 
 def create_df(start=0, columns=1) -> pd.DataFrame:
     data = {}
@@ -47,101 +52,98 @@ def create_df(start=0, columns=1) -> pd.DataFrame:
 
     index = np.arange(start, start + 10, dtype=np.int64)
     return pd.DataFrame(data, index=index)
- 
 
-def create_df_index_rownum(num_columns: int, start_index: int, end_index : int) -> pd.DataFrame:
+
+def create_df_index_rownum(num_columns: int, start_index: int, end_index: int) -> pd.DataFrame:
     """
-        Creates a data frame with (integer index) specified number of columns with integer index starting
-        from specified and ending in specified position. The content of the dataframe is 
-        integer random numbers ['start_index', 'end_index')
+    Creates a data frame with (integer index) specified number of columns with integer index starting
+    from specified and ending in specified position. The content of the dataframe is
+    integer random numbers ['start_index', 'end_index')
 
-        Why this is useful? Consider this example:
+    Why this is useful? Consider this example:
 
-          df1 = create_df_index_rownum(num_columns=2, start_index=0, end_index=2)
-          df2 = create_df_index_rownum(num_columns=2, start_index=2, end_index=4)
-          df_full = pd.concat([df1, df2])
-        
-        This will produce 3 dataframes and the result of the update full operation would be 
-        visibly correct, even without other methods of comparison:
+      df1 = create_df_index_rownum(num_columns=2, start_index=0, end_index=2)
+      df2 = create_df_index_rownum(num_columns=2, start_index=2, end_index=4)
+      df_full = pd.concat([df1, df2])
 
-            df1:
-            COL_0  COL_1
-            0      1      1
-            1      1      0
-            --------------------
-            df2:
-            COL_0  COL_1
-            2      3      2
-            3      2      2
-            --------------------
-            df_full:
-            COL_0  COL_1
-            0      1      1
-            1      1      0
-            2      3      2
-            3      2      2
+    This will produce 3 dataframes and the result of the update full operation would be
+    visibly correct, even without other methods of comparison:
+
+        df1:
+        COL_0  COL_1
+        0      1      1
+        1      1      0
+        --------------------
+        df2:
+        COL_0  COL_1
+        2      3      2
+        3      2      2
+        --------------------
+        df_full:
+        COL_0  COL_1
+        0      1      1
+        1      1      0
+        2      3      2
+        3      2      2
 
     """
     rows = end_index - start_index
-    cols = [f'COL_{i}' for i in range(num_columns)]
+    cols = [f"COL_{i}" for i in range(num_columns)]
     rng = np.random.default_rng()
-    df = pd.DataFrame(rng.integers(start_index, 
-                                        end_index, 
-                                        size=(rows, num_columns),
-                                        dtype=np.int64), 
-                                        columns=cols)
+    df = pd.DataFrame(rng.integers(start_index, end_index, size=(rows, num_columns), dtype=np.int64), columns=cols)
     df.index = np.arange(start_index, end_index, 1)
     return df
 
-def create_datetime_index(df: pd.DataFrame, name_col:str, freq:Union[str , dt.timedelta , Timedelta , DateOffset], 
-        start_time: pd.Timestamp = pd.Timestamp(0)):
+
+def create_datetime_index(
+    df: pd.DataFrame,
+    name_col: str,
+    freq: Union[str, dt.timedelta, Timedelta, DateOffset],
+    start_time: pd.Timestamp = pd.Timestamp(0),
+):
     """
-        creates a datetime index to a dataframe. The index will start at specified timestamp
-        and will be generated using specified frequency having same number of periods as the rows
-        in the table
+    creates a datetime index to a dataframe. The index will start at specified timestamp
+    and will be generated using specified frequency having same number of periods as the rows
+    in the table
     """
     periods = len(df)
     index = pd.date_range(start=start_time, periods=periods, freq=freq, name=name_col)
     df.index = index
 
 
-def create_df_index_datetime(num_columns: int, start_hour: int, end_hour : int) -> pd.DataFrame:
+def create_df_index_datetime(num_columns: int, start_hour: int, end_hour: int) -> pd.DataFrame:
     """
-        Creates data frame with specified number of columns 
-        with datetime index sorted, starting from start_hour till
-        end hour (you can use thousands of hours if needed). 
-        The data is random integer data again with min 'start_hour' and
-        max 'end_hour'. The goal is to achieve same visually understandable 
-        correctness validation of append/update operations (see 'create_df_index_rownum()' doc)
+    Creates data frame with specified number of columns
+    with datetime index sorted, starting from start_hour till
+    end hour (you can use thousands of hours if needed).
+    The data is random integer data again with min 'start_hour' and
+    max 'end_hour'. The goal is to achieve same visually understandable
+    correctness validation of append/update operations (see 'create_df_index_rownum()' doc)
     """
-    assert start_hour >= 0 , "start index must be positive"
-    assert end_hour >= 0 , "end index must be positive"
+    assert start_hour >= 0, "start index must be positive"
+    assert end_hour >= 0, "end index must be positive"
 
     time_start = dt.datetime(2000, 1, 1, 0)
     rows = end_hour - start_hour
-    cols = [f'COL_{i}' for i in range(num_columns)]
+    cols = [f"COL_{i}" for i in range(num_columns)]
     rng = np.random.default_rng()
-    df = pd.DataFrame(rng.integers(start_hour, 
-                                        end_hour, 
-                                        size=(rows, num_columns),
-                                        dtype=np.int64), 
-                                        columns=cols)
+    df = pd.DataFrame(rng.integers(start_hour, end_hour, size=(rows, num_columns), dtype=np.int64), columns=cols)
     start_date = time_start + dt.timedelta(hours=start_hour)
-    dr = pd.date_range(start_date, periods=rows, freq='h').astype("datetime64[ns]")
+    dr = pd.date_range(start_date, periods=rows, freq="h").astype("datetime64[ns]")
     df.index = dr
     return df
 
 
 def dataframe_dump_to_log(label_for_df, df: pd.DataFrame):
     """
-        Useful for printing in log content and data types of columns of
-        a dataframe. This way in the full log of a test we will have actual dataframe, that later
-        we could use to reproduce something or further analyze failures caused by
-        a problems in test code or arctic
+    Useful for printing in log content and data types of columns of
+    a dataframe. This way in the full log of a test we will have actual dataframe, that later
+    we could use to reproduce something or further analyze failures caused by
+    a problems in test code or arctic
     """
     print("-" * 80)
-    if isinstance(df,pd.DataFrame):
-        print('dataframe : , ', label_for_df)
+    if isinstance(df, pd.DataFrame):
+        print("dataframe : , ", label_for_df)
         print(df.to_csv())
         print("column definitions : ")
         print(df.dtypes)
@@ -151,17 +153,19 @@ def dataframe_dump_to_log(label_for_df, df: pd.DataFrame):
     print("-" * 80)
 
 
-def dataframe_simulate_arcticdb_update_static(existing_df: pd.DataFrame, update_df:  pd.DataFrame) ->  pd.DataFrame:
+def dataframe_simulate_arcticdb_update_static(existing_df: pd.DataFrame, update_df: pd.DataFrame) -> pd.DataFrame:
     """
-        Does implement arctic logic of update() method functionality over pandas dataframes.
-        In other words the result, new data frame will have the content of 'existing_df' dataframe
-        updated with the content of "update_df" dataframe the same way that arctic is supposed to work.
-        Useful for prediction of result content of arctic database after update operation
-        NOTE: you have to pass indexed dataframe
+    Does implement arctic logic of update() method functionality over pandas dataframes.
+    In other words the result, new data frame will have the content of 'existing_df' dataframe
+    updated with the content of "update_df" dataframe the same way that arctic is supposed to work.
+    Useful for prediction of result content of arctic database after update operation
+    NOTE: you have to pass indexed dataframe
     """
 
-    assert existing_df.dtypes.to_list() == update_df.dtypes.to_list() , "Dataframe must have identical columns types in same order"
-    assert existing_df.columns.to_list() == update_df.columns.to_list() , "Columns names also need to be in same order"
+    assert existing_df.dtypes.to_list() == update_df.dtypes.to_list(), (
+        "Dataframe must have identical columns types in same order"
+    )
+    assert existing_df.columns.to_list() == update_df.columns.to_list(), "Columns names also need to be in same order"
 
     start2 = update_df.first_valid_index()
     end2 = update_df.last_valid_index()
@@ -176,26 +180,25 @@ def dataframe_simulate_arcticdb_update_static(existing_df: pd.DataFrame, update_
     return result_df
 
 
-def dataframe_single_column_string(length=1000, column_label='string_short', seed=0, string_len=1):
+def dataframe_single_column_string(length=1000, column_label="string_short", seed=0, string_len=1):
     """
-        creates a dataframe with one column, which label can be changed, containing string
-        with specified length. Useful for combining this dataframe with another dataframe
+    creates a dataframe with one column, which label can be changed, containing string
+    with specified length. Useful for combining this dataframe with another dataframe
     """
     np.random.seed(seed)
-    return pd.DataFrame({ column_label : [random_string(string_len) for _ in range(length)] })
+    return pd.DataFrame({column_label: [random_string(string_len) for _ in range(length)]})
 
 
-def dataframe_filter_with_datetime_index(df: pd.DataFrame, start_timestamp:Scalar, end_timestamp:Scalar, inclusive='both') -> pd.DataFrame:
+def dataframe_filter_with_datetime_index(
+    df: pd.DataFrame, start_timestamp: Scalar, end_timestamp: Scalar, inclusive="both"
+) -> pd.DataFrame:
     """
-        Filters dataframe which has datetime index, and selects dates from start till end,
-        where inclusive can be one of (both,left,right,neither)
-        start and end can be pandas.Timeframe, datetime or string datetime
+    Filters dataframe which has datetime index, and selects dates from start till end,
+    where inclusive can be one of (both,left,right,neither)
+    start and end can be pandas.Timeframe, datetime or string datetime
     """
 
-    return df[
-        df.index.to_series()
-        .between(start_timestamp, end_timestamp, inclusive='both')
-        ]
+    return df[df.index.to_series().between(start_timestamp, end_timestamp, inclusive="both")]
 
 
 def maybe_not_check_freq(f):
@@ -223,19 +226,21 @@ def maybe_not_check_freq(f):
 
     return wrapper
 
+
 assert_frame_equal = maybe_not_check_freq(pd.testing.assert_frame_equal)
 assert_series_equal = maybe_not_check_freq(pd.testing.assert_series_equal)
 
-def assert_frame_equal_rebuild_index_first(expected : pd.DataFrame, actual : pd.DataFrame) -> None:
-    """
-        Use for dataframes that have index row range and you
-        obtain data from arctic with QueryBuilder.
 
-        First will rebuild index for dataframes to assure we
-        have same index in both frames when row range index is used
+def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.DataFrame) -> None:
     """
-    expected.reset_index(inplace = True, drop = True)
-    actual.reset_index(inplace = True, drop = True)
+    Use for dataframes that have index row range and you
+    obtain data from arctic with QueryBuilder.
+
+    First will rebuild index for dataframes to assure we
+    have same index in both frames when row range index is used
+    """
+    expected.reset_index(inplace=True, drop=True)
+    actual.reset_index(inplace=True, drop=True)
     assert_frame_equal(left=expected, right=actual)
 
 
@@ -297,9 +302,9 @@ def get_lib_by_name(lib_name, env, conf_path=_DEFAULT_ENVS_PATH):
 
 
 @contextmanager
-def config_context(name, value):
+def config_context(name: str, value: int):
+    initial = get_config_int(name)
     try:
-        initial = get_config_int(name)
         set_config_int(name, value)
         yield
     finally:
@@ -307,6 +312,39 @@ def config_context(name, value):
             set_config_int(name, initial)
         else:
             unset_config_int(name)
+
+
+@contextmanager
+def config_context_multi(config: Dict[str, int]):
+    """Call set_config_int for each entry in the dict."""
+    initial = dict()
+    try:
+        for name, value in config.items():
+            initial[name] = get_config_int(name)
+            if value is None:
+                unset_config_int(name)
+            else:
+                set_config_int(name, value)
+        yield
+    finally:
+        for name, value in config.items():
+            if name in initial and initial[name]:
+                set_config_int(name, initial[name])
+            else:
+                unset_config_int(name)
+
+
+@contextmanager
+def config_context_string(name: str, value: str):
+    try:
+        initial = get_config_string(name)
+        set_config_string(name, value)
+        yield
+    finally:
+        if initial is not None:
+            set_config_string(name, initial)
+        else:
+            unset_config_string(name)
 
 
 CustomThing = NamedTuple(
@@ -356,10 +394,7 @@ def random_integers(size, dtype):
     platform_int_info = np.iinfo("int_")
     iinfo = np.iinfo(dtype)
     return np.random.randint(
-        max(iinfo.min, platform_int_info.min),
-        min(iinfo.max, platform_int_info.max),
-        size=size,
-        dtype=dtype
+        max(iinfo.min, platform_int_info.min), min(iinfo.max, platform_int_info.max), size=size, dtype=dtype
     )
 
 
@@ -694,7 +729,9 @@ def generic_filter_test_dynamic(lib, symbol, arctic_query, queried_slices):
     arrays_equal = True
     for queried_slice in queried_slices:
         for col_name in queried_slice.columns:
-            if not np.array_equal(queried_slice[col_name], received[col_name].iloc[start_row: start_row + len(queried_slice)]):
+            if not np.array_equal(
+                queried_slice[col_name], received[col_name].iloc[start_row : start_row + len(queried_slice)]
+            ):
                 arrays_equal = False
         start_row += len(queried_slice)
     if not arrays_equal:
@@ -765,6 +802,7 @@ def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
         )
         raise e
 
+
 def drop_inf_and_nan(df: pd.DataFrame) -> pd.DataFrame:
     return df[~df.isin([np.nan, np.inf, -np.inf]).any(axis=1)]
 
@@ -790,7 +828,9 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
     if PANDAS_VERSION >= Version("1.2"):
         check_equals_flags["check_flags"] = False
     for col in left_no_inf_and_nan.columns:
-        if pd.api.types.is_integer_dtype(left_no_inf_and_nan[col].dtype) and pd.api.types.is_integer_dtype(right_no_inf_and_nan[col].dtype):
+        if pd.api.types.is_integer_dtype(left_no_inf_and_nan[col].dtype) and pd.api.types.is_integer_dtype(
+            right_no_inf_and_nan[col].dtype
+        ):
             pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
         else:
             if PANDAS_VERSION >= Version("1.1"):
@@ -798,7 +838,18 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
             pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
 
 
-def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=None, label=None, offset=None, origin=None, drop_empty_buckets_for=None):
+def generic_resample_test(
+    lib,
+    sym,
+    rule,
+    aggregations,
+    date_range=None,
+    closed=None,
+    label=None,
+    offset=None,
+    origin=None,
+    drop_empty_buckets_for=None,
+):
     """
     Perform a resampling in ArcticDB and compare it against the same query in Pandas.
 
@@ -812,12 +863,14 @@ def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=
     expected = lib.read(sym, date_range=date_range).data
     # Pandas 1.X needs None as the first argument to agg with named aggregators
 
-    pandas_aggregations = {**aggregations, "_bucket_size_": (drop_empty_buckets_for, "count")} if drop_empty_buckets_for else aggregations
+    pandas_aggregations = (
+        {**aggregations, "_bucket_size_": (drop_empty_buckets_for, "count")} if drop_empty_buckets_for else aggregations
+    )
     resample_args = {}
     if origin:
-        resample_args['origin'] = origin
+        resample_args["origin"] = origin
     if offset:
-        resample_args['offset'] = offset
+        resample_args["offset"] = offset
 
     if PANDAS_VERSION >= Version("1.1.0"):
         expected = expected.resample(rule, closed=closed, label=label, **resample_args).agg(None, **pandas_aggregations)

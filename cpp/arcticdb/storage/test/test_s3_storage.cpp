@@ -217,10 +217,17 @@ using namespace arcticdb;
 using namespace storage;
 using namespace s3;
 
-proto::s3_storage::Config get_test_s3_config(){
+proto::s3_storage::Config get_test_s3_config() {
     auto config = proto::s3_storage::Config();
     config.set_use_mock_storage_for_testing(true);
     return config;
+}
+
+S3Settings get_test_s3_settings() {
+    auto config = proto::s3_storage::Config();
+    auto s3_settings = S3Settings(arcticdb::storage::s3::AWSAuthMethod::DISABLED, "", true);
+    s3_settings.update(config);
+    return s3_settings;
 }
 
 class S3StorageFixture : public testing::Test {
@@ -232,6 +239,24 @@ protected:
     S3Storage store;
 };
 
+class WrapperS3StorageFixture : public testing::Test {
+protected:
+    WrapperS3StorageFixture():
+        store(LibraryPath("lib", '.'), OpenMode::DELETE, get_test_s3_settings())
+    {
+
+    }
+
+    S3Storage store;
+
+    void SetUp() override {
+        ConfigsMap::instance()->set_int("S3ClientTestWrapper.EnableFailures", 1);
+    }
+
+    void TearDown() override {
+        ConfigsMap::instance()->unset_int("S3ClientTestWrapper.EnableFailures");
+    }
+};
 arcticdb::storage::nfs_backed::NfsBackedStorage::Config get_test_nfs_config() {
     arcticdb::storage::nfs_backed::NfsBackedStorage::Config cfg;
     cfg.set_use_mock_storage_for_testing(true);
@@ -262,6 +287,12 @@ public:
         }
     }
 };
+
+TEST_F(WrapperS3StorageFixture, test_write) {
+    ASSERT_THROW(
+        write_in_store(store, "symbol"),
+        UnexpectedS3ErrorException);
+}
 
 TEST_F(S3StorageFixture, test_key_exists) {
     write_in_store(store, "symbol");
