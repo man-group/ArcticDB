@@ -169,7 +169,7 @@ jobs:
       
       - name: Build project for ASV
         run: |
-          python -m pip install -ve .
+          python -m pip install -ve .[Testing]
           
       - name: Run ASV Tests Check script
         run: |

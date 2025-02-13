@@ -36,12 +36,44 @@ logger.addHandler(console_handler)
 ## Amazon s3 storage bucket dedicated for ASV performance tests
 AWS_S3_DEFAULT_BUCKET = 'arcticdb-asv-real-storage'
 
-## The tests will write in 3 different prefixes
-## First - Where all persistent libraries are going to be stored
-PERSISTENT_LIBS_PREFIX = None 
-## Second - When a test requires to write something to measure performance
-MODIFYABLE_LIBS_PREFIX = 'MODIFYABLE_LIBRARIES' 
-## Third - This will be used for prefix instead of persistent storage when doing framework tests
+## The tests will use shared/persistent storage with 3 different prefixes, creating 3 important STORAGE SPACES:
+## First - (PERSISTENT/PERMANENT STORAGE SPACE) This prefix is for production code - the libraries written there will 
+##    be SHARED across environments and product versions. Therefore there you place mainly READ ONLY libraries.
+##    Benefits:
+##       - created only once - no need to recreate them and waste time (this way we have time that is saved)
+##       - all read operations will be able ok to persist once their libraries
+##       - there is always a procedure that can recreate the store if needed
+##       - implicitly since those stores are generated ONCE we get coverage for risks of data not being 
+##         able to be read in future versions
+##       - as there should be always check data method we always assure things are there to recreate the storage
+##
+##    NOTE: What you should avoid is any modifications on his storage type
+##
+##    OPPORTUNITY: AGING TESTS - this is one class of tests that are now possible with shared store. The tests use
+##       the permanent store to append data each time they are executed, to add new symbols also. This gives 
+##       opportunity to have new writes, new appends in actual condition over time. Those types of tests will not 
+##       be flat line on graphs but will show how well or unwell we age on SPECIFIC environment - storage, because 
+##       the tests are always executed on same environment
+PERSISTENT_LIBS_PREFIX = "PERMANENT_LIBRARIES" 
+
+
+## Second - (MODIFIABLE STORAGE SPACE) When a test requires to write something to measure performance it needs
+##    a storage space different from the main permanent space. This is the modifyable space. There each test will
+##    need own library to run write and any other library modification tests.
+## 
+##    IMPORTANT: your test MIGHT run in several processes competing (or writing) for same library! As arcticdb has
+##          no locking or any other mechanism to prevent that you might end up with completely mixed results or
+##          or broken lib (which might go unnoticed also). Therefore you MUST:
+##            - create writable libraries for each process!
+##            - the test must reuse only the library of its own process!
+MODIFIABLE_LIBS_PREFIX = 'MODIFIABLE_LIBRARIES' 
+
+
+## Third - (MODIFIABLE STORAGE SPACE) How to test your test before going into production? How to experiment with 
+##    different values while debugging or researching safely without polluting or hurting the permanent libraries?
+##    this storage space resolves all such problems. A setup environment class in test mode will always write
+##    data to this storage space instead on permanent storage space. All that will be needed is to set 
+##    this class in test mode
 TEST_LIBS_PREFIX = 'TESTS_LIBRARIES' 
 
 class SetupConfig:
@@ -66,26 +98,22 @@ class SetupConfig:
             cls._aws_default_factory.default_prefix = None
             cls._aws_default_factory.default_bucket = AWS_S3_DEFAULT_BUCKET
             cls._aws_default_factory.clean_bucket_on_fixture_exit = False
-        return 
-    
+   
     def get_aws_enforced_prefix():
         """
         Defined for test executors machines or individually
         """
-        env_var_name="ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX" 
-        if env_var_name in os.environ:
-            return os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
-        else:
-            return None
+        return os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX", None)
 
     @classmethod
-    def get_aws_s3_arctic_uri(cls, prefix: str = MODIFYABLE_LIBS_PREFIX, confirm_persistent_storage_need: bool = False) -> str:
+    def get_aws_s3_arctic_uri(cls, prefix: str = MODIFIABLE_LIBS_PREFIX, confirm_persistent_storage_need: bool = False) -> str:
         """
         Persistent libraries should be created in `prefix` None!
         Temporary should be created in prexies other than None
         """
         assert cls._aws_default_factory, "Environment variables not initialized (ARCTICDB_REAL_S3_ACCESS_KEY,ARCTICDB_REAL_S3_SECRET_KEY)"
-        if (PERSISTENT_LIBS_PREFIX is None and prefix is None) or prefix == PERSISTENT_LIBS_PREFIX:
+        assert (prefix is not None) and (prefix.strip() != ""), "None or empty string prefix is not supported!"
+        if prefix == PERSISTENT_LIBS_PREFIX:
             assert confirm_persistent_storage_need, f"Use of persistent store not confirmed!"
         cls._aws_default_factory.default_prefix = prefix
         return cls._aws_default_factory.create_fixture().arctic_uri
@@ -150,8 +178,8 @@ class EnvConfigurationBase(ABC):
     def get_persistent_storage_prefix(self):
         return PERSISTENT_LIBS_PREFIX # This should be same across environments - git, ec2, local etc
 
-    def get_modifyable_storage_prefix(self):
-        return self._combine_prefix(MODIFYABLE_LIBS_PREFIX)
+    def get_modifiable_storage_prefix(self):
+        return self._combine_prefix(MODIFIABLE_LIBS_PREFIX)
 
     def get_test_storage_prefix(self):
         return self._combine_prefix(TEST_LIBS_PREFIX)
@@ -163,22 +191,24 @@ class EnvConfigurationBase(ABC):
         all that makes unique combination
         """
         result = None
-        if SetupConfig.get_aws_enforced_prefix() is not None:
+        if SetupConfig.get_aws_enforced_prefix():
             result = SetupConfig.get_aws_enforced_prefix()
-        if type_prefix is not None:
-            if result is not None:
+        if type_prefix:
+            if result is None:
                 result = type_prefix
             else:
                 result = f"{result}_{type_prefix}"
-        if self.__storage_test_env_prefix is not None:
+        if self.__storage_test_env_prefix:
                 result = f"{result}_{self.__storage_test_env_prefix}"
         return result
 
     def set_test_mode(self):
         """
-        Makes the setup run in test mode. Will write data in separate storage space. Instead on persistent 
-        storage space on test storage space.
-        Has effect on persistent storages
+        Makes the setup run in test mode. Will write data instead on the default persistent storage
+        in a separate test persistent storage space. This allows you to do test of production code 
+        and not pollute the default persistent store with unnecessary information and also protect data
+        there from deletion or corruption.
+        Always use test mode for new tests!
         """
         self.__set_test_mode=True
         return self
@@ -209,7 +239,7 @@ class EnvConfigurationBase(ABC):
     def _get_arctic_client(self, prefix, confirm_persistent_storage_need: bool = False):
         """
         Obtains specified client on specified persistent shared storage prefix,
-        allows creationg of test and modifyable etc clients
+        allows creationg of test and modifiable etc clients
         NOTE: prefix = `None` - the persistent storage where all persistent libraries will be created
         """
         if self.storage == Storage.AMAZON:
@@ -234,19 +264,19 @@ class EnvConfigurationBase(ABC):
             return self._get_arctic_client(self.get_test_storage_prefix())
         return self._get_arctic_client(self.get_persistent_storage_prefix(), confirm_persistent_storage_need=True)
     
-    def get_arctic_client_modifyable(self) -> Arctic:
+    def get_arctic_client_modifiable(self) -> Arctic:
         if self.__storage_test_env_prefix is None:
-            return self._get_arctic_client(self.get_modifyable_storage_prefix())
+            return self._get_arctic_client(self.get_modifiable_storage_prefix())
         else:
-            return self._get_arctic_client(self.get_modifyable_storage_prefix())
+            return self._get_arctic_client(self.get_modifiable_storage_prefix())
     
     def remove_all_modifiable_libraries(self, confirm=False):
         """
-        Removes all libraries created on modifyable storage space
+        Removes all libraries created on modifiable storage space
         """
         assert confirm, "Deletion of all libraries must be confirmed"
-        ac = self.get_arctic_client_modifyable()
-        libs = self.get_arctic_client_modifyable().list_libraries()
+        ac = self.get_arctic_client_modifiable()
+        libs = self.get_arctic_client_modifiable().list_libraries()
         for lib in libs:
             ac.delete_library(lib)
     
@@ -284,22 +314,22 @@ class EnvConfigurationBase(ABC):
         return self._get_lib(self.get_arctic_client_persistent(), 
                              self.get_library_names(library_suffix)[0])
     
-    def get_modifyable_library(self, library_suffix: Union[str, int] = None) -> Library:
+    def get_modifiable_library(self, library_suffix: Union[str, int] = None) -> Library:
         """
         Returns library to read write and delete after done.
         """
-        return self._get_lib(self.get_arctic_client_modifyable(), 
+        return self._get_lib(self.get_arctic_client_modifiable(), 
                              self.get_library_names(library_suffix)[1])
 
-    def delete_modifyable_library(self, library_suffix: Union[str, int] = None):
+    def delete_modifiable_library(self, library_suffix: Union[str, int] = None):
         """
-        Use this method to delete previously created library on modifyable storage 
+        Use this method to delete previously created library on modifiable storage 
         space
         NOTE: will assert if library is not delete
         """
-        ac = self.get_arctic_client_modifyable()
+        ac = self.get_arctic_client_modifiable()
         name = self.get_library_names(library_suffix)[1]
-        logger.info(f"Deleting modifyable library {name}")
+        logger.info(f"Deleting modifiable library {name}")
         ac.delete_library(self.get_library_names(library_suffix)[1])
         assert name not in ac.list_libraries(), f"Library successfully deleted {name}"
 
@@ -343,7 +373,7 @@ class EnvConfigurationBase(ABC):
     def setup_environment(self, library_sufixes_list: List[Union[str | int]] = None) -> 'EnvConfigurationBase':
         """
         Responsible for setting up environment.
-        Will first delete any pre-existing modifyable libraries
+        Will first delete any pre-existing modifiable libraries
         Then will check if persistent environment is there
         If absent will create it, deleting firs any libraries that might exist initially        
         if test is creating multiple libraries, provide 
@@ -355,7 +385,7 @@ class EnvConfigurationBase(ABC):
         if library_sufixes_list:
             indexes = library_sufixes_list
         for i in indexes:
-            self.delete_modifyable_library(i)
+            self.delete_modifiable_library(i)
         if not self.check_ok():
             ac = self.get_arctic_client_persistent()
             ## Delete all PERSISTENT libraries before setting up them
@@ -644,7 +674,7 @@ class GeneralSetupLibraryWithSymbolsTests:
     def get_general_modifyanle_client(cls):
         setup = (GeneralSetupLibraryWithSymbols(Storage.AMAZON, 
                                                 prefix=GeneralSetupLibraryWithSymbolsTests.PREFIX_FOR_TEST))
-        assert GeneralSetupLibraryWithSymbolsTests.PREFIX_FOR_TEST in setup.get_arctic_client_modifyable().get_uri()
+        assert GeneralSetupLibraryWithSymbolsTests.PREFIX_FOR_TEST in setup.get_arctic_client_modifiable().get_uri()
         return setup
 
 
@@ -683,20 +713,20 @@ class GeneralSetupLibraryWithSymbolsTests:
         cls.delete_test_store(setup)
 
     @classmethod
-    def test_modifyable_client_workflow(cls):
+    def test_modifiable_client_workflow(cls):
         """
         Test for general functions for obtaining and 
-        cleaning modifyable libraries
+        cleaning modifiable libraries
         """
         setup = cls.get_general_modifyanle_client()
         symbol = "test_symbol"
-        lib = setup.get_modifyable_library()
+        lib = setup.get_modifiable_library()
         lib.write(symbol, setup.generate_dataframe(10,10))
-        ac = setup.get_arctic_client_modifyable()
+        ac = setup.get_arctic_client_modifiable()
         assert ac.get_library(setup.get_library_names()[1])
-        setup.delete_modifyable_library()
+        setup.delete_modifiable_library()
         assert len(ac.list_libraries()) == 0
-        assert len(setup.get_arctic_client_modifyable().list_libraries()) == 0
+        assert len(setup.get_arctic_client_modifiable().list_libraries()) == 0
 
     @classmethod
     def test_setup_versions_and_snapshots(cls):
