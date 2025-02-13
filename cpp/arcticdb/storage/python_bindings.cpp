@@ -130,6 +130,29 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
             return settings.use_internal_client_wrapper_for_testing();
         });
 
+    py::class_<s3::GCPXMLSettings>(storage, "GCPXMLSettings")
+        .def(py::init<>())
+        .def(py::pickle(
+            [](const s3::GCPXMLSettings &settings) {
+                return py::make_tuple(settings.aws_auth(), settings.aws_profile());
+            },
+            [](py::tuple t) {
+                util::check(t.size() == 2, "Invalid GCPSMLSettings pickle objects");
+                s3::GCPXMLSettings settings(t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>(),
+                    t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_PROFILE)].cast<std::string>()
+                );
+                return settings;
+            }
+        ))
+        .def_property("bucket", &s3::GCPXMLSettings::bucket, &s3::GCPXMLSettings::set_bucket)
+        .def_property("endpoint", &s3::GCPXMLSettings::endpoint, &s3::GCPXMLSettings::set_endpoint)
+        .def_property("access", &s3::GCPXMLSettings::access, &s3::GCPXMLSettings::set_access)
+        .def_property("secret", &s3::GCPXMLSettings::secret, &s3::GCPXMLSettings::set_secret)
+        .def_property("prefix", &s3::GCPXMLSettings::prefix, &s3::GCPXMLSettings::set_prefix)
+        .def_property("aws_auth", &s3::GCPXMLSettings::aws_auth, &s3::GCPXMLSettings::set_aws_auth)
+        .def_property("aws_profile", &s3::GCPXMLSettings::aws_profile, &s3::GCPXMLSettings::set_aws_profile)
+        ;
+
     py::class_<NativeVariantStorage>(storage, "NativeVariantStorage")
         .def(py::init<>())
         .def(py::init<NativeVariantStorage::VariantStorageConfig>())
@@ -154,7 +177,9 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
                 return NativeVariantStorage(std::move(settings));
             }
         ))
-        .def("update", &NativeVariantStorage::update);
+        .def("update", &NativeVariantStorage::update)
+        .def("__repr__", &NativeVariantStorage::to_string);
+
     py::implicitly_convertible<NativeVariantStorage::VariantStorageConfig, NativeVariantStorage>();
 
     storage.def("create_mem_config_resolver", [](const py::object & env_config_map_py) -> std::shared_ptr<ConfigResolver> {
@@ -205,6 +230,9 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def_property("https", &S3Override::https, &S3Override::set_https)
         .def_property("ssl", &S3Override::ssl, &S3Override::set_ssl);
 
+    py::class_<GCPXMLOverride>(storage, "GCPXMLOverride")
+        .def(py::init<>());
+
     py::class_<AzureOverride>(storage, "AzureOverride")
         .def(py::init<>())
         .def_property("container_name", &AzureOverride::container_name, &AzureOverride::set_container_name)
@@ -221,7 +249,8 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def(py::init<>())
         .def("set_s3_override", &StorageOverride::set_s3_override)
         .def("set_azure_override", &StorageOverride::set_azure_override)
-        .def("set_lmdb_override", &StorageOverride::set_lmdb_override);
+        .def("set_lmdb_override", &StorageOverride::set_lmdb_override)
+        .def("set_gcpxml_override", &StorageOverride::set_gcpxml_override);
 
     py::class_<LibraryManager, std::shared_ptr<LibraryManager>>(storage, "LibraryManager")
         .def(py::init<std::shared_ptr<storage::Library>>())
@@ -262,7 +291,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
              py::arg("library_path"),
              py::arg("storage_override") = StorageOverride{},
              py::arg("ignore_cache") = false,
-             py::arg("native_storage_map") = std::nullopt
+             py::arg("native_storage_config") = std::nullopt
         )
         .def("cleanup_library_if_open", [](LibraryManager& library_manager, std::string_view library_path) {
             return library_manager.cleanup_library_if_open(LibraryPath{library_path, '.'});

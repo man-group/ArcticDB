@@ -85,6 +85,11 @@ void S3Storage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts) {
     detail::do_remove_impl(variant_keys, root_folder_, bucket_name_, client(), FlatBucketizer{});
 }
 
+void GCPXMLStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts) {
+    // GCP does not support batch deletes
+    detail::do_remove_no_batching_impl(variant_keys, root_folder_, bucket_name_, client(), FlatBucketizer{});
+}
+
 void S3Storage::do_remove(VariantKey&& variant_key, RemoveOpts) {
     detail::do_remove_impl(std::move(variant_key), root_folder_, bucket_name_, client(), FlatBucketizer{});
 }
@@ -170,6 +175,13 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const S3Set
     std::locale locale{ std::locale::classic(), new std::num_put<char>()};
     (void)std::locale::global(locale);
     ARCTICDB_DEBUG(log::storage(), "Opened S3 backed storage at {}", root_folder_);
+}
+
+GCPXMLStorage::GCPXMLStorage(const arcticdb::storage::LibraryPath& lib,
+                             arcticdb::storage::OpenMode mode,
+                             const arcticdb::storage::s3::GCPXMLSettings& conf) :
+                             S3Storage(lib, mode, S3Settings{AWSAuthMethod::DISABLED, "", false}.update(conf)) {
+
 }
 
 } // namespace arcticdb::storage::s3

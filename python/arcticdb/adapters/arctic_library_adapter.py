@@ -49,7 +49,7 @@ def set_library_options(lib_desc: "LibraryConfig", options: LibraryOptions,
 class ArcticLibraryAdapter(ABC):
     @abstractmethod
     def __init__(self, uri: str, encoding_version: EncodingVersion):
-        self._native_cfg = None
+        ...
 
     @abstractmethod
     def __repr__(self):
@@ -64,6 +64,9 @@ class ArcticLibraryAdapter(ABC):
     @abstractmethod
     def config_library(self) -> Library:
         raise NotImplementedError
+
+    def native_config(self):
+        return None
 
     def get_library_config(self, name: str, library_options: LibraryOptions,
                            enterprise_library_options: EnterpriseLibraryOptions):
