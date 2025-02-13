@@ -67,7 +67,7 @@ class AzureStorage final : public Storage {
         return false;
     }
 
-    std::string do_key_path(const VariantKey&) const final { return {}; };
+    std::string do_key_path(const VariantKey&) const final;
 
   private:
     std::unique_ptr<AzureClientWrapper> azure_client_;
