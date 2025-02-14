@@ -659,7 +659,9 @@ class GeneralSetupSymbolsVersionsSnapshots(EnvConfigurationBase):
         return True        
     
     def clear_symbols_cache(self):
-        pass #TBD
+        for num_symbols in self.get_parameter_list():
+            lib = self.get_library(num_symbols)
+            lib._nvs.version_store._clear_symbol_list_keys()
 
 
 class GeneralSetupLibraryWithSymbolsTests:
