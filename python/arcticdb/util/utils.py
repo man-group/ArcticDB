@@ -234,19 +234,22 @@ class CachedDFGenerator:
         assert self.__cached_xlarge_dataframe, "invoke generate_dataframe() first"
         return self.__cached_xlarge_dataframe
 
-    def generate_dataframe(self, num_rows:int) -> pd.DataFrame:
+    def generate_dataframe(self, num_rows:int, verbose=False) -> pd.DataFrame:
         """
             Generate a dataframe having specified number of rows sampling the 
             cached dataframe
         """
         assert num_rows < self.max_size
         if (self.__cached_xlarge_dataframe is None):
-            print(">>>> INITIAL PREPARATION OF LARGE DF")
+            if verbose:
+                print(">>>> INITIAL PREPARATION OF LARGE DF")
             self.__cached_xlarge_dataframe = self.generate_xLarge_samples_dataframe(
                 num_rows=self.max_size, size_string_flds_array=self.size_string_flds_array) 
-            print(">>>> COMPLETED")
+            if verbose:
+                print(">>>> COMPLETED")
         else:
-            print(">>>> Use cached DF for sampling")
+            if verbose:
+                print(">>>> Use cached DF for sampling")
         return self.__cached_xlarge_dataframe.sample(n=num_rows,axis=0)
 
     def generate_dataframe_timestamp_indexed(self, rows:int, start_time:Union[int, TimestampNumber]=0, freq:str=TIME_UNIT ) -> pd.DataFrame:
