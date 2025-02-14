@@ -1712,6 +1712,7 @@ class NativeVersionStore:
         read_options = _PythonVersionStoreReadOptions()
         read_options.set_force_strings_to_object(_assume_false("force_string_to_object", kwargs))
         read_options.set_optimise_string_memory(_assume_false("optimise_string_memory", kwargs))
+        read_options.set_output_format(kwargs.get("output_format") or OutputFormat.PANDAS)
         read_options.set_dynamic_schema(
             self.resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs)
         )

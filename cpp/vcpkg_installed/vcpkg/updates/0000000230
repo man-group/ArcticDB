@@ -1,0 +1,7 @@
+Package: bitmagic
+Version: 7.13.4
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 7fc891a27c010f868b01b245942b81bd1381bd4881801ab4384cb93dd57dd6bf
+Description: Algorithms and tools for Algebra of Sets for information retrieval, indexing of databases, scientific algorithms, ranking, clustering, unsupervised machine learning and signal processing.
+Status: install ok half-installed

@@ -1,0 +1,8 @@
+Package: mongo-c-driver
+Version: 1.28.0
+Depends: libbson, utf8proc, vcpkg-cmake, vcpkg-cmake-config, zlib
+Architecture: x64-linux
+Multi-Arch: same
+Abi: a5b51afd4fdae2a2ee51a755384fdd209d4d53a5025f5b46a0075942f35a9747
+Description: Client library written in C for MongoDB.
+Status: install ok installed

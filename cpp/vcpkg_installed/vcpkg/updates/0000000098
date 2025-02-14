@@ -1,0 +1,8 @@
+Package: boost-variant2
+Version: 1.84.0
+Depends: boost-assert, boost-config, boost-mp11, boost-vcpkg-helpers
+Architecture: x64-linux
+Multi-Arch: same
+Abi: be2abe0891aed6b79ab12c386c00b59668ce712991ba328ec3432ef27bcbed5e
+Description: Boost variant2 module
+Status: install ok half-installed

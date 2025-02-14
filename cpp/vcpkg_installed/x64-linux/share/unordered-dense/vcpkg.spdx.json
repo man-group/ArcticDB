@@ -1,0 +1,110 @@
+{
+  "$schema": "https://raw.githubusercontent.com/spdx/spdx-spec/v2.2.1/schemas/spdx-schema.json",
+  "spdxVersion": "SPDX-2.2",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "documentNamespace": "https://spdx.org/spdxdocs/unordered-dense-x64-linux-4.1.2-bb2dc6c4-a2b1-48f7-94c3-9b61c566eccd",
+  "name": "unordered-dense:x64-linux@4.1.2 92de42f9290b412cb66ba456bf56e82f0f6087266a9a076c117eacecef35e413",
+  "creationInfo": {
+    "creators": [
+      "Tool: vcpkg-2024-12-09-1005b78fa1bf1dde1a20c2734cba4ea61ca94d9a"
+    ],
+    "created": "2025-01-13T11:19:13Z"
+  },
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "GENERATES",
+      "relatedSpdxElement": "SPDXRef-binary"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-0"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-1"
+    },
+    {
+      "spdxElementId": "SPDXRef-binary",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-0",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-1",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    }
+  ],
+  "packages": [
+    {
+      "name": "unordered-dense",
+      "SPDXID": "SPDXRef-port",
+      "versionInfo": "4.1.2",
+      "downloadLocation": "git+https://github.com/Microsoft/vcpkg@c25f50471fcb367451a465853e405a50e372e279",
+      "homepage": "https://github.com/martinus/unordered_dense",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "description": "A fast & densely stored hashmap and hashset based on robin-hood backward shift deletion",
+      "comment": "This is the port (recipe) consumed by vcpkg."
+    },
+    {
+      "name": "unordered-dense:x64-linux",
+      "SPDXID": "SPDXRef-binary",
+      "versionInfo": "92de42f9290b412cb66ba456bf56e82f0f6087266a9a076c117eacecef35e413",
+      "downloadLocation": "NONE",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "comment": "This is a binary package built by vcpkg."
+    },
+    {
+      "SPDXID": "SPDXRef-resource-0",
+      "name": "martinus/unordered_dense",
+      "downloadLocation": "git+https://github.com/martinus/unordered_dense@v4.1.2",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "3df9824f793553df91c253431e08244584de3cdf96bda2561df1e1b10779214bb75f3801e3b03b98671a38091d3e672db85bcebd74ad5d781d4a9edcf6a83677"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "fileName": ".//opt/arcticdb/arcticdb_link/cpp/vcpkg/buildtrees/versioning_/versions/unordered-dense/c25f50471fcb367451a465853e405a50e372e279/portfile.cmake",
+      "SPDXID": "SPDXRef-file-0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "ed156a9b4a884c506c1e5118f3b2c973e27de2011f276535a4ba4cfd77804c2e"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//opt/arcticdb/arcticdb_link/cpp/vcpkg/buildtrees/versioning_/versions/unordered-dense/c25f50471fcb367451a465853e405a50e372e279/vcpkg.json",
+      "SPDXID": "SPDXRef-file-1",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "70173b27570db27e38b9d38687a75754935c405434a79363aac05dd44a13060d"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    }
+  ]
+}

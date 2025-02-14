@@ -26,6 +26,7 @@
 #include <arcticdb/util/error_code.hpp>
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/python/python_handlers.hpp>
+#include <arcticdb/arrow/arrow_handlers.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/util/storage_lock.hpp>
 #include <arcticdb/util/gil_safe_py_none.hpp>
@@ -298,7 +299,11 @@ void register_type_handlers() {
 
     register_python_array_types();
     register_python_string_types();
+
+    register_arrow_string_types();
+
     register_python_handler_data_factory();
+    register_arrow_handler_data_factory();
 }
 
 PYBIND11_MODULE(arcticdb_ext, m) {

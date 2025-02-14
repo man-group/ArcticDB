@@ -1,0 +1,8 @@
+Package: aws-crt-cpp
+Version: 0.28.3
+Depends: aws-c-auth, aws-c-cal, aws-c-common, aws-c-compression, aws-c-event-stream, aws-c-http, aws-c-io, aws-c-mqtt, aws-c-s3, aws-checksums, s2n, vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 4865726f2f49ad26507812b728103c0d82860ce6227423341c699c7c031dafcf
+Description: C++ wrapper around the aws-c-* libraries. Provides Cross-Platform Transport Protocols and SSL/TLS implementations for C++.
+Status: install ok installed

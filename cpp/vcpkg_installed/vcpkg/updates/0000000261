@@ -1,0 +1,7 @@
+Package: folly
+Feature: lz4
+Depends: lz4
+Architecture: x64-linux
+Multi-Arch: same
+Description: Support lz4 for compression
+Status: install ok half-installed

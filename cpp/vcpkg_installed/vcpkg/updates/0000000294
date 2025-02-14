@@ -1,0 +1,8 @@
+Package: xxhash
+Version: 0.8.2
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 62c41e7b5b5558d5e31cb3c95a662e8c233456a3cd4c76cfe8222b60b5c7f62b
+Description: Extremely fast hash algorithm
+Status: install ok half-installed

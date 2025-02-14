@@ -1,0 +1,8 @@
+Package: aws-c-compression
+Version: 0.2.17
+Depends: aws-c-common, vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 0e4cde3c40fecb26cfbb2a3921848865d266653e28ab32bb01ba04e21aa0d636
+Description: C99 implementation of huffman encoding/decoding
+Status: install ok installed

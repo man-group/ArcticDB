@@ -1,0 +1,8 @@
+Package: aws-c-s3
+Version: 0.6.6
+Depends: aws-c-auth, aws-c-http, aws-c-sdkutils, aws-checksums, s2n, vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 6779a09f363caaeff89a4f807057ab01e1c58da719bb8606e8b9a80409b04c92
+Description: C99 library implementation for communicating with the S3 service, designed for maximizing throughput on high bandwidth EC2 instances.
+Status: install ok half-installed

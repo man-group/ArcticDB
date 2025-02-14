@@ -1,0 +1,8 @@
+Package: boost-function-types
+Version: 1.84.0
+Depends: boost-config, boost-core, boost-detail, boost-mpl, boost-preprocessor, boost-type-traits, boost-vcpkg-helpers
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 0e47de3b72c45c603b19a47eb2c18a1c4f9bf402d130f41e021f55f4f77cb4e3
+Description: Boost function_types module
+Status: install ok half-installed
