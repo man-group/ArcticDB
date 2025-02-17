@@ -154,7 +154,7 @@ def s3_storage_factory() -> Generator[MotoS3StorageFixtureFactory, None, None]:
 @pytest.fixture(scope="session")
 def gcp_storage_factory() -> Generator[MotoGcpS3StorageFixtureFactory, None, None]:
     with MotoGcpS3StorageFixtureFactory(
-            use_ssl=SSL_TEST_SUPPORTED, ssl_test_support=SSL_TEST_SUPPORTED, bucket_versioning=False
+            use_ssl=False, ssl_test_support=False, bucket_versioning=False
     ) as f:
         yield f
 

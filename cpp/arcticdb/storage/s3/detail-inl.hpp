@@ -27,6 +27,7 @@
 #include <aws/s3/model/Object.h>
 #include <aws/s3/model/Delete.h>
 #include <aws/s3/model/ObjectIdentifier.h>
+#include <folly/gen/Combine.h>
 
 #include <boost/interprocess/streams/bufferstream.hpp>
 
@@ -320,8 +321,6 @@ void do_remove_impl(
     do_remove_impl(std::span(arr), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer));
 }
 
-using DeleteResult = std::variant<std::monostate, FailedDelete>;
-
 template<class KeyBucketizer>
 void do_remove_no_batching_impl(
     std::span<VariantKey> ks,
@@ -331,35 +330,32 @@ void do_remove_no_batching_impl(
     KeyBucketizer&& bucketizer) {
     ARCTICDB_SUBSAMPLE(S3StorageDeleteNoBatching, 0)
 
-    static const auto batch_size = ConfigsMap::instance()->get_int("Deletion.BatchSize", 100);
-
-    auto delete_results_fut = folly::window(std::move(ks), [&root_folder, bucketizer, &s3_client, &bucket_name](VariantKey&& k) {
+    std::vector<folly::Future<S3Result<std::monostate>>> delete_object_results;
+    for (const auto& k : ks) {
         auto key_type_dir = key_type_folder(root_folder, variant_key_type(k));
         auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
+        auto delete_fut = s3_client.delete_object(s3_object_name, bucket_name);
+        delete_object_results.push_back(std::move(delete_fut));
+    }
 
-        return s3_client.delete_object(s3_object_name, bucket_name)
-        .thenValue([s3_object_name, key_type_dir, k](S3Result<std::monostate>&& delete_object_result) -> DeleteResult {
-            if (delete_object_result.is_success()) {
-                ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted object with key '{}'", variant_key_view(k));
-                return std::monostate{};
-            } else if (const auto& error = delete_object_result.get_error(); !is_not_found_error(error.GetErrorType())) {
-                auto bad_key_name = s3_object_name.substr(key_type_dir.size(), std::string::npos);
-                auto error_message = error.GetMessage();
-                return FailedDelete{
-                    variant_key_from_bytes(reinterpret_cast<const uint8_t *>(bad_key_name.data()), bad_key_name.size(), variant_key_type(k)),
-                    std::move(error_message)};
-            } else {
-                ARCTICDB_RUNTIME_DEBUG(log::storage(), "Acceptable error when deleting object with key '{}'", variant_key_view(k));
-                return std::monostate{};
-            }
-        });
-    }, batch_size);
+    folly::QueuedImmediateExecutor inline_executor;
+    auto delete_results = folly::collect(std::move(delete_object_results)).via(&inline_executor).get();
 
     boost::container::small_vector<FailedDelete, 1> failed_deletes;
-    auto delete_results = folly::collect(delete_results_fut).via(&async::cpu_executor()).get();
-    for (auto&& res : std::move(delete_results)) {
-        if (std::holds_alternative<FailedDelete>(res)) {
-            failed_deletes.push_back(std::get<FailedDelete>(std::move(res)));
+    auto keys_and_delete_results = folly::gen::from(ks) | folly::gen::zip(std::move(delete_results)) | folly::gen::as<std::vector>();
+    for (auto&& [k, delete_object_result] : std::move(keys_and_delete_results)) {
+        if (delete_object_result.is_success()) {
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted object with key '{}'", variant_key_view(k));
+        } else if (const auto& error = delete_object_result.get_error(); !is_not_found_error(error.GetErrorType())) {
+            auto key_type_dir = key_type_folder(root_folder, variant_key_type(k));
+            auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
+            auto bad_key_name = s3_object_name.substr(key_type_dir.size(), std::string::npos);
+            auto error_message = error.GetMessage();
+            failed_deletes.push_back(FailedDelete{
+                variant_key_from_bytes(reinterpret_cast<const uint8_t *>(bad_key_name.data()), bad_key_name.size(), variant_key_type(k)),
+                std::move(error_message)});
+        } else {
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Acceptable error when deleting object with key '{}'", variant_key_view(k));
         }
     }
 

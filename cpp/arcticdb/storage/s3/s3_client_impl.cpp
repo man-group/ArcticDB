@@ -263,7 +263,7 @@ folly::Future<S3Result<std::monostate>> S3ClientImpl::delete_object(
     const std::string& bucket_name) {
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Removing s3 object with key {} (async)", s3_object_name);
     auto promise = std::make_shared<folly::Promise<S3Result<std::monostate>>>();
-    auto future = promise->getFuture().via(&async::io_executor());
+    auto future = promise->getFuture();
     Aws::S3::Model::DeleteObjectRequest request;
     request.WithBucket(bucket_name.c_str());
     request.WithKey(s3_object_name);
