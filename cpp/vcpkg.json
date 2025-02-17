@@ -109,7 +109,7 @@
   "overrides": [
     { "name": "openssl", "version-string": "3.3.0" },
     { "name": "arrow", "version": "18.0.0" },
-    { "name": "aws-sdk-cpp", "version": "1.11.474", "$note": "Update overlay json to upgrade" },
+    { "name": "aws-sdk-cpp", "version": "1.11.474", "$note": "Update overlay json to upgrade; Upgrade to >=1.11.486 blocked by default integrity change" },
     { "name": "azure-core-cpp", "version": "1.12.0" },
     { "name": "benchmark", "version": "1.9.0" },
     { "name": "bitmagic", "version": "7.12.3" },
