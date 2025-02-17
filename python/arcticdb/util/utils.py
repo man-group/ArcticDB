@@ -7,16 +7,17 @@ As of the Change Date specified in that file, in accordance with the Business So
 from datetime import timedelta
 import random
 import string
-from typing import Any, List, Tuple, Union, get_args
+import time
 import sys 
 if sys.version_info >= (3, 8): 
-    from typing import Literal 
+    from typing import Literal, Any, List, Tuple, Union, get_args
 else: 
     from typing_extensions import Literal
+    from typing import Any, List, Tuple, Union
 import numpy as np
 import pandas as pd
 
-from arcticdb.util.test import create_datetime_index, get_sample_dataframe, random_integers
+from arcticdb.util.test import create_datetime_index, get_sample_dataframe, random_integers, random_string
 from arcticdb.version_store.library import Library
 
 # Types supported by arctic
@@ -551,3 +552,4 @@ class DFGenerator:
         if indexed:
             gen.add_timestamp_index("index", "s", pd.Timestamp(0))
         return gen.generate_dataframe()
+
