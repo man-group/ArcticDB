@@ -139,6 +139,7 @@ struct DeserializedSegmentData {
 };
 
 DeserializedSegmentData decode_header_and_fields(const uint8_t*& src, bool copy_data) {
+    util::check(src != nullptr, "Got null data ptr from segment");
     auto* fixed_hdr = reinterpret_cast<const FixedHeader*>(src);
     ARCTICDB_DEBUG(log::codec(), "Reading header: {} + {} = {}", FIXED_HEADER_SIZE, fixed_hdr->header_bytes, FIXED_HEADER_SIZE + fixed_hdr->header_bytes);
 
@@ -279,13 +280,32 @@ std::pair<uint8_t*, size_t> Segment::serialize_v1_header_in_place(size_t total_h
 
 std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_v1_header_to_buffer(size_t hdr_size) {
     auto tmp = std::make_unique<Buffer>();
-    ARCTICDB_TRACE(log::storage(), "Header doesn't fit in internal buffer, needed {} bytes but had {}, writing to temp buffer at {:x}", hdr_size, buffer_.preamble_bytes(),uintptr_t(tmp->data()));
-    tmp->ensure(calculate_size());
+    auto bytes_to_copy = buffer().bytes();
+    auto offset = FIXED_HEADER_SIZE + hdr_size;
+
+    auto total_size = offset + bytes_to_copy;
+
+    // Verify we have enough space for everything
+    tmp->ensure(total_size);
+    util::check(tmp->available() >= total_size,
+        "Buffer available space {} is less than required size {}", 
+        tmp->available(), 
+        total_size);
+
+    auto *src = buffer().data();
+    util::check(src != nullptr, "Expected src to be non-null");
     auto* dst = tmp->preamble();
-    write_proto_header(dst);
-    std::memcpy(dst + FIXED_HEADER_SIZE + hdr_size,
-                buffer().data(),
-                buffer().bytes());
+    util::check(dst != nullptr, "Expected dst to be non-null");
+
+    auto written_hdr_size = write_proto_header(dst);
+    util::check(written_hdr_size == hdr_size, "Expected written header size {} to be equal to expected header size {}", written_hdr_size, hdr_size);
+
+    auto *final_dst = dst + offset;
+
+    std::memcpy(final_dst,
+                src,
+                bytes_to_copy);
+
     return std::make_tuple(tmp->preamble(), calculate_size(), std::move(tmp));
 }
 
