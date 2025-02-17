@@ -149,6 +149,9 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def_property("prefix", &s3::GCPXMLSettings::prefix, &s3::GCPXMLSettings::set_prefix)
         .def_property("aws_auth", &s3::GCPXMLSettings::aws_auth, &s3::GCPXMLSettings::set_aws_auth)
         .def_property("https", &s3::GCPXMLSettings::https, &s3::GCPXMLSettings::set_https)
+        .def_property("ssl", &s3::GCPXMLSettings::ssl, &s3::GCPXMLSettings::set_ssl)
+        .def_property("ca_cert_path", &s3::GCPXMLSettings::ca_cert_path, &s3::GCPXMLSettings::set_cert_path)
+        .def_property("ca_cert_dir", &s3::GCPXMLSettings::ca_cert_dir, &s3::GCPXMLSettings::set_cert_dir)
         ;
 
     py::class_<NativeVariantStorage>(storage, "NativeVariantStorage")

@@ -26,6 +26,9 @@ class GCPXMLSettings {
     std::string prefix_;
     AWSAuthMethod aws_auth_;
     bool https_;
+    std::string ca_cert_path_;
+    std::string ca_cert_dir_;
+    bool ssl_;
 
 public:
     GCPXMLSettings() { }
@@ -94,6 +97,31 @@ public:
     void set_https(bool https) {
         https_ = https;
     }
+
+    [[nodiscard]] bool ssl() const {
+        return ssl_;
+    }
+
+    void set_ssl(bool ssl) {
+        ssl_ = ssl;
+    }
+
+    [[nodiscard]] std::string ca_cert_path() const {
+        return ca_cert_path_;
+    }
+
+    void set_cert_path(const std::string_view ca_cert_path) {
+        ca_cert_path_ = ca_cert_path;
+    };
+
+    [[nodiscard]] std::string ca_cert_dir() const {
+        return ca_cert_dir_;
+    }
+
+    void set_cert_dir(const std::string_view ca_cert_dir) {
+        ca_cert_dir_ = ca_cert_dir;
+    };
+
 };
 
 class S3Settings {
@@ -161,8 +189,9 @@ public:
         prefix_ = gcp_xml_settings.prefix();
         aws_auth_ = gcp_xml_settings.aws_auth();
         https_ = gcp_xml_settings.https();
-        // TODO aseaton support for SSL and cert path locations
-        ssl_ = gcp_xml_settings.https();
+        ssl_ = gcp_xml_settings.ssl();
+        ca_cert_path_ = gcp_xml_settings.ca_cert_path();
+        ca_cert_dir_ = gcp_xml_settings.ca_cert_dir();
         // The below are all controlled by config options
         max_connections_ = 0;
         connect_timeout_ = 0;

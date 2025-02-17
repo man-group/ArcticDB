@@ -6,8 +6,10 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import re
+import ssl
 from dataclasses import dataclass, fields
 import time
+import platform
 from typing import Optional
 
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryDescriptor
@@ -36,6 +38,9 @@ class ParsedQuery:
     secret: Optional[str] = None
     aws_auth: Optional[AWSAuthMethod] = AWSAuthMethod.DISABLED
     path_prefix: Optional[str] = None
+    CA_cert_path: Optional[str] = ""  # CURLOPT_CAINFO in curl
+    CA_cert_dir: Optional[str] = ""  # CURLOPT_CAPATH in curl
+    ssl: Optional[bool] = False
 
 
 def _parse_query(query: str) -> ParsedQuery:
@@ -121,6 +126,21 @@ class GCPXMLLibraryAdapter(ArcticLibraryAdapter):
 
         self._path_prefix = query_params.path_prefix
         self._https = uri.startswith("gcpxmls")
+
+        if platform.system() != "Linux" and (query_params.CA_cert_path or query_params.CA_cert_dir):
+            raise ValueError(
+                "You have provided `ca_cert_path` or `ca_cert_dir` in the URI which is only supported on Linux. "
+                "Remove the setting in the connection URI and use your operating system defaults."
+            )
+        self._ca_cert_path = query_params.CA_cert_path
+        self._ca_cert_dir = query_params.CA_cert_dir
+        if not self._ca_cert_path and not self._ca_cert_dir and platform.system() == "Linux":
+            if ssl.get_default_verify_paths().cafile is not None:
+                self._ca_cert_path = ssl.get_default_verify_paths().cafile
+            if ssl.get_default_verify_paths().capath is not None:
+                self._ca_cert_dir = ssl.get_default_verify_paths().capath
+
+        self._ssl = query_params.ssl
         self._encoding_version = encoding_version
 
         super().__init__(uri, self._encoding_version)
@@ -132,8 +152,11 @@ class GCPXMLLibraryAdapter(ArcticLibraryAdapter):
         native_settings.access = self._access
         native_settings.secret = self._secret
         native_settings.aws_auth = self._aws_auth
-        native_settings.prefix = ""
+        native_settings.prefix = ""  # Set on the returned value later when needed
         native_settings.https = self._https
+        native_settings.ssl = self._ssl
+        native_settings.ca_cert_path = self._ca_cert_path
+        native_settings.ca_cert_dir = self._ca_cert_dir
         return NativeVariantStorage(native_settings)
 
     def __repr__(self):
