@@ -104,9 +104,9 @@ class S3Storage : public Storage, AsyncStorage {
 class GCPXMLStorage : public S3Storage {
 public:
     GCPXMLStorage(const LibraryPath &lib, OpenMode mode, const GCPXMLSettings &conf);
-
 protected:
     void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) override;
+    void do_remove(VariantKey&& variant_key, RemoveOpts opts) override;
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &bucket_name) {
