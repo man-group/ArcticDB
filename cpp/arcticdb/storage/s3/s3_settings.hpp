@@ -25,13 +25,12 @@ class GCPXMLSettings {
     std::string secret_;
     std::string prefix_;
     AWSAuthMethod aws_auth_;
-    std::string aws_profile_;
     bool https_;
 
 public:
     GCPXMLSettings() { }
 
-    explicit GCPXMLSettings(AWSAuthMethod aws_auth, const std::string& aws_profile) : aws_auth_(aws_auth), aws_profile_(aws_profile) {
+    explicit GCPXMLSettings(AWSAuthMethod aws_auth) : aws_auth_(aws_auth) {
 
     }
 
@@ -70,14 +69,6 @@ public:
 
     void set_aws_auth(const AWSAuthMethod aws_auth) {
         aws_auth_ = aws_auth;
-    }
-
-    [[nodiscard]] std::string aws_profile() const {
-        return aws_profile_;
-    }
-
-    void set_aws_profile(const std::string_view aws_profile) {
-        aws_profile_ = aws_profile;
     }
 
     [[nodiscard]] std::string bucket() const {
@@ -169,14 +160,15 @@ public:
         endpoint_ = gcp_xml_settings.endpoint();
         prefix_ = gcp_xml_settings.prefix();
         aws_auth_ = gcp_xml_settings.aws_auth();
-        aws_profile_ = gcp_xml_settings.aws_profile();
         https_ = gcp_xml_settings.https();
-        // Separate SSL support and setting certificate locations not implemented until required
+        // TODO aseaton support for SSL and cert path locations
         ssl_ = gcp_xml_settings.https();
         // The below are all controlled by config options
         max_connections_ = 0;
         connect_timeout_ = 0;
         request_timeout_ = 0;
+        // Only used for STS, not supported for GCPXML
+        aws_profile_ = "";
         // Testing options, not used for GCPXML
         use_raw_prefix_ = false;
         use_virtual_addressing_ = false;

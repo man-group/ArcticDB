@@ -35,7 +35,6 @@ class ParsedQuery:
     access: Optional[str] = None
     secret: Optional[str] = None
     aws_auth: Optional[AWSAuthMethod] = AWSAuthMethod.DISABLED
-    aws_profile: Optional[str] = None
     path_prefix: Optional[str] = None
 
 
@@ -103,19 +102,22 @@ class GCPXMLLibraryAdapter(ArcticLibraryAdapter):
             self._aws_auth = query_params.aws_auth
 
         if query_params.access:
+            if self._aws_auth == AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN:
+                raise UserInputException(f"Specified both access and awsauth=true in the GCPXML Arctic URI - only one can be set endpoint={self._endpoint} bucket={self._bucket}")
             self._access = query_params.access
         elif self._aws_auth == AWSAuthMethod.DISABLED:
             raise UserInputException(f"Access token or awsauth=true must be specified in GCPXML Arctic URI endpoint={self._endpoint} bucket={self._bucket}")
+        else:
+            self._access = USE_AWS_CRED_PROVIDERS_TOKEN
 
         if query_params.secret:
+            if self._aws_auth == AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN:
+                raise UserInputException(f"Specified both secret and awsauth=true in the GCPXML Arctic URI - only one can be set endpoint={self._endpoint} bucket={self._bucket}")
             self._secret = query_params.secret
         elif self._aws_auth == AWSAuthMethod.DISABLED:
             raise UserInputException(f"Secret or awsauth=true must be specified in GCPXML Arctic URI endpoint={self._endpoint} bucket={self._bucket}")
-
-        if query_params.aws_profile:
-            self._aws_profile = query_params.aws_profile
         else:
-            self._aws_profile = ""
+            self._secret = USE_AWS_CRED_PROVIDERS_TOKEN
 
         self._path_prefix = query_params.path_prefix
         self._https = uri.startswith("gcpxmls")
@@ -130,7 +132,6 @@ class GCPXMLLibraryAdapter(ArcticLibraryAdapter):
         native_settings.access = self._access
         native_settings.secret = self._secret
         native_settings.aws_auth = self._aws_auth
-        native_settings.aws_profile = self._aws_profile
         native_settings.prefix = ""
         native_settings.https = self._https
         return NativeVariantStorage(native_settings)
