@@ -495,6 +495,8 @@ set(arcticdb_srcs
         storage/mock/s3_mock_client.cpp
         storage/s3/s3_storage.cpp
         storage/s3/s3_storage_tool.cpp
+        storage/s3/s3_client_wrapper.cpp
+        storage/s3/s3_client_wrapper.hpp
         storage/storage_factory.cpp
         storage/storage_utils.cpp
         stream/aggregator.cpp
@@ -1066,7 +1068,8 @@ if(${TEST})
     set(benchmark_srcs
             stream/test/stream_test_common.cpp
             column_store/test/benchmark_memory_segment.cpp
-            processing/test/benchmark_clause.cpp)
+            processing/test/benchmark_clause.cpp
+            version/test/benchmark_write.cpp)
 
     add_executable(benchmarks ${benchmark_srcs})
 

@@ -8,65 +8,40 @@ on:
       environment: { type: environment, required: true }
       run_id: { type: number, required: true }
 run-name: Publish ${{github.ref}} to ${{inputs.environment}}
+env:
+  RUN_ID: ${{ inputs.run_id || github.run_id }}
 jobs:
   # GitHub Composite Actions cannot access secrets and Reusable Workflows cannot return artifacts, so duplicate for now:
   release_notes:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-22.04
     steps:
-      # Copy and pasted from the pypi job below, until GitHub adds selective artifact download
-      - uses: actions/setup-node@v3.8.2
-        if: inputs.run_id <= 0
-        with:
-          node-version: 16
-      - run: npm install @actions/artifact@1
-        if: inputs.run_id <= 0
       - id: download
         name: Fetch wheel artifacts
-        if: inputs.run_id <= 0
-        uses: actions/github-script@v6.4.1
+        uses: actions/download-artifact@v4
         with:
-          script: |
-            const dhc = require("./node_modules/@actions/artifact/lib/internal/download-http-client.js");
-            const ds = require("./node_modules/@actions/artifact/lib/internal/download-specification.js");
-            const utils = require("./node_modules/@actions/artifact/lib/internal/utils.js");
+            pattern: "build-metadata-build-python-wheels-*"
+            run-id: ${{ env.RUN_ID }}
+            github-token: ${{ github.token }}
 
-            const cwd = process.cwd();
-            const client = new dhc.DownloadHttpClient();
-            const artifactsResponse = await client.listArtifacts();
-            for (const artifact of artifactsResponse.value) {
-                if (artifact.name.startsWith("build-metadata-build-")) {
-                  console.log(`Downloading ${artifact.name} to ${cwd}`);
-                  const itemsResponse = await client.getContainerItems(artifact.name, artifact.fileContainerResourceUrl);
-                  // Must match "symbols" in build.yml
-                  const symbols_ext = artifact.name.search('windows') >= 0 ? ".pdb" : ".gz";
-                  core.debug(`symbols_ext=${symbols_ext}`);
-                  const items = itemsResponse.value.filter(i => i.path.endsWith(symbols_ext));
-                  if (items.length < 1) {
-                    core.error(`${artifact.name} does not have any ${symbols_ext} file.
-                  Please locate the debug symbols and archive them to aid future support.`);
-                  } else {
-                    const downloadSpecs = ds.getDownloadSpecification(artifact.name, items, cwd, true);
-                    core.debug(`downloadSpecs={JSON.stringify(downloadSpecs)}`);
-                    await utils.createDirectoriesForArtifact(downloadSpecs.directoryStructure);
-                    await client.downloadSingleArtifact(downloadSpecs.filesToDownload);
-                  }
-                } else {
-                  console.log(`Ignoring ${artifact.name}`);
-                }
-            }
-        continue-on-error: true
-
+      - id: download_wheels
+        name: Fetch wheels
+        uses: actions/download-artifact@v4
+        with:
+            pattern: "wheel-cp*"
+            path: /tmp
+            run-id: ${{ env.RUN_ID }}
+            github-token: ${{ github.token }}
+            merge-multiple: true
+      
       - id: compress
-        name: Compress debug symbols
-        if: steps.download.outcome == 'success'
+        name: Compress metadata
         run: |
           for file in build-metadata-build-python-wheels-*; do
             identifier=$(echo "$file" | sed -E 's/build-metadata-build-python-wheels-(.*)/\1/')
-            output_file="/tmp/symbols-${identifier}.tar.zst"
+            output_file="/tmp/build-metadata-${identifier}.tar.zst"
             tar --zstd -cf "$output_file" "$file"
           done
-        continue-on-error: true
 
       - name: Checkout # Needed by the release action
         uses: actions/checkout@v3.3.0
@@ -81,7 +56,7 @@ jobs:
           ignorePreReleases: "true"
 
       - name: Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: true
@@ -91,51 +66,23 @@ jobs:
 
             ---
             > The wheels are on [PyPI](https://pypi.org/project/arcticdb/). Below are for debugging:
-          files: ${{steps.compress.outcome == 'success' && '/tmp/symbols*.tar.zst' || ''}}
+          files: |
+            ${{steps.compress.outcome == 'success' && '/tmp/build-metadata-*.tar.zst' || ''}}
+            /tmp/*.whl
 
 
   pypi:
     environment: ${{inputs.environment}}
     runs-on: ubuntu-22.04
     steps:
-      - name: Gather wheels from run ${{inputs.run_id}}
-        if: inputs.run_id > 0
-        run: |
-          gh run download ${{inputs.run_id}} -p 'wheel-cp*'
-          mv wheel-cp*/* .
-        env:
-          GH_TOKEN: ${{github.token}}
-          GH_REPO: ${{github.repository}}
-
-      # Above `gh` command don't work on the current run, so will have to hack:
-      - uses: actions/setup-node@v3.8.2
-        if: inputs.run_id <= 0
+      - name: Gather wheels from run ${{ env.RUN_ID }}
+        id: gather-wheels
+        uses: actions/download-artifact@v4
         with:
-          node-version: 16
-      - run: npm install @actions/artifact@1
-        if: inputs.run_id <= 0
-      - name: Fetch wheel artifacts
-        if: inputs.run_id <= 0
-        uses: actions/github-script@v6.4.1
-        with:
-          script: |
-            const dhc = require("./node_modules/@actions/artifact/lib/internal/download-http-client.js");
-            const ds = require("./node_modules/@actions/artifact/lib/internal/download-specification.js");
-
-            const cwd = process.cwd();
-            const client = new dhc.DownloadHttpClient();
-            const artifactsResponse = await client.listArtifacts();
-            for (const artifact of artifactsResponse.value) {
-                if (artifact.name.startsWith("wheel-cp")) {
-                  console.log(`Downloading ${artifact.name} to ${cwd}`);
-                  const itemsResponse = await client.getContainerItems(artifact.name, artifact.fileContainerResourceUrl);
-                  const downloadSpecs = ds.getDownloadSpecification(artifact.name, itemsResponse.value, cwd, false);
-                  await client.downloadSingleArtifact(downloadSpecs.filesToDownload);
-                } else {
-                  console.log(`Ignoring ${artifact.name}`);
-                }
-            }
-
+            pattern: "wheel-cp*"
+            merge-multiple: true
+            run-id: ${{ env.RUN_ID }}
+            github-token: ${{github.token}}
       - name: Upload to Pypi
         run: |
             ls

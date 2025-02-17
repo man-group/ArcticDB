@@ -36,12 +36,6 @@ namespace arcticdb::storage {
 
         ARCTICDB_MOVE_COPY_DEFAULT(KeySegmentPair)
 
-        // TODO aseaton remove
-        Segment& segment() {
-            util::check(segment_, "Attempting to access segment_ but it has not been set");
-            return *segment_;
-        }
-
         [[nodiscard]] std::shared_ptr<Segment> segment_ptr() const {
           return segment_;
         }

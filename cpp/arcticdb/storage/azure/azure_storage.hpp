@@ -35,13 +35,13 @@ class AzureStorage final : public Storage {
     std::string name() const final;
 
   protected:
-    void do_write(KeySegmentPair&& key_seg) final;
+    void do_write(KeySegmentPair& key_seg) final;
 
-    void do_write_if_none(KeySegmentPair&& kv [[maybe_unused]]) final {
+    void do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) final {
         storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>("Atomic operations are only supported for s3 backend");
     };
 
-    void do_update(KeySegmentPair&& key_seg, UpdateOpts opts) final;
+    void do_update(KeySegmentPair& key_seg, UpdateOpts opts) final;
 
     void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
@@ -67,7 +67,7 @@ class AzureStorage final : public Storage {
         return false;
     }
 
-    std::string do_key_path(const VariantKey&) const final { return {}; };
+    std::string do_key_path(const VariantKey&) const final;
 
   private:
     std::unique_ptr<AzureClientWrapper> azure_client_;
