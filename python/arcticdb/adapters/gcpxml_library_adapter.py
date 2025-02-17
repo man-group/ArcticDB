@@ -132,6 +132,7 @@ class GCPXMLLibraryAdapter(ArcticLibraryAdapter):
         native_settings.aws_auth = self._aws_auth
         native_settings.aws_profile = self._aws_profile
         native_settings.prefix = ""
+        native_settings.https = self._https
         return NativeVariantStorage(native_settings)
 
     def __repr__(self):

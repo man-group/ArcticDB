@@ -130,7 +130,7 @@ public:
 class GCPXMLOverride {
 public:
     void modify_storage_config(arcticdb::proto::storage::VariantStorage&, bool) const {
-
+        // Nothing is serialized in the GCPXML proto that shouldn't be, so nothing to override.
     }
 };
 

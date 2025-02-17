@@ -342,7 +342,7 @@ void do_remove_no_batching_impl(
     auto delete_results = folly::collect(std::move(delete_object_results)).via(&inline_executor).get();
 
     boost::container::small_vector<FailedDelete, 1> failed_deletes;
-    auto keys_and_delete_results = folly::gen::from(ks) | folly::gen::zip(std::move(delete_results)) | folly::gen::as<std::vector>();
+    auto keys_and_delete_results = folly::gen::from(ks) | folly::gen::move | folly::gen::zip(std::move(delete_results)) | folly::gen::as<std::vector>();
     for (auto&& [k, delete_object_result] : std::move(keys_and_delete_results)) {
         if (delete_object_result.is_success()) {
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted object with key '{}'", variant_key_view(k));

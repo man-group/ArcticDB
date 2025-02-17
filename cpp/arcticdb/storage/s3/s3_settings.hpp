@@ -26,6 +26,7 @@ class GCPXMLSettings {
     std::string prefix_;
     AWSAuthMethod aws_auth_;
     std::string aws_profile_;
+    bool https_;
 
 public:
     GCPXMLSettings() { }
@@ -94,6 +95,14 @@ public:
     [[nodiscard]] std::string prefix() const {
         return prefix_;
     }
+
+    [[nodiscard]] bool https() const {
+        return https_;
+    }
+
+    void set_https(bool https) {
+        https_ = https;
+    }
 };
 
 class S3Settings {
@@ -161,15 +170,18 @@ public:
         prefix_ = gcp_xml_settings.prefix();
         aws_auth_ = gcp_xml_settings.aws_auth();
         aws_profile_ = gcp_xml_settings.aws_profile();
-        use_virtual_addressing_ = false;
-        use_mock_storage_for_testing_ = false;
-        use_internal_client_wrapper_for_testing_ = false;
-        use_raw_prefix_ = false;
+        https_ = gcp_xml_settings.https();
+        // Separate SSL support and setting certificate locations not implemented until required
+        ssl_ = gcp_xml_settings.https();
+        // The below are all controlled by config options
         max_connections_ = 0;
         connect_timeout_ = 0;
         request_timeout_ = 0;
-        ssl_ = false;
-        https_ = false; // TODO aseaton sort this out
+        // Testing options, not used for GCPXML
+        use_raw_prefix_ = false;
+        use_virtual_addressing_ = false;
+        use_mock_storage_for_testing_ = false;
+        use_internal_client_wrapper_for_testing_ = false;
         return *this;
     }
 
