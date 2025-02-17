@@ -384,11 +384,11 @@ def mem_storage() -> Generator[InMemoryStorageFixture, None, None]:
 @pytest.fixture(
     scope="function",
     params=[
-        #"s3",
-        #"nfs_backed_s3",
+        "s3",
+        "nfs_backed_s3",
         "gcp",
-        #"lmdb",
-        #"mem",
+        "lmdb",
+        "mem",
         pytest.param("azurite", marks=AZURE_TESTS_MARK),
         pytest.param("mongo", marks=MONGO_TESTS_MARK),
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
