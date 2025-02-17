@@ -1604,6 +1604,842 @@
         "version": "ed1d1ccb6458095a627788bfa2b53afa310ca8c8118a6405c91204724c865d6c",
         "warmup_time": -1
     },
+    "real_list_operations.AWSListSymbols.peakmem_list_symbols": {
+        "code": "class AWSListSymbols:\n    def peakmem_list_symbols(self, storage_info, num_syms):\n        self.lib.list_symbols()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws_setup = AWSListSymbols.SETUP_CLASS\n        if aws_setup.check_ok():\n            aws_setup.clear_symbols_cache()\n        else:\n            aws_setup.setup_all()\n        info = aws_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_list_operations.AWSListSymbols.peakmem_list_symbols",
+        "param_names": [
+            "num_syms"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "real_list_operations:31",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "a90567eacca263ebb46de7fdf55118d53eb6dc876e9255905d3a0b635b30fce9"
+    },
+    "real_list_operations.AWSListSymbols.time_has_symbol_nonexisting": {
+        "code": "class AWSListSymbols:\n    def time_has_symbol_nonexisting(self, storage_info, num_syms):\n        self.lib.has_symbol(\"250_sym\")\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws_setup = AWSListSymbols.SETUP_CLASS\n        if aws_setup.check_ok():\n            aws_setup.clear_symbols_cache()\n        else:\n            aws_setup.setup_all()\n        info = aws_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_list_operations.AWSListSymbols.time_has_symbol_nonexisting",
+        "number": 3,
+        "param_names": [
+            "num_syms"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_list_operations:31",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "4b41ddcf6145b06ad7f80701da1523cf2f2947883fc4b07d92cef1c91ae93894",
+        "warmup_time": 0
+    },
+    "real_list_operations.AWSListSymbols.time_list_symbols": {
+        "code": "class AWSListSymbols:\n    def time_list_symbols(self, storage_info, num_syms):\n        self.lib.list_symbols()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws_setup = AWSListSymbols.SETUP_CLASS\n        if aws_setup.check_ok():\n            aws_setup.clear_symbols_cache()\n        else:\n            aws_setup.setup_all()\n        info = aws_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_list_operations.AWSListSymbols.time_list_symbols",
+        "number": 3,
+        "param_names": [
+            "num_syms"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_list_operations:31",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "da598987df4d306401cb705b74e7ee9d9cf727ad60975249ac2b0f9b60b85200",
+        "warmup_time": 0
+    },
+    "real_list_operations.AWSListSymbols.time_list_symbols_first_snapshot": {
+        "code": "class AWSListSymbols:\n    def time_list_symbols_first_snapshot(self, storage_info, num_syms):\n        self.lib.list_symbols(self.aws.first_snapshot)\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws_setup = AWSListSymbols.SETUP_CLASS\n        if aws_setup.check_ok():\n            aws_setup.clear_symbols_cache()\n        else:\n            aws_setup.setup_all()\n        info = aws_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_list_operations.AWSListSymbols.time_list_symbols_first_snapshot",
+        "number": 3,
+        "param_names": [
+            "num_syms"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_list_operations:31",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "e1a8191d64d59b0eb5d62ed65b922e13c3d0c20fd36bd050b8e55e6651b54d02",
+        "warmup_time": 0
+    },
+    "real_list_operations.AWSListSymbols.time_list_symbols_last_snapshot": {
+        "code": "class AWSListSymbols:\n    def time_list_symbols_last_snapshot(self, storage_info, num_syms):\n        self.lib.list_symbols(self.aws.last_snapshot)\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws_setup = AWSListSymbols.SETUP_CLASS\n        if aws_setup.check_ok():\n            aws_setup.clear_symbols_cache()\n        else:\n            aws_setup.setup_all()\n        info = aws_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_list_operations.AWSListSymbols.time_list_symbols_last_snapshot",
+        "number": 3,
+        "param_names": [
+            "num_syms"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_list_operations:31",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "de7a1a4e6d575955a3edf0b414363fe0a72fa8710c9be747278abfa7b7f9abab",
+        "warmup_time": 0
+    },
+    "real_list_operations.AWSVersionSymbols.peakmem_list_versions": {
+        "code": "class AWSVersionSymbols:\n    def peakmem_list_versions(self, storage_info, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment()\n        info = aws.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_list_operations.AWSVersionSymbols.peakmem_list_versions",
+        "param_names": [
+            "num_syms"
+        ],
+        "params": [
+            [
+                "25",
+                "50"
+            ]
+        ],
+        "setup_cache_key": "real_list_operations:81",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "e7c9ebfe5bcb25a0b5ba9d46c334cb6aa4f24fcde1b3edb9a8702b05a6e9dbab"
+    },
+    "real_list_operations.AWSVersionSymbols.time_list_versions": {
+        "code": "class AWSVersionSymbols:\n    def time_list_versions(self, storage_info, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment()\n        info = aws.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_list_operations.AWSVersionSymbols.time_list_versions",
+        "number": 3,
+        "param_names": [
+            "num_syms"
+        ],
+        "params": [
+            [
+                "25",
+                "50"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_list_operations:81",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "75b00fdd3f8f7697a2eb5d3bc9eb7952fc16fc1fca1bcb956c4e010b4ce495e8",
+        "warmup_time": 0
+    },
+    "real_list_operations.AWSVersionSymbols.time_list_versions_latest_only": {
+        "code": "class AWSVersionSymbols:\n    def time_list_versions_latest_only(self, storage_info, num_syms):\n        self.lib.list_versions(latest_only=True)\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment()\n        info = aws.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_list_operations.AWSVersionSymbols.time_list_versions_latest_only",
+        "number": 3,
+        "param_names": [
+            "num_syms"
+        ],
+        "params": [
+            [
+                "25",
+                "50"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_list_operations:81",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "77bb76dacb5466520ad09dc5359902e13a6425155bd1fd0dd1eb250f394d0ddb",
+        "warmup_time": 0
+    },
+    "real_list_operations.AWSVersionSymbols.time_list_versions_skip_snapshots": {
+        "code": "class AWSVersionSymbols:\n    def time_list_versions_skip_snapshots(self, storage_info, num_syms):\n        self.lib.list_versions(skip_snapshots=self.aws.last_snapshot)\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment()\n        info = aws.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_list_operations.AWSVersionSymbols.time_list_versions_skip_snapshots",
+        "number": 3,
+        "param_names": [
+            "num_syms"
+        ],
+        "params": [
+            [
+                "25",
+                "50"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_list_operations:81",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "3f8aa1851aab45ed29160759afa95b81d140340729dc2cbaf3b04dda5800b833",
+        "warmup_time": 0
+    },
+    "real_list_operations.AWSVersionSymbols.time_list_versions_snapshot": {
+        "code": "class AWSVersionSymbols:\n    def time_list_versions_snapshot(self, storage_info, num_syms):\n        self.lib.list_versions(snapshot=self.aws.last_snapshot)\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment()\n        info = aws.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_list_operations.AWSVersionSymbols.time_list_versions_snapshot",
+        "number": 3,
+        "param_names": [
+            "num_syms"
+        ],
+        "params": [
+            [
+                "25",
+                "50"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_list_operations:81",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "2fc5d8c935ffb8a674f88c6645ca56370dfb61851afcdf0f80e60086979aba43",
+        "warmup_time": 0
+    },
+    "real_read_write.AWSReadWrite.peakmem_read": {
+        "code": "class LMDBReadWrite:\n    def peakmem_read(self, storage_info, num_rows):\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "name": "real_read_write.AWSReadWrite.peakmem_read",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:204",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "e4db4eb9016252cc2bad76ba08ee7ecf9e3ebc6a778540f68267f3f0799aec66"
+    },
+    "real_read_write.AWSReadWrite.peakmem_read_with_column_float": {
+        "code": "class LMDBReadWrite:\n    def peakmem_read_with_column_float(self, storage_info, num_rows):\n        COLS = [\"float2\"]\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "name": "real_read_write.AWSReadWrite.peakmem_read_with_column_float",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:204",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "3f48fb1fa12934bc8f29c840dfa8bde8340c6b78a6d7f4790a56d40052a73e50"
+    },
+    "real_read_write.AWSReadWrite.peakmem_read_with_columns_all_types": {
+        "code": "class LMDBReadWrite:\n    def peakmem_read_with_columns_all_types(self, storage_info, num_rows):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "name": "real_read_write.AWSReadWrite.peakmem_read_with_columns_all_types",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:204",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "22f393a2fd235c3782d3e90eba20bcec002731fbee7e200a310a10dd8837de78"
+    },
+    "real_read_write.AWSReadWrite.peakmem_read_with_date_ranges_last20_percent_rows": {
+        "code": "class LMDBReadWrite:\n    def peakmem_read_with_date_ranges_last20_percent_rows(self, storage_info, num_rows):\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym, date_range=self.last_20).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "name": "real_read_write.AWSReadWrite.peakmem_read_with_date_ranges_last20_percent_rows",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:204",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "0aa87cfa8e3c6995280d940769b6af445d5cc399c9b407d5359abf4bf7ffbfd9"
+    },
+    "real_read_write.AWSReadWrite.peakmem_write": {
+        "code": "class LMDBReadWrite:\n    def peakmem_write(self, storage_info, num_rows):\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.write_library.write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "name": "real_read_write.AWSReadWrite.peakmem_write",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:204",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "832682a84bb4809a90ef66e36aa8c8b3afcbc4eeb65731e8f95e484defcbc098"
+    },
+    "real_read_write.AWSReadWrite.peakmem_write_staged": {
+        "code": "class LMDBReadWrite:\n    def peakmem_write_staged(self, storage_info, num_rows):\n        lib = self.write_library\n        lib.write(f\"sym\", self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(f\"sym\", False, False)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "name": "real_read_write.AWSReadWrite.peakmem_write_staged",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:204",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "51e7ae300716354dbd82cf1daad962041fe2e263c9834fff94e25be1204b2e8f"
+    },
+    "real_read_write.AWSReadWrite.time_read": {
+        "code": "class LMDBReadWrite:\n    def time_read(self, storage_info, num_rows):\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "min_run_count": 1,
+        "name": "real_read_write.AWSReadWrite.time_read",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:204",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "3aa4fbc05600d7c25e5d0707b9ffdd13dcb3f97b71a560a859635848204dd116",
+        "warmup_time": 0
+    },
+    "real_read_write.AWSReadWrite.time_read_with_column_float": {
+        "code": "class LMDBReadWrite:\n    def time_read_with_column_float(self, storage_info, num_rows):\n        COLS = [\"float2\"]\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "min_run_count": 1,
+        "name": "real_read_write.AWSReadWrite.time_read_with_column_float",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:204",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "b30d52fba59959a63ce616f01bed6dd7f1667a8f1552de38f991f4c5362a012a",
+        "warmup_time": 0
+    },
+    "real_read_write.AWSReadWrite.time_read_with_columns_all_types": {
+        "code": "class LMDBReadWrite:\n    def time_read_with_columns_all_types(self, storage_info, num_rows):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "min_run_count": 1,
+        "name": "real_read_write.AWSReadWrite.time_read_with_columns_all_types",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:204",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "a8062e1b6951296e53217ad888369b5ac1db202bd6a057005a17cb7925ef8ee8",
+        "warmup_time": 0
+    },
+    "real_read_write.AWSReadWrite.time_read_with_date_ranges_last20_percent_rows": {
+        "code": "class LMDBReadWrite:\n    def time_read_with_date_ranges_last20_percent_rows(self, storage_info, num_rows):\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym, date_range=self.last_20).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "min_run_count": 1,
+        "name": "real_read_write.AWSReadWrite.time_read_with_date_ranges_last20_percent_rows",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:204",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "4b05cadb89b90c76b6714f9ac5dca703d6f5ce40312d5471ce997979c74077f7",
+        "warmup_time": 0
+    },
+    "real_read_write.AWSReadWrite.time_write": {
+        "code": "class LMDBReadWrite:\n    def time_write(self, storage_info, num_rows):\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.write_library.write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "min_run_count": 1,
+        "name": "real_read_write.AWSReadWrite.time_write",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:204",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "cd1e2d7c3e9482942693e00c912767a6ec944994930d18451574aafbbaeaca68",
+        "warmup_time": 0
+    },
+    "real_read_write.AWSReadWrite.time_write_staged": {
+        "code": "class LMDBReadWrite:\n    def time_write_staged(self, storage_info, num_rows):\n        lib = self.write_library\n        lib.write(f\"sym\", self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(f\"sym\", False, False)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
+        "min_run_count": 1,
+        "name": "real_read_write.AWSReadWrite.time_write_staged",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:204",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "572f489277a78ff2cb5700ed79959ca08b9e4540c5caf87f8be00eb880504477",
+        "warmup_time": 0
+    },
+    "real_read_write.LMDBReadWrite.peakmem_read": {
+        "code": "class LMDBReadWrite:\n    def peakmem_read(self, storage_info, num_rows):\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        lmdb_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_read_write.LMDBReadWrite.peakmem_read",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500000",
+                "5000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:97",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "7d6c057be0bf944061400232400ea13c8bad84d221601873273433e344248ca6"
+    },
+    "real_read_write.LMDBReadWrite.peakmem_read_with_column_float": {
+        "code": "class LMDBReadWrite:\n    def peakmem_read_with_column_float(self, storage_info, num_rows):\n        COLS = [\"float2\"]\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        lmdb_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_read_write.LMDBReadWrite.peakmem_read_with_column_float",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500000",
+                "5000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:97",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "f99243ecc747828b4f4b17b4abb95f17b741121c07bc2fa3e1e840a5d18653ec"
+    },
+    "real_read_write.LMDBReadWrite.peakmem_read_with_columns_all_types": {
+        "code": "class LMDBReadWrite:\n    def peakmem_read_with_columns_all_types(self, storage_info, num_rows):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        lmdb_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_read_write.LMDBReadWrite.peakmem_read_with_columns_all_types",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500000",
+                "5000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:97",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "5675be19d4dd752dfa5a2ad72eb7036e82860c98a095e0c305fe54ed9dafec1a"
+    },
+    "real_read_write.LMDBReadWrite.peakmem_read_with_date_ranges_last20_percent_rows": {
+        "code": "class LMDBReadWrite:\n    def peakmem_read_with_date_ranges_last20_percent_rows(self, storage_info, num_rows):\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym, date_range=self.last_20).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        lmdb_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_read_write.LMDBReadWrite.peakmem_read_with_date_ranges_last20_percent_rows",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500000",
+                "5000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:97",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "ae103b5d2d38787508ab3087f4d5e8a868c6e7e59ffbb5d5f06cab1c969a504f"
+    },
+    "real_read_write.LMDBReadWrite.peakmem_write": {
+        "code": "class LMDBReadWrite:\n    def peakmem_write(self, storage_info, num_rows):\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.write_library.write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        lmdb_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_read_write.LMDBReadWrite.peakmem_write",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500000",
+                "5000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:97",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "66ddb1280ee577b514456f53c652743a72741648800ac19b17f4ed09e92d8beb"
+    },
+    "real_read_write.LMDBReadWrite.peakmem_write_staged": {
+        "code": "class LMDBReadWrite:\n    def peakmem_write_staged(self, storage_info, num_rows):\n        lib = self.write_library\n        lib.write(f\"sym\", self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(f\"sym\", False, False)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        lmdb_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_read_write.LMDBReadWrite.peakmem_write_staged",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500000",
+                "5000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:97",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "338750dbe353d919ca3d64bed0bac540bdfa97f0c58b4a1fc4f2dfe2d3343b4e"
+    },
+    "real_read_write.LMDBReadWrite.time_read": {
+        "code": "class LMDBReadWrite:\n    def time_read(self, storage_info, num_rows):\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        lmdb_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_read_write.LMDBReadWrite.time_read",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500000",
+                "5000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:97",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "1e4f456ed691b5c4e3265657521c880272b373d7decc33de53d3446d2db13121",
+        "warmup_time": 0
+    },
+    "real_read_write.LMDBReadWrite.time_read_with_column_float": {
+        "code": "class LMDBReadWrite:\n    def time_read_with_column_float(self, storage_info, num_rows):\n        COLS = [\"float2\"]\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        lmdb_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_read_write.LMDBReadWrite.time_read_with_column_float",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500000",
+                "5000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:97",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "bbc6654cb1a66659ef92f6bb22eed20400f7fe6f7b6a3c453295a5b1521542b6",
+        "warmup_time": 0
+    },
+    "real_read_write.LMDBReadWrite.time_read_with_columns_all_types": {
+        "code": "class LMDBReadWrite:\n    def time_read_with_columns_all_types(self, storage_info, num_rows):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym, columns=COLS).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        lmdb_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_read_write.LMDBReadWrite.time_read_with_columns_all_types",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500000",
+                "5000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:97",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "0da03af5ca996c4c871384bc8359dc1f36c867343d8cc68c7b84e79f5587a50c",
+        "warmup_time": 0
+    },
+    "real_read_write.LMDBReadWrite.time_read_with_date_ranges_last20_percent_rows": {
+        "code": "class LMDBReadWrite:\n    def time_read_with_date_ranges_last20_percent_rows(self, storage_info, num_rows):\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym, date_range=self.last_20).data\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        lmdb_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_read_write.LMDBReadWrite.time_read_with_date_ranges_last20_percent_rows",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500000",
+                "5000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:97",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "b0651fc8e0ae03cad012f3f7935e04530d18dc54a9693323b51946c8cac48302",
+        "warmup_time": 0
+    },
+    "real_read_write.LMDBReadWrite.time_write": {
+        "code": "class LMDBReadWrite:\n    def time_write(self, storage_info, num_rows):\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.write_library.write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        lmdb_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_read_write.LMDBReadWrite.time_write",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500000",
+                "5000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:97",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "de9263de50fdb6af214f9b0a81b3d28e7f552cdd88420ba45fcc6644664a19e5",
+        "warmup_time": 0
+    },
+    "real_read_write.LMDBReadWrite.time_write_staged": {
+        "code": "class LMDBReadWrite:\n    def time_write_staged(self, storage_info, num_rows):\n        lib = self.write_library\n        lib.write(f\"sym\", self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(f\"sym\", False, False)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment()\n        info = lmdb_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        lmdb_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_read_write.LMDBReadWrite.time_write_staged",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500000",
+                "5000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:97",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "8b0865d24ccea511ec9db954dea35797a30d467065bebc0dd74789e0ef70b9e4",
+        "warmup_time": 0
+    },
+    "real_read_write_wide.AWSWideDataFrameTests.peakmem_read_wide": {
+        "code": "class AWSWideDataFrameTests:\n    def peakmem_read_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.storage.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        setup_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_read_write_wide.AWSWideDataFrameTests.peakmem_read_wide",
+        "param_names": [
+            "num_rows",
+            "num_cols"
+        ],
+        "params": [
+            [
+                "2500",
+                "3000"
+            ],
+            [
+                "15000",
+                "30000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write_wide:51",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "8766de18cf0cc5aa01c0365d6a846b92f02c80650d4a5db0ada3ce92ed44a57d"
+    },
+    "real_read_write_wide.AWSWideDataFrameTests.peakmem_write_wide": {
+        "code": "class AWSWideDataFrameTests:\n    def peakmem_write_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.write_library.write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        setup_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_read_write_wide.AWSWideDataFrameTests.peakmem_write_wide",
+        "param_names": [
+            "num_rows",
+            "num_cols"
+        ],
+        "params": [
+            [
+                "2500",
+                "3000"
+            ],
+            [
+                "15000",
+                "30000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write_wide:51",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "3726fcc9e3e1a536d6101f2e669c4929ab8ce7a44dc430a565496fd809032f2c"
+    },
+    "real_read_write_wide.AWSWideDataFrameTests.time_read_wide": {
+        "code": "class AWSWideDataFrameTests:\n    def time_read_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.storage.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        setup_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_read_write_wide.AWSWideDataFrameTests.time_read_wide",
+        "number": 3,
+        "param_names": [
+            "num_rows",
+            "num_cols"
+        ],
+        "params": [
+            [
+                "2500",
+                "3000"
+            ],
+            [
+                "15000",
+                "30000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write_wide:51",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "31f6dcdcaa4c32f8c80df9c9bb9351bce53cd20535e8b8eaeb7ac8e740206171",
+        "warmup_time": 0
+    },
+    "real_read_write_wide.AWSWideDataFrameTests.time_write_wide": {
+        "code": "class AWSWideDataFrameTests:\n    def time_write_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.write_library.write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        setup_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_read_write_wide.AWSWideDataFrameTests.time_write_wide",
+        "number": 3,
+        "param_names": [
+            "num_rows",
+            "num_cols"
+        ],
+        "params": [
+            [
+                "2500",
+                "3000"
+            ],
+            [
+                "15000",
+                "30000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write_wide:51",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "4506dee1fcb6a7cd973a259fabd00503773c550c962319d2305b7b9a135372b8",
+        "warmup_time": 0
+    },
     "resample.Resample.peakmem_resample": {
         "code": "class Resample:\n    def peakmem_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        if col_type == \"datetime\" and aggregation == \"sum\" or col_type == \"str\" and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]:\n            pass\n            # Use this when upgrading to ASV 0.6.0 or later\n            # raise SkipNotImplemented(f\"{aggregation} not supported on columns of type {col_type}\")\n        else:\n            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        ac = Arctic(self.CONNECTION_STRING)\n        ac.delete_library(self.LIB_NAME)\n        lib = ac.create_library(self.LIB_NAME)\n        rng = np.random.default_rng()\n        col_types = self.params[2]\n        rows = max(self.params[0])\n        for col_type in col_types:\n            if col_type == \"str\":\n                num_unique_strings = 100\n                unique_strings = random_strings_of_length(num_unique_strings, 10, True)\n            sym = col_type\n            num_segments = rows // self.ROWS_PER_SEGMENT\n            for idx in range(num_segments):\n                index = pd.date_range(pd.Timestamp(idx * self.ROWS_PER_SEGMENT, unit=\"us\"), freq=\"us\", periods=self.ROWS_PER_SEGMENT)\n                if col_type == \"int\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                elif col_type == \"bool\":\n                    col_data = rng.integers(0, 2, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(bool)\n                elif col_type == \"float\":\n                    col_data = 100_000 * rng.random(self.ROWS_PER_SEGMENT)\n                elif col_type == \"datetime\":\n                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)\n                    col_data = col_data.astype(\"datetime64[s]\")\n                elif col_type == \"str\":\n                    col_data = np.random.choice(unique_strings, self.ROWS_PER_SEGMENT)\n                df = pd.DataFrame({\"col\": col_data}, index=index)\n                lib.append(sym, df)",
         "name": "resample.Resample.peakmem_resample",

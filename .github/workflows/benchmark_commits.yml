@@ -6,6 +6,7 @@ on:
       commit:             {required: true, type: string, description: commit hash that will be benchmarked}
       run_on_pr_head:     {required: false, default: false, type: boolean, description: Specifies if the benchmark should run on PR head branch}
       dev_image_tag:      {required: false, default: 'latest', type: string, description: Tag of the ArcticDB development image}
+      suite_to_run:       {required: true, type: string, default: 'LMDB', description: Default benchmark on 'LMDB' storage (or 'REAL' storage)}
 jobs:
   start_ec2_runner:
     uses: ./.github/workflows/ec2_runner_jobs.yml
@@ -62,6 +63,7 @@ jobs:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
           strategy_branch: "${{ inputs.commit }}"
+          shared_storage_prefix: "_github_runner_"
 
       - name: Install ASV
         shell: bash -el {0}
@@ -76,7 +78,13 @@ jobs:
         shell: bash -el {0}
         run: | 
           git config --global --add safe.directory .
-          python -m asv run -v --show-stderr ${{ inputs.commit }}^!
+          if [ "${{ github.event.inputs.suite_to_run }}" == "REAL" ]; then
+            SUITE='^(real_).*'
+          else
+            SUITE='^(?!real_).*'
+          fi
+          echo "selection SUITE=$SUITE"
+          python -m asv run -v --show-stderr --bench $SUITE ${{ inputs.commit }}^!
         
       - name: Benchmark against master
         if: github.event_name == 'pull_request_target' && inputs.run_all_benchmarks == false
