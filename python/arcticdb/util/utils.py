@@ -465,7 +465,7 @@ class DFGenerator:
         self.__data[name] = list
         self.__types[name] = dtype
         return self
-
+    
     def add_string_col(self, name: str, str_size: int, num_unique_values: int = None) -> 'DFGenerator':
         """
         Generates a list of strings with length 'str_size', and if 'num_unique_values' values is None
@@ -528,7 +528,12 @@ class DFGenerator:
         cols=int(cols)
         rows=int(rows)
         np.random.seed(seed)
-        dtypes = np.random.choice(list(get_args(ArcticTypes)), cols)
+        if sys.version_info >= (3, 8):
+            dtypes = np.random.choice(list(get_args(ArcticTypes)), cols)
+        else:
+            dtypes = [np.uint8, np.uint16, np.uint32, np.uint64, 
+                      np.int8, np.int16, np.int32, np.int64,
+                      np.float32, np.float16, str]
         gen = DFGenerator(size=rows, seed=seed) 
         for i in range(cols):
                 dtype = dtypes[i]
