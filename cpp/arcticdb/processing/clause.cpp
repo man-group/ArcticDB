@@ -676,7 +676,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
             ++slice_index;
         }
         if (!input_agg_columns.empty()) {
-            const bool has_missing_columns = existing_columns.is_all_one_range(0, row_slices.size());
+            const bool has_missing_columns = !existing_columns.is_all_one_range(0, row_slices.size() - 1);
             auto aggregated_column = has_missing_columns ?
                 std::make_shared<Column>(aggregator.aggregate(input_index_columns, input_agg_columns, bucket_boundaries, *output_index_column, string_pool, existing_columns)) :
                 std::make_shared<Column>(aggregator.aggregate(input_index_columns, input_agg_columns, bucket_boundaries, *output_index_column, string_pool));

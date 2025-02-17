@@ -143,7 +143,7 @@ template<
 >
 void aggregate_column(
     std::span<const timestamp> bucket_boundaries,
-    Column& input_index_column,
+    const Column& input_index_column,
     const ColumnWithStrings& agg_column,
     StringPool& string_pool,
     BucketAggregator& bucket_aggregator,
@@ -205,13 +205,56 @@ void aggregate_column(
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
 Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(
-    [[maybe_unused]] const std::vector<std::shared_ptr<Column>>& input_index_columns,
-    [[maybe_unused]] const std::vector<ColumnWithStrings>& input_agg_columns,
-    [[maybe_unused]] const std::vector<timestamp>& bucket_boundaries,
-    [[maybe_unused]] const Column& output_index_column,
-    [[maybe_unused]] StringPool& string_pool
+    const std::vector<std::shared_ptr<Column>>& input_index_columns,
+    const std::vector<ColumnWithStrings>& input_agg_columns,
+    const std::vector<timestamp>& bucket_boundaries,
+    const Column& output_index_column,
+    StringPool& string_pool
 ) const {
-    return {};
+    const DataType common_input_type = generate_common_input_type(input_agg_columns).value();
+    const TypeDescriptor td(generate_output_data_type(common_input_type), Dimension::Dim0);
+    Column res(td, output_index_column.row_count(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
+    details::visit_type(
+        res.type().data_type(),
+        [&]<typename output_type_desc_tag>(output_type_desc_tag) {
+            using output_type_info = ScalarTypeInfo<output_type_desc_tag>;
+            // Need this here to only generate valid get_bucket_aggregator code, exception will have been thrown earlier at runtime
+            if constexpr (is_output_type_allowed<aggregation_operator, output_type_info>()) {
+                auto output_data = res.data();
+                ranges::subrange output(output_data.begin<typename output_type_info::TDT>(), output_data.end<typename output_type_info::TDT>());
+                auto bucket_aggregator = get_bucket_aggregator<aggregation_operator, output_type_info>();
+                for (size_t i = 0; i < input_agg_columns.size(); ++i) {
+                    const ColumnWithStrings& agg_column = input_agg_columns[i];
+                    const Column& input_index_column = *input_index_columns[i];
+                    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+                       !agg_column.column_->is_sparse() && agg_column.column_->row_count() == input_index_column.row_count(),
+                       "Resample: Cannot aggregate column '{}' as it is sparse",
+                       get_input_column_name().value);
+                    details::visit_type(
+                        agg_column.column_->type().data_type(),
+                        [&]<typename input_type_desc_tag>(input_type_desc_tag) {
+                            using input_type_info = ScalarTypeInfo<input_type_desc_tag>;
+                            if constexpr (are_input_output_operation_allowed<aggregation_operator, input_type_info, output_type_info>()) {
+                                aggregate_column<aggregation_operator, closed_boundary, input_type_info, output_type_info>(
+                                    bucket_boundaries,
+                                    input_index_column,
+                                    agg_column,
+                                    string_pool,
+                                    bucket_aggregator,
+                                    output);
+                            }
+                        }
+                    );
+                }
+                // We were in the middle of aggregating a bucket when we ran out of index values
+                if (!output.empty()) {
+                    *output.begin() = finalize_aggregator<aggregation_operator, output_type_info::data_type>(bucket_aggregator, string_pool);
+                    output.advance(1);
+                }
+            }
+        }
+    );
+    return res;
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
@@ -223,17 +266,13 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(
     StringPool& string_pool,
     const bm::bvector<>& existing_columns
 ) const {
-    std::optional<DataType> common_input_type = generate_common_input_type(input_agg_columns);
-    Column res(
-        TypeDescriptor(generate_output_data_type(*common_input_type), Dimension::Dim0),
-        output_index_column.row_count(),
-        AllocationType::PRESIZED,
-        Sparsity::NOT_PERMITTED
-    );
+    const DataType common_input_type = generate_common_input_type(input_agg_columns).value();
+    const TypeDescriptor td(generate_output_data_type(common_input_type), Dimension::Dim0);
+    Column res(td, output_index_column.row_count(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
     details::visit_type(
         res.type().data_type(),
-        [&](auto output_type_desc_tag) {
-            using output_type_info = ScalarTypeInfo<decltype(output_type_desc_tag)>;
+        [&]<typename output_type_desc_tag>(output_type_desc_tag) {
+            using output_type_info = ScalarTypeInfo<output_type_desc_tag>;
             // Need this here to only generate valid get_bucket_aggregator code, exception will have been thrown earlier at runtime
             if constexpr (is_output_type_allowed<aggregation_operator, output_type_info>()) {
                 auto output_data = res.data();
@@ -249,8 +288,8 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(
                        get_input_column_name().value);
                     details::visit_type(
                         input_agg_column_it->column_->type().data_type(),
-                        [&, &agg_column=*input_agg_column_it, &input_index_column=input_index_columns[*existing_columns_begin]](auto input_type_desc_tag) {
-                            using input_type_info = ScalarTypeInfo<decltype(input_type_desc_tag)>;
+                        [&, &agg_column=*input_agg_column_it, &input_index_column=input_index_columns[*existing_columns_begin]]<typename input_type_desc_tag>(input_type_desc_tag) {
+                            using input_type_info = ScalarTypeInfo<input_type_desc_tag>;
                             if constexpr (are_input_output_operation_allowed<aggregation_operator, input_type_info, output_type_info>()) {
                                 aggregate_column<aggregation_operator, closed_boundary, input_type_info, output_type_info>(
                                     bucket_boundaries,
