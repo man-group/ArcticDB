@@ -76,6 +76,8 @@ class AWSLargeAppendDataModify:
         set_env.remove_all_modifiable_libraries(True)
         lib = set_env.get_modifiable_library()
 
+        self.set_env.logger(f"Storage info: {set_env.get_storage_info()}")
+        self.set_env.logger(f"Library: {lib}")
         # With modifiable tests we do not prepare libraries here,
         # but we do still return storage info as it has to be unique across processes
         # We also leave each process to setup its initial library in setup
@@ -113,7 +115,7 @@ class AWSLargeAppendDataModify:
         writes_list = self.cache.write_and_append_dict[num_rows]
         
         self.pid = os.getpid()
-        self.lib = self.set_env.get_modifiable_library()
+        self.lib = self.set_env.get_modifiable_library(self.pid)
 
         self.symbol = self.set_env.get_symbol_name_template(f"_pid-{self.pid}")
         self.lib.write(self.symbol, writes_list[0])
@@ -247,6 +249,7 @@ class AWSDeleteTestsFewLarge:
         set_env.remove_all_modifiable_libraries(True)
         lib = set_env.get_modifiable_library()
 
+        self.set_env.logger(f"Storage info: {set_env.get_storage_info()}")
         # With modifiable tests we do not prepare libraries here,
         # but we do still return storage info as it has to be unique across processes
         # We also leave each process to setup its initial library in setup

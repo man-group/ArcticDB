@@ -2083,7 +2083,7 @@
         "warmup_time": 0
     },
     "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_append_large": {
-        "code": "class AWSLargeAppendDataModify:\n    def time_append_large(self, cache, num_rows):\n        large: pd.DataFrame = self.appends_list.pop(0)\n        self.lib.append(self.symbol, large)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library()\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     AWS30kColsWideDFLargeAppendDataModify.params)",
+        "code": "class AWSLargeAppendDataModify:\n    def time_append_large(self, cache, num_rows):\n        large: pd.DataFrame = self.appends_list.pop(0)\n        self.lib.append(self.symbol, large)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     AWS30kColsWideDFLargeAppendDataModify.params)",
         "min_run_count": 1,
         "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_append_large",
         "number": 3,
@@ -2099,15 +2099,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_modification_functions:173",
+        "setup_cache_key": "real_modification_functions:172",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "2f907c9e2c2c6806adbbb24b5e42962a23f901ab4e689f6660621f4e6c95b670",
+        "version": "1a5b77701ea71ab3d816505ea9c799f6b4d9d0d869ead9ddf5db6b56d1cf40cb",
         "warmup_time": 0
     },
     "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_append_single": {
-        "code": "class AWSLargeAppendDataModify:\n    def time_append_single(self, cache, num_rows):\n        self.lib.append(self.symbol, self.cache.append_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library()\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     AWS30kColsWideDFLargeAppendDataModify.params)",
+        "code": "class AWSLargeAppendDataModify:\n    def time_append_single(self, cache, num_rows):\n        self.lib.append(self.symbol, self.cache.append_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     AWS30kColsWideDFLargeAppendDataModify.params)",
         "min_run_count": 1,
         "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_append_single",
         "number": 3,
@@ -2123,15 +2123,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_modification_functions:173",
+        "setup_cache_key": "real_modification_functions:172",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "06c3dad908c15ccc4a4613cc23a8b07cbdea72032365502d8894d37ae365d69c",
+        "version": "bb3c43c639968b8d764ee6a3227a6e14ace16a7dda0ed6fb93276e8543be993a",
         "warmup_time": 0
     },
     "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_full": {
-        "code": "class AWSLargeAppendDataModify:\n    def time_update_full(self, cache, num_rows):\n        #self.lib.update(self.symbol, self.cache.update_full)\n        self.lib.update(self.symbol, self.cache.update_full_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library()\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     AWS30kColsWideDFLargeAppendDataModify.params)",
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_full(self, cache, num_rows):\n        #self.lib.update(self.symbol, self.cache.update_full)\n        self.lib.update(self.symbol, self.cache.update_full_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     AWS30kColsWideDFLargeAppendDataModify.params)",
         "min_run_count": 1,
         "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_full",
         "number": 3,
@@ -2147,15 +2147,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_modification_functions:173",
+        "setup_cache_key": "real_modification_functions:172",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "836634250e743083c748487c67a160ff7b776843cee79621f3ce5afe372c443c",
+        "version": "44f22d9895415d7c5a70ffb9c82175e669e09434438369427f86d2387b26d9b8",
         "warmup_time": 0
     },
     "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_half": {
-        "code": "class AWSLargeAppendDataModify:\n    def time_update_half(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_half_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library()\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     AWS30kColsWideDFLargeAppendDataModify.params)",
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_half(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_half_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     AWS30kColsWideDFLargeAppendDataModify.params)",
         "min_run_count": 1,
         "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_half",
         "number": 3,
@@ -2171,15 +2171,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_modification_functions:173",
+        "setup_cache_key": "real_modification_functions:172",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "7d86b92e09feb2187c7fef92d6b2f7beeecd3518ae24db74989954e4161bf5f4",
+        "version": "237e884dbb342b5c78f541078afea33d20b669ab0a83012ecf6a8ac43762d559",
         "warmup_time": 0
     },
     "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_single": {
-        "code": "class AWSLargeAppendDataModify:\n    def time_update_single(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library()\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     AWS30kColsWideDFLargeAppendDataModify.params)",
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_single(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     AWS30kColsWideDFLargeAppendDataModify.params)",
         "min_run_count": 1,
         "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_single",
         "number": 3,
@@ -2195,15 +2195,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_modification_functions:173",
+        "setup_cache_key": "real_modification_functions:172",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "1ef6a08c777a5b59f5b4672f6e3e76f6b7c3bb21c84fc8fc25980efd1627897c",
+        "version": "c5906abc67ab319483fbd8e566fa14f47f7356efcd582af19225de3a5a1c6517",
         "warmup_time": 0
     },
     "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_upsert": {
-        "code": "class AWSLargeAppendDataModify:\n    def time_update_upsert(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_upsert_dict[num_rows], upsert=True)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library()\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     AWS30kColsWideDFLargeAppendDataModify.params)",
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_upsert(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_upsert_dict[num_rows], upsert=True)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     AWS30kColsWideDFLargeAppendDataModify.params)",
         "min_run_count": 1,
         "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_upsert",
         "number": 3,
@@ -2219,15 +2219,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_modification_functions:173",
+        "setup_cache_key": "real_modification_functions:172",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "88c7df9c889ca544c935f3304ed1232d36f4cbdacf8099bee82209477f038c6f",
+        "version": "07342ed7db1dcd0cd1bbb088326554a949715ce96677453cf46570f7663bfbff",
         "warmup_time": 0
     },
     "real_modification_functions.AWSDeleteTestsFewLarge.time_delete": {
-        "code": "class AWSDeleteTestsFewLarge:\n    def time_delete(self, cache, num_rows):\n        self.lib.delete(self.symbol)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        writes_list = cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library()\n    \n        self.setup_symbol(self.lib, writes_list)\n        assert self.lib.has_symbol\n\n    def setup_cache(self):\n        # warmup will execute tests additional time and we do not want that at all for write\n        # update and append tests. We want exact specified `number` of times to be executed between\n        assert AWSDeleteTestsFewLarge.warmup_time == 0, \"warm up must be 0\"\n        assert AWSDeleteTestsFewLarge.number == 1, \"delete works only once per setup=teardown\"\n    \n        set_env = AWSDeleteTestsFewLarge.SETUP_CLASS\n        num_sequenced_dataframes = AWSDeleteTestsFewLarge.number + 1\n        cache = LargeAppendDataModifyCache()\n    \n        for num_rows in AWSDeleteTestsFewLarge.params:\n            set_env.set_default_columns(20)\n            cache.write_and_append_dict[num_rows] = set_env.generate_chained_writes(\n                num_rows, num_sequenced_dataframes)\n    \n        #only create the library\n        set_env.remove_all_modifiable_libraries(True)\n        lib = set_env.get_modifiable_library()\n    \n        # With modifiable tests we do not prepare libraries here,\n        # but we do still return storage info as it has to be unique across processes\n        # We also leave each process to setup its initial library in setup\n        cache.storage_info = set_env.get_storage_info()\n        return cache",
+        "code": "class AWSDeleteTestsFewLarge:\n    def time_delete(self, cache, num_rows):\n        self.lib.delete(self.symbol)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        writes_list = cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library()\n    \n        self.setup_symbol(self.lib, writes_list)\n        assert self.lib.has_symbol\n\n    def setup_cache(self):\n        # warmup will execute tests additional time and we do not want that at all for write\n        # update and append tests. We want exact specified `number` of times to be executed between\n        assert AWSDeleteTestsFewLarge.warmup_time == 0, \"warm up must be 0\"\n        assert AWSDeleteTestsFewLarge.number == 1, \"delete works only once per setup=teardown\"\n    \n        set_env = AWSDeleteTestsFewLarge.SETUP_CLASS\n        num_sequenced_dataframes = AWSDeleteTestsFewLarge.number + 1\n        cache = LargeAppendDataModifyCache()\n    \n        for num_rows in AWSDeleteTestsFewLarge.params:\n            set_env.set_default_columns(20)\n            cache.write_and_append_dict[num_rows] = set_env.generate_chained_writes(\n                num_rows, num_sequenced_dataframes)\n    \n        #only create the library\n        set_env.remove_all_modifiable_libraries(True)\n        lib = set_env.get_modifiable_library()\n    \n        self.set_env.logger(f\"Storage info: {set_env.get_storage_info()}\")\n        # With modifiable tests we do not prepare libraries here,\n        # but we do still return storage info as it has to be unique across processes\n        # We also leave each process to setup its initial library in setup\n        cache.storage_info = set_env.get_storage_info()\n        return cache",
         "min_run_count": 1,
         "name": "real_modification_functions.AWSDeleteTestsFewLarge.time_delete",
         "number": 1,
@@ -2243,15 +2243,15 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_modification_functions:207",
+        "setup_cache_key": "real_modification_functions:233",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "9db8b22322857165801a1ff0f1343718e067b3e8e744f053ffc3ecd7f78f50e1",
+        "version": "cad1ff55936e1166455d51229e1ac198a424b62a945de5b48774ab812d887235",
         "warmup_time": 0
     },
     "real_modification_functions.AWSLargeAppendDataModify.time_append_large": {
-        "code": "class AWSLargeAppendDataModify:\n    def time_append_large(self, cache, num_rows):\n        large: pd.DataFrame = self.appends_list.pop(0)\n        self.lib.append(self.symbol, large)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library()\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params)",
+        "code": "class AWSLargeAppendDataModify:\n    def time_append_large(self, cache, num_rows):\n        large: pd.DataFrame = self.appends_list.pop(0)\n        self.lib.append(self.symbol, large)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params)",
         "min_run_count": 1,
         "name": "real_modification_functions.AWSLargeAppendDataModify.time_append_large",
         "number": 3,
@@ -2271,11 +2271,11 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "82e95feba405999f2a9905ac8e0dd9f0658bfa3d2c2d4944f04494a88e1404bf",
+        "version": "e3390da4a474d9a6c2389c50e36651618de5b38067a2cf4f68ad4b45caacdd29",
         "warmup_time": 0
     },
     "real_modification_functions.AWSLargeAppendDataModify.time_append_single": {
-        "code": "class AWSLargeAppendDataModify:\n    def time_append_single(self, cache, num_rows):\n        self.lib.append(self.symbol, self.cache.append_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library()\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params)",
+        "code": "class AWSLargeAppendDataModify:\n    def time_append_single(self, cache, num_rows):\n        self.lib.append(self.symbol, self.cache.append_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params)",
         "min_run_count": 1,
         "name": "real_modification_functions.AWSLargeAppendDataModify.time_append_single",
         "number": 3,
@@ -2295,11 +2295,11 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "419f80ea98b4e05224c72c077eaebee0963781c45a09387b96c5d8808a650c83",
+        "version": "972f1570e32130837ddcca8fa980159dd91d0920a92881310108c748de1a6481",
         "warmup_time": 0
     },
     "real_modification_functions.AWSLargeAppendDataModify.time_update_full": {
-        "code": "class AWSLargeAppendDataModify:\n    def time_update_full(self, cache, num_rows):\n        #self.lib.update(self.symbol, self.cache.update_full)\n        self.lib.update(self.symbol, self.cache.update_full_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library()\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params)",
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_full(self, cache, num_rows):\n        #self.lib.update(self.symbol, self.cache.update_full)\n        self.lib.update(self.symbol, self.cache.update_full_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params)",
         "min_run_count": 1,
         "name": "real_modification_functions.AWSLargeAppendDataModify.time_update_full",
         "number": 3,
@@ -2319,11 +2319,11 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "f07160a58568bf3ce0799b72e4d6f0c9947c4091068550deb47a794ced15bd85",
+        "version": "6ed119328c39729b08ff5b7946bbe0e4a27f8be4719d7749d3fad5e1f0d3c104",
         "warmup_time": 0
     },
     "real_modification_functions.AWSLargeAppendDataModify.time_update_half": {
-        "code": "class AWSLargeAppendDataModify:\n    def time_update_half(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_half_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library()\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params)",
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_half(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_half_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params)",
         "min_run_count": 1,
         "name": "real_modification_functions.AWSLargeAppendDataModify.time_update_half",
         "number": 3,
@@ -2343,11 +2343,11 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "6c43dd29d8d6d37f2638e63484511817af459597728344c3b7188d09eaf3e83e",
+        "version": "81f4367ce587625abc6baf6aa7beda42ea05438cfd9a07cda8f8bbab96ff2068",
         "warmup_time": 0
     },
     "real_modification_functions.AWSLargeAppendDataModify.time_update_single": {
-        "code": "class AWSLargeAppendDataModify:\n    def time_update_single(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library()\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params)",
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_single(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params)",
         "min_run_count": 1,
         "name": "real_modification_functions.AWSLargeAppendDataModify.time_update_single",
         "number": 3,
@@ -2367,11 +2367,11 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "464cc7fa9fe5a805104511673a933a7188c132919a14fe942c894efcebebd3c8",
+        "version": "f5c2dca3f0579e1b177f756dcc979169f4ce81671d13ec11024a579feb1c5839",
         "warmup_time": 0
     },
     "real_modification_functions.AWSLargeAppendDataModify.time_update_upsert": {
-        "code": "class AWSLargeAppendDataModify:\n    def time_update_upsert(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_upsert_dict[num_rows], upsert=True)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library()\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params)",
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_upsert(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_upsert_dict[num_rows], upsert=True)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params)",
         "min_run_count": 1,
         "name": "real_modification_functions.AWSLargeAppendDataModify.time_update_upsert",
         "number": 3,
@@ -2391,7 +2391,151 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "a21069955261602a2a080cfca766f13f82f20b2ea88b853536baf478731ea267",
+        "version": "00fb5e2f8f3d8da04a109f84e9f7ab7d57f2beb98725c596712198c13937c233",
+        "warmup_time": 0
+    },
+    "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_append_large": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_append_large(self, cache, num_rows):\n        large: pd.DataFrame = self.appends_list.pop(0)\n        self.lib.append(self.symbol, large)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass LMDB30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(LMDB30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     LMDB30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     LMDB30kColsWideDFLargeAppendDataModify.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_append_large",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:201",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "d8b5089f8bab7cdef9400ff0b72af22ad249538e9cfd4df8e8944aa20faf8cfd",
+        "warmup_time": 0
+    },
+    "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_append_single": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_append_single(self, cache, num_rows):\n        self.lib.append(self.symbol, self.cache.append_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass LMDB30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(LMDB30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     LMDB30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     LMDB30kColsWideDFLargeAppendDataModify.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_append_single",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:201",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "faa121491f89194303789a890671826ee8f84362e8255e7af026721fcc78534d",
+        "warmup_time": 0
+    },
+    "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_update_full": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_full(self, cache, num_rows):\n        #self.lib.update(self.symbol, self.cache.update_full)\n        self.lib.update(self.symbol, self.cache.update_full_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass LMDB30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(LMDB30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     LMDB30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     LMDB30kColsWideDFLargeAppendDataModify.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_update_full",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:201",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "6b542338073a70c83b43d2c1080dfab11641df9ca27b8a2d1b70ff42319d36c9",
+        "warmup_time": 0
+    },
+    "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_update_half": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_half(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_half_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass LMDB30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(LMDB30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     LMDB30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     LMDB30kColsWideDFLargeAppendDataModify.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_update_half",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:201",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "d21a37c04d0dcce13e9cac320cac449efd00c5a0d1b38282708ab77f15e80855",
+        "warmup_time": 0
+    },
+    "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_update_single": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_single(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass LMDB30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(LMDB30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     LMDB30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     LMDB30kColsWideDFLargeAppendDataModify.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_update_single",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:201",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "f4e0fce27d2fae8bc029a6a68972c18bd2103771af7a121b3e325f57e5c5399c",
+        "warmup_time": 0
+    },
+    "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_update_upsert": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_upsert(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_upsert_dict[num_rows], upsert=True)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass LMDB30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(LMDB30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     LMDB30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     LMDB30kColsWideDFLargeAppendDataModify.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_update_upsert",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:201",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "543ed0a5f9113b065839014b1061af7f12267485118bf09ba7de9d29ec983ef0",
         "warmup_time": 0
     },
     "real_query_builder.AWSQueryBuilderFunctions.peakmem_filtering_numeric": {
