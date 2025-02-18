@@ -90,7 +90,8 @@ jobs:
           # Remove leading and trailing whitespaces using parameter expansion
           CHOSEN_SUITE="${CHOSEN_SUITE#"${CHOSEN_SUITE%%[![:space:]]*}"}"
           CHOSEN_SUITE="${CHOSEN_SUITE%"${CHOSEN_SUITE##*[![:space:]]}"}"
-          if [[ -n "$trimmed_variable" ]]; then
+          echo "selection CHOSEN_SUITE=$CHOSEN_SUITE (trimmed)"
+          if [[ -n "${CHOSEN_SUITE// /}" ]]; then
             SUITE=$CHOSEN_SUITE
           fi
           echo "selection SUITE=$SUITE"
