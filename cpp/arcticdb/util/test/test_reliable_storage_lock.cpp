@@ -48,45 +48,45 @@ TEST(ReliableStorageLock, SingleThreaded) {
 
     // We take the first lock at 0 and it should not expire until 20
     Clock::time_ = 0;
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock1.try_take_lock()), std::optional<uint64_t>{0});
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_take_lock()), std::nullopt);
+    ASSERT_EQ(lock1.try_take_lock(), ReliableLockResult{AcquiredLock{0}});
+    ASSERT_EQ(lock2.try_take_lock(), ReliableLockResult{LockInUse{}});
     Clock::time_ = 5;
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock1.try_take_lock()), std::nullopt);
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_take_lock()), std::nullopt);
+    ASSERT_EQ((lock1.try_take_lock()), ReliableLockResult{LockInUse{}});
+    ASSERT_EQ((lock2.try_take_lock()), ReliableLockResult{LockInUse{}});
     Clock::time_ = 10;
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock1.try_take_lock()), std::nullopt);
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_take_lock()), std::nullopt);
+    ASSERT_EQ(lock1.try_take_lock(), ReliableLockResult{LockInUse{}});
+    ASSERT_EQ(lock2.try_take_lock(), ReliableLockResult{LockInUse{}});
     Clock::time_ = 19;
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock1.try_take_lock()), std::nullopt);
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_take_lock()), std::nullopt);
+    ASSERT_EQ(lock1.try_take_lock(), ReliableLockResult{LockInUse{}});
+    ASSERT_EQ(lock2.try_take_lock(), ReliableLockResult{LockInUse{}});
 
     // Once the first lock has expired we can take a new lock with lock_id=1
     Clock::time_ = 20;
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_take_lock()), std::optional<uint64_t>{1});
+    ASSERT_EQ(lock2.try_take_lock(), ReliableLockResult{AcquiredLock{1}});
     ASSERT_EQ(count_locks(), 2);
 
     // We can extend the lock timeout at 25 to 35 and get an lock_id=2
     Clock::time_ = 25;
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock1.try_take_lock()), std::nullopt);
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_extend_lock(1)), std::optional<uint64_t>{2});
+    ASSERT_EQ(lock1.try_take_lock(), ReliableLockResult{LockInUse{}});
+    ASSERT_EQ(lock2.try_extend_lock(1), ReliableLockResult{AcquiredLock{2}});
     ASSERT_EQ(count_locks(), 3);
     Clock::time_ = 34;
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock1.try_take_lock()), std::nullopt);
+    ASSERT_EQ(lock1.try_take_lock(), ReliableLockResult{LockInUse{}});
 
     // At time 35 the lock with lock_id=2 has expired and we can re-acquire the lock
     Clock::time_ = 35;
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock1.try_take_lock()), std::optional<uint64_t>{3});
+    ASSERT_EQ(lock1.try_take_lock(), ReliableLockResult{AcquiredLock{3}});
     ASSERT_EQ(count_locks(), 4);
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_take_lock()), std::nullopt);
+    ASSERT_EQ(lock2.try_take_lock(), ReliableLockResult{LockInUse{}});
 
-    // And we can free the lock immediately to allow re-aquiring without waiting for timeout
+    // And we can free the lock immediately to allow re-acquiring without waiting for timeout
     lock1.free_lock(3);
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_take_lock()), std::optional<uint64_t>{4});
+    ASSERT_EQ(lock2.try_take_lock(), ReliableLockResult{AcquiredLock{4}});
     ASSERT_EQ(count_locks(), 5);
 
     // But if we take a lock at 1000 all locks would have expired a 10xtimeout=100 ago, and we should clear all apart from latest lock_id=5
     Clock::time_ = 1000;
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock2.try_take_lock()), std::optional<uint64_t>{5});
+    ASSERT_EQ(lock2.try_take_lock(), ReliableLockResult{AcquiredLock{5}});
     ASSERT_EQ(count_locks(), 1);
 }
 
@@ -123,6 +123,8 @@ TEST(ReliableStorageLock, StressMultiThreaded) {
     auto store = std::make_shared<InMemoryStore>();
     // Running the test with tighter timeout than the 1000ms timeout causes it to fail occasionally.
     // Seemingly because the heartbeating thread might occasionally not run for long periods of time. This problem disappears with larger timouts like 1000ms.
+    // The failures are likely present only on WSL whose clock can occasionally jump back by a few seconds, which causes
+    // folly's stable clock to not increase and hence skips a heartbeat.
     ReliableStorageLock<> lock{StringId{"test_lock"}, store, ONE_SECOND};
 
     int counter = 0;
@@ -139,7 +141,7 @@ TEST(ReliableStorageLock, StressMultiThreaded) {
     ASSERT_EQ(counter, threads);
 
     // Also the lock should be free by the end (i.e. we can take a new lock)
-    ASSERT_EQ(parse_reliable_storage_lock_result(lock.try_take_lock()).has_value(), true);
+    ASSERT_EQ(std::holds_alternative<AcquiredLock>(lock.try_take_lock()), true);
 }
 
 
@@ -152,6 +154,9 @@ TEST(ReliableStorageLock, NotImplementedException) {
     as::LibraryPath library_path{"a", "b"};
     namespace ap = arcticdb::pipelines;
 
+    // We set the suffix for the storage test to fail.
+    std::string failure_suffix = storage::s3::MockS3Client::get_failure_trigger("suffix", storage::StorageOperation::WRITE, Aws::S3::S3Errors::UNKNOWN);
+    ConfigsMap::instance()->set_string("Storage.AtomicSupportTestSuffix", failure_suffix);
 
     auto failed_config = proto::s3_storage::Config();
     failed_config.set_use_mock_storage_for_testing(true);
@@ -167,13 +172,43 @@ TEST(ReliableStorageLock, NotImplementedException) {
     auto lib = failed_library_index.get_library(library_path, as::OpenMode::WRITE, user_auth, storage::NativeVariantStorage());
     auto store = std::make_shared<aa::AsyncStore<>>(aa::AsyncStore(lib, *codec_opt, EncodingVersion::V1));
 
-    std::string sym = "test_lock";
-    std::string failureSymbol = storage::s3::MockS3Client::get_failure_trigger(sym, storage::StorageOperation::WRITE, Aws::S3::S3Errors::UNKNOWN);
-    
-    ReliableStorageLock<> lock{StringId{failureSymbol}, store, ONE_SECOND};
-
-    // parse_reliable_storage_lock_result throws when we encounter an UnsupportedOperation
     EXPECT_THROW({
-        parse_reliable_storage_lock_result(lock.try_take_lock());
-    }, LostReliableLock);
+        ReliableStorageLock<> lock(StringId("test_lock"), store, ONE_SECOND);
+    }, UnsupportedAtomicOperationException);
+}
+
+TEST(ReliableStorageLock, AdminTools) {
+    auto store = std::make_shared<InMemoryStore>();
+    using Clock = util::ManualClock;
+    ReliableStorageLock<Clock> lock{StringId{"test_lock"}, store, 10};
+
+    Clock::time_ = 0;
+    // No existing lock
+    ASSERT_EQ(lock.inspect_latest_lock(), std::nullopt);
+    // When we take a lock at time 0, inspecting it shows it expires at 10.
+    ASSERT_EQ(lock.try_take_lock(), ReliableLockResult{AcquiredLock{0}});
+    ASSERT_EQ(lock.inspect_latest_lock(), std::make_optional<ActiveLock>(AcquiredLockId{0}, 10));
+
+    Clock::time_ = 15;
+    // Even when lock is expired we can inspect it
+    ASSERT_EQ(lock.inspect_latest_lock(), std::make_optional<ActiveLock>(AcquiredLockId{0}, 10));
+    ASSERT_EQ(lock.try_take_lock(), ReliableLockResult{AcquiredLock{1}});
+
+    Clock::time_ = 20;
+    // Last lock still holds and we can't take it with regular operation
+    ASSERT_EQ(lock.inspect_latest_lock(), std::make_optional<ActiveLock>(AcquiredLockId{1}, 25));
+    ASSERT_EQ(lock.try_take_lock(), ReliableLockResult{LockInUse{}});
+    // But we can force_take it with a custom timeout of 15. The force increases the id by 10.
+    ASSERT_EQ(lock.force_take_lock(15), AcquiredLockId{11});
+    ASSERT_EQ(lock.inspect_latest_lock(), std::make_optional<ActiveLock>(AcquiredLockId{11}, 35));
+
+    Clock::time_ = 30;
+    // We still can't take the lock by regular means
+    ASSERT_EQ(lock.try_take_lock(), ReliableLockResult{LockInUse{}});
+    // But we can force free it by using a negative timeout, to write an expired lock.
+    ASSERT_EQ(lock.force_take_lock(-5), AcquiredLockId{21});
+    ASSERT_EQ(lock.inspect_latest_lock(), std::make_optional<ActiveLock>(AcquiredLockId{21}, 25));
+    // And now we can take a lock with the regular try_take_lock
+    ASSERT_EQ(lock.try_take_lock(), ReliableLockResult{AcquiredLock{22}});
+    ASSERT_EQ(lock.inspect_latest_lock(), std::make_optional<ActiveLock>(AcquiredLockId{22}, 40));
 }

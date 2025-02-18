@@ -9,8 +9,18 @@ on:
         description: Force push tag
         type: boolean
         default: false
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+      from_branch:
+        type: string
+        required: true
 
-run-name: Tagging ${{github.ref_name}} as v${{inputs.version}}${{inputs.overwrite && ' [Overwrite]' || ''}}
+run-name: Tagging ${{ inputs.from_branch || github.ref_name }} as v${{inputs.version}}${{inputs.overwrite && ' [Overwrite]' || ''}}
+env:
+  FROM_BRANCH: ${{ inputs.from_branch || github.ref_name }}
 jobs:
   tag:
     environment: TestPypi  # Enforcing deployment branches permissions
@@ -39,8 +49,8 @@ jobs:
       - name: Tag required version
         run: |
           git config user.name "GitHub Actions"
-          git config user.email "arcticdb@man.com"
-          git switch -C tagging ${{github.ref}}
+          git config user.email "info@arcticdb.io"
+          git switch -C tagging refs/heads/${{ env.FROM_BRANCH }}
           # Remove the build status badge from a version tag
           sed -i 's#<img src="https://github.com/man-group/ArcticDB/actions/workflows/build.yml/badge.svg"/>##' README.md || true
           tag_and_push "Tagging" ${{inputs.version}} refs/tags/v${{inputs.version}} ${{inputs.overwrite && '-f' || ''}}

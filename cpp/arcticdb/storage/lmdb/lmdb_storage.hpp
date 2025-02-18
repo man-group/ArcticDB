@@ -36,13 +36,13 @@ class LmdbStorage final : public Storage {
     std::string name() const final;
 
   private:
-    void do_write(KeySegmentPair&& key_seg) final;
+    void do_write(KeySegmentPair& key_seg) final;
 
-    void do_write_if_none(KeySegmentPair&& kv [[maybe_unused]]) final {
+    void do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) final {
         storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>("Atomic operations are only supported for s3 backend");
     };
 
-    void do_update(KeySegmentPair&& key_seg, UpdateOpts opts) final;
+    void do_update(KeySegmentPair& key_seg, UpdateOpts opts) final;
 
     void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, storage::ReadKeyOpts opts) final;
 
@@ -56,8 +56,8 @@ class LmdbStorage final : public Storage {
         return false;
     };
 
-    bool do_supports_atomic_writes() const final {
-        return false;
+    SupportsAtomicWrites do_supports_atomic_writes() const final {
+        return SupportsAtomicWrites::NO;
     }
 
     inline bool do_fast_delete() final;
@@ -79,7 +79,7 @@ class LmdbStorage final : public Storage {
     void warn_if_lmdb_already_open();
 
     // _internal methods assume the write mutex is already held
-    void do_write_internal(KeySegmentPair&& key_seg, ::lmdb::txn& txn);
+    void do_write_internal(KeySegmentPair& key_seg, ::lmdb::txn& txn);
     boost::container::small_vector<VariantKey, 1> do_remove_internal(std::span<VariantKey> variant_key, ::lmdb::txn& txn, RemoveOpts opts);
     std::unique_ptr<std::mutex> write_mutex_;
     std::shared_ptr<LmdbInstance> lmdb_instance_;

@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import re
 import time
 from typing import Optional
@@ -17,7 +18,14 @@ from arcticdb.version_store.helper import add_s3_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter
-from arcticdb_ext.storage import StorageOverride, S3Override, CONFIG_LIBRARY_NAME, AWSAuthMethod, NativeVariantStorage, S3Settings as NativeS3Settings
+from arcticdb_ext.storage import (
+    StorageOverride,
+    S3Override,
+    CONFIG_LIBRARY_NAME,
+    AWSAuthMethod,
+    NativeVariantStorage,
+    S3Settings as NativeS3Settings,
+)
 from arcticdb.encoding_version import EncodingVersion
 from collections import namedtuple
 from dataclasses import dataclass, fields
@@ -102,8 +110,8 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             self._configure_aws()
 
         super().__init__(uri, self._encoding_version)
-        
-        self._native_cfg = NativeVariantStorage(NativeS3Settings(AWSAuthMethod.DISABLED, ""))
+
+        self._native_cfg = NativeVariantStorage(NativeS3Settings(AWSAuthMethod.DISABLED, "", False))
 
     def __repr__(self):
         return "S3(endpoint=%s, bucket=%s)" % (self._endpoint, self._bucket)

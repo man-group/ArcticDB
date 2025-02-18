@@ -23,6 +23,14 @@ void register_bindings(py::module &m) {
         }), "Number of threads used to execute tasks");
 
     async.def("print_scheduler_stats", &print_scheduler_stats);
+
+    async.def("reinit_task_scheduler", &arcticdb::async::TaskScheduler::reattach_instance);
+    async.def("cpu_thread_count", []() {
+        return arcticdb::async::TaskScheduler::instance()->cpu_thread_count();
+    });
+    async.def("io_thread_count", []() {
+        return arcticdb::async::TaskScheduler::instance()->io_thread_count();
+    });
 }
 
 } // namespace arcticdb::async

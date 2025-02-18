@@ -13,7 +13,6 @@
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/stream/incompletes.hpp>
-#include <arcticdb/pipeline/read_pipeline.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/entity/atom_key.hpp>
@@ -93,6 +92,15 @@ VersionedItem update_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
     const UpdateQuery & query,
+    const std::shared_ptr<InputTensorFrame>& frame,
+    WriteOptions&& options,
+    bool dynamic_schema,
+    bool empty_types);
+
+folly::Future<AtomKey> async_update_impl(
+    const std::shared_ptr<Store>& store,
+    const UpdateInfo& update_info,
+    const UpdateQuery& query,
     const std::shared_ptr<InputTensorFrame>& frame,
     WriteOptions&& options,
     bool dynamic_schema,
@@ -261,6 +269,8 @@ void remove_written_keys(Store* store, CompactionWrittenKeys&& written_keys);
 
 bool is_segment_unsorted(const SegmentInMemory& segment);
 
+size_t n_segments_live_during_compaction();
+
 template <typename IndexType, typename SchemaType, typename SegmentationPolicy, typename DensityPolicy, typename IteratorType>
 [[nodiscard]] CompactionResult do_compact(
     IteratorType to_compact_start,
@@ -277,20 +287,20 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
 
     std::vector<folly::Future<VariantKey>> write_futures;
 
+    auto semaphore = std::make_shared<folly::NativeSemaphore>(n_segments_live_during_compaction());
     stream::SegmentAggregator<IndexType, SchemaType, SegmentationPolicy, DensityPolicy>
         aggregator{
         [&slices](pipelines::FrameSlice &&slice) {
             slices.emplace_back(std::move(slice));
         },
         SchemaType{pipeline_context->descriptor(), index},
-        [&write_futures, &store, &pipeline_context](SegmentInMemory &&segment) {
+        [&write_futures, &store, &pipeline_context, &semaphore](SegmentInMemory &&segment) {
             auto local_index_start = IndexType::start_value_for_segment(segment);
             auto local_index_end = pipelines::end_index_generator(IndexType::end_value_for_segment(segment));
             stream::StreamSink::PartialKey
                 pk{KeyType::TABLE_DATA, pipeline_context->version_id_, pipeline_context->stream_id_, local_index_start, local_index_end};
 
-            // TODO We should apply back pressure to the work we are generating here, to bound memory use
-            write_futures.emplace_back(store->write(pk, std::move(segment)));
+            write_futures.emplace_back(store->write_maybe_blocking(pk, std::move(segment), semaphore));
         },
         segment_size.has_value() ? SegmentationPolicy{*segment_size} : SegmentationPolicy{}
     };

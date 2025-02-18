@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import copy
 import datetime
+import io
 from datetime import timedelta
 import math
 
@@ -18,6 +19,7 @@ import pandas as pd
 import pickle
 from abc import ABCMeta, abstractmethod
 
+from arcticdb_ext import get_config_string
 from pandas.api.types import is_integer_dtype
 from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetadata, MsgPackSerialization
 from arcticc.pb2.storage_pb2 import VersionStoreConfig
@@ -39,6 +41,7 @@ from typing import Dict, NamedTuple, List, Union, Mapping, Any, TypeVar, Tuple
 
 from arcticdb._msgpack_compat import packb, padded_packb, unpackb, ExtType
 from arcticdb.log import version as log
+from arcticdb_ext.log import LogLevel
 from arcticdb.version_store._common import _column_name_to_strings, TimeFrame
 
 PICKLE_PROTOCOL = 4
@@ -75,6 +78,28 @@ NPDDataFrame = NamedTuple(
 )
 
 NormalizedInput = NamedTuple("NormalizedInput", [("item", NPDDataFrame), ("metadata", NormalizationMetadata)])
+
+
+_PICKLED_METADATA_LOGLEVEL = None # set lazily with function below
+
+
+def get_pickled_metadata_loglevel():
+    global _PICKLED_METADATA_LOGLEVEL
+    if _PICKLED_METADATA_LOGLEVEL:
+        return _PICKLED_METADATA_LOGLEVEL
+
+    log_level = get_config_string("PickledMetadata.LogLevel")
+    expected_settings = ("DEBUG", "INFO", "WARN", "ERROR")
+    if log_level:
+        if log_level.upper() not in expected_settings:
+            log.warn(f"Expected PickledMetadata.LogLevel setting to be in {expected_settings} or absent but was {log_level}")
+            _PICKLED_METADATA_LOGLEVEL = LogLevel.WARN
+        else:
+            _PICKLED_METADATA_LOGLEVEL = getattr(LogLevel, log_level.upper())
+    else:
+        _PICKLED_METADATA_LOGLEVEL = LogLevel.WARN
+
+    return _PICKLED_METADATA_LOGLEVEL
 
 
 # To simplify unit testing of serialization logic. This maps the cpp _FrameData exposed object
@@ -1025,11 +1050,11 @@ class MsgPackNormalizer(Normalizer):
             # If stored in Python2 we want to use raw while unpacking.
             # https://github.com/msgpack/msgpack-python/blob/master/msgpack/_unpacker.pyx#L230
             data = unpackb(data, raw=True)
-            return Pickler.read(data, pickled_in_python2=True)
+            return Pickler.read(data)
 
         if code == MsgPackSerialization.PY_PICKLE_3:
             data = unpackb(data, raw=False)
-            return Pickler.read(data, pickled_in_python2=False)
+            return Pickler.read(data)
 
         return ExtType(code, data)
 
@@ -1045,22 +1070,12 @@ class MsgPackNormalizer(Normalizer):
 
 class Pickler(object):
     @staticmethod
-    def read(data, pickled_in_python2=False):
-        if isinstance(data, str):
-            return pickle.loads(data.encode("ascii"), encoding="bytes")
-        elif isinstance(data, str):
-            if not pickled_in_python2:
-                # Use the default encoding for python2 pickled objects similar to what's being done for PY2.
-                return pickle.loads(data, encoding="bytes")
-
-        try:
-            return pickle.loads(data)
-        except UnicodeDecodeError as exc:
-            log.debug("Failed decoding with ascii, using latin-1.")
-            return pickle.loads(data, encoding="latin-1")
+    def read(data):
+        return pd.read_pickle(io.BytesIO(data))
 
     @staticmethod
     def write(obj):
+        log.log(get_pickled_metadata_loglevel(), f"Pickling metadata - may not be readable by other clients")
         return pickle.dumps(obj, protocol=PICKLE_PROTOCOL)
 
 

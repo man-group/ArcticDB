@@ -77,7 +77,7 @@ static void raise_lmdb_exception(const ::lmdb::error& e, const std::string& obje
     return *(lmdb_instance_->dbi_by_key_type_.at(db_name));
 }
 
-void LmdbStorage::do_write_internal(KeySegmentPair&& key_seg, ::lmdb::txn& txn) {
+void LmdbStorage::do_write_internal(KeySegmentPair& key_seg, ::lmdb::txn& txn) {
     ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
 
     auto db_name = fmt::format(FMT_COMPILE("{}"), key_seg.key_type());
@@ -86,10 +86,10 @@ void LmdbStorage::do_write_internal(KeySegmentPair&& key_seg, ::lmdb::txn& txn) 
     ARCTICDB_SUBSAMPLE(LmdbStorageWriteValues, 0)
     ARCTICDB_DEBUG(log::storage(), "Lmdb storage writing segment with key {}", key_seg.key_view());
     auto k = to_serialized_key(key_seg.variant_key());
-    auto& seg = key_seg.segment();
+    auto& seg = *key_seg.segment_ptr();
     int64_t overwrite_flag = std::holds_alternative<RefKey>(key_seg.variant_key()) ? 0 : MDB_NOOVERWRITE;
     try {
-        lmdb_client_->write(db_name, k, std::move(seg), txn, dbi, overwrite_flag);
+        lmdb_client_->write(db_name, k, seg, txn, dbi, overwrite_flag);
     } catch (const ::lmdb::key_exist_error& e) {
         throw DuplicateKeyException(fmt::format("Key already exists: {}: {}", key_seg.variant_key(), e.what()));
     } catch (const ::lmdb::error& ex) {
@@ -101,17 +101,17 @@ std::string LmdbStorage::name() const {
     return fmt::format("lmdb_storage-{}", lib_dir_.string());
 }
 
-void LmdbStorage::do_write(KeySegmentPair&& key_seg) {
+void LmdbStorage::do_write(KeySegmentPair& key_seg) {
     ARCTICDB_SAMPLE(LmdbStorageWrite, 0)
     std::lock_guard<std::mutex> lock{*write_mutex_};
     auto txn = ::lmdb::txn::begin(env()); // scoped abort on exception, so no partial writes
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
-    do_write_internal(std::move(key_seg), txn);
+    do_write_internal(key_seg, txn);
     ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
     txn.commit();
 }
 
-void LmdbStorage::do_update(KeySegmentPair&& key_seg, UpdateOpts opts) {
+void LmdbStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
     ARCTICDB_SAMPLE(LmdbStorageUpdate, 0)
     std::lock_guard<std::mutex> lock{*write_mutex_};
     auto txn = ::lmdb::txn::begin(env());
@@ -128,7 +128,7 @@ void LmdbStorage::do_update(KeySegmentPair&& key_seg, UpdateOpts opts) {
         std::string err_message = fmt::format("do_update called with upsert=false on non-existent key(s): {}", failed_deletes);
         throw KeyNotFoundException(failed_deletes, err_message);
     }
-    do_write_internal(std::move(key_seg), txn);
+    do_write_internal(key_seg, txn);
     ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
     txn.commit();
 }

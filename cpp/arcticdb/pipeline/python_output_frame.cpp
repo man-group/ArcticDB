@@ -12,12 +12,12 @@
 
 namespace arcticdb::pipelines {
 
-PythonOutputFrame::PythonOutputFrame(const SegmentInMemory &frame, std::shared_ptr<BufferHolder> buffers) :
+PythonOutputFrame::PythonOutputFrame(const SegmentInMemory &frame, OutputFormat output_format) :
         module_data_(ModuleData::instance()),
         frame_(frame),
         names_(frame.fields().size() - frame.descriptor().index().field_count()),
         index_columns_(frame.descriptor().index().field_count()),
-        buffers_(std::move(buffers)) {
+        output_format_(output_format) {
     ARCTICDB_SAMPLE_DEFAULT(PythonOutputFrameCtor)
     const auto field_count = frame.descriptor().index().field_count();
     // works because we ensure that the index must be fetched
@@ -66,13 +66,13 @@ std::shared_ptr<FrameDataWrapper> PythonOutputFrame::arrays(py::object &ref) {
     if(auto cached = arrays_.lock())
         return cached;
 
-    auto generated = arcticdb::detail::initialize_array(frame_, ref);
+    auto generated = arcticdb::detail::initialize_array(frame_, output_format_, ref);
     arrays_  = generated;
     return generated;
 }
 
 py::array PythonOutputFrame::array_at(std::size_t col_pos, py::object &anchor) {
-    return arcticdb::detail::array_at(frame_, col_pos, anchor);
+    return arcticdb::detail::array_at(frame_, col_pos, output_format_, anchor);
 }
 
 }

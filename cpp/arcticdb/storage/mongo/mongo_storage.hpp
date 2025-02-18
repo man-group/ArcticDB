@@ -29,13 +29,13 @@ class MongoStorage final : public Storage {
     std::string name() const final;
 
   private:
-    void do_write(KeySegmentPair&& key_seg) final;
+    void do_write(KeySegmentPair& key_seg) final;
 
-    void do_write_if_none(KeySegmentPair&& kv [[maybe_unused]]) final {
+    void do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) final {
         storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>("Atomic operations are only supported for s3 backend");
     };
 
-    void do_update(KeySegmentPair&& key_seg, UpdateOpts opts) final;
+    void do_update(KeySegmentPair& key_seg, UpdateOpts opts) final;
 
     void do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
@@ -51,8 +51,8 @@ class MongoStorage final : public Storage {
         return false;
     }
 
-    bool do_supports_atomic_writes() const final {
-        return false;
+    SupportsAtomicWrites do_supports_atomic_writes() const final {
+        return SupportsAtomicWrites::NO;
     }
 
     inline bool do_fast_delete() final;

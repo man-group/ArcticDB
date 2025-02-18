@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import numpy as np
 import pandas as pd
+from arcticdb_ext import set_config_string, unset_config_string
 from pandas import DataFrame, Timestamp
 import pytest
 
@@ -30,6 +31,54 @@ def test_rt_df_with_small_meta(object_and_mem_and_lmdb_version_store):
     vit = lib.read("pandas")
     assert_frame_equal(df, vit.data)
     assert meta == vit.metadata
+
+
+class A:
+    def __init__(self, attrib):
+        self.attrib = attrib
+
+    def __eq__(self, other):
+        return self.attrib == other.attrib
+
+
+def test_rt_df_with_custom_meta(object_and_mem_and_lmdb_version_store):
+    lib = object_and_mem_and_lmdb_version_store
+
+    df = DataFrame(data=["A", "B", "C"])
+    meta = {"a_key": A("bananabread")}
+    lib.write("pandas", df, metadata=meta)
+    vit = lib.read("pandas")
+    assert meta == vit.metadata
+
+
+@pytest.mark.parametrize("log_level", ("error", "warn", "debug", "info", "ERROR", "eRror", "", None))
+def test_pickled_metadata_warning(lmdb_version_store_v1, log_level):
+    import arcticdb.version_store._normalization as norm
+    norm._PICKLED_METADATA_LOGLEVEL = None
+    if log_level is not None:
+        set_config_string("PickledMetadata.LogLevel", log_level)
+    lib = lmdb_version_store_v1
+    df = DataFrame(data=["A", "B", "C"])
+    meta = df
+    lib.write("pandas", df, metadata=meta)
+    vit = lib.read("pandas")
+    assert_frame_equal(df, vit.data)
+    assert_frame_equal(df, vit.metadata)
+    unset_config_string("PickledMetadata.LogLevel")
+
+
+def test_pickled_metadata_warning_bad_config(lmdb_version_store_v1):
+    """Don't block writes just because they set this wrong."""
+    import arcticdb.version_store._normalization as norm
+    norm._PICKLED_METADATA_LOGLEVEL = None
+    set_config_string("PickledMetadata.LogLevel", "cat")
+    lib = lmdb_version_store_v1
+    df = DataFrame(data=["A", "B", "C"])
+    meta = df
+    lib.write("pandas", df, metadata=meta)
+    vit = lib.read("pandas")
+    assert_frame_equal(df, vit.data)
+    assert_frame_equal(df, vit.metadata)
 
 
 def test_rt_df_with_humonguous_meta(object_and_mem_and_lmdb_version_store):

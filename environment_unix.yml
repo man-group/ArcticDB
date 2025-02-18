@@ -52,7 +52,7 @@ dependencies:
   - libiconv
   - aws-c-s3
   # Build dependencies for tests
-  - libarrow
+  - libarrow==18.0.0
   # Python dependences
   # Python 3.13+ is not yet supported
   - python <3.13

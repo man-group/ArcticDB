@@ -151,7 +151,7 @@ class EnterpriseLibraryOptions:
     Configuration options for ArcticDB libraries, that should only be used when you are using the ArcticDB enterprise
     features.
 
-    Contact `arcticdb@man.com` for more information about the Enterprise features.
+    Contact `info@arcticdb.io` for more information about the Enterprise features.
 
     Attributes
     ----------

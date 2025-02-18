@@ -22,7 +22,10 @@ namespace arcticdb {
 
 namespace arcticdb::pipelines {
 
-SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context);
+SegmentInMemory allocate_frame(
+    const std::shared_ptr<PipelineContext>& context,
+    OutputFormat output_format,
+    AllocationType allocation_type);
 
 template <typename KeySliceContainer>
 std::optional<util::BitSet> check_and_mark_slices(
@@ -74,23 +77,28 @@ folly::Future<SegmentInMemory> fetch_data(
     SegmentInMemory&& frame,
     const std::shared_ptr<PipelineContext> &context,
     const std::shared_ptr<stream::StreamSource>& ssource,
-    bool dynamic_schema,
+    const ReadQuery& read_query,
+    const ReadOptions& read_options,
     DecodePathData shared_data,
     std::any& handler_data);
 
 void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
-    Segment &&seg,
+    const Segment& seg,
     const DecodePathData& shared_data,
-    std::any& handler_data);
+    std::any& handler_data,
+    const ReadQuery& read_query,
+    const ReadOptions& read_options);
 
 void decode_into_frame_dynamic(
-    SegmentInMemory &frame,
+    const SegmentInMemory &frame,
     PipelineContextRow &context,
-    Segment &&seg,
+    const Segment& seg,
     const DecodePathData& shared_data,
-    std::any& handler_data);
+    std::any& handler_data,
+    const ReadQuery& read_query,
+    const ReadOptions& read_options);
 
 folly::Future<folly::Unit> reduce_and_fix_columns(
     std::shared_ptr<PipelineContext> &context,
@@ -100,6 +108,7 @@ folly::Future<folly::Unit> reduce_and_fix_columns(
 
 StreamDescriptor get_filtered_descriptor(
     const StreamDescriptor& desc,
+    OutputFormat output_format,
     const std::shared_ptr<FieldCollection>& filter_columns);
 
 size_t get_index_field_count(const SegmentInMemory& frame);

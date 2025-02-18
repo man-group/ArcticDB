@@ -38,15 +38,19 @@ private:
     bool use_raw_prefix_;
     AWSAuthMethod aws_auth_;
     std::string aws_profile_;
+    bool use_internal_client_wrapper_for_testing_;
 
 public:
-    explicit S3Settings(AWSAuthMethod aws_auth, const std::string& aws_profile) :
+    explicit S3Settings(AWSAuthMethod aws_auth,
+                        const std::string& aws_profile,
+                        bool use_internal_client_wrapper_for_testing) :
         aws_auth_(aws_auth),
-        aws_profile_(aws_profile) {
+        aws_profile_(aws_profile),
+        use_internal_client_wrapper_for_testing_(use_internal_client_wrapper_for_testing) {
     }
 
     explicit S3Settings(const arcticc::pb2::s3_storage_pb2::Config& config) : 
-        S3Settings(AWSAuthMethod::DISABLED, "")
+        S3Settings(AWSAuthMethod::DISABLED, "", false)
     {
         update(config);
     }
@@ -133,6 +137,10 @@ public:
 
     AWSAuthMethod aws_auth() const {
         return aws_auth_;
+    }
+
+    bool use_internal_client_wrapper_for_testing() const {
+        return use_internal_client_wrapper_for_testing_;
     }
 
     std::string aws_profile() const {

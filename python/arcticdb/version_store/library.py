@@ -22,7 +22,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError
+from arcticdb_ext.version_store import DataError, OutputFormat
 import pandas as pd
 import numpy as np
 import logging
@@ -308,6 +308,26 @@ class ReadInfoRequest(NamedTuple):
         res += ")"
         return res
 
+class UpdatePayload:
+
+    def __init__(
+        self,
+        symbol: str,
+        data: NormalizableType,
+        metadata: Any = None,
+        date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None
+    ):
+        self.symbol = symbol
+        self.data = data
+        self.metadata = metadata
+        self.date_range = date_range
+
+    def __repr__(self):
+        return(
+            f"UpdatePayload(symbol={self.symbol}, data_id={id(self.data)}"
+            f", metadata={self.metadata}" if self.metadata is not None else ""
+            f", date_range={self.date_range}" if self.date_range is not None else ""
+        )
 
 class LazyDataFrame(QueryBuilder):
     """
@@ -648,6 +668,8 @@ class Library:
         Any non-`DatetimeIndex` will converted into an internal `RowCount` index. That is, ArcticDB will assign each
         row a monotonically increasing integer identifier and that will be used for the index.
 
+        See the Metadata section of our online documentation for details about how metadata is persisted and caveats.
+
         Parameters
         ----------
         symbol : str
@@ -944,9 +966,9 @@ class Library:
         metadata
             Optional metadata to persist along with the new symbol version. Note that the metadata is
             not combined in any way with the metadata stored in the previous version.
-        prune_previous_versions, default=False
+        prune_previous_versions
             Removes previous (non-snapshotted) versions from the database.
-        validate_index: bool, default=True
+        validate_index
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
 
@@ -1077,6 +1099,9 @@ class Library:
         If dynamic schema is used then data will override everything in storage for the entire index of ``data``. Update
         will not keep columns from storage which are not in ``data``.
 
+        The update will split the first and last segments in the storage that intersect with 'data'. Therefore, frequent
+        calls to update might lead to data fragmentation (see the example below).
+        
         Parameters
         ----------
         symbol
@@ -1129,6 +1154,25 @@ class Library:
         2018-01-01     400
         2018-01-03      40
         2018-01-04       4
+
+        Update will split the first and the last segment intersecting with ``data``
+        >>> index = pd.date_range(pd.Timestamp("2024-01-01"), pd.Timestamp("2024-02-01"))
+        >>> df = pd.DataFrame({f"col_{i}": range(len(index)) for i in range(1)}, index=index)
+        >>> lib.write("test", df)
+        >>> lt=lib._dev_tools.library_tool()
+        >>> print(lt.read_index("test"))
+        start_index                     end_index  version_id stream_id          creation_ts         content_hash  index_type  key_type  start_col  end_col  start_row  end_row
+        2024-01-01  2024-02-01 00:00:00.000000001           0   b'test'  1738599073224386674  9652922778723941392          84         2          1        2          0       32
+        >>> update_index=pd.date_range(pd.Timestamp("2024-01-10"), freq="ns", periods=200000)
+        >>> update = pd.DataFrame({f"col_{i}": [1] for i in range(1)}, index=update_index)
+        >>> lib.update("test", update)
+        >>> print(lt.read_index("test"))
+        start_index                                    end_index  version_id stream_id          creation_ts          content_hash  index_type  key_type  start_col  end_col  start_row  end_row
+        2024-01-01 00:00:00.000000 2024-01-09 00:00:00.000000001           1   b'test'  1738599073268200906  13838161946080117383          84         2          1        2          0        9
+        2024-01-10 00:00:00.000000 2024-01-10 00:00:00.000100000           1   b'test'  1738599073256354553  15576483210589662891          84         2          1        2          9   100009
+        2024-01-10 00:00:00.000100 2024-01-10 00:00:00.000200000           1   b'test'  1738599073256588040  12429442054752910013          84         2          1        2     100009   200009
+        2024-01-11 00:00:00.000000 2024-02-01 00:00:00.000000001           1   b'test'  1738599073268493107   5975110026983744452          84         2          1        2     200009   200031
+
         """
         return self._nvs.update(
             symbol=symbol,
@@ -1138,6 +1182,85 @@ class Library:
             date_range=date_range,
             prune_previous_version=prune_previous_versions,
         )
+
+    def update_batch(
+        self,
+        update_payloads: List[UpdatePayload],
+        upsert: bool = False,
+        prune_previous_versions: bool = False,
+    ) -> List[Union[VersionedItem, DataError]]:
+        """
+        Perform an update operation on a list of symbols in parallel. All constrains on
+        [update](/api/library/#arcticdb.version_store.library.Library.update) apply to this call as well.
+
+        Parameters
+        ----------
+        update_payloads: List[UpdatePayload]
+            List `arcticdb.library.UpdatePayload`. Each element of the list describes an update operation for a
+            particular symbol. Providing the symbol name, data, etc. The same symbol should not appear twice in this
+            list.
+        prune_previous_versions: bool, default=False
+            Removes previous (non-snapshotted) versions from the library.
+        upsert: bool, default=False
+            If True any symbol in `update_payloads` which is not already in the library will be created.
+
+        Returns
+        -------
+        List[Union[VersionedItem, DataError]]
+            List of versioned items. i-th entry corresponds to i-th element of `update_payloads`. Each result correspond
+            to a structure containing metadata and version number of the affected symbol in the store. If a key error or
+            any other internal exception is raised, a DataError object is returned, with symbol, error_code,
+            error_category, and exception_string properties.
+
+        Raises
+        ------
+        ArcticDuplicateSymbolsInBatchException
+            When duplicate symbols appear in payload.
+        ArcticUnsupportedDataTypeException
+            If data that is not of NormalizableType appears in any of the payloads.
+
+        Examples
+        ------
+        >>> df1 = pd.DataFrame({'column_1': [1, 2, 3]}, index=pd.date_range("2025-01-01", periods=3))
+        >>> df1
+                    column_1
+        2025-01-01         1
+        2025-01-02         2
+        2025-01-03         3
+        >>> df2 = pd.DataFrame({'column_2': [10, 11]}, index=pd.date_range("2024-01-01", periods=2))
+        >>> df2
+                    column_2
+        2024-01-01        10
+        2024-01-02        11
+        >>> lib.write("symbol_1", df1)
+        >>> lib.write("symbol_2", df1)
+        >>> lib.update_batch([arcticdb.library.UpdatePayload("symbol_1", pd.DataFrame({"column_1": [4, 5]}, index=pd.date_range("2025-01-03", periods=2))), arcticdb.library.UpdatePayload("symbol_2", pd.DataFrame({"column_2": [-1]}, index=pd.date_range("2023-01-01", periods=1)))])
+        [VersionedItem(symbol='symbol_1', library='test', data=n/a, version=1, metadata=(None,), host='LMDB(path=...)', timestamp=1737542783853861819), VersionedItem(symbol='symbol_2', library='test', data=n/a, version=1, metadata=(None,), host='LMDB(path=...)', timestamp=1737542783851798754)]
+        >>> lib.read("symbol_1").data
+                    column_1
+        2025-01-01         1
+        2025-01-02         2
+        2025-01-03         4
+        2025-01-04         5
+        >>> lib.read("symbol_2").data
+                    column_2
+        2023-01-01        -1
+        2024-01-01        10
+        2024-01-02        11
+        """
+
+        self._raise_if_duplicate_symbols_in_batch(update_payloads)
+        self._raise_if_unsupported_type_in_write_batch(update_payloads)
+
+        batch_update_result = self._nvs._batch_update_internal(
+            [p.symbol for p in update_payloads],
+            [p.data for p in update_payloads],
+            [p.metadata for p in update_payloads],
+            [p.date_range for p in update_payloads],
+            prune_previous_version=prune_previous_versions,
+            upsert=upsert,
+        )
+        return batch_update_result
 
     def delete_staged_data(self, symbol: str):
         """
@@ -1404,7 +1527,7 @@ class Library:
         row_range: Optional[Tuple[int, int]] = None,
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
-        lazy: bool = False,
+        lazy: bool = False
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read data for the named symbol.  Returns a VersionedItem object with a data and metadata element (as passed into
@@ -1455,6 +1578,9 @@ class Library:
             Defer query execution until `collect` is called on the returned `LazyDataFrame` object. See documentation
             on `LazyDataFrame` for more details.
 
+        output_format: OutputFormat, default=OutputFormat.PANDAS:
+            What format to return the output in. One of PANDAS or ARROW.
+
         Returns
         -------
         Union[VersionedItem, LazyDataFrame]
@@ -1501,7 +1627,7 @@ class Library:
                 columns=columns,
                 query_builder=query_builder,
                 implement_read_index=True,
-                iterate_snapshots_if_tombstoned=False,
+                iterate_snapshots_if_tombstoned=False
             )
 
     def read_batch(
@@ -1707,6 +1833,8 @@ class Library:
 
         This method should be faster than `write` as it involves no data segment read/write operations.
 
+        See the Metadata section of our online documentation for details about how metadata is persisted and caveats.
+
         Parameters
         ----------
         symbol
@@ -1733,6 +1861,8 @@ class Library:
         `write_metadata_payloads`.
         Note that this isn't an atomic operation - it's possible for the metadata for one symbol to be fully written and
         readable before another symbol.
+
+        See the Metadata section of our online documentation for details about how metadata is persisted and caveats.
 
         Parameters
         ----------

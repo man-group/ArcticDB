@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import datetime
+from email import errors
 import inspect
 import itertools
 import sys
@@ -90,6 +91,113 @@ def test_msg_pack_legacy_2():
     loc_dt = nytz.localize(dt)
     data = norm._msgpack_unpackb(packed)
     assert data == loc_dt
+
+
+def test_decode_python2_pickle_in_msgpack_dict():
+    """See python2_pickles.py for the generation steps. This is the py2_dict.bin case.
+
+    This is to check that we can still deserialize pickles that were written with Python 2 correctly.
+    """
+    norm = test_msgpack_normalizer
+    packed = b"\x81\xa8dict_key\xc7:f\xda\x007cemail.errors\nBoundaryError\np0\n(S'bananas'\np1\ntp2\nRp3\n."
+    data = norm._msgpack_unpackb(packed)
+    assert list(data.keys()) == ["dict_key"]
+    assert isinstance(data["dict_key"], errors.BoundaryError)
+    assert data["dict_key"].args[0] == "bananas"
+
+
+def test_decode_python2_pickle_in_msgpack_obj():
+    """See python2_pickles.py for the generation steps. This is the py2_obj.bin case.
+
+    This is to check that we can still deserialize pickles that were written with Python 2 correctly.
+    """
+    norm = test_msgpack_normalizer
+    packed = b"\xc7:f\xda\x007cemail.errors\nBoundaryError\np0\n(S'bananas'\np1\ntp2\nRp3\n."
+    data = norm._msgpack_unpackb(packed)
+    assert isinstance(data, errors.BoundaryError)
+    assert data.args[0] == "bananas"
+
+
+def test_decode_python2_str_in_msgpack():
+    """See python2_pickles.py for the generation steps. This is the py2_str.bin case.
+
+    This is to check that we can still deserialize strings that were written with Python 2 correctly.
+    """
+    norm = test_msgpack_normalizer
+    packed = b'\xa9my_string'
+    data = norm._msgpack_unpackb(packed)
+    assert data == "my_string"
+    assert isinstance(data, str)
+
+
+def test_decode_python2_bytes_in_old_msgpack():
+    """See python2_pickles.py for the generation steps. This is the py2_str_bytes.bin case.
+
+    This is to check that we can still deserialize bytes that were written with Python 2 correctly.
+    """
+    norm = test_msgpack_normalizer
+    packed = b'\xa8my_bytes'
+    data = norm._msgpack_unpackb(packed)
+
+    # We claim it's `str` upon decoding because the `xa8` leading bytes tells us this is a fixed string type.
+    assert data == "my_bytes"
+    assert isinstance(data, str)
+
+
+def test_decode_python2_bytes_in_newer_msgpack():
+    """See python2_pickles.py for the generation steps. This is the py2_str_bytes.bin case.
+
+    This was written with msgpack 1.0.5 not 0.6.2 like the other examples. In this version, msgpack has
+    a dedicated type for bytes.
+
+    This is to check that we can still deserialize bytes that were written with Python 2 correctly.
+    """
+    norm = test_msgpack_normalizer
+    packed = b'\xc4\x08my_bytes'
+    data = norm._msgpack_unpackb(packed)
+    assert data == b"my_bytes"
+    assert isinstance(data, bytes)
+
+
+def test_decode_python3_pickle_in_msgpack_dict():
+    norm = test_msgpack_normalizer
+    obj = {"dict_key": errors.BoundaryError("bananas")}
+    packed = norm._msgpack_packb(obj)
+
+    data = norm._msgpack_unpackb(packed)
+    assert list(data.keys()) == ["dict_key"]
+    assert isinstance(data["dict_key"], errors.BoundaryError)
+    assert data["dict_key"].args[0] == "bananas"
+
+
+def test_decode_python3_pickle_in_msgpack_obj():
+    norm = test_msgpack_normalizer
+    obj = errors.BoundaryError("bananas")
+    packed = norm._msgpack_packb(obj)
+
+    data = norm._msgpack_unpackb(packed)
+    assert isinstance(data, errors.BoundaryError)
+    assert data.args[0] == "bananas"
+
+
+def test_decode_python3_pickle_in_msgpack_str():
+    norm = test_msgpack_normalizer
+    obj = "bananas"
+    packed = norm._msgpack_packb(obj)
+
+    data = norm._msgpack_unpackb(packed)
+    assert isinstance(data, str)
+    assert data == "bananas"
+
+
+def test_decode_python3_pickle_in_msgpack_bytes():
+    norm = test_msgpack_normalizer
+    obj = b"bananas"
+    packed = norm._msgpack_packb(obj)
+
+    data = norm._msgpack_unpackb(packed)
+    assert isinstance(data, bytes)
+    assert data == b"bananas"
 
 
 @param_dict("d", params)

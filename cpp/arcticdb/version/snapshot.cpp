@@ -39,11 +39,21 @@ void write_snapshot_entry(
         ARCTICDB_DEBUG(log::snapshot(), "Adding key {}", key);
         snapshot_agg.add_key(key);
     }
+
     // Serialize and store the python metadata in the journal entry for snapshot.
     if (!user_meta.is_none()) {
-        TimeseriesDescriptor timeseries_descriptor;
-        python_util::pb_from_python(user_meta, *timeseries_descriptor.mutable_proto().mutable_user_meta());
-        snapshot_agg.set_timeseries_descriptor(timeseries_descriptor);
+        arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
+        google::protobuf::Any output = {};
+        python_util::pb_from_python(user_meta, user_meta_proto);
+        output.PackFrom(user_meta_proto);
+        snapshot_agg.set_metadata(std::move(output));
+
+        // Bewared: Between v4.5.0 and v5.2.1 we only saved this metadata on the
+        // timeseries_descriptor user_metadata field and we need to keep support for data serialized like
+        // that.
+        // TimeseriesDescriptor timeseries_descriptor;
+        // python_util::pb_from_python(user_meta, *timeseries_descriptor.mutable_proto().mutable_user_meta());
+        // snapshot_agg.set_timeseries_descriptor(timeseries_descriptor);
     }
 
     snapshot_agg.finalize();
@@ -69,7 +79,7 @@ void tombstone_snapshot(
 
 void tombstone_snapshot(
         const std::shared_ptr<StreamSink>& store,
-        storage::KeySegmentPair&& key_segment_pair,
+        storage::KeySegmentPair& key_segment_pair,
         bool log_changes) {
     store->remove_key(key_segment_pair.ref_key()).get(); // Make the snapshot "disappear" to normal APIs
     if (log_changes) {

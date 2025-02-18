@@ -187,7 +187,9 @@ jobs:
 
       - name: Run C++ Benchmarks
         if: inputs.job_type == 'cpp-tests'
-        run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks
+        # We set a benchmark_min_time=20x because running until a time limit is reached can take a lot of time on
+        # benchmarks which pause the timer.
+        run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=20x
 
       # ========================= build-python-wheels (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
@@ -360,6 +362,13 @@ jobs:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
           strategy_branch: "${{ env.distinguishing_name }}"
+        
+      - name: Set s3 sts persistent storage variables for Windows
+        if: inputs.persistent_storage == 'true' && matrix.os == 'windows'
+        uses: ./.github/actions/set_s3_sts_persistent_storage_env_vars
+        with:
+          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
 
       - name: Run test
         run: |
@@ -381,7 +390,7 @@ jobs:
 
       # Fallback if the clean up at test fixutre tear down fails due to crash or etc
       - name: Remove AWS testing account and credentials
-        if: always() && inputs.persistent_storage == 'true'
+        if: always() && inputs.persistent_storage == 'true' && matrix.os == 'windows'
         run: |
           python -c "
           from arcticdb.storage_fixtures.s3 import real_s3_sts_clean_up

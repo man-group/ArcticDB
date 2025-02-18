@@ -177,11 +177,14 @@ inline void read_symbol_ref(const std::shared_ptr<StreamSource>& store, const St
     std::pair<entity::VariantKey, SegmentInMemory> key_seg_pair;
     // Trying to read a missing ref key is expected e.g. when writing a previously missing symbol.
     // If the ref key is missing we keep the entry empty and should not raise warnings.
+    storage::ReadKeyOpts read_opts;
+    read_opts.dont_warn_about_missing_key = true;
+
     try {
-        key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION_REF});
+        key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION_REF}, read_opts);
     } catch (const storage::KeyNotFoundException&) {
         try {
-            key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION, true});
+            key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION, true}, read_opts);
         } catch (const storage::KeyNotFoundException&) {
             return;
         }
@@ -213,7 +216,7 @@ inline void write_symbol_ref(std::shared_ptr<StreamSink> store,
         ref_agg.add_key(*previous_key);
 
     ref_agg.add_key(journal_key);
-    ref_agg.commit();
+    ref_agg.finalize();
     ARCTICDB_DEBUG(log::version(), "Done writing symbol ref for key: {}", journal_key);
 }
 

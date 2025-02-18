@@ -21,6 +21,7 @@ import time
 import requests
 from datetime import datetime
 from functools import partial
+from tempfile import mkdtemp
 
 from arcticdb import LibraryOptions
 from arcticdb.storage_fixtures.api import StorageFixture
@@ -40,16 +41,19 @@ from arcticdb.storage_fixtures.s3 import (
 )
 from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
-from arcticdb_ext.storage import NativeVariantStorage
+from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod
+from arcticdb_ext import set_config_int
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
 from arcticdb.arctic import Arctic
 from .util.mark import (
+    WINDOWS,
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
     REAL_S3_TESTS_MARK,
     SSL_TEST_SUPPORTED,
 )
+from arcticdb.storage_fixtures.utils import safer_rmtree
 
 # region =================================== Misc. Constants & Setup ====================================
 hypothesis.settings.register_profile("ci_linux", max_examples=100)
@@ -71,12 +75,12 @@ if platform.system() == "Linux":
 
 
 @pytest.fixture()
-def sym(request: pytest.FixtureRequest):
+def sym(request: "pytest.FixtureRequest"):
     return request.node.name + datetime.utcnow().strftime("%Y-%m-%dT%H_%M_%S_%f")
 
 
 @pytest.fixture()
-def lib_name(request: pytest.FixtureRequest) -> str:
+def lib_name(request: "pytest.FixtureRequest") -> str:
     name = re.sub(r"[^\w]", "_", request.node.name)[:30]
     return f"{name}.{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
 
@@ -141,6 +145,18 @@ def lmdb_library_static_dynamic(request):
 def s3_storage_factory() -> Generator[MotoS3StorageFixtureFactory, None, None]:
     with MotoS3StorageFixtureFactory(
         use_ssl=SSL_TEST_SUPPORTED, ssl_test_support=SSL_TEST_SUPPORTED, bucket_versioning=False
+    ) as f:
+        yield f
+
+
+@pytest.fixture(scope="session")
+def wrapped_s3_storage_factory() -> Generator[MotoS3StorageFixtureFactory, None, None]:
+    with MotoS3StorageFixtureFactory(
+        use_ssl=False,
+        ssl_test_support=False,
+        bucket_versioning=False,
+        use_internal_client_wrapper_for_testing=True,
+        native_config=NativeVariantStorage(),
     ) as f:
         yield f
 
@@ -216,12 +232,18 @@ def mock_s3_storage_with_error_simulation(mock_s3_storage_with_error_simulation_
 
 @pytest.fixture(scope="session")
 def real_s3_storage_factory() -> BaseS3StorageFixtureFactory:
-    return real_s3_from_environment_variables(shared_path=False, additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}")
+    return real_s3_from_environment_variables(
+        shared_path=False,
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+    )
 
 
 @pytest.fixture(scope="session")
 def real_s3_shared_path_storage_factory() -> BaseS3StorageFixtureFactory:
-    return real_s3_from_environment_variables(shared_path=True, additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}")
+    return real_s3_from_environment_variables(
+        shared_path=True,
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+    )
 
 
 @pytest.fixture(scope="session")
@@ -240,31 +262,58 @@ def real_s3_library(real_s3_storage, lib_name) -> Library:
     return real_s3_storage.create_arctic().create_library(lib_name)
 
 
-@pytest.fixture(scope="session") # Config loaded at the first ArcticDB binary import, so we need to set it up before any tests
-def real_s3_sts_storage_factory():
-    sts_test_credentials_prefix = os.getenv("ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX", f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}")
-    username = os.getenv("ARCTICDB_REAL_S3_STS_TEST_USERNAME", f"gh_sts_test_user_{sts_test_credentials_prefix}")
-    role_name = os.getenv("ARCTICDB_REAL_S3_STS_TEST_ROLE", f"gh_sts_test_role_{sts_test_credentials_prefix}")
-    policy_name = os.getenv("ARCTICDB_REAL_S3_STS_TEST_POLICY_NAME", f"gh_sts_test_policy_name_{sts_test_credentials_prefix}")
+@pytest.fixture(scope="session")
+def monkeypatch_session():
+    from _pytest.monkeypatch import MonkeyPatch
+
+    m = MonkeyPatch()
+    yield m
+    m.undo()
+
+
+@pytest.fixture(
+    scope="session"
+)  # Config loaded at the first ArcticDB binary import, so we need to set it up before any tests
+def real_s3_sts_storage_factory(monkeypatch_session) -> Generator[BaseS3StorageFixtureFactory, None, None]:
     profile_name = "sts_test_profile"
-    try:
-        f = real_s3_sts_from_environment_variables(
-            user_name=username, 
-            role_name=role_name,
-            policy_name=policy_name, 
-            profile_name=profile_name, 
-            native_config=NativeVariantStorage(), # Setting here is purposely wrong to see whether it will get overridden later
-            additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
-            )
-        # Check is made here as the new user gets authenticated only during being used; the check could be time consuming
-        real_s3_sts_resources_ready(f) # resources created in iam may not be ready immediately in s3; Could take 10+ seconds
+    set_config_int("S3Storage.STSTokenExpiryMin", 15)
+    # monkeypatch cannot runtime update environment variables in windows as copy of environment is made at startup
+    # Need to manually setup credetial beforehand if run locally
+    if WINDOWS:
+        config_file_path = os.path.expanduser(os.path.join("~", ".aws", "config"))
+        f = real_s3_from_environment_variables(False, NativeVariantStorage(), "")
+        f.aws_auth = AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER
+        f.aws_profile = profile_name
         yield f
-    finally:
-        real_s3_sts_clean_up(role_name, policy_name, username)
+    else:
+        working_dir = mkdtemp(suffix="S3STSStorageFixtureFactory")
+        config_file_path = os.path.join(working_dir, "config")
+        sts_test_credentials_prefix = f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+        username = f"gh_sts_test_user_{sts_test_credentials_prefix}"
+        role_name = f"gh_sts_test_role_{sts_test_credentials_prefix}"
+        policy_name = f"gh_sts_test_policy_name_{sts_test_credentials_prefix}"
+        try:
+            f = real_s3_sts_from_environment_variables(
+                user_name=username,
+                role_name=role_name,
+                policy_name=policy_name,
+                profile_name=profile_name,
+                native_config=NativeVariantStorage(),  # Setting here is purposely wrong to see whether it will get overridden later
+                config_file_path=config_file_path,
+            )
+            # Check is made here as the new user gets authenticated only during being used; the check could be time consuming
+            real_s3_sts_resources_ready(
+                f
+            )  # resources created in iam may not be ready immediately in s3; Could take 10+ seconds
+            monkeypatch_session.setenv("AWS_CONFIG_FILE", config_file_path)
+            yield f
+        finally:
+            real_s3_sts_clean_up(role_name, policy_name, username)
+            safer_rmtree(None, working_dir)
 
 
 @pytest.fixture
-def real_s3_sts_storage(real_s3_sts_storage_factory) -> Generator[BaseS3StorageFixtureFactory, None, None]:
+def real_s3_sts_storage(real_s3_sts_storage_factory) -> Generator[S3Bucket, None, None]:
     with real_s3_sts_storage_factory.create_fixture() as f:
         yield f
 
@@ -289,7 +338,9 @@ def azurite_ssl_storage_factory() -> Generator[AzuriteStorageFixtureFactory, Non
 
 
 @pytest.fixture
-def azurite_ssl_storage(azurite_ssl_storage_factory: AzuriteStorageFixtureFactory) -> Generator[AzureContainer, None, None]:
+def azurite_ssl_storage(
+    azurite_ssl_storage_factory: AzuriteStorageFixtureFactory,
+) -> Generator[AzureContainer, None, None]:
     with azurite_ssl_storage_factory.create_fixture() as f:
         yield f
 
@@ -351,9 +402,7 @@ def arctic_client_no_lmdb(request, encoding_version) -> Arctic:
 
 @pytest.fixture(
     scope="function",
-    params=[
-        "lmdb"
-    ],
+    params=["lmdb"],
 )
 def arctic_client_lmdb(request, encoding_version) -> Arctic:
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
@@ -386,6 +435,7 @@ def basic_arctic_client(request, encoding_version) -> Arctic:
     assert not ac.list_libraries()
     return ac
 
+
 @pytest.fixture
 def arctic_client_lmdb_map_size_100gb(lmdb_storage) -> Arctic:
     storage_fixture: LmdbStorageFixture = lmdb_storage
@@ -393,6 +443,7 @@ def arctic_client_lmdb_map_size_100gb(lmdb_storage) -> Arctic:
     ac = storage_fixture.create_arctic(encoding_version=EncodingVersion.V2)
     assert not ac.list_libraries()
     return ac
+
 
 @pytest.fixture
 def arctic_library_lmdb_100gb(arctic_client_lmdb_map_size_100gb, lib_name) -> Library:
@@ -402,6 +453,7 @@ def arctic_library_lmdb_100gb(arctic_client_lmdb_map_size_100gb, lib_name) -> Li
 @pytest.fixture
 def basic_arctic_library(basic_arctic_client, lib_name) -> Library:
     return basic_arctic_client.create_library(lib_name)
+
 
 # endregion
 # region ============================ `NativeVersionStore` Fixture Factories ============================
@@ -832,7 +884,9 @@ def basic_store_dynamic_schema_v2(basic_store_factory, lib_name) -> NativeVersio
 
 
 @pytest.fixture
-def basic_store_dynamic_schema(basic_store_dynamic_schema_v1, basic_store_dynamic_schema_v2, encoding_version) -> NativeVersionStore:
+def basic_store_dynamic_schema(
+    basic_store_dynamic_schema_v1, basic_store_dynamic_schema_v2, encoding_version
+) -> NativeVersionStore:
     if encoding_version == EncodingVersion.V1:
         return basic_store_dynamic_schema_v1
     elif encoding_version == EncodingVersion.V2:

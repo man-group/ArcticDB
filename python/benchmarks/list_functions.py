@@ -7,10 +7,11 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 from arcticdb import Arctic
 
-from .common import *
+from benchmarks.common import *
 
 
 class ListFunctions:
+
     number = 5
     timeout = 6000
 

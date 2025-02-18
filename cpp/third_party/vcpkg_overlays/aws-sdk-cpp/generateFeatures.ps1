@@ -1,0 +1,1 @@
+../../../vcpkg/ports/aws-sdk-cpp/generateFeatures.ps1

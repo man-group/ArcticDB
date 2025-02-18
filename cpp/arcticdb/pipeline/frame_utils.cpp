@@ -133,6 +133,16 @@ std::pair<size_t, size_t> offset_and_row_count(const std::shared_ptr<pipelines::
     return std::make_pair(offset, row_count);
 }
 
+std::vector<size_t> output_block_row_counts(const std::shared_ptr<pipelines::PipelineContext>& context) {
+    std::vector<size_t> output;
+    output.reserve(context->slice_and_keys_.size());
+    for(auto s = 0u; s < context->slice_and_keys_.size(); ++s) {
+        if (context->fetch_index_[s])
+            output.emplace_back(context->slice_and_keys_[s].slice_.row_range.diff());
+    }
+    return output;
+}
+
 bool index_is_not_timeseries_or_is_sorted_ascending(const pipelines::InputTensorFrame& frame) {
     return !std::holds_alternative<stream::TimeseriesIndex>(frame.index) || frame.desc.sorted() == SortedValue::ASCENDING;
 }

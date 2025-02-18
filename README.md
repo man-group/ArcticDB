@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://github.com/man-group/ArcticDB/raw/master/static/ArcticDBCropped.png" width="33%">
+  <img src="static/ArcticDB Logo Purple Horizontal.svg">
 </p>
 
 ---
@@ -7,7 +7,7 @@
 <div align="center">
   <p><b>Three minute ArcticDB demo from PyQuantNews</b></p>
   <a href="https://www.youtube.com/watch?v=5_AjD7aVEEM">
-    <img src="https://github.com/man-group/ArcticDB/raw/master/static/pqn_video_thumbnail.png" alt="Options data in ArcticDB" width="33%">
+    <img src="static/pqn_video_thumbnail.png" alt="Options data in ArcticDB" width="33%">
   </a>
 </div>
 
@@ -22,6 +22,8 @@
 
 **ArcticDB** is a high performance, serverless **DataFrame database** built for the Python Data Science ecosystem.
 Launched in March 2023, it is the successor to [Arctic](https://github.com/man-group/arctic).
+
+Use of ArcticDB in production (including business or commercial environments) or for a Database Service requires a paid for license from ArcticDB Limited . Please contact info@arcticdb.io for further details.
 
 ArcticDB offers an intuitive Python-centric API enabling you to read and write Pandas DataFrames to S3 or LMDB utilising a fast C++ data-processing and compression engine.
 
@@ -43,7 +45,7 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 
 ### Prebuilt binary availability
 
-|                       | PyPI (Python 3.6 - 3.11) | conda-forge (Python 3.8 - 3.11) |
+|                       | PyPI (Python 3.7 - 3.13) | conda-forge (Python 3.9 - 3.13) |
 | --------------------- | - | - |
 | Linux (Intel/AMD)     | ✔️ | ✔️ |
 | Windows (Intel/AMD)   | ✔️ | ➖ |
@@ -140,8 +142,8 @@ ArcticDB is released under a [Business Source License 1.1 (BSL)](https://github.
 BSL features are free to use and the source code is available, but users may not use ArcticDB for production use or for
 a Database Service, without agreement with Man Group Operations Limited.
 
-Use of ArcticDB in production or for a Database Service requires a paid for license from Man Group Operations Limited
-and is licensed under the ArcticDB Software License Agreement. For more information please contact [arcticdb@man.com](mailto:ArcticDB@man.com).
+Use of ArcticDB in production or for a Database Service requires a paid for license from ArcticDB Limited
+and is licensed under the ArcticDB Software License Agreement. For more information please contact [info@arcticdb.io](mailto:info@arcticdb.io).
 
 The BSL is not certified as an open-source license, but most of the [Open Source Initiative (OSI)](https://opensource.org/) criteria are met.
 Please see version conversion dates in the below table:
@@ -164,12 +166,14 @@ Please see version conversion dates in the below table:
 | 4.5 | Business Source License 1.1 | Aug 14, 2026 |
 | 5.0 | Business Source License 1.1 | Oct 31, 2026 |
 | 5.1 | Business Source License 1.1 | Nov 15, 2026 |
+| 5.2 | Business Source License 1.1 | Jan 27, 2027 |
+
 ## Code of Conduct
 
 [Code of Conduct](https://github.com/man-group/ArcticDB/blob/master/CODE_OF_CONDUCT.md)
 
 This project has adopted a Code of Conduct. If you have any concerns about the Code, or behaviour that you have
-experienced in the project, please contact us at [arcticdb@man.com](mailto:ArcticDB@man.com).
+experienced in the project, please contact us at [info@arcticdb.io](mailto:info@arcticdb.io).
 
 ## Contributing/Building From Source
 
@@ -184,7 +188,7 @@ Our release process is [documented here](https://github.com/man-group/ArcticDB/w
 
 ## Community
 
-We would love to hear how your ArcticDB journey evolves, email us at [arcticdb@man.com](mailto:ArcticDB@man.com) or come chat to us on [Twitter](https://www.twitter.com/arcticdb)!
+We would love to hear how your ArcticDB journey evolves, email us at [info@arcticdb.io](mailto:info@arcticdb.io) or come chat to us on [Twitter](https://www.twitter.com/arcticdb)!
 
 Interested in learning more about ArcticDB? Head over to our [blog](https://medium.com/arcticdb)!
 

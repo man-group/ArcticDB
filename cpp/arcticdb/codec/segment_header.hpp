@@ -50,6 +50,7 @@ public:
         output.header_fields_ = header_fields_.clone();
         output.body_fields_ = body_fields_.clone();
         output.offset_ = offset_;
+        output.field_count_ = field_count_;
         return output;
     }
 

@@ -1,10 +1,10 @@
 # Metadata
 
-ArcticDB enables you to store arbitrary binary-blobs alongside symbols and versions. The data is pickled when using the Python API. Note that there is a 4GB limit to the size of a single blob. 
+ArcticDB enables you to store arbitrary binary-blobs alongside symbols and versions.
 
-The below example shows a basic example of writing and reading metadata (in this case a pickled Python dictionary):
+The below example shows a basic example of writing and reading metadata (in this case a Python dictionary):
 
-```Python
+```python
 import arcticdb as adb
 # This example assumes the below variables (host, bucket, access, secret) are validly set
 ac = adb.Arctic(f"s3://{HOST}:{BUCKET}?access={ACCESS}&secret={SECRET})
@@ -26,6 +26,41 @@ lib.write("meta", data=pd.DataFrame(), metadata=metadata)  # or write_metadata c
 assert lib.read("meta").metadata == metadata
 assert lib.read_metadata("meta").metadata == metadata  # Same as read, but doesn't return data from storage
 ```
+
+New versions of symbols do not "inherit" the metadata of a previous version. Metadata needs to be specified explicitly
+each time that you create a new version of the symbol:
+
+```python
+lib.write("new_sym", data=pd.DataFrame(), metadata=metadata)
+lib.write("new_sym", data=pd.DataFrame())
+
+assert lib.read("new_sym").metadata is None
+assert lib.read("new_sym", as_of=0).metadata == metadata
+```
+
+### Serialization Format
+
+We use `msgpack` serialization for metadata when possible. We support the built-in `msgpack` types and also:
+
+- Pandas timestamps `pd.Timestamp`
+- Python datetime `datetime.datetime`
+- Python timedelta `datetime.timedelta`
+
+Documentation of supported `msgpack` structures is available [here](https://github.com/msgpack/msgpack/blob/master/spec.md).
+Arrays and maps correspond to Python lists and dicts.
+
+When this `msgpack` serialization of the metadata fails due to unsupported types we fall back to pickling the metadata.
+Pickling can have [serious downsides](https://nedbatchelder.com/blog/202006/pickles_nine_flaws.html) as it may not be possible to
+unpickle data written with one set of library versions from a client with a different set of library versions.
+
+Because of this, we log a warning when metadata gets pickled. You can disable the warning by setting an environment
+variable `ARCTICDB_PickledMetadata_loglevel_str` to `DEBUG`. The log message looks like:
+
+```
+Pickling metadata - may not be readable by other clients
+```
+
+The metadata may be up to 4GB in size.
 
 ### Practical example - using metadata to track vendor timelines
 

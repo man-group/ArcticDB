@@ -474,7 +474,7 @@ void decode_v2(const Segment& segment,
                 data += encoding_sizes::field_compressed_size(*encoded_field) + sizeof(ColumnMagic);
             }
             ++encoded_field;
-            ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", i, data-begin);
+            ARCTICDB_TRACE(log::codec(), "V2 Decoded column {} to position {}", i, data-begin);
         }
 
         util::check_magic<StringPoolMagic>(data);
@@ -560,8 +560,7 @@ void decode_into_memory_segment(
         decode_v1(segment, hdr, res, desc);
 }
 
-SegmentInMemory decode_segment(Segment&& s) {
-    auto segment = std::move(s);
+SegmentInMemory decode_segment(Segment& segment) {
     auto &hdr = segment.header();
     ARCTICDB_TRACE(log::codec(), "Decoding descriptor: {}", segment.descriptor());
     auto descriptor = segment.descriptor();

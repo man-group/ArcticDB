@@ -1,9 +1,9 @@
-import numpy as np
-import pandas as pd
 import pytest
+from packaging import version
+import pandas as pd
 from arcticdb.arctic import Arctic
 from arcticdb.util.test import assert_frame_equal
-from arcticdb_ext import set_config_int
+from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb.options import ModifiableEnterpriseLibraryOption
 from arcticdb.toolbox.library_tool import LibraryTool
 
@@ -20,13 +20,16 @@ class CurrentVersion:
         self.lib_name = lib_name
 
     def __enter__(self):
+        set_config_int("VersionMap.ReloadInterval", 0) # We disable the cache to be able to read the data written from old_venv
         self.ac = Arctic(self.uri)
         self.lib = self.ac.get_library(self.lib_name)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        unset_config_int("VersionMap.ReloadInterval")
         del self.lib
         del self.ac
+
 
 def test_compat_write_read(old_venv_and_arctic_uri, lib_name):
     old_venv, arctic_uri = old_venv_and_arctic_uri
@@ -39,7 +42,6 @@ def test_compat_write_read(old_venv_and_arctic_uri, lib_name):
     old_lib = old_ac.create_library(lib_name)
 
     # Write to library using current version
-    set_config_int("VersionMap.ReloadInterval", 0) # We disable the cache to be able to read the data written from old_venv
     with CurrentVersion(arctic_uri, lib_name) as curr:
         curr.lib.write(sym, df)
 
@@ -54,6 +56,7 @@ def test_compat_write_read(old_venv_and_arctic_uri, lib_name):
         read_df = curr.lib.read(sym).data
         assert_frame_equal(read_df, df_2)
 
+
 def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_name):
     old_venv, arctic_uri = old_venv_and_arctic_uri
     sym = "sym"
@@ -67,7 +70,6 @@ def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_nam
     old_lib.assert_read(sym, df)
 
     # Enable replication and background_deletion with current version
-    expected_cfg = None
     with CurrentVersion(arctic_uri, lib_name) as curr:
         expected_cfg = LibraryTool.read_unaltered_lib_cfg(curr.ac._library_manager, lib_name)
         expected_cfg.lib_desc.version.write_options.delayed_deletes = True
@@ -88,3 +90,103 @@ def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_nam
     with CurrentVersion(arctic_uri, lib_name) as curr:
         cfg_after_use = LibraryTool.read_unaltered_lib_cfg(curr.ac._library_manager, lib_name)
         assert(cfg_after_use == expected_cfg)
+
+
+def test_pandas_pickling(pandas_v1_venv, s3_ssl_disabled_storage, lib_name):
+    arctic_uri = s3_ssl_disabled_storage.arctic_uri
+
+    # Create library using old version and write pickled Pandas 1 metadata
+    old_ac = pandas_v1_venv.create_arctic(arctic_uri)
+    old_ac.create_library(lib_name)
+    old_ac.execute([f"""
+from packaging import version
+pandas_version = version.parse(pd.__version__)
+assert pandas_version < version.Version("2.0.0")
+df = pd.DataFrame({{"a": [1, 2, 3]}})
+idx = pd.Int64Index([1, 2, 3])
+df.index = idx
+lib = ac.get_library("{lib_name}")
+lib.write("sym", df, metadata={{"abc": df}})
+"""])
+
+    pandas_version = version.parse(pd.__version__)
+    assert pandas_version >= version.Version("2.0.0")
+    # Check we can read with Pandas 2
+    with CurrentVersion(arctic_uri, lib_name) as curr:
+        sym = "sym"
+        read_df = curr.lib.read(sym).metadata["abc"]
+        expected_df = pd.DataFrame({"a": [1, 2, 3]})
+        idx = pd.Index([1, 2, 3], dtype="int64")
+        expected_df.index = idx
+        assert_frame_equal(read_df, expected_df)
+
+
+def test_compat_snapshot_metadata_read_write(old_venv_and_arctic_uri, lib_name):
+    # Before v4.5.0 and after v5.2.1 we save metadata directly on the snapshot's segment header and we need to make
+    # sure we can read snapshot metadata written by those versions, and that those versions can read snapshot metadata
+    # written by the latest version.
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    old_ac = old_venv.create_arctic(arctic_uri)
+
+    adb_version = version.Version(old_venv.version)
+    if version.Version("4.5.0") <= adb_version <= version.Version("5.2.1"):
+        pytest.skip(reason="Versions between 4.5.0 and 5.2.1 store snapshot metadata in timeseries descriptor which is incompatible with any other versions")
+
+    sym = "sym"
+    df = pd.DataFrame({"col": [1, 2, 3]})
+    snap_meta = {"key": "value"}
+    snap = "snap"
+
+    old_lib = old_ac.create_library(lib_name)
+
+    # Write snapshot metadata using current version
+    with CurrentVersion(arctic_uri, lib_name) as curr:
+        curr.lib.write(sym, df)
+        curr.lib.snapshot(snap, metadata=snap_meta)
+
+    # Check we can read the snapshot metadata with an old client, and write snapshot metadata with the old client
+    old_lib.execute([
+        """
+snaps = lib.list_snapshots()
+meta = snaps["snap"]
+assert meta is not None
+assert meta == {"key": "value"}
+lib.snapshot("old_snap", metadata={"old_key": "old_value"})
+        """
+    ])
+
+    # Check the modern client can read the snapshot metadata written by the old client
+    with CurrentVersion(arctic_uri, lib_name) as curr:
+        snaps = curr.lib.list_snapshots()
+        meta = snaps["old_snap"]
+        assert meta == {"old_key": "old_value"}
+
+
+def test_compat_snapshot_metadata_read(old_venv_and_arctic_uri, lib_name):
+    # Between v4.5.0 and v5.2.1 we saved this metadata on the timeseries_descriptor user_metadata field
+    # and we need to keep support for reading data serialized like that.
+    # It was not possible to add support for those versions reading snapshot metadata written by current versions.
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    sym = "sym"
+    df = pd.DataFrame({"col": [1, 2, 3]})
+
+    old_ac = old_venv.create_arctic(arctic_uri)
+    old_lib = old_ac.create_library(lib_name)
+
+    # Write snapshot metadata using current version
+    with CurrentVersion(arctic_uri, lib_name) as curr:
+        curr.lib.write(sym, df)
+
+    # Check we can read the snapshot metadata with an old client, and write snapshot metadata with the old client
+    old_lib.execute([
+        """
+snaps = lib.list_snapshots()
+lib.snapshot("old_snap", metadata={"old_key": "old_value"})
+        """
+    ])
+
+    # Check the modern client can read the snapshot metadata written by the old client
+    with CurrentVersion(arctic_uri, lib_name) as curr:
+        snaps = curr.lib.list_snapshots()
+        meta = snaps["old_snap"]
+        assert meta == {"old_key": "old_value"}
