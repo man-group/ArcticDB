@@ -292,8 +292,6 @@ std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_v1_head
         tmp->available(), 
         total_size);
 
-    auto *src = buffer().data();
-    util::check(src != nullptr, "Expected src to be non-null");
     auto* dst = tmp->preamble();
     util::check(dst != nullptr, "Expected dst to be non-null");
 
@@ -302,9 +300,15 @@ std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_v1_head
 
     auto *final_dst = dst + offset;
 
-    std::memcpy(final_dst,
-                src,
-                bytes_to_copy);
+    auto *src = buffer().data();
+    if (src != nullptr) {   
+        std::memcpy(final_dst,
+                    src,
+                    bytes_to_copy);
+    } else {
+        util::check(bytes_to_copy == 0, "Expected bytes_to_copy to be 0 when src is nullptr");
+        ARCTICDB_DEBUG(log::codec(), "src is nullptr, skipping memcpy");
+    }
 
     return std::make_tuple(tmp->preamble(), calculate_size(), std::move(tmp));
 }
