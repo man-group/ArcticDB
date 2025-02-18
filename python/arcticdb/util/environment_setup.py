@@ -729,10 +729,7 @@ class GeneralAppendSetup(GeneralUseCaseNoSetup):
         In case needed no index dataframe is also possible to generate
         """
         number_cols = self.__number_cols
-        self.logger().info("Dataframe generation started.")
-        st = time.time()
         df: pd.DataFrame = DFGenerator.generate_random_dataframe(rows=number_rows, cols=number_cols, indexed=False)
-        self.logger().info(f"Dataframe rows {number_rows} cols {number_cols} generated for {time.time() - st} sec")
         return df
     
     def get_initial_time_number(self):
@@ -750,8 +747,12 @@ class GeneralAppendSetup(GeneralUseCaseNoSetup):
     def generate_dataframe(self, number_rows: int, start_timestamp: Union[pd.Timestamp, TimestampNumber]):
         
         if self.__number_cols < self.__min_wide_col_threshold_columns:
+            self.logger().info("Dataframe generation started.")
+            st = time.time()
             df = self.generate_dataframe_no_index(number_rows)
             df = self.set_index(df, start_timestamp=start_timestamp)
+            self.logger().info(
+                f"Dataframe rows {number_rows} cols {self.__number_cols} generated for {time.time() - st} sec")
         else:
             df = self.generate_wide_dataframe(number_rows, start_timestamp)
 
@@ -761,6 +762,7 @@ class GeneralAppendSetup(GeneralUseCaseNoSetup):
         """
         Efficient for wide dataframes
         """
+        st = time.time()
         max_string_cols = 500
         calculated_max = self.get_default_columns() // 15
         if calculated_max > max_string_cols:
@@ -774,6 +776,7 @@ class GeneralAppendSetup(GeneralUseCaseNoSetup):
         df = DFGenerator.generate_wide_dataframe(num_rows=number_rows, num_cols=self.__number_cols,
                                                  num_string_cols= calculated_max,
                                                  start_time=start)
+        self.logger().info(f"Wide frame generated for {time.time() - st}")
         return df
 
     def generate_chained_writes(self, number_rows: int, 

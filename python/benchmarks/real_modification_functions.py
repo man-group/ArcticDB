@@ -82,10 +82,6 @@ class AWSLargeAppendDataModify:
         cache.storage_info = set_env.get_storage_info()
         return cache
     
-    def generate_frames(self, setup_obj: GeneralAppendSetup, rows, cols, num_sequenced_dataframes) -> pd.DataFrame:
-        return setup_obj.generate_chained_writes(
-                rows, num_sequenced_dataframes)
-    
     def initialize_update_dataframes(self, num_rows, cached_results: LargeAppendDataModifyCache, 
                                      set_env: GeneralAppendSetup):
         # calculate update dataframes
@@ -147,6 +143,7 @@ class AWSLargeAppendDataModify:
     def time_append_single(self, cache, num_rows):
         self.lib.append(self.symbol, self.cache.append_single_dict[num_rows])
     
+
 class AWS30kColsWideDFLargeAppendDataModify(AWSLargeAppendDataModify):
     """
     Inherits from previous test all common functionalities.
@@ -162,7 +159,7 @@ class AWS30kColsWideDFLargeAppendDataModify(AWSLargeAppendDataModify):
     timeout = 1200
 
     SETUP_CLASS = (GeneralAppendSetup(storage=Storage.AMAZON, 
-                                      prefix="BASIC_APPEND",
+                                      prefix="WIDE_APPEND",
                                       library_options=LibraryOptions(rows_per_segment=1000,columns_per_segment=1000)
                                       )
                                       .set_default_columns(WIDE_DATAFRAME_NUM_COLS))
@@ -175,8 +172,35 @@ class AWS30kColsWideDFLargeAppendDataModify(AWSLargeAppendDataModify):
                                      AWS30kColsWideDFLargeAppendDataModify.warmup_time,
                                      AWS30kColsWideDFLargeAppendDataModify.params)
 
-    def generate_frames(self, setup_obj: GeneralAppendSetup, rows, cols, num_sequenced_dataframes) -> pd.DataFrame:
-        return setup_obj.generate_wide_dataframe(rows, cols, num_sequenced_dataframes)
+
+class LMDB30kColsWideDFLargeAppendDataModify(AWSLargeAppendDataModify):
+    """
+    Inherits from previous test all common functionalities.
+    Defines specific such that the test targets operations with very wide dataframe
+    """
+
+    rounds = 1
+    number = 3 # invokes 3 times the test runs between each setup-teardown 
+    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
+    min_run_count = 1
+    warmup_time = 0
+
+    timeout = 1200
+
+    SETUP_CLASS = (GeneralAppendSetup(storage=Storage.LMDB, 
+                                      prefix="WIDE_APPEND",
+                                      library_options=LibraryOptions(rows_per_segment=1000,columns_per_segment=1000)
+                                      )
+                                      .set_default_columns(WIDE_DATAFRAME_NUM_COLS))
+    
+    params = [2_500, 5_000] #[100, 150] for test purposes
+    param_names = ["num_rows"]
+
+    def setup_cache(self):
+        return self.initialize_cache(LMDB30kColsWideDFLargeAppendDataModify.SETUP_CLASS,
+                                     LMDB30kColsWideDFLargeAppendDataModify.warmup_time,
+                                     LMDB30kColsWideDFLargeAppendDataModify.params)
+    
 
 class AWSDeleteTestsFewLarge:
     """
