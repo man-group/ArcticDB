@@ -85,7 +85,7 @@ jobs:
             SUITE='^(?!real_).*'
           fi
           echo "selection SUITE=$SUITE"
-          CHOSEN_SUITE=${{ github.event.inputs.suite_to_run }}
+          CHOSEN_SUITE=${{ github.event.inputs.chosen_suite }}
           echo "selection CHOSEN_SUITE=$CHOSEN_SUITE"
           # Remove leading and trailing whitespaces using parameter expansion
           CHOSEN_SUITE="${CHOSEN_SUITE#"${CHOSEN_SUITE%%[![:space:]]*}"}"
