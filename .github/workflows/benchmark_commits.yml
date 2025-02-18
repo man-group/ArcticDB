@@ -85,13 +85,13 @@ jobs:
             SUITE='^(?!real_).*'
           fi
           echo "selection SUITE=$SUITE"
-          CHOSEN_SUITE=${{ github.event.inputs.suite_overwrite }}
-          echo "selection CHOSEN_SUITE=$CHOSEN_SUITE"
+          SUITE_OVERWRITE=${{ github.event.inputs.suite_overwrite }}
+          echo "selection SUITE_OVERWRITE=$SUITE_OVERWRITE"
           # Remove leading and trailing whitespaces using parameter expansion
-          CHOSEN_SUITE="${CHOSEN_SUITE#"${CHOSEN_SUITE%%[![:space:]]*}"}"
-          CHOSEN_SUITE="${CHOSEN_SUITE%"${CHOSEN_SUITE##*[![:space:]]}"}"
-          if [[ -n "${CHOSEN_SUITE// /}" ]]; then
-            SUITE=$CHOSEN_SUITE
+          SUITE_OVERWRITE="${SUITE_OVERWRITE#"${SUITE_OVERWRITE%%[![:space:]]*}"}"
+          SUITE_OVERWRITE="${SUITE_OVERWRITE%"${SUITE_OVERWRITE##*[![:space:]]}"}"
+          if [[ -n "${SUITE_OVERWRITE// /}" ]]; then
+            SUITE=$SUITE_OVERWRITE
           fi
           echo "FINAL selection is SUITE=$SUITE"
           python -m asv run -v --show-stderr --bench $SUITE ${{ inputs.commit }}^!
