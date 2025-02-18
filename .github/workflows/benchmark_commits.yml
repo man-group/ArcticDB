@@ -7,7 +7,7 @@ on:
       run_on_pr_head:     {required: false, default: false, type: boolean, description: Specifies if the benchmark should run on PR head branch}
       dev_image_tag:      {required: false, default: 'latest', type: string, description: Tag of the ArcticDB development image}
       suite_to_run:       {required: true, type: string, default: 'LMDB', description: Default benchmark on 'LMDB' storage (or 'REAL' storage)}
-      chosen_suite:       {required: false, type: string, default: '', description: User defined tests to run}
+      suite_overwrite:       {required: false, type: string, default: '', description: User defined tests to run}
 jobs:
   start_ec2_runner:
     uses: ./.github/workflows/ec2_runner_jobs.yml
@@ -85,16 +85,15 @@ jobs:
             SUITE='^(?!real_).*'
           fi
           echo "selection SUITE=$SUITE"
-          CHOSEN_SUITE=${{ github.event.inputs.chosen_suite }}
+          CHOSEN_SUITE=${{ github.event.inputs.suite_overwrite }}
           echo "selection CHOSEN_SUITE=$CHOSEN_SUITE"
           # Remove leading and trailing whitespaces using parameter expansion
           CHOSEN_SUITE="${CHOSEN_SUITE#"${CHOSEN_SUITE%%[![:space:]]*}"}"
           CHOSEN_SUITE="${CHOSEN_SUITE%"${CHOSEN_SUITE##*[![:space:]]}"}"
-          echo "selection CHOSEN_SUITE=$CHOSEN_SUITE (trimmed)"
           if [[ -n "${CHOSEN_SUITE// /}" ]]; then
             SUITE=$CHOSEN_SUITE
           fi
-          echo "selection SUITE=$SUITE"
+          echo "FINAL selection is SUITE=$SUITE"
           python -m asv run -v --show-stderr --bench $SUITE ${{ inputs.commit }}^!
         
       - name: Benchmark against master
