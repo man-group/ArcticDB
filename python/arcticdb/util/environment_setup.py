@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 from abc import ABC, abstractmethod
+import copy
 from enum import Enum
 import logging
 import os
