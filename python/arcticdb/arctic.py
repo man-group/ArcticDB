@@ -100,6 +100,7 @@ class Arctic:
             self._library_manager.get_library(lib_mgr_name, storage_override, native_storage_config=self._library_adapter.native_config()),
             repr(self._library_adapter),
             lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
+            native_cfg=self._library_adapter.native_config()
         )
         if self._accessed_libs is not None:
             self._accessed_libs.append(lib)

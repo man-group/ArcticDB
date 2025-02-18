@@ -12,6 +12,11 @@
 
 namespace arcticdb::storage::s3 {
 
+enum class NativeSettingsType : uint32_t {
+    S3 = 0,
+    GCPXML = 1
+};
+
 enum class AWSAuthMethod : uint32_t {
     DISABLED = 0,
     DEFAULT_CREDENTIALS_PROVIDER_CHAIN = 1,
@@ -33,7 +38,20 @@ class GCPXMLSettings {
 public:
     GCPXMLSettings() { }
 
-    explicit GCPXMLSettings(AWSAuthMethod aws_auth) : aws_auth_(aws_auth) {
+    explicit GCPXMLSettings(
+        AWSAuthMethod aws_auth,
+        std::string ca_cert_path,
+        std::string ca_cert_dir,
+        bool ssl,
+        bool https,
+        std::string prefix,
+        std::string endpoint,
+        std::string secret,
+        std::string access,
+        std::string bucket
+        ) : bucket_(std::move(bucket)), endpoint_(std::move(endpoint)), access_(std::move(access)), secret_(std::move(secret)),
+        prefix_(std::move(prefix)), aws_auth_(aws_auth), https_(https), ca_cert_path_(std::move(ca_cert_path)), ca_cert_dir_(std::move(ca_cert_dir)),
+        ssl_(ssl) {
 
     }
 

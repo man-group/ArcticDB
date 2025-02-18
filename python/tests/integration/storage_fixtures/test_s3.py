@@ -33,8 +33,8 @@ def test_rate_limit(s3_storage_factory: MotoS3StorageFixtureFactory):  # Don't n
 
 def test_gcp_no_batch_delete(gcp_storage_factory: MotoGcpS3StorageFixtureFactory):
     # Given
-    s3 = gcp_storage_factory
-    bucket = s3.create_fixture()
+    gcp = gcp_storage_factory
+    bucket = gcp.create_fixture()
     boto_bucket = bucket.get_boto_bucket()
     boto_bucket.put_object(Key="key1", Body=b"contents1")
     boto_bucket.put_object(Key="key2", Body=b"contents2")

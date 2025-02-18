@@ -35,6 +35,77 @@ std::shared_ptr<LibraryIndex> create_library_index(const std::string &environmen
     return std::make_shared<LibraryIndex>(EnvironmentName{environment_name}, mem_resolver);
 }
 
+enum class S3SettingsPickleOrder : uint32_t {
+    TYPE = 0,
+    AWS_AUTH = 1,
+    AWS_PROFILE = 2,
+    USE_INTERNAL_CLIENT_WRAPPER_FOR_TESTING = 3
+};
+
+enum class GCPXMLSettingsPickleOrder : uint32_t {
+    TYPE = 0,
+    AWS_AUTH = 1,
+    CA_CERT_PATH = 2,
+    CA_CERT_DIR = 3,
+    SSL = 4,
+    HTTPS = 5,
+    PREFIX = 6,
+    ENDPOINT = 7,
+    SECRET = 8,
+    ACCESS = 9,
+    BUCKET = 10,
+};
+
+s3::GCPXMLSettings gcp_settings(const py::tuple& t) {
+    util::check(t.size() == 11, "Invalid GCPXMLSettings pickle objects, expected 11 attributes but was {}", t.size());
+    return s3::GCPXMLSettings{
+        t[static_cast<uint32_t>(GCPXMLSettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>(),
+        t[static_cast<uint32_t>(GCPXMLSettingsPickleOrder::CA_CERT_PATH)].cast<std::string>(),
+        t[static_cast<uint32_t>(GCPXMLSettingsPickleOrder::CA_CERT_DIR)].cast<std::string>(),
+        t[static_cast<uint32_t>(GCPXMLSettingsPickleOrder::SSL)].cast<bool>(),
+        t[static_cast<uint32_t>(GCPXMLSettingsPickleOrder::HTTPS)].cast<bool>(),
+        t[static_cast<uint32_t>(GCPXMLSettingsPickleOrder::PREFIX)].cast<std::string>(),
+        t[static_cast<uint32_t>(GCPXMLSettingsPickleOrder::ENDPOINT)].cast<std::string>(),
+        t[static_cast<uint32_t>(GCPXMLSettingsPickleOrder::SECRET)].cast<std::string>(),
+        t[static_cast<uint32_t>(GCPXMLSettingsPickleOrder::ACCESS)].cast<std::string>(),
+        t[static_cast<uint32_t>(GCPXMLSettingsPickleOrder::BUCKET)].cast<std::string>()
+    };
+}
+
+s3::S3Settings s3_settings(const py::tuple& t) {
+    util::check(t.size() == 4, "Invalid S3Settings pickle objects");
+    return s3::S3Settings{
+        t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>(),
+        t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_PROFILE)].cast<std::string>(),
+        t[static_cast<uint32_t>(S3SettingsPickleOrder::USE_INTERNAL_CLIENT_WRAPPER_FOR_TESTING)].cast<bool>()
+    };
+}
+
+py::tuple to_tuple(const s3::GCPXMLSettings& settings) {
+    return py::make_tuple(
+        s3::NativeSettingsType::GCPXML,
+        settings.aws_auth(),
+        settings.ca_cert_path(),
+        settings.ca_cert_dir(),
+        settings.ssl(),
+        settings.https(),
+        settings.prefix(),
+        settings.endpoint(),
+        settings.secret(),
+        settings.access(),
+        settings.bucket()
+    );
+}
+
+py::tuple to_tuple(const s3::S3Settings& settings) {
+    return py::make_tuple(
+        s3::NativeSettingsType::S3,
+        settings.aws_auth(),
+        settings.aws_profile(),
+        settings.use_internal_client_wrapper_for_testing()
+    );
+}
+
 void register_bindings(py::module& storage, py::exception<arcticdb::ArcticException>& base_exception) {
     storage.attr("CONFIG_LIBRARY_NAME") = py::str(arcticdb::storage::CONFIG_LIBRARY_NAME);
 
@@ -97,31 +168,23 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
 
     storage.def("create_library_index", &create_library_index);
 
-    
     py::enum_<s3::AWSAuthMethod>(storage, "AWSAuthMethod")
         .value("DISABLED", s3::AWSAuthMethod::DISABLED)
         .value("DEFAULT_CREDENTIALS_PROVIDER_CHAIN", s3::AWSAuthMethod::DEFAULT_CREDENTIALS_PROVIDER_CHAIN)
         .value("STS_PROFILE_CREDENTIALS_PROVIDER", s3::AWSAuthMethod::STS_PROFILE_CREDENTIALS_PROVIDER);
 
-    enum class S3SettingsPickleOrder : uint32_t {
-        AWS_AUTH = 0,
-        AWS_PROFILE = 1,
-        USE_INTERNAL_CLIENT_WRAPPER_FOR_TESTING = 2
-    };
+    py::enum_<s3::NativeSettingsType>(storage, "NativeSettingsType")
+        .value("S3", s3::NativeSettingsType::S3)
+        .value("GCPXML", s3::NativeSettingsType::GCPXML);
 
     py::class_<s3::S3Settings>(storage, "S3Settings")
         .def(py::init<s3::AWSAuthMethod, const std::string&, bool>())
         .def(py::pickle(
             [](const s3::S3Settings &settings) {
-                return py::make_tuple(settings.aws_auth(), settings.aws_profile(), settings.use_internal_client_wrapper_for_testing());
+                return to_tuple(settings);
             },
             [](py::tuple t) {
-                util::check(t.size() == 3, "Invalid S3Settings pickle objects");
-                s3::S3Settings settings(t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>(),
-                    t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_PROFILE)].cast<std::string>(),
-                    t[static_cast<uint32_t>(S3SettingsPickleOrder::USE_INTERNAL_CLIENT_WRAPPER_FOR_TESTING)].cast<bool>()
-                );
-                return settings;
+                return s3_settings(t);
             }
         ))
         .def_property_readonly("aws_profile", [](const s3::S3Settings &settings) { return settings.aws_profile(); })
@@ -134,12 +197,10 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def(py::init<>())
         .def(py::pickle(
             [](const s3::GCPXMLSettings &settings) {
-                return py::make_tuple(settings.aws_auth());
+                return to_tuple(settings);
             },
             [](py::tuple t) {
-                util::check(t.size() == 1, "Invalid GCPXMLSettings pickle objects");
-                s3::GCPXMLSettings settings(t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>());
-                return settings;
+                return gcp_settings(t);
             }
         ))
         .def_property("bucket", &s3::GCPXMLSettings::bucket, &s3::GCPXMLSettings::set_bucket)
@@ -161,21 +222,26 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
             [](const NativeVariantStorage &settings) {
                 return util::variant_match(settings.variant(),
                     [] (const s3::S3Settings& settings) {
-                        return py::make_tuple(settings.aws_auth(), settings.aws_profile(), settings.use_internal_client_wrapper_for_testing());
+                        return to_tuple(settings);
                     },
-                    [](const auto &) {
+                    [] (const s3::GCPXMLSettings& settings) {
+                        return to_tuple(settings);
+                    },
+                    [](const auto &) -> py::tuple {
                         util::raise_rte("Invalid native storage setting type");
-                        return py::make_tuple();
                     }
                 );
             },
             [](py::tuple t) {
-                util::check(t.size() == 3, "Invalid S3Settings pickle objects");
-                s3::S3Settings settings(t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>(),
-                    t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_PROFILE)].cast<std::string>(),
-                    t[static_cast<uint32_t>(S3SettingsPickleOrder::USE_INTERNAL_CLIENT_WRAPPER_FOR_TESTING)].cast<bool>()
-                );
-                return NativeVariantStorage(std::move(settings));
+                util::check(t.size() >= 1, "Expected at least one attribute in Native Settings pickle");
+                auto type = t[static_cast<uint32_t>(S3SettingsPickleOrder::TYPE)].cast<s3::NativeSettingsType>();
+                switch(type) {
+                    case s3::NativeSettingsType::S3:
+                        return NativeVariantStorage(s3_settings(t));
+                    case s3::NativeSettingsType::GCPXML:
+                        return NativeVariantStorage(gcp_settings(t));
+                }
+                util::raise_rte("Inaccessible");
             }
         ))
         .def("update", &NativeVariantStorage::update)
