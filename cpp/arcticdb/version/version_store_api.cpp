@@ -868,8 +868,7 @@ ArrowReadResult PythonVersionStore::read_dataframe_version_arrow(
     const std::shared_ptr<ReadQuery>& read_query,
     const ReadOptions& read_options,
     std::any& handler_data) {
-    return ArrowReadResult{};
-    log::version().info("Reading arrow data");
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: read_dataframe_version_arrow");
     util::check(read_options.output_format() == OutputFormat::ARROW, "Expected arrow format in read_dataframe_version_arrow");
     auto opt_version_and_frame = read_dataframe_version_internal(stream_id, version_query, read_query, read_options, handler_data);
     return create_arrow_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));

@@ -32,22 +32,11 @@ std::vector<RecordBatchData> ArrowOutputFrame::record_batches() {
     std::vector<RecordBatchData> output;
     output.reserve(data_->size());
 
-    // Store views to keep the Arrow structures alive
-    std::vector<sparrow::struct_array> views;
-    views.reserve(data_->size());
-
     for(auto& batch : *data_) {
-        auto struct_array = batch.extract_struct_array();
-        views.push_back(struct_array.slice_view(0, struct_array.size()));
+        auto struct_array = sparrow::array{batch.extract_struct_array()};
+        auto [arr, schema] = sparrow::extract_arrow_structures(std::move(struct_array));
 
-        if (auto wrapper = views.back().raw_child(0)) {
-            const auto& proxy = wrapper->get_arrow_proxy();
-
-            output.push_back(RecordBatchData{
-                .array_ = reinterpret_cast<uintptr_t>(&proxy.array()),
-                .schema_ = reinterpret_cast<uintptr_t>(&proxy.schema())
-            });
-        }
+        output.push_back(RecordBatchData{arr, schema});
     }
 
     return output;

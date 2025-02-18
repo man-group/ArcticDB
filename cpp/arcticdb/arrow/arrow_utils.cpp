@@ -6,6 +6,7 @@
  */
 
 #include <arcticdb/arrow/arrow_utils.hpp>
+#include <arcticdb/arrow/array_from_block.hpp>
 #include <arcticdb/arrow/arrow_data.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
@@ -15,55 +16,53 @@
 #include <span>
 
 namespace arcticdb {
-template <class T>
-void release_external_common_arrow(T* t)
-{
-    if (t->dictionary)
-    {
-        delete t->dictionary;
-        t->dictionary = nullptr;
-    }
 
-    for (std::int64_t i = 0; i < t->n_children; ++i)
-    {
-        t->children[i]->release(t->children[i]);
-        delete t->children[i];
-    }
-    delete[] t->children;
-    t->children = nullptr;
+using keys_type = uint32_t;
+using layout_type = sparrow::dictionary_encoded_array<keys_type>;
 
-    t->release = nullptr;
+sparrow::nullable<std::string_view> get_dict_value(layout_type::const_reference r) {
+    return std::get<sparrow::nullable<std::string_view>>(r);
 }
 
-template <typename TagType>
-sparrow::array arrow_array_from_block(TypedBlockData<TagType>& block) {
-    using DataType = typename TagType::DataTypeTag;
-    using RawType = typename DataType::raw_type;
 
-    auto* data_ptr = block.release();
-    const auto size = block.row_count();
 
-    std::span<const RawType> data_span(
-        reinterpret_cast<const RawType*>(data_ptr),
-        size
-    );
-
-    sparrow::primitive_array<RawType> prim_array(
-        data_span,
-        std::nullopt,
-        std::nullopt
-    );
-
-    return sparrow::array{std::move(prim_array)};
-}
-
-void arrow_arrays_from_column(const Column& column, std::vector<sparrow::array>& vec) {
+void arrow_arrays_from_column(const Column& column, std::vector<sparrow::array>& vec, std::string_view name) {
     auto column_data = column.data();
     vec.reserve(column.num_blocks());
-    column.type().visit_tag([&vec, &column_data](auto &&impl) {
+    column.type().visit_tag([&vec, &column_data, &column, name](auto &&impl) {
         using TagType = std::decay_t<decltype(impl)>;
-        while (auto block = column_data.next<TagType>()) {
-            vec.emplace_back(arrow_array_from_block<TagType>(*block));
+        if constexpr(is_sequence_type(TagType::DataTypeTag::data_type)) {
+            while (auto block = column_data.next<TagType>()) {
+                const auto offset = block->offset();
+                auto& dict_keys = column.get_extra_buffer(offset, ExtraBufferType::OFFSET);
+                const auto offset_buffer_size = dict_keys.block(0)->bytes() / sizeof(uint32_t);
+                sparrow::u8_buffer<uint32_t> offset_buffer(reinterpret_cast<uint32_t *>(dict_keys.block(0)->release()), offset_buffer_size);
+
+                auto& dict_values =  column.get_extra_buffer(offset, ExtraBufferType::STRING);
+                const auto data_buffer_size = dict_values.block(0)->bytes();
+                sparrow::u8_buffer<char> data_buffer(reinterpret_cast<char*>(dict_values.block(0)->release()), data_buffer_size);
+
+                const auto block_size = block->row_count();
+                sparrow::u8_buffer<uint32_t> string_offsets(reinterpret_cast<uint32_t*>(block->release()), block_size);
+
+                sparrow::string_array arrow_dict(
+                    std::move(data_buffer),
+                    std::move(offset_buffer)
+                );
+                sparrow::array dict_array(std::move(arrow_dict));
+
+                sparrow::dictionary_encoded_array<uint32_t> dict_encoded(
+                    sparrow::dictionary_encoded_array<uint32_t>::keys_buffer_type(std::move(string_offsets)),
+                    std::move(dict_array),
+                    std::vector<size_t>{}
+                );
+
+                vec.emplace_back(std::move(dict_encoded));
+            }
+        } else {
+            while (auto block = column_data.next<TagType>()) {
+                vec.emplace_back(arrow_array_from_block<TagType>(*block, name));
+            }
         }
     });
 }
@@ -85,29 +84,28 @@ auto strided_range(R&& range, size_t stride, size_t start) {
 }
 
 std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(SegmentInMemory& segment) {
-    const auto num_blocks = segment.num_blocks();
+    const auto total_blocks = segment.num_blocks();
     const auto num_columns = segment.num_columns();
+    const auto column_blocks = segment.column(0).num_blocks();
 
     auto output = std::make_shared<std::vector<sparrow::record_batch>>();
-    output->reserve(num_blocks);
+    output->reserve(total_blocks);
 
-    for(auto i = 0UL; i < num_blocks; ++i) {
+    for(auto i = 0UL; i < column_blocks; ++i)
         output->emplace_back(sparrow::record_batch{});
-    }
+
+    util::check(total_blocks == column_blocks * num_columns, "Expected regular block size");
 
     for (auto i = 0UL; i < num_columns; ++i) {
         std::vector<sparrow::array> column_arrays;
         auto& column = segment.column(static_cast<position_t>(i));
+        util::check(column.num_blocks() == column_blocks, "Non-standard column block number: {} != {}", column.num_blocks(), column_blocks);
 
-        if (is_sequence_type(column.type().data_type())) {
-            // Handle sequence types if needed
-            //output.emplace_back(arrow_data_from_string_column(column, segment.field(i).name()));
-        } else {
-            arrow_arrays_from_column(column, column_arrays);
+        arrow_arrays_from_column(column, column_arrays, segment.field(i).name());
 
-            for(auto block_idx = 0UL; block_idx < num_blocks; ++block_idx) {
-                (*output)[block_idx].add_column(static_cast<std::string>(segment.field(i).name()), std::move(column_arrays[block_idx]));
-            }
+        for(auto block_idx = 0UL; block_idx < column_blocks; ++block_idx) {
+            util::check(block_idx < output->size(), "Block index overflow {} > {}", block_idx, output->size());
+            (*output)[block_idx].add_column(static_cast<std::string>(segment.field(i).name()), std::move(column_arrays[block_idx]));
         }
     }
 

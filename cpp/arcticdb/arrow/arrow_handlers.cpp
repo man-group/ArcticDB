@@ -51,31 +51,45 @@ void ArrowStringHandler::convert_type(
     const DecodePathData&,
     std::any&,
     const std::shared_ptr<StringPool>& string_pool) const {
-    size_t bytes = 0;
+    uint32_t bytes = 0;
     using ArcticStringColumnTag = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
-    auto offset_ptr = reinterpret_cast<uint32_t*>(dest_column.bytes_at(mapping.offset_bytes_, source_column.row_count() * sizeof(uint32_t)));
+    auto dest_ptr = reinterpret_cast<uint32_t*>(dest_column.bytes_at(mapping.offset_bytes_, source_column.row_count() * sizeof(uint32_t)));
     auto input_data = source_column.data();
     auto pos = input_data.cbegin<ArcticStringColumnTag>();
     const auto end = input_data.cend<ArcticStringColumnTag>();
-    while(pos != end) {
-        *offset_ptr = bytes;
-        bytes += string_pool->get_view(*pos).size();
-        ++pos;
-        ++offset_ptr;
-    }
-    *offset_ptr = bytes;
 
-    auto& buffer = dest_column.create_extra_buffer(mapping.offset_bytes_, bytes, AllocationType::DETACHABLE);
-
-    input_data = source_column.data();
-    pos = input_data.cbegin<ArcticStringColumnTag>();
-    auto strv_ptr = buffer.data();
-    while(pos != end) {
-        const auto strv = string_pool->get_view(*pos);
-        memcpy(strv_ptr, strv.data(), strv.size());
-        strv_ptr += strv.size();
-        ++pos;
+    struct DictEntry {
+        uint32_t index_offset_;
+        uint32_t bytes_pos_;
     };
+
+    ankerl::unordered_dense::map<StringPool::offset_t, DictEntry> unique_offsets;
+    uint32_t unique_string_count = 0U;
+    while(pos != end) {
+        auto [entry, emplaced] = unique_offsets.try_emplace(*pos, DictEntry{unique_string_count, bytes});
+        if(emplaced) {
+            bytes += string_pool->get_const_view(*pos).size();
+            ++unique_string_count;
+        }
+        ++pos;
+        *dest_ptr = entry->second.index_offset_;
+        ++dest_ptr;
+    }
+    auto& data_buffer = dest_column.create_extra_buffer(mapping.offset_bytes_, ExtraBufferType::STRING, bytes, AllocationType::DETACHABLE);
+    auto& offsets_buffer = dest_column.create_extra_buffer(mapping.offset_bytes_, ExtraBufferType::OFFSET, (unique_offsets.size() + 1) * sizeof(uint32_t), AllocationType::DETACHABLE);
+
+    auto strv_ptr = data_buffer.data();
+    auto begin_ptr = strv_ptr;
+    auto keys_ptr = reinterpret_cast<uint32_t*>(offsets_buffer.data());
+    for(auto unique_string : unique_offsets) {
+        const auto strv = string_pool->get_const_view(unique_string.first);
+        memcpy(strv_ptr, strv.data(), strv.size());
+        *keys_ptr = unique_string.second.bytes_pos_;
+        util::check(strv_ptr - begin_ptr == unique_string.second.bytes_pos_, "Mismatch in buffer offset");
+        strv_ptr += strv.size();
+        ++keys_ptr;
+    }
+    *keys_ptr = strv_ptr - begin_ptr;
 }
 
 TypeDescriptor ArrowStringHandler::output_type(const TypeDescriptor&) const {

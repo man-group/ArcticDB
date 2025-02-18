@@ -17,8 +17,22 @@ namespace arcticdb {
 struct ArrowData;
 
 struct RecordBatchData {
-    uintptr_t array_;
-    uintptr_t schema_;
+
+    RecordBatchData(ArrowArray array, ArrowSchema schema) :
+        array_(array),
+        schema_(schema) {
+    }
+
+    ArrowArray array_;
+    ArrowSchema schema_;
+
+    uintptr_t array() {
+        return reinterpret_cast<uintptr_t>(&array_);
+    }
+
+    uintptr_t schema() {
+        return reinterpret_cast<uintptr_t>(&schema_);
+    }
 };
 
 struct ArrowOutputFrame {
@@ -30,6 +44,7 @@ struct ArrowOutputFrame {
 
     std::shared_ptr<std::vector<sparrow::record_batch>> data_;
     std::vector<std::string> names_;
+    std::vector<sparrow::struct_array> struct_arrays_;
 
     std::vector<RecordBatchData> record_batches();
 

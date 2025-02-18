@@ -5,6 +5,7 @@ import pytest
 
 from pandas.testing import assert_frame_equal
 from arcticdb.version_store.processing import QueryBuilder
+import pyarrow as pa
 
 def test_basic(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
@@ -43,12 +44,32 @@ def test_column_filtering(lmdb_version_store_v1):
     assert_frame_equal(result, df)
 
 
+def convert_dict_strings_to_array(table: pa.Table) -> pa.Table:
+    new_columns = []
+    new_fields = []
+
+    for i, col in enumerate(table.columns):
+        field = table.field(i)
+        if pa.types.is_dictionary(col.type) and pa.types.is_string(col.type.value_type):
+            new_columns.append(col.cast(pa.string()))
+            new_fields.append(field.with_type(pa.string()))
+        else:
+            new_columns.append(col)
+            new_fields.append(field)
+
+    return pa.Table.from_arrays(
+        new_columns,
+        schema=pa.schema(new_fields)
+    )
+
 def test_strings(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"x": ["mene", "mene", "tekel", "upharsin"]})
     lib.write("arrow", df)
     vit = lib.read("arrow", output_format=OutputFormat.ARROW)
-    result = vit.to_pandas()
+    print(vit)
+    result = convert_dict_strings_to_array(vit).to_pandas()
+
     assert_frame_equal(result, df)
 
 

@@ -263,6 +263,11 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("names", &ArrowOutputFrame::names)
         ;
 
+        py::class_<RecordBatchData>(version, "RecordBatchData")
+            .def("array", &RecordBatchData::array)
+            .def("schema", &RecordBatchData::schema)
+        ;
+
     py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(
         Enum of possible version request types passed to as_of.
     )pbdoc")

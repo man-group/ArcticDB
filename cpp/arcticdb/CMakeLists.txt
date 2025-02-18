@@ -542,7 +542,7 @@ set(arcticdb_srcs
         pipeline/read_query.cpp
         pipeline/read_pipeline.cpp
         arrow/include_sparrow.hpp
-        )
+        arrow/array_from_block.hpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
