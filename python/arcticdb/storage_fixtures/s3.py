@@ -570,7 +570,7 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
                 b'</Error>'
             )
             start_response(
-                "503 Slow Down", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
+                "501 Not Implemented", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
             )
             return [response_body]
         return super().__call__(environ, start_response)
@@ -760,7 +760,7 @@ class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
 
 class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
     def _start_server(self):
-        port = self.port = get_ephemeral_port(2)
+        port = self.port = get_ephemeral_port(3)
         self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
         self.working_dir = mkdtemp(suffix="MotoGcpS3StorageFixtureFactory")
         self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
