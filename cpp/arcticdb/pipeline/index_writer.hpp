@@ -83,25 +83,25 @@ public:
         // one will need to ensure that this holds, otherwise the assumptions in the read pipeline will be
         // broken.
         ARCTICDB_DEBUG(log::version(), "Writing key {} to the index", key);
-        util::check_arg(!current_col_.has_value() || *current_col_ <= slice.col_range.first,
-                        "expected increasing column group, last col range left value {}, arg {}",
-                        current_col_.value_or(-1), slice.col_range
+        util::check_arg(!current_row_.has_value() || *current_row_ <= slice.row_range.first,
+                        "expected increasing row group, last row range left value {}, arg {}",
+                        current_row_.value_or(-1), slice.row_range
         );
 
-        bool new_col_group = !current_col_.has_value() || *current_col_ < slice.col_range.first;
-        util::check_arg(!current_row_.has_value() || new_col_group
+        bool new_row_group = !current_row_.has_value() || *current_row_ < slice.row_range.first;
+        util::check_arg(!current_row_.has_value() || new_row_group
                             ||
-                                (*current_col_ == slice.col_range.first && *current_row_ < slice.row_range.first),
+                                (*current_row_ == slice.row_range.first && *current_col_ < slice.col_range.first),
                         "expected increasing row group, last col range left value {}, arg {}",
-                        current_col_.value_or(-1), slice.col_range
+                        current_row_.value_or(-1), slice.row_range
         );
 
         add_unchecked(key, slice);
 
-        if (new_col_group) {
-            current_col_ = slice.col_range.first;
+        if (new_row_group) {
+            current_row_ = slice.row_range.first;
         }
-        current_row_ = slice.row_range.first;
+        current_col_ = slice.col_range.first;
     }
 
     folly::Future<arcticdb::entity::AtomKey> commit() {
