@@ -20,7 +20,7 @@ from typing import List, Union
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
 from arcticdb.storage_fixtures.s3 import BaseS3StorageFixtureFactory, real_s3_from_environment_variables
-from arcticdb.util.utils import DFGenerator, ListGenerators 
+from arcticdb.util.utils import DFGenerator, ListGenerators, TimestampNumber 
 from arcticdb.version_store.library import Library
 
 #ASV captures console output thus we create console handler
@@ -662,6 +662,319 @@ class GeneralSetupSymbolsVersionsSnapshots(EnvConfigurationBase):
         for num_symbols in self.get_parameter_list():
             lib = self.get_library(num_symbols)
             lib._nvs.version_store._clear_symbol_list_keys()
+
+
+class GeneralUseCaseNoSetup(EnvConfigurationBase):
+    """
+    Provides only access to persistent storage space as well
+    as functionalities around work with modifiable storage space - 
+    create library and delete library `check_ok` always returns true, 
+    and `setup_all` does nothing but returns `StorageInfo`
+
+    Use this when you need to do custom work
+    """
+
+    def check_ok(self) -> bool:
+        return True
+
+    def setup_all(self) -> StorageInfo:
+        return self.get_storage_info()
+    
+
+class GeneralAppendSetup(GeneralUseCaseNoSetup):
+    """
+    This class presents general purpose utilities to generate sequenced indexed dataframes. 
+    Those dataframes are useful for simulating update operations.
+
+    The dataframes that are meant to be written need to be in different symbols for each of the processes
+    that asv creates. Thus the aim of the utilities is to help generation of the needed cache 
+    of dataframes in `setup_cache` as the actual writing should happen in asv `setup` method, where each method
+    ideally should use process id as identification for symbol, library etc.
+
+    Typical use is to generate 4 or more dataframes. With first you will initiate 
+    write to a symbol and with next you can do appends poping out from list
+    """
+
+    # Default frequency
+    FREQ = 's'
+    # Default initial timestamp
+    INITIAL_TIMESTAMP = pd.Timestamp("1999-10-10")
+
+    def __init__(self, storage, prefix = None, library_options = None, uris_cache = None):
+        super().__init__(storage, prefix, library_options, uris_cache)
+        self._frequency = self.FREQ
+        # Internally we keep timestamp as timestamp number for quick calculations
+        self.__init_time_number = TimestampNumber.from_timestamp(self.INITIAL_TIMESTAMP, self._frequency)
+        self.__number_cols = 20
+        self.__min_wide_col_threshold_columns = 500
+
+    def set_initial_timestamp(self, initial_timestamp):
+        self.__init_time_number = TimestampNumber.from_timestamp(initial_timestamp, self._frequency)
+        return self
+
+    def set_frquency(self, freq):
+        self._frequency = freq
+        return self
+
+    def set_default_columns(self, number_cols):
+        self.__number_cols = number_cols
+        return self
+
+    def get_default_columns(self) -> int:
+        return self.__number_cols
+
+    def generate_dataframe_no_index(self, number_rows: int):
+        """
+        In case needed no index dataframe is also possible to generate
+        """
+        number_cols = self.__number_cols
+        self.logger().info("Dataframe generation started.")
+        st = time.time()
+        df: pd.DataFrame = DFGenerator.generate_random_dataframe(rows=number_rows, cols=number_cols, indexed=False)
+        self.logger().info(f"Dataframe rows {number_rows} cols {number_cols} generated for {time.time() - st} sec")
+        return df
+    
+    def get_initial_time_number(self):
+        return copy.deepcopy(self.__init_time_number)
+
+    def set_index(self, df: pd.DataFrame , start_timestamp: Union[pd.Timestamp, TimestampNumber]):
+        if isinstance(start_timestamp, TimestampNumber):
+            start = start_timestamp.to_timestamp()
+        else:
+            start = start_timestamp
+        df.index = pd.date_range(start=start, 
+                                 periods=df.shape[0], freq=self.FREQ, name='timestamp')
+        return df
+
+    def generate_dataframe(self, number_rows: int, start_timestamp: Union[pd.Timestamp, TimestampNumber]):
+        
+        if self.__number_cols < self.__min_wide_col_threshold_columns:
+            df = self.generate_dataframe_no_index(number_rows)
+            df = self.set_index(df, start_timestamp=start_timestamp)
+        else:
+            df = self.generate_wide_dataframe(number_rows, start_timestamp)
+
+        return df
+    
+    def generate_wide_dataframe(self, number_rows: int, start_timestamp: Union[pd.Timestamp, TimestampNumber]):
+        """
+        Efficient for wide dataframes
+        """
+        max_string_cols = 500
+        calculated_max = self.get_default_columns() // 15
+        if calculated_max > max_string_cols:
+            calculated_max =  max_string_cols
+
+        if isinstance(start_timestamp, TimestampNumber):
+            start = start_timestamp.to_timestamp()
+        else:
+            start = start_timestamp
+
+        df = DFGenerator.generate_wide_dataframe(num_rows=number_rows, num_cols=self.__number_cols,
+                                                 num_string_cols= calculated_max,
+                                                 start_time=start)
+        return df
+
+    def generate_chained_writes(self, number_rows: int, 
+                               number_data_frames: int, 
+                               start_timestamp: pd.Timestamp = None,
+                               freq: str = 's') -> List[pd.DataFrame]:
+        """
+        Generates specified number of data frames each having specified number of rows.
+        The dataframes are in chronological order one after the other.
+        Date range starts with the specified initial timestamp setup and frequency
+        is the one setup
+
+        NOTE: will detect if the number of columns is 250 and will use another algorithm
+        for generating wide dataframe
+        """
+        cache = []
+        if start_timestamp:
+            timestamp_number = TimestampNumber.from_timestamp(start_timestamp, freq)
+        else: 
+            timestamp_number = self.get_initial_time_number()
+
+        for i in range(number_data_frames):
+            if self.get_default_columns() < self.__min_wide_col_threshold_columns:
+                df = self.generate_dataframe(number_rows, timestamp_number)
+            else: 
+                df = self.generate_wide_dataframe(number_rows, timestamp_number)
+            cache.append(df)
+            timestamp_number.inc(df.shape[0])
+        
+        return cache
+    
+    def get_first_and_last_timestamp(self, sequence_df_list: List[pd.DataFrame]) -> List[pd.Timestamp]:
+        """
+        Returns first and last timestamp of the list of indexed dataframes
+        """
+        assert len(sequence_df_list) > 0
+        start = sequence_df_list[0].head(1).index.array[0]
+        last = sequence_df_list[-1].tail(1).index.array[0]
+        return [start, last]
+    
+    def get_next_timestamp_number(self, sequence_df_list: List[pd.DataFrame], freq: str) -> TimestampNumber:
+        """
+        Returns next timestamp after the last timestamp in passed sequence of 
+        indexed dataframes.
+        """
+        last = self.get_first_and_last_timestamp(sequence_df_list)[1]
+        next = TimestampNumber.from_timestamp(last, freq) + 1
+        return next
+    
+
+class GeneralSetupOfLibrariesWithSymbols(EnvConfigurationBase):
+    """
+    This class provides abstract logic for generation of a set of libraries
+    that contain certain number of symbols. Each symbol in the library will 
+    have certain number of rows and optionally columns. By default the dataframe
+    is timestamp indexed (optional to have no index)
+
+    Requires at least 2 parameters:
+     - list of number of symbols per library
+     - list of rows per each symbol
+     - (OPTIONAL) list of number of columns (if no column list specified will use `default_number_cols`)
+
+    The number of libraries will match the number of symbols in it.
+    Each symbol will have the following numbers encoded in the symbol name:
+      - id (0<=id<number_of_symbols)
+      - number of rows
+      - number of columns
+
+    """
+
+    def __init__(self, storage, prefix = None, library_options = None, uris_cache = None):
+        super().__init__(storage, prefix, library_options, uris_cache)
+        self.param_index_num_symbols = 0
+        self.param_index_rows = 1
+        self.param_index_cols = 2
+        self.default_number_cols = 10
+        self.start_timestamp = pd.Timestamp("2000-1-1")
+        self.index_freq = 's'
+        self.indexed = True
+
+    def set_params(self, params) -> 'GeneralSetupOfLibrariesWithSymbols':
+        assert len(params) >= 2, "At least 2 parameters must be defined number symbols and rows"
+        super().set_params(params)
+        return self
+    
+    def set_number_symbols_parameter_index(self, index:int = 0) -> 'GeneralSetupOfLibrariesWithSymbols':
+        assert index is not None
+        self.param_index_num_symbols = index
+        return self
+    
+    def set_number_rows_parameter_index(self, index:int = 1) -> 'GeneralSetupOfLibrariesWithSymbols':
+        assert index is not None
+        self.param_index_rows = index
+        return self
+
+    def set_number_columns_parameter_index(self, index:int = 2) -> 'GeneralSetupOfLibrariesWithSymbols':
+        """
+        Sets the index of the column number parameter, set to None if all symbols
+        should have same number of columns, which is `default_number_cols`
+        """
+        self.param_index_cols = index
+        return self
+    
+    def set_no_index(self) -> 'GeneralSetupOfLibrariesWithSymbols':
+        self.indexed = False
+        return self
+    
+    def set_timestamp(self, timestamp: pd.Timestamp) -> 'GeneralSetupOfLibrariesWithSymbols':
+        self.start_timestamp  = timestamp
+        return self
+
+    def generate_dataframe(self, rows: int, cols: int) -> pd.DataFrame:
+        """
+        Dataframe generator that will be used for wide dataframe generation
+        """
+        if cols is None:
+            cols = 1
+        st = time.time()
+        self.logger().info("Dataframe generation started.")
+        df: pd.DataFrame = DFGenerator.generate_random_dataframe(rows=rows, cols=cols, indexed=False)
+        if self.indexed:
+            df.index = pd.date_range(start=self.start_timestamp, 
+                                     periods=df.shape[0], freq=self.index_freq, name='primary_index')
+        self.logger().info(f"Dataframe rows {rows} cols {cols} generated for {time.time() - st} sec")
+        return df
+    
+    def get_symbol_name(self, symbol_number, rows, cols) -> str:
+        '''
+        Maps rows and cols to proper symbol name
+        This method should be used in ASV tests obtain symbol name based on parameters
+        '''
+        sym_suffix = ""
+        if cols is None:
+            sym_suffix = f"_idx{symbol_number}_rows{rows}"
+        else:
+            sym_suffix = f"_idx{symbol_number}_rows{rows}_cols{cols}"
+        return self.get_symbol_name_template(sym_suffix)
+    
+    def _get_symbol_bounds(self):
+        """
+        Extracts rows and cols from the parameter structure
+        """
+        list_rows = self._params[self.param_index_rows]
+        if self.param_index_cols is None:
+            list_cols = [self.default_number_cols]    
+        else:
+            list_cols = self._params[self.param_index_cols]
+        return(list_rows, list_cols)
+        
+    def setup_symbol(self, lib: Library, symbols_number: int):
+        (list_rows, list_cols) = self._get_symbol_bounds()
+        start = time.time()
+        for sym_num in range(symbols_number):
+            for row in list_rows:
+                for col in list_cols:
+                    st = time.time()
+                    df = self.generate_dataframe(row, col)
+                    symbol = self.get_symbol_name(sym_num, row, col)
+                    lib.write(symbol, df)
+                    self.logger().info(f"Dataframe stored at {symbol} for {time.time() - st} sec")
+        self.logger().info(f"Stored {symbols_number} symbols for {time.time() - start} sec")
+
+
+    def setup_all(self) -> 'GeneralSetupOfLibrariesWithSymbols':
+        """
+        Sets up in default library a number of symbols which is combination of parameters
+        for number of rows and columns
+        For each of symbols it will generate dataframe based on `generate_dataframe` function
+        """
+        start = time.time()
+        for num_symbols in self._params[self.param_index_num_symbols]:
+            lib = self.get_library(num_symbols)
+            self.logger().info(f"Library: {lib}")
+            self.setup_symbol(lib,num_symbols)
+        self.logger().info(f"TOTAL TIME (setup of one library with specified rows and column symbols): {time.time() - start} sec")
+        return self
+    
+    def check_symbol(self, lib: Library, symbols_number: int):
+        pass
+
+    def check_ok(self):
+        """
+        Checks if library contains all needed data to run tests.
+        if OK, setting things up can be skipped
+        """
+        (list_rows, list_cols) = self._get_symbol_bounds()
+
+        for num_symbols in self._params[self.param_index_num_symbols]:
+            lib = self.get_library(num_symbols)
+            self.logger().debug(f"Library {lib}")
+            for num_symbol in range(num_symbols):
+                symbols = lib.list_symbols()
+                self.logger().debug(f"Symbols {symbols}")
+                for rows in list_rows:
+                    for cols in list_cols:
+                        symbol = self.get_symbol_name(num_symbol, rows, cols)
+                        self.logger().debug(f"Check symbol {symbol}")
+                        if not symbol in symbols:
+                            self.logger().info(f"CHECK FAILED")
+                            return False
+        self.logger().info(f"CHECK ENVIRONMENT PASSED ALL IS THERE")
+        return True
 
 
 class GeneralSetupLibraryWithSymbolsTests:
