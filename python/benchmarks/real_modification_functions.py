@@ -47,7 +47,7 @@ class AWSWide:
 
     timeout = 1200
 
-    SETUP_CLASS = (GeneralAppendSetup(storage=Storage.LMDB, 
+    SETUP_CLASS = (GeneralAppendSetup(storage=Storage.AMAZON, 
                                     prefix="BUG_WIDE_APPEND",
                                     library_options=LibraryOptions(rows_per_segment=1000,columns_per_segment=1000)
                                     )
@@ -159,7 +159,7 @@ class AWSWide1:
 
     timeout = 1200
 
-    SETUP_CLASS = (GeneralAppendSetup(storage=Storage.LMDB, 
+    SETUP_CLASS = (GeneralAppendSetup(storage=Storage.AMAZON, 
                                     prefix="BUG_WIDE_APPEND",
                                     )
                                     .set_default_columns(WIDE_DATAFRAME_NUM_COLS))
