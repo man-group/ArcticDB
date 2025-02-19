@@ -40,15 +40,15 @@ class LargeAppendDataModifyCache:
 class AWSBugWide30K:
 
     rounds = 1
-    number = 3 # invokes 3 times the test runs between each setup-teardown 
-    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
+    number = 1 # invokes 3 times the test runs between each setup-teardown 
+    repeat = 3 # defines the number of times the measurements will invoke setup-teardown
     min_run_count = 1
     warmup_time = 0
 
     timeout = 1200
 
     SETUP_CLASS = (GeneralAppendSetup(storage=Storage.AMAZON, 
-                                    prefix="BUGONE_WIDE_APPEND",
+                                    prefix="BUGONE31232_WIDE_APPEND",
                                     library_options=LibraryOptions(rows_per_segment=1000,columns_per_segment=1000)
                                     )
                                     .set_default_columns(WIDE_DATAFRAME_NUM_COLS))
@@ -67,7 +67,7 @@ class AWSBugWide30K:
         assert warmup_time == 0, "warm up must be 0"
 
         set_env = setup_obj
-        num_sequenced_dataframes = AWSBugWide30K_2.number + 1
+        num_sequenced_dataframes = AWSBugWide30K_2.number
         cache = LargeAppendDataModifyCache()
 
         for num_rows in params:
@@ -129,21 +129,11 @@ class AWSBugWide30K:
     def teardown(self, cache, num_rows):
         self.set_env.delete_modifiable_library( self.pid )
 
-    def time_update_full(self, cache, num_rows):
-        self.lib.update(self.symbol, self.cache.update_full_dict[num_rows])
-
     def time_update_single(self, cache, num_rows):
         self.lib.update(self.symbol, self.cache.update_single_dict[num_rows])
 
     def time_update_half(self, cache, num_rows):
         self.lib.update(self.symbol, self.cache.update_half_dict[num_rows])
-
-    def time_update_full(self, cache, num_rows):
-        #self.lib.update(self.symbol, self.cache.update_full)
-        self.lib.update(self.symbol, self.cache.update_full_dict[num_rows])
-
-    def time_update_upsert(self, cache, num_rows):
-        self.lib.update(self.symbol, self.cache.update_upsert_dict[num_rows], upsert=True)
 
     def time_append_large(self, cache, num_rows):
         large: pd.DataFrame = self.appends_list.pop(0)
