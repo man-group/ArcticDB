@@ -115,6 +115,8 @@ class AWSLargeAppendDataModify:
         writes_list = self.cache.write_and_append_dict[num_rows]
         
         self.pid = os.getpid()
+        self.set_env.remove_all_modifiable_libraries(True)
+        self.set_env.delete_modifiable_library(self.pid)
         self.lib = self.set_env.get_modifiable_library(self.pid)
 
         self.symbol = self.set_env.get_symbol_name_template(f"_pid-{self.pid}")
@@ -265,7 +267,7 @@ class AWSDeleteTestsFewLarge:
 
         self.pid = os.getpid()
         self.set_env.remove_all_modifiable_libraries(True)
-        self.set_env.delete_modifiable_library(self.set_env)
+        self.set_env.delete_modifiable_library(self.pid)
         self.lib = self.set_env.get_modifiable_library(self.pid)
 
         self.setup_symbol(self.lib, writes_list)
