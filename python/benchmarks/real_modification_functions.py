@@ -53,7 +53,7 @@ class AWSWide30K:
                                     )
                                     .set_default_columns(WIDE_DATAFRAME_NUM_COLS))
         
-    params = [1_000, 2_500, 5_000] # [1000, 1500] # for test purposes
+    params = [2_500] # [1000, 1500] # for test purposes
     param_names = ["num_rows"]
 
     def setup_cache(self):
@@ -171,3 +171,66 @@ class AWSWide30KNoSegments(AWSWide30K):
         return self.initialize_cache(AWSWide30KNoSegments.SETUP_CLASS,
                                      AWSWide30KNoSegments.warmup_time,
                                      AWSWide30KNoSegments.params)
+    
+
+class AWSWide30KNewInitializeFoUpdates(AWSWide30K):
+
+    rounds = 1
+    number = 3 # invokes 3 times the test runs between each setup-teardown 
+    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
+    min_run_count = 1
+    warmup_time = 0
+
+    timeout = 1200
+
+    SETUP_CLASS = (GeneralAppendSetup(storage=Storage.AMAZON, 
+                                    prefix="BUG_WIDE_APPEND",
+                                    library_options=LibraryOptions(rows_per_segment=1000,columns_per_segment=1000)
+                                    )
+                                    .set_default_columns(WIDE_DATAFRAME_NUM_COLS))
+        
+    params = [2_500, 5_000] # [1000, 1500] # for test purposes
+    param_names = ["num_rows"]
+
+    def setup_cache(self):
+        return self.initialize_cache(AWSWide30KNewInitializeFoUpdates.SETUP_CLASS,
+                                     AWSWide30KNewInitializeFoUpdates.warmup_time,
+                                     AWSWide30KNewInitializeFoUpdates.params)
+    
+    def initialize_update_dataframes(self, num_rows, cached_results: LargeAppendDataModifyCache, 
+                                     set_env: GeneralAppendSetup):
+        timestamp_number = set_env.get_initial_time_number()
+        end_timestamp_number = timestamp_number + num_rows
+        set_env.logger().info(f"Frame START-LAST Timestamps {timestamp_number} == {end_timestamp_number}")
+
+        # calculate update dataframes
+        # update same size same date range start-end
+        cached_results.update_full_dict[num_rows] = set_env.generate_dataframe(num_rows, timestamp_number)
+        time_range = set_env.get_first_and_last_timestamp([cached_results.update_full_dict[num_rows]])
+        set_env.logger().info(f"Time range FULL update { time_range }")
+
+        # update 2nd half of initial date range
+        half = (num_rows // 2) 
+        timestamp_number.inc(half - 3) 
+        cached_results.update_half_dict[num_rows] = set_env.generate_dataframe(half, timestamp_number)
+        time_range = set_env.get_first_and_last_timestamp([cached_results.update_half_dict[num_rows]])
+        set_env.logger().info(f"Time range HALF update { time_range }")
+
+        # update from the half with same size dataframe (end period is outside initial bounds)
+        cached_results.update_upsert_dict[num_rows] = set_env.generate_dataframe(num_rows, timestamp_number)
+        time_range = set_env.get_first_and_last_timestamp([cached_results.update_upsert_dict[num_rows]])
+        set_env.logger().info(f"Time range UPSERT update { time_range }")
+
+        # update one line at the end
+        timestamp_number.inc(half) 
+        cached_results.update_single_dict[num_rows] = set_env.generate_dataframe(1, timestamp_number)
+        time_range = set_env.get_first_and_last_timestamp([cached_results.update_single_dict[num_rows]])
+        set_env.logger().info(f"Time range SINGLE update { time_range }")
+
+        next_timestamp =  set_env.get_next_timestamp_number(cached_results.write_and_append_dict[num_rows],
+                                                           set_env.FREQ )
+        cached_results.append_single_dict[num_rows] = set_env.generate_dataframe(1, 
+                                                                                next_timestamp)
+        time_range = set_env.get_first_and_last_timestamp([cached_results.append_single_dict[num_rows]])
+        set_env.logger().info(f"Time range SINGLE append { time_range }")
+        
