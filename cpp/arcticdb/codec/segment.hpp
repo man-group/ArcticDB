@@ -151,8 +151,7 @@ class Segment {
     }
 
     [[nodiscard]] std::size_t calculate_size() {
-        if(!size_.has_value())
-            size_ = FIXED_HEADER_SIZE + segment_header_bytes_size() + buffer_bytes();
+        size_ = FIXED_HEADER_SIZE + segment_header_bytes_size() + buffer_bytes();
 
         return *size_;
     }
