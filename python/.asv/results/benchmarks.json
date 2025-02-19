@@ -1604,6 +1604,282 @@
         "version": "ed1d1ccb6458095a627788bfa2b53afa310ca8c8118a6405c91204724c865d6c",
         "warmup_time": -1
     },
+    "real_bug.AWSBugWide30K.time_append_large": {
+        "code": "class AWSBugWide30K:\n    def time_append_large(self, cache, num_rows):\n        large: pd.DataFrame = self.appends_list.pop(0)\n        self.lib.append(self.symbol, large)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSBugWide30K.SETUP_CLASS,\n                                     AWSBugWide30K.warmup_time,\n                                     AWSBugWide30K.params)",
+        "min_run_count": 1,
+        "name": "real_bug.AWSBugWide30K.time_append_large",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_bug:59",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "8f0909acb73e30baa000bdb7cd26b792fdf816471f640f8162c63e1e800941fe",
+        "warmup_time": 0
+    },
+    "real_bug.AWSBugWide30K.time_append_single": {
+        "code": "class AWSBugWide30K:\n    def time_append_single(self, cache, num_rows):\n        self.lib.append(self.symbol, self.cache.append_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSBugWide30K.SETUP_CLASS,\n                                     AWSBugWide30K.warmup_time,\n                                     AWSBugWide30K.params)",
+        "min_run_count": 1,
+        "name": "real_bug.AWSBugWide30K.time_append_single",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_bug:59",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "dcd673c5faca2c0412ca839b5cc5eb974013b284173817990eea29d66804c324",
+        "warmup_time": 0
+    },
+    "real_bug.AWSBugWide30K.time_update_full": {
+        "code": "class AWSBugWide30K:\n    def time_update_full(self, cache, num_rows):\n        #self.lib.update(self.symbol, self.cache.update_full)\n        self.lib.update(self.symbol, self.cache.update_full_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSBugWide30K.SETUP_CLASS,\n                                     AWSBugWide30K.warmup_time,\n                                     AWSBugWide30K.params)",
+        "min_run_count": 1,
+        "name": "real_bug.AWSBugWide30K.time_update_full",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_bug:59",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "6702de8700cf2f50c28b731847073720160ee16c0eea365bce4ac291a604f1ed",
+        "warmup_time": 0
+    },
+    "real_bug.AWSBugWide30K.time_update_half": {
+        "code": "class AWSBugWide30K:\n    def time_update_half(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_half_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSBugWide30K.SETUP_CLASS,\n                                     AWSBugWide30K.warmup_time,\n                                     AWSBugWide30K.params)",
+        "min_run_count": 1,
+        "name": "real_bug.AWSBugWide30K.time_update_half",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_bug:59",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "f3ec34c75cbd00f626d18496a521ac0fa1fe805508d404d619ce4e55b7fdf819",
+        "warmup_time": 0
+    },
+    "real_bug.AWSBugWide30K.time_update_single": {
+        "code": "class AWSBugWide30K:\n    def time_update_single(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSBugWide30K.SETUP_CLASS,\n                                     AWSBugWide30K.warmup_time,\n                                     AWSBugWide30K.params)",
+        "min_run_count": 1,
+        "name": "real_bug.AWSBugWide30K.time_update_single",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_bug:59",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "ee7b314decdf5c1a1959f198381d97cee439c7adb6f1fad51130d10b8a47a8fd",
+        "warmup_time": 0
+    },
+    "real_bug.AWSBugWide30K.time_update_upsert": {
+        "code": "class AWSBugWide30K:\n    def time_update_upsert(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_upsert_dict[num_rows], upsert=True)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSBugWide30K.SETUP_CLASS,\n                                     AWSBugWide30K.warmup_time,\n                                     AWSBugWide30K.params)",
+        "min_run_count": 1,
+        "name": "real_bug.AWSBugWide30K.time_update_upsert",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_bug:59",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "5a4af54c0df9db83a33ea9cd513ec44161d07fb9db74b9f418d66ed9dcaea999",
+        "warmup_time": 0
+    },
+    "real_bug.AWSBugWide30K_2.time_append_large": {
+        "code": "class AWSBugWide30K:\n    def time_append_large(self, cache, num_rows):\n        large: pd.DataFrame = self.appends_list.pop(0)\n        self.lib.append(self.symbol, large)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWSBugWide30K_2:\n    def setup_cache(self):\n        return self.initialize_cache(AWSBugWide30K_2.SETUP_CLASS,\n                                     AWSBugWide30K_2.warmup_time,\n                                     AWSBugWide30K_2.params)",
+        "min_run_count": 1,
+        "name": "real_bug.AWSBugWide30K_2.time_append_large",
+        "number": 1,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_bug:174",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "b057e13a9067d41e524a5b793627b92800e85d35eda707df0f8dc2c425225e67",
+        "warmup_time": 0
+    },
+    "real_bug.AWSBugWide30K_2.time_append_single": {
+        "code": "class AWSBugWide30K:\n    def time_append_single(self, cache, num_rows):\n        self.lib.append(self.symbol, self.cache.append_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWSBugWide30K_2:\n    def setup_cache(self):\n        return self.initialize_cache(AWSBugWide30K_2.SETUP_CLASS,\n                                     AWSBugWide30K_2.warmup_time,\n                                     AWSBugWide30K_2.params)",
+        "min_run_count": 1,
+        "name": "real_bug.AWSBugWide30K_2.time_append_single",
+        "number": 1,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_bug:174",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "6d099b8f44e97b507f54e62595fca20087f8a03d2160db61ca527c1698e312ce",
+        "warmup_time": 0
+    },
+    "real_bug.AWSBugWide30K_2.time_update_full": {
+        "code": "class AWSBugWide30K:\n    def time_update_full(self, cache, num_rows):\n        #self.lib.update(self.symbol, self.cache.update_full)\n        self.lib.update(self.symbol, self.cache.update_full_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWSBugWide30K_2:\n    def setup_cache(self):\n        return self.initialize_cache(AWSBugWide30K_2.SETUP_CLASS,\n                                     AWSBugWide30K_2.warmup_time,\n                                     AWSBugWide30K_2.params)",
+        "min_run_count": 1,
+        "name": "real_bug.AWSBugWide30K_2.time_update_full",
+        "number": 1,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_bug:174",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "23b5ed760e74cef843a6403429a833044d702eb71c0a41982f3548cfb2929b39",
+        "warmup_time": 0
+    },
+    "real_bug.AWSBugWide30K_2.time_update_half": {
+        "code": "class AWSBugWide30K:\n    def time_update_half(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_half_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWSBugWide30K_2:\n    def setup_cache(self):\n        return self.initialize_cache(AWSBugWide30K_2.SETUP_CLASS,\n                                     AWSBugWide30K_2.warmup_time,\n                                     AWSBugWide30K_2.params)",
+        "min_run_count": 1,
+        "name": "real_bug.AWSBugWide30K_2.time_update_half",
+        "number": 1,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_bug:174",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "2bd45589b84f22b57a18774a6f459e652b4289c7aef6a37412976240664a7edb",
+        "warmup_time": 0
+    },
+    "real_bug.AWSBugWide30K_2.time_update_single": {
+        "code": "class AWSBugWide30K:\n    def time_update_single(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWSBugWide30K_2:\n    def setup_cache(self):\n        return self.initialize_cache(AWSBugWide30K_2.SETUP_CLASS,\n                                     AWSBugWide30K_2.warmup_time,\n                                     AWSBugWide30K_2.params)",
+        "min_run_count": 1,
+        "name": "real_bug.AWSBugWide30K_2.time_update_single",
+        "number": 1,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_bug:174",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "c6cbd2eba376e9e8ae4b094c42efaa1ebfbcbe2ba7cc72c27a58afa259f23a72",
+        "warmup_time": 0
+    },
+    "real_bug.AWSBugWide30K_2.time_update_upsert": {
+        "code": "class AWSBugWide30K:\n    def time_update_upsert(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_upsert_dict[num_rows], upsert=True)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWSBugWide30K_2:\n    def setup_cache(self):\n        return self.initialize_cache(AWSBugWide30K_2.SETUP_CLASS,\n                                     AWSBugWide30K_2.warmup_time,\n                                     AWSBugWide30K_2.params)",
+        "min_run_count": 1,
+        "name": "real_bug.AWSBugWide30K_2.time_update_upsert",
+        "number": 1,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_bug:174",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "cbb2059e0d45d438b953db590d7f7b45b3b2e25a69dcfd3dbd58203143151824",
+        "warmup_time": 0
+    },
     "real_list_operations.AWSListSymbols.peakmem_list_symbols": {
         "code": "class AWSListSymbols:\n    def peakmem_list_symbols(self, storage_info, num_syms):\n        self.lib.list_symbols()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws_setup = AWSListSymbols.SETUP_CLASS\n        if aws_setup.check_ok():\n            aws_setup.clear_symbols_cache()\n        else:\n            aws_setup.setup_all()\n        info = aws_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws_setup.logger().info(f\"storage info object: {info}\")\n        return info",
         "name": "real_list_operations.AWSListSymbols.peakmem_list_symbols",
