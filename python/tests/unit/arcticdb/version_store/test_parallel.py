@@ -27,9 +27,10 @@ from arcticdb.util.test import (
 )
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.library import Library
+from arcticdb_ext.exceptions import UnsortedDataException
 from arcticdb_ext.storage import KeyType
 
-from arcticdb import util
+from arcticdb import util, LibraryOptions
 
 from arcticdb.util.test import config_context_multi
 
@@ -1437,3 +1438,140 @@ class TestSlicing:
         lib.compact_incomplete("sym", False, False)
 
         assert_frame_equal(lib.read("sym").data, df_1)
+
+
+def test_chunks_overlap(lmdb_storage, lib_name):
+    """Given - we stage chunks with indexes:
+
+    b:test:0:0xdfde242de44bdf38@1739968386409923711[0,1001]
+    b:test:0:0x95750a82cfa088df@1739968386410180283[1000,1001]
+    
+    When - We finalize the staged segments
+    
+    Then - We should succeed even though the segments seem to overlap by 1ns because the end time in the key is 1
+    greater than the last index value in the segment
+    """
+    lib: Library = lmdb_storage.create_arctic().create_library(
+        lib_name,
+        library_options=LibraryOptions(rows_per_segment=2))
+
+    idx = [
+        pd.Timestamp(0),
+        pd.Timestamp(1000),
+        pd.Timestamp(1000),
+        pd.Timestamp(1000),
+    ]
+
+    data = pd.DataFrame({"a": len(idx)}, index=idx)
+    lib.write("test", data, staged=True)
+
+    lt = lib._nvs.library_tool()
+    append_keys = lt.find_keys_for_id(KeyType.APPEND_DATA, "test")
+    assert len(append_keys) == 2
+    lib.finalize_staged_data("test")
+
+    df = lib.read("test").data
+    assert_frame_equal(df, data)
+    assert df.index.is_monotonic_increasing
+
+
+def test_chunks_overlap_1ns(lmdb_storage, lib_name):
+    """Given - we stage chunks that overlap by 1ns
+
+    When - We finalize the staged segments
+
+    Then - We should raise a validation error
+    """
+    lib: Library = lmdb_storage.create_arctic().create_library(
+        lib_name,
+        library_options=LibraryOptions(rows_per_segment=2))
+
+    idx = [pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]
+    first = pd.DataFrame({"a": len(idx)}, index=idx)
+    lib.write("test", first, staged=True)
+
+    idx = [pd.Timestamp(1), pd.Timestamp(3)]
+    second = pd.DataFrame({"a": len(idx)}, index=idx)
+    lib.write("test", second, staged=True)
+
+    with pytest.raises(UnsortedDataException):
+        lib.finalize_staged_data("test")
+
+
+def test_chunks_match_at_ends(lmdb_storage, lib_name):
+    """Given - we stage chunks that match at the ends
+
+    When - We finalize the staged segments
+
+    Then - Should be OK to finalize
+    """
+    lib: Library = lmdb_storage.create_arctic().create_library(
+        lib_name,
+        library_options=LibraryOptions(rows_per_segment=2))
+
+    idx = [pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]
+    first = pd.DataFrame({"a": len(idx)}, index=idx)
+    lib.write("test", first, staged=True)
+
+    idx = [pd.Timestamp(2), pd.Timestamp(2)]
+    second = pd.DataFrame({"a": len(idx)}, index=idx)
+    lib.write("test", second, staged=True)
+
+    lib.finalize_staged_data("test")
+
+    assert_frame_equal(lib.read("test").data, pd.concat([first, second]))
+
+
+def test_chunks_the_same(lmdb_storage, lib_name):
+    """Given - we stage chunks with indexes:
+
+    b:test:0:0xc7ad4135da54cd6e@1739968588832977666[1000,2001]
+    b:test:0:0x68d8759aba38bcf0@1739968588832775570[1000,1001]
+    b:test:0:0x68d8759aba38bcf0@1739968588832621000[1000,1001]
+
+    When - We finalize the staged segments
+    
+    Then - We should succeed even though the segments seem to be identical, since they are just covering a duplicated
+    index value
+    """
+    lib: Library = lmdb_storage.create_arctic().create_library(
+        lib_name,
+        library_options=LibraryOptions(rows_per_segment=2))
+
+    idx = [
+        pd.Timestamp(1000),
+        pd.Timestamp(1000),
+        pd.Timestamp(1000),
+        pd.Timestamp(1000),
+        pd.Timestamp(1000),
+        pd.Timestamp(2000),
+    ]
+
+    data = pd.DataFrame({"a": len(idx)}, index=idx)
+    lib.write("test", data, staged=True)
+
+    lt = lib._nvs.library_tool()
+    append_keys = lt.find_keys_for_id(KeyType.APPEND_DATA, "test")
+    assert len(append_keys) == 3
+    lib.finalize_staged_data("test")
+
+    df = lib.read("test").data
+    assert_frame_equal(df, data)
+    assert df.index.is_monotonic_increasing
+
+
+def test_staging_in_chunks_default_settings(lmdb_storage, lib_name):
+    lib: Library = lmdb_storage.create_arctic().create_library(lib_name)
+    idx = pd.date_range(pd.Timestamp(0), periods=int(31e5), freq="us")
+
+    data = pd.DataFrame({"a": len(idx)}, index=idx)
+    lib.write("test", data, staged=True)
+
+    lt = lib._nvs.library_tool()
+    append_keys = lt.find_keys_for_id(KeyType.APPEND_DATA, "test")
+    assert len(append_keys) == 31
+    lib.finalize_staged_data("test")
+
+    df = lib.read("test").data
+    assert_frame_equal(df, data)
+    assert df.index.is_monotonic_increasing
