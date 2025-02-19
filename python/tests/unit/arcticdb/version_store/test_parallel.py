@@ -1468,11 +1468,13 @@ def test_chunks_overlap(lmdb_storage, lib_name):
     lt = lib._nvs.library_tool()
     append_keys = lt.find_keys_for_id(KeyType.APPEND_DATA, "test")
     assert len(append_keys) == 2
+    assert sorted([key.start_index for key in append_keys]) == [0, 1000]
+    assert [key.end_index for key in append_keys] == [1001, 1001]
+
     lib.finalize_staged_data("test")
 
     df = lib.read("test").data
     assert_frame_equal(df, data)
-    assert df.index.is_monotonic_increasing
 
 
 def test_chunks_overlap_1ns(lmdb_storage, lib_name):
@@ -1560,6 +1562,9 @@ def test_chunks_the_same(lmdb_storage, lib_name):
     lt = lib._nvs.library_tool()
     append_keys = lt.find_keys_for_id(KeyType.APPEND_DATA, "test")
     assert len(append_keys) == 3
+    assert sorted([key.start_index for key in append_keys]) == [1000, 1000, 1000]
+    assert sorted([key.end_index for key in append_keys]) == [1001, 1001, 2001]
+
     lib.finalize_staged_data("test")
 
     df = lib.read("test").data
