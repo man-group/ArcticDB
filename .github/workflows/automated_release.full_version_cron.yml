@@ -31,6 +31,10 @@ jobs:
 
   tag_and_release:
     name: Tag and Release version ${{ needs.get_tag_name.outputs.next_version }} from branch ${{ needs.get_tag_name.outputs.next_version }}
+    secrets: inherit
+    permissions:
+      checks: read
+      contents: write
     uses: ./.github/workflows/tag.yml
     needs: get_tag_name
     with:
