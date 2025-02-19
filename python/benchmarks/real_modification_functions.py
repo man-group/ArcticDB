@@ -47,7 +47,7 @@ class AWSLargeAppendDataModify:
 
     timeout = 1200
 
-    SETUP_CLASS = (GeneralAppendSetup(storage=Storage.AMAZON, 
+    SETUP_CLASS = (GeneralAppendSetup(storage=Storage.LMDB, 
                                       prefix="BASIC_APPEND",
                                       ).set_default_columns(20))
     
@@ -86,29 +86,41 @@ class AWSLargeAppendDataModify:
     
     def initialize_update_dataframes(self, num_rows, cached_results: LargeAppendDataModifyCache, 
                                      set_env: GeneralAppendSetup):
+        timestamp_number = set_env.get_initial_time_number()
+        end_timestamp_number = timestamp_number + num_rows
+        set_env.logger().info(f"Frame START-LAST Timestamps {timestamp_number} == {end_timestamp_number}")
+
         # calculate update dataframes
         # update same size same date range start-end
-        timestamp_number = set_env.get_next_timestamp_number(cached_results.write_and_append_dict[num_rows],
-                                                           set_env.FREQ )
-        print(timestamp_number)
         cached_results.update_full_dict[num_rows] = set_env.generate_dataframe(num_rows, timestamp_number)
+        time_range = set_env.get_first_and_last_timestamp([cached_results.update_full_dict[num_rows]])
+        set_env.logger().info(f"Time range FULL update { time_range }")
 
         # update 2nd half of initial date range
         half = (num_rows // 2) 
         timestamp_number.inc(half - 3) 
         cached_results.update_half_dict[num_rows] = set_env.generate_dataframe(half, timestamp_number)
+        time_range = set_env.get_first_and_last_timestamp([cached_results.update_half_dict[num_rows]])
+        set_env.logger().info(f"Time range HALF update { time_range }")
 
         # update from the half with same size dataframe (end period is outside initial bounds)
         cached_results.update_upsert_dict[num_rows] = set_env.generate_dataframe(num_rows, timestamp_number)
-        timestamp_number.inc(half) 
+        time_range = set_env.get_first_and_last_timestamp([cached_results.update_upsert_dict[num_rows]])
+        set_env.logger().info(f"Time range UPSERT update { time_range }")
 
         # update one line at the end
+        timestamp_number.inc(half) 
         cached_results.update_single_dict[num_rows] = set_env.generate_dataframe(1, timestamp_number)
+        time_range = set_env.get_first_and_last_timestamp([cached_results.update_single_dict[num_rows]])
+        set_env.logger().info(f"Time range SINGLE update { time_range }")
 
-        next_timestamp = timestamp_number.to_initial_value()
+        next_timestamp =  set_env.get_next_timestamp_number(cached_results.write_and_append_dict[num_rows],
+                                                           set_env.FREQ )
         cached_results.append_single_dict[num_rows] = set_env.generate_dataframe(1, 
-                                                                               next_timestamp)
-    
+                                                                                next_timestamp)
+        time_range = set_env.get_first_and_last_timestamp([cached_results.append_single_dict[num_rows]])
+        set_env.logger().info(f"Time range SINGLE append { time_range }")
+            
     def setup(self, cache: LargeAppendDataModifyCache, num_rows):
         self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)
         self.cache = cache
@@ -147,38 +159,38 @@ class AWSLargeAppendDataModify:
     def time_append_single(self, cache, num_rows):
         self.lib.append(self.symbol, self.cache.append_single_dict[num_rows])
     
-if False:
     ## Following test is marked for exclusion due to problem that needs further investigation
-    ## and isolation : https://github.com/man-group/ArcticDB/actions/runs/13393930969/job/37408222827
+    ## and isolation : 
     ## Same test  works fine on LMDB (next test is left in)
 
-    class AWS30kColsWideDFLargeAppendDataModify(AWSLargeAppendDataModify):
-        """
-        Inherits from previous test all common functionalities.
-        Defines specific such that the test targets operations with very wide dataframe
-        """
+class AWS30kColsWideDFLargeAppendDataModify(AWSLargeAppendDataModify):
+    """
+    Inherits from previous test all common functionalities.
+    Defines specific such that the test targets operations with very wide dataframe
+    """
 
-        rounds = 1
-        number = 3 # invokes 3 times the test runs between each setup-teardown 
-        repeat = 1 # defines the number of times the measurements will invoke setup-teardown
-        min_run_count = 1
-        warmup_time = 0
+    rounds = 1
+    number = 3 # invokes 3 times the test runs between each setup-teardown 
+    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
+    min_run_count = 1
+    warmup_time = 0
 
-        timeout = 1200
+    timeout = 1200
 
-        SETUP_CLASS = (GeneralAppendSetup(storage=Storage.AMAZON, 
-                                        prefix="WIDE_APPEND",
-                                        library_options=LibraryOptions(rows_per_segment=1000,columns_per_segment=1000)
-                                        )
-                                        .set_default_columns(WIDE_DATAFRAME_NUM_COLS))
-        
-        params = [2_500, 5_000] #[100, 150] for test purposes
-        param_names = ["num_rows"]
+    SETUP_CLASS = (GeneralAppendSetup(storage=Storage.AMAZON, 
+                                    prefix="WIDE_APPEND",
+                                    # causing issues: https://github.com/man-group/ArcticDB/actions/runs/13393930969/job/37408222827
+                                    # library_options=LibraryOptions(rows_per_segment=1000,columns_per_segment=1000)
+                                    )
+                                    .set_default_columns(WIDE_DATAFRAME_NUM_COLS))
+    
+    params = [2_500, 5_000] #[100, 150] for test purposes
+    param_names = ["num_rows"]
 
-        def setup_cache(self):
-            return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,
-                                        AWS30kColsWideDFLargeAppendDataModify.warmup_time,
-                                        AWS30kColsWideDFLargeAppendDataModify.params)
+    def setup_cache(self):
+        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,
+                                    AWS30kColsWideDFLargeAppendDataModify.warmup_time,
+                                    AWS30kColsWideDFLargeAppendDataModify.params)
 
 
 class LMDB30kColsWideDFLargeAppendDataModify(AWSLargeAppendDataModify):

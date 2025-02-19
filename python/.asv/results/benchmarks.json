@@ -2082,6 +2082,150 @@
         "version": "2fc5d8c935ffb8a674f88c6645ca56370dfb61851afcdf0f80e60086979aba43",
         "warmup_time": 0
     },
+    "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_append_large": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_append_large(self, cache, num_rows):\n        large: pd.DataFrame = self.appends_list.pop(0)\n        self.lib.append(self.symbol, large)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                    AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                    AWS30kColsWideDFLargeAppendDataModify.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_append_large",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:190",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "0e9bbeaef9f14af17c7dd6b463f3f07e7df3e81baaf049e90543ae446389ad43",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_append_single": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_append_single(self, cache, num_rows):\n        self.lib.append(self.symbol, self.cache.append_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                    AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                    AWS30kColsWideDFLargeAppendDataModify.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_append_single",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:190",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "d3e8d2fd97e849c0c39a706da3f83a4580788d102662d832c007a6ad79eb8847",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_full": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_full(self, cache, num_rows):\n        #self.lib.update(self.symbol, self.cache.update_full)\n        self.lib.update(self.symbol, self.cache.update_full_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                    AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                    AWS30kColsWideDFLargeAppendDataModify.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_full",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:190",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "e492191a72e0ad929a02ae7121bedc4a0b33fa70f629df7064c1fd04f6829c02",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_half": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_half(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_half_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                    AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                    AWS30kColsWideDFLargeAppendDataModify.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_half",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:190",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "9e591d29c1174fbfe518666f5cb4c7cafb5761d61c03ffcd260eff31b461bc82",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_single": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_single(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                    AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                    AWS30kColsWideDFLargeAppendDataModify.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_single",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:190",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "6978b1c0106f26b330968ba88e16ce3dc030c6f975bbba911f948a1c503cf73f",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_upsert": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_upsert(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_upsert_dict[num_rows], upsert=True)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                    AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                    AWS30kColsWideDFLargeAppendDataModify.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_upsert",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:190",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "13a59ddc3aada4573a65f6daf22ba60971198927d9ba82bc0ec4107a08edf03d",
+        "warmup_time": 0
+    },
     "real_modification_functions.AWSDeleteTestsFewLarge.time_delete": {
         "code": "class AWSDeleteTestsFewLarge:\n    def time_delete(self, cache, num_rows):\n        self.lib.delete(self.symbol)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        writes_list = cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.setup_symbol(self.lib, writes_list)\n        assert self.lib.has_symbol\n\n    def setup_cache(self):\n        # warmup will execute tests additional time and we do not want that at all for write\n        # update and append tests. We want exact specified `number` of times to be executed between\n        assert AWSDeleteTestsFewLarge.warmup_time == 0, \"warm up must be 0\"\n        assert AWSDeleteTestsFewLarge.number == 1, \"delete works only once per setup=teardown\"\n    \n        set_env = AWSDeleteTestsFewLarge.SETUP_CLASS\n        num_sequenced_dataframes = AWSDeleteTestsFewLarge.number + 1\n        cache = LargeAppendDataModifyCache()\n    \n        for num_rows in AWSDeleteTestsFewLarge.params:\n            set_env.set_default_columns(20)\n            cache.write_and_append_dict[num_rows] = set_env.generate_chained_writes(\n                num_rows, num_sequenced_dataframes)\n    \n        #only create the library\n        set_env.remove_all_modifiable_libraries(True)\n    \n        set_env.logger().info(f\"Storage info: {set_env.get_storage_info()}\")\n        # With modifiable tests we do not prepare libraries here,\n        # but we do still return storage info as it has to be unique across processes\n        # We also leave each process to setup its initial library in setup\n        cache.storage_info = set_env.get_storage_info()\n        return cache",
         "min_run_count": 1,
@@ -2099,7 +2243,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_modification_functions:239",
+        "setup_cache_key": "real_modification_functions:251",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2267,7 +2411,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_modification_functions:207",
+        "setup_cache_key": "real_modification_functions:219",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2291,7 +2435,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_modification_functions:207",
+        "setup_cache_key": "real_modification_functions:219",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2315,7 +2459,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_modification_functions:207",
+        "setup_cache_key": "real_modification_functions:219",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2339,7 +2483,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_modification_functions:207",
+        "setup_cache_key": "real_modification_functions:219",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2363,7 +2507,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_modification_functions:207",
+        "setup_cache_key": "real_modification_functions:219",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2387,7 +2531,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_modification_functions:207",
+        "setup_cache_key": "real_modification_functions:219",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
