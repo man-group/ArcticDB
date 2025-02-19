@@ -74,33 +74,37 @@ jobs:
           pip install asv virtualenv
           python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
 
+      - name: Confugure what suite or tests to execute
+        shell: bash -el {0}
+        run: | 
+            if [ "${{ github.event.inputs.suite_to_run }}" == "REAL" ]; then
+              SUITE='^(real_).*'
+            else
+              SUITE='^(?!real_).*'
+            fi
+            echo "selection of suite SUITE=$SUITE"
+            SUITE_OVERWRITE=${{ github.event.inputs.suite_overwrite }}
+            echo "selection of SUITE_OVERWRITE=$SUITE_OVERWRITE"
+            # Remove leading and trailing whitespaces using parameter expansion
+            SUITE_OVERWRITE="${SUITE_OVERWRITE#"${SUITE_OVERWRITE%%[![:space:]]*}"}"
+            SUITE_OVERWRITE="${SUITE_OVERWRITE%"${SUITE_OVERWRITE##*[![:space:]]}"}"
+            if [[ -n "${SUITE_OVERWRITE// /}" ]]; then
+              SUITE=$SUITE_OVERWRITE
+            fi
+            echo "FINAL selection to execute SUITE=$SUITE"
+
       - name: Benchmark given commit
         if: github.event_name != 'pull_request_target' || inputs.run_all_benchmarks == true
         shell: bash -el {0}
         run: | 
           git config --global --add safe.directory .
-          if [ "${{ github.event.inputs.suite_to_run }}" == "REAL" ]; then
-            SUITE='^(real_).*'
-          else
-            SUITE='^(?!real_).*'
-          fi
-          echo "selection SUITE=$SUITE"
-          SUITE_OVERWRITE=${{ github.event.inputs.suite_overwrite }}
-          echo "selection SUITE_OVERWRITE=$SUITE_OVERWRITE"
-          # Remove leading and trailing whitespaces using parameter expansion
-          SUITE_OVERWRITE="${SUITE_OVERWRITE#"${SUITE_OVERWRITE%%[![:space:]]*}"}"
-          SUITE_OVERWRITE="${SUITE_OVERWRITE%"${SUITE_OVERWRITE##*[![:space:]]}"}"
-          if [[ -n "${SUITE_OVERWRITE// /}" ]]; then
-            SUITE=$SUITE_OVERWRITE
-          fi
-          echo "FINAL selection is SUITE=$SUITE"
           python -m asv run -v --show-stderr --bench $SUITE ${{ inputs.commit }}^!
         
       - name: Benchmark against master
         if: github.event_name == 'pull_request_target' && inputs.run_all_benchmarks == false
         shell: bash -el {0}
         run: |
-          python -m asv continuous -v --show-stderr origin/master HEAD -f 1.15
+          python -m asv continuous -v --show-stderr --bench $SUITE origin/master HEAD -f 1.15
 
       - name: Add results to ArcticDB database
         shell: bash -el {0}
