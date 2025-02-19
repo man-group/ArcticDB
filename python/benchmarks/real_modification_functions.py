@@ -37,7 +37,7 @@ class LargeAppendDataModifyCache:
 #endregion
 
 
-class AWSWide:
+class AWSWide30K:
 
     rounds = 1
     number = 3 # invokes 3 times the test runs between each setup-teardown 
@@ -57,9 +57,9 @@ class AWSWide:
     param_names = ["num_rows"]
 
     def setup_cache(self):
-        return self.initialize_cache(AWSWide.SETUP_CLASS,
-                                     AWSWide.warmup_time,
-                                     AWSWide.params)
+        return self.initialize_cache(AWSWide30K.SETUP_CLASS,
+                                     AWSWide30K.warmup_time,
+                                     AWSWide30K.params)
     
     def initialize_cache(self, setup_obj: GeneralAppendSetup, warmup_time, params):
         # warmup will execute tests additional time and we do not want that at all for write
@@ -67,7 +67,7 @@ class AWSWide:
         assert warmup_time == 0, "warm up must be 0"
 
         set_env = setup_obj
-        num_sequenced_dataframes = AWSWide.number + 1
+        num_sequenced_dataframes = AWSWide30K.number + 1
         cache = LargeAppendDataModifyCache()
 
         for num_rows in params:
@@ -149,7 +149,7 @@ class AWSWide:
     def time_append_single(self, cache, num_rows):
         self.lib.append(self.symbol, self.cache.append_single_dict[num_rows])
     
-class AWSWide1:
+class AWSWide30KNoSegments(AWSWide30K):
 
     rounds = 1
     number = 3 # invokes 3 times the test runs between each setup-teardown 
@@ -168,6 +168,6 @@ class AWSWide1:
     param_names = ["num_rows"]
 
     def setup_cache(self):
-        return self.initialize_cache(AWSWide1.SETUP_CLASS,
-                                     AWSWide1.warmup_time,
-                                     AWSWide1.params)
+        return self.initialize_cache(AWSWide30KNoSegments.SETUP_CLASS,
+                                     AWSWide30KNoSegments.warmup_time,
+                                     AWSWide30KNoSegments.params)
