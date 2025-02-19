@@ -57,15 +57,16 @@ class AWSLargeAppendDataModify:
     def setup_cache(self):
         return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,
                                      AWSLargeAppendDataModify.warmup_time,
-                                     AWSLargeAppendDataModify.params)
+                                     AWSLargeAppendDataModify.params,
+                                     AWSLargeAppendDataModify.number)
     
-    def initialize_cache(self, setup_obj: GeneralAppendSetup, warmup_time, params):
+    def initialize_cache(self, setup_obj: GeneralAppendSetup, warmup_time, params, num_sequenced_dataframes):
         # warmup will execute tests additional time and we do not want that at all for write
         # update and append tests. We want exact specified `number` of times to be executed between
         assert warmup_time == 0, "warm up must be 0"
 
         set_env = setup_obj
-        num_sequenced_dataframes = AWSLargeAppendDataModify.number + 1
+        num_sequenced_dataframes = num_sequenced_dataframes + 1
         cache = LargeAppendDataModifyCache()
 
         for num_rows in params:
@@ -190,7 +191,8 @@ class AWS30kColsWideDFLargeAppendDataModify(AWSLargeAppendDataModify):
     def setup_cache(self):
         return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,
                                     AWS30kColsWideDFLargeAppendDataModify.warmup_time,
-                                    AWS30kColsWideDFLargeAppendDataModify.params)
+                                    AWS30kColsWideDFLargeAppendDataModify.params,
+                                    AWS30kColsWideDFLargeAppendDataModify.number)
 
 
 class LMDB30kColsWideDFLargeAppendDataModify(AWSLargeAppendDataModify):
@@ -219,7 +221,8 @@ class LMDB30kColsWideDFLargeAppendDataModify(AWSLargeAppendDataModify):
     def setup_cache(self):
         return self.initialize_cache(LMDB30kColsWideDFLargeAppendDataModify.SETUP_CLASS,
                                      LMDB30kColsWideDFLargeAppendDataModify.warmup_time,
-                                     LMDB30kColsWideDFLargeAppendDataModify.params)
+                                     LMDB30kColsWideDFLargeAppendDataModify.params,
+                                     LMDB30kColsWideDFLargeAppendDataModify.number)
     
 
 class AWSDeleteTestsFewLarge:
