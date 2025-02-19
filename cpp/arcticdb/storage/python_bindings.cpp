@@ -36,10 +36,9 @@ std::shared_ptr<LibraryIndex> create_library_index(const std::string &environmen
 }
 
 enum class S3SettingsPickleOrder : uint32_t {
-    TYPE = 0,
-    AWS_AUTH = 1,
-    AWS_PROFILE = 2,
-    USE_INTERNAL_CLIENT_WRAPPER_FOR_TESTING = 3
+    AWS_AUTH = 0,
+    AWS_PROFILE = 1,
+    USE_INTERNAL_CLIENT_WRAPPER_FOR_TESTING = 2
 };
 
 enum class GCPXMLSettingsPickleOrder : uint32_t {
@@ -57,7 +56,7 @@ enum class GCPXMLSettingsPickleOrder : uint32_t {
 };
 
 s3::GCPXMLSettings gcp_settings(const py::tuple& t) {
-    util::check(t.size() == 11, "Invalid GCPXMLSettings pickle objects, expected 11 attributes but was {}", t.size());
+    util::check(t.size() >= 11, "Invalid GCPXMLSettings pickle objects, expected at least 11 attributes but was {}", t.size());
     return s3::GCPXMLSettings{
         t[static_cast<uint32_t>(GCPXMLSettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>(),
         t[static_cast<uint32_t>(GCPXMLSettingsPickleOrder::CA_CERT_PATH)].cast<std::string>(),
@@ -73,12 +72,21 @@ s3::GCPXMLSettings gcp_settings(const py::tuple& t) {
 }
 
 s3::S3Settings s3_settings(const py::tuple& t) {
-    util::check(t.size() == 4, "Invalid S3Settings pickle objects");
-    return s3::S3Settings{
-        t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>(),
-        t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_PROFILE)].cast<std::string>(),
-        t[static_cast<uint32_t>(S3SettingsPickleOrder::USE_INTERNAL_CLIENT_WRAPPER_FOR_TESTING)].cast<bool>()
-    };
+    // No type for backwards compat with older clients
+    util::check(t.size() >= 2, "Invalid S3Settings pickle objects, expected at least 2 attributes but was {}", t.size());
+    if (t.size() == 2) {
+        return s3::S3Settings{
+            t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>(),
+            t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_PROFILE)].cast<std::string>(),
+            false
+        };
+    } else {
+        return s3::S3Settings{
+            t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>(),
+            t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_PROFILE)].cast<std::string>(),
+            t[static_cast<uint32_t>(S3SettingsPickleOrder::USE_INTERNAL_CLIENT_WRAPPER_FOR_TESTING)].cast<bool>()
+        };
+    }
 }
 
 py::tuple to_tuple(const s3::GCPXMLSettings& settings) {
@@ -98,8 +106,8 @@ py::tuple to_tuple(const s3::GCPXMLSettings& settings) {
 }
 
 py::tuple to_tuple(const s3::S3Settings& settings) {
+    // Legacy format without the type for backwards compat
     return py::make_tuple(
-        s3::NativeSettingsType::S3,
         settings.aws_auth(),
         settings.aws_profile(),
         settings.use_internal_client_wrapper_for_testing()
@@ -234,7 +242,13 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
             },
             [](py::tuple t) {
                 util::check(t.size() >= 1, "Expected at least one attribute in Native Settings pickle");
-                auto type = t[static_cast<uint32_t>(S3SettingsPickleOrder::TYPE)].cast<s3::NativeSettingsType>();
+                auto type_int = t[0].cast<uint32_t>();
+                if (type_int < s3::NATIVE_SETTINGS_START) {
+                    // Nasty backwards compat from before the `type` was introduced
+                    return NativeVariantStorage(s3_settings(t));
+                }
+
+                auto type = t[0].cast<s3::NativeSettingsType>();
                 switch(type) {
                     case s3::NativeSettingsType::S3:
                         return NativeVariantStorage(s3_settings(t));

@@ -12,9 +12,12 @@
 
 namespace arcticdb::storage::s3 {
 
+// Start at 100 to disambiguate from AWSAuthMethod below
+constexpr uint32_t NATIVE_SETTINGS_START = 100;
+
 enum class NativeSettingsType : uint32_t {
-    S3 = 0,
-    GCPXML = 1
+    S3 = NATIVE_SETTINGS_START,
+    GCPXML = NATIVE_SETTINGS_START + 1
 };
 
 enum class AWSAuthMethod : uint32_t {
