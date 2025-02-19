@@ -1509,17 +1509,24 @@ def test_chunks_match_at_ends(lmdb_storage, lib_name):
         lib_name,
         library_options=LibraryOptions(rows_per_segment=2))
 
-    idx = [pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]
-    first = pd.DataFrame({"a": len(idx)}, index=idx)
+    first_idx = [pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]
+    first = pd.DataFrame({"a": np.arange(3)}, index=first_idx)
     lib.write("test", first, staged=True)
 
-    idx = [pd.Timestamp(2), pd.Timestamp(2)]
-    second = pd.DataFrame({"a": len(idx)}, index=idx)
+    second_idx = [pd.Timestamp(2), pd.Timestamp(2), pd.Timestamp(2), pd.Timestamp(3)]
+    second = pd.DataFrame({"a": np.arange(3, 7)}, index=second_idx)
     lib.write("test", second, staged=True)
 
     lib.finalize_staged_data("test")
 
-    assert_frame_equal(lib.read("test").data, pd.concat([first, second]))
+    result = lib.read("test").data
+    index_result = result.index
+    assert index_result.equals(pd.Index(first_idx + second_idx))
+    assert result.index.is_monotonic_increasing
+    # There is some non-determinism about where the overlap will end up
+    assert set(result["a"].values) == set(range(7))
+    assert result["a"][0] == 0
+    assert result["a"][-1] == 6
 
 
 def test_chunks_the_same(lmdb_storage, lib_name):
