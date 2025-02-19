@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import os
+from typing import List
 import pandas as pd
 from arcticdb.options import LibraryOptions
 from arcticdb.util.environment_setup import Storage, StorageInfo, GeneralAppendSetup
@@ -48,10 +49,9 @@ class AWSLargeAppendDataModify:
 
     SETUP_CLASS = (GeneralAppendSetup(storage=Storage.AMAZON, 
                                       prefix="BASIC_APPEND",
-                                      library_options=LibraryOptions(rows_per_segment=1000,columns_per_segment=1000)
                                       ).set_default_columns(20))
     
-    params = [1_000_000, 2_000_000] # [10_000, 15_500] # for test purposes
+    params = [500_000, 1_000_000] # [1000, 1500] # for test purposes
     param_names = ["num_rows"]
 
     def setup_cache(self):
@@ -195,7 +195,7 @@ class LMDB30kColsWideDFLargeAppendDataModify(AWSLargeAppendDataModify):
 
     SETUP_CLASS = (GeneralAppendSetup(storage=Storage.LMDB, 
                                       prefix="WIDE_APPEND",
-                                      library_options=LibraryOptions(rows_per_segment=1000,columns_per_segment=1000)
+                                      library_options=LibraryOptions(rows_per_segment=10000,columns_per_segment=10000)
                                       )
                                       .set_default_columns(WIDE_DATAFRAME_NUM_COLS))
     
@@ -228,9 +228,9 @@ class AWSDeleteTestsFewLarge:
 
     SETUP_CLASS = (GeneralAppendSetup(storage=Storage.AMAZON, 
                                       prefix="BASIC_DELETE", 
-                                      library_options=LibraryOptions(rows_per_segment=10,columns_per_segment=10)))
+                                      library_options=LibraryOptions(rows_per_segment=1000,columns_per_segment=1000)))
     
-    params = [1_000_000, 2_000_000] # [10_000, 15_500] # for test purposes
+    params = [500_000, 1_000_000] # [100, 150] # for test purposes
 
     param_names = ["num_rows"]
 
@@ -251,7 +251,6 @@ class AWSDeleteTestsFewLarge:
     
         #only create the library
         set_env.remove_all_modifiable_libraries(True)
-        lib = set_env.get_modifiable_library()
 
         set_env.logger().info(f"Storage info: {set_env.get_storage_info()}")
         # With modifiable tests we do not prepare libraries here,
@@ -265,17 +264,21 @@ class AWSDeleteTestsFewLarge:
         writes_list = cache.write_and_append_dict[num_rows]
 
         self.pid = os.getpid()
-        self.lib = self.set_env.get_modifiable_library()
+        self.set_env.remove_all_modifiable_libraries(True)
+        self.set_env.delete_modifiable_library(self.set_env)
+        self.lib = self.set_env.get_modifiable_library(self.pid)
 
         self.setup_symbol(self.lib, writes_list)
         assert self.lib.has_symbol
 
-    def setup_symbol(self, lib: Library, writes_list):
+    def setup_symbol(self, lib: Library, writes_list: List[pd.DataFrame]):
         self.symbol = self.set_env.get_symbol_name_template(f"_pid-{self.pid}")
         lib.write(self.symbol, writes_list[0])
+        self.set_env.logger().info(f"Written first version {writes_list[0].shape[0]}")
 
         for frame in writes_list[1:]:
             lib.append(self.symbol, frame)
+            self.set_env.logger().info(f"Appended frame {frame.shape[0]}")
 
     def teardown(self, cache, num_rows):
         assert not self.lib.has_symbol(self.symbol)
