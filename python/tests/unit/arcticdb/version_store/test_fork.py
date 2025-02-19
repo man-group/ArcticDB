@@ -14,6 +14,8 @@ from arcticdb import Arctic
 
 from arcticdb.util.test import assert_frame_equal
 
+from tests.util.mark import SKIP_CONDA_MARK
+
 
 def df(symbol):
     return pd.DataFrame({symbol: np.arange(100)})
@@ -66,6 +68,7 @@ def test_parallel_reads(local_object_version_store):
     "s3_storage",
     "gcp_storage"
 ])
+@SKIP_CONDA_MARK
 def test_parallel_reads_arctic(storage_name, request):
     storage = request.getfixturevalue(storage_name)
     ac = Arctic(storage.arctic_uri)

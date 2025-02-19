@@ -12,7 +12,7 @@ from arcticdb.storage_fixtures.api import ArcticUriFields
 from arcticdb.storage_fixtures.azure import AzureContainer
 from arcticdb.storage_fixtures.s3 import S3Bucket
 from arcticdb.adapters.s3_library_adapter import USE_AWS_CRED_PROVIDERS_TOKEN
-from ..util.mark import AZURE_TESTS_MARK, SSL_TEST_SUPPORTED
+from ..util.mark import AZURE_TESTS_MARK, SSL_TEST_SUPPORTED, SKIP_CONDA_MARK
 from ..util.storage_test import get_s3_storage_config
 
 LIB_NAME = "test_lib"
@@ -31,6 +31,7 @@ def _get_azure_storage_config(cfg):
     return azure_config
 
 
+@SKIP_CONDA_MARK  # issue with fixture cleanup
 def test_upgrade_script_dryrun_s3(s3_storage: S3Bucket):
     ac = s3_storage.create_arctic()
     create_library_config(ac, LIB_NAME)
@@ -46,6 +47,7 @@ def test_upgrade_script_dryrun_s3(s3_storage: S3Bucket):
     assert storage_config.credential_key == s3_storage.key.secret
 
 
+@SKIP_CONDA_MARK  # issue with fixture cleanup
 def test_upgrade_script_s3(s3_storage: S3Bucket):
     ac = s3_storage.create_arctic()
     create_library_config(ac, LIB_NAME)
@@ -60,6 +62,7 @@ def test_upgrade_script_s3(s3_storage: S3Bucket):
 
 
 @pytest.mark.parametrize("default_credential_provider", ["1", "true"]) # true for testing backwards compatibility
+@SKIP_CONDA_MARK  # issue with fixture cleanup
 def test_upgrade_script_s3_rbac_ok(s3_storage: S3Bucket, monkeypatch, default_credential_provider):
     """Just _RBAC_ as creds is a placeholder. Leave config with that alone."""
     if os.name == "nt":

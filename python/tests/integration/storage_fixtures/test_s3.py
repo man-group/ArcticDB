@@ -3,6 +3,8 @@ import pytest
 import requests
 from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, MotoGcpS3StorageFixtureFactory
 
+from tests.util.mark import SKIP_CONDA_MARK
+
 
 def test_rate_limit(s3_storage_factory: MotoS3StorageFixtureFactory):  # Don't need to create buckets
     # Given a working Moto server
@@ -31,6 +33,7 @@ def test_rate_limit(s3_storage_factory: MotoS3StorageFixtureFactory):  # Don't n
     requests.head(s3.endpoint, verify=s3.client_cert_file).raise_for_status()
 
 
+@SKIP_CONDA_MARK
 def test_gcp_no_batch_delete(gcp_storage_factory: MotoGcpS3StorageFixtureFactory):
     # Given
     gcp = gcp_storage_factory
