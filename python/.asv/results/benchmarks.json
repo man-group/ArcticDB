@@ -1832,6 +1832,156 @@
         "version": "2fc5d8c935ffb8a674f88c6645ca56370dfb61851afcdf0f80e60086979aba43",
         "warmup_time": 0
     },
+    "real_modification_functions.AWSWide.time_append_large": {
+        "code": "class AWSWide:\n    def time_append_large(self, cache, num_rows):\n        large: pd.DataFrame = self.appends_list.pop(0)\n        self.lib.append(self.symbol, large)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSWide.SETUP_CLASS,\n                                     AWSWide.warmup_time,\n                                     AWSWide.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWSWide.time_append_large",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000",
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:59",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "6362428f63b21ab6c6ade1783003df5ee2d10f14fb6ecc6a117cfba2a5ff590d",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWSWide.time_append_single": {
+        "code": "class AWSWide:\n    def time_append_single(self, cache, num_rows):\n        self.lib.append(self.symbol, self.cache.append_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSWide.SETUP_CLASS,\n                                     AWSWide.warmup_time,\n                                     AWSWide.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWSWide.time_append_single",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000",
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:59",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "d6c7bbfeae71e111e90f74033f1e10c3f541fec0f071e58d8cd2bec23a552941",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWSWide.time_update_full": {
+        "code": "class AWSWide:\n    def time_update_full(self, cache, num_rows):\n        #self.lib.update(self.symbol, self.cache.update_full)\n        self.lib.update(self.symbol, self.cache.update_full_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSWide.SETUP_CLASS,\n                                     AWSWide.warmup_time,\n                                     AWSWide.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWSWide.time_update_full",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000",
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:59",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "46de40f8d894d501450b68c190f78000130ec922e1468f2c3d22ac9cdedcf6b2",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWSWide.time_update_half": {
+        "code": "class AWSWide:\n    def time_update_half(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_half_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSWide.SETUP_CLASS,\n                                     AWSWide.warmup_time,\n                                     AWSWide.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWSWide.time_update_half",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000",
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:59",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "d2a21d89c4fc200dcd89aff8f9b83a989fce5eaf234313c05968a882a510b094",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWSWide.time_update_single": {
+        "code": "class AWSWide:\n    def time_update_single(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSWide.SETUP_CLASS,\n                                     AWSWide.warmup_time,\n                                     AWSWide.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWSWide.time_update_single",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000",
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:59",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "8b7f5093186f1970b5a63fa5791ef979f0b31e1c09ddca378385476efb597b91",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWSWide.time_update_upsert": {
+        "code": "class AWSWide:\n    def time_update_upsert(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_upsert_dict[num_rows], upsert=True)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSWide.SETUP_CLASS,\n                                     AWSWide.warmup_time,\n                                     AWSWide.params)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWSWide.time_update_upsert",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000",
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:59",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "4c210df0b76ca6c3ad9d47f13d587198c7180b4c8d86109b68d49b9d7fce55c0",
+        "warmup_time": 0
+    },
     "real_read_write.AWSReadWrite.peakmem_read": {
         "code": "class LMDBReadWrite:\n    def peakmem_read(self, storage_info, num_rows):\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.setup_env.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)\n        sym = self.setup_env.get_symbol_name(num_rows, None)\n        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data\n        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.setup_env.get_modifiable_library(os.getpid())\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardowns\n        '''\n        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment()\n        return aws_setup.get_storage_info()",
         "name": "real_read_write.AWSReadWrite.peakmem_read",
