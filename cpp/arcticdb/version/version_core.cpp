@@ -1180,7 +1180,9 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
             auto [_, inserted] = unique_timestamp_ranges.emplace(key.start_time(), key.end_time());
             // This is correct because incomplete segments aren't column sliced
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
-                    inserted,
+                    // If the segment is entirely covering a single index value, then duplicates are fine
+                    // -1 as end_time is stored as 1 greater than the last index value in the segment
+                    inserted || key.end_time() -1 == key.start_time(),
                     "Cannot finalize staged data as 2 or more incomplete segments cover identical index values (in UTC): ({}, {})",
                     date_and_time(key.start_time()), date_and_time(key.end_time()));
         }
@@ -1189,7 +1191,8 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
             auto next_it = std::next(it);
             if (next_it != unique_timestamp_ranges.end()) {
                 sorting::check<ErrorCode::E_UNSORTED_DATA>(
-                        next_it->first >= it->second,
+                        // -1 as end_time is stored as 1 greater than the last index value in the segment
+                        next_it->first >= it->second - 1,
                         "Cannot finalize staged data as incomplete segment index values overlap one another (in UTC): ({}, {}) intersects ({}, {})",
                         date_and_time(it->first),
                         date_and_time(it->second - 1),
