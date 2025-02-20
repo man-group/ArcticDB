@@ -1,0 +1,41 @@
+name: "Create dev release from master"
+
+on:
+  workflow_dispatch:
+run-name: "Create developmental release from master"
+jobs:
+  get-master-sha:
+    name: Get master sha
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.get_sha.outputs.sha }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        ref: master
+    - name: Get default branch short sha
+      id: get_sha
+      run: |
+        BASE_SHA=$(git rev-parse --short master)
+        echo "sha=$BASE_SHA" >> $GITHUB_OUTPUT
+        echo "Release branch will be cut from master at $BASE_SHA"
+
+  calculate-next-version:
+    needs: get-master-sha
+    uses: ./.github/workflows/automated_release.calculate_next_version.yml
+    with:
+      regex: ^v\d+\.\d+\.\d+rc\d+$
+      from_branch: ${{ needs.get-master-sha.outputs.sha }}
+
+  rc_release:
+    name: Tag and Release version ${{ needs.calculate-next-version.outputs.version }}.dev0+${{ needs.get-master-sha.outputs.sha }} from branch master(${{ needs.get-master-sha.outputs.sha }}) 
+    secrets: inherit
+    permissions:
+      checks: read
+      contents: write
+    uses: ./.github/workflows/tag.yml
+    needs: [calculate-next-version, get-master-sha]
+    with:
+      version: ${{ needs.calculate-next-version.outputs.version }}.dev0+${{ needs.get-master-sha.outputs.sha }}
+      from_branch: master
