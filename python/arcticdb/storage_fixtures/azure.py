@@ -135,7 +135,7 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
 
     def __init__(self, port=0, working_dir: Optional[str] = None, use_ssl: bool = True, ssl_test_support: bool = True):
         self.http_protocol = "https" if use_ssl else "http"
-        self.port = port or get_ephemeral_port(0)
+        self.port = port or get_ephemeral_port(1)
         self.endpoint_root = f"{self.http_protocol}://{self.host}:{self.port}"
         self.working_dir = str(working_dir) if working_dir else mkdtemp(suffix="AzuriteStorageFixtureFactory")
         self.ssl_test_support = ssl_test_support

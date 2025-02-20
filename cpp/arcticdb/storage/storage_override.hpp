@@ -127,6 +127,13 @@ public:
     }
 };
 
+class GCPXMLOverride {
+public:
+    void modify_storage_config(arcticdb::proto::storage::VariantStorage&, bool) const {
+        // Nothing is serialized in the GCPXML proto that shouldn't be, so nothing to override.
+    }
+};
+
 class AzureOverride {
     std::string container_name_;
     std::string endpoint_;
@@ -218,13 +225,13 @@ public:
     }
 };
 
-using VariantStorageOverride = std::variant<std::monostate, S3Override, AzureOverride, LmdbOverride>;
+using VariantStorageOverride = std::variant<std::monostate, S3Override, AzureOverride, LmdbOverride, GCPXMLOverride>;
 
 class StorageOverride {
     VariantStorageOverride override_;
 
 public:
-    const VariantStorageOverride& variant() const {
+    [[nodiscard]] const VariantStorageOverride& variant() const {
         return override_;
     }
 
@@ -239,6 +246,11 @@ public:
     void set_lmdb_override(const LmdbOverride& storage_override) {
         override_ = storage_override;
     }
+
+    void set_gcpxml_override(const GCPXMLOverride& storage_override) {
+        override_ = storage_override;
+    }
+
 };
 
 } //namespace arcticdb::storage

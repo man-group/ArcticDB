@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import enum
-from typing import Callable, Generator, Iterator
+from typing import Callable, Generator
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.version_store.library import Library
 import hypothesis
@@ -30,6 +30,7 @@ from arcticdb.storage_fixtures.lmdb import LmdbStorageFixture
 from arcticdb.storage_fixtures.s3 import (
     BaseS3StorageFixtureFactory,
     MotoS3StorageFixtureFactory,
+    MotoGcpS3StorageFixtureFactory,
     MotoNfsBackedS3StorageFixtureFactory,
     NfsS3Bucket,
     S3Bucket,
@@ -54,6 +55,7 @@ from .util.mark import (
     SSL_TEST_SUPPORTED,
 )
 from arcticdb.storage_fixtures.utils import safer_rmtree
+
 
 # region =================================== Misc. Constants & Setup ====================================
 hypothesis.settings.register_profile("ci_linux", max_examples=100)
@@ -150,6 +152,14 @@ def s3_storage_factory() -> Generator[MotoS3StorageFixtureFactory, None, None]:
 
 
 @pytest.fixture(scope="session")
+def gcp_storage_factory() -> Generator[MotoGcpS3StorageFixtureFactory, None, None]:
+    with MotoGcpS3StorageFixtureFactory(
+            use_ssl=SSL_TEST_SUPPORTED, ssl_test_support=SSL_TEST_SUPPORTED, bucket_versioning=False
+    ) as f:
+        yield f
+
+
+@pytest.fixture(scope="session")
 def wrapped_s3_storage_factory() -> Generator[MotoS3StorageFixtureFactory, None, None]:
     with MotoS3StorageFixtureFactory(
         use_ssl=False,
@@ -188,6 +198,12 @@ def nfs_backed_s3_storage_factory() -> Generator[MotoNfsBackedS3StorageFixtureFa
 @pytest.fixture
 def s3_storage(s3_storage_factory) -> Generator[S3Bucket, None, None]:
     with s3_storage_factory.create_fixture() as f:
+        yield f
+
+
+@pytest.fixture
+def gcp_storage(gcp_storage_factory) -> Generator[S3Bucket, None, None]:
+    with gcp_storage_factory.create_fixture() as f:
         yield f
 
 
@@ -369,6 +385,8 @@ def mem_storage() -> Generator[InMemoryStorageFixture, None, None]:
     scope="function",
     params=[
         "s3",
+        "nfs_backed_s3",
+        "gcp",
         "lmdb",
         "mem",
         pytest.param("azurite", marks=AZURE_TESTS_MARK),

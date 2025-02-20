@@ -275,6 +275,15 @@ inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path
                                                                   mode,
                                                                   s3::S3Settings(settings).update(s3_storage)));
                             },
+                            [&storage_config, &storages, &library_path, mode](const s3::GCPXMLSettings& settings) {
+                                util::check(storage_config.config().Is<arcticdb::proto::gcp_storage::Config>(),
+                                            "Only support GCP native settings");
+                                arcticdb::proto::gcp_storage::Config gcp_storage;
+                                storage_config.config().UnpackTo(&gcp_storage);
+                                storages.push_back(create_storage(library_path,
+                                                                  mode,
+                                                                  s3::GCPXMLSettings(settings).update(gcp_storage)));
+                            },
                             [&storage_config, &storages, &library_path, mode](const auto&) {
                                 storages.push_back(create_storage(library_path, mode, storage_config));
                             }

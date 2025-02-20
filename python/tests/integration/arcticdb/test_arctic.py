@@ -83,8 +83,9 @@ def edit_connection_string(uri, delimiter, storage, ssl_setting, client_cert_fil
 @pytest.mark.parametrize('client_cert_file', parameter_display_status if SSL_TEST_SUPPORTED else no_ssl_parameter_display_status)
 @pytest.mark.parametrize('client_cert_dir', parameter_display_status if SSL_TEST_SUPPORTED else no_ssl_parameter_display_status)
 @pytest.mark.parametrize('ssl_setting', parameter_display_status if SSL_TEST_SUPPORTED else no_ssl_parameter_display_status)
-def test_s3_verification(monkeypatch, s3_storage, client_cert_file, client_cert_dir, ssl_setting):
-    storage = s3_storage
+@pytest.mark.parametrize('storage_fixture', ["s3_storage", "gcp_storage"])
+def test_s3_verification(monkeypatch, storage_fixture, client_cert_file, client_cert_dir, ssl_setting, request):
+    storage = request.getfixturevalue(storage_fixture)
     # Leaving ca file and ca dir unset will fallback to using os default setting,
     # which is different from the test environment
     default_setting = DefaultSetting(storage.factory)

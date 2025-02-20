@@ -19,8 +19,8 @@ from arcticdb.adapters.lmdb_library_adapter import LMDBLibraryAdapter
 from arcticdb.adapters.azure_library_adapter import AzureLibraryAdapter
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.adapters.in_memory_library_adapter import InMemoryLibraryAdapter
+from arcticdb.adapters.gcpxml_library_adapter import GCPXMLLibraryAdapter
 from arcticdb.encoding_version import EncodingVersion
-from arcticdb.exceptions import UnsupportedLibraryOptionValue, UnknownLibraryOption
 from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
 
 
@@ -35,6 +35,7 @@ class Arctic:
 
     _LIBRARY_ADAPTERS = [
         S3LibraryAdapter,
+        GCPXMLLibraryAdapter,
         LMDBLibraryAdapter,
         AzureLibraryAdapter,
         MongoLibraryAdapter,
@@ -96,9 +97,10 @@ class Arctic:
 
         storage_override = self._library_adapter.get_storage_override()
         lib = NativeVersionStore(
-            self._library_manager.get_library(lib_mgr_name, storage_override, native_storage_map=self._library_adapter._native_cfg),
+            self._library_manager.get_library(lib_mgr_name, storage_override, native_storage_config=self._library_adapter.native_config()),
             repr(self._library_adapter),
             lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
+            native_cfg=self._library_adapter.native_config()
         )
         if self._accessed_libs is not None:
             self._accessed_libs.append(lib)
@@ -317,7 +319,7 @@ class Arctic:
         storage_override = self._library_adapter.get_storage_override()
         new_cfg = self._library_manager.get_library_config(lib_mgr_name, storage_override)
         library._nvs._initialize(
-            self._library_manager.get_library(lib_mgr_name, storage_override, ignore_cache=True, native_storage_map=self._library_adapter._native_cfg),
+            self._library_manager.get_library(lib_mgr_name, storage_override, ignore_cache=True, native_storage_config=self._library_adapter.native_config()),
             library._nvs.env,
             new_cfg,
             library._nvs._custom_normalizer,
