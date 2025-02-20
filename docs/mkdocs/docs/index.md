@@ -32,7 +32,7 @@ This section will cover installation, setup and basic usage. More details on bas
 
 ### Installation
 
-ArcticDB supports Python 3.6 - 3.11. Python 3.7 is the earliest version for Windows.
+ArcticDB supports Python 3.7 - 3.13.
 
 To install, simply run:
 
