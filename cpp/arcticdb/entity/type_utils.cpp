@@ -43,7 +43,8 @@ namespace arcticdb {
         return (is_integer_type(left) && is_floating_point_type(right)) || (is_floating_point_type(left) && is_integer_type(right));
     }
 
-    std::optional<entity::TypeDescriptor> common_type_float_integer(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right) {
+    static std::optional<entity::TypeDescriptor> common_type_float_integer(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right) {
+        util::check(left.dimension() == right.dimension(), "Dimensions should match but were left={} right={}", left.dimension(), right.dimension());
         auto dimension = left.dimension();
         auto left_type = left.data_type();
         auto right_type = right.data_type();
@@ -54,7 +55,7 @@ namespace arcticdb {
 
         auto target_size = entity::SizeBits::UNKNOWN_SIZE_BITS;
         auto floating_size = is_floating_point_type(left_type) ? left_size : right_size;
-        auto integral_size = is_floating_point_type(left_type) ? right_size : left_size;
+        auto integral_size = is_integer_type(left_type) ? left_size : right_size;
         if (floating_size == entity::SizeBits::S64 || integral_size >= entity::SizeBits::S32) {
             // (u)int64 up to float64 will lose precision, we accept that
             target_size = entity::SizeBits::S64;
@@ -127,7 +128,7 @@ namespace arcticdb {
                 return false;
             }
         } else if (is_floating_point_type(source_type)) {
-            if (is_unsigned_type(target_type) || is_signed_type(target_type)) {
+            if (is_integer_type(target_type)) {
                 // FLOAT->U/INT never promotable
                 return false;
             } else if (is_floating_point_type(target_type)) {
@@ -148,7 +149,7 @@ namespace arcticdb {
         }
     }
 
-    std::optional<entity::TypeDescriptor> common_type_mixed_sign_ints(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right) {
+    static std::optional<entity::TypeDescriptor> common_type_mixed_sign_ints(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right) {
         auto dimension = left.dimension();
         auto left_type = left.data_type();
         auto right_type = right.data_type();
@@ -186,6 +187,9 @@ namespace arcticdb {
         }
 
         if (is_integer_type(left.data_type()) && is_integer_type(right.data_type())) {
+            // One must be signed and the other unsigned, since if they matched is_valid_type_promotion_to_target would have handled them already
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(is_signed_type(left.data_type()) ^ is_signed_type(right.data_type()),
+                                                            "Expected one signed and one unsigned int in has_valid_common_type");
             return common_type_mixed_sign_ints(left, right);
         } else if (is_mixed_float_and_integer(left.data_type(), right.data_type())) {
             return common_type_float_integer(left, right);
