@@ -1,8 +1,8 @@
 name: "Automated Release: Release next full version from release branch"
 
 on:
-  # schedule:
-  #   - cron: '0 0 * * 1' # Every Monday at midnight UTC
+  schedule:
+    - cron: '0 0 * * 1' # Every Monday at midnight UTC
   workflow_dispatch:
 
 jobs:
