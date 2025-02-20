@@ -16,6 +16,10 @@ on:
             - 'LMDB'
             - 'REAL'
           default: 'LMDB'
+      suite_overwrite:
+        description: Specify regular expression for specific tests to be executed
+        type: string
+        default: ''
   
 
   schedule: # Schedule the job to run at 12 a.m. daily
@@ -59,6 +63,7 @@ jobs:
       run_on_pr_head: ${{ github.event_name == 'pull_request_target' }}
       dev_image_tag: ${{ inputs.dev_image_tag || 'latest' }}
       suite_to_run: ${{ inputs.suite_to_run || 'LMDB'}}
+      suite_overwrite: ${{ inputs.suite_overwrite || ''}}
 
   publish_benchmark_results_to_gh_pages:  
     name: Publish benchmark results to gh-pages
