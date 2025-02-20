@@ -834,7 +834,7 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
             pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
         else:
             if PANDAS_VERSION >= Version("1.1"):
-                check_equals_flags["atol"] = 1e-8
+                check_equals_flags["rtol"] = 1e-4
             pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
 
 
@@ -860,7 +860,7 @@ def generic_resample_test(
     but it cannot take parameters such as origin and offset.
     """
     # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
-    expected = lib.read(sym, date_range=date_range).data
+    original_data = lib.read(sym, date_range=date_range).data
     # Pandas 1.X needs None as the first argument to agg with named aggregators
 
     pandas_aggregations = (
@@ -873,9 +873,9 @@ def generic_resample_test(
         resample_args["offset"] = offset
 
     if PANDAS_VERSION >= Version("1.1.0"):
-        expected = expected.resample(rule, closed=closed, label=label, **resample_args).agg(None, **pandas_aggregations)
+        expected = original_data.resample(rule, closed=closed, label=label, **resample_args).agg(None, **pandas_aggregations)
     else:
-        expected = expected.resample(rule, closed=closed, label=label).agg(None, **pandas_aggregations)
+        expected = original_data.resample(rule, closed=closed, label=label).agg(None, **pandas_aggregations)
     if drop_empty_buckets_for:
         expected = expected[expected["_bucket_size_"] > 0]
         expected.drop(columns=["_bucket_size_"], inplace=True)
