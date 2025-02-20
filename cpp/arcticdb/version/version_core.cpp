@@ -1042,6 +1042,7 @@ void read_indexed_keys_to_pipeline(
     pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization()));
     pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta()));
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
+    ARCTICDB_DEBUG(log::version(), "read_indexed_keys_to_pipeline: Symbol {} Found {} keys with {} total rows", pipeline_context->slice_and_keys_.size(), pipeline_context->total_rows_, version_info.symbol());
 }
 
 // Returns true if there are staged segments
@@ -1063,18 +1064,24 @@ bool read_incompletes_to_pipeline(
         via_iteration,
         false);
 
-    if(incomplete_segments.empty())
+    ARCTICDB_DEBUG(log::version(), "Symbol {}: Found {} incomplete segments", pipeline_context->stream_id_, incomplete_segments.size());
+    if(incomplete_segments.empty()) {
         return false;
+    }
 
     // In order to have the right normalization metadata and descriptor we need to find the first non-empty segment.
     // Picking an empty segment when there are non-empty ones will impact the index type and column namings.
     // If all segments are empty we will proceed as if were appending/writing and empty dataframe.
     debug::check<ErrorCode::E_ASSERTION_FAILURE>(!incomplete_segments.empty(), "Incomplete segments must be non-empty");
     const auto first_non_empty_seg = std::find_if(incomplete_segments.begin(), incomplete_segments.end(), [&](auto& slice){
-        return slice.segment(store).row_count() > 0;
+        auto res = slice.segment(store).row_count() > 0;
+        ARCTICDB_DEBUG(log::version(), "Testing for non-empty seg {} res={}", slice.key(), res);
+        return res;
     });
     const auto& seg =
         first_non_empty_seg != incomplete_segments.end() ? first_non_empty_seg->segment(store) : incomplete_segments.begin()->segment(store);
+    ARCTICDB_DEBUG(log::version(), "Symbol {}: First segment has rows {} columns {} uncompressed bytes {} descriptor {}",
+                   pipeline_context->stream_id_, seg.row_count(), seg.columns().size(), seg.descriptor().uncompressed_bytes(), seg.index_descriptor());
     // Mark the start point of the incompletes, so we know that there is no column slicing after this point
     pipeline_context->incompletes_after_ = pipeline_context->slice_and_keys_.size();
 
@@ -1105,6 +1112,7 @@ bool read_incompletes_to_pipeline(
     }
 
     if (dynamic_schema) {
+        ARCTICDB_DEBUG(log::version(), "read_incompletes_to_pipeline: Dynamic schema");
         pipeline_context->staged_descriptor_ =
             merge_descriptors(seg.descriptor(), incomplete_segments, read_query.columns);
         if (pipeline_context->desc_) {
@@ -1115,6 +1123,14 @@ bool read_incompletes_to_pipeline(
             pipeline_context->desc_ = pipeline_context->staged_descriptor_;
         }
     } else {
+        ARCTICDB_DEBUG(log::version(), "read_incompletes_to_pipeline: Static schema");
+        [[maybe_unused]] auto& first_incomplete_seg = incomplete_segments[0].segment(store);
+        ARCTICDB_DEBUG(log::version(), "Symbol {}: First incomplete segment has rows {} columns {} uncompressed bytes {} descriptor {}",
+                       pipeline_context->stream_id_,
+                       first_incomplete_seg.row_count(),
+                       first_incomplete_seg.columns().size(),
+                       first_incomplete_seg.descriptor().uncompressed_bytes(),
+                       first_incomplete_seg.index_descriptor());
         if (pipeline_context->desc_) {
             schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                 columns_match(staged_desc, *pipeline_context->desc_),
@@ -1609,6 +1625,8 @@ void delete_incomplete_keys(PipelineContext& pipeline_context, Store& store) {
             );
         }
     }
+
+    ARCTICDB_DEBUG(log::version(), "delete_incomplete_keys Symbol {}: Deleting {} keys", pipeline_context.stream_id_, keys_to_delete.size());
     store.remove_keys(keys_to_delete).get();
 }
 
@@ -1736,8 +1754,13 @@ VersionedItem sort_merge_impl(
                 },
                 RowCountSegmentPolicy(write_options.segment_row_size)};
 
+            [[maybe_unused]] size_t count = 0;
             for(auto& sk : segments) {
                 SegmentInMemory segment = sk.release_segment(store);
+
+                ARCTICDB_DEBUG(log::version(), "sort_merge_impl Symbol {} Segment {}: Segment has rows {} columns {} uncompressed bytes {}",
+                               pipeline_context->stream_id_, count++, segment.row_count(), segment.columns().size(),
+                               segment.descriptor().uncompressed_bytes());
                 // Empty columns can appear only of one staged segment is empty and adds column which
                 // does not appear in any other segment. There can also be empty columns if all segments
                 // are empty in that case this loop won't be reached as segments.size() will be 0
