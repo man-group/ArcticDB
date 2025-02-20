@@ -13,16 +13,21 @@
 #include <arcticdb/storage/open_mode.hpp>
 
 
-namespace arcticdb {
-    namespace storage {
-        std::shared_ptr<Storage> create_storage(
-                const LibraryPath &library_path,
-                OpenMode mode,
-                const s3::S3Settings& storage_descriptor);
-        std::shared_ptr<Storage> create_storage(
-                const LibraryPath& library_path,
-                OpenMode mode,
-                const arcticdb::proto::storage::VariantStorage &storage_config);
+namespace arcticdb::storage {
 
-    } // namespace storage
-} // namespace arcticdb
+std::shared_ptr<Storage> create_storage(
+    const LibraryPath &library_path,
+    OpenMode mode,
+    const s3::S3Settings& storage_descriptor);
+
+std::shared_ptr<Storage> create_storage(
+    const LibraryPath &library_path,
+    OpenMode mode,
+    const s3::GCPXMLSettings& storage_descriptor);
+
+std::shared_ptr<Storage> create_storage(
+    const LibraryPath& library_path,
+    OpenMode mode,
+    const arcticdb::proto::storage::VariantStorage &storage_config);
+
+} // namespace arcticdb::storage

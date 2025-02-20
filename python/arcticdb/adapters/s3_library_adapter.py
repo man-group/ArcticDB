@@ -12,7 +12,6 @@ from typing import Optional
 import ssl
 import platform
 
-from arcticdb.options import LibraryOptions
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryDescriptor
 from arcticdb.version_store.helper import add_s3_library_to_env
 from arcticdb.config import _DEFAULT_ENV
@@ -111,7 +110,8 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
         super().__init__(uri, self._encoding_version)
 
-        self._native_cfg = NativeVariantStorage(NativeS3Settings(AWSAuthMethod.DISABLED, "", False))
+    def native_config(self):
+        return NativeVariantStorage(NativeS3Settings(AWSAuthMethod.DISABLED, "", False))
 
     def __repr__(self):
         return "S3(endpoint=%s, bucket=%s)" % (self._endpoint, self._bucket)
@@ -150,11 +150,11 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             ssl=self._ssl,
             aws_auth=self._query_params.aws_auth,
             aws_profile=self._query_params.aws_profile,
-            native_cfg=self._native_cfg,
+            native_cfg=self.native_config(),
         )
 
         lib = NativeVersionStore.create_store_from_config(
-            (env_cfg, self._native_cfg), _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
+            (env_cfg, self.native_config()), _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
         )
 
         return lib._library
@@ -198,7 +198,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         _kwargs = {k: v for k, v in parsed_query.items()}
         return ParsedQuery(**_kwargs)
 
-    def get_storage_override(self) -> StorageOverride:
+    def _get_s3_override(self) -> S3Override:
         s3_override = S3Override()
         # storage_override will overwrite access and key while reading config from storage
         # access and secret whether equals to _RBAC_ are used for determining aws_auth is true on C++ layer
@@ -226,10 +226,11 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             s3_override.ssl = self._ssl
 
         s3_override.use_virtual_addressing = self._query_params.use_virtual_addressing
+        return s3_override
 
+    def get_storage_override(self) -> StorageOverride:
         storage_override = StorageOverride()
-        storage_override.set_s3_override(s3_override)
-
+        storage_override.set_s3_override(self._get_s3_override())
         return storage_override
 
     def get_masking_override(self) -> StorageOverride:
@@ -273,7 +274,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             ssl=self._ssl,
             aws_auth=self._query_params.aws_auth,
             aws_profile=self._query_params.aws_profile,
-            native_cfg=self._native_cfg,
+            native_cfg=self.native_config(),
         )
 
     def _configure_aws(self):
