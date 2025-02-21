@@ -17,51 +17,18 @@
 
 namespace arcticdb {
 
-using keys_type = uint32_t;
-using layout_type = sparrow::dictionary_encoded_array<keys_type>;
-
-sparrow::nullable<std::string_view> get_dict_value(layout_type::const_reference r) {
-    return std::get<sparrow::nullable<std::string_view>>(r);
-}
-
-
-
 void arrow_arrays_from_column(const Column& column, std::vector<sparrow::array>& vec, std::string_view name) {
     auto column_data = column.data();
     vec.reserve(column.num_blocks());
+
     column.type().visit_tag([&vec, &column_data, &column, name](auto &&impl) {
         using TagType = std::decay_t<decltype(impl)>;
-        if constexpr(is_sequence_type(TagType::DataTypeTag::data_type)) {
-            while (auto block = column_data.next<TagType>()) {
-                const auto offset = block->offset();
-                auto& dict_keys = column.get_extra_buffer(offset, ExtraBufferType::OFFSET);
-                const auto offset_buffer_size = dict_keys.block(0)->bytes() / sizeof(uint32_t);
-                sparrow::u8_buffer<uint32_t> offset_buffer(reinterpret_cast<uint32_t *>(dict_keys.block(0)->release()), offset_buffer_size);
-
-                auto& dict_values =  column.get_extra_buffer(offset, ExtraBufferType::STRING);
-                const auto data_buffer_size = dict_values.block(0)->bytes();
-                sparrow::u8_buffer<char> data_buffer(reinterpret_cast<char*>(dict_values.block(0)->release()), data_buffer_size);
-
-                const auto block_size = block->row_count();
-                sparrow::u8_buffer<uint32_t> string_offsets(reinterpret_cast<uint32_t*>(block->release()), block_size);
-
-                sparrow::string_array arrow_dict(
-                    std::move(data_buffer),
-                    std::move(offset_buffer)
-                );
-                sparrow::array dict_array(std::move(arrow_dict));
-
-                sparrow::dictionary_encoded_array<uint32_t> dict_encoded(
-                    sparrow::dictionary_encoded_array<uint32_t>::keys_buffer_type(std::move(string_offsets)),
-                    std::move(dict_array),
-                    std::vector<size_t>{}
-                );
-
-                vec.emplace_back(std::move(dict_encoded));
-            }
-        } else {
-            while (auto block = column_data.next<TagType>()) {
-                vec.emplace_back(arrow_array_from_block<TagType>(*block, name));
+        while (auto block = column_data.next<TagType>()) {
+            auto bitmap = create_validity_bitmap(block->offset(), column);
+            if constexpr(is_sequence_type(TagType::DataTypeTag::data_type)) {
+                vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, bitmap));
+            } else {
+                vec.emplace_back(arrow_array_from_block<TagType>(*block, name, bitmap));
             }
         }
     });
@@ -76,13 +43,6 @@ std::vector<std::string> names_from_segment(const SegmentInMemory& segment) {
     }
     return output;
 }
-
-template<std::ranges::random_access_range R>
-auto strided_range(R&& range, size_t stride, size_t start) {
-    return std::views::iota(start, std::ranges::size(range) / stride)
-        | std::views::transform([&range, stride](auto i) { return range[i * stride]; });
-}
-
 std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(SegmentInMemory& segment) {
     const auto total_blocks = segment.num_blocks();
     const auto num_columns = segment.num_columns();

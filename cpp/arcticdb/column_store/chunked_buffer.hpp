@@ -462,6 +462,7 @@ class ChunkedBufferImpl {
         auto new_block = create_block(remaining_bytes, 0);
         new_block->copy_from(block->data() + start_offset, remaining_bytes, 0);
         blocks_[0] = new_block;
+        block->abandon();
         delete block;
     }
 
@@ -473,6 +474,7 @@ class ChunkedBufferImpl {
         auto new_block = create_block(bytes, 0);
         new_block->copy_from(block->data() + bytes, remaining_bytes, 0);
         blocks_[0] = new_block;
+        block->abandon();
         delete block;
     }
 
@@ -484,6 +486,7 @@ class ChunkedBufferImpl {
         auto new_block = create_block(remaining_bytes, block->offset_);
         new_block->copy_from(block->data(), remaining_bytes, 0);
         *blocks_.rbegin() = new_block;
+        block->abandon();
         delete block;
     }
 

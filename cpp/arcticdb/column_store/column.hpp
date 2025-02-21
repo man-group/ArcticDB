@@ -73,7 +73,8 @@ struct JiveTable {
 enum class ExtraBufferType : uint8_t {
     OFFSET,
     STRING,
-    ARRAY
+    ARRAY,
+    BITMAP
 };
 
 
@@ -119,8 +120,14 @@ struct ExtraBufferContainer {
         auto it = buffers_.find(ExtraBufferIndex{offset, type});
         util::check(it != buffers_.end(), "Failed to find additional chunked buffer at position {}", offset);
         return const_cast<ChunkedBuffer&>(it->second);
-        }
-    };
+    }
+
+    bool has_buffer(size_t offset, ExtraBufferType type) const {
+        std::lock_guard lock(mutex_);
+        auto it = buffers_.find(ExtraBufferIndex{offset, type});
+        return it != buffers_.end();
+    }
+};
 
 
 class Column;
@@ -1022,6 +1029,13 @@ public:
     void set_extra_buffer(size_t offset, ExtraBufferType type, ChunkedBuffer&& buffer) {
         init_buffer();
         extra_buffers_->set_buffer(offset, type, std::move(buffer));
+    }
+
+    bool has_extra_buffer(size_t offset, ExtraBufferType type) const {
+        if(!extra_buffers_)
+            return false;
+
+        return extra_buffers_->has_buffer(offset, type);
     }
 private:
     position_t last_offset() const;
