@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 #pragma once
 
@@ -16,8 +17,7 @@ namespace arcticdb::version_store {
  * A key whose segment stores many atom keys (all of the same type).
  */
 class KeyBlock {
-public:
-
+  public:
     /**
      * Loaded from an existing key block.
      */
@@ -50,9 +50,8 @@ public:
 
     StreamId id() const;
 
-private:
-
-    static KeyType expected_key_type_of_contents(const KeyType &key_type);
+  private:
+    static KeyType expected_key_type_of_contents(const KeyType& key_type);
     std::unordered_map<StreamId, AtomKey> map_from_segment(SegmentInMemory&& segment);
 
     std::unordered_map<StreamId, AtomKey> keys_;
@@ -72,4 +71,4 @@ void write_key_block(Store* store, KeyBlock&& key);
  */
 KeyBlock read_key_block(Store* store, KeyType key_type, const StreamId& id);
 
-}
+} // namespace arcticdb::version_store

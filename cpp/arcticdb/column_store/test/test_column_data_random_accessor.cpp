@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -13,7 +14,7 @@
 using namespace arcticdb;
 
 class ColumnDataRandomAccessorTest : public testing::Test {
-protected:
+  protected:
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
     void SetUp() override {
         input_data.resize(n);
@@ -28,7 +29,7 @@ protected:
 // Note that dense and sparse single block accessors are tested in rapidcheck_column_data_random_accessor.cpp
 TEST_F(ColumnDataRandomAccessorTest, DenseRegularBlocks) {
     Column column(type_descriptor, Sparsity::NOT_PERMITTED);
-    for (auto& val: input_data) {
+    for (auto& val : input_data) {
         column.push_back<int64_t>(val);
     }
 

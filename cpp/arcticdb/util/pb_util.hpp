@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -20,17 +21,16 @@
 
 namespace arcticdb::util {
 
-
 namespace detail {
 constexpr char TYPE_URL[] = "cxx.arctic.org";
 }
 
 template<class Msg>
-void pack_to_any(const Msg &msg, google::protobuf::Any &any) {
+void pack_to_any(const Msg& msg, google::protobuf::Any& any) {
     any.PackFrom(msg, detail::TYPE_URL);
 }
 
-inline folly::StringPiece get_arcticdb_pb_type_name(const google::protobuf::Any &any) {
+inline folly::StringPiece get_arcticdb_pb_type_name(const google::protobuf::Any& any) {
     folly::StringPiece sp{any.type_url()};
     if (!sp.startsWith(detail::TYPE_URL)) {
         util::raise_rte("Not a valid arcticc proto msg", any.DebugString());
@@ -39,19 +39,19 @@ inline folly::StringPiece get_arcticdb_pb_type_name(const google::protobuf::Any 
 }
 
 template<class Msg>
-bool pb_equals(const Msg &a, const Msg &b) {
+bool pb_equals(const Msg& a, const Msg& b) {
     return google::protobuf::util::MessageDifferencer::Equals(a, b);
 }
 
 template<class T>
-std::optional<T> as_opt(T val, const T &sentinel = T()) {
+std::optional<T> as_opt(T val, const T& sentinel = T()) {
     if (val == sentinel) {
         return std::nullopt;
     }
     return std::make_optional(val);
 }
 
-inline std::string format(const google::protobuf::Message &msg) {
+inline std::string format(const google::protobuf::Message& msg) {
     std::string dest;
     google::protobuf::TextFormat::Printer p;
     p.SetExpandAny(true);
@@ -65,5 +65,4 @@ inline std::string newlines_to_spaces(const ::google::protobuf::Message& msg) {
     return out;
 }
 
-} // namespace arctic::util
-
+} // namespace arcticdb::util

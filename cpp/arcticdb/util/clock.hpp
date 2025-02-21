@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -17,7 +18,6 @@
 #elif defined(__APPLE__)
 #include <mach/mach_time.h>
 #endif
-
 
 namespace arcticdb::util {
 
@@ -48,28 +48,18 @@ class SysClock {
     }
 };
 
-
 struct LinearClock {
     inline static std::atomic<entity::timestamp> time_{0};
 
-    static entity::timestamp nanos_since_epoch() {
-        return LinearClock::time_.fetch_add(1);
-    }
-    static entity::timestamp coarse_nanos_since_epoch() {
-        return LinearClock::time_.fetch_add(1);
-    }
+    static entity::timestamp nanos_since_epoch() { return LinearClock::time_.fetch_add(1); }
+    static entity::timestamp coarse_nanos_since_epoch() { return LinearClock::time_.fetch_add(1); }
 };
 
 struct ManualClock {
     inline static std::atomic<entity::timestamp> time_{0};
 
-    static entity::timestamp nanos_since_epoch() {
-        return time_.load();
-    }
-    static entity::timestamp coarse_nanos_since_epoch() {
-        return time_.load();
-    }
+    static entity::timestamp nanos_since_epoch() { return time_.load(); }
+    static entity::timestamp coarse_nanos_since_epoch() { return time_.load(); }
 };
-
 
 } // namespace arcticdb::util

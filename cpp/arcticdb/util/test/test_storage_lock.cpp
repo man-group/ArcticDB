@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/storage/test/in_memory_store.hpp>
@@ -57,23 +58,19 @@ struct LockData {
     std::atomic<bool> timedout_;
 
     LockData(size_t num_tests) :
-    lock_name_("stress_test_lock"),
-    store_(std::make_shared<InMemoryStore>()),
-    vol_(0),
-    atomic_(0),
-    contended_(false),
-    num_tests_(num_tests),
-    timedout_(false){
-    }
-
+        lock_name_("stress_test_lock"),
+        store_(std::make_shared<InMemoryStore>()),
+        vol_(0),
+        atomic_(0),
+        contended_(false),
+        num_tests_(num_tests),
+        timedout_(false) {}
 };
 
 struct OptimisticLockTask {
     std::shared_ptr<LockData> data_;
 
-    explicit OptimisticLockTask(std::shared_ptr<LockData> data) :
-        data_(std::move(data)) {
-    }
+    explicit OptimisticLockTask(std::shared_ptr<LockData> data) : data_(std::move(data)) {}
 
     folly::Future<folly::Unit> operator()() {
         StorageLock<> lock{data_->lock_name_};
@@ -81,8 +78,7 @@ struct OptimisticLockTask {
         for (auto i = size_t(0); i < data_->num_tests_; ++i) {
             if (!lock.try_lock(data_->store_)) {
                 data_->contended_ = true;
-            }
-            else {
+            } else {
                 // As of C++20, '++' expression of 'volatile'-qualified type is deprecated.
                 const uint64_t vol_ = data_->vol_ + 1;
                 data_->vol_ = vol_;
@@ -94,7 +90,6 @@ struct OptimisticLockTask {
     }
 };
 
-
 TEST(StorageLock, Contention) {
     SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
@@ -103,7 +98,7 @@ TEST(StorageLock, Contention) {
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
 
     std::vector<Future<Unit>> futures;
-    for(auto i = size_t{0}; i < 4; ++i) {
+    for (auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(OptimisticLockTask{lock_data}));
     }
     collect(futures).get();
@@ -118,15 +113,14 @@ struct PessimisticLockTask {
 
     PessimisticLockTask(std::shared_ptr<LockData> data, std::optional<size_t> timeout_ms = std::nullopt) :
         data_(std::move(data)),
-        timeout_ms_(timeout_ms){
-    }
+        timeout_ms_(timeout_ms) {}
 
     folly::Future<folly::Unit> operator()() {
         StorageLock<> lock{data_->lock_name_};
 
         for (auto i = size_t(0); i < data_->num_tests_; ++i) {
             try {
-                if(timeout_ms_)
+                if (timeout_ms_)
                     lock.lock_timeout(data_->store_, *timeout_ms_);
                 else
                     lock.lock(data_->store_);
@@ -136,8 +130,7 @@ struct PessimisticLockTask {
                 data_->vol_ = vol_;
                 ++data_->atomic_;
                 lock.unlock(data_->store_);
-            }
-            catch(const StorageLockTimeout&) {
+            } catch (const StorageLockTimeout&) {
                 data_->timedout_ = true;
             }
         }
@@ -151,9 +144,7 @@ struct ForceReleaseLockTask {
 
     ForceReleaseLockTask(std::shared_ptr<LockData> data, size_t timeout_ms) :
         data_(std::move(data)),
-        timeout_ms_(timeout_ms)
-        {
-    }
+        timeout_ms_(timeout_ms) {}
 
     folly::Future<folly::Unit> operator()() {
         StorageLock<> lock{data_->lock_name_};
@@ -165,8 +156,7 @@ struct ForceReleaseLockTask {
             data_->vol_ = vol_;
             ++data_->atomic_;
             // Dont unlock
-        }
-        catch(const StorageLockTimeout&) {
+        } catch (const StorageLockTimeout&) {
             data_->timedout_ = true;
         }
 
@@ -182,11 +172,9 @@ struct OptimisticForceReleaseLockTask {
     size_t retry_ms_;
 
     OptimisticForceReleaseLockTask(std::shared_ptr<LockData> data, size_t timeout_ms, size_t retry_ms) :
-            data_(std::move(data)),
-            timeout_ms_(timeout_ms),
-            retry_ms_(retry_ms)
-    {
-    }
+        data_(std::move(data)),
+        timeout_ms_(timeout_ms),
+        retry_ms_(retry_ms) {}
 
     folly::Future<folly::Unit> operator()() {
         StorageLock<> lock{data_->lock_name_};
@@ -221,7 +209,7 @@ TEST(StorageLock, Wait) {
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
 
     std::vector<Future<Unit>> futures;
-    for(auto i = size_t{0}; i < 4; ++i) {
+    for (auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(PessimisticLockTask{lock_data}));
     }
     collect(futures).get();
@@ -238,7 +226,7 @@ TEST(StorageLock, Timeouts) {
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
 
     std::vector<Future<Unit>> futures;
-    for(auto i = size_t{0}; i < 4; ++i) {
+    for (auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(PessimisticLockTask{lock_data, 20}));
     }
     collect(futures).get();
@@ -246,7 +234,8 @@ TEST(StorageLock, Timeouts) {
 }
 
 int count_occurrences(std::string search, std::string pattern) {
-    if (search.size() < pattern.size()) return false;
+    if (search.size() < pattern.size())
+        return false;
     int count = 0;
     for (size_t pos = 0; pos <= search.size() - pattern.size(); pos++) {
         if (search.substr(pos, pattern.size()) == pattern)
@@ -278,7 +267,7 @@ TEST(StorageLock, ForceReleaseLock) {
     testing::internal::CaptureStderr();
     testing::internal::CaptureStdout();
     std::vector<Future<Unit>> futures;
-    for(auto i = size_t{0}; i < 4; ++i) {
+    for (auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(ForceReleaseLockTask{lock_data, 10 * 1000}));
     }
 
@@ -287,7 +276,7 @@ TEST(StorageLock, ForceReleaseLock) {
     ASSERT_EQ(4u, lock_data->atomic_);
     ASSERT_EQ(4u, lock_data->vol_);
 
-    std::string stdout_str  = testing::internal::GetCapturedStdout();
+    std::string stdout_str = testing::internal::GetCapturedStdout();
     std::string stderr_str = testing::internal::GetCapturedStderr();
     std::string expected = "taken for more than TTL";
 
@@ -297,10 +286,7 @@ TEST(StorageLock, ForceReleaseLock) {
     // number of log messages.
     // Skip on Windows as capturing logs doesn't work. TODO: Configure the logger with the file output
 #ifndef _WIN32
-    ASSERT_TRUE(
-            count_occurrences(stdout_str, expected) >= 4 ||
-            count_occurrences(stderr_str, expected) >= 4
-    );
+    ASSERT_TRUE(count_occurrences(stdout_str, expected) >= 4 || count_occurrences(stderr_str, expected) >= 4);
 #endif
 
     // Clean up locks to avoid "mutex destroyed while active" errors on Windows debug build
@@ -332,7 +318,7 @@ TEST(StorageLock, OptimisticForceReleaseLock) {
     testing::internal::CaptureStderr();
     testing::internal::CaptureStdout();
     std::vector<Future<Unit>> futures;
-    for(auto i = size_t{0}; i < 4; ++i) {
+    for (auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(OptimisticForceReleaseLockTask{lock_data, 10 * 1000, 100}));
     }
 
@@ -342,7 +328,7 @@ TEST(StorageLock, OptimisticForceReleaseLock) {
     ASSERT_EQ(4u, lock_data->atomic_);
     ASSERT_EQ(4u, lock_data->vol_);
 
-    std::string stdout_str  = testing::internal::GetCapturedStdout();
+    std::string stdout_str = testing::internal::GetCapturedStdout();
     std::string stderr_str = testing::internal::GetCapturedStderr();
     std::string expected = "taken for more than TTL";
 
@@ -355,10 +341,7 @@ TEST(StorageLock, OptimisticForceReleaseLock) {
     // number of log messages.
     // Skip on Windows as capturing logs doesn't work. TODO: Configure the logger with the file output
 #ifndef _WIN32
-    ASSERT_TRUE(
-        count_occurrences(stdout_str, expected) >= 4 ||
-        count_occurrences(stderr_str, expected) >= 4
-    );
+    ASSERT_TRUE(count_occurrences(stdout_str, expected) >= 4 || count_occurrences(stderr_str, expected) >= 4);
 #endif
 
     // Clean up locks to avoid "mutex destroyed while active" errors on Windows debug build

@@ -6,12 +6,7 @@ import tempfile
 import logging
 import shutil
 from typing import Union, Optional, Dict, List
-from ..util.mark import (
-    AZURE_TESTS_MARK,
-    MONGO_TESTS_MARK,
-    VENV_COMPAT_TESTS_MARK,
-    PANDAS_2_COMPAT_TESTS_MARK
-)
+from ..util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, VENV_COMPAT_TESTS_MARK, PANDAS_2_COMPAT_TESTS_MARK
 from packaging.version import Version
 
 logger = logging.getLogger("Compatibility tests")
@@ -45,9 +40,7 @@ def run_shell_command(
             stdin=subprocess.DEVNULL,
         )
     if result.returncode != 0:
-        logger.warning(
-            f"Command failed, stdout: {str(result.stdout)}, stderr: {str(result.stderr)}"
-        )
+        logger.warning(f"Command failed, stdout: {str(result.stdout)}, stderr: {str(result.stderr)}")
     return result
 
 
@@ -86,9 +79,7 @@ class Venv:
     def tear_down_venv(self):
         shutil.rmtree(self.path, ignore_errors=True)
 
-    def execute_python_file(
-        self, python_path: Union[str, os.PathLike]
-    ) -> subprocess.CompletedProcess:
+    def execute_python_file(self, python_path: Union[str, os.PathLike]) -> subprocess.CompletedProcess:
         command = [get_os_specific_venv_python(), python_path]
         return run_shell_command(command, self.path)
 
@@ -114,9 +105,7 @@ class VenvArctic:
             for df_name, df_value in dfs.items():
                 parquet_file = os.path.join(dir, f"{df_name}.parquet")
                 df_value.to_parquet(parquet_file)
-                df_load_commands.append(
-                    f"{df_name} = pd.read_parquet({repr(parquet_file)})"
-                )
+                df_load_commands.append(f"{df_name} = pd.read_parquet({repr(parquet_file)})")
 
             python_commands = (
                 [
@@ -135,9 +124,7 @@ class VenvArctic:
 
             result = self.venv.execute_python_file(python_path)
             if result.returncode != 0:
-                raise ErrorInVenv(
-                    f"Executing {python_commands} failed with return code {result.returncode}: {result}"
-                )
+                raise ErrorInVenv(f"Executing {python_commands} failed with return code {result.returncode}: {result}")
 
     def init_storage(self):
         self.execute([])
@@ -194,11 +181,7 @@ def old_venv(request, tmp_path):
         yield old_venv
 
 
-@pytest.fixture(
-    params=[
-        pytest.param("tmp_path", marks=PANDAS_2_COMPAT_TESTS_MARK)
-    ]
-)
+@pytest.fixture(params=[pytest.param("tmp_path", marks=PANDAS_2_COMPAT_TESTS_MARK)])
 def pandas_v1_venv(request):
     """A venv with Pandas v1 installed (and an old ArcticDB version). To help test compat across Pandas versions."""
     version = "1.6.2"
@@ -237,8 +220,6 @@ def old_venv_and_arctic_uri(old_venv, arctic_uri):
         pytest.skip("Mongo storage backend is not supported in 1.6.2")
 
     if arctic_uri.startswith("lmdb") and Version(old_venv.version) < Version("5.0.0"):
-        pytest.skip(
-            "LMDB storage backed has a bug in versions before 5.0.0 which leads to flaky segfaults"
-        )
+        pytest.skip("LMDB storage backed has a bug in versions before 5.0.0 which leads to flaky segfaults")
 
     return old_venv, arctic_uri

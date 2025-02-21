@@ -20,10 +20,9 @@ inline py::handle* create_py_nan() {
 struct PythonHandlerData {
     PythonHandlerData() :
         py_nan_(std::shared_ptr<py::handle>(create_py_nan(), [](py::handle* py_obj) {
-                util::check(PyGILState_Check() != 0, "Expected GIL to be held when deallocating Python nan");
-                py_obj->dec_ref();
-        })) {
-    }
+            util::check(PyGILState_Check() != 0, "Expected GIL to be held when deallocating Python nan");
+            py_obj->dec_ref();
+        })) {}
 
     SpinLock& spin_lock() {
         util::check(spin_lock_, "Spinlock not set on python handler data");
@@ -34,10 +33,8 @@ struct PythonHandlerData {
     std::shared_ptr<py::handle> py_nan_;
 };
 
-struct PythonHandlerDataFactory  : public TypeHandlerDataFactory {
-    std::any get_data() const override {
-        return {PythonHandlerData{}};
-    }
+struct PythonHandlerDataFactory : public TypeHandlerDataFactory {
+    std::any get_data() const override { return {PythonHandlerData{}}; }
 };
 
-}
+} // namespace arcticdb

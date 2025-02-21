@@ -2,24 +2,30 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
 
 #include <folly/Poly.h>
 
-namespace arcticdb{
+namespace arcticdb {
 
 struct IGroupingAggregatorData {
     template<class Base>
     struct Interface : Base {
         void add_data_type(DataType data_type) { folly::poly_call<0>(*this, data_type); }
 
-        void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
+        void aggregate(
+                const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups,
+                size_t unique_values
+        ) {
             folly::poly_call<1>(*this, input_column, groups, unique_values);
         }
-        [[nodiscard]] SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values) {
+        [[nodiscard]] SegmentInMemory finalize(
+                const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values
+        ) {
             return folly::poly_call<2>(*this, output_column_name, dynamic_schema, unique_values);
         }
     };
@@ -73,4 +79,4 @@ struct IColumnStatsAggregator {
 
 using ColumnStatsAggregator = folly::Poly<IColumnStatsAggregator>;
 
-} //namespace arcticdb
+} // namespace arcticdb

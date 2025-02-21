@@ -19,20 +19,23 @@ from arcticdb_ext.exceptions import (
     SortingException,
 )
 
-@pytest.mark.parametrize("operation", ["update", "append", "sort_index", "delete_range", "restore_version", "batch_restore_version"])
+
+@pytest.mark.parametrize(
+    "operation", ["update", "append", "sort_index", "delete_range", "restore_version", "batch_restore_version"]
+)
 def test_version_chain_increasing(version_store_factory, operation):
     lib = version_store_factory()
     sym = "sym"
 
-    df = pd.DataFrame({"col": [1, 2, 3]}, index=pd.date_range(start=pd.Timestamp(0), periods=3, freq='ns'))
-    df_2 = pd.DataFrame({"col": [1, 2, 6]}, index=pd.date_range(start=pd.Timestamp(0), periods=3, freq='ns'))
+    df = pd.DataFrame({"col": [1, 2, 3]}, index=pd.date_range(start=pd.Timestamp(0), periods=3, freq="ns"))
+    df_2 = pd.DataFrame({"col": [1, 2, 6]}, index=pd.date_range(start=pd.Timestamp(0), periods=3, freq="ns"))
 
     def execute_operation():
         if operation == "update":
-            df_update = pd.DataFrame({"col": [4, 5]}, index=pd.date_range(start=pd.Timestamp(1), periods=2, freq='ns'))
+            df_update = pd.DataFrame({"col": [4, 5]}, index=pd.date_range(start=pd.Timestamp(1), periods=2, freq="ns"))
             lib.update(sym, df_update)
         elif operation == "append":
-            df_append = pd.DataFrame({"col": [4, 5]}, index=pd.date_range(start=pd.Timestamp(3), periods=2, freq='ns'))
+            df_append = pd.DataFrame({"col": [4, 5]}, index=pd.date_range(start=pd.Timestamp(3), periods=2, freq="ns"))
             lib.append(sym, df_append)
         elif operation == "sort_index":
             lib.version_store.sort_index(sym, False, False)
@@ -45,7 +48,6 @@ def test_version_chain_increasing(version_store_factory, operation):
         else:
             raise "Unknown operation"
 
-
     lib.write(sym, df)
     assert lib.read(sym).version == 0
 
@@ -57,4 +59,3 @@ def test_version_chain_increasing(version_store_factory, operation):
 
     execute_operation()
     assert lib.read(sym).version == 2
-

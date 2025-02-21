@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -11,7 +12,7 @@
 #include <optional>
 
 namespace arcticdb::pipelines {
-    struct PipelineContextRow;
+struct PipelineContextRow;
 }
 
 namespace arcticdb {
@@ -19,16 +20,11 @@ namespace arcticdb {
 class SegmentInMemory;
 
 struct ColumnTruncation {
-    ColumnTruncation(std::optional<size_t> start, std::optional<size_t> end) :
-        start_(start),
-        end_(end) {
-    }
+    ColumnTruncation(std::optional<size_t> start, std::optional<size_t> end) : start_(start), end_(end) {}
 
     ColumnTruncation() = default;
 
-    bool requires_truncation() const {
-        return start_ || end_;
-    }
+    bool requires_truncation() const { return start_ || end_; }
 
     std::optional<size_t> start_;
     std::optional<size_t> end_;
@@ -47,30 +43,19 @@ struct ColumnMapping {
     ColumnTruncation truncate_;
 
     ColumnMapping(
-        SegmentInMemory& frame,
-        size_t dst_col,
-        size_t field_col,
-        pipelines::PipelineContextRow& context,
-        OutputFormat output_format);
+            SegmentInMemory& frame, size_t dst_col, size_t field_col, pipelines::PipelineContextRow& context,
+            OutputFormat output_format
+    );
 
     ColumnMapping(
-        const entity::TypeDescriptor source_type_desc,
-        const entity::TypeDescriptor dest_type_desc,
-        const entity::Field& frame_field_descriptor,
-        const size_t dest_size,
-        const size_t num_rows,
-        const size_t first_row,
-        const size_t offset_bytes,
-        const size_t dest_bytes,
-        const size_t dest_col);
+            const entity::TypeDescriptor source_type_desc, const entity::TypeDescriptor dest_type_desc,
+            const entity::Field& frame_field_descriptor, const size_t dest_size, const size_t num_rows,
+            const size_t first_row, const size_t offset_bytes, const size_t dest_bytes, const size_t dest_col
+    );
 
-    void set_truncate(ColumnTruncation truncate) {
-        truncate_ = std::move(truncate);
-    }
+    void set_truncate(ColumnTruncation truncate) { truncate_ = std::move(truncate); }
 
-    bool requires_truncation() const {
-        return truncate_.requires_truncation();
-    }
+    bool requires_truncation() const { return truncate_.requires_truncation(); }
 };
 
 struct StaticColumnMappingIterator {

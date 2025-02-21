@@ -2,11 +2,11 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
-
 
 #include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/entity/protobufs.hpp>
@@ -25,14 +25,14 @@ struct BlockDataHelper {
     std::size_t count_;
     std::size_t bytes_;
 
-    template <typename BlockType>
+    template<typename BlockType>
     void set_block_data(BlockType& block, HashedValue h, std::size_t encoded_size) const {
         block.set_in_bytes(static_cast<uint32_t>(bytes_));
         block.set_out_bytes(static_cast<uint32_t>(encoded_size));
         block.set_hash(h);
     }
 
-    template <typename BlockType>
+    template<typename BlockType>
     void set_version(BlockType& block, std::uint32_t version) const {
         block.set_encoder_version(version);
     }
@@ -43,32 +43,24 @@ struct NdArrayBlock {
     BlockDataHelper shapes_;
     BlockDataHelper values_;
 
-    template <typename EncodedFieldType>
-    void update_field_size(EncodedFieldType &field) const {
+    template<typename EncodedFieldType>
+    void update_field_size(EncodedFieldType& field) const {
         auto existing_items_count = field.items_count();
         field.set_items_count(existing_items_count + static_cast<std::uint32_t>(item_count_));
     }
 
-    template <typename BlockType>
+    template<typename BlockType>
     void set_block_data(
-        BlockType* shapes_pb,
-        BlockType* values_pb,
-        HashedValue shape_hash,
-        std::size_t encoded_shape_bytes,
-        HashedValue values_hash,
-        std::size_t encoded_values_bytes
-        ) {
+            BlockType* shapes_pb, BlockType* values_pb, HashedValue shape_hash, std::size_t encoded_shape_bytes,
+            HashedValue values_hash, std::size_t encoded_values_bytes
+    ) {
         ARCTICDB_TRACE(log::codec(), "Setting encoded bytes: {}:{}", encoded_shape_bytes, encoded_values_bytes);
         shapes_.set_block_data(*shapes_pb, shape_hash, encoded_shape_bytes);
         values_.set_block_data(*values_pb, values_hash, encoded_values_bytes);
     }
 
-    template <typename BlockType>
-    void set_version(
-        BlockType* shapes_pb,
-        BlockType* values_pb,
-        std::uint32_t version,
-        std::uint32_t shape_version) {
+    template<typename BlockType>
+    void set_version(BlockType* shapes_pb, BlockType* values_pb, std::uint32_t version, std::uint32_t shape_version) {
         shapes_.set_version(*shapes_pb, shape_version);
         values_.set_version(*values_pb, version);
     }
@@ -94,9 +86,7 @@ class CodecHelper {
 
     HashAccum hasher_;
 
-    void ensure_buffer(Buffer &out, std::ptrdiff_t pos, std::size_t bytes_count) {
-        out.assert_size(pos + bytes_count);
-    }
+    void ensure_buffer(Buffer& out, std::ptrdiff_t pos, std::size_t bytes_count) { out.assert_size(pos + bytes_count); }
 
     HashedValue get_digest_and_reset() {
         HashedValue v = hasher_.digest();
@@ -104,11 +94,9 @@ class CodecHelper {
         return v;
     }
 
-    static BlockDataHelper scalar_block(std::size_t row_count) {
-        return {row_count, row_count * sizeof(T)};
-    }
+    static BlockDataHelper scalar_block(std::size_t row_count) { return {row_count, row_count * sizeof(T)}; }
 
-    static NdArrayBlock nd_array_block(std::size_t row_count, const shape_t *shape) {
+    static NdArrayBlock nd_array_block(std::size_t row_count, const shape_t* shape) {
         std::size_t shape_count = static_cast<std::size_t>(dim) * row_count;
         std::size_t total_values_count = 0;
         if constexpr (dim == Dimension::Dim1) {
@@ -145,13 +133,9 @@ struct ShapeEncodingFromBlock {
 
     template<class T, class EncodedFieldType>
     static std::size_t encode_block(
-        const T *in,
-        BlockDataHelper &block_utils,
-        HashAccum &hasher,
-        T *out,
-        std::size_t out_capacity,
-        std::ptrdiff_t &pos,
-        EncodedFieldType &out_codec) {
+            const T* in, BlockDataHelper& block_utils, HashAccum& hasher, T* out, std::size_t out_capacity,
+            std::ptrdiff_t& pos, EncodedFieldType& out_codec
+    ) {
         typename BE::Opts opts;
         DefaultOpt::set_shape_defaults(opts);
         return BE::encode_block(opts, in, block_utils, hasher, out, out_capacity, pos, out_codec);
@@ -184,10 +168,10 @@ struct GenericBlockEncoder {
     using ShapeEncoding = ShapeEncodingFromBlock<EncoderType, EncoderType>;
 
     GenericBlockEncoder() = delete;
-    GenericBlockEncoder(GenericBlockEncoder &&enc) = delete;
+    GenericBlockEncoder(GenericBlockEncoder&& enc) = delete;
 
     static size_t max_compressed_size(const BlockType& block) {
-        if(block.nbytes() == 0) {
+        if (block.nbytes() == 0) {
             ARCTICDB_TRACE(log::codec(), "GenericBlockEncoder got empty block. Max compressed size is 0.");
             return 0;
         }
@@ -210,23 +194,22 @@ struct GenericBlockEncoder {
             std::size_t comp_data = EncoderType::max_compressed_size(helper_array_block.values_.bytes_);
             std::size_t comp_shapes = ShapeEncoding::max_compressed_size(helper_array_block.shapes_.bytes_);
 
-            ARCTICDB_TRACE(log::codec(), "Array block has {} bytes ({} + {})", comp_data + comp_shapes, comp_shapes, comp_data);
+            ARCTICDB_TRACE(
+                    log::codec(), "Array block has {} bytes ({} + {})", comp_data + comp_shapes, comp_shapes, comp_data
+            );
             return comp_data + comp_shapes;
         }
     }
 
     static void encode(
-        const typename EncoderType::Opts &opts,
-        const BlockType& block,
-        EncodedFieldImpl& field,
-        Buffer& out,
-        std::ptrdiff_t& pos
+            const typename EncoderType::Opts& opts, const BlockType& block, EncodedFieldImpl& field, Buffer& out,
+            std::ptrdiff_t& pos
     ) {
         Helper helper;
         helper.hasher_.reset(helper.seed);
         const std::size_t block_row_count = block.row_count();
-        auto *field_nd_array = field.mutable_ndarray();
-        if(block.nbytes() == 0) {
+        auto* field_nd_array = field.mutable_ndarray();
+        if (block.nbytes() == 0) {
             ARCTICDB_TRACE(log::codec(), "GenericBlockEncoder got empty block. There's nothing to encode");
             return;
         }
@@ -242,27 +225,35 @@ struct GenericBlockEncoder {
 
             // doing copy + hash in one pass, this might have a negative effect on perf
             // since the hashing is path dependent. This is a toy example though so not critical
-            auto t_out = reinterpret_cast<T *>(out.data() + pos);
+            auto t_out = reinterpret_cast<T*>(out.data() + pos);
             const auto total_items_count = field_nd_array->items_count() + block_row_count;
             field_nd_array->set_items_count(total_items_count);
             auto value_pb = field_nd_array->add_values(EncodingVersion::V1);
-            const auto compressed_size = EncoderType::encode_block(opts,
-                block.data(),
-                helper_scalar_block,
-                helper.hasher_,
-                t_out,
-                max_compressed_size,
-                pos,
-                *value_pb->mutable_codec());
+            const auto compressed_size = EncoderType::encode_block(
+                    opts,
+                    block.data(),
+                    helper_scalar_block,
+                    helper.hasher_,
+                    t_out,
+                    max_compressed_size,
+                    pos,
+                    *value_pb->mutable_codec()
+            );
 
             helper_scalar_block.set_block_data(*value_pb, helper.hasher_.digest(), compressed_size);
             helper_scalar_block.set_version(*value_pb, EncoderType::VERSION);
         } else {
             auto helper_array_block = Helper::nd_array_block(block_row_count, block.shapes());
 
-            ARCTICDB_TRACE(log::codec(), "Generic block encoder writing ndarray field of {} items", helper_array_block.item_count_);
-            const std::size_t max_compressed_data_size = EncoderType::max_compressed_size(helper_array_block.values_.bytes_);
-            const std::size_t max_compressed_shapes_size = ShapeEncoding::max_compressed_size(helper_array_block.shapes_.bytes_);
+            ARCTICDB_TRACE(
+                    log::codec(),
+                    "Generic block encoder writing ndarray field of {} items",
+                    helper_array_block.item_count_
+            );
+            const std::size_t max_compressed_data_size =
+                    EncoderType::max_compressed_size(helper_array_block.values_.bytes_);
+            const std::size_t max_compressed_shapes_size =
+                    ShapeEncoding::max_compressed_size(helper_array_block.shapes_.bytes_);
             const std::size_t helper_buffer_size = max_compressed_data_size + max_compressed_shapes_size;
 
             helper.ensure_buffer(out, pos, helper_buffer_size);
@@ -271,32 +262,36 @@ struct GenericBlockEncoder {
             // write shapes
             auto s_out = reinterpret_cast<shape_t*>(out.data() + pos);
             const auto shape_comp_size = ShapeEncoding::encode_block(
-                block.shapes(),
-                helper_array_block.shapes_,
-                helper.hasher_,
-                s_out,
-                max_compressed_shapes_size,
-                pos,
-                *shape_pb->mutable_codec());
+                    block.shapes(),
+                    helper_array_block.shapes_,
+                    helper.hasher_,
+                    s_out,
+                    max_compressed_shapes_size,
+                    pos,
+                    *shape_pb->mutable_codec()
+            );
 
             HashedValue shape_hash = helper.get_digest_and_reset();
 
             // write values
             auto value_pb = field_nd_array->add_values(EncodingVersion::V1);
-            auto t_out = reinterpret_cast<T *>(out.data() + pos);
+            auto t_out = reinterpret_cast<T*>(out.data() + pos);
             const auto values_comp_size = EncoderType::encode_block(
-                opts,
-                block.data(),
-                helper_array_block.values_,
-                helper.hasher_,
-                t_out,
-                max_compressed_data_size,
-                pos,
-                *value_pb->mutable_codec());
+                    opts,
+                    block.data(),
+                    helper_array_block.values_,
+                    helper.hasher_,
+                    t_out,
+                    max_compressed_data_size,
+                    pos,
+                    *value_pb->mutable_codec()
+            );
 
             auto digest = helper.hasher_.digest();
             helper_array_block.update_field_size(*field_nd_array);
-            helper_array_block.set_block_data(shape_pb, value_pb, shape_hash, shape_comp_size, digest, values_comp_size);
+            helper_array_block.set_block_data(
+                    shape_pb, value_pb, shape_hash, shape_comp_size, digest, values_comp_size
+            );
             helper_array_block.set_version(shape_pb, value_pb, EncoderType::VERSION, ShapeEncoding::VERSION);
         }
     }
@@ -310,13 +305,13 @@ struct GenericBlockEncoder {
 /// does not encode the shapes of the block. For more information see comment above arcticdb::ColumnEncoder2
 template<class BlockType, class TD, class EncoderType>
 struct GenericBlockEncoderV2 {
-public:
+  public:
     using Helper = CodecHelper<TD>;
     using T = typename Helper::T;
 
-    static size_t max_compressed_size(const BlockType &block) {
+    static size_t max_compressed_size(const BlockType& block) {
         const auto uncompressed_size = block.nbytes();
-        if(uncompressed_size == 0) {
+        if (uncompressed_size == 0) {
             ARCTICDB_TRACE(log::codec(), "GenericBlockEncoderV2 got empty block. Max compressed size is 0.");
             return 0;
         }
@@ -325,15 +320,12 @@ public:
         return compressed;
     }
 
-    template <typename EncodedBlockType>
+    template<typename EncodedBlockType>
     static void encode(
-        const typename EncoderType::Opts &opts,
-        const BlockType& block,
-        Buffer& out,
-        std::ptrdiff_t& pos,
-        EncodedBlockType* encoded_block
+            const typename EncoderType::Opts& opts, const BlockType& block, Buffer& out, std::ptrdiff_t& pos,
+            EncodedBlockType* encoded_block
     ) {
-        if(block.nbytes() == 0) {
+        if (block.nbytes() == 0) {
             ARCTICDB_TRACE(log::codec(), "GenericBlockEncoderV2 got empty block. There's nothing to encode.");
             return;
         }
@@ -351,14 +343,15 @@ public:
         // since the hashing is path dependent. This is a toy example though so not critical
         auto t_out = reinterpret_cast<T*>(out.data() + pos);
         const auto compressed_size = EncoderType::encode_block(
-            opts,
-            block.data(),
-            helper_scalar_block,
-            helper.hasher_,
-            t_out,
-            max_compressed_size,
-            pos,
-            *encoded_block->mutable_codec());
+                opts,
+                block.data(),
+                helper_scalar_block,
+                helper.hasher_,
+                t_out,
+                max_compressed_size,
+                pos,
+                *encoded_block->mutable_codec()
+        );
         helper_scalar_block.set_block_data(*encoded_block, helper.hasher_.digest(), compressed_size);
         helper_scalar_block.set_version(*encoded_block, EncoderType::VERSION);
     }

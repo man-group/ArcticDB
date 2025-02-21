@@ -164,10 +164,10 @@ class EnterpriseLibraryOptions:
     """
 
     def __init__(
-            self,
-            *,
-            replication: bool = False,
-            background_deletion: bool = False,
+        self,
+        *,
+        replication: bool = False,
+        background_deletion: bool = False,
     ):
         """
         Parameters
@@ -199,10 +199,7 @@ class EnterpriseLibraryOptions:
         self.background_deletion = background_deletion
 
     def __eq__(self, right):
-        return (
-                self.replication == right.replication
-                and self.background_deletion == right.background_deletion
-        )
+        return self.replication == right.replication and self.background_deletion == right.background_deletion
 
     def __repr__(self):
         return (

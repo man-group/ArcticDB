@@ -41,7 +41,9 @@ def test_many_increments(real_s3_storage_factory, lib_name, num_processes, max_s
     lib.write(symbol, init_df)
 
     processes = [
-        Process(target=slow_increment_task, args=(real_s3_storage_factory, lib_name, symbol, 0 if i % 2 == 0 else max_sleep))
+        Process(
+            target=slow_increment_task, args=(real_s3_storage_factory, lib_name, symbol, 0 if i % 2 == 0 else max_sleep)
+        )
         for i in range(num_processes)
     ]
     for p in processes:

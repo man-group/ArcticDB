@@ -198,15 +198,10 @@ def test_prefix():
     return "test_bucket_prefix"
 
 
-@pytest.fixture(scope="function",
-                params=[MotoNfsBackedS3StorageFixtureFactory,
-                        MotoS3StorageFixtureFactory])
+@pytest.fixture(scope="function", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
 def storage_bucket(test_prefix, request):
     with request.param(
-            use_ssl=False,
-            ssl_test_support=False,
-            bucket_versioning=False,
-            default_prefix=test_prefix
+        use_ssl=False, ssl_test_support=False, bucket_versioning=False, default_prefix=test_prefix
     ) as factory:
         with factory.create_fixture() as bucket:
             yield bucket
@@ -227,4 +222,3 @@ def test_library_get_key_path(lib_name, storage_bucket, test_prefix):
             assert path.startswith(test_prefix)
 
     assert keys_count > 0
-

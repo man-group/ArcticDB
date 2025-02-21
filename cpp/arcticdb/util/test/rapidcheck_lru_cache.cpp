@@ -4,7 +4,6 @@
 #include <vector>
 #include <arcticdb/util/lru_cache.hpp>
 
-
 #include <gtest/gtest.h>
 #include <arcticdb/util/test/rapidcheck.hpp>
 #include <rapidcheck.h>

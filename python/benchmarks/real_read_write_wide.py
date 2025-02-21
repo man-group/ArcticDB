@@ -20,7 +20,7 @@ class AWSWideDataFrameTests:
     This is ASV class for testing arcticdb with wide dataframe
 
 
-        IMPORTANT: 
+        IMPORTANT:
         - When we inherit from another test we inherit test, setup and teardown methods
         - setup_cache() method we inherit it AS IS, thus it will be executed only ONCE for
           all classes that inherit from the base class. Therefore it is perhaps best to ALWAYS
@@ -29,45 +29,44 @@ class AWSWideDataFrameTests:
     """
 
     rounds = 1
-    number = 3 # invokes 3 times the test runs between each setup-teardown 
-    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
+    number = 3  # invokes 3 times the test runs between each setup-teardown
+    repeat = 1  # defines the number of times the measurements will invoke setup-teardown
     min_run_count = 1
     warmup_time = 0
 
     timeout = 1200
 
-    SETUP_CLASS = (GeneralSetupLibraryWithSymbols(storage=Storage.AMAZON,
-                                                  # Define UNIQUE STRING for persistent libraries names 
-                                                  # as well as name of unique storage prefix
-                                                  prefix="WIDE_TESTS", 
-                                                  library_options=LibraryOptions(rows_per_segment=1000, columns_per_segment=1000))
-                    .set_params([
-                        [2500, 3000],
-                        [15000, 30000]]))
+    SETUP_CLASS = GeneralSetupLibraryWithSymbols(
+        storage=Storage.AMAZON,
+        # Define UNIQUE STRING for persistent libraries names
+        # as well as name of unique storage prefix
+        prefix="WIDE_TESTS",
+        library_options=LibraryOptions(rows_per_segment=1000, columns_per_segment=1000),
+    ).set_params([[2500, 3000], [15000, 30000]])
 
     params = SETUP_CLASS.get_parameter_list()
     param_names = ["num_rows", "num_cols"]
 
     def setup_cache(self):
-        '''
+        """
         Always provide implementation of setup_cache in
         the child class
 
-        And always return storage info which should 
+        And always return storage info which should
         be first parameter for setup, tests and teardown
-        '''
-        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment() 
+        """
+        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()
         info = setup_env.get_storage_info()
         # NOTE: use only logger defined by setup class
         setup_env.logger().info(f"storage info object: {info}")
         return info
 
     def setup(self, storage_info, num_rows, num_cols):
-        '''
+        """
         This setup method for read and writes can be executed only once
-        No need to be executed before each test. That is why we define 
+        No need to be executed before each test. That is why we define
         `repeat` as 1
-        '''
+        """
         ## Construct back from arctic url the object
         self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)
         sym = self.storage.get_symbol_name(num_rows, num_cols)
@@ -92,5 +91,4 @@ class AWSWideDataFrameTests:
 
     def peakmem_write_wide(self, storage_info, num_rows, num_cols):
         sym = self.storage.get_symbol_name(num_rows, num_cols)
-        self.write_library.write(symbol=sym, data=self.to_write_df)        
- 
+        self.write_library.write(symbol=sym, data=self.to_write_df)

@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -25,19 +26,14 @@ namespace arcticdb {
 namespace py = pybind11;
 
 using NumericSetType = std::variant<
-        std::shared_ptr<std::unordered_set<uint8_t>>,
-        std::shared_ptr<std::unordered_set<uint16_t>>,
-        std::shared_ptr<std::unordered_set<uint32_t>>,
-        std::shared_ptr<std::unordered_set<uint64_t>>,
-        std::shared_ptr<std::unordered_set<int8_t>>,
-        std::shared_ptr<std::unordered_set<int16_t>>,
-        std::shared_ptr<std::unordered_set<int32_t>>,
-        std::shared_ptr<std::unordered_set<int64_t>>,
-        std::shared_ptr<std::unordered_set<float>>,
-        std::shared_ptr<std::unordered_set<double>>>;
+        std::shared_ptr<std::unordered_set<uint8_t>>, std::shared_ptr<std::unordered_set<uint16_t>>,
+        std::shared_ptr<std::unordered_set<uint32_t>>, std::shared_ptr<std::unordered_set<uint64_t>>,
+        std::shared_ptr<std::unordered_set<int8_t>>, std::shared_ptr<std::unordered_set<int16_t>>,
+        std::shared_ptr<std::unordered_set<int32_t>>, std::shared_ptr<std::unordered_set<int64_t>>,
+        std::shared_ptr<std::unordered_set<float>>, std::shared_ptr<std::unordered_set<double>>>;
 
 class ValueSet {
-public:
+  public:
     explicit ValueSet(std::vector<std::string>&& value_list);
     explicit ValueSet(py::array value_list);
     explicit ValueSet(NumericSetType&& value_set);
@@ -53,25 +49,25 @@ public:
 
     std::shared_ptr<std::unordered_set<std::string>> get_fixed_width_string_set(size_t width);
 
-private:
+  private:
     bool empty_ = false;
     entity::TypeDescriptor base_type_;
     NumericSetType numeric_base_set_;
 
     template<typename T>
     class typed_set {
-    public:
+      public:
         ARCTICDB_VISIBILITY_HIDDEN std::shared_ptr<std::unordered_set<T>> create(py::array value_list) {
-            std::call_once(flag_, [&]{set_ = create_internal(value_list);});
+            std::call_once(flag_, [&] { set_ = create_internal(value_list); });
             return set_;
         }
 
         std::shared_ptr<std::unordered_set<T>> transform(const NumericSetType& numeric_base_set) {
-            std::call_once(flag_, [&]{set_ = transform_internal(numeric_base_set);});
+            std::call_once(flag_, [&] { set_ = transform_internal(numeric_base_set); });
             return set_;
         }
 
-    private:
+      private:
         std::shared_ptr<std::unordered_set<T>> set_;
         std::once_flag flag_;
 
@@ -86,9 +82,8 @@ private:
 
         std::shared_ptr<std::unordered_set<T>> transform_internal(const NumericSetType& numeric_base_set) {
             auto target_set = std::make_shared<std::unordered_set<T>>();
-            util::variant_match(numeric_base_set,
-            [&](const auto& source_set) {
-                for (const auto& member: *source_set) {
+            util::variant_match(numeric_base_set, [&](const auto& source_set) {
+                for (const auto& member : *source_set) {
                     target_set->insert(static_cast<T>(member));
                 }
             });
@@ -110,7 +105,6 @@ private:
     typed_set<float> typed_set_float_;
     typed_set<double> typed_set_double_;
     std::unique_ptr<std::mutex> mutex_ = std::make_unique<std::mutex>();
-
 };
 
 template<>
@@ -168,4 +162,4 @@ inline std::shared_ptr<std::unordered_set<double>> ValueSet::get_set<double>() {
     return typed_set_double_.transform(numeric_base_set_);
 }
 
-}
+} // namespace arcticdb

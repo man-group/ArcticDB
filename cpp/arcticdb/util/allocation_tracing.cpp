@@ -20,7 +20,7 @@ void AllocationTracker::destroy_instance() {
 }
 
 void AllocationTracker::trace() {
-    if(top_level_) {
+    if (top_level_) {
         top_level_ = false;
         auto trace = unwind_stack(num_levels_);
         {
@@ -31,28 +31,22 @@ void AllocationTracker::trace() {
     }
 }
 
-void AllocationTracker::init() {
-    instance_ = std::make_shared<AllocationTracker>();
-}
+void AllocationTracker::init() { instance_ = std::make_shared<AllocationTracker>(); }
 
 std::shared_ptr<AllocationTracker> AllocationTracker::instance_;
 std::once_flag AllocationTracker::init_flag_;
 
 } // namespace arcticdb
 
-void* operator new(std::size_t sz){
+void* operator new(std::size_t sz) {
     void* ptr = std::malloc(sz);
-    if(arcticdb::AllocationTracker::started())
+    if (arcticdb::AllocationTracker::started())
         arcticdb::AllocationTracker::instance()->trace();
     return ptr;
 }
 
-void operator delete(void* ptr) noexcept{
-    std::free(ptr);
-}
+void operator delete(void* ptr) noexcept { std::free(ptr); }
 
-void operator delete(void* ptr, std::size_t) noexcept{
-    std::free(ptr);
-}
+void operator delete(void* ptr, std::size_t) noexcept { std::free(ptr); }
 
 #endif

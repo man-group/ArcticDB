@@ -10,15 +10,13 @@
 /*If you see the error message below, this might be the header file you're looking for:
 
 [build] gtest/internal/gtest-port.h(2075): error C2668: 'close': ambiguous call to overloaded function
-[build] C:\Program Files (x86)\Windows Kits\10\include\10.0.22000.0\ucrt\corecrt_io.h(461): note: could be 'int close(int)'
-[build] folly/portability/Unistd.h(76): note: or       'int folly::portability::unistd::close(int)'
-[build] gtest/internal/gtest-port.h(2075): note: while trying to match the argument list '(int)'
+[build] C:\Program Files (x86)\Windows Kits\10\include\10.0.22000.0\ucrt\corecrt_io.h(461): note: could be 'int
+close(int)' [build] folly/portability/Unistd.h(76): note: or       'int folly::portability::unistd::close(int)' [build]
+gtest/internal/gtest-port.h(2075): note: while trying to match the argument list '(int)'
 */
 namespace testing::internal::posix {
-    inline int close(int i) {
-        return ::close(i);
-    }
-}
-#endif  // _WIN32
+inline int close(int i) { return ::close(i); }
+} // namespace testing::internal::posix
+#endif // _WIN32
 
 #include <gtest/gtest.h>

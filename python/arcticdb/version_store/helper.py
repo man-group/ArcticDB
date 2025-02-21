@@ -292,9 +292,9 @@ def get_s3_proto(
             raise UserInputException("STS credential provider and aws_profile must be set together")
 
     if use_internal_client_wrapper_for_testing:
-        assert native_cfg is not None, (
-            "use_internal_client_wrapper_for_testing can only be set if native_cfg is provided"
-        )
+        assert (
+            native_cfg is not None
+        ), "use_internal_client_wrapper_for_testing can only be set if native_cfg is provided"
 
     if native_cfg:
         aws_auth = AWSAuthMethod.DISABLED if aws_auth is None else aws_auth
@@ -365,11 +365,11 @@ def add_s3_library_to_env(
 
 
 def get_gcp_proto(
-        *,
-        cfg,
-        lib_name,
-        env_name,
-        with_prefix,
+    *,
+    cfg,
+    lib_name,
+    env_name,
+    with_prefix,
 ):
     env = cfg.env_by_id[env_name]
     proto = GcpConfig()
@@ -389,11 +389,11 @@ def get_gcp_proto(
 
 
 def add_gcp_library_to_env(
-        *,
-        cfg,
-        lib_name,
-        env_name,
-        with_prefix,
+    *,
+    cfg,
+    lib_name,
+    env_name,
+    with_prefix,
 ):
     env = cfg.env_by_id[env_name]
     if with_prefix and isinstance(with_prefix, str) and (with_prefix.endswith("/") or "//" in with_prefix):

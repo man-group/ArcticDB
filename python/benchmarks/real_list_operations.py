@@ -8,22 +8,24 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 from arcticdb.util.environment_setup import GeneralSetupSymbolsVersionsSnapshots, Storage
 
+
 class AWSListSymbols:
 
     rounds = 1
-    number = 3 # invoke X times the test runs between each setup-teardown 
-    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
+    number = 3  # invoke X times the test runs between each setup-teardown
+    repeat = 1  # defines the number of times the measurements will invoke setup-teardown
     min_run_count = 1
     warmup_time = 0
 
     timeout = 1200
 
-    
-    SETUP_CLASS = (GeneralSetupSymbolsVersionsSnapshots(storage=Storage.AMAZON, prefix="LIST_SYMBOLS")
+    SETUP_CLASS = (
+        GeneralSetupSymbolsVersionsSnapshots(storage=Storage.AMAZON, prefix="LIST_SYMBOLS")
         .set_with_metadata_for_each_version()
         .set_with_snapshot_for_each_version()
-        .set_params([500, 1000]))
-        #.set_params([10, 20])) # For test purposes 
+        .set_params([500, 1000])
+    )
+    # .set_params([10, 20])) # For test purposes
 
     params = SETUP_CLASS.get_parameter_list()
     param_names = ["num_syms"]
@@ -47,7 +49,7 @@ class AWSListSymbols:
         self.lib.list_symbols()
 
     def time_has_symbol_nonexisting(self, storage_info, num_syms):
-        self.lib.has_symbol("250_sym")        
+        self.lib.has_symbol("250_sym")
 
     def peakmem_list_symbols(self, storage_info, num_syms):
         self.lib.list_symbols()
@@ -58,28 +60,31 @@ class AWSListSymbols:
     def time_list_symbols_last_snapshot(self, storage_info, num_syms):
         self.lib.list_symbols(self.aws.last_snapshot)
 
+
 class AWSVersionSymbols:
 
     rounds = 1
-    number = 3 # invoke X times the test runs between each setup-teardown 
-    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
+    number = 3  # invoke X times the test runs between each setup-teardown
+    repeat = 1  # defines the number of times the measurements will invoke setup-teardown
     min_run_count = 1
     warmup_time = 0
 
     timeout = 1200
 
-    SETUP_CLASS = (GeneralSetupSymbolsVersionsSnapshots(storage=Storage.AMAZON, prefix="LIST_VERSIONS")
-        .set_mean_number_versions_per_sym(35) # change to lower for testing
-        .set_max_number_versions(50) # number versions is approx = num_syms * mean_number_versions
+    SETUP_CLASS = (
+        GeneralSetupSymbolsVersionsSnapshots(storage=Storage.AMAZON, prefix="LIST_VERSIONS")
+        .set_mean_number_versions_per_sym(35)  # change to lower for testing
+        .set_max_number_versions(50)  # number versions is approx = num_syms * mean_number_versions
         .set_with_metadata_for_each_version()
         .set_with_snapshot_for_each_version()
-        .set_params([25, 50])) # for test purposes: .set_params([5, 6]))
+        .set_params([25, 50])
+    )  # for test purposes: .set_params([5, 6]))
 
     params = SETUP_CLASS.get_parameter_list()
     param_names = ["num_syms"]
 
     def setup_cache(self):
-        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment() 
+        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment()
         info = aws.get_storage_info()
         # NOTE: use only logger defined by setup class
         aws.logger().info(f"storage info object: {info}")
@@ -93,14 +98,13 @@ class AWSVersionSymbols:
         self.lib.list_versions()
 
     def time_list_versions_latest_only(self, storage_info, num_syms):
-        self.lib.list_versions(latest_only=True)        
+        self.lib.list_versions(latest_only=True)
 
     def time_list_versions_skip_snapshots(self, storage_info, num_syms):
-        self.lib.list_versions(skip_snapshots=self.aws.last_snapshot)        
+        self.lib.list_versions(skip_snapshots=self.aws.last_snapshot)
 
     def time_list_versions_snapshot(self, storage_info, num_syms):
-        self.lib.list_versions(snapshot=self.aws.last_snapshot)        
+        self.lib.list_versions(snapshot=self.aws.last_snapshot)
 
     def peakmem_list_versions(self, storage_info, num_syms):
         self.lib.list_versions()
-

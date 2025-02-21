@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pandas as pd
 from hypothesis import assume, given, settings
 import pytest
@@ -43,7 +44,7 @@ def test_aggregation_numeric(lmdb_version_store_v1, df):
         symbol,
         df,
         "grouping_column",
-         {
+        {
             "mean": ("agg_column", "mean"),
             "sum": ("agg_column", "sum"),
             "min": ("agg_column", "min"),
@@ -52,7 +53,7 @@ def test_aggregation_numeric(lmdb_version_store_v1, df):
             # Uncomment when un-feature flagged
             # "first": ("agg_column", "first"),
             # "last": ("agg_column", "last"),
-        }
+        },
     )
 
 
@@ -82,7 +83,7 @@ def test_aggregation_strings(lmdb_version_store_v1, df):
             # Uncomment when un-feature flagged
             # "first": ("agg_column", "first"),
             # "last": ("agg_column", "last"),
-        }
+        },
     )
 
 
@@ -107,9 +108,9 @@ def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     symbol = "test_aggregation_numeric_dynamic"
     lib.delete(symbol)
     slices = [
-        df[:len(df) // 3],
-        df[len(df) // 3: 2 * len(df) // 3].drop(columns=["grouping_column"]),
-        df[2 * len(df) // 3:].drop(columns=["agg_column"]),
+        df[: len(df) // 3],
+        df[len(df) // 3 : 2 * len(df) // 3].drop(columns=["grouping_column"]),
+        df[2 * len(df) // 3 :].drop(columns=["agg_column"]),
     ]
     for slice in slices:
         lib.append(symbol, slice)
@@ -128,7 +129,7 @@ def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, df):
             # Uncomment when un-feature flagged
             # "first": ("agg_column", "first"),
             # "last": ("agg_column", "last"),
-        }
+        },
     )
 
 
@@ -148,9 +149,9 @@ def test_aggregation_strings_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     symbol = "test_aggregation_strings_dynamic"
     lib.delete(symbol)
     slices = [
-        df[:len(df) // 3],
-        df[len(df) // 3: 2 * len(df) // 3].drop(columns=["grouping_column"]),
-        df[2 * len(df) // 3:].drop(columns=["agg_column"]),
+        df[: len(df) // 3],
+        df[len(df) // 3 : 2 * len(df) // 3].drop(columns=["grouping_column"]),
+        df[2 * len(df) // 3 :].drop(columns=["agg_column"]),
     ]
     for slice in slices:
         lib.append(symbol, slice)
@@ -165,5 +166,5 @@ def test_aggregation_strings_dynamic(lmdb_version_store_dynamic_schema_v1, df):
             # Uncomment when un-feature flagged
             # "first": ("agg_column", "first"),
             # "last": ("agg_column", "last"),
-        }
+        },
     )

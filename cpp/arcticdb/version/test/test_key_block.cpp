@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -23,12 +24,12 @@ TEST(KeyBlock, BasicRoundtrip) {
     std::vector<StreamId> streams{"symbol_1", "symbol_2"};
     for (size_t i = 0; i < streams.size(); i++) {
         AtomKey k = AtomKeyBuilder()
-            .start_index(10 + i)
-            .end_index(100 + i)
-            .creation_ts(123 + i)
-            .version_id(1 + i)
-            .content_hash(2 + i)
-            .build<KeyType::VERSION>(streams[i]);
+                            .start_index(10 + i)
+                            .end_index(100 + i)
+                            .creation_ts(123 + i)
+                            .version_id(1 + i)
+                            .content_hash(2 + i)
+                            .build<KeyType::VERSION>(streams[i]);
 
         key_block.upsert(std::move(k));
     }
@@ -59,12 +60,12 @@ TEST(KeyBlock, RemoveKey) {
     std::vector<StreamId> streams{"symbol_1", "symbol_2"};
     for (size_t i = 0; i < streams.size(); i++) {
         AtomKey k = AtomKeyBuilder()
-            .start_index(10 + i)
-            .end_index(100 + i)
-            .creation_ts(123 + i)
-            .version_id(1 + i)
-            .content_hash(2 + i)
-            .build<KeyType::VERSION>(streams[i]);
+                            .start_index(10 + i)
+                            .end_index(100 + i)
+                            .creation_ts(123 + i)
+                            .version_id(1 + i)
+                            .content_hash(2 + i)
+                            .build<KeyType::VERSION>(streams[i]);
 
         key_block.upsert(std::move(k));
     }
@@ -86,12 +87,12 @@ TEST(KeyBlock, ErrorIfReleasedTwice) {
     std::vector<StreamId> streams{"symbol_1", "symbol_2"};
     for (size_t i = 0; i < streams.size(); i++) {
         AtomKey k = AtomKeyBuilder()
-            .start_index(10 + i)
-            .end_index(100 + i)
-            .creation_ts(123 + i)
-            .version_id(1 + i)
-            .content_hash(2 + i)
-            .build<KeyType::VERSION>(streams[i]);
+                            .start_index(10 + i)
+                            .end_index(100 + i)
+                            .creation_ts(123 + i)
+                            .version_id(1 + i)
+                            .content_hash(2 + i)
+                            .build<KeyType::VERSION>(streams[i]);
 
         key_block.upsert(std::move(k));
     }
@@ -109,12 +110,12 @@ TEST(KeyBlock, CopySegmentToNewBlock) {
     std::vector<StreamId> streams{"symbol_1", "symbol_2"};
     for (size_t i = 0; i < streams.size(); i++) {
         AtomKey k = AtomKeyBuilder()
-            .start_index(10 + i)
-            .end_index(100 + i)
-            .creation_ts(123 + i)
-            .version_id(1 + i)
-            .content_hash(2 + i)
-            .build<KeyType::VERSION>(streams[i]);
+                            .start_index(10 + i)
+                            .end_index(100 + i)
+                            .creation_ts(123 + i)
+                            .version_id(1 + i)
+                            .content_hash(2 + i)
+                            .build<KeyType::VERSION>(streams[i]);
 
         key_block.upsert(std::move(k));
     }

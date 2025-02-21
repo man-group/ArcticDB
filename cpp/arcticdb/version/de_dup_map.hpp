@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -12,12 +13,10 @@ namespace arcticdb {
 using namespace arcticdb::entity;
 
 class DeDupMap {
-public:
-    DeDupMap() :
-            de_dup_map_(std::make_unique<std::unordered_map<ContentHash, std::vector<AtomKey>>>()) {
-    }
+  public:
+    DeDupMap() : de_dup_map_(std::make_unique<std::unordered_map<ContentHash, std::vector<AtomKey>>>()) {}
 
-    std::optional<AtomKey> get_key_if_present(const AtomKey &key) const {
+    std::optional<AtomKey> get_key_if_present(const AtomKey& key) const {
         if (!de_dup_map_) {
             util::raise_rte("Invalid de dup map object");
         }
@@ -28,11 +27,11 @@ public:
         }
         // Just content hash matching isn't enough, start and end index also need to be matched
         // which uniquely identifies the position of the segment
-        auto key_iterator = std::find_if(std::begin(de_dup_candidates->second), std::end(de_dup_candidates->second),
-                                         [&](const auto &k) {
-                                             return k.start_index() == key.start_index() &&
-                                                    k.end_index() == key.end_index();
-                                         });
+        auto key_iterator = std::find_if(
+                std::begin(de_dup_candidates->second),
+                std::end(de_dup_candidates->second),
+                [&](const auto& k) { return k.start_index() == key.start_index() && k.end_index() == key.end_index(); }
+        );
         if (key_iterator == de_dup_candidates->second.end()) {
             return std::nullopt;
         } else {
@@ -40,7 +39,7 @@ public:
         }
     }
 
-    void insert_key(const AtomKey &key) {
+    void insert_key(const AtomKey& key) {
         if (!de_dup_map_) {
             util::raise_rte("Invalid de dup map object");
         }
@@ -50,8 +49,8 @@ public:
             de_dup_map_->insert({key.content_hash(), std::vector<AtomKey>({key})});
     }
 
-private:
+  private:
     std::unique_ptr<std::unordered_map<ContentHash, std::vector<AtomKey>>> de_dup_map_;
 };
 
-}
+} // namespace arcticdb

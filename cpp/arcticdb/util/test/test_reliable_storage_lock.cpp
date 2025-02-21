@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/storage/test/in_memory_store.hpp>
@@ -42,7 +43,9 @@ TEST(ReliableStorageLock, SingleThreaded) {
 
     auto count_locks = [&]() {
         auto number_of_lock_keys = 0;
-        store->iterate_type(KeyType::ATOMIC_LOCK, [&number_of_lock_keys](VariantKey&& _ [[maybe_unused]]){++number_of_lock_keys;});
+        store->iterate_type(KeyType::ATOMIC_LOCK, [&number_of_lock_keys](VariantKey&& _ [[maybe_unused]]) {
+            ++number_of_lock_keys;
+        });
         return number_of_lock_keys;
     };
 
@@ -84,7 +87,8 @@ TEST(ReliableStorageLock, SingleThreaded) {
     ASSERT_EQ(lock2.try_take_lock(), ReliableLockResult{AcquiredLock{4}});
     ASSERT_EQ(count_locks(), 5);
 
-    // But if we take a lock at 1000 all locks would have expired a 10xtimeout=100 ago, and we should clear all apart from latest lock_id=5
+    // But if we take a lock at 1000 all locks would have expired a 10xtimeout=100 ago, and we should clear all apart
+    // from latest lock_id=5
     Clock::time_ = 1000;
     ASSERT_EQ(lock2.try_take_lock(), ReliableLockResult{AcquiredLock{5}});
     ASSERT_EQ(count_locks(), 1);
@@ -97,13 +101,13 @@ struct SlowIncrementTask : async::BaseTask {
     bool lock_lost_ = false;
 
     SlowIncrementTask(int& cnt, ReliableStorageLock<>& lock, std::chrono::milliseconds sleep_time) :
-        cnt_(cnt), lock_(lock), sleep_time_(sleep_time) {}
+        cnt_(cnt),
+        lock_(lock),
+        sleep_time_(sleep_time) {}
 
     void operator()() {
         auto acquired = lock_.retry_until_take_lock();
-        auto guard = ReliableStorageLockGuard(lock_, acquired, [that = this](){
-            that->lock_lost_ = true;
-        });
+        auto guard = ReliableStorageLockGuard(lock_, acquired, [that = this]() { that->lock_lost_ = true; });
         auto value_before_sleep = cnt_;
         std::this_thread::sleep_for(sleep_time_);
         if (lock_lost_) {
@@ -114,7 +118,6 @@ struct SlowIncrementTask : async::BaseTask {
     }
 };
 
-
 TEST(ReliableStorageLock, StressMultiThreaded) {
     // It is hard to use a piloted clock for these tests because the folly::FunctionScheduler we use for the lock
     // extensions doesn't support a custom clock. Thus this test will need to run for about 2 minutes.
@@ -122,17 +125,18 @@ TEST(ReliableStorageLock, StressMultiThreaded) {
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{threads};
     auto store = std::make_shared<InMemoryStore>();
     // Running the test with tighter timeout than the 1000ms timeout causes it to fail occasionally.
-    // Seemingly because the heartbeating thread might occasionally not run for long periods of time. This problem disappears with larger timouts like 1000ms.
-    // The failures are likely present only on WSL whose clock can occasionally jump back by a few seconds, which causes
-    // folly's stable clock to not increase and hence skips a heartbeat.
+    // Seemingly because the heartbeating thread might occasionally not run for long periods of time. This problem
+    // disappears with larger timouts like 1000ms. The failures are likely present only on WSL whose clock can
+    // occasionally jump back by a few seconds, which causes folly's stable clock to not increase and hence skips a
+    // heartbeat.
     ReliableStorageLock<> lock{StringId{"test_lock"}, store, ONE_SECOND};
 
     int counter = 0;
 
     std::vector<folly::Future<folly::Unit>> futures;
-    for(auto i = 0u; i < threads; ++i) {
+    for (auto i = 0u; i < threads; ++i) {
         // We use both fast and slow tasks to test both fast lock frees and lock extensions
-        auto sleep_time = std::chrono::milliseconds(i%2 * 2000);
+        auto sleep_time = std::chrono::milliseconds(i % 2 * 2000);
         futures.emplace_back(exec.addFuture(SlowIncrementTask{counter, lock, sleep_time}));
     }
     folly::collectAll(futures).get();
@@ -144,7 +148,6 @@ TEST(ReliableStorageLock, StressMultiThreaded) {
     ASSERT_EQ(std::holds_alternative<AcquiredLock>(lock.try_take_lock()), true);
 }
 
-
 TEST(ReliableStorageLock, NotImplementedException) {
     using namespace arcticdb::async;
 
@@ -155,26 +158,32 @@ TEST(ReliableStorageLock, NotImplementedException) {
     namespace ap = arcticdb::pipelines;
 
     // We set the suffix for the storage test to fail.
-    std::string failure_suffix = storage::s3::MockS3Client::get_failure_trigger("suffix", storage::StorageOperation::WRITE, Aws::S3::S3Errors::UNKNOWN);
+    std::string failure_suffix = storage::s3::MockS3Client::get_failure_trigger(
+            "suffix", storage::StorageOperation::WRITE, Aws::S3::S3Errors::UNKNOWN
+    );
     ConfigsMap::instance()->set_string("Storage.AtomicSupportTestSuffix", failure_suffix);
 
     auto failed_config = proto::s3_storage::Config();
     failed_config.set_use_mock_storage_for_testing(true);
 
     auto failed_env_config = arcticdb::get_test_environment_config(
-        library_path, storage_name, environment_name, std::make_optional(failed_config));
+            library_path, storage_name, environment_name, std::make_optional(failed_config)
+    );
     auto failed_config_resolver = as::create_in_memory_resolver(failed_env_config);
     as::LibraryIndex failed_library_index{environment_name, failed_config_resolver};
 
     as::UserAuth user_auth{"abc"};
     auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
 
-    auto lib = failed_library_index.get_library(library_path, as::OpenMode::WRITE, user_auth, storage::NativeVariantStorage());
+    auto lib = failed_library_index.get_library(
+            library_path, as::OpenMode::WRITE, user_auth, storage::NativeVariantStorage()
+    );
     auto store = std::make_shared<aa::AsyncStore<>>(aa::AsyncStore(lib, *codec_opt, EncodingVersion::V1));
 
-    EXPECT_THROW({
-        ReliableStorageLock<> lock(StringId("test_lock"), store, ONE_SECOND);
-    }, UnsupportedAtomicOperationException);
+    EXPECT_THROW(
+            { ReliableStorageLock<> lock(StringId("test_lock"), store, ONE_SECOND); },
+            UnsupportedAtomicOperationException
+    );
 }
 
 TEST(ReliableStorageLock, AdminTools) {

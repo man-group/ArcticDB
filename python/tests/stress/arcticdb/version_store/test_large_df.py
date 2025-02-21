@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import datetime
 import random
 import pytest
@@ -20,10 +21,12 @@ from arcticdb.util.test import (
     random_strings_of_length_with_nan,
 )
 
+
 def create_large_df(num_rows, start_time):
-    index = pd.date_range(start=start_time, periods=num_rows, freq='ns')
+    index = pd.date_range(start=start_time, periods=num_rows, freq="ns")
     df = pd.DataFrame(data={"col": np.arange(num_rows, dtype=np.int8)}, index=index)
     return df
+
 
 # We use map_size of at least 2**35 to allow storing 2**32 rows.
 # This test is similar to the one below but it uses a time index so we can test that update also works.
@@ -41,14 +44,14 @@ def test_write_and_update_large_df_in_chunks(lmdb_version_store_very_big_map):
     lib.write(symbol, chunk)
     del chunk
 
-    for i in range(num_chunks-1):
+    for i in range(num_chunks - 1):
         start_time = start_time + pd.Timedelta(chunk_size)
         chunk = create_large_df(chunk_size, start_time)
         lib.append(symbol, chunk)
         del chunk
 
     # Verify that number of rows is correct
-    assert(lib.get_num_rows(symbol) == chunk_size*num_chunks)
+    assert lib.get_num_rows(symbol) == chunk_size * num_chunks
 
     # Test that head works correctly
     expected_head = create_large_df(5, datetime.datetime.utcfromtimestamp(0))
@@ -59,6 +62,7 @@ def test_write_and_update_large_df_in_chunks(lmdb_version_store_very_big_map):
     lib.update(symbol, expected_head)
     assert_frame_equal(lib.head(symbol).data, expected_head)
 
+
 def test_write_large_df_in_chunks(lmdb_version_store_big_map):
     symbol = "symbol"
     lib = lmdb_version_store_big_map
@@ -68,10 +72,10 @@ def test_write_large_df_in_chunks(lmdb_version_store_big_map):
     all_zeros = pd.DataFrame({"col": np.zeros(chunk_size)})
     lib.write(symbol, all_zeros)
 
-    for i in range(num_chunks-1):
+    for i in range(num_chunks - 1):
         lib.append(symbol, all_zeros)
 
     # Verify that number of rows is correct
-    assert(lib.get_num_rows(symbol) == chunk_size*num_chunks)
+    assert lib.get_num_rows(symbol) == chunk_size * num_chunks
 
     assert_frame_equal(lib.head(symbol).data, all_zeros.head(5))

@@ -202,7 +202,7 @@ def run_scenario(func, lib, with_snapshots, verbose):
             lib.snapshot(rand_id + "snapshot" + datetime.utcnow().isoformat())
             # clean up old snapshots - more than 3 hours old
             for s in lib.list_snapshots():
-                t = datetime.strptime(s[len(rand_id):], "snapshot%Y-%m-%dT%H:%M:%S.%f")
+                t = datetime.strptime(s[len(rand_id) :], "snapshot%Y-%m-%dT%H:%M:%S.%f")
                 if (datetime.utcnow() - t).seconds > 60 * 60 * 3:
                     lib.delete_snapshot(s)
     except Exception as e:

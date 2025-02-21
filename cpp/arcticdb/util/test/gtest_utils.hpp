@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -10,9 +11,13 @@
 #include <fmt/ostream.h>
 #include <arcticdb/entity/variant_key.hpp>
 
-#define MAKE_GTEST_FMT(our_type, fstr) namespace testing::internal { \
-template<> inline void PrintTo(const our_type&val, ::std::ostream* os) { fmt::print(*os, fstr, val); } \
-}
+#define MAKE_GTEST_FMT(our_type, fstr)                                                                                 \
+    namespace testing::internal {                                                                                      \
+    template<>                                                                                                         \
+    inline void PrintTo(const our_type& val, ::std::ostream* os) {                                                     \
+        fmt::print(*os, fstr, val);                                                                                    \
+    }                                                                                                                  \
+    }
 
 // For the most common types, format them by default:
 MAKE_GTEST_FMT(arcticdb::entity::RefKey, "{}")

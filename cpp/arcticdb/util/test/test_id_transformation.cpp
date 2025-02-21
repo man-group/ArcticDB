@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -14,8 +15,10 @@ TEST(KeyTransformation, Roundtrip) {
     using namespace arcticdb;
     using namespace arcticdb::storage;
 
-    auto k = entity::atom_key_builder().gen_id(3).start_index(0).end_index(1).creation_ts(999)
-        .content_hash(12345).build("hello", entity::KeyType::TABLE_DATA);
+    auto k =
+            entity::atom_key_builder().gen_id(3).start_index(0).end_index(1).creation_ts(999).content_hash(12345).build(
+                    "hello", entity::KeyType::TABLE_DATA
+            );
 
     nfs_backed::NfsBucketizer b;
     std::string root_folder{"example/test"};

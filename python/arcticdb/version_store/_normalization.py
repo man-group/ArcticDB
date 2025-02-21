@@ -80,7 +80,7 @@ NPDDataFrame = NamedTuple(
 NormalizedInput = NamedTuple("NormalizedInput", [("item", NPDDataFrame), ("metadata", NormalizationMetadata)])
 
 
-_PICKLED_METADATA_LOGLEVEL = None # set lazily with function below
+_PICKLED_METADATA_LOGLEVEL = None  # set lazily with function below
 
 
 def get_pickled_metadata_loglevel():
@@ -92,7 +92,9 @@ def get_pickled_metadata_loglevel():
     expected_settings = ("DEBUG", "INFO", "WARN", "ERROR")
     if log_level:
         if log_level.upper() not in expected_settings:
-            log.warn(f"Expected PickledMetadata.LogLevel setting to be in {expected_settings} or absent but was {log_level}")
+            log.warn(
+                f"Expected PickledMetadata.LogLevel setting to be in {expected_settings} or absent but was {log_level}"
+            )
             _PICKLED_METADATA_LOGLEVEL = LogLevel.WARN
         else:
             _PICKLED_METADATA_LOGLEVEL = getattr(LogLevel, log_level.upper())
@@ -1384,7 +1386,8 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
         if not getattr(data, "timezone", None):
             start, end = _strip_tz(start, end)
         data = data[
-            start.to_pydatetime(warn=False) - timedelta(microseconds=1) : end.to_pydatetime(warn=False)
+            start.to_pydatetime(warn=False)
+            - timedelta(microseconds=1) : end.to_pydatetime(warn=False)
             + timedelta(microseconds=1)
         ]
     return data

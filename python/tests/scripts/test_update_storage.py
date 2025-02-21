@@ -61,7 +61,7 @@ def test_upgrade_script_s3(s3_storage: S3Bucket):
     assert storage_config.credential_key == ""
 
 
-@pytest.mark.parametrize("default_credential_provider", ["1", "true"]) # true for testing backwards compatibility
+@pytest.mark.parametrize("default_credential_provider", ["1", "true"])  # true for testing backwards compatibility
 @SKIP_CONDA_MARK  # issue with fixture cleanup
 def test_upgrade_script_s3_rbac_ok(s3_storage: S3Bucket, monkeypatch, default_credential_provider):
     """Just _RBAC_ as creds is a placeholder. Leave config with that alone."""
@@ -78,7 +78,9 @@ def test_upgrade_script_s3_rbac_ok(s3_storage: S3Bucket, monkeypatch, default_cr
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", s3_storage.key.id)
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", s3_storage.key.secret)
 
-    uri = s3_storage.replace_uri_field(s3_storage.arctic_uri, ArcticUriFields.USER, f"aws_auth={default_credential_provider}", start=1)
+    uri = s3_storage.replace_uri_field(
+        s3_storage.arctic_uri, ArcticUriFields.USER, f"aws_auth={default_credential_provider}", start=1
+    )
     uri = s3_storage.replace_uri_field(uri, ArcticUriFields.PASSWORD, "", start=1, end=3)
     s3_storage.arctic_uri = uri
 

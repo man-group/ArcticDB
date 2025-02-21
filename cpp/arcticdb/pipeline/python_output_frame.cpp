@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/pipeline/python_output_frame.hpp>
@@ -12,28 +13,29 @@
 
 namespace arcticdb::pipelines {
 
-PythonOutputFrame::PythonOutputFrame(const SegmentInMemory &frame, OutputFormat output_format) :
-        module_data_(ModuleData::instance()),
-        frame_(frame),
-        names_(frame.fields().size() - frame.descriptor().index().field_count()),
-        index_columns_(frame.descriptor().index().field_count()),
-        output_format_(output_format) {
+PythonOutputFrame::PythonOutputFrame(const SegmentInMemory& frame, OutputFormat output_format) :
+    module_data_(ModuleData::instance()),
+    frame_(frame),
+    names_(frame.fields().size() - frame.descriptor().index().field_count()),
+    index_columns_(frame.descriptor().index().field_count()),
+    output_format_(output_format) {
     ARCTICDB_SAMPLE_DEFAULT(PythonOutputFrameCtor)
     const auto field_count = frame.descriptor().index().field_count();
     // works because we ensure that the index must be fetched
     for (std::size_t c = 0; c < field_count; ++c) {
         index_columns_[c] = frame.field(c).name();
     }
-    for (std::size_t c = frame.descriptor().index().field_count(); c < static_cast<size_t>(frame.fields().size()); ++c) {
+    for (std::size_t c = frame.descriptor().index().field_count(); c < static_cast<size_t>(frame.fields().size());
+         ++c) {
         names_[c - field_count] = frame.field(c).name();
     }
 }
 
 PythonOutputFrame::~PythonOutputFrame() {
-    if(frame_.is_null())
+    if (frame_.is_null())
         return;
 
-    for (auto &column : frame_.columns()) {
+    for (auto& column : frame_.columns()) {
         auto dt = column->type().data_type();
         if (is_dynamic_string_type(dt) && column->is_inflated()) {
             auto column_data = column->data();
@@ -41,9 +43,9 @@ PythonOutputFrame::~PythonOutputFrame() {
                 using TDT = decltype(type_desc_tag);
                 constexpr auto td = TypeDescriptor(type_desc_tag);
                 if constexpr (is_object_type(TypeDescriptor(type_desc_tag))) {
-                    if constexpr(is_array_type(td)) {
+                    if constexpr (is_array_type(td)) {
                         auto it = column_data.buffer().iterator(sizeof(PyObject*));
-                        while(!it.finished()) {
+                        while (!it.finished()) {
                             util::check(reinterpret_cast<PyObject*>(it.value()) != nullptr, "Can't delete null item");
                             Py_DECREF(reinterpret_cast<PyObject*>(it.value()));
                             it.next();
@@ -51,8 +53,8 @@ PythonOutputFrame::~PythonOutputFrame() {
                     } else {
                         while (auto block = column_data.next<TDT>()) {
                             for (auto item : *block) {
-                                util::check(reinterpret_cast<PyObject *>(item) != nullptr, "Can't delete null item");
-                                Py_DECREF(reinterpret_cast<PyObject *>(item));
+                                util::check(reinterpret_cast<PyObject*>(item) != nullptr, "Can't delete null item");
+                                Py_DECREF(reinterpret_cast<PyObject*>(item));
                             }
                         }
                     }
@@ -62,17 +64,17 @@ PythonOutputFrame::~PythonOutputFrame() {
     }
 }
 
-std::shared_ptr<FrameDataWrapper> PythonOutputFrame::arrays(py::object &ref) {
-    if(auto cached = arrays_.lock())
+std::shared_ptr<FrameDataWrapper> PythonOutputFrame::arrays(py::object& ref) {
+    if (auto cached = arrays_.lock())
         return cached;
 
     auto generated = arcticdb::detail::initialize_array(frame_, output_format_, ref);
-    arrays_  = generated;
+    arrays_ = generated;
     return generated;
 }
 
-py::array PythonOutputFrame::array_at(std::size_t col_pos, py::object &anchor) {
+py::array PythonOutputFrame::array_at(std::size_t col_pos, py::object& anchor) {
     return arcticdb::detail::array_at(frame_, col_pos, output_format_, anchor);
 }
 
-}
+} // namespace arcticdb::pipelines

@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pytest
 import numpy as np
 import pandas as pd
@@ -89,8 +90,17 @@ def test_last_aggregation(lmdb_version_store_v1):
     symbol = "test_last_aggregation"
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1",
-                                "group_5"],
+            "grouping_column": [
+                "group_1",
+                "group_2",
+                "group_4",
+                "group_5",
+                "group_2",
+                "group_1",
+                "group_3",
+                "group_1",
+                "group_5",
+            ],
             "to_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9],
         },
         index=np.arange(9),
@@ -152,12 +162,7 @@ def test_named_agg(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_named_agg"
     gen = np.random.default_rng()
-    df = DataFrame(
-        {
-            "grouping_column": [1, 1, 1, 2, 3, 4],
-            "agg_column": gen.random(6)
-        }
-    )
+    df = DataFrame({"grouping_column": [1, 1, 1, 2, 3, 4], "agg_column": gen.random(6)})
     lib.write(symbol, df)
     expected = df.groupby("grouping_column").agg(
         agg_column_sum=pd.NamedAgg("agg_column", "sum"),
@@ -165,12 +170,16 @@ def test_named_agg(lmdb_version_store_tiny_segment):
         agg_column=pd.NamedAgg("agg_column", "min"),
     )
     expected = expected.reindex(columns=sorted(expected.columns))
-    q = QueryBuilder().groupby("grouping_column").agg(
-        {
-            "agg_column_sum": ("agg_column", "sum"),
-            "agg_column_mean": ("agg_column", "MEAN"),
-            "agg_column": "MIN",
-        }
+    q = (
+        QueryBuilder()
+        .groupby("grouping_column")
+        .agg(
+            {
+                "agg_column_sum": ("agg_column", "sum"),
+                "agg_column_mean": ("agg_column", "MEAN"),
+                "agg_column": "MIN",
+            }
+        )
     )
     received = lib.read(symbol, query_builder=q).data
     received = received.reindex(columns=sorted(received.columns))
@@ -367,7 +376,17 @@ def test_last_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
     symbol = "test_last_aggregation_dynamic"
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1", "group_5"],
+            "grouping_column": [
+                "group_1",
+                "group_2",
+                "group_4",
+                "group_5",
+                "group_2",
+                "group_1",
+                "group_3",
+                "group_1",
+                "group_5",
+            ],
             "to_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9],
         },
         index=np.arange(9),
@@ -441,7 +460,9 @@ def test_segment_without_aggregation_column(lmdb_version_store_dynamic_schema_v1
     lib.write(symbol, write_df)
     append_df = pd.DataFrame({"grouping_column": ["group_1"]})
     lib.append(symbol, append_df)
-    generic_aggregation_test(lib, symbol, pd.concat([write_df, append_df]), "grouping_column", {"aggregation_column": agg})
+    generic_aggregation_test(
+        lib, symbol, pd.concat([write_df, append_df]), "grouping_column", {"aggregation_column": agg}
+    )
 
 
 def test_minimal_repro_type_change(lmdb_version_store_dynamic_schema_v1):

@@ -54,9 +54,7 @@ class FinalizeStagedData:
         self.ac.delete_library(self.lib_name)
         self.lib = self.ac.create_library(self.lib_name)
 
-        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(
-            0, cachedDF.TIME_UNIT
-        )  # Synchronize index frequency
+        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(0, cachedDF.TIME_UNIT)  # Synchronize index frequency
 
         df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)
         list_of_chunks = [10000] * param
@@ -89,9 +87,7 @@ class FinalizeStagedDataWiderDataframeX3(FinalizeStagedData):
 
     def setup_cache(self):
         # Generating dataframe with all kind of supported data type
-        cachedDF = CachedDFGenerator(
-            350000, [5, 25, 50]
-        )  # 3 times wider DF with bigger string columns
+        cachedDF = CachedDFGenerator(350000, [5, 25, 50])  # 3 times wider DF with bigger string columns
         return cachedDF
 
     def setup(self, cache: CachedDFGenerator, param: int):
