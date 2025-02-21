@@ -1,8 +1,0 @@
-Package: s2n
-Version: 1.3.5
-Depends: openssl, vcpkg-cmake, vcpkg-cmake-config
-Architecture: x64-linux
-Multi-Arch: same
-Abi: dc71c16c566670ebf19315225630d356db62142eb1c213a55eded124064e63a2
-Description: C99 implementation of the TLS/SSL protocols.
-Status: install ok installed

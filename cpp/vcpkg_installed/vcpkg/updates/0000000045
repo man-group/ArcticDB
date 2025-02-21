@@ -1,8 +1,0 @@
-Package: boost-bind
-Version: 1.84.0
-Depends: boost-config, boost-core, boost-vcpkg-helpers
-Architecture: x64-linux
-Multi-Arch: same
-Abi: 05cb132edc95a188532096828b717810b9ebc5757c1ce09ff5b001fef1ddb19b
-Description: Boost bind module
-Status: install ok installed

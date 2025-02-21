@@ -1,9 +1,0 @@
-Package: civetweb
-Version: 1.16
-Port-Version: 1
-Depends: vcpkg-cmake, vcpkg-cmake-config
-Architecture: x64-linux
-Multi-Arch: same
-Abi: 0bf8cf9f849a3f1fbc6c6f461a1bc55f06e5102695e5e791af396c263a3271c7
-Description: Easy to use, powerful, C/C++ embeddable web server.
-Status: install ok half-installed

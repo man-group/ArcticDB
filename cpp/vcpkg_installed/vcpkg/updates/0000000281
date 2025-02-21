@@ -1,9 +1,0 @@
-Package: prometheus-cpp
-Version: 1.1.0
-Depends: vcpkg-cmake, vcpkg-cmake-config
-Architecture: x64-linux
-Multi-Arch: same
-Abi: 2549ab96ad8d63ad3b515b892f7a2353e7896067ae0482e4cf69e2a3c9c3a2bb
-Description: Prometheus Client Library for Modern C++
-Default-Features: compression, pull
-Status: install ok installed

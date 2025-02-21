@@ -1,9 +1,0 @@
-Package: azure-identity-cpp
-Version: 1.6.0
-Depends: azure-core-cpp, openssl, vcpkg-cmake, vcpkg-cmake-config
-Architecture: x64-linux
-Multi-Arch: same
-Abi: 3ca20dce8a40f65ee248eecd0309fc21b6daaaacdbfb185e55be87d34f77e734
-Description: Microsoft Azure Identity SDK for C++
-    This library provides common authentication-related abstractions for Azure SDK.
-Status: install ok installed

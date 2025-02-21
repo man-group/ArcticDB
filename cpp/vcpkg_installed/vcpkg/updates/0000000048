@@ -1,8 +1,0 @@
-Package: boost-scope-exit
-Version: 1.84.0
-Depends: boost-config, boost-function, boost-preprocessor, boost-type-traits, boost-typeof, boost-vcpkg-helpers
-Architecture: x64-linux
-Multi-Arch: same
-Abi: f300aa9f8f7ac8321a73615b60876090d34666e73bc48d267395370046c20cd8
-Description: Boost scope_exit module
-Status: install ok half-installed

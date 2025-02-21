@@ -1,6 +1,0 @@
-Package: libevent
-Feature: thread
-Architecture: x64-linux
-Multi-Arch: same
-Description: Support for thread
-Status: install ok half-installed

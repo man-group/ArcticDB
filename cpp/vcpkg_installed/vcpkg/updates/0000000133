@@ -1,8 +1,0 @@
-Package: thrift
-Version: 0.19.0
-Depends: boost-date-time, boost-locale, boost-range, boost-scope-exit, boost-smart-ptr, libevent, openssl, vcpkg-cmake, vcpkg-cmake-config, zlib
-Architecture: x64-linux
-Multi-Arch: same
-Abi: 50b49d63ddcede89c35174f9054feb150afe5fdc6a3efe9bbe8826f45ae6f57d
-Description: Apache Thrift is a software project spanning a variety of programming languages and use cases. Our goal is to make reliable, performant communication and data serialization across languages as efficient and seamless as possible.
-Status: install ok installed

@@ -1,7 +1,0 @@
-Package: libxml2
-Feature: lzma
-Depends: liblzma
-Architecture: x64-linux
-Multi-Arch: same
-Description: Use LZMA
-Status: install ok half-installed

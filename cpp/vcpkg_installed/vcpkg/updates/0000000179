@@ -1,8 +1,0 @@
-Package: aws-checksums
-Version: 0.1.20
-Depends: aws-c-common, vcpkg-cmake, vcpkg-cmake-config
-Architecture: x64-linux
-Multi-Arch: same
-Abi: cbfc3f93a527b069a80f99eeef2680ac8a3dadeb0ff35b0fad0e24859c28ad49
-Description: Cross-Platform HW accelerated CRC32c and CRC32 with fallback to efficient SW implementations.
-Status: install ok installed

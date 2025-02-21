@@ -1,8 +1,0 @@
-Package: aws-c-http
-Version: 0.8.10
-Depends: aws-c-cal, aws-c-common, aws-c-compression, aws-c-io, vcpkg-cmake, vcpkg-cmake-config
-Architecture: x64-linux
-Multi-Arch: same
-Abi: 039407d3968b86212cc00d0687314ae745554679e2e0f4ea96358d563e197254
-Description: C99 implementation of the HTTP/1.1 and HTTP/2 specifications
-Status: install ok half-installed

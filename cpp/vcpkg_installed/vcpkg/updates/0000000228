@@ -1,8 +1,0 @@
-Package: benchmark
-Version: 1.9.0
-Depends: vcpkg-cmake, vcpkg-cmake-config
-Architecture: x64-linux
-Multi-Arch: same
-Abi: 22284bafa73bd1ffbe19673fae63cdcd5f09693f6ee5233bdc408fcd852ea593
-Description: A library to benchmark code snippets, similar to unit tests.
-Status: install ok half-installed

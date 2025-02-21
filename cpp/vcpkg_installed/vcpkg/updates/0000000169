@@ -1,8 +1,0 @@
-Package: aws-c-cal
-Version: 0.7.4
-Depends: aws-c-common, openssl, vcpkg-cmake, vcpkg-cmake-config
-Architecture: x64-linux
-Multi-Arch: same
-Abi: eb69cf929260835c635643d39e36925cbd216b4392630ab9daaf4996ad13c143
-Description: C99 wrapper for cryptography primitives.
-Status: install ok installed

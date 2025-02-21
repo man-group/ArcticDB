@@ -1,8 +1,0 @@
-Package: rapidcheck
-Version: 2023-12-14
-Depends: vcpkg-cmake, vcpkg-cmake-config
-Architecture: x64-linux
-Multi-Arch: same
-Abi: 6e6d1c1901e11d2d3a7db39a96756f9247fbcf082f4a967339cc40cbb42e175e
-Description: A property-based testing library for C++ (a la QuickCheck) with the goal of being simple to use with as little boilerplate as possible.
-Status: install ok installed

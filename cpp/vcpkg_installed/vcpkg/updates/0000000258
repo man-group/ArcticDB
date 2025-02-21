@@ -1,8 +1,0 @@
-Package: boost-context
-Version: 1.84.0
-Depends: boost-assert, boost-build, boost-config, boost-core, boost-modular-build-helper, boost-mp11, boost-pool, boost-predef, boost-smart-ptr, boost-vcpkg-helpers, vcpkg-cmake
-Architecture: x64-linux
-Multi-Arch: same
-Abi: 8f84d7f93abb0458b54d5676a38442519bc2bde68f638477f8b1cda201d03fae
-Description: Boost context module
-Status: install ok half-installed

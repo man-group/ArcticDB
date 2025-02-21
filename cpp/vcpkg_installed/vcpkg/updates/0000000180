@@ -1,8 +1,0 @@
-Package: aws-c-event-stream
-Version: 0.4.3
-Depends: aws-c-common, aws-c-io, aws-checksums, vcpkg-cmake, vcpkg-cmake-config
-Architecture: x64-linux
-Multi-Arch: same
-Abi: 6da4a47a687a7c1b8f4b0bff15f21096f75b1a8e7e59795bf494cfe0745e33f9
-Description: C99 implementation of the vnd.amazon.event-stream content-type.
-Status: install ok half-installed

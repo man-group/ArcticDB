@@ -1,9 +1,0 @@
-Package: aws-sdk-cpp
-Version: 1.11.405
-Depends: aws-crt-cpp, curl, openssl, vcpkg-cmake, vcpkg-cmake-config, zlib
-Architecture: x64-linux
-Multi-Arch: same
-Abi: 307da1cc104c24686b20ec245f3898c83c988d0031352be25a71de69dbcb0522
-Description: AWS SDK for C++
-Default-Features: dynamodb, kinesis, s3
-Status: install ok half-installed

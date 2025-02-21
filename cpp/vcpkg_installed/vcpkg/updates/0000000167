@@ -1,8 +1,0 @@
-Package: aws-c-sdkutils
-Version: 0.1.19
-Depends: aws-c-common, vcpkg-cmake, vcpkg-cmake-config
-Architecture: x64-linux
-Multi-Arch: same
-Abi: 98594e742bb1e14708440c9296809613bbde4398f32c5bb5942e39787a8f06c8
-Description: C99 library implementing AWS SDK specific utilities. Includes utilities for ARN parsing, reading AWS profiles, etc...
-Status: install ok installed

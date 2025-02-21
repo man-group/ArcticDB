@@ -1,9 +1,0 @@
-Package: azure-storage-blobs-cpp
-Version: 12.10.0
-Depends: azure-storage-common-cpp, vcpkg-cmake, vcpkg-cmake-config
-Architecture: x64-linux
-Multi-Arch: same
-Abi: eb7d9547befbbac1b7c96e383d1d56db17c2244e39ef8f7bb9f61133f09e16bd
-Description: Microsoft Azure Storage Blobs SDK for C++
-    This library provides Azure Storage Blobs SDK.
-Status: install ok half-installed

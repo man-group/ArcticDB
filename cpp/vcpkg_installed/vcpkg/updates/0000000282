@@ -1,7 +1,0 @@
-Package: prometheus-cpp
-Feature: pull
-Depends: civetweb
-Architecture: x64-linux
-Multi-Arch: same
-Description: Support for regular pull mode
-Status: install ok installed

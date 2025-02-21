@@ -1,7 +1,0 @@
-Package: curl
-Feature: openssl
-Depends: openssl
-Architecture: x64-linux
-Multi-Arch: same
-Description: SSL support (OpenSSL)
-Status: install ok installed

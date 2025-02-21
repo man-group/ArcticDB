@@ -1,7 +1,0 @@
-Package: libiconv
-Version: 1.17
-Architecture: x64-linux
-Multi-Arch: same
-Abi: 8f9500c28ac4b43f687472963a2ed5ebc3c9dcd7281c500b6224c1536d617cd5
-Description: GNU Unicode text conversion
-Status: install ok installed

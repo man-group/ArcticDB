@@ -1,8 +1,0 @@
-Package: aws-c-common
-Version: 0.9.28
-Depends: vcpkg-cmake, vcpkg-cmake-config
-Architecture: x64-linux
-Multi-Arch: same
-Abi: 75d1ffbc1528c91c456677109da2e06a724cc08d6f255547a34c47ac6927ad43
-Description: AWS common library for C
-Status: install ok installed

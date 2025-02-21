@@ -1,9 +1,0 @@
-Package: azure-storage-common-cpp
-Version: 12.5.0
-Depends: azure-core-cpp, libxml2, openssl, vcpkg-cmake, vcpkg-cmake-config
-Architecture: x64-linux
-Multi-Arch: same
-Abi: d2546e3afef15e7748f13f734e2b033820548d35e5add08388516ffc1158c195
-Description: Microsoft Azure Common Storage SDK for C++
-    This library provides common Azure Storage-related abstractions for Azure SDK.
-Status: install ok installed
