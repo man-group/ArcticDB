@@ -136,12 +136,12 @@ def check_process_memory_leaks(
         print(f"  Maximum growth so far: {nice_bytes_str(max(mem_growth_each_iter))}")
         print(f"  Number of times there was 50% drop in memory: {count_drops(mem_growth_each_iter, 0.5)}")
 
-        assert max_total_mem_lost_threshold_bytes >= process_growth, (
-            f"Memory of the process grew more than defined threshold: {nice_bytes_str(process_growth)} (specified: {nice_bytes_str(max_total_mem_lost_threshold_bytes)} )"
-        )
-        assert max_machine_memory_percentage >= mem_per, (
-            f"Machine utilized more memory than specified threshold :{mem_per}% (specified {max_machine_memory_percentage}%)"
-        )
+        assert (
+            max_total_mem_lost_threshold_bytes >= process_growth
+        ), f"Memory of the process grew more than defined threshold: {nice_bytes_str(process_growth)} (specified: {nice_bytes_str(max_total_mem_lost_threshold_bytes)} )"
+        assert (
+            max_machine_memory_percentage >= mem_per
+        ), f"Machine utilized more memory than specified threshold :{mem_per}% (specified {max_machine_memory_percentage}%)"
 
     print(
         "The process assessment finished within expectations. Total consumed additional mem is bellow threshold: ",

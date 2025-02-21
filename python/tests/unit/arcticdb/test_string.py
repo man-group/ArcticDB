@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 from numpy.testing import assert_equal
 import platform
@@ -210,4 +211,3 @@ def test_write_dynamic_simple(lmdb_version_store_v2):
     lmdb_version_store_v2.write("strings", df, dynamic_strings=True)
     vit = lmdb_version_store_v2.read("strings")
     assert_frame_equal(df, vit.data)
-

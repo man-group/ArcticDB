@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -48,7 +49,6 @@ inline uint32_t murmur3_32(std::string_view str) {
     return hash;
 }
 
-
 inline size_t bucketize(std::string_view name, const std::optional<size_t>& num_buckets) {
     auto hash = murmur3_32(name);
     if (!num_buckets)
@@ -56,4 +56,4 @@ inline size_t bucketize(std::string_view name, const std::optional<size_t>& num_
     return hash % *num_buckets;
 }
 
-}
+} // namespace arcticdb

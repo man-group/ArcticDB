@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -82,7 +83,8 @@ TEST(OperationDispatch, binary_comparator) {
     auto value = std::make_shared<Value>(static_cast<int64_t>(50), DataType::INT64);
 
     // int col < int col
-    ASSERT_TRUE(std::holds_alternative<EmptyResult>(visit_binary_comparator(int_column, int_column, LessThanOperator{})));
+    ASSERT_TRUE(std::holds_alternative<EmptyResult>(visit_binary_comparator(int_column, int_column, LessThanOperator{}))
+    );
     // int col < val
     auto variant_data_0 = visit_binary_comparator(int_column, value, LessThanOperator{});
     ASSERT_TRUE(std::holds_alternative<util::BitSet>(variant_data_0));
@@ -99,11 +101,17 @@ TEST(OperationDispatch, binary_comparator) {
     }
     // val < val not supported, should be handled at expression evaluation time
     // int col < empty col
-    ASSERT_TRUE(std::holds_alternative<EmptyResult>(visit_binary_comparator(int_column, empty_column, LessThanOperator{})));
+    ASSERT_TRUE(
+            std::holds_alternative<EmptyResult>(visit_binary_comparator(int_column, empty_column, LessThanOperator{}))
+    );
     // empty col < int col
-    ASSERT_TRUE(std::holds_alternative<EmptyResult>(visit_binary_comparator(empty_column, int_column, LessThanOperator{})));
+    ASSERT_TRUE(
+            std::holds_alternative<EmptyResult>(visit_binary_comparator(empty_column, int_column, LessThanOperator{}))
+    );
     // empty col < empty col
-    ASSERT_TRUE(std::holds_alternative<EmptyResult>(visit_binary_comparator(empty_column, empty_column, LessThanOperator{})));
+    ASSERT_TRUE(
+            std::holds_alternative<EmptyResult>(visit_binary_comparator(empty_column, empty_column, LessThanOperator{}))
+    );
     // empty col < val
     ASSERT_TRUE(std::holds_alternative<EmptyResult>(visit_binary_comparator(empty_column, value, LessThanOperator{})));
     // val < empty col
@@ -135,5 +143,6 @@ TEST(OperationDispatch, binary_membership) {
     // empty col isin set
     ASSERT_TRUE(std::holds_alternative<EmptyResult>(visit_binary_membership(empty_column, value_set, IsInOperator{})));
     // empty col isnotin set
-    ASSERT_TRUE(std::holds_alternative<FullResult>(visit_binary_membership(empty_column, value_set, IsNotInOperator{})));
+    ASSERT_TRUE(std::holds_alternative<FullResult>(visit_binary_membership(empty_column, value_set, IsNotInOperator{}))
+    );
 }

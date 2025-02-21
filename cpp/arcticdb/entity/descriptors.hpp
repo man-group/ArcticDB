@@ -10,5 +10,5 @@
 
 #include <descriptors.pb.h>
 namespace arcticdb::proto {
-    namespace descriptors = arcticc::pb2::descriptors_pb2;
+namespace descriptors = arcticc::pb2::descriptors_pb2;
 }

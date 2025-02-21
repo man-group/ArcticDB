@@ -2,45 +2,43 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
 #include <arcticdb/util/composite.hpp>
 
-
 struct TestThing {
     int info_;
 
-    explicit TestThing(int val) :
-    info_(val) {}
+    explicit TestThing(int val) : info_(val) {}
 };
-
 
 TEST(Composite, TestFold) {
     using namespace arcticdb;
     TestThing single_thing(3);
     Composite<TestThing> c1{std::move(single_thing)};
-    int res = c1.fold([] (int i, const TestThing& thing) { return i + thing.info_; }, 0);
+    int res = c1.fold([](int i, const TestThing& thing) { return i + thing.info_; }, 0);
     ASSERT_EQ(res, 3);
-    res = c1.fold([] (int i, const TestThing& thing) { return i + thing.info_; }, 4);
+    res = c1.fold([](int i, const TestThing& thing) { return i + thing.info_; }, 4);
     ASSERT_EQ(res, 7);
-    std::vector<TestThing> more_things{ TestThing{1}, TestThing{4}, TestThing{3} };
+    std::vector<TestThing> more_things{TestThing{1}, TestThing{4}, TestThing{3}};
     Composite<TestThing> c2(std::move(more_things));
-    res = c2.fold([] (int i, const TestThing& thing) { return i + thing.info_; }, 0);
+    res = c2.fold([](int i, const TestThing& thing) { return i + thing.info_; }, 0);
     ASSERT_EQ(res, 8);
-    res = c2.fold([] (int i, const TestThing& thing) { return i + thing.info_; }, 2);
+    res = c2.fold([](int i, const TestThing& thing) { return i + thing.info_; }, 2);
     ASSERT_EQ(res, 10);
 }
 
 TEST(Composite, IterationSimple) {
     using namespace arcticdb;
     Composite<int> comp;
-    for(auto i = 0; i < 10; ++i)
+    for (auto i = 0; i < 10; ++i)
         comp.push_back(i);
 
     int expected = 0;
-    for(auto x : comp.as_range())
+    for (auto x : comp.as_range())
         ASSERT_EQ(x, expected++);
 }
 

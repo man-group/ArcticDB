@@ -2,8 +2,9 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
-*/
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
+ */
 
 #pragma once
 
@@ -34,19 +35,16 @@ struct DecodePathDataImpl {
 };
 
 struct DecodePathData {
-public:
+  public:
     [[nodiscard]] const std::shared_ptr<UniqueStringMapType>& unique_string_map() const {
         return data_->unique_string_map_.instance();
     }
 
-    [[nodiscard]] bool optimize_for_memory() const {
-        return data_->optimize_for_memory_;
-    }
+    [[nodiscard]] bool optimize_for_memory() const { return data_->optimize_for_memory_; }
 
-    void set_optimize_for_memory() {
-        data_->optimize_for_memory_ = true;
-    }
-private:
+    void set_optimize_for_memory() { data_->optimize_for_memory_ = true; }
+
+  private:
     std::shared_ptr<DecodePathDataImpl> data_ = std::make_shared<DecodePathDataImpl>();
 };
-}  //namespace arcticdb
+} // namespace arcticdb

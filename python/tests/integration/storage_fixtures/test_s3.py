@@ -45,10 +45,14 @@ def test_gcp_no_batch_delete(gcp_storage_factory: MotoGcpS3StorageFixtureFactory
 
     # When
     with pytest.raises(botocore.exceptions.ClientError):
-        boto_bucket.delete_objects(Delete={"Objects": [
-            {"Key": "key1"},
-            {"Key": "key2"},
-        ]})
+        boto_bucket.delete_objects(
+            Delete={
+                "Objects": [
+                    {"Key": "key1"},
+                    {"Key": "key2"},
+                ]
+            }
+        )
 
     # Then
     # We're checking that our simulator doesn't handle batch deletes (like GCP does not)
@@ -65,10 +69,14 @@ def test_s3_has_batch_delete(s3_storage_factory: MotoS3StorageFixtureFactory):
     assert [k.key for k in boto_bucket.objects.all()] == ["key1", "key2"]
 
     # When
-    boto_bucket.delete_objects(Delete={"Objects": [
-        {"Key": "key1"},
-        {"Key": "key2"},
-    ]})
+    boto_bucket.delete_objects(
+        Delete={
+            "Objects": [
+                {"Key": "key1"},
+                {"Key": "key2"},
+            ]
+        }
+    )
 
     # Then
     # We're checking that our simulator does handle batch deletes (like AWS does)

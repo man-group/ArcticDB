@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -15,9 +16,8 @@
 namespace arcticdb {
 
 inline std::optional<AtomKey> get_latest_undeleted_version(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<VersionMap> &version_map,
-    const StreamId &stream_id) {
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id
+) {
     ARCTICDB_RUNTIME_SAMPLE(GetLatestUndeletedVersion, 0)
     LoadStrategy load_strategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY};
     const auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
@@ -25,20 +25,19 @@ inline std::optional<AtomKey> get_latest_undeleted_version(
 }
 
 inline std::pair<std::optional<AtomKey>, bool> get_latest_version(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<VersionMap> &version_map,
-    const StreamId &stream_id) {
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id
+) {
     ARCTICDB_SAMPLE(GetLatestVersion, 0)
     LoadStrategy load_strategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     return entry->get_first_index(true);
 }
 
-// The next version ID returned will be 0 for brand new symbols, or one greater than the largest ever version created so far
+// The next version ID returned will be 0 for brand new symbols, or one greater than the largest ever version created so
+// far
 inline version_store::UpdateInfo get_latest_undeleted_version_and_next_version_id(
-        const std::shared_ptr<Store> &store,
-        const std::shared_ptr<VersionMap> &version_map,
-        const StreamId &stream_id) {
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id
+) {
     ARCTICDB_SAMPLE(GetLatestUndeletedVersionAndHighestVersionId, 0)
     LoadStrategy load_strategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
@@ -49,10 +48,8 @@ inline version_store::UpdateInfo get_latest_undeleted_version_and_next_version_i
 }
 
 inline std::vector<AtomKey> get_all_versions(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<VersionMap> &version_map,
-    const StreamId &stream_id
-    ) {
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id
+) {
     ARCTICDB_SAMPLE(GetAllVersions, 0)
     LoadStrategy load_strategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
@@ -60,11 +57,9 @@ inline std::vector<AtomKey> get_all_versions(
 }
 
 inline std::optional<AtomKey> get_specific_version(
-        const std::shared_ptr<Store> &store,
-        const std::shared_ptr<VersionMap> &version_map,
-        const StreamId &stream_id,
-        SignedVersionId signed_version_id,
-        bool include_deleted = false) {
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id,
+        SignedVersionId signed_version_id, bool include_deleted = false
+) {
     LoadStrategy load_strategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, signed_version_id};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     VersionId version_id;
@@ -88,16 +83,13 @@ inline std::optional<AtomKey> get_specific_version(
 
 template<typename MatchingAcceptor, typename PrevAcceptor, typename NextAcceptor, typename KeyFilter>
 inline bool get_matching_prev_and_next_versions(
-        const std::shared_ptr<VersionMapEntry>& entry,
-        VersionId version_id,
-        MatchingAcceptor matching_acceptor,
-        PrevAcceptor prev_acceptor,
-        NextAcceptor next_acceptor,
-        KeyFilter key_filter) {
+        const std::shared_ptr<VersionMapEntry>& entry, VersionId version_id, MatchingAcceptor matching_acceptor,
+        PrevAcceptor prev_acceptor, NextAcceptor next_acceptor, KeyFilter key_filter
+) {
     bool found_version = false;
     const IndexTypeKey* last = nullptr;
 
-    for (const auto& item: entry->keys_) {
+    for (const auto& item : entry->keys_) {
         if (key_filter(item, entry)) {
             if (item.version_id() == version_id) {
                 found_version = true;
@@ -117,43 +109,38 @@ inline bool get_matching_prev_and_next_versions(
 }
 
 inline bool has_undeleted_version(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<VersionMap> &version_map,
-    const StreamId &id) {
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& id
+) {
     auto maybe_undeleted = get_latest_undeleted_version(store, version_map, id);
     return static_cast<bool>(maybe_undeleted);
 }
 
 inline void insert_if_undeleted(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<VersionMap> &version_map,
-    const VariantKey &key,
-    std::set<StreamId> &res) {
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const VariantKey& key,
+        std::set<StreamId>& res
+) {
     auto id = variant_key_id(key);
     if (has_undeleted_version(store, version_map, id))
         res.insert(std::move(id));
 }
 
 inline std::unordered_map<VersionId, bool> get_all_tombstoned_versions(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<VersionMap> &version_map,
-    const StreamId &stream_id) {
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id
+) {
     LoadStrategy load_strategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     std::unordered_map<VersionId, bool> result;
-    for (auto key: entry->get_tombstoned_indexes())
-            result[key.version_id()] = store->key_exists(key).get();
+    for (auto key : entry->get_tombstoned_indexes())
+        result[key.version_id()] = store->key_exists(key).get();
 
     return result;
 }
 
 inline version_store::TombstoneVersionResult tombstone_version(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<VersionMap> &version_map,
-    const StreamId &stream_id,
-    VersionId version_id,
-    bool allow_tombstoning_beyond_latest_version=false,
-    const std::optional<timestamp>& creation_ts=std::nullopt) {
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id,
+        VersionId version_id, bool allow_tombstoning_beyond_latest_version = false,
+        const std::optional<timestamp>& creation_ts = std::nullopt
+) {
     ARCTICDB_DEBUG(log::version(), "Tombstoning version {} for stream {}", version_id, stream_id);
     LoadStrategy load_strategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
@@ -161,12 +148,14 @@ inline version_store::TombstoneVersionResult tombstone_version(
     // But if entry is empty, it's possible the load failed (since iterate_on_failure=false above), so set the flag
     // to defer the check to delete_tree() (instead of reloading in case eager delete is disabled).
     version_store::TombstoneVersionResult res(entry->empty());
-    get_matching_prev_and_next_versions(entry, version_id,
-            [&res](auto& matching){res.keys_to_delete.push_back(matching);},
-            [&res](auto& prev){res.could_share_data.emplace(prev);},
-            [&res](auto& next){res.could_share_data.emplace(next);},
+    get_matching_prev_and_next_versions(
+            entry,
+            version_id,
+            [&res](auto& matching) { res.keys_to_delete.push_back(matching); },
+            [&res](auto& prev) { res.could_share_data.emplace(prev); },
+            [&res](auto& next) { res.could_share_data.emplace(next); },
             is_live_index_type_key // Entry could be cached with deleted keys even if LOAD_UNDELETED
-            );
+    );
 
     if (res.keys_to_delete.empty()) {
         // It is possible to have a tombstone key without a corresponding index_key
@@ -177,8 +166,11 @@ inline version_store::TombstoneVersionResult tombstone_version(
             if (!allow_tombstoning_beyond_latest_version) {
                 auto latest_key = get_latest_version(store, version_map, stream_id).first;
                 if (!latest_key || latest_key->version_id() < version_id)
-                    util::raise_rte("Can't delete version {} for symbol {} - it's higher than the latest version",
-                            stream_id, version_id);
+                    util::raise_rte(
+                            "Can't delete version {} for symbol {} - it's higher than the latest version",
+                            stream_id,
+                            version_id
+                    );
             }
             // We will write a tombstone key even when the index_key is not found
             version_map->write_tombstone(store, version_id, stream_id, entry, creation_ts);
@@ -195,16 +187,11 @@ inline version_store::TombstoneVersionResult tombstone_version(
     return res;
 }
 
-inline std::optional<AtomKey> get_index_key_from_time(
-    timestamp from_time,
-    const std::vector<AtomKey> &keys) {
-    auto at_or_after = std::lower_bound(
-        std::begin(keys),
-        std::end(keys),
-        from_time,
-        [](const AtomKey &v_key, timestamp cmp) {
-            return v_key.creation_ts() > cmp;
-        });
+inline std::optional<AtomKey> get_index_key_from_time(timestamp from_time, const std::vector<AtomKey>& keys) {
+    auto at_or_after =
+            std::lower_bound(std::begin(keys), std::end(keys), from_time, [](const AtomKey& v_key, timestamp cmp) {
+                return v_key.creation_ts() > cmp;
+            });
     // If iterator points to the last element, we didn't have any versions before that
     if (at_or_after == keys.end()) {
         return std::nullopt;
@@ -213,10 +200,9 @@ inline std::optional<AtomKey> get_index_key_from_time(
 }
 
 inline std::optional<AtomKey> load_index_key_from_time(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<VersionMap> &version_map,
-    const StreamId &stream_id,
-    timestamp from_time) {
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id,
+        timestamp from_time
+) {
     LoadStrategy load_strategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, from_time};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     auto indexes = entry->get_indexes(false);
@@ -224,42 +210,43 @@ inline std::optional<AtomKey> load_index_key_from_time(
 }
 
 inline std::vector<AtomKey> get_index_and_tombstone_keys(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<VersionMap> &version_map,
-    const StreamId &stream_id) {
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id
+) {
     LoadStrategy load_strategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED};
     const auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     std::vector<AtomKey> res;
-    std::copy_if(std::begin(entry->keys_), std::end(entry->keys_), std::back_inserter(res),
-                 [&](const auto &key) { return is_index_or_tombstone(key); });
+    std::copy_if(std::begin(entry->keys_), std::end(entry->keys_), std::back_inserter(res), [&](const auto& key) {
+        return is_index_or_tombstone(key);
+    });
 
     return res;
 }
 
 inline std::set<StreamId> list_streams(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<VersionMap> &version_map,
-    const std::optional<std::string> &prefix,
-    bool all_symbols
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
+        const std::optional<std::string>& prefix, bool all_symbols
 ) {
     ARCTICDB_SAMPLE(ListStreams, 0)
     std::set<StreamId> res;
     if (prefix && store->supports_prefix_matching()) {
         ARCTICDB_DEBUG(log::version(), "Storage backend supports prefix matching");
-        store->iterate_type(KeyType::VERSION_REF, [&store, &res, &version_map, all_symbols](auto &&vk) {
-                                auto key = std::forward<VariantKey&&>(vk);
-                                util::check(!variant_key_id_empty(key), "Unexpected empty id in key {}", key);
-                                if(all_symbols)
-                                    res.insert(variant_key_id(key));
-                                else
-                                    insert_if_undeleted(store, version_map, key, res);
-                            },
-                            *prefix);
+        store->iterate_type(
+                KeyType::VERSION_REF,
+                [&store, &res, &version_map, all_symbols](auto&& vk) {
+                    auto key = std::forward<VariantKey&&>(vk);
+                    util::check(!variant_key_id_empty(key), "Unexpected empty id in key {}", key);
+                    if (all_symbols)
+                        res.insert(variant_key_id(key));
+                    else
+                        insert_if_undeleted(store, version_map, key, res);
+                },
+                *prefix
+        );
     } else {
-        store->iterate_type(KeyType::VERSION_REF, [&store, &res, &version_map, all_symbols](auto &&vk) {
+        store->iterate_type(KeyType::VERSION_REF, [&store, &res, &version_map, all_symbols](auto&& vk) {
             const auto key = std::forward<VariantKey>(vk);
             util::check(!variant_key_id_empty(key), "Unexpected empty id in key {}", key);
-            if(all_symbols)
+            if (all_symbols)
                 res.insert(variant_key_id(key));
             else
                 insert_if_undeleted(store, version_map, key, res);
@@ -268,4 +255,4 @@ inline std::set<StreamId> list_streams(
     return res;
 }
 
-}
+} // namespace arcticdb

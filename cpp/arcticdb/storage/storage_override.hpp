@@ -20,91 +20,49 @@ class S3Override {
     bool https_;
     bool ssl_;
 
-public:
-    std::string credential_name() const {
-        return credential_name_;
-    }
+  public:
+    std::string credential_name() const { return credential_name_; }
 
-    void set_credential_name(std::string_view credential_name) {
-        credential_name_ = credential_name;
-    }
+    void set_credential_name(std::string_view credential_name) { credential_name_ = credential_name; }
 
-    std::string credential_key() const {
-        return credential_key_;
-    }
+    std::string credential_key() const { return credential_key_; }
 
-    void set_credential_key(std::string_view credential_key) {
-        credential_key_ = credential_key;
-    }
+    void set_credential_key(std::string_view credential_key) { credential_key_ = credential_key; }
 
-    std::string endpoint() const {
-        return endpoint_;
-    }
+    std::string endpoint() const { return endpoint_; }
 
-    void set_endpoint(std::string_view endpoint) {
-        endpoint_ = endpoint;
-    }
+    void set_endpoint(std::string_view endpoint) { endpoint_ = endpoint; }
 
-    std::string bucket_name() const {
-        return bucket_name_;
-    }
+    std::string bucket_name() const { return bucket_name_; }
 
-    void set_bucket_name(std::string_view bucket_name){
-        bucket_name_ = bucket_name;
-    }
+    void set_bucket_name(std::string_view bucket_name) { bucket_name_ = bucket_name; }
 
-    std::string region() const {
-        return region_;
-    }
+    std::string region() const { return region_; }
 
-    void set_region(std::string_view region){
-        region_ = region;
-    }
+    void set_region(std::string_view region) { region_ = region; }
 
-    bool use_virtual_addressing() const {
-        return use_virtual_addressing_;
-    }
+    bool use_virtual_addressing() const { return use_virtual_addressing_; }
 
-    void set_use_virtual_addressing(bool use_virtual_addressing) {
-        use_virtual_addressing_ = use_virtual_addressing;
-    }
+    void set_use_virtual_addressing(bool use_virtual_addressing) { use_virtual_addressing_ = use_virtual_addressing; }
 
-    std::string ca_cert_path() const {
-        return ca_cert_path_;
-    }
+    std::string ca_cert_path() const { return ca_cert_path_; }
 
-    void set_ca_cert_path(std::string_view ca_cert_path){
-        ca_cert_path_ = ca_cert_path;
-    }
+    void set_ca_cert_path(std::string_view ca_cert_path) { ca_cert_path_ = ca_cert_path; }
 
+    std::string ca_cert_dir() const { return ca_cert_dir_; }
 
-    std::string ca_cert_dir() const {
-        return ca_cert_dir_;
-    }
+    void set_ca_cert_dir(std::string_view ca_cert_dir) { ca_cert_dir_ = ca_cert_dir; }
 
-    void set_ca_cert_dir(std::string_view ca_cert_dir){
-        ca_cert_dir_ = ca_cert_dir;
-    }
+    bool https() const { return https_; }
 
-    bool https() const {
-        return https_;
-    }
+    void set_https(bool https) { https_ = https; }
 
-    void set_https(bool https){
-        https_ = https;
-    }
+    bool ssl() const { return ssl_; }
 
-    bool ssl() const {
-        return ssl_;
-    }
+    void set_ssl(bool ssl) { ssl_ = ssl; }
 
-    void set_ssl(bool ssl){
-        ssl_ = ssl;
-    }
-
-    void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage,
-                                bool override_https) const {
-        if(storage.config().Is<arcticdb::proto::s3_storage::Config>()) {
+    void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage, bool override_https) const {
+        if (storage.config().Is<arcticdb::proto::s3_storage::Config>()) {
             arcticdb::proto::s3_storage::Config s3_storage;
             storage.config().UnpackTo(&s3_storage);
 
@@ -118,7 +76,7 @@ public:
             s3_storage.set_ca_cert_dir(ca_cert_dir_);
             s3_storage.set_ssl(ssl_);
 
-            if(override_https) {
+            if (override_https) {
                 s3_storage.set_https(https_);
             }
 
@@ -128,7 +86,7 @@ public:
 };
 
 class GCPXMLOverride {
-public:
+  public:
     void modify_storage_config(arcticdb::proto::storage::VariantStorage&, bool) const {
         // Nothing is serialized in the GCPXML proto that shouldn't be, so nothing to override.
     }
@@ -140,42 +98,26 @@ class AzureOverride {
     std::string ca_cert_path_;
     std::string ca_cert_dir_;
 
-public:
-    std::string container_name() const {
-        return container_name_;
-    }
+  public:
+    std::string container_name() const { return container_name_; }
 
-    void set_container_name(std::string_view container_name) {
-        container_name_ = container_name;
-    }
+    void set_container_name(std::string_view container_name) { container_name_ = container_name; }
 
-    std::string endpoint() const {
-        return endpoint_;
-    }
+    std::string endpoint() const { return endpoint_; }
 
-    void set_endpoint(std::string_view endpoint) {
-        endpoint_ = endpoint;
-    }
+    void set_endpoint(std::string_view endpoint) { endpoint_ = endpoint; }
 
-    std::string ca_cert_path() const {
-        return ca_cert_path_;
-    }
+    std::string ca_cert_path() const { return ca_cert_path_; }
 
-    void set_ca_cert_path(std::string_view ca_cert_path){
-        ca_cert_path_ = ca_cert_path;
-    }
+    void set_ca_cert_path(std::string_view ca_cert_path) { ca_cert_path_ = ca_cert_path; }
 
-    std::string ca_cert_dir() const {
-        return ca_cert_dir_;
-    }
+    std::string ca_cert_dir() const { return ca_cert_dir_; }
 
-    void set_ca_cert_dir(std::string_view ca_cert_dir){
-        ca_cert_dir_ = ca_cert_dir;
-    }
+    void set_ca_cert_dir(std::string_view ca_cert_dir) { ca_cert_dir_ = ca_cert_dir; }
 
-    void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage,
-                                bool override_https ARCTICDB_UNUSED) const {
-        if(storage.config().Is<arcticdb::proto::azure_storage::Config>()) {
+    void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage, bool override_https ARCTICDB_UNUSED)
+            const {
+        if (storage.config().Is<arcticdb::proto::azure_storage::Config>()) {
             arcticdb::proto::azure_storage::Config azure_storage;
             storage.config().UnpackTo(&azure_storage);
 
@@ -193,27 +135,18 @@ class LmdbOverride {
     std::string path_;
     uint64_t map_size_;
 
-public:
+  public:
+    [[nodiscard]] std::string path() const { return path_; }
 
-    [[nodiscard]] std::string path() const {
-        return path_;
-    }
+    [[nodiscard]] uint64_t map_size() const { return map_size_; }
 
-    [[nodiscard]] uint64_t map_size() const {
-        return map_size_;
-    }
+    void set_path(std::string path) { path_ = std::move(path); }
 
-    void set_path(std::string path) {
-        path_ = std::move(path);
-    }
+    void set_map_size(uint64_t map_size) { map_size_ = map_size; }
 
-    void set_map_size(uint64_t map_size) {
-        map_size_ = map_size;
-    }
-
-    void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage,
-                                bool override_https ARCTICDB_UNUSED) const {
-        if(storage.config().Is<arcticdb::proto::lmdb_storage::Config>()) {
+    void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage, bool override_https ARCTICDB_UNUSED)
+            const {
+        if (storage.config().Is<arcticdb::proto::lmdb_storage::Config>()) {
             arcticdb::proto::lmdb_storage::Config lmdb_storage;
             storage.config().UnpackTo(&lmdb_storage);
 
@@ -230,27 +163,16 @@ using VariantStorageOverride = std::variant<std::monostate, S3Override, AzureOve
 class StorageOverride {
     VariantStorageOverride override_;
 
-public:
-    [[nodiscard]] const VariantStorageOverride& variant() const {
-        return override_;
-    }
+  public:
+    [[nodiscard]] const VariantStorageOverride& variant() const { return override_; }
 
-    void set_s3_override(const S3Override& storage_override) {
-        override_ = storage_override;
-    }
+    void set_s3_override(const S3Override& storage_override) { override_ = storage_override; }
 
-    void set_azure_override(const AzureOverride& storage_override) {
-        override_ = storage_override;
-    }
+    void set_azure_override(const AzureOverride& storage_override) { override_ = storage_override; }
 
-    void set_lmdb_override(const LmdbOverride& storage_override) {
-        override_ = storage_override;
-    }
+    void set_lmdb_override(const LmdbOverride& storage_override) { override_ = storage_override; }
 
-    void set_gcpxml_override(const GCPXMLOverride& storage_override) {
-        override_ = storage_override;
-    }
-
+    void set_gcpxml_override(const GCPXMLOverride& storage_override) { override_ = storage_override; }
 };
 
-} //namespace arcticdb::storage
+} // namespace arcticdb::storage

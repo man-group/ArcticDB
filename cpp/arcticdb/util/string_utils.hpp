@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -77,9 +78,8 @@ inline std::string_view strv_from_pos(const std::string& str, size_t start, size
     return std::string_view{str.data() + start, length};
 }
 
-
-std::string safe_encode(const std::string &value);
+std::string safe_encode(const std::string& value);
 
 std::string safe_decode(const std::string& value);
 
-} //namespace arcticdb::util
+} // namespace arcticdb::util

@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from math import log10
 import time
 
@@ -35,7 +36,9 @@ def test_write_bbg_style_data():
         print(f"Day {day+1}/{num_days}: {start_time}")
         index = pd.date_range(start_time, freq="ms", periods=ticks_per_day)
         # Generate data that is half BID, then half ASK, then randomly permute for final data
-        tick_type_col = np.concatenate([np.repeat(np.array(["BID"]), half_ticks), np.repeat(np.array(["ASK"]), half_ticks)])
+        tick_type_col = np.concatenate(
+            [np.repeat(np.array(["BID"]), half_ticks), np.repeat(np.array(["ASK"]), half_ticks)]
+        )
         bid_col = np.concatenate([rng.random(half_ticks), np.repeat(np.array([np.nan]), half_ticks)])
         ask_col = np.concatenate([np.repeat(np.array([np.nan]), half_ticks), rng.random(half_ticks)])
         permutation = rng.permutation(ticks_per_day)
@@ -103,8 +106,20 @@ def test_filter_then_resample_bbg_style_data():
 @pytest.mark.parametrize("num_rows", [100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000])
 @pytest.mark.parametrize(
     "col_type",
-    ["bool", "int", "float", "float_with_nans", "datetime", "datetime_with_nats",
-     "str10", "str100", "str1000", "str10000", "str100000", "str_with_nones10"]
+    [
+        "bool",
+        "int",
+        "float",
+        "float_with_nans",
+        "datetime",
+        "datetime_with_nats",
+        "str10",
+        "str100",
+        "str1000",
+        "str10000",
+        "str100000",
+        "str_with_nones10",
+    ],
 )
 def test_write_data(num_rows, col_type):
     power_of_ten = round(log10(num_rows))
@@ -122,20 +137,20 @@ def test_write_data(num_rows, col_type):
         elif col_type.startswith("float"):
             col_data = 100_000 * rng.random(rows_per_segment)
             if col_type == "float_with_nans":
-                col_data[:rows_per_segment // 2] = np.nan
+                col_data[: rows_per_segment // 2] = np.nan
                 rng.shuffle(col_data)
         elif col_type.startswith("datetime"):
             col_data = rng.integers(0, 100_000, rows_per_segment)
             col_data = col_data.astype("datetime64[s]")
             if col_type == "datetime_with_nats":
-                col_data[:rows_per_segment // 2] = np.datetime64('NaT')
+                col_data[: rows_per_segment // 2] = np.datetime64("NaT")
                 rng.shuffle(col_data)
         elif col_type.startswith("str"):
             num_unique_strings = int(col_type.lstrip("str_with_nones"))
             unique_strings = random_strings_of_length(num_unique_strings, 10, True)
             col_data = np.random.choice(unique_strings, rows_per_segment)
             if col_type.startswith("str_with_nones"):
-                col_data[:rows_per_segment // 2] = None
+                col_data[: rows_per_segment // 2] = None
                 rng.shuffle(col_data)
         df = pd.DataFrame({"col": col_data}, index=index)
         lib.append(sym, df, write_if_missing=True)
@@ -144,8 +159,20 @@ def test_write_data(num_rows, col_type):
 @pytest.mark.parametrize("num_rows", [100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000])
 @pytest.mark.parametrize(
     "col_type",
-    ["bool", "int", "float", "float_with_nans", "datetime", "datetime_with_nats",
-     "str10", "str100", "str1000", "str10000", "str100000", "str_with_nones10"]
+    [
+        "bool",
+        "int",
+        "float",
+        "float_with_nans",
+        "datetime",
+        "datetime_with_nats",
+        "str10",
+        "str100",
+        "str1000",
+        "str10000",
+        "str100000",
+        "str_with_nones10",
+    ],
 )
 @pytest.mark.parametrize("freq", ["1us", "10us", "100us", "1ms", "10ms", "100ms", "1s", "10s", "100s", "1000s"])
 @pytest.mark.parametrize("agg", ["sum", "mean", "min", "max", "first", "last", "count"])
@@ -192,7 +219,9 @@ def test_resample_data(num_rows, col_type, freq, agg):
         }
     )
     lib.write(results_sym, results_df)
-    print(f"Downsampling ({agg}) 10^{input_power_of_ten}->10^{output_power_of_ten} rows of {col_type} took {end - start}")
+    print(
+        f"Downsampling ({agg}) 10^{input_power_of_ten}->10^{output_power_of_ten} rows of {col_type} took {end - start}"
+    )
 
 
 @pytest.mark.parametrize("num_rows", [100_000])
@@ -211,7 +240,9 @@ def test_resample_mostly_missing_buckets(num_rows, col_type, freq, agg):
 
     output_power_of_ten = round(log10(len(df)))
 
-    print(f"Downsampling ({agg}) 10^{input_power_of_ten}->10^{output_power_of_ten} rows of {col_type} took {end - start}")
+    print(
+        f"Downsampling ({agg}) 10^{input_power_of_ten}->10^{output_power_of_ten} rows of {col_type} took {end - start}"
+    )
 
 
 @pytest.mark.parametrize("num_rows", [100_000_000])
@@ -239,7 +270,9 @@ def test_resample_all_aggs_one_column(num_rows, col_type, freq):
 
     output_power_of_ten = round(log10(len(df)))
 
-    print(f"Downsampling (all aggregators) 10^{input_power_of_ten}->10^{output_power_of_ten} rows of {col_type} took {end - start}")
+    print(
+        f"Downsampling (all aggregators) 10^{input_power_of_ten}->10^{output_power_of_ten} rows of {col_type} took {end - start}"
+    )
 
 
 @pytest.mark.parametrize("num_rows", [10_000_000, 100_000_000])
@@ -260,7 +293,7 @@ def test_write_ohlcvt(num_rows):
                 "volume": rng.integers(0, 100_000, rows_per_segment),
                 "trades": rng.integers(0, 1_000, rows_per_segment),
             },
-            index=index
+            index=index,
         )
         lib.append(sym, df, write_if_missing=True)
 

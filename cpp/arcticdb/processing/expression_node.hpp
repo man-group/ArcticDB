@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -16,19 +17,18 @@
 #include <arcticdb/pipeline/value_set.hpp>
 #include <utility>
 
-
 namespace arcticdb {
 
-struct ColumnNameTag{};
+struct ColumnNameTag {};
 using ColumnName = util::StringWrappingValue<ColumnNameTag>;
 
-struct ValueNameTag{};
+struct ValueNameTag {};
 using ValueName = util::StringWrappingValue<ValueNameTag>;
 
-struct ValueSetNameTag{};
+struct ValueSetNameTag {};
 using ValueSetName = util::StringWrappingValue<ValueSetNameTag>;
 
-struct ExpressionNameTag{};
+struct ExpressionNameTag {};
 using ExpressionName = util::StringWrappingValue<ExpressionNameTag>;
 
 using VariantNode = std::variant<std::monostate, ColumnName, ValueName, ValueSetName, ExpressionName>;
@@ -47,22 +47,23 @@ struct ColumnWithStrings {
 
     ColumnWithStrings(std::unique_ptr<Column>&& col, std::string_view col_name) :
         column_(std::move(col)),
-        column_name_(col_name) {
-    }
+        column_name_(col_name) {}
 
     ColumnWithStrings(Column&& col, std::shared_ptr<StringPool> string_pool, std::string_view col_name) :
         column_(std::make_shared<Column>(std::move(col))),
         string_pool_(std::move(string_pool)),
-        column_name_(col_name) {
-    }
+        column_name_(col_name) {}
 
-    ColumnWithStrings(std::shared_ptr<Column> column, const std::shared_ptr<StringPool>& string_pool, std::string_view col_name) :
+    ColumnWithStrings(
+            std::shared_ptr<Column> column, const std::shared_ptr<StringPool>& string_pool, std::string_view col_name
+    ) :
         column_(std::move(column)),
         string_pool_(string_pool),
-        column_name_(col_name) {
-    }
+        column_name_(col_name) {}
 
-    [[nodiscard]] std::optional<std::string_view> string_at_offset(entity::position_t offset, bool strip_fixed_width_trailing_nulls=false) const;
+    [[nodiscard]] std::optional<std::string_view> string_at_offset(
+            entity::position_t offset, bool strip_fixed_width_trailing_nulls = false
+    ) const;
 
     [[nodiscard]] std::optional<size_t> get_fixed_width_string_size() const;
 };
@@ -71,7 +72,8 @@ struct FullResult {};
 
 struct EmptyResult {};
 
-using VariantData = std::variant<FullResult, EmptyResult, std::shared_ptr<Value>, std::shared_ptr<ValueSet>, ColumnWithStrings, util::BitSet>;
+using VariantData = std::variant<
+        FullResult, EmptyResult, std::shared_ptr<Value>, std::shared_ptr<ValueSet>, ColumnWithStrings, util::BitSet>;
 
 /*
  * Basic AST node.
@@ -88,4 +90,4 @@ struct ExpressionNode {
     VariantData compute(ProcessingUnit& seg) const;
 };
 
-} //namespace arcticdb
+} // namespace arcticdb

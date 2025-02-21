@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -24,7 +25,7 @@ TEST(ChunkedBuffer, Iterator) {
     auto it = buff.buffer().iterator(8);
     uint64_t count = 0;
     while (!it.finished()) {
-        ASSERT_EQ(*reinterpret_cast<uint64_t *>(it.value()), count++);
+        ASSERT_EQ(*reinterpret_cast<uint64_t*>(it.value()), count++);
         it.next();
     }
 

@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -26,7 +27,7 @@ arcticdb::proto::azure_storage::Config get_mock_azure_config() {
 }
 
 class AzureMockStorageFixture : public testing::Test {
-protected:
+  protected:
     AzureStorage store;
     AzureMockStorageFixture() : store(LibraryPath("_arctic_cfg", '.'), OpenMode::DELETE, get_mock_azure_config()) {}
 };
@@ -38,19 +39,27 @@ TEST_F(AzureMockStorageFixture, test_key_exists) {
     ASSERT_FALSE(exists_in_store(store, "symbol-not-present"));
 }
 
-TEST_F(AzureMockStorageFixture, test_read){
+TEST_F(AzureMockStorageFixture, test_read) {
     write_in_store(store, "symbol");
 
     ASSERT_EQ(read_in_store(store, "symbol"), "symbol");
     ASSERT_THROW(read_in_store(store, "symbol-not-present"), arcticdb::ArcticException);
 }
 
-TEST_F(AzureMockStorageFixture, test_write){
+TEST_F(AzureMockStorageFixture, test_write) {
     write_in_store(store, "symbol");
     ASSERT_THROW(
-            write_in_store(store, MockAzureClient::get_failure_trigger("symbol",
-               StorageOperation::WRITE, AzureErrorCode_to_string(AzureErrorCode::UnauthorizedBlobOverwrite),
-               Azure::Core::Http::HttpStatusCode::Unauthorized)),arcticdb::ArcticException);
+            write_in_store(
+                    store,
+                    MockAzureClient::get_failure_trigger(
+                            "symbol",
+                            StorageOperation::WRITE,
+                            AzureErrorCode_to_string(AzureErrorCode::UnauthorizedBlobOverwrite),
+                            Azure::Core::Http::HttpStatusCode::Unauthorized
+                    )
+            ),
+            arcticdb::ArcticException
+    );
 }
 
 TEST_F(AzureMockStorageFixture, test_remove) {
@@ -88,11 +97,9 @@ TEST_F(AzureMockStorageFixture, test_matching_key_type_prefix_list) {
 TEST_F(AzureMockStorageFixture, test_key_path) {
     std::vector<VariantKey> res;
 
-    store.iterate_type(KeyType::TABLE_DATA, [&](VariantKey &&found_key) {
-        res.emplace_back(found_key);
-    }, "");
+    store.iterate_type(KeyType::TABLE_DATA, [&](VariantKey&& found_key) { res.emplace_back(found_key); }, "");
 
-    for(auto vk: res) {
+    for (auto vk : res) {
         auto key_path = store.key_path(vk);
         ASSERT_TRUE(key_path.size() > 0);
         ASSERT_TRUE(key_path.starts_with(store.library_path().to_delim_path('/')));

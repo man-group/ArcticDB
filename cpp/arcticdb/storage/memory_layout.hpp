@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 #pragma once
 
@@ -90,17 +91,9 @@ static_assert(sizeof(Block) == 46);
 
 // Possible types of encoded fields, which are
 // sets of blocks representing a column of data
-enum class EncodedFieldType : uint8_t {
-    UNKNOWN,
-    NDARRAY,
-    DICTIONARY
-};
+enum class EncodedFieldType : uint8_t { UNKNOWN, NDARRAY, DICTIONARY };
 
-enum class BitmapFormat : uint8_t {
-    UNKNOWN,
-    DENSE,
-    BITMAGIC
-};
+enum class BitmapFormat : uint8_t { UNKNOWN, DENSE, BITMAGIC };
 
 enum class UniqueCountType : uint8_t {
     PRECISE,
@@ -139,11 +132,7 @@ struct EncodedField {
 
 static_assert(sizeof(EncodedField) == 88);
 
-enum class EncodingVersion : uint16_t {
-    V1 = 0,
-    V2 = 1,
-    COUNT = 2
-};
+enum class EncodingVersion : uint16_t { V1 = 0, V2 = 1, COUNT = 2 };
 
 constexpr static uint16_t MAGIC_NUMBER = 0xFA57;
 
@@ -177,7 +166,8 @@ struct FieldBuffer {
 // the segment. At the moment there are two encoding versions, a
 // legacy encoding utilizing a protobuf header, and the binary
 // encoding described by the MemoryLayout structure below.
-struct HeaderData { ;
+struct HeaderData {
+    ;
     EncodingVersion encoding_version_ = EncodingVersion::V1;
     uint16_t fields_ = 0U;
     uint8_t flags_ = 0U;
@@ -185,33 +175,20 @@ struct HeaderData { ;
     FieldBuffer field_buffer_;
 };
 
-
 // Dynamic schema frames can change their schema over time,
 // adding and removing columns and changing types. A dynamic
 // schema type indicates that for each row group, not all of
 // the columns in the global descriptor will necessarily
 // be found
-enum class SchemaType : uint8_t {
-    STATIC,
-    DYNAMIC
-};
+enum class SchemaType : uint8_t { STATIC, DYNAMIC };
 
 // The type of indexing of a frame as a whole
 struct IndexDescriptor {
-    enum class Type : int32_t {
-        UNKNOWN = 0,
-        EMPTY = 69,
-        ROWCOUNT = 82,
-        STRING = 83,
-        TIMESTAMP = 84
-    };
+    enum class Type : int32_t { UNKNOWN = 0, EMPTY = 69, ROWCOUNT = 82, STRING = 83, TIMESTAMP = 84 };
 
     IndexDescriptor() = default;
 
-    IndexDescriptor(Type type, uint32_t field_count) :
-        type_(type),
-        field_count_(field_count) {
-    }
+    IndexDescriptor(Type type, uint32_t field_count) : type_(type), field_count_(field_count) {}
 
     Type type_ = Type::UNKNOWN;
     uint32_t field_count_ = 0U;
@@ -223,9 +200,7 @@ struct IndexDescriptor {
 // assumed that this information is non-essential to the data
 // objects and can be ignored when denormalizing to different
 // languages and libraries
-enum class FrameMetadataEncoding : uint8_t {
-    PROTOBUF = 0
-};
+enum class FrameMetadataEncoding : uint8_t { PROTOBUF = 0 };
 
 // A FrameDescriptor describes a dataframe as a whole; it is used on
 // segments that describe and index other segments
@@ -247,10 +222,7 @@ struct SegmentDescriptor {
 };
 
 // Frame identifiers can be of either numeric or string type
-enum class IdentifierType : uint8_t {
-    NUMERIC = 0,
-    STRING = 1
-};
+enum class IdentifierType : uint8_t { NUMERIC = 0, STRING = 1 };
 
 struct SegmentIdentifierHeader {
     IdentifierType type_ = IdentifierType::NUMERIC;
@@ -259,11 +231,11 @@ struct SegmentIdentifierHeader {
 
 // A segment header contains a set of optional fields that describe the contents of a given segment
 enum class FieldOffset : uint8_t {
-    METADATA, // Opaque field for user and normalization metadata
+    METADATA,    // Opaque field for user and normalization metadata
     STRING_POOL, // Deduplicated compressed field of string data
-    DESCRIPTOR, // Collection of field names and types for the current segment
-    INDEX, // Optional additional set of fields used when this segment indexes a dataframe
-    COLUMN, // Set of encoded fields that represent the body (user) data of the segment
+    DESCRIPTOR,  // Collection of field names and types for the current segment
+    INDEX,       // Optional additional set of fields used when this segment indexes a dataframe
+    COLUMN,      // Set of encoded fields that represent the body (user) data of the segment
     COUNT
 };
 
@@ -294,23 +266,21 @@ struct ColumnField {
 
 // A compressed block of data containing some other structure. A compressed field is represented by an EncodedField
 // which contains a set of Block objects describing the compression type
-template <typename FieldType>
-struct CompressedField {
-};
+template<typename FieldType>
+struct CompressedField {};
 
 // A set of fields that are repeated, whose number corresponds to a unary field describing this set. For example, the
 // number of repeated column fields should correspond to the number of entries in the descriptor (which describes the
 // user-facing information about a column's contents, and the number of EncodedFields in the body fields, which describe
 // the block structure and compression
-template <typename FieldType>
-struct RepeatedField {
-};
+template<typename FieldType>
+struct RepeatedField {};
 
 // Binary representation of a segment header. Contains positioning information about the structure of the segment,
 // and the list of fields representing the segment metadata fields
 struct SegmentHeaderData {
     HeaderData data_;
-    EncodedFieldList header_fields_; // Header fields containing the fields described by FieldOffsets
+    EncodedFieldList header_fields_;      // Header fields containing the fields described by FieldOffsets
     std::array<uint32_t, 5> offset_ = {}; // Maps the entries in the FieldOffset enumeration to the header field entries
 };
 
@@ -344,9 +314,9 @@ struct MemoryLayout {
     StringPoolMagic string_pool_magic_;
     Optional<ColumnField> string_pool_field_;
 
-    EncodedFieldList body_fields_;  // Encoded field list representing the user data fields (columns)
+    EncodedFieldList body_fields_; // Encoded field list representing the user data fields (columns)
 };
 
 #pragma pack(pop)
 
-} //namespace arcticdb
+} // namespace arcticdb
