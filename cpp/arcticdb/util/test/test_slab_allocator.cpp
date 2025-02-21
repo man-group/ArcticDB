@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -18,17 +19,18 @@
 
 using namespace arcticdb;
 
-template <typename MemoryChunk>
+template<typename MemoryChunk>
 using pointer_set = std::unordered_set<typename MemoryChunk::pointer>;
 
-// We limit the number of concurrent threads to 8 to avoid the slab allocator poor performance with large amounts of threads:
+// We limit the number of concurrent threads to 8 to avoid the slab allocator poor performance with large amounts of
+// threads:
 // https://manwiki.maninvestments.com/display/AlphaTech/Slab+Allocator+poor+multi-threaded+performance+with+aggressive+allocations
 size_t num_threads = std::min(std::thread::hardware_concurrency() - 1, 8u);
 std::size_t const num_blocks_per_thread = 10000;
 
-template <typename MemoryChunk>
+template<typename MemoryChunk>
 pointer_set<MemoryChunk> call_alloc(MemoryChunk& mc, std::size_t n, int64_t& execution_time_ms) {
-    
+
     pointer_set<MemoryChunk> mcps;
     mcps.reserve(n);
 
@@ -42,7 +44,7 @@ pointer_set<MemoryChunk> call_alloc(MemoryChunk& mc, std::size_t n, int64_t& exe
     return mcps;
 }
 
-template <typename MemoryChunk>
+template<typename MemoryChunk>
 void check_sets(const pointer_set<MemoryChunk>& s1, const pointer_set<MemoryChunk>& s2) {
     auto end = std::cend(s2);
     for (auto* p : s1)
@@ -50,25 +52,26 @@ void check_sets(const pointer_set<MemoryChunk>& s1, const pointer_set<MemoryChun
             throw std::runtime_error("two sets have the same address");
 }
 
-template <typename MemoryChunk>
+template<typename MemoryChunk>
 void run_test(MemoryChunk& mc, unsigned int K) {
     std::vector<int64_t> execution_times(num_threads);
     int64_t avg = 0;
-    for (size_t k = 0; k < K; ++k ) {
+    for (size_t k = 0; k < K; ++k) {
         std::vector<std::future<pointer_set<MemoryChunk>>> v;
-        for (size_t i = 0; i < num_threads; ++i ) {
+        for (size_t i = 0; i < num_threads; ++i) {
             v.emplace_back(std::async(
                     std::launch::async,
                     call_alloc<MemoryChunk>,
                     std::ref(mc),
                     num_blocks_per_thread,
-                    std::ref(execution_times[i])));
+                    std::ref(execution_times[i])
+            ));
         }
         for (auto& t : v)
             t.wait();
 
         for (size_t i = 0; i < num_threads; ++i) {
-            avg += execution_times[i] ;
+            avg += execution_times[i];
         }
 
         std::vector<pointer_set<MemoryChunk>> comparisons;
@@ -78,19 +81,17 @@ void run_test(MemoryChunk& mc, unsigned int K) {
 
         std::vector<std::future<void>> exceptions;
         for (size_t i = 0; i < num_threads; ++i) {
-            for (size_t j = i + 1; j < num_threads; ++j){
+            for (size_t j = i + 1; j < num_threads; ++j) {
                 exceptions.emplace_back(std::async(
-                        std::launch::async,
-                        check_sets<MemoryChunk>,
-                        std::ref(comparisons[i]),
-                        std::ref(comparisons[j])));
+                        std::launch::async, check_sets<MemoryChunk>, std::ref(comparisons[i]), std::ref(comparisons[j])
+                ));
             }
         }
         for (auto& f : exceptions)
             f.get();
 
-        for(const auto& pointers: comparisons) {
-            for (auto* p: pointers) {
+        for (const auto& pointers : comparisons) {
+            for (auto* p : pointers) {
                 mc.deallocate(p);
             }
         }
@@ -127,7 +128,7 @@ TEST(SlabAlloc, PageSizeMem) {
 
 TEST(SlabAlloc, Integer) {
     SlabAllocator<int, 128> mc128{1};
-    for (size_t i = 0; i<100; i++) {
+    for (size_t i = 0; i < 100; i++) {
         auto p = mc128.allocate();
         ASSERT_NE(p, nullptr);
         *p = i;
@@ -139,8 +140,8 @@ TEST(SlabAlloc, Integer) {
 TEST(SlabAlloc, Char32) {
     using SlabAllocatorType = SlabAllocator<char[32], 128>;
     SlabAllocatorType mc128{1};
-    for (size_t i = 0; i<100; i++) {
-        auto p = reinterpret_cast<char *>(mc128.allocate());
+    for (size_t i = 0; i < 100; i++) {
+        auto p = reinterpret_cast<char*>(mc128.allocate());
         ASSERT_NE(p, nullptr);
         char src[32] = "1234567812345678123456781234567";
         strcpy(p, src);
@@ -152,8 +153,8 @@ TEST(SlabAlloc, Char32) {
 TEST(SlabAlloc, Bytes4096) {
     using SlabAllocatorType = SlabAllocator<std::byte[4096], 128>;
     SlabAllocatorType mc128{1};
-    for (size_t i = 0; i<100; i++) {
-        auto p = reinterpret_cast<std::byte *>(mc128.allocate());
+    for (size_t i = 0; i < 100; i++) {
+        auto p = reinterpret_cast<std::byte*>(mc128.allocate());
         ASSERT_NE(p, nullptr);
         memset(p, 0, 4096);
         for (size_t j = 0; j < 4096; j++) {
@@ -168,18 +169,17 @@ TEST(SlabAlloc, AddrInSlab) {
     auto p = mc128.allocate();
 
     ASSERT_TRUE(mc128.is_addr_in_slab(p));
-    ASSERT_TRUE(mc128.is_addr_in_slab(p+50));
-    ASSERT_TRUE(mc128.is_addr_in_slab(p+99));
-    ASSERT_FALSE(mc128.is_addr_in_slab(p+100));
-    ASSERT_FALSE(mc128.is_addr_in_slab(p+101));
-    ASSERT_FALSE(mc128.is_addr_in_slab(p+1000));
-
+    ASSERT_TRUE(mc128.is_addr_in_slab(p + 50));
+    ASSERT_TRUE(mc128.is_addr_in_slab(p + 99));
+    ASSERT_FALSE(mc128.is_addr_in_slab(p + 100));
+    ASSERT_FALSE(mc128.is_addr_in_slab(p + 101));
+    ASSERT_FALSE(mc128.is_addr_in_slab(p + 1000));
 }
 
 using SlabAllocType = SlabAllocator<std::byte[4096], 64>;
 std::vector<SlabAllocType::pointer> perform_allocations(SlabAllocType& mc, size_t num) {
     std::vector<SlabAllocType::pointer> res;
-    for(size_t i = 0; i<num; i++) {
+    for (size_t i = 0; i < num; i++) {
         res.push_back(mc.allocate());
     }
     return res;
@@ -187,10 +187,10 @@ std::vector<SlabAllocType::pointer> perform_allocations(SlabAllocType& mc, size_
 
 TEST(SlabAlloc, MultipleThreads) {
     size_t cap = 10000;
-    SlabAllocType mc (cap);
+    SlabAllocType mc(cap);
     size_t num_thds = 4;
     size_t rounds = 10;
-    for(size_t k = 0; k <rounds; k++) {
+    for (size_t k = 0; k < rounds; k++) {
         ASSERT_EQ(mc.get_approx_free_blocks(), cap);
         std::vector<std::future<std::vector<SlabAllocType::pointer>>> res;
         for (size_t i = 0; i < num_thds; i++) {
@@ -198,7 +198,7 @@ TEST(SlabAlloc, MultipleThreads) {
         }
 
         for (size_t i = 0; i < num_thds; i++) {
-            for (auto &p: res[i].get()) {
+            for (auto& p : res[i].get()) {
                 mc.deallocate(p);
             }
         }
@@ -209,9 +209,9 @@ TEST(SlabAlloc, MultipleThreads) {
 TEST(SlabAlloc, Callbacks) {
     size_t cap = 10000;
     size_t num_thds = 4;
-    SlabAllocType mc (cap);
+    SlabAllocType mc(cap);
     std::atomic<int> cb_called = 0;
-    mc.add_cb_when_full([&cb_called](){cb_called.fetch_add(1);});
+    mc.add_cb_when_full([&cb_called]() { cb_called.fetch_add(1); });
     std::vector<std::future<std::vector<SlabAllocType::pointer>>> res;
     for (size_t i = 0; i < num_thds; i++) {
         res.emplace_back(std::async(std::launch::async, perform_allocations, std::ref(mc), cap / num_thds));
@@ -222,7 +222,7 @@ TEST(SlabAlloc, Callbacks) {
     }
     ASSERT_EQ(mc.get_approx_free_blocks(), 0);
     for (size_t i = 0; i < num_thds; i++) {
-        for (auto &p: res2[i]) {
+        for (auto& p : res2[i]) {
             mc.deallocate(p);
         }
     }

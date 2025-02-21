@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/column_store/column.hpp>
@@ -16,7 +17,9 @@
 
 namespace arcticdb {
 
-[[nodiscard]] std::optional<std::string_view> ColumnWithStrings::string_at_offset(entity::position_t offset, bool strip_fixed_width_trailing_nulls) const {
+[[nodiscard]] std::optional<std::string_view> ColumnWithStrings::string_at_offset(
+        entity::position_t offset, bool strip_fixed_width_trailing_nulls
+) const {
     if (UNLIKELY(!column_ || !string_pool_))
         return std::nullopt;
     util::check(!column_->is_inflated(), "Unexpected inflated column in filtering");
@@ -27,7 +30,7 @@ namespace arcticdb {
     if (strip_fixed_width_trailing_nulls && is_fixed_string_type(column_->type().data_type())) {
         auto char_width = is_utf_type(slice_value_type(column_->type().data_type())) ? UNICODE_WIDTH : ASCII_WIDTH;
         const std::string_view null_char_view("\0\0\0\0", char_width);
-        while(!raw.empty() && raw.substr(raw.size() - char_width) == null_char_view) {
+        while (!raw.empty() && raw.substr(raw.size() - char_width) == null_char_view) {
             raw.remove_suffix(char_width);
         }
     }
@@ -39,7 +42,7 @@ namespace arcticdb {
         return std::nullopt;
 
     util::check(!column_->is_inflated(), "Unexpected inflated column in filtering");
-    for(position_t i = 0; i < column_->row_count(); ++i) {
+    for (position_t i = 0; i < column_->row_count(); ++i) {
         auto offset = column_->scalar_at<entity::position_t>(i);
         if (offset != std::nullopt) {
             std::string_view raw = string_pool_->get_view(*offset);
@@ -56,9 +59,7 @@ ExpressionNode::ExpressionNode(VariantNode left, VariantNode right, OperationTyp
     util::check(is_binary_operation(op), "Left and right expressions supplied to non-binary operator");
 }
 
-ExpressionNode::ExpressionNode(VariantNode left, OperationType op) :
-    left_(std::move(left)),
-    operation_type_(op) {
+ExpressionNode::ExpressionNode(VariantNode left, OperationType op) : left_(std::move(left)), operation_type_(op) {
     util::check(!is_binary_operation(op), "Binary expression expects both left and right children");
 }
 
@@ -70,4 +71,4 @@ VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
     }
 }
 
-} //namespace arcticdb
+} // namespace arcticdb

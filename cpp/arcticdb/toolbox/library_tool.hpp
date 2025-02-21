@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -23,7 +24,7 @@ namespace arcticdb::storage {
 class Library;
 
 class LibraryIndex;
-}
+} // namespace arcticdb::storage
 
 namespace arcticdb::toolbox::apy {
 
@@ -31,7 +32,7 @@ namespace py = pybind11;
 
 class LibraryTool {
 
-public:
+  public:
     explicit LibraryTool(std::shared_ptr<storage::Library> lib);
 
     ReadResult read(const VariantKey& key);
@@ -48,7 +49,9 @@ public:
 
     void overwrite_segment_in_memory(VariantKey key, SegmentInMemory& segment_in_memory);
 
-    SegmentInMemory overwrite_append_data(VariantKey key, const py::tuple &item, const py::object &norm, const py::object & user_meta);
+    SegmentInMemory overwrite_append_data(
+            VariantKey key, const py::tuple& item, const py::object& norm, const py::object& user_meta
+    );
 
     void remove(VariantKey key);
 
@@ -60,7 +63,7 @@ public:
 
     std::string get_key_path(const VariantKey& key);
 
-    std::vector<VariantKey> find_keys_for_id(entity::KeyType kt, const StreamId &stream_id);
+    std::vector<VariantKey> find_keys_for_id(entity::KeyType kt, const StreamId& stream_id);
 
     int count_keys(entity::KeyType kt);
 
@@ -70,10 +73,10 @@ public:
 
     static py::object read_unaltered_lib_cfg(const storage::LibraryManager& lib_manager, std::string lib_name);
 
-private:
+  private:
     std::shared_ptr<Store> store();
     async::AsyncStore<>& async_store();
     version_store::LocalVersionedEngine engine_;
 };
 
-} //namespace arcticdb::toolbox::apy
+} // namespace arcticdb::toolbox::apy

@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #ifndef ARCTICDB_AGGREGATOR_H_
@@ -24,10 +25,15 @@ template<class Index, class Schema, class SegmentingPolicy, class DensityPolicy>
 inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit_impl(bool final) {
     callback_(std::move(segment_));
     commits_count_++;
-    if(final)
+    if (final)
         return;
 
-    segment_ = SegmentInMemory(schema_policy_.default_descriptor(), segmenting_policy_.expected_row_size(), AllocationType::DYNAMIC, DensityPolicy::allow_sparse);
+    segment_ = SegmentInMemory(
+            schema_policy_.default_descriptor(),
+            segmenting_policy_.expected_row_size(),
+            AllocationType::DYNAMIC,
+            DensityPolicy::allow_sparse
+    );
     segment_.init_column_map();
     stats_.reset();
 }
@@ -46,10 +52,9 @@ inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::finalize
     }
 }
 
-
 template<class Index, class Schema, class SegmentingPolicy, class DensityPolicy>
 inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::clear() {
     segment_.clear();
 }
 
-} // namespace arcticdb
+} // namespace arcticdb::stream

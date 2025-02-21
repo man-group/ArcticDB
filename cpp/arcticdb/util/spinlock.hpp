@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -30,16 +31,14 @@ struct SpinLock {
             while (lock_.load(std::memory_order_relaxed))
                 PAUSE;
 
-        } while(true);
+        } while (true);
     }
 
     bool try_lock() noexcept {
         return !lock_.load(std::memory_order_relaxed) && !lock_.exchange(true, std::memory_order_acquire);
     }
 
-    void unlock() {
-        lock_.store(false, std::memory_order_release);
-    }
+    void unlock() { lock_.store(false, std::memory_order_release); }
 };
 
-} //namespace arcticdb
+} // namespace arcticdb

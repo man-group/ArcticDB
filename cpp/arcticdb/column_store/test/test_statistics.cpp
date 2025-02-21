@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -67,12 +68,7 @@ TEST(FieldStatsTest, FieldStatsImplConstruction) {
 
 TEST(FieldStatsTest, FieldStatsImplFullConstruction) {
     using namespace arcticdb;
-    FieldStatsImpl stats(
-        static_cast<int64_t>(1),
-        static_cast<int64_t>(100),
-        50u,
-        UniqueCountType::PRECISE
-    );
+    FieldStatsImpl stats(static_cast<int64_t>(1), static_cast<int64_t>(100), 50u, UniqueCountType::PRECISE);
 
     EXPECT_TRUE(stats.has_min());
     EXPECT_TRUE(stats.has_max());

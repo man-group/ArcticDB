@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -47,12 +48,18 @@ def test_project_string_binary_arithmetic(lmdb_version_store_v1):
     operands = ["col_a", "col_b", "col_c", "0", 0]
     for lhs in operands:
         for rhs in operands:
-            if ((lhs == "col_a" and rhs in ["col_a", 0]) or
-                (rhs == "col_a" and lhs in ["col_a", 0]) or
-                (lhs in ["0", 0] and rhs in ["0", 0])):
+            if (
+                (lhs == "col_a" and rhs in ["col_a", 0])
+                or (rhs == "col_a" and lhs in ["col_a", 0])
+                or (lhs in ["0", 0] and rhs in ["0", 0])
+            ):
                 continue
             q = QueryBuilder()
-            q = q.apply("d", (q[lhs] if isinstance(lhs, str) and lhs.startswith("col_") else lhs) + (q[rhs] if isinstance(rhs, str) and rhs.startswith("col_") else rhs))
+            q = q.apply(
+                "d",
+                (q[lhs] if isinstance(lhs, str) and lhs.startswith("col_") else lhs)
+                + (q[rhs] if isinstance(rhs, str) and rhs.startswith("col_") else rhs),
+            )
             with pytest.raises(UserInputException):
                 lib.read(symbol, query_builder=q)
 

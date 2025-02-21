@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -21,34 +22,31 @@ namespace arcticdb {
 
 struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
     ReadResult(
-            const VersionedItem& versioned_item,
-            pipelines::PythonOutputFrame&& frame_data,
+            const VersionedItem& versioned_item, pipelines::PythonOutputFrame&& frame_data,
             const arcticdb::proto::descriptors::NormalizationMetadata& norm_meta,
             const arcticdb::proto::descriptors::UserDefinedMetadata& user_meta,
             const arcticdb::proto::descriptors::UserDefinedMetadata& multi_key_meta,
-            std::vector<entity::AtomKey>&& multi_keys) :
-            item(versioned_item),
-            frame_data(std::move(frame_data)),
-            norm_meta(norm_meta),
-            user_meta(user_meta),
-            multi_key_meta(multi_key_meta),
-            multi_keys(std::move(multi_keys)) {
-
-    }
+            std::vector<entity::AtomKey>&& multi_keys
+    ) :
+        item(versioned_item),
+        frame_data(std::move(frame_data)),
+        norm_meta(norm_meta),
+        user_meta(user_meta),
+        multi_key_meta(multi_key_meta),
+        multi_keys(std::move(multi_keys)) {}
     VersionedItem item;
     pipelines::PythonOutputFrame frame_data;
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata multi_key_meta;
-    std::vector <entity::AtomKey> multi_keys;
+    std::vector<entity::AtomKey> multi_keys;
 
     ARCTICDB_MOVE_ONLY_DEFAULT(ReadResult)
 };
 
 inline ReadResult create_python_read_result(
-    const VersionedItem& version,
-    OutputFormat output_format,
-    FrameAndDescriptor&& fd) {
+        const VersionedItem& version, OutputFormat output_format, FrameAndDescriptor&& fd
+) {
     auto result = std::move(fd);
 
     // Very old (pre Nov-2020) PandasIndex protobuf messages had no "start" or "step" fields. If is_physically_stored
@@ -60,13 +58,12 @@ inline ReadResult create_python_read_result(
     // We therefore patch the normalization metadata here in this case
     auto norm_meta = result.desc_.mutable_proto().mutable_normalization();
     if (norm_meta->has_df() || norm_meta->has_series()) {
-        auto common = norm_meta->has_df() ? norm_meta->mutable_df()->mutable_common() : norm_meta->mutable_series()->mutable_common();
+        auto common = norm_meta->has_df() ? norm_meta->mutable_df()->mutable_common()
+                                          : norm_meta->mutable_series()->mutable_common();
         if (common->has_index()) {
             auto index = common->mutable_index();
-            if (result.desc_.index().type() == IndexDescriptor::Type::ROWCOUNT &&
-                !index->is_physically_stored()
-                && index->start() == 0 &&
-                index->step() == 0) {
+            if (result.desc_.index().type() == IndexDescriptor::Type::ROWCOUNT && !index->is_physically_stored() &&
+                index->start() == 0 && index->step() == 0) {
                 index->set_step(1);
             }
         }
@@ -76,8 +73,12 @@ inline ReadResult create_python_read_result(
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
 
     const auto& desc_proto = result.desc_.proto();
-    return {version, std::move(python_frame), desc_proto.normalization(),
-            desc_proto.user_meta(), desc_proto.multi_key_meta(), std::move(result.keys_)};
+    return {version,
+            std::move(python_frame),
+            desc_proto.normalization(),
+            desc_proto.user_meta(),
+            desc_proto.multi_key_meta(),
+            std::move(result.keys_)};
 }
 
-} //namespace arcticdb
+} // namespace arcticdb

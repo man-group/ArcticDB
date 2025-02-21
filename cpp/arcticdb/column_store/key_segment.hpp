@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -14,9 +15,9 @@
 
 namespace arcticdb {
 
-enum class SymbolStructure: uint8_t {
+enum class SymbolStructure : uint8_t {
     UNKNOWN,
-    SAME, // e.g. in index keys
+    SAME,  // e.g. in index keys
     UNIQUE // e.g. in snapshot ref keys
 };
 
@@ -33,15 +34,17 @@ enum class SymbolStructure: uint8_t {
  *  Many of these key types have special properties, such as all the contained keys having the same stream id, or all
  *  of the contained keys being of the same type, in which case further optimisations can be made.
  *  For now, this class does the bare minimum required for it's one use. Useful extensions could include:
- *  - IndexKeySegment: inheriting from this class. Would also contain start/end row/column columns, and use sortedness information
- *  - ShapshotRefKeySegment: inheriting from this class. Sorted on StreamId, so would allow rapid checks for contained symbol/version pairs
+ *  - IndexKeySegment: inheriting from this class. Would also contain start/end row/column columns, and use sortedness
+ * information
+ *  - ShapshotRefKeySegment: inheriting from this class. Sorted on StreamId, so would allow rapid checks for contained
+ * symbol/version pairs
  *  - Filtering: maintain a bitset to represent keys (rows) that have not been filtered out. Optionally memcpy when
  *               true bits falls below some threshold
-*   - Iterators: Iterate through all the keys in the segment (or all with true bits if filtered)
+ *   - Iterators: Iterate through all the keys in the segment (or all with true bits if filtered)
  *  - HashSet operations: maintain hashes of each row for quick set membership operations
  */
 class KeySegment {
-public:
+  public:
     KeySegment(SegmentInMemory&& segment, SymbolStructure symbol_structure);
 
     ARCTICDB_NO_MOVE_OR_COPY(KeySegment)
@@ -49,7 +52,7 @@ public:
     // Returns AtomKeyPacked vector for SymbolStructure::SAME keys with numeric indexes, and AtomKey vector otherwise
     [[nodiscard]] std::variant<std::vector<AtomKeyPacked>, std::vector<AtomKey>> materialise() const;
 
-private:
+  private:
     [[nodiscard]] bool check_symbols_all_same() const;
     [[nodiscard]] bool check_symbols_all_unique() const;
 
@@ -73,4 +76,4 @@ private:
     std::optional<StreamId> symbol_;
 };
 
-} // arcticdb
+} // namespace arcticdb

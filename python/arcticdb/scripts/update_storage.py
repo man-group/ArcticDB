@@ -19,7 +19,9 @@ def repair_library_if_necessary(ac, lib_name: str, run: bool) -> bool:
     """Returns True if library required repair."""
     storage_override = ac._library_adapter.get_storage_override()
     lib = NativeVersionStore(
-        ac._library_manager.get_library(lib_name, storage_override, native_storage_config=ac._library_adapter.native_config()),
+        ac._library_manager.get_library(
+            lib_name, storage_override, native_storage_config=ac._library_adapter.native_config()
+        ),
         repr(ac._library_adapter),
         lib_cfg=ac._library_manager.get_library_config(lib_name, storage_override),
     )

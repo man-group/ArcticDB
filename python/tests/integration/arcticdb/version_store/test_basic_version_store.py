@@ -2706,6 +2706,7 @@ def test_missing_first_version_key_batch(basic_store):
     for x in range(num_items):
         assert_equal(vits[symbols[x]].data, expected[x])
 
+
 @pytest.mark.parametrize("use_caching", [True, False])
 def test_version_chain_cache(basic_store, use_caching):
     timeout = sys.maxsize if use_caching else 0
@@ -2727,13 +2728,17 @@ def test_version_chain_cache(basic_store, use_caching):
 
         # Timestamp
         timestamp_index = timestamp_and_version_index
+
         def find_expected_version(first_to_check):
             for num in range(first_to_check, -1, -1):
                 if num not in deleted_versions:
                     return num
             return None
 
-        for timestamp, is_before in [(timestamps[timestamp_index].before, True), (timestamps[timestamp_index].after, False)]:
+        for timestamp, is_before in [
+            (timestamps[timestamp_index].before, True),
+            (timestamps[timestamp_index].after, False),
+        ]:
             first_version_to_check = timestamp_index - 1 if is_before else timestamp_index
             expected_version_to_find = find_expected_version(first_version_to_check)
             if expected_version_to_find is None:

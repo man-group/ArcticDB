@@ -18,7 +18,7 @@ from arcticdb.version_store.library import (
     LazyDataFrame,
     LazyDataFrameCollection,
     StagedDataFinalizeMethod,
-    WriteMetadataPayload
+    WriteMetadataPayload,
 )
 
 set_config_from_env_vars(_os.environ)

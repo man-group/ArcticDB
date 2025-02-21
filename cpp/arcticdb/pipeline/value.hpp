@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -14,17 +15,11 @@ namespace arcticdb {
 using namespace arcticdb::entity;
 
 struct ValueIterator {
-    ValueIterator(char* data) :
-        data_(data) {
-    }
+    ValueIterator(char* data) : data_(data) {}
 
-    bool finished() const {
-        return false;
-    }
+    bool finished() const { return false; }
 
-    uint8_t* value() const {
-        return reinterpret_cast<uint8_t *>(data_);
-    }
+    uint8_t* value() const { return reinterpret_cast<uint8_t*>(data_); }
 
     void next() {}
 
@@ -37,23 +32,19 @@ struct Value {
     char data_[8] = {};
     size_t len_ = 0;
 
-    template <typename T>
-    Value(T t, DataType data_type=DataType::UNKNOWN):
-    data_type_(data_type) {
+    template<typename T>
+    Value(T t, DataType data_type = DataType::UNKNOWN) : data_type_(data_type) {
         *reinterpret_cast<T*>(&data_) = t;
     }
 
     void assign(const Value& other) {
-        if(is_sequence_type(other.data_type_))
+        if (is_sequence_type(other.data_type_))
             assign_string(*other.str_data(), other.len_);
         else
             memcpy(data_, other.data_, 8);
     }
 
-    Value(const Value& other) :
-        data_type_(other.data_type_) {
-        assign(other);
-    }
+    Value(const Value& other) : data_type_(other.data_type_) { assign(other); }
 
     Value& operator=(const Value& other) {
         data_type_ = other.data_type_;
@@ -67,35 +58,25 @@ struct Value {
         return *this;
     }
 
-    ValueIterator get_iterator() {
-        return {data_};
-    }
+    ValueIterator get_iterator() { return {data_}; }
 
-    template <typename T>
+    template<typename T>
     T get() const {
         return *reinterpret_cast<const T*>(&data_);
     }
 
-    template <typename T>
+    template<typename T>
     void set(T t) {
         *reinterpret_cast<T*>(data_) = t;
     }
 
-    TypeDescriptor type() const {
-        return make_scalar_type(data_type_);
-    }
+    TypeDescriptor type() const { return make_scalar_type(data_type_); }
 
-    char** str_data() {
-        return reinterpret_cast<char**>(data_);
-    }
+    char** str_data() { return reinterpret_cast<char**>(data_); }
 
-    const char* const* str_data() const {
-        return reinterpret_cast<const char* const *>(data_);
-    }
+    const char* const* str_data() const { return reinterpret_cast<const char* const*>(data_); }
 
-    size_t len() const {
-        return len_;
-    }
+    size_t len() const { return len_; }
 
     void assign_string(const char* c, size_t len) {
         auto data = new char[len + 1];
@@ -109,7 +90,7 @@ struct Value {
         len_ = str.size();
         auto data = new char[len_ + 1];
         memset(data, 0, len_ + 1);
-        memcpy(data, str.data(), str.size()) ;
+        memcpy(data, str.data(), str.size());
 
         *str_data() = data;
     }
@@ -142,24 +123,19 @@ struct Value {
     std::string to_string() const {
         if (has_sequence_type()) {
             return "\"" + std::string(*str_data(), len()) + "\"";
-        }
-        else {
+        } else {
             return fmt::format("{}", get<RawType>());
         }
     }
 
     ~Value() {
-        if(has_sequence_type())
+        if (has_sequence_type())
             delete[] *str_data();
     }
 
-    bool has_sequence_type() const {
-        return is_sequence_type(data_type_);
-    }
+    bool has_sequence_type() const { return is_sequence_type(data_type_); }
 
-    auto descriptor() {
-        return TypeDescriptor {data_type_, Dimension::Dim0};
-    }
+    auto descriptor() { return TypeDescriptor{data_type_, Dimension::Dim0}; }
 };
 
 inline Value convert_to_utf32(const Value& other) {
@@ -176,13 +152,13 @@ Value construct_value(T val) {
     return Value{};
 }
 
-#define VALUE_CONSTRUCT(__T__, __DT__)  \
-   template<> \
-    inline Value construct_value(__T__ val) { \
-        Value value; \
-        value.data_type_ = DataType::__DT__; \
-        *(reinterpret_cast<__T__ *>(&(value.data_))) = val; \
-        return value; \
+#define VALUE_CONSTRUCT(__T__, __DT__)                                                                                 \
+    template<>                                                                                                         \
+    inline Value construct_value(__T__ val) {                                                                          \
+        Value value;                                                                                                   \
+        value.data_type_ = DataType::__DT__;                                                                           \
+        *(reinterpret_cast<__T__*>(&(value.data_))) = val;                                                             \
+        return value;                                                                                                  \
     }
 
 VALUE_CONSTRUCT(bool, BOOL8)
@@ -217,11 +193,11 @@ inline std::optional<std::string> ascii_to_padded_utf32(std::string_view str, si
     std::string rv(width, '\0');
     auto input = str.data();
     auto output = rv.data();
-    for ([[maybe_unused]] const auto& c: str) {
+    for ([[maybe_unused]] const auto& c : str) {
         *output = *input++;
         output += arcticdb::entity::UNICODE_WIDTH;
     }
     return rv;
 }
 
-} //namespace arcticdb
+} // namespace arcticdb

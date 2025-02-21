@@ -14,9 +14,9 @@ from datetime import date
 from numpy import datetime64
 from copy import deepcopy
 
-MACOS=sys.platform.lower().startswith('darwin')
-LINUX=sys.platform.lower().startswith('linux')
-WINDOWS=sys.platform.lower().startswith('win32')
+MACOS = sys.platform.lower().startswith("darwin")
+LINUX = sys.platform.lower().startswith("linux")
+WINDOWS = sys.platform.lower().startswith("win32")
 
 # TODO: Some tests are either segfaulting or failing on MacOS with conda builds.
 # This is meant to be used as a temporary flag to skip/xfail those tests.
@@ -65,8 +65,8 @@ SSL_TEST_SUPPORTED = sys.platform == "linux"
 ## MEMRAY supports linux and macos and python 3.8 and above
 MEMRAY_SUPPORTED = (sys.version_info >= (3, 8)) and (MACOS or LINUX)
 MEMRAY_TESTS_MARK = pytest.mark.skipif(
-    not MEMRAY_SUPPORTED, 
-    reason="MEMRAY supports linux and macos and python 3.8 and above")
+    not MEMRAY_SUPPORTED, reason="MEMRAY supports linux and macos and python 3.8 and above"
+)
 
 SSL_TESTS_MARK = pytest.mark.skipif(
     not SSL_TEST_SUPPORTED,
@@ -87,8 +87,8 @@ PANDAS_2_COMPAT_TESTS_MARK = pytest.mark.skipif(
     or sys.version.startswith("3.12")
     or sys.version.startswith("3.13"),  # Waiting for https://github.com/man-group/ArcticDB/issues/2008
     reason="Skipping compatibility tests because macOS conda builds don't have an available PyPi arcticdb version and "
-           "need a version that has Pandas 2",
-    )
+    "need a version that has Pandas 2",
+)
 
 
 def _no_op_decorator(fun):

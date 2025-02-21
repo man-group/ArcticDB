@@ -162,9 +162,9 @@ def dataframe_simulate_arcticdb_update_static(existing_df: pd.DataFrame, update_
     NOTE: you have to pass indexed dataframe
     """
 
-    assert existing_df.dtypes.to_list() == update_df.dtypes.to_list(), (
-        "Dataframe must have identical columns types in same order"
-    )
+    assert (
+        existing_df.dtypes.to_list() == update_df.dtypes.to_list()
+    ), "Dataframe must have identical columns types in same order"
     assert existing_df.columns.to_list() == update_df.columns.to_list(), "Columns names also need to be in same order"
 
     start2 = update_df.first_valid_index()
@@ -397,12 +397,7 @@ def random_integers(size, dtype, min_value: int = None, max_value: int = None):
         min_value = max(iinfo.min, platform_int_info.min)
     if max_value is None:
         max_value = min(iinfo.max, platform_int_info.max)
-    return np.random.randint(
-        min_value,
-        max_value,
-        size=size,
-        dtype=dtype
-    )
+    return np.random.randint(min_value, max_value, size=size, dtype=dtype)
 
 
 def get_wide_dataframe(size=10000, seed=0):

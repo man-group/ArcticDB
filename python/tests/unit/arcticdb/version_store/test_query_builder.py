@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import copy
 from functools import partial
 import numpy as np
@@ -144,9 +145,7 @@ def test_reuse_querybuilder(lmdb_version_store_tiny_segment):
 def test_reuse_querybuilder_date_range(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_reuse_querybuilder_date_range"
-    df = pd.DataFrame(
-        {"col1": np.arange(1, 11, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
-    )
+    df = pd.DataFrame({"col1": np.arange(1, 11, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10))
     lib.write(symbol, df)
 
     q = QueryBuilder()
@@ -164,26 +163,30 @@ def test_reuse_querybuilder_date_range(lmdb_version_store_tiny_segment):
     assert_frame_equal(expected_2, received_2)
 
     expected_3 = df.query("col1 in [7]")
-    received_3 = lib.read(symbol, date_range=(pd.Timestamp("2000-01-06"), pd.Timestamp("2000-01-08")), query_builder=q).data
+    received_3 = lib.read(
+        symbol, date_range=(pd.Timestamp("2000-01-06"), pd.Timestamp("2000-01-08")), query_builder=q
+    ).data
     assert_frame_equal(expected_3, received_3)
 
 
 def test_reuse_querybuilder_date_range_batch(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_reuse_querybuilder_date_range_batch"
-    df = pd.DataFrame(
-        {"col1": np.arange(1, 11, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
-    )
+    df = pd.DataFrame({"col1": np.arange(1, 11, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10))
     lib.write(symbol, df)
 
     q = QueryBuilder()
     q = q[q["col1"].isin(2, 3, 7)]
 
     expected_0 = df.query("col1 in [2, 3]")
-    received_0 = lib.batch_read([symbol], date_ranges=[(None, pd.Timestamp("2000-01-06"))], query_builder=q)[symbol].data
+    received_0 = lib.batch_read([symbol], date_ranges=[(None, pd.Timestamp("2000-01-06"))], query_builder=q)[
+        symbol
+    ].data
     assert_frame_equal(expected_0, received_0)
 
-    received_1 = lib.batch_read([symbol], date_ranges=[(None, pd.Timestamp("2000-01-06"))], query_builder=[q])[symbol].data
+    received_1 = lib.batch_read([symbol], date_ranges=[(None, pd.Timestamp("2000-01-06"))], query_builder=[q])[
+        symbol
+    ].data
     assert_frame_equal(expected_0, received_1)
 
     expected_2 = df.query("col1 in [2, 3, 7]")
@@ -194,6 +197,7 @@ def test_reuse_querybuilder_date_range_batch(lmdb_version_store_tiny_segment):
 def test_querybuilder_filter_datetime_with_timezone(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "symbol"
+
     def can_read_back(write_with_time, filter_with_time):
         df = pd.DataFrame({"col": [write_with_time]})
         lib.delete(symbol)
@@ -208,7 +212,7 @@ def test_querybuilder_filter_datetime_with_timezone(lmdb_version_store_tiny_segm
     notz_winter_time = datetime.datetime(2024, 1, 1)
     notz_summer_time = datetime.datetime(2024, 6, 1)
     utc_time = datetime.datetime(2024, 6, 1, tzinfo=dateutil.tz.tzutc())
-    us_time = datetime.datetime(2024, 6, 1, tzinfo=dateutil.tz.gettz('America/New_York'))
+    us_time = datetime.datetime(2024, 6, 1, tzinfo=dateutil.tz.gettz("America/New_York"))
 
     # Reading back the same time should always succeed
     assert can_read_back(notz_winter_time, notz_winter_time)
@@ -326,11 +330,11 @@ def test_querybuilder_date_range_then_filter_then_resample(lmdb_version_store_ti
     rng = np.random.default_rng()
     df = pd.DataFrame(
         {"filter_col": rng.integers(0, 2, 100), "agg_col": rng.integers(0, 1000, 100)},
-        index=pd.date_range("2000-01-01", periods=100, freq="h")
+        index=pd.date_range("2000-01-01", periods=100, freq="h"),
     )
     lib.write(symbol, df)
 
-    date_range=(pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-04"))
+    date_range = (pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-04"))
     q = QueryBuilder()
     q = q[q["filter_col"] == 0]
     q = q.resample("3h").agg({"agg_col": "sum"})
@@ -1008,7 +1012,8 @@ def test_querybuilder_resample_then_groupby(lmdb_version_store_tiny_segment):
             "grouping_col": [0, 0, 10, -9, 20, -19, 30, -30],
             "agg_col": np.arange(8),
         },
-        index=idx)
+        index=idx,
+    )
     lib.write(symbol, df)
 
     q = QueryBuilder()
@@ -1030,7 +1035,7 @@ def test_querybuilder_resample_then_resample(lmdb_version_store_tiny_segment):
         {
             "col": np.arange(240),
         },
-        index=pd.date_range("2024-01-01", periods=240, freq="min")
+        index=pd.date_range("2024-01-01", periods=240, freq="min"),
     )
     lib.write(symbol, df)
     q = QueryBuilder()
@@ -1053,7 +1058,7 @@ def test_query_builder_vwap(lmdb_version_store_v1):
             "price": rng.random(len(index)),
             "volume": rng.integers(1, 100, len(index)),
         },
-        index=index
+        index=index,
     )
     lib.write(symbol, df)
 

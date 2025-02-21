@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import logging
 from typing import List, Optional, Any, Union
 
@@ -97,10 +98,12 @@ class Arctic:
 
         storage_override = self._library_adapter.get_storage_override()
         lib = NativeVersionStore(
-            self._library_manager.get_library(lib_mgr_name, storage_override, native_storage_config=self._library_adapter.native_config()),
+            self._library_manager.get_library(
+                lib_mgr_name, storage_override, native_storage_config=self._library_adapter.native_config()
+            ),
             repr(self._library_adapter),
             lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
-            native_cfg=self._library_adapter.native_config()
+            native_cfg=self._library_adapter.native_config(),
         )
         if self._accessed_libs is not None:
             self._accessed_libs.append(lib)
@@ -165,10 +168,12 @@ class Arctic:
             else:
                 raise e
 
-    def create_library(self,
-                       name: str,
-                       library_options: Optional[LibraryOptions] = None,
-                       enterprise_library_options: Optional[EnterpriseLibraryOptions] = None) -> Library:
+    def create_library(
+        self,
+        name: str,
+        library_options: Optional[LibraryOptions] = None,
+        enterprise_library_options: Optional[EnterpriseLibraryOptions] = None,
+    ) -> Library:
         """
         Creates the library named ``name``.
 
@@ -289,10 +294,12 @@ class Arctic:
         """
         return self._uri
 
-    def modify_library_option(self,
-                              library: Library,
-                              option: Union[ModifiableLibraryOption, ModifiableEnterpriseLibraryOption],
-                              option_value: Any):
+    def modify_library_option(
+        self,
+        library: Library,
+        option: Union[ModifiableLibraryOption, ModifiableEnterpriseLibraryOption],
+        option_value: Any,
+    ):
         """
         Modify an option for a library.
 
@@ -319,11 +326,16 @@ class Arctic:
         storage_override = self._library_adapter.get_storage_override()
         new_cfg = self._library_manager.get_library_config(lib_mgr_name, storage_override)
         library._nvs._initialize(
-            self._library_manager.get_library(lib_mgr_name, storage_override, ignore_cache=True, native_storage_config=self._library_adapter.native_config()),
+            self._library_manager.get_library(
+                lib_mgr_name,
+                storage_override,
+                ignore_cache=True,
+                native_storage_config=self._library_adapter.native_config(),
+            ),
             library._nvs.env,
             new_cfg,
             library._nvs._custom_normalizer,
-            library._nvs._open_mode
+            library._nvs._open_mode,
         )
 
         logger.info(f"Set option=[{option}] to value=[{option_value}] for Arctic=[{self}] Library=[{library}]")

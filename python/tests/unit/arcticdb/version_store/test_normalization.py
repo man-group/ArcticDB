@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import datetime
 from email import errors
 import inspect
@@ -75,9 +76,12 @@ def test_msg_pack_legacy_1():
     # serialised data created with Python 3.6, msgpack 0.6.2, pandas 0.25.3
     # this was before string and bytes types were seperated in msgpack
     norm = test_msgpack_normalizer
-    packed = b'\x82\xa1a\xc7\x0b \x92\xcf\x15\t\x05:\xdfT\xc8\x00\xc0\xa1b\xc7\x1b \x92\xcf\x14\x9e\xc2\x84+~ \x00\xb0America/New_York'
+    packed = b"\x82\xa1a\xc7\x0b \x92\xcf\x15\t\x05:\xdfT\xc8\x00\xc0\xa1b\xc7\x1b \x92\xcf\x14\x9e\xc2\x84+~ \x00\xb0America/New_York"
     data = norm._msgpack_unpackb(packed)
-    assert data == {'a': pd.Timestamp('2018-01-12 09:15:00'), 'b': pd.Timestamp('2017-01-31 00:00:00-0500', tz='America/New_York')}
+    assert data == {
+        "a": pd.Timestamp("2018-01-12 09:15:00"),
+        "b": pd.Timestamp("2017-01-31 00:00:00-0500", tz="America/New_York"),
+    }
 
 
 def test_msg_pack_legacy_2():
@@ -85,7 +89,7 @@ def test_msg_pack_legacy_2():
     # serialised data created with Python 3.6, msgpack 0.6.2, pandas 0.25.3
     # this was before string and bytes types were seperated in msgpack
     norm = test_msgpack_normalizer
-    packed = b'\xc7\x1b!\x92\xcf\x15\x93w\xb1\xd2\xa6\x8f\xe8\xb0America/New_York'
+    packed = b"\xc7\x1b!\x92\xcf\x15\x93w\xb1\xd2\xa6\x8f\xe8\xb0America/New_York"
     dt = datetime.datetime(2019, 4, 8, 10, 5, 2, 1)
     nytz = pytz.timezone("America/New_York")
     loc_dt = nytz.localize(dt)
@@ -124,7 +128,7 @@ def test_decode_python2_str_in_msgpack():
     This is to check that we can still deserialize strings that were written with Python 2 correctly.
     """
     norm = test_msgpack_normalizer
-    packed = b'\xa9my_string'
+    packed = b"\xa9my_string"
     data = norm._msgpack_unpackb(packed)
     assert data == "my_string"
     assert isinstance(data, str)
@@ -136,7 +140,7 @@ def test_decode_python2_bytes_in_old_msgpack():
     This is to check that we can still deserialize bytes that were written with Python 2 correctly.
     """
     norm = test_msgpack_normalizer
-    packed = b'\xa8my_bytes'
+    packed = b"\xa8my_bytes"
     data = norm._msgpack_unpackb(packed)
 
     # We claim it's `str` upon decoding because the `xa8` leading bytes tells us this is a fixed string type.
@@ -153,7 +157,7 @@ def test_decode_python2_bytes_in_newer_msgpack():
     This is to check that we can still deserialize bytes that were written with Python 2 correctly.
     """
     norm = test_msgpack_normalizer
-    packed = b'\xc4\x08my_bytes'
+    packed = b"\xc4\x08my_bytes"
     data = norm._msgpack_unpackb(packed)
     assert data == b"my_bytes"
     assert isinstance(data, bytes)
@@ -244,7 +248,7 @@ def test_empty_df():
 )
 def test_write_tz(lmdb_version_store, sym, tz):
     assert tz is not None
-    index = index=pd.date_range(pd.Timestamp(0), periods=10, tz=tz)
+    index = index = pd.date_range(pd.Timestamp(0), periods=10, tz=tz)
     df = pd.DataFrame(data={"col1": np.arange(10)}, index=index)
     lmdb_version_store.write(sym, df)
     result = lmdb_version_store.read(sym).data
@@ -260,7 +264,9 @@ def test_write_tz(lmdb_version_store, sym, tz):
     assert end_ts == index[-1]
 
 
-@pytest.mark.parametrize("column_data", itertools.permutations([pd.Timestamp(0), pd.NaT, pd.Timestamp(0, tz="Europe/Amsterdam")]))
+@pytest.mark.parametrize(
+    "column_data", itertools.permutations([pd.Timestamp(0), pd.NaT, pd.Timestamp(0, tz="Europe/Amsterdam")])
+)
 def test_write_mixed_tz(lmdb_version_store_v1, column_data):
     lib = lmdb_version_store_v1
     sym = "test_write_mixed_tz"
@@ -752,12 +758,14 @@ def test_norm_failure_error_message(lmdb_version_store_v1):
     with pytest.raises(ArcticDbNotYetImplemented) as update_exception:
         lib.update(sym, df)
 
-    assert all(col_name in str(e.value) for e in
-               [write_exception, batch_write_exception, append_exception, batch_append_exception, update_exception])
-    assert all("pickle_on_failure" in str(e.value) for e in
-               [write_exception, batch_write_exception])
-    assert all("pickle_on_failure" not in str(e.value) for e in
-               [append_exception, batch_append_exception, update_exception])
+    assert all(
+        col_name in str(e.value)
+        for e in [write_exception, batch_write_exception, append_exception, batch_append_exception, update_exception]
+    )
+    assert all("pickle_on_failure" in str(e.value) for e in [write_exception, batch_write_exception])
+    assert all(
+        "pickle_on_failure" not in str(e.value) for e in [append_exception, batch_append_exception, update_exception]
+    )
 
 
 def test_writing_timedelta(lmdb_version_store_v1):
@@ -774,12 +782,12 @@ def test_bools_are_pickled(lmdb_version_store_allows_pickling):
 
     df = pd.DataFrame({"a": [True, False]})
     lib.write(sym, df)
-    lib.get_info(sym)['type'] == 'pickled'
+    lib.get_info(sym)["type"] == "pickled"
     assert_frame_equal(df, lib.read(sym).data)
 
     df = pd.DataFrame({"a": [True, False, np.nan]})
     lib.write(sym, df)
-    lib.get_info(sym)['type'] == 'pickled'
+    lib.get_info(sym)["type"] == "pickled"
     assert_frame_equal(df, lib.read(sym).data)
 
 
@@ -798,12 +806,12 @@ def test_arrays_are_pickled(lmdb_version_store_allows_pickling):
 
     df = pd.DataFrame({"a": [np.array([1, 2])]})
     lib.write(sym, df)
-    lib.get_info(sym)['type'] == 'pickled'
+    lib.get_info(sym)["type"] == "pickled"
     assert_frame_equal(df, lib.read(sym).data)
 
     df = pd.DataFrame({"a": [[1, 2]]})
     lib.write(sym, df)
-    lib.get_info(sym)['type'] == 'pickled'
+    lib.get_info(sym)["type"] == "pickled"
     assert_frame_equal(df, lib.read(sym).data)
 
 
@@ -819,25 +827,23 @@ def test_arrays_throw_without_pickling(lmdb_version_store_v1):
 
 def test_series_zero_name(lmdb_version_store, sym):
     lib = lmdb_version_store
-    series = pd.Series([3.14, np.nan, 5.7, np.inf], pd.date_range("2020-01-01", periods=4, freq="D", name="date")).rename(0)
+    series = pd.Series(
+        [3.14, np.nan, 5.7, np.inf], pd.date_range("2020-01-01", periods=4, freq="D", name="date")
+    ).rename(0)
     lib.write(sym, series)
     vit = lib.read(sym)
     assert vit.data.equals(series)
+
 
 @pytest.mark.parametrize(
     "returns_expected",
     [
         {"returns": ArcticDbNotYetImplemented(), "expected": ArcticDbNotYetImplemented},
         {"returns": Exception(), "expected": ArcticNativeException},
-        {"returns": (MagicMock(), None), "expected": ArcticNativeException}
-    ]
+        {"returns": (MagicMock(), None), "expected": ArcticNativeException},
+    ],
 )
-@pytest.mark.parametrize(
-    "method_to_test",
-    [
-        "write", "update", "stage", "append"
-    ]
-)
+@pytest.mark.parametrize("method_to_test", ["write", "update", "stage", "append"])
 def test_throws_correct_exceptions(returns_expected, method_to_test, lmdb_version_store):
     mock_normalizer = MagicMock(name="mock_normalizer")
     returns = returns_expected["returns"]
@@ -851,10 +857,9 @@ def test_throws_correct_exceptions(returns_expected, method_to_test, lmdb_versio
     lib._normalizer = mock_normalizer
 
     method_to_test = getattr(lib, method_to_test)
-    non_default_arg_count = sum(
-        1 for param in inspect.signature(method_to_test).parameters.values()
-        if param.default is param.empty
-    ) - 1
+    non_default_arg_count = (
+        sum(1 for param in inspect.signature(method_to_test).parameters.values() if param.default is param.empty) - 1
+    )
     args = [MagicMock()] * non_default_arg_count
     with pytest.raises(expected):
         method_to_test(*args)

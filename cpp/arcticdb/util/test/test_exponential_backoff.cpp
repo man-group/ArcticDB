@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -46,20 +47,22 @@ TEST(ExponentialBackoff, Fails) {
 
 TEST(ExponentialBackoff, FailsSpecificError) {
     ThrowNTimes<MySpecialError> test{232};
-    ASSERT_THROW(arcticdb::ExponentialBackoff<MySpecialError>(100, 1000).go(test, [](const auto &) {
-        throw MyEvenMoreSpecialError("arg");
-    }), MyEvenMoreSpecialError);
+    ASSERT_THROW(
+            arcticdb::ExponentialBackoff<MySpecialError>(100, 1000).go(
+                    test, [](const auto&) { throw MyEvenMoreSpecialError("arg"); }
+            ),
+            MyEvenMoreSpecialError
+    );
     ASSERT_TRUE(g_called < 10);
 }
 
 TEST(ExponentialBackoff, UncaughtExceptionEscapes) {
     ThrowNTimes<std::runtime_error> test{232};
-    ASSERT_THROW(arcticdb::ExponentialBackoff<MySpecialError>(100, 1000).go(test, [](const auto &) {
-        throw MyEvenMoreSpecialError("bad news bear");
-    }), std::runtime_error);
+    ASSERT_THROW(
+            arcticdb::ExponentialBackoff<MySpecialError>(100, 1000).go(
+                    test, [](const auto&) { throw MyEvenMoreSpecialError("bad news bear"); }
+            ),
+            std::runtime_error
+    );
     ASSERT_EQ(g_called, 1);
 }
-
-
-
-
