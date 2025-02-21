@@ -53,7 +53,7 @@ void TimeseriesIndex::check(const FieldCollection& fields) const {
     const TypeDescriptor& first_field_type = fields[0].type();
     const TypeDescriptor& current_first_field_type = this->field(0).type();
 
-    const bool valid_type_promotion = has_valid_type_promotion(first_field_type, current_first_field_type).has_value();
+    const bool valid_type_promotion = is_valid_type_promotion_to_target(first_field_type, current_first_field_type);
     const bool trivial_type_compatibility = trivially_compatible_types(first_field_type, current_first_field_type);
 
     const bool compatible_types = valid_type_promotion || trivial_type_compatibility;
