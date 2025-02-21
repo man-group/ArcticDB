@@ -30,6 +30,42 @@ python build_tooling/format.py --in-place --type cpp
 python build_tooling/format.py --in-place --type all
 ```
 
+### Rebasing Old Work
+
+You may have old work that isn't auto-formatted that you need to rebase and merge. Steps taken from [this blog](https://blog.scottlogic.com/2019/03/04/retroactively-applying-prettier-to-existing-branches.html)
+can help.
+
+First push a copy of your branch somewhere so you have a backup in case this goes horribly wrong.
+
+Suppose that `master` has the formatting enforced.
+
+With your feature branch checked out, rebase to just before the auto-formatting and squash commits:
+
+```
+git rebase -i --onto <code formatting commit SHA>~1 origin/master
+# Now squash everything in to one commit
+```
+
+You will need to fix any genuine conflicts at this point.
+
+Now rebase, applying the formatter. Run this from a venv with the linters installed. The "theirs" strategy means to
+prefer the feature branch.
+
+```
+git rebase \
+  --strategy-option=theirs \
+  --exec '`which python` ./build_tooling/format.py --type all --in-place && git add cpp/ python/ && git commit --amend --no-edit' \
+  --onto <code formatting commit SHA> origin/master
+```
+
+You should now have a single commit with the correct formatting, that you can then rebase as normal on to master,
+
+```
+git rebase origin/master
+```
+
+and resolve any genuine conflicts as usual.
+
 #### CLion Integration
 
 #### C++
