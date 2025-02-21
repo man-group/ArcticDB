@@ -15,7 +15,7 @@ class BitRateStats {
 
     ARCTICDB_NO_MOVE_OR_COPY(BitRateStats)
   private:
-    uint64_t data_to_stat(std::size_t bytes, double time_ms) const;
+    uint64_t data_to_stat(const std::size_t bytes, double time_ms) const;
     void log_stats(uint64_t stats) const;
 
     // Use an 8 byte atomic for lock free implementation
