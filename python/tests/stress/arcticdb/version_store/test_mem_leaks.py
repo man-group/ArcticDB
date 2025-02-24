@@ -22,8 +22,9 @@ import random
 import time
 import pandas as pd
 
-from typing import Generator, Tuple
+from typing import Generator, List, Tuple
 from arcticdb.util.test import get_sample_dataframe, random_string
+from arcticdb.util.utils import DFGenerator
 from arcticdb.version_store.library import Library, ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore
@@ -721,7 +722,90 @@ if MEMRAY_SUPPORTED:
         logger.info("Test starting")
         st = time.time()
         data: pd.DataFrame = lib.read(symbol).data
+        lib.head
         del data
         logger.info(f"Test took : {time.time() - st}")
 
         gc.collect()
+
+    @pytest.fixture
+    def prepare_head_tails_symbol(basic_store_small_segment):
+        """
+        This fixture is part of test `test_mem_leak_head_tail_memray`
+        Should not be reused
+        """
+        store: NativeVersionStore = basic_store_small_segment
+        total_number_columns = 1002
+        symbol = "asdf12345"
+        num_rows_list = [279,199,350,999,1001]
+        snapshot_names = []
+        for rows in num_rows_list:
+            st = time.time()
+            df = DFGenerator.generate_wide_dataframe(num_rows=rows, num_cols=total_number_columns, num_string_cols=25, 
+                                                     start_time=pd.Timestamp(0),seed=64578)
+            store.write(symbol,df)
+            snap = f"{symbol}_{rows}"
+            store.snapshot(snap)
+            snapshot_names.append(snap)
+            logger.info(f"Generated {rows} in {time.time() - st} sec")
+        all_columns = df.columns.to_list()
+        yield (store, symbol, num_rows_list, total_number_columns, snapshot_names, all_columns)
+        store.delete(symbol=symbol)
+
+    @MEMRAY_TESTS_MARK
+    @pytest.mark.limit_leaks(location_limit="52 KB", filter_fn=is_relevant)
+    def test_mem_leak_head_tail_memray(prepare_head_tails_symbol):
+        """
+        This test aims to test `head` and `tail` functions if they do leak memory.
+        The creation of initial symbol (test environment precondition) is in specialized fixture
+        so that memray does not detect memory there as this will slow the process many times
+        """
+
+        store: NativeVersionStore = None
+        (store, symbol, num_rows_list, total_number_columns, snapshot_names, all_columns) = prepare_head_tails_symbol
+    
+        start_test = time.time()
+        min_rows = min(num_rows_list)
+        max_rows = max(num_rows_list)
+
+        np.random.seed = 959034
+        # constructing a list of head and tail rows to be selected
+        important_values = [0, min_rows, 1, max_rows, 0, -min_rows, -1, -max_rows, 2, -2, min_rows-1, - (min_rows-1)]
+        num_rows_to_select = important_values  
+        num_rows_to_select.extend(np.random.randint(low=2, high=min_rows-10, size=7)) # add 7 more random values
+        # number of iterations will be the list length/size
+        iterations = len(num_rows_to_select)
+        # constructing a random list of values for snapshot names for each iteration
+        snapshots_list: List[str] = np.random.choice(snapshot_names, iterations) 
+        # constructing a random list of values for versions names for each iteration
+        versions_list: List[int] = np.random.randint(0, len(num_rows_list) - 1, iterations) 
+        # constructing a random list of values for column selection for each iteration
+        number_columns_list: List[int] = np.random.randint(0, len(all_columns)-1, iterations) 
+
+        count = 0
+        for rows in num_rows_to_select:
+            number_columns = np.random.choice(all_columns, number_columns_list[count]).tolist() 
+            number_columns = list(set(number_columns)) # take only unique columns
+            snap = snapshots_list[count]
+            ver = int(versions_list[count])
+            logger.info(f"rows {rows} / snapshot {snap}")
+            df1: pd.DataFrame = store.head(n=rows, as_of=snap, symbol=symbol).data
+            df2: pd.DataFrame = store.tail(n=rows, as_of=snap, symbol=symbol).data
+            df3: pd.DataFrame = store.head(n=rows, as_of=ver, symbol=symbol, columns=number_columns).data
+            difference = list(set(df3.columns.to_list()).difference(set(number_columns)))
+            assert len(difference) == 0, f"Columns not included : {difference}"
+            df4 = store.tail(n=rows, as_of=ver, symbol=symbol, columns=number_columns).data
+            difference = list(set(df4.columns.to_list()).difference(set(number_columns)))
+            assert len(difference) == 0, f"Columns not included : {difference}"
+
+            logger.info(f"Iteration {count} / {iterations} completed")
+            count += 1
+            del number_columns, df1, df2, df3, df4
+        
+        del store, symbol, num_rows_list, snapshot_names, all_columns
+        del num_rows_to_select, important_values, snapshots_list, versions_list, number_columns_list
+        gc.collect()
+        time.sleep(10) # collection is not immediate
+        logger.info(f"Test completed in {time.time() - start_test}")     
+
+               

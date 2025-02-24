@@ -553,3 +553,129 @@ class DFGenerator:
             gen.add_timestamp_index("index", "s", pd.Timestamp(0))
         return gen.generate_dataframe()
 
+
+    @classmethod
+    def generate_random_int_dataframe(seclslf, start_name_prefix: str, 
+                                      num_rows:int, num_cols:int, 
+                                      dtype: ArcticIntType = np.int64, min_value: int = None, max_value: int = None,
+                                      seed: int = 3432) -> pd.DataFrame:
+        """
+        To be used to generate large number of same type columns, when generation time is
+        critical
+        """
+        np.random.seed(seed=seed)
+        platform_int_info = np.iinfo("int_")
+        iinfo = np.iinfo(dtype)
+        if min_value is None:
+            min_value = max(iinfo.min, platform_int_info.min)
+        if max_value is None:
+            max_value = min(iinfo.max, platform_int_info.max)
+
+        data = np.random.randint(min_value, max_value, size=(num_rows, num_cols), dtype= dtype)
+        columns = [f"{start_name_prefix}_{n}" for n in range(num_cols)]
+
+        return pd.DataFrame(data=data, columns=columns)
+
+    @classmethod
+    def generate_random_float_dataframe(cls, start_name_prefix: str, num_rows: int, num_cols: int, 
+                                        dtype: ArcticFloatType = np.float64, 
+                                        min_value: float = None, max_value: float = None, round_at: int = None,
+                                        seed: int = 54675) -> 'DFGenerator':
+        """
+        To be used to generate large number of same type columns, when generation time is
+        critical
+        """
+        # Higher numbers will trigger overflow in numpy uniform (-1e307 - 1e307)
+        # Get the minimum and maximum values for np.float32
+        info = np.finfo(np.float32)
+        _max = info.max
+        _min = info.min
+        np.random.seed(seed)
+        if min_value is None:
+            min_value = max(-1e307, -sys.float_info.max, _min)
+        if max_value is None:    
+            max_value = min(1e307, sys.float_info.max, _max)
+        if round_at is None:
+            data = np.random.uniform(min_value, max_value, size=(num_rows, num_cols)).astype(dtype)
+        else :
+            data = np.round(np.random.uniform(min_value, max_value, 
+                                              size=(num_rows, num_cols)), round_at).astype(dtype)
+
+        columns = [f"{start_name_prefix}_{n}" for n in range(num_cols)]
+
+        return pd.DataFrame(data=data, columns=columns)
+    
+    @classmethod
+    def generate_random_strings_dataframe(cls, start_name_prefix: str, num_rows: int, num_cols: int,
+                                          column_sizes=None, seed: int = 4543):
+        """
+        To be used to generate large number of same type columns, when generation time is
+        critical
+        If `column_sizes` not supplied default 10 will be used
+        """
+        if column_sizes is None:
+            column_sizes =  [10] * num_cols
+        np.random.seed(seed=seed)
+        data = [[random_string(column_sizes[col]) 
+                 for col in range(num_cols)] 
+                 for _ in range(num_rows)]
+        
+        columns = [f"{start_name_prefix}_{n}" for n in range(num_cols)]
+        return pd.DataFrame(data=data, columns=columns)
+
+    @classmethod
+    def generate_wide_dataframe(cls, num_rows: int, num_cols: int,  
+                            num_string_cols: int,
+                            start_time: pd.Timestamp = None,
+                            freq: Union[str , timedelta , pd.Timedelta , pd.DateOffset] = 's',
+                            seed = 23445):
+        """
+        Generates as fast as possible specified number of columns.
+        Uses random arrays generation in numpy to do that
+        As the strings generation is slowest always be mindful to pass number between 1-1000 max
+        The generated dataframe will have also index starting at specified `start_time`
+        """
+
+        cols, mod = divmod(num_cols - num_string_cols, 10) # divide by number of unique frame types
+        
+        int_frame1 = cls.generate_random_int_dataframe("int8", num_rows=num_rows, num_cols=cols, 
+                                                       dtype=np.int8, seed=seed)
+
+        int_frame2 = cls.generate_random_int_dataframe("int16", num_rows=num_rows, num_cols=cols, 
+                                                       dtype=np.int16, seed=seed)
+
+        int_frame3 = cls.generate_random_int_dataframe("int32", num_rows=num_rows, num_cols=cols, 
+                                                       dtype=np.int32, seed=seed)
+
+        int_frame4 = cls.generate_random_int_dataframe("int64", num_rows=num_rows, num_cols=cols + mod, 
+                                                       dtype=np.int64, seed=seed)
+
+        uint_frame1 = cls.generate_random_int_dataframe("uint8", num_rows=num_rows, num_cols=cols, 
+                                                        dtype=np.uint8, seed=seed)
+
+        uint_frame2 = cls.generate_random_int_dataframe("uint16", num_rows=num_rows, num_cols=cols, 
+                                                        dtype=np.uint16, seed=seed)
+
+        uint_frame3 = cls.generate_random_int_dataframe("uint32", num_rows=num_rows, num_cols=cols, 
+                                                        dtype=np.uint32, seed=seed)
+
+        uint_frame4 = cls.generate_random_int_dataframe("uint64", num_rows=num_rows, num_cols=cols, 
+                                                        dtype=np.uint64, seed=seed)
+
+        float_frame1 = cls.generate_random_float_dataframe("float32", num_rows=num_rows, num_cols=cols, 
+                                                           dtype=np.float32, seed=seed)
+
+        float_frame2 = cls.generate_random_float_dataframe("float64", num_rows=num_rows, num_cols=cols, 
+                                                           dtype=np.float64, seed=seed)
+
+        str_frame = cls.generate_random_strings_dataframe("str", num_rows=num_rows, num_cols=num_string_cols)
+
+        frame: pd.DataFrame = pd.concat([int_frame1, int_frame2, int_frame3, int_frame4,
+                           uint_frame1, uint_frame2, uint_frame3, uint_frame4,
+                           float_frame1, float_frame2, str_frame], axis=1) # Concatenate horizontally
+        
+        if start_time:
+            range = pd.date_range(start=start_time, periods=frame.shape[0], freq=freq, name='index')
+            frame.index = range
+
+        return  frame
