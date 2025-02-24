@@ -64,7 +64,6 @@ plugins:
             group_by_category: true
             docstring_options:
               ignore_init_summary: false
-              allow_section_blank_line: true
             docstring_section_style: spacy
             heading_level: 2
             inherited_members: true
