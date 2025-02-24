@@ -33,6 +33,8 @@ jobs:
   create-next-release-branch:
     needs: [calculate-next-version, get-master-sha]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       new_branch: ${{ needs.calculate-next-version.outputs.version }}
     steps:
