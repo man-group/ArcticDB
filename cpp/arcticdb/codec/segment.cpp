@@ -310,7 +310,7 @@ std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_v1_head
         ARCTICDB_DEBUG(log::codec(), "src is nullptr, skipping memcpy");
     }
 
-    return std::make_tuple(tmp->preamble(), calculate_size(), std::move(tmp));
+    return std::make_tuple(tmp->preamble(), total_size, std::move(tmp));
 }
 
 std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_header_v1() {
