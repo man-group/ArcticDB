@@ -11,6 +11,7 @@ import datetime
 import os
 import sys
 import pandas as pd
+import pyarrow as pa
 import numpy as np
 import pytz
 import re
@@ -1103,6 +1104,10 @@ class NativeVersionStore:
         read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, query_builder)
         read_options = self._get_read_options(**kwargs)
         read_options.set_batch_throw_on_error(throw_on_error)
+        # TODO: This is a temporary bodge until full arrow support
+        output_format = read_options.output_format
+        if read_options.output_format == OutputFormat.ARROW:
+            read_options.set_output_format(OutputFormat.PANDAS)
         read_results = self.version_store.batch_read(symbols, version_queries, read_queries, read_options)
         versioned_items = []
         for i in range(len(read_results)):
@@ -1112,6 +1117,9 @@ class NativeVersionStore:
                 read_result = ReadResult(*read_results[i])
                 read_query = read_queries[i]
                 vitem = self._post_process_dataframe(read_result, read_query, implement_read_index)
+                # TODO: This is a temporary bodge until full arrow support
+                if output_format == OutputFormat.ARROW:
+                    vitem = self.temp_convert_to_arrow(vitem)
                 versioned_items.append(vitem)
         return versioned_items
 
@@ -1718,6 +1726,7 @@ class NativeVersionStore:
         read_options.set_set_tz(self.resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
         read_options.set_allow_sparse(self.resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
         read_options.set_incompletes(self.resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
+        read_options.set_output_format(self.resolve_defaults("output_format", proto_cfg, global_default=OutputFormat.PANDAS, **kwargs))
         return read_options
 
     def _get_queries(self, as_of, date_range, row_range, columns=None, query_builder=None, **kwargs):
@@ -1763,6 +1772,20 @@ class NativeVersionStore:
         if not implement_read_index and is_columns_empty:
             columns = None
         return columns
+
+
+    def temp_convert_to_arrow(self, read_result):
+        pyarrow_table = pa.Table.from_pandas(read_result.data)
+        return VersionedItem(
+            symbol=read_result.symbol,
+            library=read_result.library,
+            data=pyarrow_table,
+            version=read_result.version,
+            metadata=read_result.metadata,
+            host=read_result.host,
+            timestamp=read_result.timestamp,
+        )
+
 
     def read(
         self,
@@ -1822,19 +1845,23 @@ class NativeVersionStore:
         )
 
         if read_options.output_format == OutputFormat.ARROW:
-            vit, frame, meta = self.version_store.read_dataframe_version_arrow(symbol, version_query, read_query, read_options)
-            import pyarrow as pa
-            record_batches = []
-            for i in range(frame.num_blocks):
-                arrays = []
-                for arr, schema in zip(frame.arrays, frame.schemas):
-                    print("Arr: {} Schema: {}".format(arr, schema));
-                    arrays.append(pa.Array._import_from_c(arr[i], schema[i]))
-
-                record_batches.append(pa.RecordBatch.from_arrays(arrays, names=frame.names))
-
-            return pa.Table.from_batches(record_batches)
-
+            # TODO: Use this code once arrow is feature complete. For now read as pandas and convert
+            # vit, frame, meta = self.version_store.read_dataframe_version_arrow(symbol, version_query, read_query, read_options)
+            # import pyarrow as pa
+            # record_batches = []
+            # for i in range(frame.num_blocks):
+            #     arrays = []
+            #     for arr, schema in zip(frame.arrays, frame.schemas):
+            #         print("Arr: {} Schema: {}".format(arr, schema));
+            #         arrays.append(pa.Array._import_from_c(arr[i], schema[i]))
+            #
+            #     record_batches.append(pa.RecordBatch.from_arrays(arrays, names=frame.names))
+            #
+            # return pa.Table.from_batches(record_batches)
+            read_options.set_output_format(OutputFormat.PANDAS)
+            read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
+            read_result = self._post_process_dataframe(read_result, read_query, implement_read_index)
+            return self.temp_convert_to_arrow(read_result)
         else:
             read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
             return self._post_process_dataframe(read_result, read_query, implement_read_index)

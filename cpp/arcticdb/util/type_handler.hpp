@@ -116,6 +116,10 @@ public:
     }
 
     std::any get_handler_data(OutputFormat output_format) {
+        // TODO: Remove once arrow is feature complete
+        if (output_format == OutputFormat::ARROW) {
+            output_format = OutputFormat::PANDAS;
+        }
         util::check(static_cast<bool>(handler_data_factories_[static_cast<uint8_t>(output_format)]), "No type handler set");
         return handler_data_factories_[static_cast<uint8_t>(output_format)]->get_data();
     }
