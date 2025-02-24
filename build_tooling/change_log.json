@@ -1,6 +1,10 @@
 {
 "categories": [
     {
+        "title": "## ⚠️ Breaking Changes",
+        "labels": ["api break"]
+    },
+    {
         "title": "## 🚀 Features",
         "labels": ["enhancement"]
     },

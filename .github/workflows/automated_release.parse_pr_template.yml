@@ -15,7 +15,7 @@ jobs:
           mode: exactly
           count: 1
           labels: |
-            patch
-            minor
-            major
+            bug
+            enhancement
+            api break
           add_comment: true
