@@ -1,81 +1,21 @@
-name: "Automated Release: Parse PR Change Type"
-
+name: Pull Request Labels
 on:
   pull_request:
-    branches:
-      - master
-    types: [opened, edited, reopened]
-
+    types: [opened, labeled, unlabeled, synchronize]
+    branches: master
 jobs:
-  parse-pr:
-    name: Parse PR and Add labels
-    permissions: 
-      pull-requests: write
+  label:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
     steps:
-      - name: Get PR change type
-        id: detect-change
-        uses: actions/github-script@v7
+      - uses: mheap/github-action-required-labels@v5
         with:
-          script: |
-            const prBody = context.payload.pull_request.body || "";
-            let changeType = "unknown";
-
-            if (prBody.includes("[x] **Major**")) {
-              changeType = "major";
-            } else if (prBody.includes("[x] **Minor**")) {
-              changeType = "minor";
-            } else if (prBody.includes("[x] **Patch**")) {
-              changeType = "patch";
-            } else {
-              core.setFailed("No valid change type found in PR body.");
-            }
-            
-            core.setOutput("change_type", changeType);
-            core.info(`Change type is: ${changeType}`);
-      - name: Set label
-        id: set-label
-        uses: actions/github-script@v7
-        env:
-          MAJOR_LABEL_NAME: major
-          MINOR_LABEL_NAME: minor
-          PATCH_LABEL_NAME: patch
-        with:
-          script: |
-            const changeType = "${{ steps.detect-change.outputs.change_type }}";
-            let labelName = "";
-            const majorLabel = "${{ env.MAJOR_LABEL_NAME }}";
-            const minorLabel = "${{ env.MINOR_LABEL_NAME }}";
-            const patchLabel = "${{ env.PATCH_LABEL_NAME }}";
-            if (changeType === "major") {
-              labelName = majorLabel;
-            } else if (changeType === "minor") {
-              labelName = minorLabel;
-            } else if (changeType === "patch") {
-              labelName = patchLabel;
-            } else {
-              core.setFail("Unknown Change Type Label");
-            }
-            core.info(`Desired label name is ${labelName}`)
-            const pr = context.payload.pull_request;
-
-            const labelsToRemove = [majorLabel, minorLabel, patchLabel];
-            await Promise.all(labelsToRemove.map(async (label) => {
-              try {
-                await github.rest.issues.removeLabel({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: pr.number,
-                  name: label,
-                });
-              } catch (error) {
-                core.debug(`Error removing label '${label}': ${error.message}`);
-              }
-            }));
-
-            github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr.number,
-              labels: [labelName],
-            });
+          mode: exactly
+          count: 1
+          labels: |
+            patch
+            minor
+            major
+          add_comment: true
