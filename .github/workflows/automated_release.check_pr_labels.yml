@@ -1,10 +1,10 @@
-name: Pull Request Labels
+name: Check Pull Request Labels
 on:
   pull_request:
     types: [opened, labeled, unlabeled, synchronize]
     branches: master
 jobs:
-  label:
+  check_labels:
     runs-on: ubuntu-latest
     permissions:
       issues: write
