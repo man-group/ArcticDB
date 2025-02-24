@@ -914,6 +914,61 @@
         "version": "c746faf05e4dbb872efa770cbe5ae057dafe3ecc1fb8969d1026db2dee7bfd99",
         "warmup_time": -1
     },
+    "comparison_benchmarks.ComparisonBenchmarks.peakmem_create_dataframe": {
+        "code": "class ComparisonBenchmarks:\n    def peakmem_create_dataframe(self, tpl):\n        df, dict = tpl\n        df = pd.DataFrame(dict)\n\n    def setup(self, tpl):\n        df, dict = tpl\n        self.ac = Arctic(ComparisonBenchmarks.URL)\n        self.lib = self.ac[ComparisonBenchmarks.LIB_NAME]\n        self.path = f\"{tempfile.gettempdir()}/df.parquet\"\n        self.path_to_read = f\"{tempfile.gettempdir()}/df_to_read.parquet\"\n        self.delete_if_exists(self.path)\n        df.to_parquet(self.path_to_read, index=True)\n\n    def setup_cache(self):\n        st = time.time()\n        dict = self.create_dict(ComparisonBenchmarks.NUMBER_ROWS)\n        df = pd.DataFrame(dict)\n        print(f\"DF generated {time.time() - st}\")\n        ac = Arctic(ComparisonBenchmarks.URL)\n        ac.delete_library(ComparisonBenchmarks.LIB_NAME)\n        lib = ac.create_library(ComparisonBenchmarks.LIB_NAME)\n        lib.write(symbol=ComparisonBenchmarks.SYMBOL, data=df)\n        return (df, dict)",
+        "name": "comparison_benchmarks.ComparisonBenchmarks.peakmem_create_dataframe",
+        "param_names": [],
+        "params": [],
+        "setup_cache_key": "comparison_benchmarks:37",
+        "timeout": 60000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "3fba994ac7997b310a49e3a6eaff3aac7aaea9072e7dce6025959b53c8e891c9"
+    },
+    "comparison_benchmarks.ComparisonBenchmarks.peakmem_read_dataframe_arctic": {
+        "code": "class ComparisonBenchmarks:\n    def peakmem_read_dataframe_arctic(self, tpl):\n        self.lib.read(ComparisonBenchmarks.SYMBOL)\n\n    def setup(self, tpl):\n        df, dict = tpl\n        self.ac = Arctic(ComparisonBenchmarks.URL)\n        self.lib = self.ac[ComparisonBenchmarks.LIB_NAME]\n        self.path = f\"{tempfile.gettempdir()}/df.parquet\"\n        self.path_to_read = f\"{tempfile.gettempdir()}/df_to_read.parquet\"\n        self.delete_if_exists(self.path)\n        df.to_parquet(self.path_to_read, index=True)\n\n    def setup_cache(self):\n        st = time.time()\n        dict = self.create_dict(ComparisonBenchmarks.NUMBER_ROWS)\n        df = pd.DataFrame(dict)\n        print(f\"DF generated {time.time() - st}\")\n        ac = Arctic(ComparisonBenchmarks.URL)\n        ac.delete_library(ComparisonBenchmarks.LIB_NAME)\n        lib = ac.create_library(ComparisonBenchmarks.LIB_NAME)\n        lib.write(symbol=ComparisonBenchmarks.SYMBOL, data=df)\n        return (df, dict)",
+        "name": "comparison_benchmarks.ComparisonBenchmarks.peakmem_read_dataframe_arctic",
+        "param_names": [],
+        "params": [],
+        "setup_cache_key": "comparison_benchmarks:37",
+        "timeout": 60000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "3f0b5ba30cf1ba9ff3ac3a9e89aeea8f4b68a1f94cef660ead8f66845d61978b"
+    },
+    "comparison_benchmarks.ComparisonBenchmarks.peakmem_read_dataframe_parquet": {
+        "code": "class ComparisonBenchmarks:\n    def peakmem_read_dataframe_parquet(self, tpl):\n        pd.read_parquet(self.path_to_read)\n\n    def setup(self, tpl):\n        df, dict = tpl\n        self.ac = Arctic(ComparisonBenchmarks.URL)\n        self.lib = self.ac[ComparisonBenchmarks.LIB_NAME]\n        self.path = f\"{tempfile.gettempdir()}/df.parquet\"\n        self.path_to_read = f\"{tempfile.gettempdir()}/df_to_read.parquet\"\n        self.delete_if_exists(self.path)\n        df.to_parquet(self.path_to_read, index=True)\n\n    def setup_cache(self):\n        st = time.time()\n        dict = self.create_dict(ComparisonBenchmarks.NUMBER_ROWS)\n        df = pd.DataFrame(dict)\n        print(f\"DF generated {time.time() - st}\")\n        ac = Arctic(ComparisonBenchmarks.URL)\n        ac.delete_library(ComparisonBenchmarks.LIB_NAME)\n        lib = ac.create_library(ComparisonBenchmarks.LIB_NAME)\n        lib.write(symbol=ComparisonBenchmarks.SYMBOL, data=df)\n        return (df, dict)",
+        "name": "comparison_benchmarks.ComparisonBenchmarks.peakmem_read_dataframe_parquet",
+        "param_names": [],
+        "params": [],
+        "setup_cache_key": "comparison_benchmarks:37",
+        "timeout": 60000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "ac09370986d4696bde103c09c29fca234c5f6de88f367e1f9d2cab6c939740b3"
+    },
+    "comparison_benchmarks.ComparisonBenchmarks.peakmem_write_dataframe_arctic": {
+        "code": "class ComparisonBenchmarks:\n    def peakmem_write_dataframe_arctic(self, tpl):\n        df, dict = tpl\n        self.lib.write(\"symbol\", df)\n\n    def setup(self, tpl):\n        df, dict = tpl\n        self.ac = Arctic(ComparisonBenchmarks.URL)\n        self.lib = self.ac[ComparisonBenchmarks.LIB_NAME]\n        self.path = f\"{tempfile.gettempdir()}/df.parquet\"\n        self.path_to_read = f\"{tempfile.gettempdir()}/df_to_read.parquet\"\n        self.delete_if_exists(self.path)\n        df.to_parquet(self.path_to_read, index=True)\n\n    def setup_cache(self):\n        st = time.time()\n        dict = self.create_dict(ComparisonBenchmarks.NUMBER_ROWS)\n        df = pd.DataFrame(dict)\n        print(f\"DF generated {time.time() - st}\")\n        ac = Arctic(ComparisonBenchmarks.URL)\n        ac.delete_library(ComparisonBenchmarks.LIB_NAME)\n        lib = ac.create_library(ComparisonBenchmarks.LIB_NAME)\n        lib.write(symbol=ComparisonBenchmarks.SYMBOL, data=df)\n        return (df, dict)",
+        "name": "comparison_benchmarks.ComparisonBenchmarks.peakmem_write_dataframe_arctic",
+        "param_names": [],
+        "params": [],
+        "setup_cache_key": "comparison_benchmarks:37",
+        "timeout": 60000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "8f859b71fa3b8c3c4acefdc333d07f57aff7d9a897e0bd93096dbdc44f99a2e4"
+    },
+    "comparison_benchmarks.ComparisonBenchmarks.peakmem_write_dataframe_parquet": {
+        "code": "class ComparisonBenchmarks:\n    def peakmem_write_dataframe_parquet(self, tpl):\n        df, dict = tpl\n        df.to_parquet(self.path, index=True)\n\n    def setup(self, tpl):\n        df, dict = tpl\n        self.ac = Arctic(ComparisonBenchmarks.URL)\n        self.lib = self.ac[ComparisonBenchmarks.LIB_NAME]\n        self.path = f\"{tempfile.gettempdir()}/df.parquet\"\n        self.path_to_read = f\"{tempfile.gettempdir()}/df_to_read.parquet\"\n        self.delete_if_exists(self.path)\n        df.to_parquet(self.path_to_read, index=True)\n\n    def setup_cache(self):\n        st = time.time()\n        dict = self.create_dict(ComparisonBenchmarks.NUMBER_ROWS)\n        df = pd.DataFrame(dict)\n        print(f\"DF generated {time.time() - st}\")\n        ac = Arctic(ComparisonBenchmarks.URL)\n        ac.delete_library(ComparisonBenchmarks.LIB_NAME)\n        lib = ac.create_library(ComparisonBenchmarks.LIB_NAME)\n        lib.write(symbol=ComparisonBenchmarks.SYMBOL, data=df)\n        return (df, dict)",
+        "name": "comparison_benchmarks.ComparisonBenchmarks.peakmem_write_dataframe_parquet",
+        "param_names": [],
+        "params": [],
+        "setup_cache_key": "comparison_benchmarks:37",
+        "timeout": 60000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "219e33422ea9ced5dc92ced39e0eea27dee1870cf991a82db139498f17446fe0"
+    },
     "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data": {
         "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, cache: CachedDFGenerator, param: int):\n        print(\">>> Library:\", self.lib)\n        print(\">>> Symbol:\", self.symbol)\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache: CachedDFGenerator, param: int):\n        cachedDF = cache\n    \n        # Unfortunately there is no way to tell asv to run single time\n        # each of finalize_stage_data() tests if we do the large setup in the\n        # setup_cache() method. We can only force it to work with single execution\n        # if the symbol setup with stage data is in the setup() method\n    \n        self.ac = Arctic(f\"lmdb://{self.lib_name}{param}?map_size=40GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(\n            0, cachedDF.TIME_UNIT\n        )  # Synchronize index frequency\n    \n        df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)\n        list_of_chunks = [10000] * param\n        self.symbol\n    \n        self.lib.write(self.symbol, data=df, prune_previous_versions=True)\n        stage_chunks(self.lib, self.symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data types\n        cachedDF = CachedDFGenerator(350000, [5])\n        return cachedDF",
         "name": "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data",
