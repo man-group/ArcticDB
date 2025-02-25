@@ -165,10 +165,7 @@ class Aggregator {
         callback_(std::forward<Callback>(c)),
         stats_(),
         segmenting_policy_(std::move(segmenting_policy)),
-        //TODO presizing with expected rowsize  (using a rowcount segmenting policy) means that buffer sizes are always irregular, unless
-        // the expected rowsize matches the column size, or some more clever logic is done so that if the row-count subdivides the buffer
-        // size then you get default buffer sizes.
-        segment_(desc.value_or(schema_policy_.default_descriptor()), row_count.value_or(segmenting_policy_.expected_row_size()), AllocationType::DYNAMIC, SparsePolicy::allow_sparse) {
+        segment_(desc ? *desc : schema_policy_.default_descriptor(), row_count.value_or(segmenting_policy_.expected_row_size()), AllocationType::DYNAMIC, SparsePolicy::allow_sparse) {
             segment_.init_column_map();
             if constexpr (!(std::is_same_v<Index, EmptyIndex> || std::is_same_v<Index, RowCountIndex>)) {
                 index().check(segment_.descriptor().fields());

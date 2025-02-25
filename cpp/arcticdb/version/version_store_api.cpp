@@ -692,7 +692,7 @@ ReadResult PythonVersionStore::read_column_stats_version(
     const VersionQuery& version_query) {
     ARCTICDB_SAMPLE(ReadColumnStats, 0)
     auto [versioned_item, frame_and_descriptor] = read_column_stats_version_internal(stream_id, version_query);
-    return read_result_from_single_frame(frame_and_descriptor, versioned_item.key_);
+    return read_result_from_single_frame(frame_and_descriptor, versioned_item.key_, OutputFormat::PANDAS);
 }
 
 ColumnStats PythonVersionStore::get_column_stats_info_version(
@@ -773,15 +773,17 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
     std::vector<std::shared_ptr<ReadQuery>>& read_queries,
-    const ReadOptions& read_options,
-    std::any& handler_data) {
+    const ReadOptions& read_options) {
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
+
     auto read_versions_or_errors = batch_read_internal(stream_ids, version_queries, read_queries, read_options, handler_data);
     std::vector<std::variant<ReadResult, DataError>> res;
     for (auto&& [idx, read_version_or_error]: folly::enumerate(read_versions_or_errors)) {
         util::variant_match(
                 read_version_or_error,
-                [&res] (ReadVersionOutput& read_version) {
+                [&res, &read_options] (ReadVersionOutput& read_version) {
                     res.emplace_back(create_python_read_result(read_version.versioned_item_,
+                                                               read_options.output_format(),
                                                                std::move(read_version.frame_and_descriptor_)));
                 },
                 [&res] (DataError& data_error) {
@@ -856,7 +858,7 @@ ReadResult PythonVersionStore::read_dataframe_version(
     std::any& handler_data) {
 
     auto opt_version_and_frame = read_dataframe_version_internal(stream_id, version_query, read_query, read_options, handler_data);
-    return create_python_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));
+    return create_python_read_result(opt_version_and_frame.versioned_item_, read_options.output_format(), std::move(opt_version_and_frame.frame_and_descriptor_));
 }
 
 namespace {
@@ -1103,7 +1105,7 @@ ReadResult PythonVersionStore::read_index(
         throw NoDataFoundException(fmt::format("read_index: version not found for symbol '{}'", stream_id));
 
     auto res = read_index_impl(store(), *version);
-    return read_result_from_single_frame(res, version->key_);
+    return read_result_from_single_frame(res, version->key_, OutputFormat::PANDAS);
 }
 
 std::vector<AtomKey> PythonVersionStore::get_version_history(const StreamId& stream_id) {
@@ -1169,16 +1171,18 @@ ReadResult read_dataframe_from_file(
         const StreamId &stream_id,
         const std::string& path,
         const std::shared_ptr<ReadQuery>& read_query,
-        std::any& handler_data) {
+        const ReadOptions& read_options) {
+
+    auto handler_data = get_type_handler_data(read_options.output_format());
     auto opt_version_and_frame = read_dataframe_from_file_internal(
         stream_id,
         path,
         read_query,
-        ReadOptions{},
+        read_options,
         codec::default_lz4_codec(),
         handler_data);
 
-    return create_python_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));
+    return create_python_read_result(opt_version_and_frame.versioned_item_, read_options.output_format(), std::move(opt_version_and_frame.frame_and_descriptor_));
 }
 
 void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {

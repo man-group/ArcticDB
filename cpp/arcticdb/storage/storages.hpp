@@ -41,18 +41,18 @@ public:
         storages_(std::move(storages)), mode_(mode) {
     }
 
-    void write(KeySegmentPair&& key_seg) {
+    void write(KeySegmentPair& key_seg) {
         ARCTICDB_SAMPLE(StoragesWrite, 0)
-        primary().write(std::move(key_seg));
+        primary().write(key_seg);
     }
 
-    void write_if_none(KeySegmentPair&& kv) {
-        primary().write_if_none(std::move(kv));
+    void write_if_none(KeySegmentPair& kv) {
+        primary().write_if_none(kv);
     }
 
-    void update(KeySegmentPair&& key_seg, storage::UpdateOpts opts) {
+    void update(KeySegmentPair& key_seg, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(StoragesUpdate, 0)
-        primary().update(std::move(key_seg), opts);
+        primary().update(key_seg, opts);
     }
 
     [[nodiscard]] bool supports_prefix_matching() const {
@@ -274,6 +274,15 @@ inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path
                                 storages.push_back(create_storage(library_path,
                                                                   mode,
                                                                   s3::S3Settings(settings).update(s3_storage)));
+                            },
+                            [&storage_config, &storages, &library_path, mode](const s3::GCPXMLSettings& settings) {
+                                util::check(storage_config.config().Is<arcticdb::proto::gcp_storage::Config>(),
+                                            "Only support GCP native settings");
+                                arcticdb::proto::gcp_storage::Config gcp_storage;
+                                storage_config.config().UnpackTo(&gcp_storage);
+                                storages.push_back(create_storage(library_path,
+                                                                  mode,
+                                                                  s3::GCPXMLSettings(settings).update(gcp_storage)));
                             },
                             [&storage_config, &storages, &library_path, mode](const auto&) {
                                 storages.push_back(create_storage(library_path, mode, storage_config));

@@ -58,7 +58,8 @@ struct FailedDelete{
     std::string s3_object_name;
     std::string error_message;
 };
-struct DeleteOutput{
+
+struct DeleteObjectsOutput{
     std::vector<FailedDelete> failed_deletes;
 };
 
@@ -85,12 +86,16 @@ public:
 
     virtual S3Result<std::monostate> put_object(
         const std::string& s3_object_name,
-        Segment&& segment,
+        Segment& segment,
         const std::string& bucket_name,
         PutHeader header = PutHeader::NONE) = 0;
 
-    virtual S3Result<DeleteOutput> delete_objects(
+    virtual S3Result<DeleteObjectsOutput> delete_objects(
         const std::vector<std::string>& s3_object_names,
+        const std::string& bucket_name) = 0;
+
+    [[nodiscard]] virtual folly::Future<S3Result<std::monostate>> delete_object(
+        const std::string& s3_object_name,
         const std::string& bucket_name) = 0;
 
     [[nodiscard]] virtual S3Result<ListObjectsOutput> list_objects(

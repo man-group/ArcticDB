@@ -1,0 +1,42 @@
+name: "Automated Release: Release next full version from release branch"
+
+on:
+  schedule:
+    - cron: '0 0 * * 1' # Every Monday at midnight UTC
+  workflow_dispatch:
+
+jobs:
+  get_tag_name:
+    name: Get next full version number
+    env:
+      CURRENT_BRANCH: ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    outputs:
+      next_version: ${{ steps.calculate-next-version.outputs.next_version }}
+    steps:
+      - name: Get latest RC tag
+        id: latest_rc_tag
+        uses: oprypin/find-latest-tag@v1
+        with:
+          repository: ${{ github.repository }}
+          regex: ^v\d+\.\d+\.\d+rc\d+$
+      
+      - name: Calculate next version
+        id: calculate-next-version
+        run: |
+          LATEST_TAG="${{ steps.latest_rc_tag.outputs.tag }}"
+          LATEST_TAG="${LATEST_TAG#v}"
+          base="${LATEST_TAG%rc*}"
+          echo "next_version=$base" >> $GITHUB_OUTPUT
+
+  tag_and_release:
+    name: Tag and Release version ${{ needs.get_tag_name.outputs.next_version }} from branch ${{ needs.get_tag_name.outputs.next_version }}
+    secrets: inherit
+    permissions:
+      checks: read
+      contents: write
+    uses: ./.github/workflows/tag.yml
+    needs: get_tag_name
+    with:
+      version: ${{ needs.get_tag_name.outputs.next_version }}  
+      from_branch: ${{ needs.get_tag_name.outputs.next_version }}

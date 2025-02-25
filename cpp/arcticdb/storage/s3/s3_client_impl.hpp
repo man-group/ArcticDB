@@ -45,12 +45,16 @@ public:
 
     S3Result<std::monostate> put_object(
             const std::string& s3_object_name,
-            Segment&& segment,
+            Segment& segment,
             const std::string& bucket_name,
             PutHeader header = PutHeader::NONE) override;
 
-    S3Result<DeleteOutput> delete_objects(
+    S3Result<DeleteObjectsOutput> delete_objects(
         const std::vector<std::string>& s3_object_names,
+        const std::string& bucket_name) override;
+
+    folly::Future<S3Result<std::monostate>> delete_object(
+        const std::string& s3_object_name,
         const std::string& bucket_name) override;
 
     S3Result<ListObjectsOutput> list_objects(

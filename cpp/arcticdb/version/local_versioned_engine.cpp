@@ -408,7 +408,7 @@ std::variant<VersionedItem, StreamId> get_version_identifier(
         const ReadOptions& read_options,
         const std::optional<VersionedItem>& version) {
     if (!version) {
-        if (opt_false(read_options.incompletes_)) {
+        if (opt_false(read_options.incompletes())) {
             log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", stream_id);
             return stream_id;
         } else {
@@ -498,7 +498,7 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
     const std::vector<VersionQuery>& version_queries,
     const ReadOptions& read_options) {
 
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error().has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
 
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
@@ -509,7 +509,7 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
     }
     auto descriptors = collectAll(descriptor_futures).get();
     TransformBatchResultsFlags flags;
-    flags.throw_on_error_ = *read_options.batch_throw_on_error_;
+    flags.throw_on_error_ = *read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(descriptors), stream_ids, flags, version_queries);
 }
 
@@ -1043,17 +1043,25 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
     const CompactIncompleteOptions& options) {
-    log::version().debug("Compacting incomplete symbol {}", stream_id);
+    log::version().debug("Compacting incomplete symbol {} with options {}", stream_id, options);
 
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
+    if (update_info.previous_index_key_) {
+        ARCTICDB_DEBUG(log::version(), "Found previous version for symbol {}", stream_id);
+    } else {
+        ARCTICDB_DEBUG(log::version(), "No previous version found for symbol {}", stream_id);
+    };
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = stream_id;
     pipeline_context->version_id_ = update_info.next_version_id_;
     auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), options);
 
     auto versioned_item = compact_incomplete_impl(store_, stream_id, user_meta, update_info, options, get_write_options(), pipeline_context);
+    ARCTICDB_DEBUG(log::version(), "Finished compact_incomplete_impl for symbol {}", stream_id);
 
     write_version_and_prune_previous(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
+    ARCTICDB_DEBUG(log::version(), "Finished write_version_and_prune_previous for symbol {}", stream_id);
+
     add_to_symbol_list_on_compaction(stream_id, options, update_info);
     if (delete_keys_on_failure)
         delete_keys_on_failure->release();
@@ -1092,7 +1100,7 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
 }
 
 std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(const std::vector<AtomKey> &keys) {
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     py::gil_scoped_release release_gil;
     std::vector<folly::Future<ReadVersionOutput>> res;
     res.reserve(keys.size());
@@ -1111,7 +1119,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
     std::any& handler_data) {
     py::gil_scoped_release release_gil;
     // This read option should always be set when calling batch_read
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error().has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<ReadVersionOutput>> read_versions_futs;
@@ -1134,7 +1142,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
                     if (opt_index_key.has_value()) {
                         version_info = VersionedItem(std::move(*opt_index_key));
                     } else {
-                        if (opt_false(read_options.incompletes_)) {
+                        if (opt_false(read_options.incompletes())) {
                             log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", stream_ids[idx]);
                             version_info = stream_ids[idx];
                         } else {
@@ -1160,7 +1168,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
 
     TransformBatchResultsFlags flags;
     flags.convert_no_data_found_to_key_not_found_ = true;
-    flags.throw_on_error_ = *read_options.batch_throw_on_error_;
+    flags.throw_on_error_ = *read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(all_results), stream_ids, flags, version_queries);
 }
 
@@ -1597,7 +1605,7 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
     const ReadOptions& read_options
     ) {
     // This read option should always be set when calling batch_read_metadata
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error().has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>>> metadata_futures;
@@ -1609,7 +1617,7 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
     // For legacy reason read_metadata_batch is not throwing if the symbol is missing
     TransformBatchResultsFlags flags;
     flags.throw_on_missing_symbol_ = false;
-    flags.throw_on_error_ = *read_options.batch_throw_on_error_;
+    flags.throw_on_error_ = *read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(metadatas), stream_ids, flags, version_queries);
 }
 
@@ -1626,15 +1634,26 @@ VersionedItem LocalVersionedEngine::sort_merge_internal(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
     const CompactIncompleteOptions& options) {
+    log::version().debug("Sort merge for symbol {} with options {}", stream_id, options);
+
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
+    if (update_info.previous_index_key_) {
+        ARCTICDB_DEBUG(log::version(), "Found previous version for symbol {}", stream_id);
+    } else {
+        ARCTICDB_DEBUG(log::version(), "No previous version found for symbol {}", stream_id);
+    };
+
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = stream_id;
     pipeline_context->version_id_ = update_info.next_version_id_;
     auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), options);
 
     auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, update_info, options, get_write_options(), pipeline_context);
+    ARCTICDB_DEBUG(log::version(), "Finished sort_merge_impl for symbol {}", stream_id);
 
     write_version_and_prune_previous(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
+    ARCTICDB_DEBUG(log::version(), "Finished write_version_and_prune_previous for symbol {}", stream_id);
+
     add_to_symbol_list_on_compaction(stream_id, options, update_info);
     if (delete_keys_on_failure)
         delete_keys_on_failure->release();

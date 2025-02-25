@@ -68,12 +68,16 @@ public:
 
     S3Result<std::monostate> put_object(
         const std::string& s3_object_name,
-        Segment&& segment,
+        Segment& segment,
         const std::string& bucket_name,
         PutHeader header = PutHeader::NONE) override;
 
-    S3Result<DeleteOutput> delete_objects(
+    S3Result<DeleteObjectsOutput> delete_objects(
         const std::vector<std::string>& s3_object_names,
+        const std::string& bucket_name) override;
+
+    folly::Future<S3Result<std::monostate>> delete_object(
+        const std::string& s3_object_name,
         const std::string& bucket_name) override;
 
     S3Result<ListObjectsOutput> list_objects(
@@ -82,7 +86,12 @@ public:
         const std::optional<std::string>& continuation_token) const override;
 
 private:
-    std::map<S3Key, Segment> s3_contents;
+    // We store a std::nullopt for deleted segments.
+    // We need to preserve the deleted keys in the map to ensure a correct thread-safe list_objects operation.
+    // Between two calls to list_objects() part of the same query via a continuation_token there might have been
+    // new writes or deletes and we still need to return a consistent list of symbols.
+    std::map<S3Key, std::optional<Segment>> s3_contents_;
+    mutable std::mutex mutex_; // Used to guard the map.
 };
 
 }

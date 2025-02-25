@@ -123,6 +123,8 @@ TEST(ReliableStorageLock, StressMultiThreaded) {
     auto store = std::make_shared<InMemoryStore>();
     // Running the test with tighter timeout than the 1000ms timeout causes it to fail occasionally.
     // Seemingly because the heartbeating thread might occasionally not run for long periods of time. This problem disappears with larger timouts like 1000ms.
+    // The failures are likely present only on WSL whose clock can occasionally jump back by a few seconds, which causes
+    // folly's stable clock to not increase and hence skips a heartbeat.
     ReliableStorageLock<> lock{StringId{"test_lock"}, store, ONE_SECOND};
 
     int counter = 0;
@@ -173,4 +175,40 @@ TEST(ReliableStorageLock, NotImplementedException) {
     EXPECT_THROW({
         ReliableStorageLock<> lock(StringId("test_lock"), store, ONE_SECOND);
     }, UnsupportedAtomicOperationException);
+}
+
+TEST(ReliableStorageLock, AdminTools) {
+    auto store = std::make_shared<InMemoryStore>();
+    using Clock = util::ManualClock;
+    ReliableStorageLock<Clock> lock{StringId{"test_lock"}, store, 10};
+
+    Clock::time_ = 0;
+    // No existing lock
+    ASSERT_EQ(lock.inspect_latest_lock(), std::nullopt);
+    // When we take a lock at time 0, inspecting it shows it expires at 10.
+    ASSERT_EQ(lock.try_take_lock(), ReliableLockResult{AcquiredLock{0}});
+    ASSERT_EQ(lock.inspect_latest_lock(), std::make_optional<ActiveLock>(AcquiredLockId{0}, 10));
+
+    Clock::time_ = 15;
+    // Even when lock is expired we can inspect it
+    ASSERT_EQ(lock.inspect_latest_lock(), std::make_optional<ActiveLock>(AcquiredLockId{0}, 10));
+    ASSERT_EQ(lock.try_take_lock(), ReliableLockResult{AcquiredLock{1}});
+
+    Clock::time_ = 20;
+    // Last lock still holds and we can't take it with regular operation
+    ASSERT_EQ(lock.inspect_latest_lock(), std::make_optional<ActiveLock>(AcquiredLockId{1}, 25));
+    ASSERT_EQ(lock.try_take_lock(), ReliableLockResult{LockInUse{}});
+    // But we can force_take it with a custom timeout of 15. The force increases the id by 10.
+    ASSERT_EQ(lock.force_take_lock(15), AcquiredLockId{11});
+    ASSERT_EQ(lock.inspect_latest_lock(), std::make_optional<ActiveLock>(AcquiredLockId{11}, 35));
+
+    Clock::time_ = 30;
+    // We still can't take the lock by regular means
+    ASSERT_EQ(lock.try_take_lock(), ReliableLockResult{LockInUse{}});
+    // But we can force free it by using a negative timeout, to write an expired lock.
+    ASSERT_EQ(lock.force_take_lock(-5), AcquiredLockId{21});
+    ASSERT_EQ(lock.inspect_latest_lock(), std::make_optional<ActiveLock>(AcquiredLockId{21}, 25));
+    // And now we can take a lock with the regular try_take_lock
+    ASSERT_EQ(lock.try_take_lock(), ReliableLockResult{AcquiredLock{22}});
+    ASSERT_EQ(lock.inspect_latest_lock(), std::make_optional<ActiveLock>(AcquiredLockId{22}, 40));
 }

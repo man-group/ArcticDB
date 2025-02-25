@@ -10,7 +10,7 @@
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/pipeline/frame_slice_map.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
-#include <arcticdb/util/buffer_holder.hpp>
+#include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/python/python_handlers.hpp>
 
 namespace arcticdb {

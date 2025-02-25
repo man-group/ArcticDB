@@ -47,13 +47,13 @@ std::size_t internal_data_type_size(const TypeDescriptor& td) {
     return get_type_size(td.data_type());
 }
 
-std::size_t external_data_type_size(const TypeDescriptor& td) {
-    auto handler = TypeHandlerRegistry::instance()->get_handler(td);
+std::size_t external_data_type_size(const TypeDescriptor& td, OutputFormat output_format) {
+    auto handler = TypeHandlerRegistry::instance()->get_handler(output_format, td);
     return handler ? handler->type_size() : internal_data_type_size(td);
 }
 
-std::size_t data_type_size(const TypeDescriptor& td, DataTypeMode mode) {
-    return mode == DataTypeMode::EXTERNAL ? external_data_type_size(td) : internal_data_type_size(td);
+std::size_t data_type_size(const TypeDescriptor& td, OutputFormat output_format, DataTypeMode mode) {
+    return mode == DataTypeMode::EXTERNAL ? external_data_type_size(td, output_format) : internal_data_type_size(td);
 }
 
 TypeDescriptor FieldRef::type() const {

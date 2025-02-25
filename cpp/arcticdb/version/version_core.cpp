@@ -19,6 +19,7 @@
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
+#include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/stream/schema.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
@@ -35,11 +36,11 @@ namespace ranges = std::ranges;
 
 void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, const ReadOptions& read_options) {
 
-    if (opt_false(read_options.force_strings_to_object_) || opt_false(read_options.force_strings_to_fixed_))
+    if (opt_false(read_options.force_strings_to_object()) || opt_false(read_options.force_strings_to_fixed()))
         pipeline_context->orig_desc_ = pipeline_context->desc_;
 
     auto& desc = *pipeline_context->desc_;
-    if (opt_false(read_options.force_strings_to_object_)) {
+    if (opt_false(read_options.force_strings_to_object())) {
         auto& fields = desc.fields();
         for (Field& field_desc : fields) {
             if (field_desc.type().data_type() == DataType::ASCII_FIXED64)
@@ -48,7 +49,7 @@ void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>& pipeli
             if (field_desc.type().data_type() == DataType::UTF_FIXED64)
                 set_data_type(DataType::UTF_DYNAMIC64, field_desc.mutable_type());
         }
-    } else if (opt_false(read_options.force_strings_to_fixed_)) {
+    } else if (opt_false(read_options.force_strings_to_fixed())) {
         auto& fields = desc.fields();
         for (Field& field_desc : fields) {
             if (field_desc.type().data_type() == DataType::ASCII_DYNAMIC64)
@@ -511,12 +512,12 @@ folly::Future<ReadVersionOutput> read_multi_key(
     AtomKey dup{keys[0]};
     VersionedItem versioned_item{std::move(dup)};
     TimeseriesDescriptor multi_key_desc{index_key_seg.index_descriptor()};
+
     return read_frame_for_version(store, versioned_item, std::make_shared<ReadQuery>(), ReadOptions{}, handler_data)
     .thenValue([multi_key_desc=std::move(multi_key_desc), keys=std::move(keys)](ReadVersionOutput&& read_version_output) mutable {
         multi_key_desc.mutable_proto().mutable_normalization()->CopyFrom(read_version_output.frame_and_descriptor_.desc_.proto().normalization());
         read_version_output.frame_and_descriptor_.desc_ = std::move(multi_key_desc);
         read_version_output.frame_and_descriptor_.keys_ = std::move(keys);
-        read_version_output.frame_and_descriptor_.buffers_ = std::make_shared<BufferHolder>();
         return std::move(read_version_output);
     });
 }
@@ -1024,11 +1025,11 @@ void read_indexed_keys_to_pipeline(
     add_index_columns_to_query(read_query, index_segment_reader.tsd());
 
     const auto& tsd = index_segment_reader.tsd();
-    read_query.calculate_row_filter(static_cast<int64_t>(tsd.total_rows()));
+    read_query.convert_to_positive_row_filter(static_cast<int64_t>(tsd.total_rows()));
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     pipeline_context->desc_ = tsd.as_stream_descriptor();
 
-    bool dynamic_schema = opt_false(read_options.dynamic_schema_);
+    bool dynamic_schema = opt_false(read_options.dynamic_schema());
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
         read_query,
         pipeline_context,
@@ -1041,6 +1042,7 @@ void read_indexed_keys_to_pipeline(
     pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization()));
     pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta()));
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
+    ARCTICDB_DEBUG(log::version(), "read_indexed_keys_to_pipeline: Symbol {} Found {} keys with {} total rows", pipeline_context->slice_and_keys_.size(), pipeline_context->total_rows_, version_info.symbol());
 }
 
 // Returns true if there are staged segments
@@ -1062,18 +1064,24 @@ bool read_incompletes_to_pipeline(
         via_iteration,
         false);
 
-    if(incomplete_segments.empty())
+    ARCTICDB_DEBUG(log::version(), "Symbol {}: Found {} incomplete segments", pipeline_context->stream_id_, incomplete_segments.size());
+    if(incomplete_segments.empty()) {
         return false;
+    }
 
     // In order to have the right normalization metadata and descriptor we need to find the first non-empty segment.
     // Picking an empty segment when there are non-empty ones will impact the index type and column namings.
     // If all segments are empty we will proceed as if were appending/writing and empty dataframe.
     debug::check<ErrorCode::E_ASSERTION_FAILURE>(!incomplete_segments.empty(), "Incomplete segments must be non-empty");
     const auto first_non_empty_seg = std::find_if(incomplete_segments.begin(), incomplete_segments.end(), [&](auto& slice){
-        return slice.segment(store).row_count() > 0;
+        auto res = slice.segment(store).row_count() > 0;
+        ARCTICDB_DEBUG(log::version(), "Testing for non-empty seg {} res={}", slice.key(), res);
+        return res;
     });
     const auto& seg =
         first_non_empty_seg != incomplete_segments.end() ? first_non_empty_seg->segment(store) : incomplete_segments.begin()->segment(store);
+    ARCTICDB_DEBUG(log::version(), "Symbol {}: First segment has rows {} columns {} uncompressed bytes {} descriptor {}",
+                   pipeline_context->stream_id_, seg.row_count(), seg.columns().size(), seg.descriptor().uncompressed_bytes(), seg.index_descriptor());
     // Mark the start point of the incompletes, so we know that there is no column slicing after this point
     pipeline_context->incompletes_after_ = pipeline_context->slice_and_keys_.size();
 
@@ -1104,6 +1112,7 @@ bool read_incompletes_to_pipeline(
     }
 
     if (dynamic_schema) {
+        ARCTICDB_DEBUG(log::version(), "read_incompletes_to_pipeline: Dynamic schema");
         pipeline_context->staged_descriptor_ =
             merge_descriptors(seg.descriptor(), incomplete_segments, read_query.columns);
         if (pipeline_context->desc_) {
@@ -1114,6 +1123,14 @@ bool read_incompletes_to_pipeline(
             pipeline_context->desc_ = pipeline_context->staged_descriptor_;
         }
     } else {
+        ARCTICDB_DEBUG(log::version(), "read_incompletes_to_pipeline: Static schema");
+        [[maybe_unused]] auto& first_incomplete_seg = incomplete_segments[0].segment(store);
+        ARCTICDB_DEBUG(log::version(), "Symbol {}: First incomplete segment has rows {} columns {} uncompressed bytes {} descriptor {}",
+                       pipeline_context->stream_id_,
+                       first_incomplete_seg.row_count(),
+                       first_incomplete_seg.columns().size(),
+                       first_incomplete_seg.descriptor().uncompressed_bytes(),
+                       first_incomplete_seg.index_descriptor());
         if (pipeline_context->desc_) {
             schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                 columns_match(staged_desc, *pipeline_context->desc_),
@@ -1179,7 +1196,9 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
             auto [_, inserted] = unique_timestamp_ranges.emplace(key.start_time(), key.end_time());
             // This is correct because incomplete segments aren't column sliced
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
-                    inserted,
+                    // If the segment is entirely covering a single index value, then duplicates are fine
+                    // -1 as end_time is stored as 1 greater than the last index value in the segment
+                    inserted || key.end_time() -1 == key.start_time(),
                     "Cannot finalize staged data as 2 or more incomplete segments cover identical index values (in UTC): ({}, {})",
                     date_and_time(key.start_time()), date_and_time(key.end_time()));
         }
@@ -1188,7 +1207,8 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
             auto next_it = std::next(it);
             if (next_it != unique_timestamp_ranges.end()) {
                 sorting::check<ErrorCode::E_UNSORTED_DATA>(
-                        next_it->first >= it->second,
+                        // -1 as end_time is stored as 1 greater than the last index value in the segment
+                        next_it->first >= it->second - 1,
                         "Cannot finalize staged data as incomplete segment index values overlap one another (in UTC): ({}, {}) intersects ({}, {})",
                         date_and_time(it->first),
                         date_and_time(it->second - 1),
@@ -1200,32 +1220,34 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
 }
 
 void copy_frame_data_to_buffer(
-        const SegmentInMemory& destination,
+        SegmentInMemory& destination,
         size_t target_index,
         SegmentInMemory& source,
         size_t source_index,
         const RowRange& row_range,
-        const DecodePathData& shared_data,
-        std::any& handler_data) {
+        DecodePathData shared_data,
+        std::any& handler_data,
+        OutputFormat output_format) {
     const auto num_rows = row_range.diff();
     if (num_rows == 0) {
         return;
     }
     auto& src_column = source.column(static_cast<position_t>(source_index));
     auto& dst_column = destination.column(static_cast<position_t>(target_index));
-    auto& buffer = dst_column.data().buffer();
-    auto dst_rawtype_size = data_type_size(dst_column.type(), DataTypeMode::EXTERNAL);
+    auto dst_rawtype_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
     auto offset = dst_rawtype_size * (row_range.first - destination.offset());
     auto total_size = dst_rawtype_size * num_rows;
-    buffer.assert_size(offset + total_size);
+    dst_column.assert_size(offset + total_size);
 
     auto src_data = src_column.data();
-    auto dst_ptr = buffer.data() + offset;
+    auto dst_ptr = dst_column.bytes_at(offset, total_size);
 
     auto type_promotion_error_msg = fmt::format("Can't promote type {} to type {} in field {}",
                                                 src_column.type(), dst_column.type(), destination.field(target_index).name());
-    if(auto handler = get_type_handler(src_column.type(), dst_column.type()); handler) {
-        handler->convert_type(src_column, buffer, num_rows, offset, src_column.type(), dst_column.type(), shared_data, handler_data, source.string_pool_ptr());
+    if(auto handler = get_type_handler(output_format, src_column.type(), dst_column.type()); handler) {
+        const auto type_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
+        ColumnMapping mapping{src_column.type(), dst_column.type(), destination.field(target_index), type_size, num_rows, row_range.first, offset, total_size, target_index};
+        handler->convert_type(src_column, dst_column, mapping, shared_data, handler_data, source.string_pool_ptr());
     } else if (is_empty_type(src_column.type().data_type())) {
         dst_column.type().visit_tag([&](auto dst_desc_tag) {
             util::default_initialize<decltype(dst_desc_tag)>(dst_ptr, num_rows * dst_rawtype_size);
@@ -1281,6 +1303,7 @@ struct CopyToBufferTask : async::BaseTask {
     DecodePathData shared_data_;
     std::any& handler_data_;
     bool fetch_index_;
+    OutputFormat output_format_;
 
     CopyToBufferTask(
             SegmentInMemory&& source_segment,
@@ -1288,20 +1311,21 @@ struct CopyToBufferTask : async::BaseTask {
             FrameSlice frame_slice,
             DecodePathData shared_data,
             std::any& handler_data,
-            bool fetch_index) :
+            bool fetch_index,
+            OutputFormat output_format) :
             source_segment_(std::move(source_segment)),
         target_segment_(std::move(target_segment)),
         frame_slice_(std::move(frame_slice)),
         shared_data_(std::move(shared_data)),
         handler_data_(handler_data),
-        fetch_index_(fetch_index) {
-
+        fetch_index_(fetch_index),
+        output_format_(output_format){
     }
 
     folly::Unit operator()() {
         const auto index_field_count = get_index_field_count(target_segment_);
         for (auto idx = 0u; idx < index_field_count && fetch_index_; ++idx) {
-            copy_frame_data_to_buffer(target_segment_, idx, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_);
+            copy_frame_data_to_buffer(target_segment_, idx, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
         }
 
         auto field_count = frame_slice_.col_range.diff() + index_field_count;
@@ -1318,7 +1342,7 @@ struct CopyToBufferTask : async::BaseTask {
             if (!frame_loc_opt)
                 continue;
 
-            copy_frame_data_to_buffer(target_segment_, *frame_loc_opt, source_segment_, field_col, frame_slice_.row_range, shared_data_, handler_data_);
+            copy_frame_data_to_buffer(target_segment_, *frame_loc_opt, source_segment_, field_col, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
         }
         return folly::Unit{};
     }
@@ -1328,7 +1352,8 @@ folly::Future<folly::Unit> copy_segments_to_frame(
         const std::shared_ptr<Store>& store,
         const std::shared_ptr<PipelineContext>& pipeline_context,
         SegmentInMemory frame,
-        std::any& handler_data) {
+        std::any& handler_data,
+        OutputFormat output_format) {
     std::vector<folly::Future<folly::Unit>> copy_tasks;
     DecodePathData shared_data;
     for (auto context_row : folly::enumerate(*pipeline_context)) {
@@ -1342,7 +1367,8 @@ folly::Future<folly::Unit> copy_segments_to_frame(
                 context_row->slice_and_key().slice(),
                 shared_data,
                 handler_data,
-                context_row->fetch_index()}));
+                context_row->fetch_index(),
+                output_format}));
     }
     return folly::collect(copy_tasks).via(&async::cpu_executor()).unit();
 }
@@ -1359,7 +1385,7 @@ folly::Future<SegmentInMemory> prepare_output_frame(
 		return std::tie(left.slice_.row_range, left.slice_.col_range) < std::tie(right.slice_.row_range, right.slice_.col_range);
 	});
     adjust_slice_rowcounts(pipeline_context);
-    const auto dynamic_schema = opt_false(read_options.dynamic_schema_);
+    const auto dynamic_schema = opt_false(read_options.dynamic_schema());
     mark_index_slices(pipeline_context, dynamic_schema, pipeline_context->bucketize_dynamic_);
     pipeline_context->ensure_vectors();
 
@@ -1369,8 +1395,9 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         row.set_string_pool(row.slice_and_key().segment(store).string_pool_ptr());
     }
 
-    auto frame = allocate_frame(pipeline_context);
-    return copy_segments_to_frame(store, pipeline_context, frame, handler_data).thenValue([frame](auto&&){ return frame; });
+    const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
+    auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
+    return copy_segments_to_frame(store, pipeline_context, frame, handler_data, read_options.output_format()).thenValue([frame](auto&&){ return frame; });
 }
 
 AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key) {
@@ -1502,7 +1529,7 @@ FrameAndDescriptor read_column_stats_impl(
         TimeseriesDescriptor tsd;
         tsd.set_total_rows(segment_in_memory.row_count());
         tsd.set_stream_descriptor(segment_in_memory.descriptor());
-        return {SegmentInMemory(std::move(segment_in_memory)), tsd, {}, {}};
+        return {SegmentInMemory(std::move(segment_in_memory)), tsd, {}};
     } catch (const std::exception& e) {
         storage::raise<ErrorCode::E_KEY_NOT_FOUND>("Failed to read column stats key: {}", e.what());
     }
@@ -1538,11 +1565,12 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
     } else {
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
         util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query->row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
-        mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema_), pipeline_context->bucketize_dynamic_);
-        auto frame = allocate_frame(pipeline_context);
+        mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema()), pipeline_context->bucketize_dynamic_);
+        const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
+        auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
         util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
         ARCTICDB_DEBUG(log::version(), "Fetching frame data");
-        return fetch_data(std::move(frame), pipeline_context, store, opt_false(read_options.dynamic_schema_), shared_data, handler_data);
+        return fetch_data(std::move(frame), pipeline_context, store, *read_query, read_options, shared_data, handler_data);
     }
 }
 
@@ -1597,6 +1625,8 @@ void delete_incomplete_keys(PipelineContext& pipeline_context, Store& store) {
             );
         }
     }
+
+    ARCTICDB_DEBUG(log::version(), "delete_incomplete_keys Symbol {}: Deleting {} keys", pipeline_context.stream_id_, keys_to_delete.size());
     store.remove_keys(keys_to_delete).get();
 }
 
@@ -1678,6 +1708,7 @@ VersionedItem sort_merge_impl(
 
     std::vector<FrameSlice> slices;
     std::vector<folly::Future<VariantKey>> fut_vec;
+    auto semaphore = std::make_shared<folly::NativeSemaphore>(n_segments_live_during_compaction());
     auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
     util::variant_match(index,
         [&](const stream::TimeseriesIndex &timeseries_index) {
@@ -1692,7 +1723,7 @@ VersionedItem sort_merge_impl(
                 write_options.dynamic_schema
             }));
             ReadOptions read_options;
-            read_options.dynamic_schema_ = write_options.dynamic_schema;
+            read_options.set_dynamic_schema(write_options.dynamic_schema);
             auto segments = read_and_process(store, pipeline_context, read_query, read_options).get();
             if (options.append_ && update_info.previous_index_key_ && !segments.empty()) {
                 const timestamp last_index_on_disc = update_info.previous_index_key_->end_time() - 1;
@@ -1714,18 +1745,22 @@ VersionedItem sort_merge_impl(
                     slices.emplace_back(std::move(slice));
                 },
                 DynamicSchema{*pipeline_context->staged_descriptor_, index},
-                [pipeline_context, &fut_vec, &store](SegmentInMemory &&segment) {
-                    StreamDescriptor only_non_empty_cols;
+                [pipeline_context, &fut_vec, &store, &semaphore](SegmentInMemory &&segment) {
                     const auto local_index_start = TimeseriesIndex::start_value_for_segment(segment);
                     const auto local_index_end = TimeseriesIndex::end_value_for_segment(segment);
                     stream::StreamSink::PartialKey
                     pk{KeyType::TABLE_DATA, pipeline_context->version_id_, pipeline_context->stream_id_, local_index_start, local_index_end};
-                    fut_vec.emplace_back(store->write(pk, std::move(segment)));
+                    fut_vec.emplace_back(store->write_maybe_blocking(pk, std::move(segment), semaphore));
                 },
                 RowCountSegmentPolicy(write_options.segment_row_size)};
 
+            [[maybe_unused]] size_t count = 0;
             for(auto& sk : segments) {
                 SegmentInMemory segment = sk.release_segment(store);
+
+                ARCTICDB_DEBUG(log::version(), "sort_merge_impl Symbol {} Segment {}: Segment has rows {} columns {} uncompressed bytes {}",
+                               pipeline_context->stream_id_, count++, segment.row_count(), segment.columns().size(),
+                               segment.descriptor().uncompressed_bytes());
                 // Empty columns can appear only of one staged segment is empty and adds column which
                 // does not appear in any other segment. There can also be empty columns if all segments
                 // are empty in that case this loop won't be reached as segments.size() will be 0
@@ -2006,12 +2041,12 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
         return read_multi_key(store, *pipeline_context->multi_key_, handler_data);
     }
 
-    if(opt_false(read_options.incompletes_)) {
+    if(opt_false(read_options.incompletes())) {
         util::check(std::holds_alternative<IndexRange>(read_query->row_filter), "Streaming read requires date range filter");
         const auto& query_range = std::get<IndexRange>(read_query->row_filter);
         const auto existing_range = pipeline_context->index_range();
         if(!existing_range.specified_ || query_range.end_ > existing_range.end_)
-            read_incompletes_to_pipeline(store, pipeline_context, *read_query, read_options, false, false, false,  opt_false(read_options.dynamic_schema_));
+            read_incompletes_to_pipeline(store, pipeline_context, *read_query, read_options, false, false, false,  opt_false(read_options.dynamic_schema()));
     }
 
     if(std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {
@@ -2025,7 +2060,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 
     DecodePathData shared_data;
     return version_store::do_direct_read_or_process(store, read_query, read_options, pipeline_context, shared_data, handler_data)
-    .thenValue([res_versioned_item, pipeline_context, &read_options, &handler_data, read_query, shared_data](auto&& frame) mutable {
+    .thenValue([res_versioned_item, pipeline_context, read_options, &handler_data, read_query, shared_data](auto&& frame) mutable {
         ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
         return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
         .via(&async::cpu_executor())
@@ -2034,8 +2069,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
             return ReadVersionOutput{std::move(res_versioned_item),
                                      {frame,
                                       timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_),
-                                      {},
-                                      shared_data.buffers()}};
+                                      {}}};
         });
     });
 }
@@ -2084,6 +2118,16 @@ CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_desc
         };
     }
     return std::monostate{};
+}
+
+size_t n_segments_live_during_compaction() {
+    int64_t default_count = 2 * async::TaskScheduler::instance()->io_thread_count();
+    int64_t res = ConfigsMap::instance()->get_int("VersionStore.NumSegmentsLiveDuringCompaction", default_count);
+    log::version().debug("Allowing up to {} segments to be live during compaction", res);
+    static constexpr auto max_size = static_cast<int64_t>(folly::NativeSemaphore::value_max_v);
+    util::check(res < max_size, "At most {} live segments during compaction supported but were {}, adjust VersionStore.NumSegmentsLiveDuringCompaction", max_size, res);
+    util::check(res > 0, "VersionStore.NumSegmentsLiveDuringCompaction must be strictly positive but was {}", res);
+    return static_cast<size_t>(res);
 }
 
 }

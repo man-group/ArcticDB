@@ -21,17 +21,18 @@ void TypeHandlerRegistry::init() {
 std::shared_ptr<TypeHandlerRegistry> TypeHandlerRegistry::instance_;
 std::once_flag TypeHandlerRegistry::init_flag_;
 
-std::shared_ptr<TypeHandler> TypeHandlerRegistry::get_handler(const entity::TypeDescriptor& type_descriptor) const {
-    auto it = handlers_.find(type_descriptor);
-    return it == std::end(handlers_) ? std::shared_ptr<TypeHandler>{} : it->second;
+std::shared_ptr<TypeHandler> TypeHandlerRegistry::get_handler(OutputFormat output_format, const entity::TypeDescriptor& type_descriptor) const {
+    const auto& map = handler_map(output_format);
+    auto it = map.find(type_descriptor);
+    return it == std::end(map) ? std::shared_ptr<TypeHandler>{} : it->second;
 }
 
 void TypeHandlerRegistry::destroy_instance() {
     TypeHandlerRegistry::instance_.reset();
 }
 
-void TypeHandlerRegistry::register_handler(const entity::TypeDescriptor& type_descriptor, TypeHandler&& handler) {
-     handlers_.try_emplace(type_descriptor, std::make_shared<TypeHandler>(std::move(handler)));
+void TypeHandlerRegistry::register_handler(OutputFormat output_format, const entity::TypeDescriptor& type_descriptor, TypeHandler&& handler) {
+     handler_map(output_format).try_emplace(type_descriptor, std::make_shared<TypeHandler>(std::move(handler)));
 }
 
 size_t TypeHandlerRegistry::Hasher::operator()(const entity::TypeDescriptor descriptor) const {

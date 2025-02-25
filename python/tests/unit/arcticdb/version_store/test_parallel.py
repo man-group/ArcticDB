@@ -23,12 +23,18 @@ from arcticdb.util.test import (
     random_strings_of_length,
     random_integers,
     random_floats,
-    random_dates,
+    random_dates
 )
 from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb.version_store.library import Library
+from arcticdb_ext.exceptions import UnsortedDataException
 from arcticdb_ext.storage import KeyType
 
-from arcticdb import util
+from arcticdb import util, LibraryOptions
+
+from arcticdb.util.test import config_context_multi
+
+import arcticdb_ext.cpp_async as adb_async
 
 
 def get_append_keys(lib, sym):
@@ -104,32 +110,47 @@ def test_remove_incomplete(basic_store):
     lib.remove_incomplete(sym3)
 
 
-def test_parallel_write(basic_store):
-    sym = "parallel"
-    basic_store.remove_incomplete(sym)
+@pytest.mark.parametrize("num_segments_live_during_compaction, num_io_threads, num_cpu_threads", [
+    (1, 1, 1),
+    (10, 1, 1),
+    (None, None, None)
+])
+def test_parallel_write(basic_store_tiny_segment, num_segments_live_during_compaction, num_io_threads, num_cpu_threads):
+    with config_context_multi({"VersionStore.NumSegmentsLiveDuringCompaction": num_segments_live_during_compaction,
+                               "VersionStore.NumIOThreads": num_io_threads,
+                               "VersionStore.NumCPUThreads": num_cpu_threads}):
+        adb_async.reinit_task_scheduler()
+        if num_io_threads:
+            assert adb_async.io_thread_count() == num_io_threads
+        if num_cpu_threads:
+            assert adb_async.cpu_thread_count() == num_cpu_threads
 
-    num_rows = 1111
-    dtidx = pd.date_range("1970-01-01", periods=num_rows)
-    test = pd.DataFrame(
-        {
-            "uint8": random_integers(num_rows, np.uint8),
-            "uint32": random_integers(num_rows, np.uint32),
-        },
-        index=dtidx,
-    )
-    chunk_size = 100
-    list_df = [test[i : i + chunk_size] for i in range(0, test.shape[0], chunk_size)]
-    random.shuffle(list_df)
+        store = basic_store_tiny_segment
+        sym = "parallel"
+        store.remove_incomplete(sym)
 
-    for df in list_df:
-        basic_store.write(sym, df, parallel=True)
+        num_rows = 1111
+        dtidx = pd.date_range("1970-01-01", periods=num_rows)
+        test = pd.DataFrame(
+            {
+                "uint8": random_integers(num_rows, np.uint8),
+                "uint32": random_integers(num_rows, np.uint32),
+            },
+            index=dtidx,
+        )
+        chunk_size = 100
+        list_df = [test[i : i + chunk_size] for i in range(0, test.shape[0], chunk_size)]
+        random.shuffle(list_df)
 
-    user_meta = {"thing": 7}
-    basic_store.compact_incomplete(sym, False, False, metadata=user_meta)
-    vit = basic_store.read(sym)
-    assert_frame_equal(test, vit.data)
-    assert vit.metadata["thing"] == 7
-    assert len(get_append_keys(basic_store, sym)) == 0
+        for df in list_df:
+            store.write(sym, df, parallel=True)
+
+        user_meta = {"thing": 7}
+        store.compact_incomplete(sym, False, False, metadata=user_meta)
+        vit = store.read(sym)
+        assert_frame_equal(test, vit.data)
+        assert vit.metadata["thing"] == 7
+        assert len(get_append_keys(store, sym)) == 0
 
 
 @pytest.mark.parametrize("index, expect_ordered", [
@@ -243,49 +264,57 @@ def test_floats_to_nans(lmdb_version_store_dynamic_schema):
     assert_frame_equal(vit.data, df)
 
 
-@pytest.mark.parametrize("prune_previous_versions", [True, False])
-def test_write_parallel_sort_merge(basic_arctic_library, prune_previous_versions):
-    lib = basic_arctic_library
+@pytest.mark.parametrize("num_segments_live_during_compaction, num_io_threads, num_cpu_threads", [
+    (1, 1, 1),
+    (10, 1, 1),
+    (None, None, None)
+])
+@pytest.mark.parametrize("prune_previous_versions", (True, False))
+def test_parallel_write_sort_merge(basic_store_tiny_segment, prune_previous_versions, num_segments_live_during_compaction, num_io_threads, num_cpu_threads):
+    with config_context_multi({"VersionStore.NumSegmentsLiveDuringCompaction": num_segments_live_during_compaction,
+                               "VersionStore.NumIOThreads": num_io_threads,
+                               "VersionStore.NumCPUThreads": num_cpu_threads}):
+        lib = Library("test_lib", basic_store_tiny_segment)
 
-    num_rows_per_day = 10
-    num_days = 10
-    num_columns = 4
-    column_length = 8
-    dt = datetime.datetime(2019, 4, 8, 0, 0, 0)
-    cols = random_strings_of_length(num_columns, column_length, True)
-    symbol = "test_write_parallel_sort_merge"
-    dataframes = []
-    df = pd.DataFrame()
+        num_rows_per_day = 10
+        num_days = 10
+        num_columns = 4
+        column_length = 8
+        dt = datetime.datetime(2019, 4, 8, 0, 0, 0)
+        cols = random_strings_of_length(num_columns, column_length, True)
+        symbol = "test_write_parallel_sort_merge"
+        dataframes = []
+        df = pd.DataFrame()
 
-    for _ in range(num_days):
-        index = pd.Index(
-            [dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)]
+        for _ in range(num_days):
+            index = pd.Index(
+                [dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)]
+            )
+            vals = {c: random_floats(num_rows_per_day) for c in cols}
+            new_df = pd.DataFrame(data=vals, index=index)
+
+            dataframes.append(new_df)
+            df = pd.concat((df, new_df))
+            dt = dt + datetime.timedelta(days=1)
+
+        random.shuffle(dataframes)
+        lib.write(symbol, dataframes[0])
+        for d in dataframes:
+            lib.write(symbol, d, staged=True)
+        lib.sort_and_finalize_staged_data(
+            symbol, prune_previous_versions=prune_previous_versions
         )
-        vals = {c: random_floats(num_rows_per_day) for c in cols}
-        new_df = pd.DataFrame(data=vals, index=index)
-
-        dataframes.append(new_df)
-        df = pd.concat((df, new_df))
-        dt = dt + datetime.timedelta(days=1)
-
-    random.shuffle(dataframes)
-    lib.write(symbol, dataframes[0])
-    for d in dataframes:
-        lib.write(symbol, d, staged=True)
-    lib.sort_and_finalize_staged_data(
-        symbol, prune_previous_versions=prune_previous_versions
-    )
-    vit = lib.read(symbol)
-    df.sort_index(axis=1, inplace=True)
-    result = vit.data
-    result.sort_index(axis=1, inplace=True)
-    assert_frame_equal(vit.data, df)
-    if prune_previous_versions:
-        assert 0 not in [
-            version["version"] for version in lib._nvs.list_versions(symbol)
-        ]
-    else:
-        assert_frame_equal(lib.read(symbol, as_of=0).data, dataframes[0])
+        vit = lib.read(symbol)
+        df.sort_index(axis=1, inplace=True)
+        result = vit.data
+        result.sort_index(axis=1, inplace=True)
+        assert_frame_equal(vit.data, df)
+        if prune_previous_versions:
+            assert 0 not in [
+                version["version"] for version in lib._nvs.list_versions(symbol)
+            ]
+        else:
+            assert_frame_equal(lib.read(symbol, as_of=0).data, dataframes[0])
 
 
 @pytest.mark.parametrize("prune_previous_versions", [True, False])
@@ -1409,3 +1438,152 @@ class TestSlicing:
         lib.compact_incomplete("sym", False, False)
 
         assert_frame_equal(lib.read("sym").data, df_1)
+
+
+def test_chunks_overlap(lmdb_storage, lib_name):
+    """Given - we stage chunks with indexes:
+
+    b:test:0:0xdfde242de44bdf38@1739968386409923711[0,1001]
+    b:test:0:0x95750a82cfa088df@1739968386410180283[1000,1001]
+    
+    When - We finalize the staged segments
+    
+    Then - We should succeed even though the segments seem to overlap by 1ns because the end time in the key is 1
+    greater than the last index value in the segment
+    """
+    lib: Library = lmdb_storage.create_arctic().create_library(
+        lib_name,
+        library_options=LibraryOptions(rows_per_segment=2))
+
+    idx = [
+        pd.Timestamp(0),
+        pd.Timestamp(1000),
+        pd.Timestamp(1000),
+        pd.Timestamp(1000),
+    ]
+
+    data = pd.DataFrame({"a": len(idx)}, index=idx)
+    lib.write("test", data, staged=True)
+
+    lt = lib._nvs.library_tool()
+    append_keys = lt.find_keys_for_id(KeyType.APPEND_DATA, "test")
+    assert len(append_keys) == 2
+    assert sorted([key.start_index for key in append_keys]) == [0, 1000]
+    assert [key.end_index for key in append_keys] == [1001, 1001]
+
+    lib.finalize_staged_data("test")
+
+    df = lib.read("test").data
+    assert_frame_equal(df, data)
+
+
+def test_chunks_overlap_1ns(lmdb_storage, lib_name):
+    """Given - we stage chunks that overlap by 1ns
+
+    When - We finalize the staged segments
+
+    Then - We should raise a validation error
+    """
+    lib: Library = lmdb_storage.create_arctic().create_library(
+        lib_name,
+        library_options=LibraryOptions(rows_per_segment=2))
+
+    idx = [pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]
+    first = pd.DataFrame({"a": len(idx)}, index=idx)
+    lib.write("test", first, staged=True)
+
+    idx = [pd.Timestamp(1), pd.Timestamp(3)]
+    second = pd.DataFrame({"a": len(idx)}, index=idx)
+    lib.write("test", second, staged=True)
+
+    with pytest.raises(UnsortedDataException):
+        lib.finalize_staged_data("test")
+
+
+def test_chunks_match_at_ends(lmdb_storage, lib_name):
+    """Given - we stage chunks that match at the ends
+
+    When - We finalize the staged segments
+
+    Then - Should be OK to finalize
+    """
+    lib: Library = lmdb_storage.create_arctic().create_library(
+        lib_name,
+        library_options=LibraryOptions(rows_per_segment=2))
+
+    first_idx = [pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]
+    first = pd.DataFrame({"a": np.arange(3)}, index=first_idx)
+    lib.write("test", first, staged=True)
+
+    second_idx = [pd.Timestamp(2), pd.Timestamp(2), pd.Timestamp(2), pd.Timestamp(3)]
+    second = pd.DataFrame({"a": np.arange(3, 7)}, index=second_idx)
+    lib.write("test", second, staged=True)
+
+    lib.finalize_staged_data("test")
+
+    result = lib.read("test").data
+    index_result = result.index
+    assert index_result.equals(pd.Index(first_idx + second_idx))
+    assert result.index.is_monotonic_increasing
+    # There is some non-determinism about where the overlap will end up
+    assert set(result["a"].values) == set(range(7))
+    assert result["a"][0] == 0
+    assert result["a"][-1] == 6
+
+
+def test_chunks_the_same(lmdb_storage, lib_name):
+    """Given - we stage chunks with indexes:
+
+    b:test:0:0xc7ad4135da54cd6e@1739968588832977666[1000,2001]
+    b:test:0:0x68d8759aba38bcf0@1739968588832775570[1000,1001]
+    b:test:0:0x68d8759aba38bcf0@1739968588832621000[1000,1001]
+
+    When - We finalize the staged segments
+    
+    Then - We should succeed even though the segments seem to be identical, since they are just covering a duplicated
+    index value
+    """
+    lib: Library = lmdb_storage.create_arctic().create_library(
+        lib_name,
+        library_options=LibraryOptions(rows_per_segment=2))
+
+    idx = [
+        pd.Timestamp(1000),
+        pd.Timestamp(1000),
+        pd.Timestamp(1000),
+        pd.Timestamp(1000),
+        pd.Timestamp(1000),
+        pd.Timestamp(2000),
+    ]
+
+    data = pd.DataFrame({"a": len(idx)}, index=idx)
+    lib.write("test", data, staged=True)
+
+    lt = lib._nvs.library_tool()
+    append_keys = lt.find_keys_for_id(KeyType.APPEND_DATA, "test")
+    assert len(append_keys) == 3
+    assert sorted([key.start_index for key in append_keys]) == [1000, 1000, 1000]
+    assert sorted([key.end_index for key in append_keys]) == [1001, 1001, 2001]
+
+    lib.finalize_staged_data("test")
+
+    df = lib.read("test").data
+    assert_frame_equal(df, data)
+    assert df.index.is_monotonic_increasing
+
+
+def test_staging_in_chunks_default_settings(lmdb_storage, lib_name):
+    lib: Library = lmdb_storage.create_arctic().create_library(lib_name)
+    idx = pd.date_range(pd.Timestamp(0), periods=int(31e5), freq="us")
+
+    data = pd.DataFrame({"a": len(idx)}, index=idx)
+    lib.write("test", data, staged=True)
+
+    lt = lib._nvs.library_tool()
+    append_keys = lt.find_keys_for_id(KeyType.APPEND_DATA, "test")
+    assert len(append_keys) == 31
+    lib.finalize_staged_data("test")
+
+    df = lib.read("test").data
+    assert_frame_equal(df, data)
+    assert df.index.is_monotonic_increasing

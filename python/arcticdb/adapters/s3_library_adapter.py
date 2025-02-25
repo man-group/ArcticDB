@@ -5,19 +5,26 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import re
 import time
 from typing import Optional
 import ssl
 import platform
 
-from arcticdb.options import LibraryOptions
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryDescriptor
 from arcticdb.version_store.helper import add_s3_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter
-from arcticdb_ext.storage import StorageOverride, S3Override, CONFIG_LIBRARY_NAME, AWSAuthMethod, NativeVariantStorage, S3Settings as NativeS3Settings
+from arcticdb_ext.storage import (
+    StorageOverride,
+    S3Override,
+    CONFIG_LIBRARY_NAME,
+    AWSAuthMethod,
+    NativeVariantStorage,
+    S3Settings as NativeS3Settings,
+)
 from arcticdb.encoding_version import EncodingVersion
 from collections import namedtuple
 from dataclasses import dataclass, fields
@@ -102,8 +109,9 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             self._configure_aws()
 
         super().__init__(uri, self._encoding_version)
-        
-        self._native_cfg = NativeVariantStorage(NativeS3Settings(AWSAuthMethod.DISABLED, ""))
+
+    def native_config(self):
+        return NativeVariantStorage(NativeS3Settings(AWSAuthMethod.DISABLED, "", False))
 
     def __repr__(self):
         return "S3(endpoint=%s, bucket=%s)" % (self._endpoint, self._bucket)
@@ -142,11 +150,11 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             ssl=self._ssl,
             aws_auth=self._query_params.aws_auth,
             aws_profile=self._query_params.aws_profile,
-            native_cfg=self._native_cfg,
+            native_cfg=self.native_config(),
         )
 
         lib = NativeVersionStore.create_store_from_config(
-            (env_cfg, self._native_cfg), _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
+            (env_cfg, self.native_config()), _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
         )
 
         return lib._library
@@ -190,7 +198,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         _kwargs = {k: v for k, v in parsed_query.items()}
         return ParsedQuery(**_kwargs)
 
-    def get_storage_override(self) -> StorageOverride:
+    def _get_s3_override(self) -> S3Override:
         s3_override = S3Override()
         # storage_override will overwrite access and key while reading config from storage
         # access and secret whether equals to _RBAC_ are used for determining aws_auth is true on C++ layer
@@ -218,10 +226,11 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             s3_override.ssl = self._ssl
 
         s3_override.use_virtual_addressing = self._query_params.use_virtual_addressing
+        return s3_override
 
+    def get_storage_override(self) -> StorageOverride:
         storage_override = StorageOverride()
-        storage_override.set_s3_override(s3_override)
-
+        storage_override.set_s3_override(self._get_s3_override())
         return storage_override
 
     def get_masking_override(self) -> StorageOverride:
@@ -265,7 +274,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             ssl=self._ssl,
             aws_auth=self._query_params.aws_auth,
             aws_profile=self._query_params.aws_profile,
-            native_cfg=self._native_cfg,
+            native_cfg=self.native_config(),
         )
 
     def _configure_aws(self):

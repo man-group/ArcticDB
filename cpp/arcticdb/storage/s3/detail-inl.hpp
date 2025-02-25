@@ -27,6 +27,7 @@
 #include <aws/s3/model/Object.h>
 #include <aws/s3/model/Delete.h>
 #include <aws/s3/model/ObjectIdentifier.h>
+#include <folly/gen/Combine.h>
 
 #include <boost/interprocess/streams/bufferstream.hpp>
 
@@ -46,6 +47,10 @@ static const size_t DELETE_OBJECTS_LIMIT = 1000;
 template<class It>
 using Range = folly::Range<It>;
 
+inline bool is_not_found_error(const Aws::S3::S3Errors& error) {
+    return error == Aws::S3::S3Errors::NO_SUCH_KEY || error == Aws::S3::S3Errors::RESOURCE_NOT_FOUND;
+}
+
 [[noreturn]] inline void raise_s3_exception(const Aws::S3::S3Error& err, const std::string& object_name) {
     std::string error_message;
     auto type = err.GetErrorType();
@@ -57,7 +62,7 @@ using Range = folly::Range<It>;
                                             object_name);
 
     // s3_client.HeadObject returns RESOURCE_NOT_FOUND if a key is not found.
-    if (type == Aws::S3::S3Errors::NO_SUCH_KEY || type == Aws::S3::S3Errors::RESOURCE_NOT_FOUND) {
+    if (is_not_found_error(type)) {
         throw KeyNotFoundException(fmt::format("Key Not Found Error: {}",
                                                error_message_suffix));
     }
@@ -110,8 +115,7 @@ using Range = folly::Range<It>;
 }
 
 inline bool is_expected_error_type(Aws::S3::S3Errors err) {
-    return err == Aws::S3::S3Errors::NO_SUCH_KEY || err == Aws::S3::S3Errors::RESOURCE_NOT_FOUND
-        || err == Aws::S3::S3Errors::NO_SUCH_BUCKET;
+    return is_not_found_error(err) || err == Aws::S3::S3Errors::NO_SUCH_BUCKET;
 }
 
 inline void raise_if_unexpected_error(const Aws::S3::S3Error& err, const std::string& object_name) {
@@ -122,7 +126,7 @@ inline void raise_if_unexpected_error(const Aws::S3::S3Error& err, const std::st
 
 template<class KeyBucketizer>
 void do_write_impl(
-    KeySegmentPair&& key_seg,
+    KeySegmentPair& key_seg,
     const std::string& root_folder,
     const std::string& bucket_name,
     S3ClientInterface& s3_client,
@@ -135,9 +139,9 @@ void do_write_impl(
     ARCTICDB_SUBSAMPLE(S3StorageWriteValues, 0)
     auto& k = key_seg.variant_key();
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
-    auto& seg = key_seg.segment();
+    auto seg = key_seg.segment_ptr();
 
-    auto put_object_result = s3_client.put_object(s3_object_name, std::move(seg), bucket_name);
+    auto put_object_result = s3_client.put_object(s3_object_name, *seg, bucket_name);
 
     if (!put_object_result.is_success()) {
         auto& error = put_object_result.get_error();
@@ -148,13 +152,13 @@ void do_write_impl(
 
 template<class KeyBucketizer>
 void do_update_impl(
-    KeySegmentPair&& key_seg,
+    KeySegmentPair& key_seg,
     const std::string& root_folder,
     const std::string& bucket_name,
     S3ClientInterface& s3_client,
     KeyBucketizer&& bucketizer) {
     // s3 updates the key if it already exists. We skip the check for key not found to save a round-trip.
-    do_write_impl(std::move(key_seg), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer));
+    do_write_impl(key_seg, root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer));
 }
 
 template<class KeyBucketizer, class KeyDecoder>
@@ -225,7 +229,7 @@ void do_read_impl(
     KeyDecoder&& key_decoder,
     ReadKeyOpts opts) {
     auto key_seg = do_read_impl(std::move(variant_key), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer), std::forward<KeyDecoder>(key_decoder), opts);
-    visitor(key_seg.variant_key(), std::move(key_seg.segment()));
+    visitor(key_seg.variant_key(), std::move(*key_seg.segment_ptr()));
 }
 
 struct FailedDelete {
@@ -236,6 +240,21 @@ struct FailedDelete {
         failed_key(failed_key),
         error_message(error_message) {}
 };
+
+inline void raise_if_failed_deletes(const boost::container::small_vector<FailedDelete, 1>& failed_deletes) {
+    if (!failed_deletes.empty()) {
+        auto failed_deletes_message = std::ostringstream();
+        for (auto i = 0u; i < failed_deletes.size(); ++i) {
+            auto& failed = failed_deletes[i];
+            failed_deletes_message << fmt::format("'{}' failed with '{}'", to_serialized_key(failed.failed_key), failed.error_message);
+            if (i != failed_deletes.size()) {
+                failed_deletes_message << ", ";
+            }
+        }
+        auto error_message = fmt::format("Failed to delete some of the objects: {}.", failed_deletes_message.str());
+        raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(error_message);
+    }
+}
 
 template<class KeyBucketizer>
 void do_remove_impl(
@@ -288,18 +307,7 @@ void do_remove_impl(
         });
 
     util::check(to_delete.empty(), "Have {} segment that have not been removed", to_delete.size());
-    if (!failed_deletes.empty()) {
-        auto failed_deletes_message = std::ostringstream();
-        for (auto i = 0u; i < failed_deletes.size(); ++i) {
-            auto& failed = failed_deletes[i];
-            failed_deletes_message << fmt::format("'{}' failed with '{}'", to_serialized_key(failed.failed_key), failed.error_message);
-            if (i != failed_deletes.size()) {
-                failed_deletes_message << ", ";
-            }
-        }
-        auto error_message = fmt::format("Failed to delete some of the objects: {}.", failed_deletes_message.str());
-        raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(error_message);
-    }
+    raise_if_failed_deletes(failed_deletes);
 }
 
 template<class KeyBucketizer>
@@ -314,8 +322,60 @@ void do_remove_impl(
 }
 
 template<class KeyBucketizer>
+void do_remove_no_batching_impl(
+    std::span<VariantKey> ks,
+    const std::string& root_folder,
+    const std::string& bucket_name,
+    S3ClientInterface& s3_client,
+    KeyBucketizer&& bucketizer) {
+    ARCTICDB_SUBSAMPLE(S3StorageDeleteNoBatching, 0)
+
+    std::vector<folly::Future<S3Result<std::monostate>>> delete_object_results;
+    for (const auto& k : ks) {
+        auto key_type_dir = key_type_folder(root_folder, variant_key_type(k));
+        auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
+        auto delete_fut = s3_client.delete_object(s3_object_name, bucket_name);
+        delete_object_results.push_back(std::move(delete_fut));
+    }
+
+    folly::QueuedImmediateExecutor inline_executor;
+    auto delete_results = folly::collect(std::move(delete_object_results)).via(&inline_executor).get();
+
+    boost::container::small_vector<FailedDelete, 1> failed_deletes;
+    auto keys_and_delete_results = folly::gen::from(ks) | folly::gen::move | folly::gen::zip(std::move(delete_results)) | folly::gen::as<std::vector>();
+    for (auto&& [k, delete_object_result] : std::move(keys_and_delete_results)) {
+        if (delete_object_result.is_success()) {
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted object with key '{}'", variant_key_view(k));
+        } else if (const auto& error = delete_object_result.get_error(); !is_not_found_error(error.GetErrorType())) {
+            auto key_type_dir = key_type_folder(root_folder, variant_key_type(k));
+            auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
+            auto bad_key_name = s3_object_name.substr(key_type_dir.size(), std::string::npos);
+            auto error_message = error.GetMessage();
+            failed_deletes.push_back(FailedDelete{
+                variant_key_from_bytes(reinterpret_cast<const uint8_t *>(bad_key_name.data()), bad_key_name.size(), variant_key_type(k)),
+                std::move(error_message)});
+        } else {
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Acceptable error when deleting object with key '{}'", variant_key_view(k));
+        }
+    }
+
+    raise_if_failed_deletes(failed_deletes);
+}
+
+template<class KeyBucketizer>
+void do_remove_no_batching_impl(
+    VariantKey&& variant_key,
+    const std::string& root_folder,
+    const std::string& bucket_name,
+    S3ClientInterface& s3_client,
+    KeyBucketizer&& bucketizer) {
+    std::array<VariantKey, 1> arr{std::move(variant_key)};
+    do_remove_no_batching_impl(std::span(arr), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer));
+}
+
+template<class KeyBucketizer>
 void do_write_if_none_impl(
-                KeySegmentPair &&kv,
+                KeySegmentPair &kv,
                 const std::string &root_folder,
                 const std::string &bucket_name,
                 S3ClientInterface &s3_client,
@@ -324,9 +384,9 @@ void do_write_if_none_impl(
             auto key_type_dir = key_type_folder(root_folder, kv.key_type());
             auto &k = kv.variant_key();
             auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
-            auto &seg = kv.segment();
+            auto& seg = *kv.segment_ptr();
 
-            auto put_object_result = s3_client.put_object(s3_object_name, std::move(seg), bucket_name, PutHeader::IF_NONE_MATCH);
+            auto put_object_result = s3_client.put_object(s3_object_name, seg, bucket_name, PutHeader::IF_NONE_MATCH);
 
             if (!put_object_result.is_success()) {
                 auto& error = put_object_result.get_error();

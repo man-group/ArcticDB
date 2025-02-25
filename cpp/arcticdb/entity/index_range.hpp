@@ -43,6 +43,14 @@ inline std::string tokenized_index(const IndexValue& val) {
        });
 }
 
+inline bool intersects(const TimestampRange &left, const TimestampRange& right) {
+    return left.first <= right.second && left.second >= right.first;
+}
+
+inline bool contains(const TimestampRange& range, timestamp point) {
+    return point >= range.first && point <= range.second;
+}
+
 struct IndexRange {
     IndexValue start_;
     IndexValue end_;
@@ -62,6 +70,11 @@ struct IndexRange {
         start_(rg.first),
         end_(rg.second),
         specified_(true) {
+    }
+
+    operator TimestampRange() const {
+        util::check(std::holds_alternative<NumericIndex>(start_) && std::holds_alternative<NumericIndex>(end_), "Can't get timestamp range from non-numeric index");
+        return {std::get<timestamp>(start_), std::get<timestamp>(end_)};
     }
 
     // Indices of non-matching types will always be excluded, might want to assert though

@@ -15,22 +15,44 @@ namespace arcticdb {
         SegmentInMemory& frame,
         size_t dst_col,
         size_t field_col,
-        pipelines::PipelineContextRow& context
-    ) :
+        pipelines::PipelineContextRow& context,
+        OutputFormat output_format) :
             source_type_desc_(context.descriptor().fields(field_col).type()),
             dest_type_desc_(frame.field(dst_col).type()),
             frame_field_descriptor_(frame.field(dst_col)),
-            dest_size_(data_type_size(dest_type_desc_, DataTypeMode::EXTERNAL)),
+            dest_size_(data_type_size(dest_type_desc_, output_format, DataTypeMode::EXTERNAL)),
             num_rows_(context.slice_and_key().slice_.row_range.diff()),
             first_row_(context.slice_and_key().slice_.row_range.first - frame.offset()),
             offset_bytes_(dest_size_ * first_row_),
-            dest_bytes_(dest_size_ * num_rows_) {
+            dest_bytes_(dest_size_ * num_rows_),
+            dest_col_(dst_col) {
+    }
+
+ColumnMapping::ColumnMapping(
+    const entity::TypeDescriptor source_type_desc,
+    const entity::TypeDescriptor dest_type_desc,
+    const entity::Field& frame_field_descriptor,
+    const size_t dest_size,
+    const size_t num_rows,
+    const size_t first_row,
+    const size_t offset_bytes,
+    const size_t dest_bytes,
+    const size_t dest_col) :
+        source_type_desc_(source_type_desc),
+        dest_type_desc_(dest_type_desc),
+        frame_field_descriptor_(frame_field_descriptor),
+        dest_size_(dest_size),
+        num_rows_(num_rows),
+        first_row_(first_row),
+        offset_bytes_(offset_bytes),
+        dest_bytes_(dest_bytes),
+        dest_col_(dest_col) {
+
     }
 
     StaticColumnMappingIterator::StaticColumnMappingIterator(
         pipelines::PipelineContextRow& context,
-        size_t index_fieldcount
-    ) :
+        size_t index_fieldcount) :
             index_fieldcount_(index_fieldcount),
             field_count_(context.slice_and_key().slice_.col_range.diff() + index_fieldcount),
             first_slice_col_offset_(context.slice_and_key().slice_.col_range.first),
@@ -85,6 +107,7 @@ namespace arcticdb {
             source_field_pos_ = field_count_;
             source_col_ = last_slice_col_offset_;
         }
+        ARCTICDB_TRACE(log::version(), "Post advance: source {} dest {} source_col: dst_col_", source_field_pos_, field_count_);
     }
 
     bool StaticColumnMappingIterator::invalid() const {
@@ -92,6 +115,7 @@ namespace arcticdb {
     }
 
     bool StaticColumnMappingIterator::has_next() const {
+        ARCTICDB_TRACE(log::version(), "Has next: {} {}", source_field_pos_, field_count_);
         return source_field_pos_ < field_count_;
     }
 

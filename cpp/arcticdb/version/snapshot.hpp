@@ -40,7 +40,7 @@ void tombstone_snapshot(
 
 void tombstone_snapshot(
         const std::shared_ptr<stream::StreamSink>& store,
-        storage::KeySegmentPair&& key_segment_pair,
+        storage::KeySegmentPair& key_segment_pair,
         bool log_changes
         );
 

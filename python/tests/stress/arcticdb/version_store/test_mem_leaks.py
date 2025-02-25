@@ -671,6 +671,7 @@ if MEMRAY_SUPPORTED:
 
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_memory("490 MB")
+    @pytest.mark.skipif(MACOS, reason="Mac OS mem usage is harder to predicts than WINDOWS")
     def test_mem_limit_querybuilder_read_memray(library_with_symbol):
         """
         The fact that we do not leak memory does not mean that we
@@ -684,6 +685,7 @@ if MEMRAY_SUPPORTED:
 
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_memory("490 MB")
+    @pytest.mark.skipif(MACOS, reason="Mac OS mem usage is harder to predicts than WINDOWS")
     def test_mem_limit_querybuilder_read_batch_memray(library_with_symbol):
         """
         The fact that we do not leak memory does not mean that we

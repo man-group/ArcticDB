@@ -37,7 +37,7 @@ async::AsyncStore<>& LibraryTool::async_store() {
 
 ReadResult LibraryTool::read(const VariantKey& key) {
     auto segment = read_to_segment(key);
-    auto segment_in_memory = decode_segment(std::move(segment));
+    auto segment_in_memory = decode_segment(segment);
     auto frame_and_descriptor = frame_and_descriptor_from_segment(std::move(segment_in_memory));
     auto atom_key = util::variant_match(
             key,
@@ -45,14 +45,14 @@ ReadResult LibraryTool::read(const VariantKey& key) {
             // We construct a dummy atom key in case of a RefKey to be able to build the read_result
             [](const RefKey& key){return AtomKeyBuilder().build<KeyType::VERSION_REF>(key.id());},
             [](const auto&){});
-    return pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key);
+
+    return pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key, OutputFormat::PANDAS);
 }
 
 Segment LibraryTool::read_to_segment(const VariantKey& key) {
     auto kv = store()->read_compressed_sync(key);
     util::check(kv.has_segment(), "Failed to read key: {}", key);
-    kv.segment().force_own_buffer();
-    return std::move(kv.segment());
+    return kv.segment().clone();
 }
 
 std::optional<google::protobuf::Any> LibraryTool::read_metadata(const VariantKey& key){
@@ -88,7 +88,7 @@ SegmentInMemory LibraryTool::overwrite_append_data(
         std::holds_alternative<AtomKey>(key) && std::get<AtomKey>(key).type() == KeyType::APPEND_DATA,
         "Can only override APPEND_DATA keys. Received: {}", key);
     auto old_segment = read_to_segment(key);
-    auto old_segment_in_memory = decode_segment(std::move(old_segment));
+    auto old_segment_in_memory = decode_segment(old_segment);
     const auto& tsd = old_segment_in_memory.index_descriptor();
     std::optional<AtomKey> next_key = std::nullopt;
     if (tsd.proto().has_next_key()){

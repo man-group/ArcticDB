@@ -10,10 +10,12 @@
 #include <cstdint>
 
 namespace arcticdb {
-enum class OutputType : uint8_t {
+enum class OutputFormat : uint8_t {
+    NATIVE,
     PANDAS,
     ARROW,
-    PARQUET
+    PARQUET,
+    COUNT
 };
 
 }  // namespace arcticdb
