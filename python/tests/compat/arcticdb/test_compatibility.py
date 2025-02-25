@@ -6,6 +6,7 @@ from arcticdb.options import ModifiableEnterpriseLibraryOption
 from arcticdb.toolbox.library_tool import LibraryTool
 from tests.util.mark import ARCTICDB_USING_CONDA
 
+from arcticdb.util.venv import CurrentVersion
 
 if ARCTICDB_USING_CONDA:
     pytest.skip("These tests rely on pip based environments", allow_module_level=True)
