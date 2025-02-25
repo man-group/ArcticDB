@@ -25,7 +25,6 @@
 #ifdef __APPLE__
 #include <cstdio>
 #endif
-#include <folly/Function.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 
@@ -515,7 +514,7 @@ public:
         return data_.bytes();
     }
 
-    ColumnData  data() const {
+    ColumnData data() const {
         return ColumnData(&data_.buffer(), &shapes_.buffer(), type_, sparse_map_ ? &*sparse_map_ : nullptr);
     }
 

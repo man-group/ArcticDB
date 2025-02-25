@@ -899,7 +899,7 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
     const ReadOptions& read_options
     ) {
     auto component_manager = std::make_shared<ComponentManager>();
-    const ProcessingConfig processing_config{opt_false(read_options.dynamic_schema_), pipeline_context->rows_};
+    const ProcessingConfig processing_config{opt_false(read_options.dynamic_schema()), pipeline_context->rows_};
     for (const auto& clause: read_query->clauses_) {
         clause->set_processing_config(processing_config);
         clause->set_component_manager(component_manager);
