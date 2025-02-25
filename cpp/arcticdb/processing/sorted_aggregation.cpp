@@ -88,8 +88,29 @@ template<AggregationOperator aggregation_operator, typename input_type_info, typ
 requires arcticdb::util::is_instantiation_of_v<input_type_info, ScalarTypeInfo> && arcticdb::util::is_instantiation_of_v<output_type_info, ScalarTypeInfo>
 consteval bool are_input_output_operation_allowed() {
     return (is_numeric_type(input_type_info::data_type) && is_numeric_type(output_type_info::data_type)) ||
-    (is_sequence_type(input_type_info::data_type) && (is_sequence_type(output_type_info::data_type) || aggregation_operator == AggregationOperator::COUNT)) ||
-    (is_bool_type(input_type_info::data_type) && (is_bool_type(output_type_info::data_type) || is_numeric_type(output_type_info::data_type)));
+        (is_sequence_type(input_type_info::data_type) && (is_sequence_type(output_type_info::data_type) || aggregation_operator == AggregationOperator::COUNT)) ||
+        (is_bool_type(input_type_info::data_type) && (is_bool_type(output_type_info::data_type) || is_numeric_type(output_type_info::data_type)));
+}
+
+template<AggregationOperator aggregation_operator>
+DataType generate_output_data_type(const DataType common_input_data_type) {
+    if constexpr (aggregation_operator == AggregationOperator::SUM) {
+        // Deal with overflow as best we can
+        if (is_unsigned_type(common_input_data_type) || is_bool_type(common_input_data_type)) {
+            return DataType::UINT64;
+        } else if (is_signed_type(common_input_data_type)) {
+            return DataType::INT64;
+        } else if (is_floating_point_type(common_input_data_type)) {
+            return DataType::FLOAT64;
+        }
+    } else if constexpr (aggregation_operator == AggregationOperator::MEAN) {
+        if (!is_time_type(common_input_data_type)) {
+            return DataType::FLOAT64;
+        }
+    } else if constexpr (aggregation_operator == AggregationOperator::COUNT) {
+        return DataType::UINT64;
+    }
+    return common_input_data_type;
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
@@ -212,7 +233,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(
     StringPool& string_pool
 ) const {
     const DataType common_input_type = generate_common_input_type(input_agg_columns).value();
-    const TypeDescriptor td(generate_output_data_type(common_input_type), Dimension::Dim0);
+    const TypeDescriptor td(generate_output_data_type<aggregation_operator>(common_input_type), Dimension::Dim0);
     Column res(td, output_index_column.row_count(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
     details::visit_type(
         res.type().data_type(),
@@ -267,7 +288,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(
     const bm::bvector<>& existing_columns
 ) const {
     const DataType common_input_type = generate_common_input_type(input_agg_columns).value();
-    const TypeDescriptor td(generate_output_data_type(common_input_type), Dimension::Dim0);
+    const TypeDescriptor td(generate_output_data_type<aggregation_operator>(common_input_type), Dimension::Dim0);
     Column res(td, output_index_column.row_count(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
     details::visit_type(
         res.type().data_type(),
@@ -317,7 +338,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
 std::optional<DataType> SortedAggregator<aggregation_operator, closed_boundary>::generate_common_input_type(
-    std::span<const ColumnWithStrings> input_agg_columns
+    const std::span<const ColumnWithStrings> input_agg_columns
 ) const {
     std::optional<DataType> common_input_type;
     for (const auto& opt_input_agg_column: input_agg_columns) {
@@ -340,28 +361,6 @@ void SortedAggregator<aggregation_operator, closed_boundary>::check_aggregator_s
               aggregation_operator == AggregationOperator::COUNT)),
             "Resample: Unsupported aggregation type {} on column '{}' of type {}",
             aggregation_operator, get_input_column_name().value, data_type);
-}
-
-template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-DataType SortedAggregator<aggregation_operator, closed_boundary>::generate_output_data_type(DataType common_input_data_type) const {
-    DataType output_type{common_input_data_type};
-    if constexpr (aggregation_operator == AggregationOperator::SUM) {
-        // Deal with overflow as best we can
-        if (is_unsigned_type(common_input_data_type) || is_bool_type(common_input_data_type)) {
-            output_type = DataType::UINT64;
-        } else if (is_signed_type(common_input_data_type)) {
-            output_type = DataType::INT64;
-        } else if (is_floating_point_type(common_input_data_type)) {
-            output_type = DataType::FLOAT64;
-        }
-    } else if constexpr (aggregation_operator == AggregationOperator::MEAN) {
-        if (!is_time_type(common_input_data_type)) {
-            output_type = DataType::FLOAT64;
-        }
-    } else if constexpr (aggregation_operator == AggregationOperator::COUNT) {
-        output_type = DataType::UINT64;
-    }
-    return output_type;
 }
 
 template class SortedAggregator<AggregationOperator::SUM, ResampleBoundary::LEFT>;

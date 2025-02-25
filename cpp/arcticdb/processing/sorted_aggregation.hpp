@@ -386,7 +386,6 @@ public:
 private:
     [[nodiscard]] std::optional<DataType> generate_common_input_type(std::span<const ColumnWithStrings> input_agg_columns) const;
     void check_aggregator_supported_with_data_type(DataType data_type) const;
-    [[nodiscard]] DataType generate_output_data_type(DataType common_input_data_type) const;
 
     ColumnName input_column_name_;
     ColumnName output_column_name_;
