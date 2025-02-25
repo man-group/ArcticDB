@@ -293,7 +293,8 @@ std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_v1_head
         total_size);
 
     // This is both a sanity check and a way to populate the segment with the correct size
-    util::check(total_size == calculate_size(), "Expected total size {} to be equal to calculated size {}", total_size, calculate_size());
+    auto calculated_size = calculate_size();
+    util::check(total_size == calculate_size, "Expected total size {} to be equal to calculated size {}", total_size, calculate_size);
 
     auto* dst = tmp->preamble();
     util::check(dst != nullptr, "Expected dst to be non-null");
@@ -313,7 +314,7 @@ std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_v1_head
         ARCTICDB_DEBUG(log::codec(), "src is nullptr, skipping memcpy");
     }
 
-    return std::make_tuple(tmp->preamble(), total_size, std::move(tmp));
+    return std::make_tuple(dst, total_size, std::move(tmp));
 }
 
 std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_header_v1() {
