@@ -8,6 +8,8 @@ import venv
 from typing import Dict, List, Optional, Union
 
 from packaging.version import Version
+from arcticdb_ext import set_config_int, unset_config_int
+from arcticdb.arctic import Arctic
 
 logger = logging.getLogger("Compatibility tests")
 
@@ -171,3 +173,25 @@ class VenvLib:
         ]
         return self.execute(python_commands, {"expected_df": df})
 
+
+class CurrentVersion:
+    """
+    For many of the compatibility tests we need to maintain a single open connection to the library.
+    For example LMDB on Windows starts to fail if we at the same time we use an old_venv and current connection.
+
+    So we use `with CurrentVersion` construct to ensure we delete all our outstanding references to the library.
+    """
+    def __init__(self, uri, lib_name):
+        self.uri = uri
+        self.lib_name = lib_name
+
+    def __enter__(self):
+        set_config_int("VersionMap.ReloadInterval", 0) # We disable the cache to be able to read the data written from old_venv
+        self.ac = Arctic(self.uri)
+        self.lib = self.ac.get_library(self.lib_name)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        unset_config_int("VersionMap.ReloadInterval")
+        del self.lib
+        del self.ac
