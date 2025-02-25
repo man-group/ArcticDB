@@ -3,7 +3,8 @@ name: "Automated Release: Create next release branch"
 on:
   release:
     types: [released]
-run-name: "Automated release: ${{ github.event.release.tag_name }} released. Cutting the branch for the next version"
+  workflow_dispatch:
+
 jobs:
   get-master-sha:
     name: Get master sha
