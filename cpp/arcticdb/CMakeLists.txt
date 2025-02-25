@@ -27,7 +27,7 @@ find_package(prometheus-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(double-conversion REQUIRED)
 find_package(unordered_dense CONFIG REQUIRED)
-find_package(date REQUIRED)
+#find_package(date REQUIRED)
 
 if(NOT WIN32 AND ${SSL_LINK})
     find_package(Kerberos REQUIRED)
