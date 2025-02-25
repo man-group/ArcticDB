@@ -768,7 +768,7 @@ if MEMRAY_SUPPORTED:
         min_rows = min(num_rows_list)
         max_rows = max(num_rows_list)
 
-        np.random.seed = 959034
+        np.random.seed(959034)
         # constructing a list of head and tail rows to be selected
         important_values = [0, min_rows, 1, max_rows, 0, -min_rows, -1, -max_rows, 2, -2, min_rows-1, - (min_rows-1)]
         num_rows_to_select = important_values  
