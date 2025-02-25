@@ -383,6 +383,7 @@ set(arcticdb_srcs
         util/type_traits.hpp
         util/variant.hpp
         util/gil_safe_py_none.hpp
+        util/stats_query.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
         version/schema_checks.hpp
@@ -520,9 +521,10 @@ set(arcticdb_srcs
         util/timer.cpp
         util/trace.cpp
         util/type_handler.cpp
+        util/gil_safe_py_none.cpp
+        util/stats_query.cpp
         version/key_block.hpp
         version/key_block.cpp
-        util/gil_safe_py_none.cpp
         version/local_versioned_engine.cpp
         version/schema_checks.cpp
         version/op_log.cpp
