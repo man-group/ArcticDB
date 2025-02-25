@@ -107,6 +107,16 @@ namespace arcticdb {
     [[nodiscard]] Segment encode_v1(SegmentInMemory&& s, const arcticdb::proto::encoding::VariantCodec &codec_opts) {
         ARCTICDB_SAMPLE(EncodeSegment, 0)
         auto in_mem_seg = std::move(s);
+
+        // INTENTIONAL
+        std::vector<int> arr(3);
+        s.end_row();
+        std::cout<<s.num_blocks()<< " " <<s.num_blocks()<<'\n';
+        auto a = s.clone();
+        s.clear();
+        std::cout<<arr.data()[4];
+
+
         SegmentHeader segment_header{EncodingVersion::V1};
         segment_header.set_compacted(in_mem_seg.compacted());
 
