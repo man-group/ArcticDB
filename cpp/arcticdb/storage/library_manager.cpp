@@ -46,6 +46,7 @@ void apply_storage_override(
     util::variant_match(
             storage_override.variant(),
             StorageVisitor<S3Override>{lib_cfg_proto, override_https},
+            StorageVisitor<GCPXMLOverride>{lib_cfg_proto, override_https},
             StorageVisitor<AzureOverride>{lib_cfg_proto, override_https},
             StorageVisitor<LmdbOverride>{lib_cfg_proto, override_https},
             [] (const std::monostate&) {});

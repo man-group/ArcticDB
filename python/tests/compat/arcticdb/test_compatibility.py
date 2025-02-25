@@ -6,6 +6,11 @@ from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb.options import ModifiableEnterpriseLibraryOption
 from arcticdb.toolbox.library_tool import LibraryTool
+from tests.util.mark import ARCTICDB_USING_CONDA
+
+
+if ARCTICDB_USING_CONDA:
+    pytest.skip("These tests rely on pip based environments", allow_module_level=True)
 
 
 class CurrentVersion:

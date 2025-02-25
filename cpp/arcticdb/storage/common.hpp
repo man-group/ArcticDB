@@ -75,14 +75,26 @@ inline std::vector<char> stream_to_vector(std::iostream& src) {
 
 class NativeVariantStorage {
 public:
-    using VariantStorageConfig = std::variant<std::monostate, s3::S3Settings>;
+    using VariantStorageConfig = std::variant<std::monostate, s3::S3Settings, s3::GCPXMLSettings>;
     explicit NativeVariantStorage(VariantStorageConfig config = std::monostate()) : config_(std::move(config)) {};
     const VariantStorageConfig& variant() const {
         return config_;
     }
+
     void update(const s3::S3Settings& config) {
         config_ = config;
     }
+
+    std::string to_string() {
+        return util::variant_match(config_, [](std::monostate) {
+            return "empty";
+        }, [](s3::S3Settings) {
+            return "s3";
+        }, [](s3::GCPXMLSettings) {
+            return "gcpxml";
+        });
+    }
+
 private:
     VariantStorageConfig config_;
 };
