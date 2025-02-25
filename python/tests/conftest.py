@@ -128,6 +128,22 @@ def lmdb_storage(tmp_path) -> Generator[LmdbStorageFixture, None, None]:
 def lmdb_library(lmdb_storage, lib_name) -> Library:
     return lmdb_storage.create_arctic().create_library(lib_name)
 
+@pytest.fixture
+def lmdb_library_any(lmdb_storage, lib_name, request) -> Library:
+    """
+    Allows passing library creation parameters as parameters of the test or other fixture.
+    Example: 
+
+
+        @pytest.mark.parametrize("lmdb_library_any", [
+                    {'library_options': LibraryOptions(rows_per_segment=100, columns_per_segment=100)}
+                ], indirect=True)
+        def test_my_test(lmdb_library_any):
+           .....
+    """
+    params = request.param if hasattr(request, 'param') else {}
+    yield lmdb_storage.create_arctic().create_library(name=lib_name, **params)
+
 
 @pytest.fixture
 def lmdb_library_dynamic_schema(lmdb_storage, lib_name) -> Library:

@@ -23,6 +23,8 @@ import time
 import pandas as pd
 
 from typing import Generator, List, Tuple
+from arcticdb.encoding_version import EncodingVersion
+from arcticdb.options import LibraryOptions
 from arcticdb.util.test import get_sample_dataframe, random_string
 from arcticdb.util.utils import DFGenerator
 from arcticdb.version_store.library import Library, ReadRequest
@@ -729,31 +731,47 @@ if MEMRAY_SUPPORTED:
         gc.collect()
 
     @pytest.fixture
-    def prepare_head_tails_symbol(basic_store_small_segment):
+    def prepare_head_tails_symbol(lmdb_library_any):
         """
         This fixture is part of test `test_mem_leak_head_tail_memray`
+
+        It creates a symbol with several versions and snapshot for each version.
+        It inserts dataframes which are large given the segment size of library.
+        And if the dynamic schema is used each version has more columns than previous version
+
         Should not be reused
         """
-        store: NativeVersionStore = basic_store_small_segment
+        lib: Library = lmdb_library_any
+        opts: LibraryOptions = lib.options()
         total_number_columns = 1002
         symbol = "asdf12345"
-        num_rows_list = [279,199,350,999,1001]
+        num_rows_list = [279,199,1,350,999,0,1001]
         snapshot_names = []
         for rows in num_rows_list:
             st = time.time()
             df = DFGenerator.generate_wide_dataframe(num_rows=rows, num_cols=total_number_columns, num_string_cols=25, 
                                                      start_time=pd.Timestamp(0),seed=64578)
-            store.write(symbol,df)
+            lib.write(symbol,df)
             snap = f"{symbol}_{rows}"
-            store.snapshot(snap)
+            lib.snapshot(snap)
             snapshot_names.append(snap)
             logger.info(f"Generated {rows} in {time.time() - st} sec")
+            if opts.dynamic_schema:
+                # For dynamic schema we will increase number of columns each iteration
+                total_number_columns += 20
+                logger.info(f"Total number of columns increased to {total_number_columns}")
+            
         all_columns = df.columns.to_list()
-        yield (store, symbol, num_rows_list, total_number_columns, snapshot_names, all_columns)
-        store.delete(symbol=symbol)
+        yield (lib, symbol, num_rows_list, snapshot_names, all_columns)
+        lib.delete(symbol=symbol)
 
     @MEMRAY_TESTS_MARK
+    @pytest.mark.parametrize("lmdb_library_any", [
+            {'library_options': LibraryOptions(rows_per_segment=233, columns_per_segment=197, dynamic_schema=True, encoding_version=EncodingVersion.V2)},
+            {'library_options': LibraryOptions(rows_per_segment=99, columns_per_segment=99, dynamic_schema=False, encoding_version=EncodingVersion.V1)}
+        ], indirect=True)
     @pytest.mark.limit_leaks(location_limit="52 KB", filter_fn=is_relevant)
+
     def test_mem_leak_head_tail_memray(prepare_head_tails_symbol):
         """
         This test aims to test `head` and `tail` functions if they do leak memory.
@@ -762,7 +780,7 @@ if MEMRAY_SUPPORTED:
         """
 
         store: NativeVersionStore = None
-        (store, symbol, num_rows_list, total_number_columns, snapshot_names, all_columns) = prepare_head_tails_symbol
+        (store, symbol, num_rows_list, snapshot_names, all_columns) = prepare_head_tails_symbol
     
         start_test = time.time()
         min_rows = min(num_rows_list)
@@ -770,9 +788,10 @@ if MEMRAY_SUPPORTED:
 
         np.random.seed(959034)
         # constructing a list of head and tail rows to be selected
-        important_values = [0, min_rows, 1, max_rows, 0, -min_rows, -1, -max_rows, 2, -2, min_rows-1, - (min_rows-1)]
-        num_rows_to_select = important_values  
-        num_rows_to_select.extend(np.random.randint(low=2, high=min_rows-10, size=7)) # add 7 more random values
+        num_rows_to_select=[]
+        important_values = [0, 1, 0 -1, 2, -2, max_rows, -max_rows ]
+        num_rows_to_select.extend(important_values)
+        num_rows_to_select.extend(np.random.randint(low=5, high=99, size=7)) # add 7 more random values
         # number of iterations will be the list length/size
         iterations = len(num_rows_to_select)
         # constructing a random list of values for snapshot names for each iteration
