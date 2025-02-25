@@ -262,8 +262,8 @@ def test_storage_mover_clone_old_library(old_venv_and_arctic_uri, lib_name):
         s.clone_all_keys_for_symbol(sym, 1000)
         assert_frame_equal(src_lib.read(sym).data, dst_lib.read(sym).data)
 
-    if arctic_uri.startswith("s3") and "1.6.2" in old_venv.version:
-        pytest.skip("Reading the new library on s3 with 1.6.2 requires some work arounds")
+    if (arctic_uri.startswith("s3") or arctic_uri.startswith("azure")) and "1.6.2" in old_venv.version:
+        pytest.skip("Reading the new library on s3 or azure with 1.6.2 requires some work arounds")
         
     # Make sure that we can read the new lib with the old version
     old_ac = old_venv.create_arctic(arctic_uri)
