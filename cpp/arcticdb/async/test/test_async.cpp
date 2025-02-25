@@ -10,9 +10,10 @@
 #include <arcticdb/storage/config_resolvers.hpp>
 #include <arcticdb/storage/library_index.hpp>
 #include <arcticdb/async/async_store.hpp>
-#include <arcticdb/util/test/config_common.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
+#include <arcticdb/util/test/config_common.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 
 
 #include <string>
@@ -136,6 +137,59 @@ TEST(Async, CollectWithThrow) {
    }
 
    ARCTICDB_DEBUG(log::version(), "Collect returned");
+}
+
+TEST(Async, QueryStatsDemo) {
+    using namespace arcticdb::query_stats;
+    class EnableQueryStatsRAII {
+    public:
+        EnableQueryStatsRAII() {
+            QueryStats::instance()->enable();
+        }
+        ~EnableQueryStatsRAII() {
+            QueryStats::instance()->disable();
+            QueryStats::instance()->reset_stats();
+        }
+    };
+    EnableQueryStatsRAII enable_query_stats;
+    async::TaskScheduler sched{20, 20};
+    auto work = [&]() {
+        std::vector<folly::Future<folly::Unit>> stuff;
+        {
+            stuff.push_back(sched.submit_cpu_task(MaybeThrowTask(false))
+                .thenValue([](auto) {
+                    auto query_stat_operation_time = query_stats::add_task_count_and_time(KeyType::SYMBOL_LIST, query_stats::TaskType::S3_ListObjectsV2);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1)); // For verifying call duration calculation
+                    query_stats::add(KeyType::SYMBOL_LIST, query_stats::TaskType::S3_ListObjectsV2, 1);
+                    query_stats::add(KeyType::SYMBOL_LIST, query_stats::TaskType::S3_ListObjectsV2, 10);
+                    return folly::Unit{};
+                })
+                .via(&async::io_executor())
+            );
+            stuff.push_back(sched.submit_io_task(MaybeThrowTask(false))
+                .thenValue([](auto) {
+                    auto query_stat_operation_time = query_stats::add_task_count_and_time(KeyType::SYMBOL_LIST, query_stats::TaskType::S3_ListObjectsV2);
+                    query_stats::add(KeyType::SYMBOL_LIST, query_stats::TaskType::S3_ListObjectsV2, 2);
+                    return folly::Unit{};
+                })
+                .thenValue([](auto) {
+                    throw std::runtime_error("Test exception"); // Exception will not affect query stats
+                }).thenValue([](auto) {
+                    // Below won't be logged as preceeding task throws
+                    auto query_stat_operation_time = query_stats::add_task_count_and_time(KeyType::SYMBOL_LIST, query_stats::TaskType::S3_ListObjectsV2);
+                    query_stats::add(KeyType::SYMBOL_LIST, query_stats::TaskType::S3_ListObjectsV2, 3);
+                    return folly::Unit{};
+                })
+            );
+            folly::collectAll(stuff).get();
+        }
+    };
+    std::thread t1(work), t2(work); // mimic multithreading at python level
+    t1.join();
+    t2.join();
+    auto result = QueryStats::instance()->get_stats()["SYMBOL_LIST"]["storage_ops"]["S3_ListObjectsV2"];
+    ASSERT_TRUE(result.stats_["total_time_ms"] > 0);
+    ASSERT_EQ(result.stats_["count"], 15);
 }
 
 using IndexSegmentReader = int;
