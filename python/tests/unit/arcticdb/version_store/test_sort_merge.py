@@ -637,7 +637,7 @@ class TestSortMergeDynamicSchema:
         lib.sort_and_finalize_staged_data("sym")
 
         expected = pd.DataFrame(
-            {"col_0": np.array([1, 10], dtype="int32"), "col_1": np.array([2, 20], dtype="int64"), "col_3": np.array([3, 30], dtype="float32")},
+            {"col_0": np.array([1, 10], dtype="int32"), "col_1": np.array([2, 20], dtype="int64"), "col_3": np.array([3, 30], dtype="float64")},
             index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 2)])
         )
         assert_frame_equal(lib.read("sym").data, expected, check_dtype=True)
@@ -659,7 +659,7 @@ class TestSortMergeDynamicSchema:
         lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
 
         expected = pd.DataFrame(
-            {"col_0": np.array([1, 10], dtype="int32"), "col_1": np.array([2, 20], dtype="int64"), "col_3": np.array([3, 30], dtype="float32")},
+            {"col_0": np.array([1, 10], dtype="int32"), "col_1": np.array([2, 20], dtype="int64"), "col_3": np.array([3, 30], dtype="float64")},
             index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 2)])
         )
         assert_frame_equal(lib.read("sym").data, expected, check_dtype=True)

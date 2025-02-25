@@ -6,8 +6,7 @@ import hypothesis.extra.pandas as hs_pd
 import hypothesis.extra.numpy as hs_np
 import hypothesis.strategies as st
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
-from arcticdb import QueryBuilder
-from arcticdb.util.test import assert_frame_equal, generic_resample_test
+from arcticdb.util.test import generic_resample_test
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 
@@ -108,3 +107,27 @@ def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
                     raise pandas_error
                 else:
                     return
+
+
+def test_resample_mean_large_arithmetic_error_repro(lmdb_version_store_v1):
+    """The hypothesis test above failed with a superset of this example on master.
+
+    @reproduce_failure('6.72.4', b'AXicY2RgZGRgWMwKJEAIxGEGEowsTCAOIxPDfH8wxTCfhRGiposJSIBVMjIAmYxAbAbmQAGICeQ3wLggifr///9/Ps0FtoEJpAuhHAQA5XYJAA==')
+
+    We had to increase the tolerance of assert_dfs_approximate as a result.
+    """
+    lib = lmdb_version_store_v1
+    sym = "sym"
+    rule = "1min"
+    origin = "start"
+    df = pd.DataFrame({"col_int": [-513, -9223372036854775808, -513, 9223372036649978369]}, dtype=np.int64)
+    df.index = pd.date_range("2025-01-01", periods=4, freq="s")
+    lib.write(sym, df)
+
+    agg = {'col_int_mean': ('col_int', 'mean')}
+    generic_resample_test(
+        lib,
+        sym,
+        rule,
+        agg,
+        origin=origin)
