@@ -674,7 +674,8 @@ class DFGenerator:
                            uint_frame1, uint_frame2, uint_frame3, uint_frame4,
                            float_frame1, float_frame2, str_frame], axis=1) # Concatenate horizontally
         
-        range = pd.date_range(start=start_time, periods=frame.shape[0], freq=freq, name='index')
-        
-        frame.index = range
+        if start_time:
+            range = pd.date_range(start=start_time, periods=frame.shape[0], freq=freq, name='index')
+            frame.index = range
+            
         return  frame
