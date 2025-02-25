@@ -99,7 +99,7 @@ class ChunkedBufferImpl {
     ChunkedBufferImpl(size_t size, entity::AllocationType allocation_type) :
             allocation_type_(allocation_type) {
         if(allocation_type == entity::AllocationType::DETACHABLE) {
-            add_detachable_block(size);
+            add_detachable_block(size, 0UL);
             bytes_ = size;
         } else {
             reserve(size);
@@ -202,7 +202,7 @@ class ChunkedBufferImpl {
             last_block().bytes_ += extra_size;
         } else {
             if(allocation_type_ == entity::AllocationType::DETACHABLE) {
-                add_detachable_block(extra_size);
+                add_detachable_block(extra_size, bytes_);
             } else if (is_regular_sized()) {
                 auto space = free_space();
                 if (extra_size <= DefaultBlockSize && (space == 0 || aligned)) {
@@ -405,14 +405,14 @@ class ChunkedBufferImpl {
         bytes_ += size;
     }
 
-    void add_detachable_block(size_t capacity) {
+    void add_detachable_block(size_t capacity, size_t offset) {
         if(capacity == 0)
             return;
 
         if (!no_blocks() && last_block().empty())
             free_last_block();
 
-        blocks_.emplace_back(create_detachable_block(capacity));
+        blocks_.emplace_back(create_detachable_block(capacity, offset));
         if(block_offsets_.empty())
             block_offsets_.emplace_back(0);
 
@@ -462,6 +462,7 @@ class ChunkedBufferImpl {
         auto new_block = create_block(remaining_bytes, 0);
         new_block->copy_from(block->data() + start_offset, remaining_bytes, 0);
         blocks_[0] = new_block;
+        block->abandon();
         delete block;
     }
 
@@ -473,6 +474,7 @@ class ChunkedBufferImpl {
         auto new_block = create_block(bytes, 0);
         new_block->copy_from(block->data() + bytes, remaining_bytes, 0);
         blocks_[0] = new_block;
+        block->abandon();
         delete block;
     }
 
@@ -484,13 +486,14 @@ class ChunkedBufferImpl {
         auto new_block = create_block(remaining_bytes, block->offset_);
         new_block->copy_from(block->data(), remaining_bytes, 0);
         *blocks_.rbegin() = new_block;
+        block->abandon();
         delete block;
     }
 
   private:
     MemBlock* create_block(size_t capacity, size_t offset) const {
         if(allocation_type_ == entity::AllocationType::DETACHABLE)
-            return create_detachable_block(capacity);
+            return create_detachable_block(capacity, offset);
         else
             return create_regular_block(capacity, offset);
     }
@@ -501,10 +504,10 @@ class ChunkedBufferImpl {
         return reinterpret_cast<BlockType*>(ptr);
     }
 
-    MemBlock* create_detachable_block(size_t capacity) const {
+    MemBlock* create_detachable_block(size_t capacity, size_t offset) const {
         auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
         auto* data = new uint8_t[capacity];
-        new(ptr) MemBlock(data, capacity, 0UL, ts, true);
+        new(ptr) MemBlock(data, capacity, offset, ts, true);
         return reinterpret_cast<BlockType*>(ptr);
     }
 

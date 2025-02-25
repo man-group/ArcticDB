@@ -26,6 +26,14 @@
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/entity/read_result.hpp>
 
+namespace arcticdb {
+struct ArrowReadResult;
+}
+
+namespace arcticdb {
+struct ArrowReadResult;
+}
+
 namespace arcticdb::version_store {
 
 using namespace arcticdb::entity;
@@ -160,6 +168,13 @@ class PythonVersionStore : public LocalVersionedEngine {
         const ReadOptions& read_options,
         std::any& handler_data);
 
+    ArrowReadResult read_dataframe_version_arrow(
+        const StreamId &stream_id,
+        const VersionQuery& version_query,
+        const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options,
+        std::any& handler_data);
+
     VersionedItem sort_merge(
             const StreamId& stream_id,
             const py::object& user_meta,
@@ -282,12 +297,6 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<StreamId>& id,
         const std::vector<VersionQuery>& version_query);
 
-    std::vector<std::variant<ReadResult, DataError>> batch_read(
-        const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries,
-        std::vector<std::shared_ptr<ReadQuery>>& read_queries,
-        const ReadOptions& read_options);
-
     std::vector<std::variant<VersionedItem, DataError>> batch_update(
         const std::vector<StreamId>& stream_ids,
         const std::vector<py::tuple>& items,
@@ -296,6 +305,12 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<UpdateQuery>& update_qeries,
         bool prune_previous_versions,
         bool upsert);
+
+    std::vector<std::variant<ReadResult, DataError>> batch_read(
+        const std::vector<StreamId>& stream_ids,
+        const std::vector<VersionQuery>& version_queries,
+        std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+        const ReadOptions& read_options);
 
     std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> batch_read_metadata(
         const std::vector<StreamId>& stream_ids,

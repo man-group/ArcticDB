@@ -1,4 +1,6 @@
 if(NOT ${ARCTICDB_USING_CONDA})
+    set(BUILD_TZ_LIB ON CACHE BOOL "Build the tz library" FORCE)
+
     add_subdirectory(pybind11)
     add_subdirectory(recycle)
     add_subdirectory(semimap EXCLUDE_FROM_ALL)
@@ -6,4 +8,6 @@ if(NOT ${ARCTICDB_USING_CONDA})
     add_subdirectory(Remotery)
     add_subdirectory(lmdbcxx)
     add_subdirectory(entt)
+    add_subdirectory(sparrow)
+    add_subdirectory(date)
 endif()
