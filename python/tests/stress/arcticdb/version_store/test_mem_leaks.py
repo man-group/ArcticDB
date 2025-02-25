@@ -30,7 +30,7 @@ from arcticdb.util.utils import DFGenerator
 from arcticdb.version_store.library import Library, ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore
-from tests.util.mark import MACOS, SLOW_TESTS_MARK, WINDOWS, MEMRAY_SUPPORTED, MEMRAY_TESTS_MARK, SKIP_CONDA_MARK
+from tests.util.mark import LINUX, MACOS, SLOW_TESTS_MARK, WINDOWS, MEMRAY_SUPPORTED, MEMRAY_TESTS_MARK, SKIP_CONDA_MARK
 
 
 logging.basicConfig(level=logging.INFO)
@@ -593,6 +593,30 @@ if MEMRAY_SUPPORTED:
             # do something to check if we need this to be added
             # as mem leak
             # print(f"SAMPLE >>> {frame.filename}:{frame.function}[{frame.lineno}]")
+            frame_info_str = f"{frame.filename}:{frame.function}:[{frame.lineno}]"
+
+            if "folly::CPUThreadPoolExecutor::CPUTask" in frame_info_str:
+                logger.warning(f"Frame excluded : {frame_info_str}")
+                logger.warning(f'''Explanation    : These are on purpose, and they come from the interaction of 
+                               multi-threading and forking. When Python forks, the task-scheduler has a linked-list 
+                               of tasks to execute, but there is a global lock held that protects the thread-local state.
+                               We can't free the list without accessing the global thread-local storage singleton, 
+                               and that is protected by a lock which is now held be a thread that is in a different 
+                               process, so it will never be unlocked in the child. As a work-around we intentionally 
+                               leak the task-scheduler and replace it with a new one, in this method: 
+                               https://github.com/man-group/ArcticDB/blob/master/cpp/arcticdb/async/task_scheduler.cpp#L34
+
+                               It's actually due to a bug in folly, because the lock around the thread-local 
+                               storage manager has a compile-time token that should be used to differentiate it 
+                               from other locks, but it has been constructed with type void as have other locks. 
+                               It's possible they might fix it at some point in which case we can free the memory. 
+                               Or we do have a vague intention to move away from folly for async if we 
+                               find something better
+
+                               Great that it is catching this, as it's the one case in the whole project where I know 
+                               for certain that it does leak memory (and only because there's no alternative''')
+                return False
+            
             pass
         return True
 
@@ -772,8 +796,7 @@ if MEMRAY_SUPPORTED:
             {'library_options': LibraryOptions(rows_per_segment=233, columns_per_segment=197, dynamic_schema=True, encoding_version=EncodingVersion.V2)},
             {'library_options': LibraryOptions(rows_per_segment=99, columns_per_segment=99, dynamic_schema=False, encoding_version=EncodingVersion.V1)}
         ], indirect=True)
-    @pytest.mark.limit_leaks(location_limit="52 KB", filter_fn=is_relevant)
-
+    @pytest.mark.limit_leaks(location_limit="52 KB" if not LINUX else "380 KB", filter_fn=is_relevant)
     def test_mem_leak_head_tail_memray(prepare_head_tails_symbol):
         """
         This test aims to test `head` and `tail` functions if they do leak memory.
