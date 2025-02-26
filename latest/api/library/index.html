@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/5.2.4/api/library/">
+        <link rel="canonical" href="https://docs.arcticdb.io/5.2.3/api/library/">
       
       
         <link rel="prev" href="../arctic_uri/">
@@ -1777,15 +1777,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#arcticdb.version_store.library.Library.update_batch" class="md-nav__link">
-    <span class="md-ellipsis">
-      update_batch
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#arcticdb.version_store.library.Library.write" class="md-nav__link">
     <span class="md-ellipsis">
       write
@@ -2247,14 +2238,6 @@ explicitly state support for single-symbol concurrent writes.</p>
               </td>
             </tr>
             <tr class="doc-section-item">
-              <td><code><a class="autorefs autorefs-internal" title="update_batch (arcticdb.version_store.library.Library.update_batch)" href="#arcticdb.version_store.library.Library.update_batch">update_batch</a></code></td>
-              <td class="doc-function-details">
-                <div class="doc-md-description">
-                  <p>Perform an update operation on a list of symbols in parallel. All constrains on</p>
-                </div>
-              </td>
-            </tr>
-            <tr class="doc-section-item">
               <td><code><a class="autorefs autorefs-internal" title="write (arcticdb.version_store.library.Library.write)" href="#arcticdb.version_store.library.Library.write">write</a></code></td>
               <td class="doc-function-details">
                 <div class="doc-md-description">
@@ -2459,6 +2442,26 @@ not combined in any way with the metadata stored in the previous version.</p>
           <tr class="doc-section-item">
             <td>
                 <code>prune_previous_versions</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Removes previous (non-snapshotted) versions from the database.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="bool">bool</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>default</code>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
@@ -4803,18 +4806,6 @@ on <code>LazyDataFrame</code> for more details.</p>
               </p>
             </td>
           </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>output_format</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>What format to return the output in. One of PANDAS or ARROW.</p>
-              </div>
-              <p>
-              </p>
-            </td>
-          </tr>
       </tbody>
     </table>
 
@@ -5988,8 +5979,6 @@ for exactly this purpose and to make it very clear when deletion is intended.</p
 <p>If using static schema then all the column names of <code>data</code>, their order, and their type must match the columns already in storage.</p>
 <p>If dynamic schema is used then data will override everything in storage for the entire index of <code>data</code>. Update
 will not keep columns from storage which are not in <code>data</code>.</p>
-<p>The update will split the first and last segments in the storage that intersect with 'data'. Therefore, frequent
-calls to update might lead to data fragmentation (see the example below).</p>
 
 
 <table>
@@ -6171,211 +6160,6 @@ modified, even if <code>data</code> covers a wider date range.</p>
 <span class="go">2018-01-03      40</span>
 <span class="go">2018-01-04       4</span>
 </code></pre></div>
-    <p>Update will split the first and the last segment intersecting with <code>data</code></p>
-    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">&quot;2024-01-01&quot;</span><span class="p">),</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">&quot;2024-02-01&quot;</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="sa">f</span><span class="s2">&quot;col_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">))</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">)},</span> <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;test&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lt</span><span class="o">=</span><span class="n">lib</span><span class="o">.</span><span class="n">_dev_tools</span><span class="o">.</span><span class="n">library_tool</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">lt</span><span class="o">.</span><span class="n">read_index</span><span class="p">(</span><span class="s2">&quot;test&quot;</span><span class="p">))</span>
-<span class="go">start_index                     end_index  version_id stream_id          creation_ts         content_hash  index_type  key_type  start_col  end_col  start_row  end_row</span>
-<span class="go">2024-01-01  2024-02-01 00:00:00.000000001           0   b&#39;test&#39;  1738599073224386674  9652922778723941392          84         2          1        2          0       32</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">update_index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">&quot;2024-01-10&quot;</span><span class="p">),</span> <span class="n">freq</span><span class="o">=</span><span class="s2">&quot;ns&quot;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">200000</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">update</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="sa">f</span><span class="s2">&quot;col_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">)},</span> <span class="n">index</span><span class="o">=</span><span class="n">update_index</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s2">&quot;test&quot;</span><span class="p">,</span> <span class="n">update</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">lt</span><span class="o">.</span><span class="n">read_index</span><span class="p">(</span><span class="s2">&quot;test&quot;</span><span class="p">))</span>
-<span class="go">start_index                                    end_index  version_id stream_id          creation_ts          content_hash  index_type  key_type  start_col  end_col  start_row  end_row</span>
-<span class="go">2024-01-01 00:00:00.000000 2024-01-09 00:00:00.000000001           1   b&#39;test&#39;  1738599073268200906  13838161946080117383          84         2          1        2          0        9</span>
-<span class="go">2024-01-10 00:00:00.000000 2024-01-10 00:00:00.000100000           1   b&#39;test&#39;  1738599073256354553  15576483210589662891          84         2          1        2          9   100009</span>
-<span class="go">2024-01-10 00:00:00.000100 2024-01-10 00:00:00.000200000           1   b&#39;test&#39;  1738599073256588040  12429442054752910013          84         2          1        2     100009   200009</span>
-<span class="go">2024-01-11 00:00:00.000000 2024-02-01 00:00:00.000000001           1   b&#39;test&#39;  1738599073268493107   5975110026983744452          84         2          1        2     200009   200031</span>
-</code></pre></div>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="arcticdb.version_store.library.Library.update_batch" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">update_batch</span>
-
-
-<a href="#arcticdb.version_store.library.Library.update_batch" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><span class="nf">update_batch</span><span class="p">(</span>
-    <span class="n">update_payloads</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="arcticdb.version_store.library.UpdatePayload">UpdatePayload</span></span><span class="p">],</span>
-    <span class="n">upsert</span><span class="p">:</span> <span class="n"><span title="bool">bool</span></span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n"><span title="bool">bool</span></span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="VersionedItem (arcticdb.version_store._store.VersionedItem)" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="DataError (arcticdb_ext.version_store.DataError)" href="../exceptions/#arcticdb.DataError">DataError</a></span><span class="p">]]</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Perform an update operation on a list of symbols in parallel. All constrains on
-<a href="/api/library/#arcticdb.version_store.library.Library.update">update</a> apply to this call as well.</p>
-
-
-<table>
-      <thead>
-        <tr>
-          <th><span class="doc-section-title">PARAMETER</span></th>
-          <th><span>DESCRIPTION</span></th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>update_payloads</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>List <code>arcticdb.library.UpdatePayload</code>. Each element of the list describes an update operation for a
-particular symbol. Providing the symbol name, data, etc. The same symbol should not appear twice in this
-list.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="typing.List">List</span>[<span title="arcticdb.version_store.library.UpdatePayload">UpdatePayload</span>]</code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>prune_previous_versions</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>Removes previous (non-snapshotted) versions from the library.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="bool">bool</span></code>
-                  </span>
-                  <span class="doc-param-default">
-                    <b>DEFAULT:</b>
-                      <code>False</code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>upsert</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>If True any symbol in <code>update_payloads</code> which is not already in the library will be created.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="bool">bool</span></code>
-                  </span>
-                  <span class="doc-param-default">
-                    <b>DEFAULT:</b>
-                      <code>False</code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<table>
-      <thead>
-        <tr>
-          <th><span class="doc-section-title">RETURNS</span></th>
-          <th><span>DESCRIPTION</span></th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <span class="doc-returns-annotation">
-                    <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="VersionedItem (arcticdb.version_store._store.VersionedItem)" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a>, <a class="autorefs autorefs-internal" title="DataError (arcticdb_ext.version_store.DataError)" href="../exceptions/#arcticdb.DataError">DataError</a>]]</code>
-                </span>
-            </td>
-            <td class="doc-returns-details">
-              <div class="doc-md-description">
-                <p>List of versioned items. i-th entry corresponds to i-th element of <code>update_payloads</code>. Each result correspond
-to a structure containing metadata and version number of the affected symbol in the store. If a key error or
-any other internal exception is raised, a DataError object is returned, with symbol, error_code,
-error_category, and exception_string properties.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<table>
-      <thead>
-        <tr>
-          <th><span class="doc-section-title">RAISES</span></th>
-          <th><span>DESCRIPTION</span></th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-              <span class="doc-raises-annotation">
-                  <code><a class="autorefs autorefs-internal" title="ArcticDuplicateSymbolsInBatchException (arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException)" href="../exceptions/#arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException">ArcticDuplicateSymbolsInBatchException</a></code>
-              </span>
-            </td>
-            <td class="doc-raises-details">
-              <div class="doc-md-description">
-                <p>When duplicate symbols appear in payload.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-              <span class="doc-raises-annotation">
-                  <code><a class="autorefs autorefs-internal" title="ArcticUnsupportedDataTypeException (arcticdb.version_store.library.ArcticUnsupportedDataTypeException)" href="../exceptions/#arcticdb.version_store.library.ArcticUnsupportedDataTypeException">ArcticUnsupportedDataTypeException</a></code>
-              </span>
-            </td>
-            <td class="doc-raises-details">
-              <div class="doc-md-description">
-                <p>If data that is not of NormalizableType appears in any of the payloads.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<p><span class="doc-section-title">Examples:</span></p>
-    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df1</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">&#39;column_1&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">&quot;2025-01-01&quot;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">3</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">df1</span>
-<span class="go">            column_1</span>
-<span class="go">2025-01-01         1</span>
-<span class="go">2025-01-02         2</span>
-<span class="go">2025-01-03         3</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">df2</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">&#39;column_2&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">11</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">&quot;2024-01-01&quot;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">df2</span>
-<span class="go">            column_2</span>
-<span class="go">2024-01-01        10</span>
-<span class="go">2024-01-02        11</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol_1&quot;</span><span class="p">,</span> <span class="n">df1</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol_2&quot;</span><span class="p">,</span> <span class="n">df1</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">update_batch</span><span class="p">([</span><span class="n">arcticdb</span><span class="o">.</span><span class="n">library</span><span class="o">.</span><span class="n">UpdatePayload</span><span class="p">(</span><span class="s2">&quot;symbol_1&quot;</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;column_1&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">&quot;2025-01-03&quot;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">2</span><span class="p">))),</span> <span class="n">arcticdb</span><span class="o">.</span><span class="n">library</span><span class="o">.</span><span class="n">UpdatePayload</span><span class="p">(</span><span class="s2">&quot;symbol_2&quot;</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;column_2&quot;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">&quot;2023-01-01&quot;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">1</span><span class="p">)))])</span>
-<span class="go">[VersionedItem(symbol=&#39;symbol_1&#39;, library=&#39;test&#39;, data=n/a, version=1, metadata=(None,), host=&#39;LMDB(path=...)&#39;, timestamp=1737542783853861819), VersionedItem(symbol=&#39;symbol_2&#39;, library=&#39;test&#39;, data=n/a, version=1, metadata=(None,), host=&#39;LMDB(path=...)&#39;, timestamp=1737542783851798754)]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol_1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
-<span class="go">            column_1</span>
-<span class="go">2025-01-01         1</span>
-<span class="go">2025-01-02         2</span>
-<span class="go">2025-01-03         4</span>
-<span class="go">2025-01-04         5</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol_2&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
-<span class="go">            column_2</span>
-<span class="go">2023-01-01        -1</span>
-<span class="go">2024-01-01        10</span>
-<span class="go">2024-01-02        11</span>
-</code></pre></div>
 
     </div>
 
@@ -6420,7 +6204,6 @@ all staged data rendering the data readable by clients. To finalize staged data,
 <p>Note: ArcticDB will use the 0-th level index of the Pandas DataFrame for its on-disk index.</p>
 <p>Any non-<code>DatetimeIndex</code> will converted into an internal <code>RowCount</code> index. That is, ArcticDB will assign each
 row a monotonically increasing integer identifier and that will be used for the index.</p>
-<p>See the Metadata section of our online documentation for details about how metadata is persisted and caveats.</p>
 
 
 <table>
@@ -6836,7 +6619,6 @@ A new version will be created.</p>
 <p>If the symbol is missing, it causes a write with empty data (None, pickled, can't append) and the supplied
 metadata.</p>
 <p>This method should be faster than <code>write</code> as it involves no data segment read/write operations.</p>
-<p>See the Metadata section of our online documentation for details about how metadata is persisted and caveats.</p>
 
 
 <table>
@@ -6952,7 +6734,6 @@ in succession as some constant-time operations can be executed only once rather 
 <code>write_metadata_payloads</code>.
 Note that this isn't an atomic operation - it's possible for the metadata for one symbol to be fully written and
 readable before another symbol.</p>
-<p>See the Metadata section of our online documentation for details about how metadata is persisted and caveats.</p>
 
 
 <table>
