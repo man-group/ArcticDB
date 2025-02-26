@@ -275,6 +275,7 @@ void create_dense_bitmap(size_t offset, const util::BitSet& sparse_map, Column& 
 
     bitset_to_packed_bits(sparse_map, reinterpret_cast<uint64_t*>(sparse_buffer.data()));
 }
+
 void decode_or_expand(
     const uint8_t*& data,
     Column& dest_column,
