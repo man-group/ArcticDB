@@ -1,3 +1,6 @@
+from multiprocessing import Queue, Process
+
+import pytest
 from arcticdb.util.test import sample_dataframe
 from arcticdb_ext.storage import KeyType
 
@@ -92,3 +95,47 @@ def test_scan_object_sizes(basic_store):
     assert sizes[KeyType.VERSION].count == 1
     assert sizes[KeyType.TABLE_INDEX].count == 1
     assert sizes[KeyType.TABLE_DATA].count == 1
+
+
+@pytest.fixture
+def reader_store(basic_store):
+    return basic_store
+
+
+@pytest.fixture
+def writer_store(basic_store):
+    return basic_store
+
+
+def read_repeatedly(version_store, queue: Queue):
+    while True:
+        try:
+            version_store.version_store.scan_object_sizes_by_stream()
+        except Exception as e:
+            queue.put(e)
+            raise  # don't get stuck in the while loop when we already know there's an issue
+
+
+def write_repeatedly(version_store):
+    while True:
+        version_store.write("sym", [1, 2, 3], prune_previous_version=True)
+
+
+def test_symbol_sizes_concurrent(reader_store, writer_store):
+    """We should still return (possibly approximate) symbol sizes even when the keys we scan are being deleted by
+    another process."""
+    writer_store.write("sym", [1, 2, 3], prune_previous_version=True)
+    exceptions_in_reader = Queue()
+    reader = Process(target=read_repeatedly, args=(reader_store, exceptions_in_reader))
+    writer = Process(target=write_repeatedly, args=(writer_store,))
+
+    try:
+        reader.start()
+        writer.start()
+        reader.join(1)
+        writer.join(0.001)
+    finally:
+        writer.terminate()
+        reader.terminate()
+
+    assert exceptions_in_reader.empty()
