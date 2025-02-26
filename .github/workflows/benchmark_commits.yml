@@ -6,7 +6,7 @@ on:
       commit:             {required: true, type: string, description: commit hash that will be benchmarked}
       run_on_pr_head:     {required: false, default: false, type: boolean, description: Specifies if the benchmark should run on PR head branch}
       dev_image_tag:      {required: false, default: 'latest', type: string, description: Tag of the ArcticDB development image}
-      suite_to_run:       {required: true, type: string, default: 'LMDB', description: Default benchmark on 'LMDB' storage (or 'REAL' storage)}
+      suite_to_run:       {required: true, type: string, default: 'LMDB', description: Default benchmark on 'LMDB' storage (or 'REAL' storage ond 'ALL' for both)}
       suite_overwrite:       {required: false, type: string, default: '', description: User defined tests to run}
 jobs:
   start_ec2_runner:
@@ -74,11 +74,13 @@ jobs:
           pip install asv virtualenv
           python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
 
-      - name: Confugure what suite or tests to execute
+      - name: Configure what suite or tests to execute
         shell: bash -el {0}
         run: | 
             if [ "${{ github.event.inputs.suite_to_run }}" == "REAL" ]; then
               SUITE='^(real_).*'
+            elif [ "${{ github.event.inputs.suite_to_run }}" == "ALL" ]; then
+              SUITE='.*'
             else
               SUITE='^(?!real_).*'
             fi
