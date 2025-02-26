@@ -35,14 +35,16 @@ NO_OPERATION = "no-operation-load"
 CREATE_DATAFRAME = "create-df-pandas-from_dict"
 PANDAS_PARQUET = "pandas-parquet"
 ARCTICDB_LMDB = "arcticdb-lmdb"
+ARCTICDB_AMAZON_S3 = "arcticdb-amazon-s3"
 
-class ComparisonBenchmarks:
+class RealComparisonBenchmarks:
     """
     The test aims to compare efficiency of read and write operations
     in terms of memory on one graph
         - creation of dataframe
         - read/write dataframe
-        - read/write dataframe to arcticdb LMDB 
+        - read/write dataframe to arcticdb LMDB
+        - read/write dataframe to arcticdb Amazon S3
 
     The above problem is interesting in 2 ways:
      a) how to measure accurately the memory of certain operation with asv
@@ -72,12 +74,11 @@ class ComparisonBenchmarks:
                     pandas-parquet          5.6G
                     arcticdb-lmdb          5.01G
              ============================ =======
-
     """
 
     rounds = 1
     ## Note in most of our cases setup() is expensive therefore we play with number only and fix repeat to 1
-    number = 3 # invoke X times the test runs between each setup-teardown 
+    number = 2 # invoke X times the test runs between each setup-teardown 
     repeat = 1 # defines the number of times the measurements will invoke setup-teardown
     min_run_count = 1
     warmup_time = 0
@@ -87,38 +88,47 @@ class ComparisonBenchmarks:
     LIB_NAME = "compare"
     URL = "lmdb://compare"
     SYMBOL = "dataframe"
-    NUMBER_ROWS = 3_000_000 
+    NUMBER_ROWS = 2_000_000 #100_000
 
+    REAL_STORAGE_SETUP = GeneralUseCaseNoSetup(Storage.AMAZON, "COMPARISON_OPS")
 
-    params = [NO_OPERATION, CREATE_DATAFRAME, PANDAS_PARQUET, ARCTICDB_LMDB]
+    params = [NO_OPERATION, CREATE_DATAFRAME, PANDAS_PARQUET, ARCTICDB_LMDB, ARCTICDB_AMAZON_S3]
     param_names = ["backend_type"]
 
     def setup_cache(self):
         logger.info(f"Setup CACHE start")
         st = time.time()
-        dict = self.create_dict(ComparisonBenchmarks.NUMBER_ROWS)
+        dict = self.create_dict(RealComparisonBenchmarks.NUMBER_ROWS)
         df = pd.DataFrame(dict)
-        logger.info(f"DF with {ComparisonBenchmarks.NUMBER_ROWS} rows generated for {time.time() - st}")
-        ac = Arctic(ComparisonBenchmarks.URL)
-        ac.delete_library(ComparisonBenchmarks.LIB_NAME)
-        lib = ac.create_library(ComparisonBenchmarks.LIB_NAME)
-        lib.write(symbol=ComparisonBenchmarks.SYMBOL, data=df)
+        logger.info(f"DF with {RealComparisonBenchmarks.NUMBER_ROWS} rows generated for {time.time() - st}")
+        ac = Arctic(RealComparisonBenchmarks.URL)
+        ac.delete_library(RealComparisonBenchmarks.LIB_NAME)
+        lib = ac.create_library(RealComparisonBenchmarks.LIB_NAME)
+        lib.write(symbol=RealComparisonBenchmarks.SYMBOL, data=df)
+        RealComparisonBenchmarks.REAL_STORAGE_SETUP.remove_all_modifiable_libraries(confirm=True)
         return (df, dict)
 
     def teardown(self, tpl, btype):
         self.delete_if_exists(self.path)
         self.delete_if_exists(self.path_to_read)
+        RealComparisonBenchmarks.REAL_STORAGE_SETUP.delete_modifiable_library(self.pid)
         logger.info(f"Teardown completed")
 
     def setup(self, tpl, btype):
         logger.info(f"Setup started")
         df, dict = tpl
-        self.ac = Arctic(ComparisonBenchmarks.URL)
-        self.lib = self.ac[ComparisonBenchmarks.LIB_NAME]
+        self.ac = Arctic(RealComparisonBenchmarks.URL)
+        self.lib = self.ac[RealComparisonBenchmarks.LIB_NAME]
         self.path = f"{tempfile.gettempdir()}/df.parquet"
         self.path_to_read = f"{tempfile.gettempdir()}/df_to_read.parquet"
         self.delete_if_exists(self.path)
         df.to_parquet(self.path_to_read, index=True)
+        self.pid = os.getpid()
+        # With shared storage we create different libs for each process
+        # therefore we initialize the symbol here also not in setup_cache
+        self.s3_lib = RealComparisonBenchmarks.REAL_STORAGE_SETUP.get_modifiable_library(self.pid)
+        self.s3_symbol = RealComparisonBenchmarks.REAL_STORAGE_SETUP.get_symbol_name_template(self.pid)
+        self.s3_lib.write(self.s3_symbol, df) 
         del df, dict, tpl
         gc.collect()
         logger.info(f"Setup ended")
@@ -152,7 +162,10 @@ class ComparisonBenchmarks:
         elif btype == PANDAS_PARQUET:
             pd.read_parquet(self.path_to_read)
         elif btype == ARCTICDB_LMDB:
-            self.lib.read(ComparisonBenchmarks.SYMBOL)
+            self.lib.read(RealComparisonBenchmarks.SYMBOL)
+        elif btype == ARCTICDB_AMAZON_S3:
+            self.s3_lib.read(self.s3_symbol) 
+            pass
         else: 
             raise Exception(f"Unsupported type: {btype}")
 
@@ -167,6 +180,9 @@ class ComparisonBenchmarks:
             df.to_parquet(self.path, index=True)
         elif btype == ARCTICDB_LMDB:
             self.lib.write("symbol", df)
+        elif btype == ARCTICDB_AMAZON_S3:
+            self.s3_lib.write(self.s3_symbol, df)
+            pass
         else: 
             raise Exception(f"Unsupported type: {btype}")
         
@@ -185,6 +201,9 @@ class ComparisonBenchmarks:
             df.to_parquet(self.path, index=True)
         elif btype == ARCTICDB_LMDB:
             self.lib.write("symbol", df)
+        elif btype == ARCTICDB_AMAZON_S3:
+            self.s3_lib.write(self.s3_symbol, df)
+            pass
         else: 
             raise Exception(f"Unsupported type: {btype}")
 
