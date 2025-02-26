@@ -901,3 +901,19 @@ def generic_resample_test(
         assert_dfs_approximate(expected, received)
     else:
         assert_frame_equal(expected, received, check_dtype=False)
+
+def equals(x, y):
+    if isinstance(x, tuple) or isinstance(x, list):
+        assert len(x) == len(y)
+        for vx, vy in zip(x, y):
+            equals(vx, vy)
+    elif isinstance(x, dict):
+        assert isinstance(y, dict)
+        assert set(x.keys()) == set(y.keys())
+        for k in x.keys():
+            equals(x[k], y[k])
+    elif isinstance(x, np.ndarray):
+        assert isinstance(y, np.ndarray)
+        assert np.allclose(x, y)
+    else:
+        assert x == y
