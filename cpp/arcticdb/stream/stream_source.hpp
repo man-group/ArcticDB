@@ -55,14 +55,12 @@ struct StreamSource {
 
     using ReadContinuation = folly::Function<VariantKey(storage::KeySegmentPair &&)>;
 
-    virtual folly::Future<std::vector<VariantKey>> batch_read_compressed(
+    virtual std::vector<folly::Future<VariantKey>> batch_read_compressed(
         std::vector<std::pair<entity::VariantKey, ReadContinuation>> &&ks,
-        const BatchReadArgs &args) = 0;
+        const BatchReadArgs& args) = 0;
 
     [[nodiscard]] virtual std::vector<folly::Future<bool>> batch_key_exists(
             const std::vector<entity::VariantKey> &keys) = 0;
-
-    using DecodeContinuation = folly::Function<folly::Unit(SegmentInMemory &&)>;
 
     virtual std::vector<folly::Future<pipelines::SegmentAndSlice>> batch_read_uncompressed(
         std::vector<pipelines::RangesAndKey>&& ranges_and_keys,
