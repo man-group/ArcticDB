@@ -42,8 +42,9 @@ def run_shell_command(
             stdin=subprocess.DEVNULL,
         )
     if result.returncode != 0:
-        logger.warning(
-            f"Command failed, stdout: {str(result.stdout)}, stderr: {str(result.stderr)}"
+        logger.error(
+            f"Command '{command_string}' failed with return code {result.returncode}\n"
+            f"stdout:\n{result.stdout.decode('utf-8')}\nstderr:\n{result.stderr.decode('utf-8')}"
         )
     return result
 
@@ -145,6 +146,10 @@ class VenvArctic:
     def get_library(self, lib_name: str) -> "VenvLib":
         return VenvLib(self, lib_name, create_if_not_exists=False)
 
+    def cleanup(self):
+        ac = Arctic(self.uri)
+        for lib in ac.list_libraries():
+            ac.delete_library(lib)
 
 class VenvLib:
     def __init__(self, arctic, lib_name, create_if_not_exists=True):
