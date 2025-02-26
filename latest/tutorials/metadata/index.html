@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/5.2.4/tutorials/metadata/">
+        <link rel="canonical" href="https://docs.arcticdb.io/5.2.3/tutorials/metadata/">
       
       
         <link rel="prev" href="../snapshots/">
@@ -683,15 +683,6 @@
       Table of contents
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#serialization-format" class="md-nav__link">
-    <span class="md-ellipsis">
-      Serialization Format
-    </span>
-  </a>
-  
-</li>
       
         <li class="md-nav__item">
   <a href="#practical-example-using-metadata-to-track-vendor-timelines" class="md-nav__link">
@@ -1617,8 +1608,8 @@
 
 
 <h1 id="metadata">Metadata<a class="headerlink" href="#metadata" title="Permanent link">&para;</a></h1>
-<p>ArcticDB enables you to store arbitrary binary-blobs alongside symbols and versions.</p>
-<p>The below example shows a basic example of writing and reading metadata (in this case a Python dictionary):</p>
+<p>ArcticDB enables you to store arbitrary binary-blobs alongside symbols and versions. The data is pickled when using the Python API. Note that there is a 4GB limit to the size of a single blob. </p>
+<p>The below example shows a basic example of writing and reading metadata (in this case a pickled Python dictionary):</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">arcticdb</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">adb</span>
 <span class="c1"># This example assumes the below variables (host, bucket, access, secret) are validly set</span>
 <span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;s3://</span><span class="si">{</span><span class="n">HOST</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">BUCKET</span><span class="si">}</span><span class="s2">?access=</span><span class="si">{</span><span class="n">ACCESS</span><span class="si">}</span><span class="s2">&amp;secret=</span><span class="si">{</span><span class="n">SECRET</span><span class="si">}</span><span class="s2">)</span>
@@ -1640,31 +1631,6 @@
 <span class="k">assert</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;meta&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">metadata</span> <span class="o">==</span> <span class="n">metadata</span>
 <span class="k">assert</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_metadata</span><span class="p">(</span><span class="s2">&quot;meta&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">metadata</span> <span class="o">==</span> <span class="n">metadata</span>  <span class="c1"># Same as read, but doesn&#39;t return data from storage</span>
 </code></pre></div>
-<p>New versions of symbols do not "inherit" the metadata of a previous version. Metadata needs to be specified explicitly
-each time that you create a new version of the symbol:</p>
-<div class="highlight"><pre><span></span><code><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;new_sym&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(),</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">)</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;new_sym&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">())</span>
-
-<span class="k">assert</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;new_sym&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">metadata</span> <span class="ow">is</span> <span class="kc">None</span>
-<span class="k">assert</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;new_sym&quot;</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">metadata</span> <span class="o">==</span> <span class="n">metadata</span>
-</code></pre></div>
-<h3 id="serialization-format">Serialization Format<a class="headerlink" href="#serialization-format" title="Permanent link">&para;</a></h3>
-<p>We use <code>msgpack</code> serialization for metadata when possible. We support the built-in <code>msgpack</code> types and also:</p>
-<ul>
-<li>Pandas timestamps <code>pd.Timestamp</code></li>
-<li>Python datetime <code>datetime.datetime</code></li>
-<li>Python timedelta <code>datetime.timedelta</code></li>
-</ul>
-<p>Documentation of supported <code>msgpack</code> structures is available <a href="https://github.com/msgpack/msgpack/blob/master/spec.md">here</a>.
-Arrays and maps correspond to Python lists and dicts.</p>
-<p>When this <code>msgpack</code> serialization of the metadata fails due to unsupported types we fall back to pickling the metadata.
-Pickling can have <a href="https://nedbatchelder.com/blog/202006/pickles_nine_flaws.html">serious downsides</a> as it may not be possible to
-unpickle data written with one set of library versions from a client with a different set of library versions.</p>
-<p>Because of this, we log a warning when metadata gets pickled. You can disable the warning by setting an environment
-variable <code>ARCTICDB_PickledMetadata_loglevel_str</code> to <code>DEBUG</code>. The log message looks like:</p>
-<div class="highlight"><pre><span></span><code>Pickling metadata - may not be readable by other clients
-</code></pre></div>
-<p>The metadata may be up to 4GB in size.</p>
 <h3 id="practical-example-using-metadata-to-track-vendor-timelines">Practical example - using metadata to track vendor timelines<a class="headerlink" href="#practical-example-using-metadata-to-track-vendor-timelines" title="Permanent link">&para;</a></h3>
 <p>One common example for metadata is to store the vendor-provided date alongside the version. For example, let's say we are processing three files - <code>data-2004-01-01.csv</code>, <code>data-2004-01-02.csv</code> and <code>data-2004-01-03.csv</code>. Each file name contains a date which we'd like to be able to store along side the version information in ArcticDB.</p>
 <p>We can do this using the following code:</p>
