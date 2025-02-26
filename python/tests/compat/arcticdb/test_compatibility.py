@@ -6,6 +6,7 @@ from arcticdb.util.test import assert_frame_equal
 from arcticdb.options import ModifiableEnterpriseLibraryOption
 from arcticdb.toolbox.library_tool import LibraryTool
 from tests.util.mark import ARCTICDB_USING_CONDA
+from arcticdb_ext.tools import StorageMover
 
 from arcticdb.util.venv import CurrentVersion
 
@@ -61,7 +62,7 @@ def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_nam
         curr.ac.modify_library_option(curr.lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
 
         cfg_after_modification = LibraryTool.read_unaltered_lib_cfg(curr.ac._library_manager, lib_name)
-        assert(cfg_after_modification == expected_cfg)
+        assert cfg_after_modification == expected_cfg
 
     # We should still be able to read and write with the old version
     old_lib.assert_read(sym, df)
@@ -71,7 +72,7 @@ def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_nam
     # We verify that cfg is still what we expect after operations from old_venv
     with CurrentVersion(arctic_uri, lib_name) as curr:
         cfg_after_use = LibraryTool.read_unaltered_lib_cfg(curr.ac._library_manager, lib_name)
-        assert(cfg_after_use == expected_cfg)
+        assert cfg_after_use == expected_cfg
 
 
 def test_pandas_pickling(pandas_v1_venv, s3_ssl_disabled_storage, lib_name):
@@ -80,7 +81,9 @@ def test_pandas_pickling(pandas_v1_venv, s3_ssl_disabled_storage, lib_name):
     # Create library using old version and write pickled Pandas 1 metadata
     old_ac = pandas_v1_venv.create_arctic(arctic_uri)
     old_ac.create_library(lib_name)
-    old_ac.execute([f"""
+    old_ac.execute(
+        [
+            f"""
 from packaging import version
 pandas_version = version.parse(pd.__version__)
 assert pandas_version < version.Version("2.0.0")
@@ -89,7 +92,9 @@ idx = pd.Int64Index([1, 2, 3])
 df.index = idx
 lib = ac.get_library("{lib_name}")
 lib.write("sym", df, metadata={{"abc": df}})
-"""])
+"""
+        ]
+    )
 
     pandas_version = version.parse(pd.__version__)
     assert pandas_version >= version.Version("2.0.0")
@@ -102,6 +107,8 @@ lib.write("sym", df, metadata={{"abc": df}})
         expected_df.index = idx
         assert_frame_equal(read_df, expected_df)
 
+    pandas_v1_venv.create_arctic(arctic_uri).cleanup()
+
 
 def test_compat_snapshot_metadata_read_write(old_venv_and_arctic_uri, lib_name):
     # Before v4.5.0 and after v5.2.1 we save metadata directly on the snapshot's segment header and we need to make
@@ -112,7 +119,9 @@ def test_compat_snapshot_metadata_read_write(old_venv_and_arctic_uri, lib_name):
 
     adb_version = version.Version(old_venv.version)
     if version.Version("4.5.0") <= adb_version <= version.Version("5.2.1"):
-        pytest.skip(reason="Versions between 4.5.0 and 5.2.1 store snapshot metadata in timeseries descriptor which is incompatible with any other versions")
+        pytest.skip(
+            reason="Versions between 4.5.0 and 5.2.1 store snapshot metadata in timeseries descriptor which is incompatible with any other versions"
+        )
 
     sym = "sym"
     df = pd.DataFrame({"col": [1, 2, 3]})
@@ -127,15 +136,17 @@ def test_compat_snapshot_metadata_read_write(old_venv_and_arctic_uri, lib_name):
         curr.lib.snapshot(snap, metadata=snap_meta)
 
     # Check we can read the snapshot metadata with an old client, and write snapshot metadata with the old client
-    old_lib.execute([
-        """
+    old_lib.execute(
+        [
+            """
 snaps = lib.list_snapshots()
 meta = snaps["snap"]
 assert meta is not None
 assert meta == {"key": "value"}
 lib.snapshot("old_snap", metadata={"old_key": "old_value"})
         """
-    ])
+        ]
+    )
 
     # Check the modern client can read the snapshot metadata written by the old client
     with CurrentVersion(arctic_uri, lib_name) as curr:
@@ -160,12 +171,14 @@ def test_compat_snapshot_metadata_read(old_venv_and_arctic_uri, lib_name):
         curr.lib.write(sym, df)
 
     # Check we can read the snapshot metadata with an old client, and write snapshot metadata with the old client
-    old_lib.execute([
-        """
+    old_lib.execute(
+        [
+            """
 snaps = lib.list_snapshots()
 lib.snapshot("old_snap", metadata={"old_key": "old_value"})
         """
-    ])
+        ]
+    )
 
     # Check the modern client can read the snapshot metadata written by the old client
     with CurrentVersion(arctic_uri, lib_name) as curr:
@@ -177,11 +190,14 @@ lib.snapshot("old_snap", metadata={"old_key": "old_value"})
 def test_compat_read_incomplete(old_venv_and_arctic_uri, lib_name):
     old_venv, arctic_uri = old_venv_and_arctic_uri
     sym = "sym"
-    df = pd.DataFrame({
-        "col": np.arange(10),
-        "float_col": np.arange(10, dtype=np.float64),
-        "str_col": [f"str_{i}" for i in range(10)]
-    }, pd.date_range("2024-01-01", periods=10))
+    df = pd.DataFrame(
+        {
+            "col": np.arange(10),
+            "float_col": np.arange(10, dtype=np.float64),
+            "str_col": [f"str_{i}" for i in range(10)],
+        },
+        pd.date_range("2024-01-01", periods=10),
+    )
     df_1 = df.iloc[:8]
     df_2 = df.iloc[8:]
 
@@ -190,21 +206,26 @@ def test_compat_read_incomplete(old_venv_and_arctic_uri, lib_name):
 
     if version.Version(old_venv.version) >= version.Version("5.1.0"):
         # In version 5.1.0 (with commit a3b7545) we moved the streaming incomplete python API to the library tool.
-        old_lib.execute([
-            """
+        old_lib.execute(
+            [
+                """
 lib_tool = lib.library_tool()
 lib_tool.append_incomplete("sym", df_1)
 lib_tool.append_incomplete("sym", df_2)
             """
-        ], dfs={"df_1": df_1, "df_2": df_2})
+            ],
+            dfs={"df_1": df_1, "df_2": df_2},
+        )
     else:
-        old_lib.execute([
-            """
+        old_lib.execute(
+            [
+                """
 lib._nvs.append("sym", df_1, incomplete=True)
 lib._nvs.append("sym", df_2, incomplete=True)
             """
-        ], dfs={"df_1": df_1, "df_2": df_2})
-
+            ],
+            dfs={"df_1": df_1, "df_2": df_2},
+        )
 
     with CurrentVersion(arctic_uri, lib_name) as curr:
         read_df = curr.lib._nvs.read(sym, date_range=(None, None), incomplete=True).data
@@ -213,8 +234,44 @@ lib._nvs.append("sym", df_2, incomplete=True)
         read_df = curr.lib._nvs.read(sym, date_range=(None, None), incomplete=True, columns=["float_col"]).data
         assert_frame_equal(read_df, df[["float_col"]])
 
-        read_df = curr.lib._nvs.read(sym, date_range=(None, None), incomplete=True, columns=["float_col", "str_col"]).data
+        read_df = curr.lib._nvs.read(
+            sym, date_range=(None, None), incomplete=True, columns=["float_col", "str_col"]
+        ).data
         assert_frame_equal(read_df, df[["float_col", "str_col"]])
 
-        read_df = curr.lib._nvs.read(sym, date_range=(pd.Timestamp(2024, 1, 5), pd.Timestamp(2024, 1, 9)), incomplete=True, columns=["float_col", "str_col"]).data
+        read_df = curr.lib._nvs.read(
+            sym,
+            date_range=(pd.Timestamp(2024, 1, 5), pd.Timestamp(2024, 1, 9)),
+            incomplete=True,
+            columns=["float_col", "str_col"],
+        ).data
         assert_frame_equal(read_df, df[["float_col", "str_col"]].iloc[4:9])
+
+
+def test_storage_mover_clone_old_library(old_venv_and_arctic_uri, lib_name):
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    df = pd.DataFrame({"col": [1, 2, 3]})
+    df_2 = pd.DataFrame({"col": [4, 5, 6]})
+    dst_lib_name = "local.extra"
+    sym = "a"
+
+    # Create library using old version
+    old_ac = old_venv.create_arctic(arctic_uri)
+    old_lib = old_ac.create_library(lib_name)
+    old_lib.write(sym, df)
+    old_lib.write(sym, df_2)
+
+    with CurrentVersion(arctic_uri, lib_name) as curr:
+        src_lib = curr.ac.get_library(lib_name)
+        dst_lib = curr.ac.get_library(dst_lib_name, create_if_missing=True)
+        s = StorageMover(src_lib._nvs._library, dst_lib._nvs._library)
+        s.clone_all_keys_for_symbol(sym, 1000)
+        assert_frame_equal(src_lib.read(sym).data, dst_lib.read(sym).data)
+
+    if (arctic_uri.startswith("s3") or arctic_uri.startswith("azure")) and "1.6.2" in old_venv.version:
+        pytest.skip("Reading the new library on s3 or azure with 1.6.2 requires some work arounds")
+
+    # Make sure that we can read the new lib with the old version
+    old_ac = old_venv.create_arctic(arctic_uri)
+    old_dst_lib = old_ac.get_library(dst_lib_name)
+    old_dst_lib.assert_read(sym, df_2)

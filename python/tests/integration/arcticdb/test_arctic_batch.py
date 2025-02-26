@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pytz
 from arcticdb_ext.exceptions import ErrorCode, ErrorCategory
 
@@ -1185,9 +1186,18 @@ def test_get_description_batch(arctic_library):
     assert infos[1].date_range == (pd.Timestamp(year=2019, month=1, day=1), pd.Timestamp(year=2019, month=1, day=6))
     assert infos[2].date_range == (pd.Timestamp(year=2020, month=1, day=1), pd.Timestamp(year=2020, month=1, day=6))
 
-    assert original_infos[0].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=4))
-    assert original_infos[1].date_range == (pd.Timestamp(year=2019, month=1, day=1), pd.Timestamp(year=2019, month=1, day=4))
-    assert original_infos[2].date_range == (pd.Timestamp(year=2020, month=1, day=1), pd.Timestamp(year=2020, month=1, day=4))
+    assert original_infos[0].date_range == (
+        pd.Timestamp(year=2018, month=1, day=1),
+        pd.Timestamp(year=2018, month=1, day=4),
+    )
+    assert original_infos[1].date_range == (
+        pd.Timestamp(year=2019, month=1, day=1),
+        pd.Timestamp(year=2019, month=1, day=4),
+    )
+    assert original_infos[2].date_range == (
+        pd.Timestamp(year=2020, month=1, day=1),
+        pd.Timestamp(year=2020, month=1, day=4),
+    )
 
     list_infos = list(zip(infos, original_infos))
     # then
@@ -1260,6 +1270,7 @@ def test_get_description_batch_multiple_versions(arctic_library):
         assert info.last_update_time > original_info.last_update_time
         assert original_info.sorted == "ASCENDING"
         assert info.sorted == "ASCENDING"
+
 
 def test_get_description_batch_high_amount(arctic_library):
     lib = arctic_library

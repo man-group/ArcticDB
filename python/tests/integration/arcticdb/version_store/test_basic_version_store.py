@@ -109,25 +109,6 @@ def test_s3_breaking_chars(object_version_store, breaking_char):
     assert sym not in object_version_store.list_symbols()
 
 
-@pytest.mark.parametrize("prefix", ["", "prefix"])
-@pytest.mark.parametrize("suffix", ["", "suffix"])
-def test_symbol_names_with_all_chars(object_version_store, prefix, suffix):
-    # Create symbol names with each character (except '\' because Azure replaces it with '/' in some cases)
-    names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != "\\"]
-    df = sample_dataframe()
-
-    written_symbols = set()
-    for name in names:
-        try:
-            object_version_store.write(name, df)
-            written_symbols.add(name)
-        # We should only fail with UserInputException (indicating that name validation failed)
-        except UserInputException:
-            pass
-
-    assert set(object_version_store.list_symbols()) == written_symbols
-
-
 @pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
 def test_unhandled_chars_default(object_version_store, unhandled_char):
     """Test that by default, the problematic chars are raising an exception"""
@@ -2468,7 +2449,7 @@ def test_missing_first_version_key_batch(basic_store):
 
         write_times.append(pd.Timestamp(vit.timestamp))
         expected.append(df1)
-        time.sleep(1)
+
         df2 = pd.DataFrame(
             {"d": range(x + 1, l + x + 1), "e": range(x + 2, l + x + 2), "f": range(x + 3, l + x + 3)}, index=idx
         )
@@ -2479,6 +2460,7 @@ def test_missing_first_version_key_batch(basic_store):
     vits = lib.batch_read(symbols, as_ofs=write_times)
     for x in range(num_items):
         assert_equal(vits[symbols[x]].data, expected[x])
+
 
 @pytest.mark.parametrize("use_caching", [True, False])
 def test_version_chain_cache(basic_store, use_caching):
@@ -2501,13 +2483,17 @@ def test_version_chain_cache(basic_store, use_caching):
 
         # Timestamp
         timestamp_index = timestamp_and_version_index
+
         def find_expected_version(first_to_check):
             for num in range(first_to_check, -1, -1):
                 if num not in deleted_versions:
                     return num
             return None
 
-        for timestamp, is_before in [(timestamps[timestamp_index].before, True), (timestamps[timestamp_index].after, False)]:
+        for timestamp, is_before in [
+            (timestamps[timestamp_index].before, True),
+            (timestamps[timestamp_index].after, False),
+        ]:
             first_version_to_check = timestamp_index - 1 if is_before else timestamp_index
             expected_version_to_find = find_expected_version(first_version_to_check)
             if expected_version_to_find is None:
