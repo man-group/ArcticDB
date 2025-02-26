@@ -969,6 +969,7 @@ if(${TEST})
             util/test/test_cursor.cpp
             util/test/test_decimal.cpp
             util/test/test_exponential_backoff.cpp
+            util/test/test_folly.cpp
             util/test/test_format_date.cpp
             util/test/test_hash.cpp
             util/test/test_id_transformation.cpp

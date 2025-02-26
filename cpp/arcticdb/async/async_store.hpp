@@ -340,14 +340,14 @@ std::vector<RemoveKeyResultType> remove_keys_sync(std::vector<entity::VariantKey
            RemoveBatchTask{std::move(keys), library_, opts}();
 }
 
-folly::Future<std::vector<VariantKey>> batch_read_compressed(
+std::vector<folly::Future<VariantKey>> batch_read_compressed(
         std::vector<std::pair<entity::VariantKey, ReadContinuation>> &&keys_and_continuations,
         const BatchReadArgs &args) override {
     util::check(!keys_and_continuations.empty(), "Unexpected empty keys/continuation vector in batch_read_compressed");
-    return folly::collect(folly::window(std::move(keys_and_continuations), [this] (auto&& key_and_continuation) {
+    return folly::window(std::move(keys_and_continuations), [this] (auto&& key_and_continuation) {
         auto [key, continuation] = std::forward<decltype(key_and_continuation)>(key_and_continuation);
         return read_and_continue(key, library_, storage::ReadKeyOpts{}, std::move(continuation));
-    }, args.batch_size_)).via(&async::io_executor());
+    }, args.batch_size_);
 }
 
 std::vector<folly::Future<pipelines::SegmentAndSlice>> batch_read_uncompressed(
