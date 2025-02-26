@@ -48,7 +48,15 @@ jobs:
     runs-on: ${{ needs.start_ec2_runner.status != 'failure' && needs.start_ec2_runner.outputs.label || matrix.distro}}
     container: ${{ (matrix.os == 'linux' && inputs.job_type != 'build-python-wheels') && matrix.container || null}}
     env:
-      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
+      # 0 - uses S3 Cache, 1 - does uses GHA cache
+      # this was extract PRs can use the GHA cache
+      SCCACHE_GHA_VERSION: ${{secrets.AWS_S3_ACCESS_KEY && 0 || 1}}
+      SCCACHE_BUCKET: arcticdb-ci-sccache-bucket
+      SCCACHE_ENDPOINT: http://s3.eu-west-1.amazonaws.com
+      SCCACHE_REGION: eu-west-1
+      SCCACHE_S3_USE_SSL: false
+      AWS_ACCESS_KEY_ID: ${{secrets.AWS_S3_ACCESS_KEY}}
+      AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_S3_SECRET_KEY}}
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
       VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
       VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
@@ -63,6 +71,7 @@ jobs:
         VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN
         CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
         ARCTICDB_BUILD_DIR TEST_OUTPUT_DIR ARCTICDB_VCPKG_INSTALLED_DIR ARCTICDB_VCPKG_PACKAGES_DIR
+        SCCACHE_BUCKET SCCACHE_ENDPOINT AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY SCCACHE_REGION SCCACHE_S3_USE_SSL
       ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
       python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
@@ -101,16 +110,12 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       # ========================= Leader steps =========================
-      - name: Remove GitHub default packages (baseimage) # To save space
-        if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
-        uses: jlumbroso/free-disk-space@main
-
       - name: Remove GitHub default packages (manylinux) # To save space
         if: inputs.job_type == 'cpp-tests' && matrix.os == 'linux'
         run: |
           du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
           nohup rm -rf /mnt/usr/local/lib/android &
-
+      
       - name: Find and remove ccache # See PR: #945
         if: matrix.os == 'windows'
         run: rm $(which ccache) || true
