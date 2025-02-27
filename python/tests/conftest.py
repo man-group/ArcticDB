@@ -57,8 +57,7 @@ from .util.mark import (
     PANDAS_2_COMPAT_TESTS_MARK,
 )
 from arcticdb.storage_fixtures.utils import safer_rmtree
-from packaging.version import Version
-from arcticdb.util.venv import Venv
+
 
 
 # region =================================== Misc. Constants & Setup ====================================
