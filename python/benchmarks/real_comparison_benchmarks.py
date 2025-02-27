@@ -6,7 +6,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import gc
 import logging
 import tempfile
 import time
@@ -45,35 +44,6 @@ class RealComparisonBenchmarks:
         - read/write dataframe
         - read/write dataframe to arcticdb LMDB
         - read/write dataframe to arcticdb Amazon S3
-
-    The above problem is interesting in 2 ways:
-     a) how to measure accurately the memory of certain operation with asv
-     b) how to represent information of comparison effectively    
-
-    To accurately measure the peakmem of any operation with ASV we have to exclude
-    to base memory that is the object memory space from the calculation.
-    
-    To be able to do that we need to introduce memory baseline - a run of the test 
-    which actually does nothing. It will produce result X
-    
-    Then each new run of the same test with operation that does anything will produce
-    memory which is X + Z, where Z will be the actual memory of that specific operation
-
-    The only logical way to represent then the information is to put all in one graph:
-      - the base line
-      - operation A
-      - operation B
-
-    Sample measurement:
-
-             ============================ =======
-                     backend_type
-             ---------------------------- -------
-                  no-operation-load        2.66G
-              create-df-pandas-from_dict   3.17G
-                    pandas-parquet          5.6G
-                    arcticdb-lmdb          5.01G
-             ============================ =======
     """
 
     rounds = 1
@@ -95,6 +65,9 @@ class RealComparisonBenchmarks:
     params = [NO_OPERATION, CREATE_DATAFRAME, PANDAS_PARQUET, ARCTICDB_LMDB, ARCTICDB_AMAZON_S3]
     param_names = ["backend_type"]
 
+    def storage(self):
+        return RealComparisonBenchmarks.REAL_STORAGE_SETUP
+    
     def setup_cache(self):
         logger.info(f"Setup CACHE start")
         st = time.time()
@@ -105,37 +78,37 @@ class RealComparisonBenchmarks:
         ac.delete_library(RealComparisonBenchmarks.LIB_NAME)
         lib = ac.create_library(RealComparisonBenchmarks.LIB_NAME)
         lib.write(symbol=RealComparisonBenchmarks.SYMBOL, data=df)
-        RealComparisonBenchmarks.REAL_STORAGE_SETUP.remove_all_modifiable_libraries(confirm=True)
+        self.storage().remove_all_modifiable_libraries(confirm=True)
         return (df, dict)
-
+    
     def teardown(self, tpl, btype):
-        self.delete_if_exists(self.path)
-        self.delete_if_exists(self.path_to_read)
+        self.delete_if_exists(self.parquet_to_write)
+        self.delete_if_exists(self.parquet_to_read )
         RealComparisonBenchmarks.REAL_STORAGE_SETUP.delete_modifiable_library(self.pid)
         logger.info(f"Teardown completed")
 
     def setup(self, tpl, btype):
-        logger.info(f"Setup started")
         df, dict = tpl
+        logger.info(f"Setup started")
+        # LMDB Setup
         self.ac = Arctic(RealComparisonBenchmarks.URL)
         self.lib = self.ac[RealComparisonBenchmarks.LIB_NAME]
-        self.path = f"{tempfile.gettempdir()}/df.parquet"
-        self.path_to_read = f"{tempfile.gettempdir()}/df_to_read.parquet"
-        self.delete_if_exists(self.path)
-        df.to_parquet(self.path_to_read, index=True)
-        self.pid = os.getpid()
+        self.parquet_to_write = f"{tempfile.gettempdir()}/df.parquet"
+        self.parquet_to_read = f"{tempfile.gettempdir()}/df_to_read.parquet"
+        self.delete_if_exists(self.parquet_to_write)
+        df.to_parquet(self.parquet_to_read , index=True)
+
         # With shared storage we create different libs for each process
         # therefore we initialize the symbol here also not in setup_cache
-        self.s3_lib = RealComparisonBenchmarks.REAL_STORAGE_SETUP.get_modifiable_library(self.pid)
-        self.s3_symbol = RealComparisonBenchmarks.REAL_STORAGE_SETUP.get_symbol_name_template(self.pid)
+        self.pid = os.getpid()
+        self.s3_lib = self.storage().get_modifiable_library(self.pid)
+        self.s3_symbol = f"symbol_{self.pid}"
         self.s3_lib.write(self.s3_symbol, df) 
-        del df, dict, tpl
-        gc.collect()
         logger.info(f"Setup ended")
 
     def delete_if_exists(self, path):
-        if os.path.exists(self.path):
-            os.remove(self.path)
+        if os.path.exists(self.parquet_to_write):
+            os.remove(self.parquet_to_write)
 
     def create_dict(self, size):
         return {
@@ -160,9 +133,9 @@ class RealComparisonBenchmarks:
         if btype == CREATE_DATAFRAME:
             df = pd.DataFrame(dict)
         elif btype == PANDAS_PARQUET:
-            pd.read_parquet(self.path_to_read)
+            pd.read_parquet(self.parquet_to_read )
         elif btype == ARCTICDB_LMDB:
-            self.lib.read(RealComparisonBenchmarks.SYMBOL)
+            self.lib.read(self.SYMBOL)
         elif btype == ARCTICDB_AMAZON_S3:
             self.s3_lib.read(self.s3_symbol) 
             pass
@@ -177,7 +150,7 @@ class RealComparisonBenchmarks:
         if btype == CREATE_DATAFRAME:
             df = pd.DataFrame(dict)
         elif btype == PANDAS_PARQUET:
-            df.to_parquet(self.path, index=True)
+            df.to_parquet(self.parquet_to_write, index=True)
         elif btype == ARCTICDB_LMDB:
             self.lib.write("symbol", df)
         elif btype == ARCTICDB_AMAZON_S3:
@@ -198,7 +171,7 @@ class RealComparisonBenchmarks:
         if btype == CREATE_DATAFRAME:
             pass
         elif btype == PANDAS_PARQUET:
-            df.to_parquet(self.path, index=True)
+            df.to_parquet(self.parquet_to_write, index=True)
         elif btype == ARCTICDB_LMDB:
             self.lib.write("symbol", df)
         elif btype == ARCTICDB_AMAZON_S3:

@@ -43,36 +43,6 @@ class ComparisonBenchmarks:
         - creation of dataframe
         - read/write dataframe
         - read/write dataframe to arcticdb LMDB 
-
-    The above problem is interesting in 2 ways:
-     a) how to measure accurately the memory of certain operation with asv
-     b) how to represent information of comparison effectively    
-
-    To accurately measure the peakmem of any operation with ASV we have to exclude
-    to base memory that is the object memory space from the calculation.
-    
-    To be able to do that we need to introduce memory baseline - a run of the test 
-    which actually does nothing. It will produce result X
-    
-    Then each new run of the same test with operation that does anything will produce
-    memory which is X + Z, where Z will be the actual memory of that specific operation
-
-    The only logical way to represent then the information is to put all in one graph:
-      - the base line
-      - operation A
-      - operation B
-
-    Sample measurement:
-
-             ============================ =======
-                     backend_type
-             ---------------------------- -------
-                  no-operation-load        2.66G
-              create-df-pandas-from_dict   3.17G
-                    pandas-parquet          5.6G
-                    arcticdb-lmdb          5.01G
-             ============================ =======
-
     """
 
     rounds = 1
@@ -87,8 +57,7 @@ class ComparisonBenchmarks:
     LIB_NAME = "compare"
     URL = "lmdb://compare"
     SYMBOL = "dataframe"
-    NUMBER_ROWS = 3_000_000 
-
+    NUMBER_ROWS = 3_000_00
 
     params = [NO_OPERATION, CREATE_DATAFRAME, PANDAS_PARQUET, ARCTICDB_LMDB]
     param_names = ["backend_type"]
@@ -152,7 +121,7 @@ class ComparisonBenchmarks:
         elif btype == PANDAS_PARQUET:
             pd.read_parquet(self.path_to_read)
         elif btype == ARCTICDB_LMDB:
-            self.lib.read(ComparisonBenchmarks.SYMBOL)
+            self.lib.read(self.SYMBOL)
         else: 
             raise Exception(f"Unsupported type: {btype}")
 
