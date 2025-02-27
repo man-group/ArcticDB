@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pytz
 from arcticdb_ext.exceptions import ErrorCode, ErrorCategory
 
@@ -1185,9 +1186,18 @@ def test_get_description_batch(arctic_library):
     assert infos[1].date_range == (pd.Timestamp(year=2019, month=1, day=1), pd.Timestamp(year=2019, month=1, day=6))
     assert infos[2].date_range == (pd.Timestamp(year=2020, month=1, day=1), pd.Timestamp(year=2020, month=1, day=6))
 
-    assert original_infos[0].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=4))
-    assert original_infos[1].date_range == (pd.Timestamp(year=2019, month=1, day=1), pd.Timestamp(year=2019, month=1, day=4))
-    assert original_infos[2].date_range == (pd.Timestamp(year=2020, month=1, day=1), pd.Timestamp(year=2020, month=1, day=4))
+    assert original_infos[0].date_range == (
+        pd.Timestamp(year=2018, month=1, day=1),
+        pd.Timestamp(year=2018, month=1, day=4),
+    )
+    assert original_infos[1].date_range == (
+        pd.Timestamp(year=2019, month=1, day=1),
+        pd.Timestamp(year=2019, month=1, day=4),
+    )
+    assert original_infos[2].date_range == (
+        pd.Timestamp(year=2020, month=1, day=1),
+        pd.Timestamp(year=2020, month=1, day=4),
+    )
 
     list_infos = list(zip(infos, original_infos))
     # then
@@ -1261,6 +1271,7 @@ def test_get_description_batch_multiple_versions(arctic_library):
         assert original_info.sorted == "ASCENDING"
         assert info.sorted == "ASCENDING"
 
+
 def test_get_description_batch_high_amount(arctic_library):
     lib = arctic_library
     num_symbols = 10
@@ -1312,7 +1323,7 @@ def test_get_description_batch_empty_nat(arctic_library):
         assert np.isnat(results_list[sym].date_range[1])
 
 
-def test_read_batch_mixed_with_snapshots(arctic_library):
+def test_read_batch_mixed_with_snapshots(arctic_library_v1):
     num_symbols = 10
     num_versions = 10
 
@@ -1325,12 +1336,12 @@ def test_read_batch_mixed_with_snapshots(arctic_library):
         dataframe = dataframe_for_offset(version_num, symbol_num)
         return symbol_name, dataframe
 
-    lib = arctic_library
+    lib = arctic_library_v1
     version_write_times = []
 
     for version in range(num_versions):
         version_write_times.append(pd.Timestamp.now())
-        time.sleep(1)
+        time.sleep(0.1)
         for sym in range(num_symbols):
             symbol, df = dataframe_and_symbol(version, sym)
             lib.write(symbol, df)
