@@ -109,6 +109,7 @@ class S3Bucket(StorageFixture):
             # client_cert_dir is skipped on purpose; It will be tested manually in other tests
 
     def __exit__(self, exc_type, exc_value, traceback):
+        self.slow_cleanup(failure_consequence="We will be charged unless we manually delete it.")
         if self.factory.clean_bucket_on_fixture_exit:
             self.factory.cleanup_bucket(self)
 
@@ -202,12 +203,11 @@ class NfsS3Bucket(S3Bucket):
 
 
 class GcpS3Bucket(S3Bucket):
-
     def __init__(
-            self,
-            factory: "BaseS3StorageFixtureFactory",
-            bucket: str,
-            native_config: Optional[NativeVariantStorage] = None,
+        self,
+        factory: "BaseS3StorageFixtureFactory",
+        bucket: str,
+        native_config: Optional[NativeVariantStorage] = None,
     ):
         super().__init__(factory, bucket, native_config=native_config)
         self.arctic_uri = self.arctic_uri.replace("s3", "gcpxml", 1)
@@ -527,8 +527,8 @@ class HostDispatcherApplication(DomainDispatcherApplication):
         with self.lock:
             # Mock ec2 imds responses for testing
             if path_info in (
-                    "/latest/dynamic/instance-identity/document",
-                    b"/latest/dynamic/instance-identity/document",
+                "/latest/dynamic/instance-identity/document",
+                b"/latest/dynamic/instance-identity/document",
             ):
                 start_response("200 OK", [("Content-Type", "text/plain")])
                 return [b"Something to prove imds is reachable"]
@@ -563,11 +563,11 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
         if environ["REQUEST_METHOD"] == "POST" and environ["QUERY_STRING"] == "delete":
             response_body = (
                 b'<?xml version="1.0" encoding="UTF-8"?>'
-                b'<Error>'
-                    b'<Code>NotImplemented</Code>'
-                    b'<Message>A header or query you provided requested a function that is not implemented.</Message>'
-                    b'<Details>POST ?delete is not implemented for objects.</Details>'
-                b'</Error>'
+                b"<Error>"
+                b"<Code>NotImplemented</Code>"
+                b"<Message>A header or query you provided requested a function that is not implemented.</Message>"
+                b"<Details>POST ?delete is not implemented for objects.</Details>"
+                b"</Error>"
             )
             start_response(
                 "501 Not Implemented", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
@@ -766,7 +766,7 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
         self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
 
         self.ssl = (
-                self.http_protocol == "https"
+            self.http_protocol == "https"
         )  # In real world, using https protocol doesn't necessarily mean ssl will be verified
         if self.ssl_test_support:
             self.ca, self.key_file, self.cert_file, self.client_cert_file = get_ca_cert_for_testing(self.working_dir)
