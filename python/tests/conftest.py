@@ -59,7 +59,6 @@ from .util.mark import (
 from arcticdb.storage_fixtures.utils import safer_rmtree
 
 
-
 # region =================================== Misc. Constants & Setup ====================================
 hypothesis.settings.register_profile("ci_linux", max_examples=100)
 hypothesis.settings.register_profile("ci_windows", max_examples=100)
@@ -198,38 +197,38 @@ def nfs_backed_s3_storage_factory() -> Generator[MotoNfsBackedS3StorageFixtureFa
         yield f
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def s3_storage(s3_storage_factory) -> Generator[S3Bucket, None, None]:
     with s3_storage_factory.create_fixture() as f:
         yield f
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def gcp_storage(gcp_storage_factory) -> Generator[S3Bucket, None, None]:
     with gcp_storage_factory.create_fixture() as f:
         yield f
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def nfs_backed_s3_storage(nfs_backed_s3_storage_factory) -> Generator[NfsS3Bucket, None, None]:
     with nfs_backed_s3_storage_factory.create_fixture() as f:
         yield f
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def s3_no_ssl_storage(s3_no_ssl_storage_factory) -> Generator[S3Bucket, None, None]:
     with s3_no_ssl_storage_factory.create_fixture() as f:
         yield f
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def s3_ssl_disabled_storage(s3_ssl_disabled_storage_factory) -> Generator[S3Bucket, None, None]:
     with s3_ssl_disabled_storage_factory.create_fixture() as f:
         yield f
 
 
 # s3 storage is picked just for its versioning capabilities for verifying arcticdb atomicity
-@pytest.fixture(scope="session")
+@pytest.fixture
 def s3_bucket_versioning_storage(s3_bucket_versioning_storage_factory) -> Generator[S3Bucket, None, None]:
     with s3_bucket_versioning_storage_factory.create_fixture() as f:
         s3_admin = f.factory._s3_admin
@@ -238,12 +237,12 @@ def s3_bucket_versioning_storage(s3_bucket_versioning_storage_factory) -> Genera
         yield f
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def mock_s3_storage_with_error_simulation_factory():
     return mock_s3_with_error_simulation()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def mock_s3_storage_with_error_simulation(mock_s3_storage_with_error_simulation_factory):
     with mock_s3_storage_with_error_simulation_factory.create_fixture() as f:
         yield f
@@ -370,13 +369,13 @@ def mongo_server():
         yield s
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def mongo_storage(mongo_server):
     with mongo_server.create_fixture() as f:
         yield f
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def mem_storage() -> Generator[InMemoryStorageFixture, None, None]:
     with InMemoryStorageFixture() as f:
         yield f

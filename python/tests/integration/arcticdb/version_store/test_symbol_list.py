@@ -44,8 +44,9 @@ def make_read_only(lib):
 
 def test_with_symbol_list(basic_store):
     syms = []
+    df = sample_dataframe(100)
+
     for i in range(100):
-        df = sample_dataframe(100, i)
         sym = "sym_{}".format(i)
         basic_store.write(sym, df)
         syms.append(sym)
