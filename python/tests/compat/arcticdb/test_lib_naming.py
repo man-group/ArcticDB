@@ -1,7 +1,7 @@
 import pytest
 import sys
 from arcticdb_ext.exceptions import UserInputException
-from arcticdb_ext.tests.fixtures import sample_dataframe
+from arcticdb.util.test import sample_dataframe
 
 
 @pytest.mark.parametrize("prefix", ["", "prefix"])
