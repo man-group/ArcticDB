@@ -25,8 +25,20 @@ class AlmostAListNormalizer(CustomNormalizer):
         return AlmostAList(item)
 
 
-@pytest.mark.parametrize("batch", (True, False))
-def test_recursively_written_data(basic_store, batch):
+def assert_vit_equals_except_data(left, right):
+    """
+    Checks if two VersionedItem objects are equal disregarding differences in the data field. This is because when a
+    write is performed the returned VersionedItem does not contain a data field.
+    """
+    assert left.symbol == right.symbol
+    assert left.library == right.library
+    assert left.version == right.version
+    assert left.metadata == right.metadata
+    assert left.host == right.host
+    assert left.timestamp == right.timestamp
+
+@pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
+def test_recursively_written_data(basic_store, read):
     samples = [
         {"a": np.arange(5), "b": np.arange(8)},  # dict of np arrays
         (np.arange(5), np.arange(6)),  # tuple of np arrays
@@ -37,22 +49,22 @@ def test_recursively_written_data(basic_store, batch):
     for idx, sample in enumerate(samples):
         recursive_sym = "sym_recursive" + str(idx)
         pickled_sym = "sym_pickled" + str(idx)
-        basic_store.write(recursive_sym, sample, recursive_normalizers=True)
-        basic_store.write(pickled_sym, sample)  # pickled writes
-        if batch:
-            recursive_vit = basic_store.batch_read([recursive_sym])[recursive_sym]
-            pickled_vit = basic_store.batch_read([pickled_sym])[pickled_sym]
-        else:
-            recursive_vit = basic_store.read(recursive_sym)
-            pickled_vit = basic_store.read(pickled_sym)
+        recursive_write_vit = basic_store.write(recursive_sym, sample, recursive_normalizers=True)
+        pickled_write_vit = basic_store.write(pickled_sym, sample)  # pickled writes
+        recursive_vit = read(basic_store, recursive_sym)
+        pickled_vit = read(basic_store, pickled_sym)
+
         equals(sample, recursive_vit.data)
         equals(pickled_vit.data, recursive_vit.data)
         assert recursive_vit.symbol == recursive_sym
         assert pickled_vit.symbol == pickled_sym
+        assert_vit_equals_except_data(recursive_write_vit, recursive_vit)
+        assert_vit_equals_except_data(pickled_write_vit, pickled_vit)
 
 
-@pytest.mark.parametrize("batch", (True, False))
-def test_recursively_written_data_with_metadata(basic_store, batch):
+
+@pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
+def test_recursively_written_data_with_metadata(basic_store, read):
     samples = [
         {"a": np.arange(5), "b": np.arange(8)},  # dict of np arrays
         (np.arange(5), np.arange(6)),  # tuple of np arrays
@@ -61,37 +73,35 @@ def test_recursively_written_data_with_metadata(basic_store, batch):
     for idx, sample in enumerate(samples):
         sym = "sym_recursive" + str(idx)
         metadata = {"something": 1}
-        basic_store.write(sym, sample, metadata=metadata, recursive_normalizers=True)
-        if batch:
-            vit = basic_store.batch_read([sym])[sym]
-        else:
-            vit = basic_store.read(sym)
-        equals(sample, vit.data)
-        assert vit.symbol == sym
-        assert vit.metadata == metadata
+        write_vit = basic_store.write(sym, sample, metadata=metadata, recursive_normalizers=True)
+        read_vit = read(basic_store, sym)
+
+        equals(sample, read_vit.data)
+        assert read_vit.symbol == sym
+        assert read_vit.metadata == metadata
+        assert_vit_equals_except_data(read_vit, write_vit)
 
 
-@pytest.mark.parametrize("batch", (True, False))
-def test_recursively_written_data_with_nones(basic_store, batch):
+@pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
+def test_recursively_written_data_with_nones(basic_store, read):
     sample = {"a": np.arange(5), "b": np.arange(8), "c": None}
     recursive_sym = "sym_recursive"
     pickled_sym = "sym_pickled"
-    basic_store.write(recursive_sym, sample, recursive_normalizers=True)
-    basic_store.write(pickled_sym, sample)  # pickled writes
-    if batch:
-        recursive_vit = basic_store.batch_read([recursive_sym])[recursive_sym]
-        pickled_vit = basic_store.batch_read([pickled_sym])[pickled_sym]
-    else:
-        recursive_vit = basic_store.read(recursive_sym)
-        pickled_vit = basic_store.read(pickled_sym)
-    equals(sample, recursive_vit.data)
-    equals(pickled_vit.data, recursive_vit.data)
-    assert recursive_vit.symbol == recursive_sym
-    assert pickled_vit.symbol == pickled_sym
+    recursive_write_vit = basic_store.write(recursive_sym, sample, recursive_normalizers=True)
+    pickled_write_vit = basic_store.write(pickled_sym, sample)  # pickled writes
+    recursive_read_vit = read(basic_store, recursive_sym)
+    pickled_read_vit = read(basic_store, pickled_sym)
+
+    equals(sample, recursive_read_vit.data)
+    equals(pickled_read_vit.data, recursive_read_vit.data)
+    assert recursive_read_vit.symbol == recursive_sym
+    assert pickled_read_vit.symbol == pickled_sym
+    assert_vit_equals_except_data(recursive_write_vit, recursive_read_vit)
+    assert_vit_equals_except_data(pickled_write_vit, pickled_read_vit)
 
 
-@pytest.mark.parametrize("batch", (True, False))
-def test_recursive_nested_data(basic_store, batch):
+@pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
+def test_recursive_nested_data(basic_store, read):
     sym = "test_recursive_nested_data"
     sample_data = {"a": {"b": {"c": {"d": np.arange(24)}}}}
     fl = Flattener()
@@ -101,13 +111,11 @@ def test_recursive_nested_data(basic_store, batch):
     assert len(to_write) == 1
     equals(list(to_write.values())[0], np.arange(24))
 
-    basic_store.write(sym, sample_data, recursive_normalizers=True)
-    if batch:
-        vit = basic_store.batch_read([sym])[sym]
-    else:
-        vit = basic_store.read(sym)
-    equals(vit.data, sample_data)
-    assert vit.symbol == sym
+    write_vit = basic_store.write(sym, sample_data, recursive_normalizers=True)
+    read_vit = read(basic_store, sym)
+    equals(read_vit.data, sample_data)
+    assert read_vit.symbol == sym
+    assert_vit_equals_except_data(read_vit, write_vit)
 
 def test_recursive_normalizer_with_custom_class():
     list_like_obj = AlmostAList([1, 2, 3])
@@ -124,11 +132,13 @@ def test_nested_custom_types(basic_store):
     fl = Flattener()
     meta, to_write = fl.create_meta_structure(data, "sym")
     equals(list(to_write.values())[0], np.arange(6))
-    basic_store.write("sym", data, recursive_normalizers=True)
-    got_back = basic_store.read("sym").data
+    write_vit = basic_store.write("sym", data, recursive_normalizers=True)
+    read_vit = basic_store.read("sym")
+    got_back = read_vit.data
     assert isinstance(got_back, AlmostAList)
     assert isinstance(got_back[3], AlmostAList)
     assert got_back[0] == 1
+    assert_vit_equals_except_data(write_vit, read_vit)
 
 def test_data_directly_msgpackable(basic_store):
     data = {"a": [1, 2, 3], "b": {"c": 5}}
@@ -136,24 +146,24 @@ def test_data_directly_msgpackable(basic_store):
     meta, to_write = fl.create_meta_structure(data, "sym")
     assert len(to_write) == 0
     assert meta["leaf"] is True
-    basic_store.write("s", data, recursive_normalizers=True)
-    equals(basic_store.read("s").data, data)
+    write_vit = basic_store.write("s", data, recursive_normalizers=True)
+    read_vit = basic_store.read("s")
+    equals(read_vit.data, data)
+    assert_vit_equals_except_data(write_vit, read_vit)
 
 
-@pytest.mark.parametrize("batch", (True, False))
-def test_really_large_symbol_for_recursive_data(basic_store, batch):
+@pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
+def test_really_large_symbol_for_recursive_data(basic_store, read):
     sym = "s" * 100
     data = {"a" * 100: {"b" * 100: {"c" * 1000: {"d": np.arange(5)}}}}
-    basic_store.write(sym, data, recursive_normalizers=True)
+    write_vit = basic_store.write(sym, data, recursive_normalizers=True)
     fl = Flattener()
     metastruct, to_write = fl.create_meta_structure(data, "s" * 100)
     assert len(list(to_write.keys())[0]) < fl.MAX_KEY_LENGTH
-    if batch:
-        vit = basic_store.batch_read([sym])[sym]
-    else:
-        vit = basic_store.read(sym)
-    equals(vit.data, data)
-    assert vit.symbol == sym
+    read_vit = read(basic_store, sym)
+    equals(read_vit.data, data)
+    assert read_vit.symbol == sym
+    assert_vit_equals_except_data(write_vit, read_vit)
 
 
 def test_too_much_recursive_metastruct_data(monkeypatch, lmdb_version_store_v1):
@@ -165,8 +175,3 @@ def test_too_much_recursive_metastruct_data(monkeypatch, lmdb_version_store_v1):
             m.setattr(arcticdb.version_store._normalization, "_MAX_RECURSIVE_METASTRUCT", 1)
             lib.write(sym, data, recursive_normalizers=True)
     assert "recursive" in str(e.value).lower()
-
-def test_simple_recursive_normalizer(object_version_store):
-    object_version_store.write(
-        "rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True
-    )
