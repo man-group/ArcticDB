@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import random
 import time
 import os
@@ -16,6 +17,8 @@ from arcticdb_ext import set_config_int
 from arcticdb import log
 
 from arcticdb.config import set_log_level
+
+from tests.util.mark import SLOW_TESTS_MARK
 
 # set_log_level("DEBUG")
 
@@ -66,6 +69,7 @@ def read_data(lib, sym, done, error):
             assert vs[idx]["version"] == vs[idx + 1]["version"] + 1
 
 
+@SLOW_TESTS_MARK
 @pytest.mark.skipif(
     os.environ.get("ARCTICDB_CODE_COVERAGE_BUILD", "0") == "1",
     reason=(

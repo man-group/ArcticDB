@@ -58,7 +58,6 @@ from .util.mark import (
 )
 from arcticdb.storage_fixtures.utils import safer_rmtree
 
-
 # region =================================== Misc. Constants & Setup ====================================
 hypothesis.settings.register_profile("ci_linux", max_examples=100)
 hypothesis.settings.register_profile("ci_windows", max_examples=100)
@@ -269,13 +268,13 @@ def real_s3_storage_without_clean_up(real_s3_shared_path_storage_factory) -> S3B
     return real_s3_shared_path_storage_factory.create_fixture()
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def real_s3_storage(real_s3_storage_factory) -> Generator[S3Bucket, None, None]:
     with real_s3_storage_factory.create_fixture() as f:
         yield f
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def real_s3_library(real_s3_storage, lib_name) -> Library:
     return real_s3_storage.create_arctic().create_library(lib_name)
 
@@ -330,7 +329,7 @@ def real_s3_sts_storage_factory(monkeypatch_session) -> Generator[BaseS3StorageF
             safer_rmtree(None, working_dir)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def real_s3_sts_storage(real_s3_sts_storage_factory) -> Generator[S3Bucket, None, None]:
     with real_s3_sts_storage_factory.create_fixture() as f:
         yield f
@@ -343,7 +342,7 @@ def azurite_storage_factory() -> Generator[AzuriteStorageFixtureFactory, None, N
         yield f
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def azurite_storage(azurite_storage_factory: AzuriteStorageFixtureFactory) -> Generator[AzureContainer, None, None]:
     with azurite_storage_factory.create_fixture() as f:
         yield f
@@ -355,7 +354,7 @@ def azurite_ssl_storage_factory() -> Generator[AzuriteStorageFixtureFactory, Non
         yield f
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def azurite_ssl_storage(
     azurite_ssl_storage_factory: AzuriteStorageFixtureFactory,
 ) -> Generator[AzureContainer, None, None]:
