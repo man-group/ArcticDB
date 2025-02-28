@@ -11,9 +11,6 @@
 
 namespace arcticdb::util::stats_query {
 
-thread_local std::shared_ptr<StatsInstance> StatsInstance::instance_ = nullptr;
-StatsQuery stats_query;
-
 std::shared_ptr<StatsInstance> StatsInstance::instance(){
     if (!instance_) {
         // TODO: Add checking for non python threads must have instance_ as non-nullptr
@@ -49,7 +46,7 @@ void StatsQuery::reset_stats(){
 StatsOutputFormat StatsQuery::get_stats() { 
     std::lock_guard<std::mutex> lock(stats_mutex_);
     StatsOutputFormat result;
-    for (const auto& [infos, value] : stats_query.stats) {
+    for (const auto& [infos, value] : stats) {
         StatsOutputFormat::value_type items;
         for (const auto &info : infos ) {
             if (!items.emplace(info->first, info->second).second) {
@@ -84,5 +81,8 @@ void StatsQuery::deregister_query_stat_tool() {
         reset_stats();
     }
 }
-
+StatsQuery& StatsQuery::instance(){
+    static StatsQuery stats_query;
+    return stats_query;
+}
 }
