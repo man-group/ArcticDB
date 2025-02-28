@@ -110,19 +110,19 @@ def test_get_library(arctic_client, lib_name):
         _ = ac.get_library(lib_name, create_if_missing=False, library_options=library_options)
 
 
-def test_create_library_enterprise_options_defaults(lmdb_storage):
+def test_create_library_enterprise_options_defaults(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library("lib")
+    lib = ac.create_library(lib_name)
 
     enterprise_options = lib.enterprise_options()
     assert not enterprise_options.replication
     assert not enterprise_options.background_deletion
 
 
-def test_create_library_enterprise_options_set(lmdb_storage):
+def test_create_library_enterprise_options_set(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
     lib = ac.create_library(
-        "lib",
+        lib_name,
         enterprise_library_options=EnterpriseLibraryOptions(replication=True, background_deletion=True),
     )
 
@@ -135,9 +135,9 @@ def test_create_library_enterprise_options_set(lmdb_storage):
     assert proto_options.delayed_deletes
 
 
-def test_create_library_replication_option_set_writes_logs(lmdb_storage):
+def test_create_library_replication_option_set_writes_logs(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library("lib", enterprise_library_options=EnterpriseLibraryOptions(replication=True))
+    lib = ac.create_library(lib_name, enterprise_library_options=EnterpriseLibraryOptions(replication=True))
     lt = lib._nvs.library_tool()
     assert not lt.find_keys(KeyType.LOG)
 
@@ -147,10 +147,10 @@ def test_create_library_replication_option_set_writes_logs(lmdb_storage):
     assert len(lt.find_keys(KeyType.LOG))
 
 
-def test_create_library_background_deletion_option_set_does_not_delete(lmdb_storage):
+def test_create_library_background_deletion_option_set_does_not_delete(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
     lib = ac.create_library(
-        "lib",
+        lib_name,
         enterprise_library_options=EnterpriseLibraryOptions(background_deletion=True),
     )
     lt = lib._nvs.library_tool()
@@ -162,9 +162,9 @@ def test_create_library_background_deletion_option_set_does_not_delete(lmdb_stor
     assert len(lt.find_keys(KeyType.TABLE_DATA))
 
 
-def test_modify_options_affect_in_memory_lib(lmdb_storage):
+def test_modify_options_affect_in_memory_lib(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library("lib")
+    lib = ac.create_library(lib_name)
 
     ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, True)
     ac.modify_library_option(lib, ModifiableLibraryOption.DEDUP, False)
@@ -174,23 +174,23 @@ def test_modify_options_affect_in_memory_lib(lmdb_storage):
     assert not proto_options.de_duplication
 
 
-def test_modify_options_affect_persistent_lib_config(lmdb_storage):
+def test_modify_options_affect_persistent_lib_config(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library("lib")
+    lib = ac.create_library(lib_name)
 
     ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, True)
     ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
 
     new_client = Arctic(ac.get_uri())
-    new_lib = new_client["lib"]
+    new_lib = new_client[lib_name]
     proto_options = new_lib._nvs.lib_cfg().lib_desc.version.write_options
     assert proto_options.sync_passive.enabled
     assert proto_options.delayed_deletes
 
 
-def test_modify_options_dedup(lmdb_storage):
+def test_modify_options_dedup(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library("lib")
+    lib = ac.create_library(lib_name)
 
     ac.modify_library_option(lib, ModifiableLibraryOption.DEDUP, False)
 
@@ -203,9 +203,9 @@ def test_modify_options_dedup(lmdb_storage):
     assert proto_options.de_duplication
 
 
-def test_modify_options_rows_per_segment(lmdb_storage):
+def test_modify_options_rows_per_segment(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library("lib")
+    lib = ac.create_library(lib_name)
 
     ac.modify_library_option(lib, ModifiableLibraryOption.ROWS_PER_SEGMENT, 100)
 
@@ -218,9 +218,9 @@ def test_modify_options_rows_per_segment(lmdb_storage):
     assert proto_options.segment_row_size == 200
 
 
-def test_modify_options_cols_per_segment(lmdb_storage):
+def test_modify_options_cols_per_segment(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library("lib")
+    lib = ac.create_library(lib_name)
 
     ac.modify_library_option(lib, ModifiableLibraryOption.COLUMNS_PER_SEGMENT, 100)
 
@@ -233,9 +233,9 @@ def test_modify_options_cols_per_segment(lmdb_storage):
     assert proto_options.column_group_size == 200
 
 
-def test_modify_options_replication(lmdb_storage):
+def test_modify_options_replication(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library("lib")
+    lib = ac.create_library(lib_name)
 
     ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, True)
 
@@ -256,9 +256,9 @@ def test_modify_options_replication(lmdb_storage):
     assert len(lt.find_keys(KeyType.LOG)) == 1
 
 
-def test_modify_options_background_deletion(lmdb_storage):
+def test_modify_options_background_deletion(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library("lib")
+    lib = ac.create_library(lib_name)
     lt = lib._nvs.library_tool()
 
     ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
@@ -269,13 +269,13 @@ def test_modify_options_background_deletion(lmdb_storage):
     assert len(lt.find_keys(KeyType.TABLE_DATA))
 
 
-def test_create_library_with_invalid_name(arctic_client_v1):
+def test_create_library_with_invalid_name(arctic_client_v1, lib_name):
     ac = arctic_client_v1
 
     # These should succeed because the names are valid
-    valid_names = ["lib", "lib-with-dash", "lib.with.dot", "lib123"]
+    valid_names = [lib_name, "lib-with-dash", "lib.with.dot", "lib123"]
     # These should fail because the names are invalid
-    invalid_names = [chr(0), "lib>", "lib<", "lib*", "/lib", "lib...lib", "lib" * 1000]
+    invalid_names = [chr(0), "lib>", "lib<", "lib*", "/lib", "lib...lib", lib_name * 1000]
     # This name should fail on mongo, and succeed on other storages
     if "mongo" in ac.get_uri():
         invalid_names += ["lib/with/slash"]
@@ -325,6 +325,8 @@ def test_do_not_persist_s3_details(s3_storage):
         assert s3_storage.https
     else:
         assert not s3_storage.https
+
+    ac.delete_library("test")
 
 
 def test_library_options(arctic_client, lib_name):

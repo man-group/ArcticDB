@@ -4,6 +4,7 @@ from arcticdb.util.errors import *
 import arcticdb.exceptions as ae
 from arcticdb.exceptions import *  # keep as wildcard so all_exception_types below includes everything
 from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException
+from tests.util.mark import SLOW_TESTS_MARK
 
 
 test_raise_params = [(NormalizationError.E_UPDATE_NOT_SUPPORTED, NormalizationException)]
@@ -83,3 +84,11 @@ def test_no_such_version_exception(lmdb_version_store):
     assert not issubclass(e.type, _ArcticLegacyCompatibilityException)
     assert issubclass(e.type, NoDataFoundException)
     assert issubclass(e.type, ArcticException)
+
+
+@SLOW_TESTS_MARK
+def test_symbol_list_exception_and_printout(
+    mock_s3_store_with_mock_storage_exception,
+):  # moto is choosen just because it's easy to give storage error
+    with pytest.raises(InternalException, match="E_S3_RETRYABLE Retry-able error"):
+        mock_s3_store_with_mock_storage_exception.list_symbols()

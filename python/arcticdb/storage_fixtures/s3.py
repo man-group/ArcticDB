@@ -750,7 +750,7 @@ _PermissionCapableFactory = MotoS3StorageFixtureFactory
 
 class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
     def create_fixture(self) -> NfsS3Bucket:
-        bucket = f"test_bucket_{self._bucket_id}"
+        bucket = f"test_bucket_{self.unique_id}_{self._bucket_id}"
         self._s3_admin.create_bucket(Bucket=bucket)
         self._bucket_id += 1
         out = NfsS3Bucket(self, bucket)
@@ -792,7 +792,7 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
         wait_for_server_to_come_up(self.endpoint, "moto", self._p)
 
     def create_fixture(self) -> GcpS3Bucket:
-        bucket = f"test_bucket_{self._bucket_id}"
+        bucket = f"test_bucket_{self.unique_id}_{self._bucket_id}"
         self._s3_admin.create_bucket(Bucket=bucket)
         self._bucket_id += 1
         out = GcpS3Bucket(self, bucket)
