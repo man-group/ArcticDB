@@ -145,14 +145,12 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
         // wide type always is 64bits
         val_bytes = 8;
 
-        // If Numpy has type 'O' then get_value_type above will return type 'BYTES'
-        // If there is no value, and we can't deduce a type then leave it that way,
-        // otherwise try to work out whether it was a bytes (string) type or unicode
         if (!is_fixed_string_type(val_type) && element_count > 0) {
             auto none = py::none{};
             auto obj = reinterpret_cast<PyObject **>(arr->data);
             bool empty = false;
             bool all_nans = false;
+            bool empty_string_placeholder = false;
             PyObject *sample = *obj;
             PyObject** current_object = obj;
             // Arctic allows both None and NaN to represent a string with no value. We have 3 options:
@@ -163,14 +161,14 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
             // * In case there is at least one actual string we can sample it and decide the type of the column segment
             //      based on it
             // Note: ValueType::ASCII_DYNAMIC was used when Python 2 was supported. It is no longer supported, and
-            //  we're not expected to enter that branch.
+            // we're not expected to enter that branch.
             if (sample == none.ptr() || is_py_nan(sample)) {
                 empty = true;
                 all_nans = true;
+                empty_string_placeholder = true;
                 util::check(c_style, "Non contiguous columns with first element as None not supported yet.");
                 const auto* end = obj + size;
                 while(current_object < end) {
-
                     if(*current_object == none.ptr()) {
                         all_nans = false;
                     } else if(is_py_nan(*current_object)) {
@@ -178,6 +176,7 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
                     } else {
                         all_nans = false;
                         empty = false;
+                        empty_string_placeholder = false;
                         break;
                     }
                     ++current_object;
@@ -185,7 +184,11 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
                 if(current_object != end)
                     sample = *current_object;
             }
-            if (empty && kind == 'O') {
+            // TODO: If empty types are brought back to life consider merging empty_string_placeholder and empty into a
+            // single thing as they have similar meaning. This would mean that [None, np.nan] would be considered empty
+            if (empty_string_placeholder) {
+                val_type = ValueType::UTF_DYNAMIC;
+            } else if (empty && kind == 'O') {
                 val_type = empty_types ? ValueType::EMPTY : ValueType::UTF_DYNAMIC;
             } else if(all_nans || is_unicode(sample)){
                 val_type = ValueType::UTF_DYNAMIC;

@@ -95,8 +95,14 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
             auto& tensor = frame_->field_tensors[slice_.absolute_field_col(col)];
             auto opt_error = aggregator_set_data(
                 fd.type(),
-                tensor, agg, abs_col, rows_to_write, offset_in_frame, slice_num_for_column_,
-                regular_slice_size, sparsify_floats_);
+                tensor,
+                agg,
+                abs_col,
+                rows_to_write,
+                offset_in_frame,
+                slice_num_for_column_,
+                regular_slice_size,
+                sparsify_floats_);
             if (opt_error.has_value()) {
                 opt_error->raise(fd.name(), offset_in_frame);
             }

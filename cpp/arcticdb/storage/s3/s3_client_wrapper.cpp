@@ -136,9 +136,7 @@ folly::Future<S3Result<std::monostate>> S3ClientTestWrapper::delete_object(
     return actual_client_->delete_object(s3_object_name, bucket_name);
 }
 
-// Using a fixed page size since it's only being used for simple tests.
-// If we ever need to configure it we should move it to the s3 proto config instead.
-constexpr auto page_size = 10;
+
 S3Result<ListObjectsOutput> S3ClientTestWrapper::list_objects(
         const std::string& name_prefix,
         const std::string& bucket_name,
