@@ -450,9 +450,7 @@ bool do_iterate_type_impl(
             auto& output = list_objects_result.get_output();
 
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
-            STATS_QUERY_ADD_STAT_CONDITIONAL(
-                continuation_token==std::nullopt && !output.s3_object_names.size(),
-                count, 0)
+            STATS_QUERY_ADD_STAT(count, output.s3_object_names.size())
             for (auto& s3_object_name : output.s3_object_names) {
                 auto key = s3_object_name.substr(path_to_key_size);
                 ARCTICDB_TRACE(log::version(), "Got object_list: {}, key: {}", s3_object_name, key);
@@ -464,7 +462,6 @@ bool do_iterate_type_impl(
                 ARCTICDB_DEBUG(log::storage(), "Iterating key {}: {}", variant_key_type(k),
                                variant_key_view(k));
                 ARCTICDB_SUBSAMPLE(S3StorageVisitKey, 0)
-                STATS_QUERY_ADD_STAT(count, 1)
                 if (visitor(std::move(k))) {
                     return true;
                 }
