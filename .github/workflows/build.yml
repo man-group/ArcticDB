@@ -88,7 +88,7 @@ jobs:
                     - /:/mnt
             windows_matrix:
               - os: windows
-                distro: windows-latest-8core
+                distro: windows-latest
                 cmake_preset_prefix: windows-cl
                 cibw_build_suffix: win_amd64
                 build_dir: C:/cpp_build
