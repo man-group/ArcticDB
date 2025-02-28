@@ -507,14 +507,25 @@ public:
             size_t copied = 0;
             for (size_t offset = start; offset < end; ++offset) {
                 if (VariantKey& key = vkeys[offset]; source_store_->key_exists(key).get() && !target_store_->key_exists(key).get()) {
+                    util::check(variant_key_type(key) != KeyType::UNDEFINED, "Key type is undefined");
                     keys_to_copy[copied++] = std::pair{std::move(key), [copied, &segments](storage::KeySegmentPair&& ks) {
                         segments[copied] = std::move(ks);
                         return segments[copied].variant_key();
                     }};
+                } else {
+                    log::storage().warn("Key {} not found in source or already exists in target", key);
                 }
             }
+            // check that there are no undefined keys due to failed key_exists calls
+            std::erase_if(keys_to_copy, [](const auto& key) { return variant_key_type(key.first) == KeyType::UNDEFINED; });
+            if (keys_to_copy.empty()) {
+                continue;
+            }
+
             total_copied += copied;
-            [[maybe_unused]] auto keys = source_store_->batch_read_compressed(std::move(keys_to_copy), BatchReadArgs{}).get();
+            auto keys = source_store_->batch_read_compressed(std::move(keys_to_copy), BatchReadArgs{}).get();
+            std::erase_if(segments, [](const auto& segment) { return variant_key_type(segment.variant_key()) == KeyType::UNDEFINED; });
+            util::check(keys.size() == segments.size(), "Keys and segments size mismatch, maybe due to parallel deletes");
             write_futs.push_back(target_store_->batch_write_compressed(std::move(segments)));
         }
         folly::collect(write_futs).get();

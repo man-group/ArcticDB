@@ -1,18 +1,15 @@
-import pytest
-import subprocess
-import os
-import venv
-import tempfile
 import logging
+import os
 import shutil
-from typing import Union, Optional, Dict, List
-from ..util.mark import (
-    AZURE_TESTS_MARK,
-    MONGO_TESTS_MARK,
-    VENV_COMPAT_TESTS_MARK,
-    PANDAS_2_COMPAT_TESTS_MARK
-)
+import subprocess
+import tempfile
+import venv
+
+from typing import Dict, List, Optional, Union
+
 from packaging.version import Version
+from arcticdb_ext import set_config_int, unset_config_int
+from arcticdb.arctic import Arctic
 
 logger = logging.getLogger("Compatibility tests")
 
@@ -45,8 +42,9 @@ def run_shell_command(
             stdin=subprocess.DEVNULL,
         )
     if result.returncode != 0:
-        logger.warning(
-            f"Command failed, stdout: {str(result.stdout)}, stderr: {str(result.stderr)}"
+        logger.error(
+            f"Command '{command_string}' failed with return code {result.returncode}\n"
+            f"stdout:\n{result.stdout.decode('utf-8')}\nstderr:\n{result.stderr.decode('utf-8')}"
         )
     return result
 
@@ -148,6 +146,10 @@ class VenvArctic:
     def get_library(self, lib_name: str) -> "VenvLib":
         return VenvLib(self, lib_name, create_if_not_exists=False)
 
+    def cleanup(self):
+        ac = Arctic(self.uri)
+        for lib in ac.list_libraries():
+            ac.delete_library(lib)
 
 class VenvLib:
     def __init__(self, arctic, lib_name, create_if_not_exists=True):
@@ -177,68 +179,24 @@ class VenvLib:
         return self.execute(python_commands, {"expected_df": df})
 
 
-@pytest.fixture(
-    # scope="session",
-    params=[
-        pytest.param("1.6.2", marks=VENV_COMPAT_TESTS_MARK),
-        pytest.param("4.5.1", marks=VENV_COMPAT_TESTS_MARK),
-        pytest.param("5.0.0", marks=VENV_COMPAT_TESTS_MARK),
-    ],  # TODO: Extend this list with other old versions
-)
-def old_venv(request, tmp_path):
-    version = request.param
-    path = os.path.join("venvs", tmp_path, version)
-    compat_dir = os.path.dirname(os.path.abspath(__file__))
-    requirements_file = os.path.join(compat_dir, f"requirements-{version}.txt")
-    with Venv(path, requirements_file, version) as old_venv:
-        yield old_venv
-
-
-@pytest.fixture(
-    params=[
-        pytest.param("tmp_path", marks=PANDAS_2_COMPAT_TESTS_MARK)
-    ]
-)
-def pandas_v1_venv(request):
-    """A venv with Pandas v1 installed (and an old ArcticDB version). To help test compat across Pandas versions."""
-    version = "1.6.2"
-    tmp_path = request.getfixturevalue(request.param)
-    path = os.path.join("venvs", tmp_path, version)
-    compat_dir = os.path.dirname(os.path.abspath(__file__))
-    requirements_file = os.path.join(compat_dir, f"requirements-{version}.txt")
-    with Venv(path, requirements_file, version) as old_venv:
-        yield old_venv
-
-
-@pytest.fixture(
-    params=[
-        "lmdb",
-        "s3_ssl_disabled",
-        pytest.param("azurite", marks=AZURE_TESTS_MARK),
-        pytest.param("mongo", marks=MONGO_TESTS_MARK),
-    ]
-)
-def arctic_uri(request):
+class CurrentVersion:
     """
-    arctic_uri is a fixture which provides uri to all storages to be used for creating both old and current Arctic instances.
+    For many of the compatibility tests we need to maintain a single open connection to the library.
+    For example LMDB on Windows starts to fail if we at the same time we use an old_venv and current connection.
 
-    We use s3_ssl_disabled because which allows running tests for older versions like 1.6.2
+    So we use `with CurrentVersion` construct to ensure we delete all our outstanding references to the library.
     """
-    storage_fixture = request.getfixturevalue(request.param + "_storage")
-    if request.param == "mongo":
-        return storage_fixture.mongo_uri
-    else:
-        return storage_fixture.arctic_uri
+    def __init__(self, uri, lib_name):
+        self.uri = uri
+        self.lib_name = lib_name
 
+    def __enter__(self):
+        set_config_int("VersionMap.ReloadInterval", 0) # We disable the cache to be able to read the data written from old_venv
+        self.ac = Arctic(self.uri)
+        self.lib = self.ac.get_library(self.lib_name)
+        return self
 
-@pytest.fixture
-def old_venv_and_arctic_uri(old_venv, arctic_uri):
-    if arctic_uri.startswith("mongo") and "1.6.2" in old_venv.version:
-        pytest.skip("Mongo storage backend is not supported in 1.6.2")
-
-    if arctic_uri.startswith("lmdb") and Version(old_venv.version) < Version("5.0.0"):
-        pytest.skip(
-            "LMDB storage backed has a bug in versions before 5.0.0 which leads to flaky segfaults"
-        )
-
-    return old_venv, arctic_uri
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        unset_config_int("VersionMap.ReloadInterval")
+        del self.lib
+        del self.ac
