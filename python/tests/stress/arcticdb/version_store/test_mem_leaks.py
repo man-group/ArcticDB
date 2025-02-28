@@ -792,6 +792,7 @@ if MEMRAY_SUPPORTED:
         lib.delete(symbol=symbol)
 
     @MEMRAY_TESTS_MARK
+    @SLOW_TESTS_MARK
     @pytest.mark.parametrize("lmdb_library", [
             {'library_options': LibraryOptions(rows_per_segment=233, columns_per_segment=197, dynamic_schema=True, encoding_version=EncodingVersion.V2)},
             {'library_options': LibraryOptions(rows_per_segment=99, columns_per_segment=99, dynamic_schema=False, encoding_version=EncodingVersion.V1)}
