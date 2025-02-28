@@ -1,12 +1,11 @@
 """
-Copyright 2023 Man Group Operations Limited
+Copyright 2025 Man Group Operations Limited
 
 Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import logging
 import tempfile
 import time
 from arcticdb import Arctic
@@ -17,14 +16,7 @@ from arcticdb.util.test import random_string, random_integers, random_dates
 from benchmarks.common import *
 
 #ASV captures console output thus we create console handler
-logLevel = logging.INFO
-logger = logging.getLogger(__name__)
-logger.setLevel(logLevel)
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logLevel)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+logger = create_asv_logger()
 
 
 def str_col(num, size):

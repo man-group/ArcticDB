@@ -928,7 +928,7 @@
                 "'arcticdb-lmdb'"
             ]
         ],
-        "setup_cache_key": "comparison_benchmarks:65",
+        "setup_cache_key": "comparison_benchmarks:57",
         "timeout": 60000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -948,7 +948,7 @@
                 "'arcticdb-lmdb'"
             ]
         ],
-        "setup_cache_key": "comparison_benchmarks:65",
+        "setup_cache_key": "comparison_benchmarks:57",
         "timeout": 60000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -968,7 +968,7 @@
                 "'arcticdb-lmdb'"
             ]
         ],
-        "setup_cache_key": "comparison_benchmarks:65",
+        "setup_cache_key": "comparison_benchmarks:57",
         "timeout": 60000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1679,7 +1679,7 @@
                 "'arcticdb-amazon-s3'"
             ]
         ],
-        "setup_cache_key": "real_comparison_benchmarks:71",
+        "setup_cache_key": "real_comparison_benchmarks:63",
         "timeout": 60000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1700,7 +1700,7 @@
                 "'arcticdb-amazon-s3'"
             ]
         ],
-        "setup_cache_key": "real_comparison_benchmarks:71",
+        "setup_cache_key": "real_comparison_benchmarks:63",
         "timeout": 60000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1721,7 +1721,7 @@
                 "'arcticdb-amazon-s3'"
             ]
         ],
-        "setup_cache_key": "real_comparison_benchmarks:71",
+        "setup_cache_key": "real_comparison_benchmarks:63",
         "timeout": 60000,
         "type": "peakmemory",
         "unit": "bytes",
