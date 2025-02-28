@@ -119,6 +119,8 @@ def test_s3_verification(
     lib = ac.create_library(lib_name)
     lib.write("sym", pd.DataFrame())
 
+    ac.delete_library(lib_name)
+
 
 @SSL_TESTS_MARK
 @pytest.mark.parametrize("client_cert_file", no_ssl_parameter_display_status)
@@ -136,6 +138,8 @@ def test_s3_no_ssl_verification(
     ac = Arctic(uri)
     lib = ac.create_library(lib_name)
     lib.write("sym", pd.DataFrame())
+
+    ac.delete_library(lib_name)
 
 
 @REAL_S3_TESTS_MARK
@@ -214,7 +218,7 @@ def test_s3_sts_auth_store(real_s3_sts_version_store):
 @AZURE_TESTS_MARK
 @pytest.mark.parametrize("client_cert_file", no_ssl_parameter_display_status)
 @pytest.mark.parametrize("client_cert_dir", no_ssl_parameter_display_status)
-def test_azurite_no_ssl_verification(monkeypatch, azurite_storage, client_cert_file, client_cert_dir):
+def test_azurite_no_ssl_verification(monkeypatch, azurite_storage, client_cert_file, client_cert_dir, lib_name):
     storage = azurite_storage
     # Leaving ca file and ca dir unset will fallback to using os default setting,
     # which is different from the test environment
@@ -222,15 +226,16 @@ def test_azurite_no_ssl_verification(monkeypatch, azurite_storage, client_cert_f
     monkeypatch.setattr("ssl.get_default_verify_paths", lambda: default_setting)
     uri = edit_connection_string(storage.arctic_uri, ";", storage, None, client_cert_file, client_cert_dir)
     ac = Arctic(uri)
-    lib = ac.create_library("test")
+    lib = ac.create_library(lib_name)
     lib.write("sym", pd.DataFrame())
+    ac.delete_library(lib_name)
 
 
 @AZURE_TESTS_MARK
 @SSL_TESTS_MARK
 @pytest.mark.parametrize("client_cert_file", parameter_display_status)
 @pytest.mark.parametrize("client_cert_dir", parameter_display_status)
-def test_azurite_ssl_verification(azurite_ssl_storage, monkeypatch, client_cert_file, client_cert_dir):
+def test_azurite_ssl_verification(azurite_ssl_storage, monkeypatch, client_cert_file, client_cert_dir, lib_name):
     storage = azurite_ssl_storage
     # Leaving ca file and ca dir unset will fallback to using os default setting,
     # which is different from the test environment
@@ -238,8 +243,9 @@ def test_azurite_ssl_verification(azurite_ssl_storage, monkeypatch, client_cert_
     monkeypatch.setattr("ssl.get_default_verify_paths", lambda: default_setting)
     uri = edit_connection_string(storage.arctic_uri, ";", storage, None, client_cert_file, client_cert_dir)
     ac = Arctic(uri)
-    lib = ac.create_library("test")
+    lib = ac.create_library(lib_name)
     lib.write("sym", pd.DataFrame())
+    ac.delete_library(lib_name)
 
 
 def test_basic_metadata(lmdb_version_store):
