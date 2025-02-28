@@ -13,7 +13,7 @@ class StatsQueryTool:
         StatsQuery.register_new_query_stat_tool()
 
     def __del__(self):
-        StatsQuery.unregister_query_stat_tool()
+        StatsQuery.deregister_query_stat_tool()
 
     def __sub__(self, other):
         return self._populate_stats(other._create_time)
@@ -28,7 +28,7 @@ class StatsQueryTool:
         
         for col in groupby_cols:
             if col not in df.columns:
-                df[col] = np.nan
+                df[col] = pd.Series(dtype='object')
         
         if "key_type" in df.columns:
             mask = df["key_type"].notna() & df["key_type"].ne("") & df["parallelized"].isna()
@@ -77,6 +77,10 @@ class StatsQueryTool:
         
         all_cols = fixed_cols + time_cols
         result_df = result_df.reindex(columns=[col for col in all_cols if col in result_df.columns])
+        
+        if "count" in result_df.columns:
+            result_df["count"] = result_df["count"].replace({np.nan: None})
+            result_df.loc[result_df["count"].notna(), "count"] = result_df.loc[result_df["count"].notna(), "count"].map(int)
         
         return result_df
 
