@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 
 import os
-from arcticdb.util.environment_setup import Storage, GeneralUseCaseNoSetup
+from arcticdb.util.environment_setup import Storage, NoSetup
 from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
 from arcticdb.version_store.library import StagedDataFinalizeMethod
 
@@ -28,7 +28,7 @@ class AWSFinalizeStagedData:
 
     timeout = 1200
 
-    SETUP_CLASS = (GeneralUseCaseNoSetup(storage=Storage.LMDB, 
+    SETUP_CLASS = (NoSetup(storage=Storage.AMAZON, 
                                                       prefix="FINALIZE"))
                    
     params = [500, 1000] # Test data [10, 20]
@@ -53,7 +53,7 @@ class AWSFinalizeStagedData:
     
     def setup(self, cache, num_chunks: int):
         self.df_cache: CachedDFGenerator = cache["df_cache"]
-        self.set_env = GeneralUseCaseNoSetup.from_storage_info(cache["storage_info"])
+        self.set_env = NoSetup.from_storage_info(cache["storage_info"])
 
         self.pid = os.getpid()
         self.lib = self.set_env.get_modifiable_library(self.pid)

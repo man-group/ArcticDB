@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import time
 import pandas as pd
-from arcticdb.util.environment_setup import GeneralSetupLibraryWithSymbols, Storage
+from arcticdb.util.environment_setup import SetupSingleLibrary, Storage
 from arcticdb.version_store.library import Library
 from arcticdb.version_store.processing import QueryBuilder
 
@@ -18,7 +18,7 @@ from benchmarks.local_query_builder import PARAMS_QUERY_BUILDER
 
 #region Setup classes
 
-class QueryBuilderFunctionsSettings(GeneralSetupLibraryWithSymbols):
+class QueryBuilderFunctionsSettings(SetupSingleLibrary):
     """
     Responsible for setup special read only symbols generated based
     on special dataframe for benchmarking queries

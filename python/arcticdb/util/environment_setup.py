@@ -287,7 +287,7 @@ class EnvConfigurationBase(ABC):
         """
         return f"sym_{sym_suffix}"
 
-    def get_library_names(self, lib_suffix: Union[str, int] = None) -> List[str]:
+    def _get_library_names(self, lib_suffix: Union[str, int] = None) -> List[str]:
         """
         Redefine the way the names of libraries are constructed.
         `lib_suffix` can be None indicating no lib suffix added,
@@ -307,20 +307,36 @@ class EnvConfigurationBase(ABC):
         self.__libraries.add(lib_name)
         return ac.get_library(lib_name, create_if_missing=True, 
                                 library_options=lib_opts)
-    
+
+    def get_library_name(self, library_suffix: Union[str, int] = None) -> str:
+        """
+        Returns library name on persistent space
+        """
+        return self._get_library_names(library_suffix)[0]
+
     def get_library(self, library_suffix: Union[str, int] = None) -> Library:
         """
-        Returns one time setup library (permanent)
+        Returns a library on persistent space. (created if do not exist)
+        The name is constructed internally, but user can add a suffix (index)
+        Uses `get_modifiable_library_name` to construct the name
         """
         return self._get_lib(self.get_arctic_client_persistent(), 
-                             self.get_library_names(library_suffix)[0])
+                             self.get_library_name(library_suffix))
+    
+    def get_modifiable_library_name(self, library_suffix: Union[str, int] = None) -> str:
+        """
+        Returns library name for the modifiable storage
+        """
+        return self._get_library_names(library_suffix)[1]
     
     def get_modifiable_library(self, library_suffix: Union[str, int] = None) -> Library:
         """
-        Returns library to read write and delete after done.
+        Returns library to read write and delete after done. (create if not exist is on!)
+        The name is constructed internally, but user can add a suffix (index)
+        Uses `get_modifiable_library_name` to construct the name
         """
         return self._get_lib(self.get_arctic_client_modifiable(), 
-                             self.get_library_names(library_suffix)[1])
+                             self.get_modifiable_library_name(library_suffix))
 
     def delete_modifiable_library(self, library_suffix: Union[str, int] = None):
         """
@@ -329,9 +345,9 @@ class EnvConfigurationBase(ABC):
         NOTE: will assert if library is not delete
         """
         ac = self.get_arctic_client_modifiable()
-        name = self.get_library_names(library_suffix)[1]
+        name = self.get_modifiable_library_name(library_suffix)
         logger.info(f"Deleting modifiable library {name}")
-        ac.delete_library(self.get_library_names(library_suffix)[1])
+        ac.delete_library(name)
         assert name not in ac.list_libraries(), f"Library successfully deleted {name}"
 
     def set_params(self, params):
@@ -391,7 +407,7 @@ class EnvConfigurationBase(ABC):
             ac = self.get_arctic_client_persistent()
             ## Delete all PERSISTENT libraries before setting up them
             for i in indexes:
-                lib = self.get_library_names(i)[0]
+                lib = self.get_library_name(i)
                 logger.info(f"REMOVING LIBRARY: {lib}")
                 ac.delete_library(lib)
             self.setup_all()
@@ -425,7 +441,7 @@ class EnvConfigurationBase(ABC):
         return value
 
 
-class GeneralSetupLibraryWithSymbols(EnvConfigurationBase):
+class SetupSingleLibrary(EnvConfigurationBase):
     """
     This class provides abstract logic for generation of a set of symbols
     that have certain number of rows and optionally columns.
@@ -440,7 +456,7 @@ class GeneralSetupLibraryWithSymbols(EnvConfigurationBase):
 
     """
 
-    def set_params(self, params) -> 'GeneralSetupLibraryWithSymbols':
+    def set_params(self, params) -> 'SetupSingleLibrary':
         super().set_params(params)
         return self
 
@@ -484,7 +500,7 @@ class GeneralSetupLibraryWithSymbols(EnvConfigurationBase):
         else:
             return (self._params, [ None ])
 
-    def setup_all(self) -> 'GeneralSetupLibraryWithSymbols':
+    def setup_all(self) -> 'SetupSingleLibrary':
         """
         Sets up in default library a number of symbols which is combination of parameters
         for number of rows and columns
@@ -522,7 +538,7 @@ class GeneralSetupLibraryWithSymbols(EnvConfigurationBase):
         return True
 
 
-class GeneralSetupSymbolsVersionsSnapshots(EnvConfigurationBase):
+class SetupLibrariesWithVersionAndSnapshots(EnvConfigurationBase):
     """
     Will create several libraries each containing specified number of symbols.
     Each symbol will have by default 1 version (use `set_max_number_versions` and
@@ -543,23 +559,23 @@ class GeneralSetupSymbolsVersionsSnapshots(EnvConfigurationBase):
         self.first_snapshot = None # Will hold the name of first snapshot created
         self.first_snapshot_taken = False
 
-    def set_params(self, params) -> 'GeneralSetupSymbolsVersionsSnapshots':
+    def set_params(self, params) -> 'SetupLibrariesWithVersionAndSnapshots':
         super().set_params(params=params)
         return self
 
-    def set_mean_number_versions_per_sym(self, mean) -> 'GeneralSetupSymbolsVersionsSnapshots':
+    def set_mean_number_versions_per_sym(self, mean) -> 'SetupLibrariesWithVersionAndSnapshots':
         self.mean = mean
         return self
 
-    def set_max_number_versions(self, versions_max) -> 'GeneralSetupSymbolsVersionsSnapshots':
+    def set_max_number_versions(self, versions_max) -> 'SetupLibrariesWithVersionAndSnapshots':
         self.versions_max = versions_max
         return self
 
-    def set_with_metadata_for_each_version(self, with_medatada: bool = True) -> 'GeneralSetupSymbolsVersionsSnapshots':
+    def set_with_metadata_for_each_version(self, with_medatada: bool = True) -> 'SetupLibrariesWithVersionAndSnapshots':
         self.with_metadata = with_medatada
         return self
     
-    def set_with_snapshot_for_each_version(self, with_snapshot: bool = True) -> 'GeneralSetupSymbolsVersionsSnapshots':
+    def set_with_snapshot_for_each_version(self, with_snapshot: bool = True) -> 'SetupLibrariesWithVersionAndSnapshots':
         self.with_snapshot = with_snapshot
         return self
 
@@ -595,7 +611,7 @@ class GeneralSetupSymbolsVersionsSnapshots(EnvConfigurationBase):
                 seed=365)
         return versions_list
 
-    def setup_library(self, number_symbols) -> 'GeneralSetupSymbolsVersionsSnapshots':
+    def setup_library(self, number_symbols) -> 'SetupLibrariesWithVersionAndSnapshots':
         """
         Sets a library with specified number of symbols with a snapshot and metadata if specified
         """
@@ -665,7 +681,7 @@ class GeneralSetupSymbolsVersionsSnapshots(EnvConfigurationBase):
             lib._nvs.version_store._clear_symbol_list_keys()
 
 
-class GeneralUseCaseNoSetup(EnvConfigurationBase):
+class NoSetup(EnvConfigurationBase):
     """
     Provides only access to persistent storage space as well
     as functionalities around work with modifiable storage space - 
@@ -682,7 +698,7 @@ class GeneralUseCaseNoSetup(EnvConfigurationBase):
         return self.get_storage_info()
     
 
-class GeneralAppendSetup(GeneralUseCaseNoSetup):
+class AppendDataSetupUtils(NoSetup):
     """
     This class presents general purpose utilities to generate sequenced indexed dataframes. 
     Those dataframes are useful for simulating update operations.
@@ -815,7 +831,7 @@ class GeneralAppendSetup(GeneralUseCaseNoSetup):
         assert len(sequence_df_list) > 0
         start = sequence_df_list[0].head(1).index.array[0]
         last = sequence_df_list[-1].tail(1).index.array[0]
-        return [start, last]
+        return (start, last)
     
     def get_next_timestamp_number(self, sequence_df_list: List[pd.DataFrame], freq: str) -> TimestampNumber:
         """
@@ -827,19 +843,30 @@ class GeneralAppendSetup(GeneralUseCaseNoSetup):
         return next
     
 
-class GeneralSetupOfLibrariesWithSymbols(EnvConfigurationBase):
+class SetupMultipleLibraries(EnvConfigurationBase):
     """
-    This class provides abstract logic for generation of a set of libraries
-    that contain certain number of symbols. Each symbol in the library will 
-    have certain number of rows and optionally columns. By default the dataframe
-    is timestamp indexed (optional to have no index)
+    Provide flexible logic to generate many libraries with many symbols combining specified row and column 
+    numbers. Example:
 
+        symbols_numbers = [1, 2] 
+        rows_number_list = [2, 3]
+        column_number_list = [5, 6]
+
+    Libraries: ['PERM_BASIC_BATCH_1', 'PERM_BASIC_BATCH_2'] (matches the length of symbols_numbers)
+
+    'PERM_BASIC_BATCH_1' Library will have: (4 symbols with combinations of rows and cols)
+      ['sym__idx0_rows3_cols5', 'sym__idx0_rows5_cols6', 'sym__idx0_rows3_cols6', 'sym__idx0_rows5_cols5']
+
+    'PERM_BASIC_BATCH_2' Library will have: (8 symbols with 2x times the combinations of rows and cols)
+      ['sym__idx0_rows3_cols6', 'sym__idx0_rows3_cols5', 'sym__idx1_rows5_cols5', 'sym__idx0_rows5_cols6', 
+      'sym__idx1_rows3_cols5', 'sym__idx1_rows3_cols6', 'sym__idx1_rows5_cols6', 'sym__idx0_rows5_cols5']
+    
     Requires at least 2 parameters:
-     - list of number of symbols per library
-     - list of rows per each symbol
-     - (OPTIONAL) list of number of columns (if no column list specified will use `default_number_cols`)
+     - list of symbol numbers - its length determines the number of libraries that will be created 
+       (the value will indicate the number of times the combination of row and cols will be generated)
+     - list specifying the number of rows for symbols
+     - (OPTIONAL) list specifying the number of columns (if no column list specified will use `default_number_cols`)
 
-    The number of libraries will match the number of symbols in it.
     Each symbol will have the following numbers encoded in the symbol name:
       - id (0<=id<number_of_symbols)
       - number of rows
@@ -857,22 +884,22 @@ class GeneralSetupOfLibrariesWithSymbols(EnvConfigurationBase):
         self.index_freq = 's'
         self.indexed = True
 
-    def set_params(self, params) -> 'GeneralSetupOfLibrariesWithSymbols':
+    def set_params(self, params) -> 'SetupMultipleLibraries':
         assert len(params) >= 2, "At least 2 parameters must be defined number symbols and rows"
         super().set_params(params)
         return self
     
-    def set_number_symbols_parameter_index(self, index:int = 0) -> 'GeneralSetupOfLibrariesWithSymbols':
+    def set_number_symbols_parameter_index(self, index:int = 0) -> 'SetupMultipleLibraries':
         assert index is not None
         self.param_index_num_symbols = index
         return self
     
-    def set_number_rows_parameter_index(self, index:int = 1) -> 'GeneralSetupOfLibrariesWithSymbols':
+    def set_number_rows_parameter_index(self, index:int = 1) -> 'SetupMultipleLibraries':
         assert index is not None
         self.param_index_rows = index
         return self
 
-    def set_number_columns_parameter_index(self, index:int = 2) -> 'GeneralSetupOfLibrariesWithSymbols':
+    def set_number_columns_parameter_index(self, index:int = 2) -> 'SetupMultipleLibraries':
         """
         Sets the index of the column number parameter, set to None if all symbols
         should have same number of columns, which is `default_number_cols`
@@ -880,11 +907,11 @@ class GeneralSetupOfLibrariesWithSymbols(EnvConfigurationBase):
         self.param_index_cols = index
         return self
     
-    def set_no_index(self) -> 'GeneralSetupOfLibrariesWithSymbols':
+    def set_no_index(self) -> 'SetupMultipleLibraries':
         self.indexed = False
         return self
     
-    def set_timestamp(self, timestamp: pd.Timestamp) -> 'GeneralSetupOfLibrariesWithSymbols':
+    def set_timestamp(self, timestamp: pd.Timestamp) -> 'SetupMultipleLibraries':
         self.start_timestamp  = timestamp
         return self
 
@@ -940,7 +967,7 @@ class GeneralSetupOfLibrariesWithSymbols(EnvConfigurationBase):
         self.logger().info(f"Stored {symbols_number} symbols for {time.time() - start} sec")
 
 
-    def setup_all(self) -> 'GeneralSetupOfLibrariesWithSymbols':
+    def setup_all(self) -> 'SetupMultipleLibraries':
         """
         Sets up in default library a number of symbols which is combination of parameters
         for number of rows and columns
@@ -954,9 +981,6 @@ class GeneralSetupOfLibrariesWithSymbols(EnvConfigurationBase):
         self.logger().info(f"TOTAL TIME (setup of one library with specified rows and column symbols): {time.time() - start} sec")
         return self
     
-    def check_symbol(self, lib: Library, symbols_number: int):
-        pass
-
     def check_ok(self):
         """
         Checks if library contains all needed data to run tests.
@@ -981,7 +1005,7 @@ class GeneralSetupOfLibrariesWithSymbols(EnvConfigurationBase):
         return True
 
 
-class GeneralSetupLibraryWithSymbolsTests:
+class TestsClassForSetupEnvironmentFramework:
     """
     This set of tests allows to test the setup / check / teardown logic of setup environment 
     building block classes 
@@ -991,15 +1015,15 @@ class GeneralSetupLibraryWithSymbolsTests:
 
     @classmethod
     def get_general_modifyanle_client(cls):
-        setup = (GeneralSetupLibraryWithSymbols(Storage.AMAZON, 
-                                                prefix=GeneralSetupLibraryWithSymbolsTests.PREFIX_FOR_TEST))
-        assert GeneralSetupLibraryWithSymbolsTests.PREFIX_FOR_TEST in setup.get_arctic_client_modifiable().get_uri()
+        setup = (SetupSingleLibrary(Storage.AMAZON, 
+                                                prefix=TestsClassForSetupEnvironmentFramework.PREFIX_FOR_TEST))
+        assert TestsClassForSetupEnvironmentFramework.PREFIX_FOR_TEST in setup.get_arctic_client_modifiable().get_uri()
         return setup
 
 
     @classmethod
     def get_general_setup_test_mode(cls):
-        setup = (GeneralSetupLibraryWithSymbols(Storage.LMDB)
+        setup = (SetupSingleLibrary(Storage.LMDB)
                  .set_test_mode())
         assert setup.is_test_mode()
         return setup
@@ -1042,14 +1066,14 @@ class GeneralSetupLibraryWithSymbolsTests:
         lib = setup.get_modifiable_library()
         lib.write(symbol, setup.generate_dataframe(10,10))
         ac = setup.get_arctic_client_modifiable()
-        assert ac.get_library(setup.get_library_names()[1])
+        assert ac.get_library(setup.get_modifiable_library_name())
         setup.delete_modifiable_library()
         assert len(ac.list_libraries()) == 0
         assert len(setup.get_arctic_client_modifiable().list_libraries()) == 0
 
     @classmethod
     def test_setup_versions_and_snapshots(cls):
-        setup = (GeneralSetupSymbolsVersionsSnapshots(storage=Storage.LMDB, prefix="LIST_SYMBOLS")
+        setup = (SetupLibrariesWithVersionAndSnapshots(storage=Storage.LMDB, prefix="LIST_SYMBOLS")
         .set_with_metadata_for_each_version()
         .set_with_snapshot_for_each_version()
         .set_params([10, 20])
@@ -1066,4 +1090,30 @@ class GeneralSetupLibraryWithSymbolsTests:
         setup.set_with_snapshot_for_each_version()
         setup.set_params([2, 3])
         assert not setup.check_ok()
+
+    @classmethod
+    def test_setup_multiple_libs_with_symbols(cls):
+        setup = (SetupMultipleLibraries(storage=Storage.LMDB, 
+                                                      prefix="BASIC_BATCH")
+                   .set_params([[1, 2], [3, 5], [5, 6]]) # For test purposes
+                   .set_number_symbols_parameter_index(0)
+                   .set_number_rows_parameter_index(1)
+                   ).set_test_mode()
+        assert setup.is_test_mode()
+
+        cls.delete_test_store(setup)
+
+        setup.setup_environment()
+        assert setup.check_ok()
+
+        libs = setup.get_arctic_client_persistent().list_libraries()
+        assert len(libs) == 2
+        for lib in libs:
+            l = setup.get_arctic_client_persistent().get_library(lib)
+            if ("_1" in lib) :
+                assert len(l.list_symbols()) == 4
+            elif ("_2" in lib) :
+                assert len(l.list_symbols()) == 8
+            else:
+                raise Exception("Problem")
         

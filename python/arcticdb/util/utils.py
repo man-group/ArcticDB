@@ -20,10 +20,19 @@ import pandas as pd
 from arcticdb.util.test import create_datetime_index, get_sample_dataframe, random_integers, random_string
 from arcticdb.version_store.library import Library
 
+
 # Types supported by arctic
 ArcticIntType = Union[np.uint8, np.uint16, np.uint32, np.uint64, np.int8, np.int16, np.int32, np.int64]
 ArcticFloatType = Union[np.float64, np.float32]
 ArcticTypes = Union[ArcticIntType, ArcticFloatType, str]
+if sys.version_info >= (3, 8):
+    supported_int_types_list = list(get_args(ArcticIntType))
+    supported_float_types_list = list(get_args(ArcticFloatType))
+    supported_types_list = list(get_args(ArcticTypes))
+else:
+    supported_int_types_list = [np.uint8, np.uint16, np.uint32, np.uint64, np.int8, np.int16, np.int32, np.int64]
+    supported_float_types_list = [np.float64, np.float32]
+    supported_types_list = [str] + supported_int_types_list + supported_float_types_list
 
 class  TimestampNumber:
     """
@@ -529,15 +538,10 @@ class DFGenerator:
         cols=int(cols)
         rows=int(rows)
         np.random.seed(seed)
-        if sys.version_info >= (3, 8):
-            dtypes = np.random.choice(list(get_args(ArcticTypes)), cols)
-        else:
-            dtypes = [np.uint8, np.uint16, np.uint32, np.uint64, 
-                      np.int8, np.int16, np.int32, np.int64,
-                      np.float32, np.float16, str]
+        dtypes = supported_types_list
         gen = DFGenerator(size=rows, seed=seed) 
         for i in range(cols):
-                dtype = dtypes[i]
+                dtype = dtypes[i % len(dtypes)]
                 if 'int' in str(dtype):
                     gen.add_int_col(f"col_{i}", dtype)
                     pass
@@ -555,7 +559,7 @@ class DFGenerator:
 
 
     @classmethod
-    def generate_random_int_dataframe(seclslf, start_name_prefix: str, 
+    def generate_random_int_dataframe(cls, start_name_prefix: str, 
                                       num_rows:int, num_cols:int, 
                                       dtype: ArcticIntType = np.int64, min_value: int = None, max_value: int = None,
                                       seed: int = 3432) -> pd.DataFrame:
@@ -595,11 +599,9 @@ class DFGenerator:
             min_value = max(-1e307, -sys.float_info.max, _min)
         if max_value is None:    
             max_value = min(1e307, sys.float_info.max, _max)
-        if round_at is None:
-            data = np.random.uniform(min_value, max_value, size=(num_rows, num_cols)).astype(dtype)
-        else :
-            data = np.round(np.random.uniform(min_value, max_value, 
-                                              size=(num_rows, num_cols)), round_at).astype(dtype)
+        data = np.random.uniform(min_value, max_value, size=(num_rows, num_cols)).astype(dtype)
+        if round_at is not None:
+            data = np.round(data, round_at)
 
         columns = [f"{start_name_prefix}_{n}" for n in range(num_cols)]
 
@@ -635,47 +637,30 @@ class DFGenerator:
         As the strings generation is slowest always be mindful to pass number between 1-1000 max
         The generated dataframe will have also index starting at specified `start_time`
         """
-
-        cols, mod = divmod(num_cols - num_string_cols, 10) # divide by number of unique frame types
         
-        int_frame1 = cls.generate_random_int_dataframe("int8", num_rows=num_rows, num_cols=cols, 
-                                                       dtype=np.int8, seed=seed)
+        cols, mod = divmod(num_cols - num_string_cols, 
+                           len (supported_int_types_list + supported_float_types_list )) # divide by number of unique frame types
+        
+        frames = []
+        for dtype in supported_int_types_list:
+            frame = cls.generate_random_int_dataframe(dtype.__name__, num_rows=num_rows, num_cols=cols, 
+                                                       dtype=dtype, seed=seed)
+            frames.append(frame)
 
-        int_frame2 = cls.generate_random_int_dataframe("int16", num_rows=num_rows, num_cols=cols, 
-                                                       dtype=np.int16, seed=seed)
-
-        int_frame3 = cls.generate_random_int_dataframe("int32", num_rows=num_rows, num_cols=cols, 
-                                                       dtype=np.int32, seed=seed)
-
-        int_frame4 = cls.generate_random_int_dataframe("int64", num_rows=num_rows, num_cols=cols + mod, 
-                                                       dtype=np.int64, seed=seed)
-
-        uint_frame1 = cls.generate_random_int_dataframe("uint8", num_rows=num_rows, num_cols=cols, 
-                                                        dtype=np.uint8, seed=seed)
-
-        uint_frame2 = cls.generate_random_int_dataframe("uint16", num_rows=num_rows, num_cols=cols, 
-                                                        dtype=np.uint16, seed=seed)
-
-        uint_frame3 = cls.generate_random_int_dataframe("uint32", num_rows=num_rows, num_cols=cols, 
-                                                        dtype=np.uint32, seed=seed)
-
-        uint_frame4 = cls.generate_random_int_dataframe("uint64", num_rows=num_rows, num_cols=cols, 
-                                                        dtype=np.uint64, seed=seed)
-
-        float_frame1 = cls.generate_random_float_dataframe("float32", num_rows=num_rows, num_cols=cols, 
-                                                           dtype=np.float32, seed=seed)
-
-        float_frame2 = cls.generate_random_float_dataframe("float64", num_rows=num_rows, num_cols=cols, 
-                                                           dtype=np.float64, seed=seed)
+        for dtype in supported_float_types_list:
+            frame = cls.generate_random_float_dataframe(dtype.__name__, num_rows=num_rows, num_cols=cols, 
+                                                       dtype=dtype, seed=seed)
+            frames.append(frame)
 
         str_frame = cls.generate_random_strings_dataframe("str", num_rows=num_rows, num_cols=num_string_cols)
+        frames.append(str_frame)
 
-        frame: pd.DataFrame = pd.concat([int_frame1, int_frame2, int_frame3, int_frame4,
-                           uint_frame1, uint_frame2, uint_frame3, uint_frame4,
-                           float_frame1, float_frame2, str_frame], axis=1) # Concatenate horizontally
-        
+        frame: pd.DataFrame = pd.concat(frames, axis=1) # Concatenate horizontally
+
         if start_time:
             range = pd.date_range(start=start_time, periods=frame.shape[0], freq=freq, name='index')
             frame.index = range
             
         return  frame
+
+

@@ -10,7 +10,7 @@ import os
 from typing import List
 import pandas as pd
 from arcticdb.options import LibraryOptions
-from arcticdb.util.environment_setup import Storage, StorageInfo, GeneralAppendSetup
+from arcticdb.util.environment_setup import Storage, StorageInfo, AppendDataSetupUtils
 from arcticdb.version_store.library import Library
 
 
@@ -47,7 +47,7 @@ class AWSLargeAppendDataModify:
 
     timeout = 1200
 
-    SETUP_CLASS = (GeneralAppendSetup(storage=Storage.LMDB, 
+    SETUP_CLASS = (AppendDataSetupUtils(storage=Storage.AMAZON, 
                                       prefix="BASIC_APPEND",
                                       ).set_default_columns(20))
     
@@ -60,7 +60,7 @@ class AWSLargeAppendDataModify:
                                      AWSLargeAppendDataModify.params,
                                      AWSLargeAppendDataModify.number)
     
-    def initialize_cache(self, setup_obj: GeneralAppendSetup, warmup_time, params, num_sequenced_dataframes):
+    def initialize_cache(self, setup_obj: AppendDataSetupUtils, warmup_time, params, num_sequenced_dataframes):
         # warmup will execute tests additional time and we do not want that at all for write
         # update and append tests. We want exact specified `number` of times to be executed between
         assert warmup_time == 0, "warm up must be 0"
@@ -86,7 +86,7 @@ class AWSLargeAppendDataModify:
         return cache
     
     def initialize_update_dataframes(self, num_rows, cached_results: LargeAppendDataModifyCache, 
-                                     set_env: GeneralAppendSetup):
+                                     set_env: AppendDataSetupUtils):
         timestamp_number = set_env.get_initial_time_number()
         end_timestamp_number = timestamp_number + num_rows
         set_env.logger().info(f"Frame START-LAST Timestamps {timestamp_number} == {end_timestamp_number}")
@@ -123,7 +123,7 @@ class AWSLargeAppendDataModify:
         set_env.logger().info(f"Time range SINGLE append { time_range }")
             
     def setup(self, cache: LargeAppendDataModifyCache, num_rows):
-        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)
+        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)
         self.cache = cache
         writes_list = self.cache.write_and_append_dict[num_rows]
         
@@ -178,7 +178,7 @@ class AWS30kColsWideDFLargeAppendDataModify(AWSLargeAppendDataModify):
 
     timeout = 1200
 
-    SETUP_CLASS = (GeneralAppendSetup(storage=Storage.AMAZON, 
+    SETUP_CLASS = (AppendDataSetupUtils(storage=Storage.AMAZON, 
                                     prefix="WIDE_APPEND",
                                     # causing issues: https://github.com/man-group/ArcticDB/actions/runs/13393930969/job/37408222827
                                     # library_options=LibraryOptions(rows_per_segment=1000,columns_per_segment=1000)
@@ -209,7 +209,7 @@ class LMDB30kColsWideDFLargeAppendDataModify(AWSLargeAppendDataModify):
 
     timeout = 1200
 
-    SETUP_CLASS = (GeneralAppendSetup(storage=Storage.LMDB, 
+    SETUP_CLASS = (AppendDataSetupUtils(storage=Storage.LMDB, 
                                       prefix="WIDE_APPEND",
                                       library_options=LibraryOptions(rows_per_segment=10000,columns_per_segment=10000)
                                       )
@@ -243,7 +243,7 @@ class AWSDeleteTestsFewLarge:
 
     timeout = 1200
 
-    SETUP_CLASS = (GeneralAppendSetup(storage=Storage.AMAZON, 
+    SETUP_CLASS = (AppendDataSetupUtils(storage=Storage.AMAZON, 
                                       prefix="BASIC_DELETE", 
                                       library_options=LibraryOptions(rows_per_segment=1000,columns_per_segment=1000)))
     
@@ -277,7 +277,7 @@ class AWSDeleteTestsFewLarge:
         return cache
     
     def setup(self, cache: LargeAppendDataModifyCache, num_rows):
-        self.set_env = GeneralAppendSetup.from_storage_info(cache.storage_info)
+        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)
         writes_list = cache.write_and_append_dict[num_rows]
 
         self.pid = os.getpid()

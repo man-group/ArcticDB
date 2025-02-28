@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import os
 import numpy as np
 import pandas as pd
-from arcticdb.util.environment_setup import Storage, GeneralSetupOfLibrariesWithSymbols
+from arcticdb.util.environment_setup import Storage, SetupMultipleLibraries
 from arcticdb.util.utils import TimestampNumber
 from arcticdb.version_store.library import Library, ReadRequest, WritePayload
 
@@ -29,7 +29,7 @@ class AWSBatchBasicFunctions:
 
     timeout = 1200
 
-    SETUP_CLASS = (GeneralSetupOfLibrariesWithSymbols(storage=Storage.AMAZON, 
+    SETUP_CLASS = (SetupMultipleLibraries(storage=Storage.AMAZON, 
                                                       prefix="BASIC_BATCH")
                    .set_params([[500, 1000], [25_000, 50_000]]) # For test purposes
                    .set_number_symbols_parameter_index(0)
@@ -51,7 +51,7 @@ class AWSBatchBasicFunctions:
         self.setup_env.delete_modifiable_library(os.getpid())
 
     def setup(self, storage_info, num_symbols, num_rows):
-        self.setup_env = GeneralSetupOfLibrariesWithSymbols.from_storage_info(storage_info)
+        self.setup_env = SetupMultipleLibraries.from_storage_info(storage_info)
         
         self.lib: Library = self.setup_env.get_library(num_symbols)
         
