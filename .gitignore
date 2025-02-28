@@ -50,3 +50,6 @@ docs/mkdocs/docs/notebooks/.ipynb_checkpoints/
 # Ignore asv results
 python/.asv/html/
 python/.asv/results/
+
+# Ignore azurite files
+__azurite_*
