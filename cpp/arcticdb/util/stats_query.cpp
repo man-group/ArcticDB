@@ -23,10 +23,6 @@ std::shared_ptr<StatsInstance> StatsInstance::instance(){
     return instance_;
 }
 
-void StatsInstance::reset_stats(){
-    stats_query.reset_stats();
-}
-
 
 // Could be called in 3 situations:
 // 1. By the head of the chain of task - Need copy of the instance

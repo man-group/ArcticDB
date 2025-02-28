@@ -28,7 +28,6 @@ public:
     static std::shared_ptr<StatsInstance> instance();
     static void copy_instance(std::shared_ptr<StatsInstance>& ptr);
     static void pass_instance(std::shared_ptr<StatsInstance>&& ptr);
-    static void reset_stats();
 
     GroupableStats info_;
 private:
@@ -92,13 +91,13 @@ class GroupableStat {
 
 }
 
-#define GROUPABLE_STAT_PTR_NAME(x) stats_query_info##x
+#define GROUPABLE_STAT_NAME(x) stats_query_info##x
 
 #define STATS_QUERY_ADD_GROUPABLE_STAT_IMPL(log_time, col_name, value) \
-    std::unique_ptr<arcticdb::util::stats_query::GroupableStat> GROUPABLE_STAT_PTR_NAME(col_name); \
+    std::optional<arcticdb::util::stats_query::GroupableStat> GROUPABLE_STAT_NAME(col_name); \
     if (arcticdb::util::stats_query::stats_query.stats_query_enabled.load(std::memory_order_relaxed)) { \
         auto stats_instance = arcticdb::util::stats_query::StatsInstance::instance(); \
-        GROUPABLE_STAT_PTR_NAME(col_name) = std::make_unique<arcticdb::util::stats_query::GroupableStat>(stats_instance, log_time, #col_name, value); \
+        GROUPABLE_STAT_NAME(col_name).emplace(stats_instance, log_time, #col_name, value); \
     }
 #define STATS_QUERY_ADD_GROUPABLE_STAT(col_name, value) STATS_QUERY_ADD_GROUPABLE_STAT_IMPL(false, col_name, value)
 #define STATS_QUERY_ADD_GROUPABLE_STAT_WITH_TIME(col_name, value) STATS_QUERY_ADD_GROUPABLE_STAT_IMPL(true, col_name, value)
