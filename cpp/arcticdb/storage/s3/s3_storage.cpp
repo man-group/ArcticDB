@@ -105,7 +105,15 @@ bool S3Storage::do_iterate_type_until_match(KeyType key_type, const IterateTypeP
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };
 
-    return detail::do_iterate_type_impl(key_type, visitor, root_folder_, bucket_name_, client(), FlatBucketizer{}, std::move(prefix_handler), prefix);
+    return detail::do_iterate_type_impl(key_type, visitor, root_folder_, bucket_name_, client(), FlatBucketizer{}, prefix_handler, prefix);
+}
+
+ObjectSizes S3Storage::do_get_object_sizes(KeyType key_type, const std::string& prefix) {
+    auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType) {
+        return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
+    };
+
+    return detail::do_calculate_sizes_for_type_impl(key_type, root_folder_, bucket_name_, client(), FlatBucketizer{}, prefix_handler, prefix);
 }
 
 bool S3Storage::do_key_exists(const VariantKey& key) {
@@ -181,6 +189,10 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const S3Set
     std::locale locale{ std::locale::classic(), new std::num_put<char>()};
     (void)std::locale::global(locale);
     ARCTICDB_DEBUG(log::storage(), "Opened S3 backed storage at {}", root_folder_);
+}
+
+bool S3Storage::supports_object_size_calculation() const {
+    return true;
 }
 
 GCPXMLStorage::GCPXMLStorage(const arcticdb::storage::LibraryPath& lib,

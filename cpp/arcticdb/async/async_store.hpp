@@ -223,6 +223,42 @@ void iterate_type(
     library_->iterate_type(type, func, prefix);
 }
 
+folly::Future<storage::ObjectSizes> get_object_sizes(KeyType type, const std::string& prefix) override {
+    if (library_->supports_object_size_calculation()) {
+        // The library has native support for some kind of clever size calculation, so let it take over
+        return async::submit_io_task(ObjectSizesTask{type, prefix, library_});
+    }
+
+    // No native support for a clever size calculation, so just read key headers and sum their sizes
+
+    auto size_futures = std::make_shared<std::vector<folly::Future<size_t>>>();
+    // Control the number of read futures running at once TODO aseaton make configurable
+    auto semaphore = std::make_shared<folly::NativeSemaphore>(1000);
+    IterateTypeVisitor visitor = [semaphore, size_futures, library=library_](VariantKey&& key) {
+        semaphore->wait();
+        folly::Future<size_t> size_fut = library->read(key)
+            .via(&async::io_executor())
+            .thenTryInline([semaphore](folly::Try<storage::KeySegmentPair>&& key_segment_pair_try) -> size_t {
+                semaphore->post();
+                try {
+                    key_segment_pair_try.throwUnlessValue();
+                    return key_segment_pair_try.value().segment().size();  // compressed size in bytes
+                } catch (const storage::KeyNotFoundException&) {
+                    // Ignore, someone might be deleting while we scan
+                    return 0;
+                }
+            });
+        size_futures->push_back(std::move(size_fut));
+    };
+
+    // Populate size_futures
+    library_->iterate_type(type, visitor, prefix);
+    size_t num_keys = size_futures->size();
+
+    return folly::unorderedReduce(*size_futures, 0, std::plus{}).via(&async::cpu_executor())
+        .thenValueInline([num_keys, type](size_t size) { return storage::ObjectSizes{type, num_keys, size}; });
+}
+
 bool scan_for_matching_key(
     KeyType key_type, const IterateTypePredicate& predicate) override {
     return library_->scan_for_matching_key(key_type, predicate);

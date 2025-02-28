@@ -1700,12 +1700,6 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
     return -1;
 }
 
-struct AtomicKeySizesInfo {
-    size_t count{0};
-    std::atomic<size_t> compressed_size;
-    std::atomic<size_t> uncompressed_size;
-};
-
 using KeySizeCalculators = std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>>;
 
 static void read_ignoring_key_not_found(Store* store, KeySizeCalculators&& calculators) {
@@ -1724,30 +1718,15 @@ static void read_ignoring_key_not_found(Store* store, KeySizeCalculators&& calcu
     folly::collect(res).get();
 }
 
-std::unordered_map<KeyType, KeySizesInfo> LocalVersionedEngine::scan_object_sizes() {
-    std::unordered_map<KeyType, AtomicKeySizesInfo> sizes;
-    foreach_key_type([&store=store(), &sizes=sizes](KeyType key_type) {
-        KeySizeCalculators key_size_calculators;
-        store->iterate_type(key_type, [&key_size_calculators, &sizes, &key_type](const VariantKey&& k) {
-            auto& sizes_info = sizes[key_type];
-            ++sizes_info.count;
-            key_size_calculators.emplace_back(std::forward<const VariantKey>(k), [&sizes_info] (auto&& ks) {
-                auto key_seg = std::forward<decltype(ks)>(ks);
-                sizes_info.compressed_size += key_seg.segment().size();
-                const auto& desc = key_seg.segment().descriptor();
-                sizes_info.uncompressed_size += desc.uncompressed_bytes();
-                return key_seg.variant_key();
-            });
-        });
-
-        read_ignoring_key_not_found(store.get(), std::move(key_size_calculators));
+std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes() {
+    using ObjectSizes = storage::ObjectSizes;
+    std::vector<folly::Future<ObjectSizes>> sizes_futs;
+    foreach_key_type([&store=store(), &sizes=sizes_futs](KeyType key_type) {
+        sizes.push_back(store->get_object_sizes(key_type, ""));
     });
 
-    std::unordered_map<KeyType, KeySizesInfo> result;
-    for (const auto& [k, v] : sizes) {
-        result[k] = KeySizesInfo{v.count, v.compressed_size, v.uncompressed_size};
-    }
-    return result;
+    folly::QueuedImmediateExecutor inline_executor;
+    return folly::collect(sizes_futs).via(&inline_executor).get();
 }
 
 std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> LocalVersionedEngine::scan_object_sizes_by_stream() {

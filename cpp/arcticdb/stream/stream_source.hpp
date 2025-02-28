@@ -45,13 +45,18 @@ struct StreamSource {
         const entity::IterateTypeVisitor& func,
         const std::string &prefix = std::string{}) = 0;
 
+    [[nodiscard]] virtual folly::Future<storage::ObjectSizes> get_object_sizes(
+        KeyType type,
+        const std::string& prefix
+    ) = 0;
+
     virtual bool scan_for_matching_key(
         KeyType key_type, const IterateTypePredicate& predicate) = 0;
 
     [[nodiscard]] virtual folly::Future<bool> key_exists(const entity::VariantKey &key) = 0;
-    virtual bool key_exists_sync(const entity::VariantKey &key) = 0;
-    virtual bool supports_prefix_matching() const = 0;
-    virtual bool fast_delete() = 0;
+    [[nodiscard]] virtual bool key_exists_sync(const entity::VariantKey &key) = 0;
+    [[nodiscard]] virtual bool supports_prefix_matching() const = 0;
+    [[nodiscard]] virtual bool fast_delete() = 0;
 
     using ReadContinuation = folly::Function<VariantKey(storage::KeySegmentPair &&)>;
 

@@ -63,6 +63,10 @@ public:
         return primary().supports_atomic_writes();
     }
 
+    [[nodiscard]] bool supports_object_size_calculation() {
+        return std::all_of(storages_.begin(), storages_.end(), [](const auto& storage) {return storage->supports_object_size_calculation();});
+    }
+
     bool fast_delete() {
         return primary().fast_delete();
     }
@@ -182,6 +186,16 @@ public:
                 storage->iterate_type(key_type, visitor, prefix);
             }
         }
+    }
+
+    ObjectSizes get_object_sizes(KeyType key_type, const std::string& prefix) {
+        ObjectSizes res{key_type, 0, 0};
+        for (const auto& storage : storages_) {
+            auto storage_sizes = storage->get_object_sizes(key_type, prefix);
+            res.compressed_size_bytes_ += storage_sizes.compressed_size_bytes_;
+            res.count_ += storage_sizes.count_;
+        }
+        return res;
     }
 
     bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate, bool primary_only = true) {
