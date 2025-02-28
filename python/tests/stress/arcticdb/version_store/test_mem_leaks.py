@@ -750,14 +750,13 @@ if MEMRAY_SUPPORTED:
         logger.info("Test starting")
         st = time.time()
         data: pd.DataFrame = lib.read(symbol).data
-        lib.head
         del data
         logger.info(f"Test took : {time.time() - st}")
 
         gc.collect()
 
     @pytest.fixture
-    def prepare_head_tails_symbol(lmdb_library_any):
+    def prepare_head_tails_symbol(lmdb_library):
         """
         This fixture is part of test `test_mem_leak_head_tail_memray`
 
@@ -767,7 +766,7 @@ if MEMRAY_SUPPORTED:
 
         Should not be reused
         """
-        lib: Library = lmdb_library_any
+        lib: Library = lmdb_library
         opts: LibraryOptions = lib.options()
         total_number_columns = 1002
         symbol = "asdf12345"
@@ -783,7 +782,8 @@ if MEMRAY_SUPPORTED:
             snapshot_names.append(snap)
             logger.info(f"Generated {rows} in {time.time() - st} sec")
             if opts.dynamic_schema:
-                # For dynamic schema we will increase number of columns each iteration
+                # Dynamic libraries are dynamic by nature so the test should cover that
+                # characteristic
                 total_number_columns += 20
                 logger.info(f"Total number of columns increased to {total_number_columns}")
             
@@ -792,11 +792,11 @@ if MEMRAY_SUPPORTED:
         lib.delete(symbol=symbol)
 
     @MEMRAY_TESTS_MARK
-    @pytest.mark.parametrize("lmdb_library_any", [
+    @pytest.mark.parametrize("lmdb_library", [
             {'library_options': LibraryOptions(rows_per_segment=233, columns_per_segment=197, dynamic_schema=True, encoding_version=EncodingVersion.V2)},
             {'library_options': LibraryOptions(rows_per_segment=99, columns_per_segment=99, dynamic_schema=False, encoding_version=EncodingVersion.V1)}
         ], indirect=True)
-    @pytest.mark.limit_leaks(location_limit="52 KB" if not LINUX else "380 KB", filter_fn=is_relevant)
+    @pytest.mark.limit_leaks(location_limit="380 KB" if LINUX else "52 KB", filter_fn=is_relevant)
     def test_mem_leak_head_tail_memray(prepare_head_tails_symbol):
         """
         This test aims to test `head` and `tail` functions if they do leak memory.
@@ -804,17 +804,20 @@ if MEMRAY_SUPPORTED:
         so that memray does not detect memory there as this will slow the process many times
         """
 
+        symbol: str
+        num_rows_list: List[int]
         store: NativeVersionStore = None
+        snapshot_names:  List[str]
+        all_columns: List[str]
         (store, symbol, num_rows_list, snapshot_names, all_columns) = prepare_head_tails_symbol
     
-        start_test = time.time()
-        min_rows = min(num_rows_list)
-        max_rows = max(num_rows_list)
+        start_test: float = time.time()
+        max_rows:int = max(num_rows_list)
 
         np.random.seed(959034)
         # constructing a list of head and tail rows to be selected
-        num_rows_to_select=[]
-        important_values = [0, 1, 0 -1, 2, -2, max_rows, -max_rows ]
+        num_rows_to_select = []
+        important_values = [0, 1, 0 -1, 2, -2, max_rows, -max_rows ] # some boundary cases
         num_rows_to_select.extend(important_values)
         num_rows_to_select.extend(np.random.randint(low=5, high=99, size=7)) # add 7 more random values
         # number of iterations will be the list length/size
@@ -823,31 +826,32 @@ if MEMRAY_SUPPORTED:
         snapshots_list: List[str] = np.random.choice(snapshot_names, iterations) 
         # constructing a random list of values for versions names for each iteration
         versions_list: List[int] = np.random.randint(0, len(num_rows_list) - 1, iterations) 
-        # constructing a random list of values for column selection for each iteration
-        number_columns_list: List[int] = np.random.randint(0, len(all_columns)-1, iterations) 
+        # constructing a random list of number of columns to be selected
+        number_columns_for_selection_list: List[int] = np.random.randint(0, len(all_columns)-1, iterations) 
 
-        count = 0
+        count: int = 0
+        # We will execute several time all head/tail operations with specific number of columns.
+        # the number of columns consist of random columns and boundary cases see definition above
         for rows in num_rows_to_select:
-            number_columns = np.random.choice(all_columns, number_columns_list[count]).tolist() 
-            number_columns = list(set(number_columns)) # take only unique columns
-            snap = snapshots_list[count]
-            ver = int(versions_list[count])
+            selected_columns:List[str] = np.random.choice(all_columns, number_columns_for_selection_list[count], replace=False).tolist() 
+            snap: str = snapshots_list[count]
+            ver: str = int(versions_list[count])
             logger.info(f"rows {rows} / snapshot {snap}")
             df1: pd.DataFrame = store.head(n=rows, as_of=snap, symbol=symbol).data
             df2: pd.DataFrame = store.tail(n=rows, as_of=snap, symbol=symbol).data
-            df3: pd.DataFrame = store.head(n=rows, as_of=ver, symbol=symbol, columns=number_columns).data
-            difference = list(set(df3.columns.to_list()).difference(set(number_columns)))
+            df3: pd.DataFrame = store.head(n=rows, as_of=ver, symbol=symbol, columns=selected_columns).data
+            difference = list(set(df3.columns.to_list()).difference(set(selected_columns)))
             assert len(difference) == 0, f"Columns not included : {difference}"
-            df4 = store.tail(n=rows, as_of=ver, symbol=symbol, columns=number_columns).data
-            difference = list(set(df4.columns.to_list()).difference(set(number_columns)))
+            df4: pd.DataFrame = store.tail(n=rows, as_of=ver, symbol=symbol, columns=selected_columns).data
+            difference = list(set(df4.columns.to_list()).difference(set(selected_columns)))
             assert len(difference) == 0, f"Columns not included : {difference}"
 
             logger.info(f"Iteration {count} / {iterations} completed")
             count += 1
-            del number_columns, df1, df2, df3, df4
+            del selected_columns, df1, df2, df3, df4
         
         del store, symbol, num_rows_list, snapshot_names, all_columns
-        del num_rows_to_select, important_values, snapshots_list, versions_list, number_columns_list
+        del num_rows_to_select, important_values, snapshots_list, versions_list, number_columns_for_selection_list
         gc.collect()
         time.sleep(10) # collection is not immediate
         logger.info(f"Test completed in {time.time() - start_test}")     

@@ -125,11 +125,7 @@ def lmdb_storage(tmp_path) -> Generator[LmdbStorageFixture, None, None]:
 
 
 @pytest.fixture
-def lmdb_library(lmdb_storage, lib_name) -> Library:
-    return lmdb_storage.create_arctic().create_library(lib_name)
-
-@pytest.fixture
-def lmdb_library_any(lmdb_storage, lib_name, request) -> Library:
+def lmdb_library(lmdb_storage, lib_name, request) -> Generator[Library, None, None]:
     """
     Allows passing library creation parameters as parameters of the test or other fixture.
     Example: 
