@@ -52,6 +52,7 @@ cached_results.update_half_dict[num_rows] = set_env.generate_dataframe(half, tim
 time_range = set_env.get_first_and_last_timestamp([cached_results.update_half_dict[num_rows]])
 set_env.logger().info(f"Time range HALF update { time_range }")
 
+"""
 # update from the half with same size dataframe (end period is outside initial bounds)
 cached_results.update_upsert_dict[num_rows] = set_env.generate_dataframe(num_rows, timestamp_number)
 time_range = set_env.get_first_and_last_timestamp([cached_results.update_upsert_dict[num_rows]])
@@ -69,7 +70,7 @@ cached_results.append_single_dict[num_rows] = set_env.generate_dataframe(1,
                                                                         next_timestamp)
 time_range = set_env.get_first_and_last_timestamp([cached_results.append_single_dict[num_rows]])
 set_env.logger().info(f"Time range SINGLE append { time_range }")
-
+"""
 
 pid = "PID"
 set_env.remove_all_modifiable_libraries(True)
