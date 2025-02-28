@@ -6,8 +6,8 @@
 */
 
 #include <arcticdb/util/stats_query.hpp>
-#include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/log/log.hpp>
 
 namespace arcticdb::util::stats_query {
 
@@ -50,22 +50,19 @@ void StatsQuery::reset_stats(){
     stats.clear();
 }
 
-void StatsQuery::add_stat(GroupableStats info, std::string col_name, std::string value){
+StatsOutputFormat StatsQuery::get_stats() { 
     std::lock_guard<std::mutex> lock(stats_mutex_);
-    stats.emplace_back(std::move(info), std::make_pair(std::move(col_name), std::move(value)));
-}
-
-std::vector<std::vector<std::string>> StatsQuery::get_stats() { 
-    std::lock_guard<std::mutex> lock(stats_mutex_);
-    std::vector<std::vector<std::string>> result;
+    StatsOutputFormat result;
     for (const auto& [infos, value] : stats_query.stats) {
-        std::vector<std::string> items;
+        StatsOutputFormat::value_type items;
         for (const auto &info : infos ) {
-            items.push_back(info->first);
-            items.push_back(info->second);
+            if (!items.emplace(info->first, info->second).second) {
+                arcticdb::log::storage().warn("Duplicate key in stats query {}:{}", info->first, info->second);
+            }
         }
-        items.push_back(value.first);
-        items.push_back(value.second);
+        if (!items.emplace(value.first, value.second).second) {
+            arcticdb::log::storage().warn("Duplicate key in stats query {}:{}", value.first, value.second);
+        }
         result.push_back(std::move(items));
     }
     return result;

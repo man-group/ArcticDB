@@ -243,6 +243,7 @@ inline std::set<StreamId> list_streams(
     bool all_symbols
 ) {
     ARCTICDB_SAMPLE(ListStreams, 0)
+    STATS_QUERY_ADD_GROUPABLE_STAT(parallelized, "False") 
     std::set<StreamId> res;
     if (prefix && store->supports_prefix_matching()) {
         ARCTICDB_DEBUG(log::version(), "Storage backend supports prefix matching");

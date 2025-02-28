@@ -428,6 +428,7 @@ bool do_iterate_type_impl(
     if (prefix.empty()) {
         key_type_dir += "/";
     }
+    STATS_QUERY_ADD_GROUPABLE_STAT(key_type, key_type)
 
     // Generally we get the key descriptor from the AtomKey, but in the case of iterating version journals
     // where we want to have a narrower prefix, we can use the info that it's a version journal and derive
@@ -443,12 +444,15 @@ bool do_iterate_type_impl(
 
     auto continuation_token = std::optional<std::string>();
     do {
+        STATS_QUERY_ADD_GROUPABLE_STAT_WITH_TIME(storage_op, "ListObjectsV2")
         auto list_objects_result = s3_client.list_objects(key_prefix, bucket_name, continuation_token);
         if (list_objects_result.is_success()) {
             auto& output = list_objects_result.get_output();
 
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
-
+            STATS_QUERY_ADD_STAT_CONDITIONAL(
+                continuation_token==std::nullopt && !output.s3_object_names.size(),
+                count, 0)
             for (auto& s3_object_name : output.s3_object_names) {
                 auto key = s3_object_name.substr(path_to_key_size);
                 ARCTICDB_TRACE(log::version(), "Got object_list: {}, key: {}", s3_object_name, key);
@@ -460,6 +464,7 @@ bool do_iterate_type_impl(
                 ARCTICDB_DEBUG(log::storage(), "Iterating key {}: {}", variant_key_type(k),
                                variant_key_view(k));
                 ARCTICDB_SUBSAMPLE(S3StorageVisitKey, 0)
+                STATS_QUERY_ADD_STAT(count, 1)
                 if (visitor(std::move(k))) {
                     return true;
                 }

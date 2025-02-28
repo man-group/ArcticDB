@@ -153,7 +153,7 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
     using namespace arcticdb::util::stats_query;
     
     // Create StatsQuery submodule
-    auto stats_query_module = tools.def_submodule("stats_query", "Stats query functionality");
+    auto stats_query_module = tools.def_submodule("StatsQuery", "Stats query functionality");
 
     // Move stats query bindings to the submodule
     stats_query_module.def("register_new_query_stat_tool", []() {stats_query.register_new_query_stat_tool(); });
