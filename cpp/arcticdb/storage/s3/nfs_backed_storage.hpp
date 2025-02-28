@@ -32,6 +32,8 @@ public:
 
     std::string name() const final;
 
+    bool supports_object_size_calculation() const final override;
+
 private:
     void do_write(KeySegmentPair& key_seg) final;
 
@@ -50,6 +52,8 @@ private:
     void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) final;
 
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
+
+    ObjectSizes do_get_object_sizes(KeyType key_type, const std::string& prefix) final;
 
     bool do_key_exists(const VariantKey& key) final;
 

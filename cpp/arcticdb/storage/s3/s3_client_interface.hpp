@@ -49,6 +49,7 @@ using S3Result = StorageResult<Output, Aws::S3::S3Error>;
 
 struct ListObjectsOutput{
     std::vector<std::string> s3_object_names;
+    std::vector<uint64_t> s3_object_sizes;
     // next_continuation_token indicates there are more s3_objects to be listed because they didn't fit in one response.
     // If set can be used to get the remaining s3_objects.
     std::optional<std::string> next_continuation_token;

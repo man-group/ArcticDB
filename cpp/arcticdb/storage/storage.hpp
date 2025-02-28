@@ -19,6 +19,21 @@
 
 namespace arcticdb::storage {
 
+struct ObjectSizes {
+    ObjectSizes(KeyType key_type, size_t count, size_t compressed_size_bytes) :
+        key_type_(key_type), count_(count), compressed_size_bytes_(compressed_size_bytes) {
+
+    }
+
+    ObjectSizes(KeyType key_type) : ObjectSizes(key_type, 0, 0) {
+
+    }
+
+    KeyType key_type_;
+    size_t count_;
+    size_t compressed_size_bytes_;
+};
+
 enum class SupportsAtomicWrites {
     NO,
     YES,
@@ -117,16 +132,27 @@ public:
         return do_key_exists(key);
     }
 
-    bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) {
-      return do_iterate_type_until_match(key_type, predicate, std::string());
-    }
-
     void iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix = std::string()) {
         const IterateTypePredicate predicate_visitor = [&visitor](VariantKey&& k) {
           visitor(std::move(k));
           return false; // keep applying the visitor no matter what
         };
       do_iterate_type_until_match(key_type, predicate_visitor, prefix);
+    }
+
+    [[nodiscard]] virtual bool supports_object_size_calculation() const {
+        // TODO aseaton remove this default implementation when more storages have special size calculations implemented
+        return false;
+    }
+
+    [[nodiscard]] ObjectSizes get_object_sizes(KeyType key_type, const std::string& prefix) {
+        util::check(supports_object_size_calculation(), "get_object_sizes called on storage {} which does not support "
+                                                        "object size calculation", name());
+        return do_get_object_sizes(key_type, prefix);
+    }
+
+    bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) {
+        return do_iterate_type_until_match(key_type, predicate, std::string());
     }
 
     [[nodiscard]] std::string key_path(const VariantKey& key) const {
@@ -208,6 +234,11 @@ private:
     // the predicate.
     virtual bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string & prefix) = 0;
 
+    [[nodiscard]] virtual ObjectSizes do_get_object_sizes([[maybe_unused]] KeyType key_type, [[maybe_unused]] const std::string& prefix) {
+        // Must be overridden if you want to use this
+        util::raise_rte("do_get_object_sizes called on storage {} that does not support object size calculation {}", name());
+    }
+
     [[nodiscard]] virtual std::string do_key_path(const VariantKey& key) const = 0;
 
     [[nodiscard]] virtual bool do_is_path_valid(std::string_view) const { return true; }
@@ -217,4 +248,20 @@ private:
     std::optional<bool> supports_atomic_writes_;
 };
 
+}
+
+namespace fmt {
+using namespace arcticdb::storage;
+
+template<> struct formatter<ObjectSizes> {
+
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const ObjectSizes &srv, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "ObjectSizes key_type[{}] count[{}] compressed_size_bytes[{}]",
+                              srv.key_type_, srv.count_, srv.compressed_size_bytes_);
+    }
+};
 }
