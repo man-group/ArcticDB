@@ -403,15 +403,15 @@ def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_m
 
 
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
-def test_finalize_without_adding_segments(arctic_library, finalize_method):
-    lib = arctic_library
+def test_finalize_without_adding_segments(arctic_library_v1, finalize_method):
+    lib = arctic_library_v1
     with pytest.raises(UserInputException) as exception_info:
         lib.finalize_staged_data("sym", mode=finalize_method)
 
 
 class TestAppendStagedData:
-    def test_appended_df_interleaves_with_storage(self, arctic_library):
-        lib = arctic_library
+    def test_appended_df_interleaves_with_storage(self, arctic_library_v1):
+        lib = arctic_library_v1
         initial_df = pd.DataFrame(
             {"col": [1, 3]},
             index=pd.DatetimeIndex([np.datetime64("2023-01-01"), np.datetime64("2023-01-03")], dtype="datetime64[ns]"),
@@ -447,8 +447,8 @@ class TestAppendStagedData:
         assert_frame_equal(lib.read("sym").data, expected_df)
 
 
-def test_snapshots_and_deletes(arctic_library):
-    lib = arctic_library
+def test_snapshots_and_deletes(arctic_library_v1):
+    lib = arctic_library_v1
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("my_symbol", df)
     lib.write("my_symbol2", df)
@@ -469,8 +469,8 @@ def test_snapshots_and_deletes(arctic_library):
     assert lib.list_symbols() == ["my_symbol2"]
 
 
-def test_list_snapshots_no_metadata(arctic_library):
-    lib = arctic_library
+def test_list_snapshots_no_metadata(arctic_library_v1):
+    lib = arctic_library_v1
     df = pd.DataFrame({"a": [1, 2, 3]})
 
     snap1 = "snap1"
@@ -489,16 +489,16 @@ def test_list_snapshots_no_metadata(arctic_library):
     assert set(snaps_list) == {snap1, snap2}
 
 
-def test_delete_non_existent_snapshot(arctic_library):
-    lib = arctic_library
+def test_delete_non_existent_snapshot(arctic_library_v1):
+    lib = arctic_library_v1
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("my_symbol", df)
     with pytest.raises(NoDataFoundException):
         lib.delete_snapshot("test")
 
 
-def test_prune_previous_versions(arctic_library):
-    lib = arctic_library
+def test_prune_previous_versions(arctic_library_v1):
+    lib = arctic_library_v1
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("symbol", df, metadata={"very": "interesting"})
     lib.write("symbol", df, metadata={"muy": "interesante"}, prune_previous_versions=False)
@@ -509,8 +509,8 @@ def test_prune_previous_versions(arctic_library):
     assert lib["symbol"].metadata == {"tres": "interessant"}
 
 
-def test_do_not_prune_previous_versions_by_default(arctic_library):
-    lib = arctic_library
+def test_do_not_prune_previous_versions_by_default(arctic_library_v1):
+    lib = arctic_library_v1
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("symbol", df)
     lib.write("symbol", df)
@@ -520,8 +520,8 @@ def test_do_not_prune_previous_versions_by_default(arctic_library):
     assert len(lib.list_versions("symbol")) == 5
 
 
-def test_delete_version(arctic_library):
-    lib = arctic_library
+def test_delete_version(arctic_library_v1):
+    lib = arctic_library_v1
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("symbol", df, metadata={"very": "interesting"})
     lib.write("symbol", df, metadata={"muy": "interesante"}, prune_previous_versions=False)
@@ -531,8 +531,8 @@ def test_delete_version(arctic_library):
     assert lib["symbol"].metadata == {"very": "interesting"}
 
 
-def test_list_versions_write_append_update(arctic_library):
-    lib = arctic_library
+def test_list_versions_write_append_update(arctic_library_v1):
+    lib = arctic_library_v1
     # Note: can only update timeseries dataframes
     index = pd.date_range(start="2000-01-01", freq="D", periods=3)
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]}, index=index)
@@ -547,8 +547,8 @@ def test_list_versions_write_append_update(arctic_library):
     assert len(lib.list_versions("symbol")) == 3
 
 
-def test_list_versions_latest_only(arctic_library):
-    lib = arctic_library
+def test_list_versions_latest_only(arctic_library_v1):
+    lib = arctic_library_v1
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("symbol", df)
     lib.write("symbol", df)
@@ -556,8 +556,8 @@ def test_list_versions_latest_only(arctic_library):
     assert len(lib.list_versions("symbol", latest_only=True)) == 1
 
 
-def test_non_existent_list_versions_latest_only(arctic_library):
-    lib = arctic_library
+def test_non_existent_list_versions_latest_only(arctic_library_v1):
+    lib = arctic_library_v1
     assert len(lib.list_versions("symbol", latest_only=True)) == 0
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("symbol2", df)
@@ -565,8 +565,8 @@ def test_non_existent_list_versions_latest_only(arctic_library):
     assert len(lib.list_versions("symbol2", latest_only=True)) == 0
 
 
-def test_delete_version_with_snapshot(arctic_library):
-    lib = arctic_library
+def test_delete_version_with_snapshot(arctic_library_v1):
+    lib = arctic_library_v1
     sym = "test_delete_version_with_snapshot"
     df = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(sym, df)
@@ -579,8 +579,8 @@ def test_delete_version_with_snapshot(arctic_library):
                 getattr(lib, method)(sym, as_of=as_of)
 
 
-def test_list_versions_with_snapshot(arctic_library):
-    lib = arctic_library
+def test_list_versions_with_snapshot(arctic_library_v1):
+    lib = arctic_library_v1
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("symbol", df, metadata={"very": "interesting"})
     lib.write("symbol", df, metadata={"muy": "interesante"}, prune_previous_versions=False)
@@ -597,8 +597,8 @@ def test_list_versions_with_snapshot(arctic_library):
     assert versions["symbol", 1].date > versions["symbol", 0].date
 
 
-def test_list_versions_without_snapshot(arctic_library):
-    lib = arctic_library
+def test_list_versions_without_snapshot(arctic_library_v1):
+    lib = arctic_library_v1
     lib.write("symbol", pd.DataFrame())
 
     versions = lib.list_versions("symbol")
@@ -607,8 +607,8 @@ def test_list_versions_without_snapshot(arctic_library):
     assert versions["symbol", 0].snapshots == []
 
 
-def test_delete_version_that_does_not_exist(arctic_library):
-    lib = arctic_library
+def test_delete_version_that_does_not_exist(arctic_library_v1):
+    lib = arctic_library_v1
 
     # symbol does not exist
     with pytest.raises(InternalException):
@@ -635,8 +635,8 @@ def test_delete_date_range(arctic_library):
     assert lib["symbol"].version == 1
 
 
-def test_azure_repr_body_censored(arctic_library):
-    ac_library_repr = repr(arctic_library)
+def test_azure_repr_body_censored(arctic_library_v1):
+    ac_library_repr = repr(arctic_library_v1)
     if "AccountKey=" in ac_library_repr:
         assert "AccountKey=..." in ac_library_repr.split(";")
 
@@ -689,47 +689,47 @@ class A:
         return self.id == other.id
 
 
-def test_write_object_with_pickle_mode(arctic_library):
+def test_write_object_with_pickle_mode(arctic_library_v1):
     """Writing in pickle mode should succeed when the user uses the dedicated method."""
-    lib = arctic_library
+    lib = arctic_library_v1
     lib.write_pickle("test_1", A("id_1"))
     assert lib["test_1"].data.id == "id_1"
 
 
-def test_write_object_without_pickle_mode(arctic_library):
+def test_write_object_without_pickle_mode(arctic_library_v1):
     """Writing outside of pickle mode should fail when the user does not use the dedicated method."""
-    lib = arctic_library
+    lib = arctic_library_v1
     with pytest.raises(ArcticUnsupportedDataTypeException):
         lib.write("test_1", A("id_1"))
 
 
-def test_write_list_without_pickle_mode(arctic_library):
+def test_write_list_without_pickle_mode(arctic_library_v1):
     """Writing outside of pickle mode should fail when the user does not use the dedicated method."""
-    lib = arctic_library
+    lib = arctic_library_v1
     with pytest.raises(ArcticUnsupportedDataTypeException):
         lib.write("test_1", [1, 2, 3])
 
 
-def test_write_non_native_frame_with_pickle_mode(arctic_library):
+def test_write_non_native_frame_with_pickle_mode(arctic_library_v1):
     """Writing with pickle mode should work when the user calls the dedicated method."""
-    lib = arctic_library
+    lib = arctic_library_v1
     df = pd.DataFrame({"col1": [A("id_1")]})
     lib.write_pickle("test_1", df)
     loaded: pd.DataFrame = lib["test_1"].data
     assert_frame_equal(loaded, df[["col1"]])
 
 
-def test_write_non_native_frame_without_pickle_mode(arctic_library):
+def test_write_non_native_frame_without_pickle_mode(arctic_library_v1):
     """Writing outside of pickle mode should fail when the user does not use the dedicated method."""
-    lib = arctic_library
+    lib = arctic_library_v1
     df = pd.DataFrame({"col1": [A("id_1")]})
     with pytest.raises(Exception):
         lib.write("test_1", df)
 
 
-def test_write_with_unpacking(arctic_library):
+def test_write_with_unpacking(arctic_library_v1):
     """Check the syntactic sugar that lets us unpack WritePayload in `write` calls using *."""
-    lib = arctic_library
+    lib = arctic_library_v1
     df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     df_2 = pd.DataFrame({"col1": [-1, -2, -3], "col2": [-4, -5, -6], "anothercol": [0, 0, 0]})
 
@@ -747,8 +747,8 @@ def test_write_with_unpacking(arctic_library):
     assert symbol_2_loaded.metadata == "great_metadata"
 
 
-def test_prune_previous_versions_with_write(arctic_library):
-    lib = arctic_library
+def test_prune_previous_versions_with_write(arctic_library_v1):
+    lib = arctic_library_v1
     # When
     lib.write("sym", pd.DataFrame(), prune_previous_versions=True)
     lib.write("sym", pd.DataFrame({"col": [1, 2, 3]}))
@@ -771,8 +771,8 @@ def test_prune_previous_versions_with_write(arctic_library):
     assert v3.empty
 
 
-def test_append_documented_example(arctic_library):
-    lib = arctic_library
+def test_append_documented_example(arctic_library_v1):
+    lib = arctic_library_v1
     df = pd.DataFrame({"column": [1, 2, 3]}, index=pd.date_range(start="1/1/2018", end="1/3/2018"))
     lib.write("symbol", df)
     to_append_df = pd.DataFrame({"column": [4, 5, 6]}, index=pd.date_range(start="1/4/2018", end="1/6/2018"))
@@ -788,8 +788,8 @@ def test_append_documented_example(arctic_library):
     assert_frame_equal(lib.read("symbol", as_of=0).data, df)
 
 
-def test_append_prune_previous_versions(arctic_library):
-    lib = arctic_library
+def test_append_prune_previous_versions(arctic_library_v1):
+    lib = arctic_library_v1
     df = pd.DataFrame({"column": [1, 2, 3]}, index=pd.date_range(start="1/1/2018", end="1/3/2018"))
     lib.write("symbol", df)
     to_append_df = pd.DataFrame({"column": [4, 5, 6]}, index=pd.date_range(start="1/4/2018", end="1/6/2018"))
@@ -827,9 +827,9 @@ def test_update_documented_example(arctic_library):
     assert_frame_equal(lib.read("symbol", as_of=0).data, df)
 
 
-def test_update_prune_previous_versions(arctic_library):
+def test_update_prune_previous_versions(arctic_library_v1):
     """Test that updating and pruning previous versions does indeed clear previous versions."""
-    lib = arctic_library
+    lib = arctic_library_v1
     df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
     lib.write("symbol", df)
 
@@ -972,8 +972,8 @@ def test_update_with_daterange_restrictive(arctic_library):
     assert_frame_equal(expected, result)
 
 
-def test_update_with_upsert(arctic_library):
-    lib = arctic_library
+def test_update_with_upsert(arctic_library_v1):
+    lib = arctic_library_v1
     with pytest.raises(Exception):
         lib.update("symbol", pd.DataFrame())
     assert not lib.list_symbols()
@@ -996,8 +996,8 @@ def test_read_with_read_request_form(arctic_library):
     assert_frame_equal(result.data, pd.DataFrame({"A": [1, 2]}))
 
 
-def test_has_symbol(arctic_library):
-    lib = arctic_library
+def test_has_symbol(arctic_library_v1):
+    lib = arctic_library_v1
     lib.write("symbol", pd.DataFrame())
     lib.write("symbol", pd.DataFrame(), prune_previous_versions=False)
     assert lib.has_symbol("symbol")
