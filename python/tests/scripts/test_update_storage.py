@@ -46,6 +46,8 @@ def test_upgrade_script_dryrun_s3(s3_storage: S3Bucket, lib_name):
     assert storage_config.credential_name == s3_storage.key.id
     assert storage_config.credential_key == s3_storage.key.secret
 
+    ac.delete_library(lib_name)
+
 
 @SKIP_CONDA_MARK  # issue with fixture cleanup
 def test_upgrade_script_s3(s3_storage: S3Bucket, lib_name):
@@ -59,6 +61,8 @@ def test_upgrade_script_s3(s3_storage: S3Bucket, lib_name):
     assert storage_config.bucket_name == ""
     assert storage_config.credential_name == ""
     assert storage_config.credential_key == ""
+
+    ac.delete_library(lib_name)
 
 
 @pytest.mark.parametrize("default_credential_provider", ["1", "true"])  # true for testing backwards compatibility

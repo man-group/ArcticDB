@@ -5,7 +5,6 @@ on:
       job_type:          {required: true, type: string, description: Selects the steps to enable}
       cmake_preset_type: {required: true, type: string, description: release/debug}
       matrix:            {required: true, type: string, description: JSON string to feed into the matrix}
-      compile-override:  {required: false, type: string, description: Parameter to override the agent that is used for compiling e.g. compile-on-ec2}
       cibw_image_tag:    {required: false, type: string, description: Linux only. As built by cibw_docker_image.yml workflow}
       cibw_version:      {required: false, type: string, description: build-python-wheels only. Must match the cibw_image_tag}
       python_deps_ids:   {default: '[""]', type: string, description: build-python-wheels test matrix parameter. JSON string.}
@@ -14,18 +13,7 @@ on:
       pytest_xdist_mode: {default: "", type: string, description: additional argument to pass for pytest-xdist}
       pytest_args:       {default: "", type: string, description: a way to rewrite the pytest args to change what tests are being run}
 jobs:
-  start_ec2_runner:
-    if: inputs.compile-override == 'compile-on-ec2'
-    uses: ./.github/workflows/ec2_runner_jobs.yml
-    secrets: inherit
-    with:
-      job_type: start
-
   compile:
-    needs: [start_ec2_runner]
-    if: |
-      always() &&
-      !cancelled()
     strategy:
       matrix:
         # Declaring the dummy fields here to aid the Github Actions linting in VSCode and to provide documentation
@@ -45,7 +33,7 @@ jobs:
         include:
             - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only
 
-    runs-on: ${{ needs.start_ec2_runner.status != 'failure' && needs.start_ec2_runner.outputs.label || matrix.distro}}
+    runs-on: ${{ matrix.distro}}
     container: ${{ (matrix.os == 'linux' && inputs.job_type != 'build-python-wheels') && matrix.container || null}}
     env:
       # 0 - uses S3 Cache, 1 - does uses GHA cache
@@ -262,23 +250,8 @@ jobs:
       test_dirs: ${{env.test_dirs}}
       cibw_build: ${{env.CIBW_BUILD}}
 
-  stop-ec2-runner:
-    needs: [start_ec2_runner, compile]
-    if: |
-      always() &&
-      inputs.compile-override == 'compile-on-ec2'
-    uses: ./.github/workflows/ec2_runner_jobs.yml
-    secrets: inherit
-    with:
-      job_type: stop
-      label: ${{ needs.start_ec2_runner.outputs.label }}
-      ec2-instance-id: ${{ needs.start_ec2_runner.outputs.ec2-instance-id }}
-
   python_tests:
     if: |
-      always() &&
-      !failure() &&
-      !cancelled() &&
       inputs.job_type == 'build-python-wheels'
     needs: [compile]
     strategy:
