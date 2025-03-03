@@ -194,12 +194,6 @@ def s3_ssl_disabled_storage_factory() -> Generator[MotoS3StorageFixtureFactory, 
         yield f
 
 
-@pytest.fixture(scope="function")
-def s3_bucket_versioning_storage_factory() -> Generator[MotoS3StorageFixtureFactory, None, None]:
-    with MotoS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=False) as f:
-        yield f
-
-
 @pytest.fixture(scope="session")
 def nfs_backed_s3_storage_factory() -> Generator[MotoNfsBackedS3StorageFixtureFactory, None, None]:
     with MotoNfsBackedS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=False) as f:
@@ -215,6 +209,12 @@ def s3_storage(s3_storage_factory) -> Generator[S3Bucket, None, None]:
 @pytest.fixture(scope="function")
 def s3_clean_bucket(s3_storage_factory) -> Generator[S3Bucket, None, None]:
     with s3_storage_factory.create_fixture() as f:
+        yield f
+
+
+@pytest.fixture(scope="function")
+def nfs_clean_bucket(nfs_backed_s3_storage_factory) -> Generator[NfsS3Bucket, None, None]:
+    with nfs_backed_s3_storage_factory.create_fixture() as f:
         yield f
 
 
@@ -243,6 +243,8 @@ def s3_ssl_disabled_storage(s3_ssl_disabled_storage_factory) -> Generator[S3Buck
 
 
 # s3 storage is picked just for its versioning capabilities for verifying arcticdb atomicity
+# This fixture is made at function scope on purpose
+# otherwise there are problems with the moto server and the bucket versioning
 @pytest.fixture(scope="function")
 def s3_bucket_versioning_storage() -> Generator[S3Bucket, None, None]:
     with MotoS3StorageFixtureFactory(
@@ -253,6 +255,12 @@ def s3_bucket_versioning_storage() -> Generator[S3Bucket, None, None]:
             bucket = f.bucket
             assert s3_admin.get_bucket_versioning(Bucket=bucket)["Status"] == "Enabled"
             yield f
+
+            # The test exectues too fast for the simulator to cleanup the version objects
+            # So we need to manually delete them
+            boto_bucket = f.get_boto_bucket()
+            boto_bucket.object_versions.delete()
+            res = s3_admin.list_object_versions(Bucket=bucket)
 
 
 @pytest.fixture(scope="session")
