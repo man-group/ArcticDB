@@ -483,30 +483,29 @@ def test_snapshot_tombstoned_but_referenced_in_other_snapshot_version(basic_stor
     assert lib.read(symB, as_of="s2").data == 1
 
 
-# TODO: Fix this, there is a probelm with the fixture - s3_bucket_versioning_storage
-# def test_add_to_snapshot_atomicity(s3_bucket_versioning_storage, lib_name):
-#     storage = s3_bucket_versioning_storage
-#     lib = storage.create_version_store_factory(lib_name)()
+def test_add_to_snapshot_atomicity(s3_bucket_versioning_storage, lib_name):
+    storage = s3_bucket_versioning_storage
+    lib = storage.create_version_store_factory(lib_name)()
 
-#     lib.write("s1", 1)
-#     lib.snapshot("snap")
-#     s2_ver = lib.write("s2", 2).version
+    lib.write("s1", 1)
+    lib.snapshot("snap")
+    s2_ver = lib.write("s2", 2).version
 
-#     # Only keys being deleted will in the list of delete markers; Overwritten won't
-#     def assert_0_delete_marker(lib, storage):
-#         s3_admin = storage.factory._s3_admin
-#         bucket = storage.bucket
-#         # It's overly simplified; May not be bullet proof for other tests
-#         prefix = get_s3_storage_config(lib.lib_cfg()).prefix.replace(".", "/")
-#         response = s3_admin.list_object_versions(Bucket=bucket, Prefix=prefix)
-#         tref_delete_markers = [marker for marker in response.get('DeleteMarkers', []) if "/tref/" in marker['Key']]
-#         assert len(tref_delete_markers) == 0
+    # Only keys being deleted will in the list of delete markers; Overwritten won't
+    def assert_0_delete_marker(lib, storage):
+        s3_admin = storage.factory._s3_admin
+        bucket = storage.bucket
+        # It's overly simplified; May not be bullet proof for other tests
+        prefix = get_s3_storage_config(lib.lib_cfg()).prefix.replace(".", "/")
+        response = s3_admin.list_object_versions(Bucket=bucket, Prefix=prefix)
+        tref_delete_markers = [marker for marker in response.get("DeleteMarkers", []) if "/tref/" in marker["Key"]]
+        assert len(tref_delete_markers) == 0
 
-#     lib.add_to_snapshot("snap", ["s2"])
-#     assert_0_delete_marker(lib, storage)
+    lib.add_to_snapshot("snap", ["s2"])
+    assert_0_delete_marker(lib, storage)
 
-#     lib.remove_from_snapshot("snap", ["s2"], [s2_ver])
-#     assert_0_delete_marker(lib, storage)
+    lib.remove_from_snapshot("snap", ["s2"], [s2_ver])
+    assert_0_delete_marker(lib, storage)
 
 
 def test_delete_snapshot_basic_flow(basic_store):

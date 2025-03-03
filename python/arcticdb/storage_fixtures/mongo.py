@@ -53,7 +53,7 @@ class MongoDatabase(StorageFixture):
 
         assert mongo_uri.startswith("mongodb://")
         self.mongo_uri = mongo_uri
-        self.client = client or MongoClient(mongo_uri)
+        self.client = client or MongoClient(mongo_uri, heartbeatFrequencyMS=86400000)
         if not name:
             while True:
                 logger.debug("Searching for new name")
@@ -119,7 +119,7 @@ class ManagedMongoDBServer(StorageFixtureFactory):
         self._p = GracefulProcessUtils.start(cmd)
         self.mongo_uri = f"mongodb://localhost:{self._port}"
         wait_for_server_to_come_up(f"http://localhost:{self._port}", "mongod", self._p)
-        self._client = MongoClient(self.mongo_uri)
+        self._client = MongoClient(self.mongo_uri, heartbeatFrequencyMS=86400000)
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self._client:

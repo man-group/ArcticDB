@@ -72,16 +72,15 @@ def test_s3_running_on_aws_fast_check(lib_name, s3_storage_factory, run_on_aws):
         assert lib_tool.inspect_env_variable("AWS_EC2_METADATA_DISABLED") == "true"
 
 
-@pytest.mark.skip(reason="TODO: Fix this test")
-def test_nfs_backed_s3_storage(lib_name, nfs_backed_s3_storage):
+def test_nfs_backed_s3_storage(lib_name, nfs_clean_bucket):
     # Given
-    lib = nfs_backed_s3_storage.create_version_store_factory(lib_name)()
+    lib = nfs_clean_bucket.create_version_store_factory(lib_name)()
 
     # When
     lib.write("s", data=create_df())
 
     # Then - should be written in "bucketized" structure
-    bucket = nfs_backed_s3_storage.get_boto_bucket()
+    bucket = nfs_clean_bucket.get_boto_bucket()
     objects = bucket.objects.all()
 
     # Expect one or two repetitions of 3 digit "buckets" in the object names
