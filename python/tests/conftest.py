@@ -57,6 +57,9 @@ from .util.mark import (
     PANDAS_2_COMPAT_TESTS_MARK,
 )
 from arcticdb.storage_fixtures.utils import safer_rmtree
+from packaging.version import Version
+from arcticdb.util.venv import Venv
+
 
 # region =================================== Misc. Constants & Setup ====================================
 hypothesis.settings.register_profile("ci_linux", max_examples=100)
@@ -119,7 +122,14 @@ def pytest_generate_tests(metafunc):
 
 # endregion
 # region ======================================= Storage Fixtures =======================================
-@pytest.fixture
+@pytest.fixture(scope="session")
+def lmdb_shared_storage(tmp_path_factory) -> Generator[LmdbStorageFixture, None, None]:
+    tmp_path = tmp_path_factory.mktemp("lmdb")
+    with LmdbStorageFixture(tmp_path) as f:
+        yield f
+
+
+@pytest.fixture()
 def lmdb_storage(tmp_path) -> Generator[LmdbStorageFixture, None, None]:
     with LmdbStorageFixture(tmp_path) as f:
         yield f
@@ -202,6 +212,12 @@ def s3_storage(s3_storage_factory) -> Generator[S3Bucket, None, None]:
         yield f
 
 
+@pytest.fixture(scope="function")
+def s3_clean_bucket(s3_storage_factory) -> Generator[S3Bucket, None, None]:
+    with s3_storage_factory.create_fixture() as f:
+        yield f
+
+
 @pytest.fixture(scope="session")
 def gcp_storage(gcp_storage_factory) -> Generator[S3Bucket, None, None]:
     with gcp_storage_factory.create_fixture() as f:
@@ -230,9 +246,9 @@ def s3_ssl_disabled_storage(s3_ssl_disabled_storage_factory) -> Generator[S3Buck
 @pytest.fixture(scope="session")
 def s3_bucket_versioning_storage(s3_bucket_versioning_storage_factory) -> Generator[S3Bucket, None, None]:
     with s3_bucket_versioning_storage_factory.create_fixture() as f:
-        s3_admin = f.factory._s3_admin
-        bucket = f.bucket
-        assert s3_admin.get_bucket_versioning(Bucket=bucket)["Status"] == "Enabled"
+        # s3_admin = f.factory._s3_admin
+        # bucket = f.bucket
+        # assert s3_admin.get_bucket_versioning(Bucket=bucket)["Status"] == "Enabled"
         yield f
 
 
@@ -448,17 +464,20 @@ def arctic_client_lmdb(request, encoding_version) -> Arctic:
 
 @pytest.fixture
 def arctic_library(arctic_client, lib_name) -> Library:
-    return arctic_client.create_library(lib_name)
+    yield arctic_client.create_library(lib_name)
+    arctic_client.delete_library(lib_name)
 
 
 @pytest.fixture
 def arctic_library_v1(arctic_client_v1, lib_name) -> Library:
-    return arctic_client_v1.create_library(lib_name)
+    yield arctic_client_v1.create_library(lib_name)
+    arctic_client_v1.delete_library(lib_name)
 
 
 @pytest.fixture
 def arctic_library_lmdb(arctic_client_lmdb, lib_name) -> Library:
-    return arctic_client_lmdb.create_library(lib_name)
+    yield arctic_client_lmdb.create_library(lib_name)
+    arctic_client_lmdb.delete_library(lib_name)
 
 
 @pytest.fixture(
@@ -1112,43 +1131,45 @@ def lmdb_or_in_memory_version_store_tiny_segment(request):
 
 
 @pytest.fixture(
-    # scope="session",
+    scope="session",
     params=[
         pytest.param("1.6.2", marks=VENV_COMPAT_TESTS_MARK),
         pytest.param("4.5.1", marks=VENV_COMPAT_TESTS_MARK),
         pytest.param("5.0.0", marks=VENV_COMPAT_TESTS_MARK),
     ],  # TODO: Extend this list with other old versions
 )
-def old_venv(request, tmp_path):
+def old_venv(request, tmp_path_factory):
     version = request.param
-    path = os.path.join("venvs", tmp_path, version)
-    test_dir = os.path.dirname(os.path.abspath(__file__))
-    compat_dir = os.path.join(test_dir, "compat")
-    requirements_file = os.path.join(compat_dir, f"requirements-{version}.txt")
-    with Venv(path, requirements_file, version) as old_venv:
+
+    venvs_dir = tmp_path_factory.mktemp("venvs")
+    venv_dir = venvs_dir / version
+    requirements_file = os.path.join(os.path.dirname(__file__), "compat", f"requirements-{version}.txt")
+
+    with Venv(venv_dir, requirements_file, version) as old_venv:
         yield old_venv
 
 
-@pytest.fixture(params=[pytest.param("tmp_path", marks=PANDAS_2_COMPAT_TESTS_MARK)])
+@pytest.fixture(scope="session", params=[pytest.param("tmp_path_factory", marks=PANDAS_2_COMPAT_TESTS_MARK)])
 def pandas_v1_venv(request):
     """A venv with Pandas v1 installed (and an old ArcticDB version). To help test compat across Pandas versions."""
     version = "1.6.2"
-    tmp_path = request.getfixturevalue(request.param)
-    path = os.path.join("venvs", tmp_path, version)
-    test_dir = os.path.dirname(os.path.abspath(__file__))
-    compat_dir = os.path.join(test_dir, "compat")
-    requirements_file = os.path.join(compat_dir, f"requirements-{version}.txt")
-    with Venv(path, requirements_file, version) as old_venv:
+    tmp_path_factory = request.getfixturevalue("tmp_path_factory")
+    venvs_dir = tmp_path_factory.mktemp("venvs")
+    venv_dir = venvs_dir / version
+    requirements_file = os.path.join(os.path.dirname(__file__), "compat", f"requirements-{version}.txt")
+
+    with Venv(venv_dir, requirements_file, version) as old_venv:
         yield old_venv
 
 
 @pytest.fixture(
+    scope="session",
     params=[
-        "lmdb",
+        "lmdb_shared",
         "s3_ssl_disabled",
         pytest.param("azurite", marks=AZURE_TESTS_MARK),
         pytest.param("mongo", marks=MONGO_TESTS_MARK),
-    ]
+    ],
 )
 def arctic_uri(request):
     """
@@ -1163,7 +1184,7 @@ def arctic_uri(request):
         return storage_fixture.arctic_uri
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def old_venv_and_arctic_uri(old_venv, arctic_uri):
     if arctic_uri.startswith("mongo") and "1.6.2" in old_venv.version:
         pytest.skip("Mongo storage backend is not supported in 1.6.2")

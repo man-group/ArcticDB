@@ -5,10 +5,13 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import time
 from numpy.random import RandomState
+
+from tests.util.mark import SLOW_TESTS_MARK
 
 
 def generate_floats(n, pct_null=0.1, repeats=10):
@@ -38,6 +41,7 @@ def append_to_arctic(df, symbol, version_store, count):
 
 
 # This test is running only against LMDB because it is **very** slow, if ran against a persistent storage
+@SLOW_TESTS_MARK
 def test_stress_indexing(lmdb_version_store_big_map):
     symbol = "symbol"
 

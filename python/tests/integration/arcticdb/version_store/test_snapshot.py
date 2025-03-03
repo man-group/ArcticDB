@@ -483,6 +483,7 @@ def test_snapshot_tombstoned_but_referenced_in_other_snapshot_version(basic_stor
     assert lib.read(symB, as_of="s2").data == 1
 
 
+# TODO: Fix this, there is a probelm with the fixture - s3_bucket_versioning_storage
 # def test_add_to_snapshot_atomicity(s3_bucket_versioning_storage, lib_name):
 #     storage = s3_bucket_versioning_storage
 #     lib = storage.create_version_store_factory(lib_name)()

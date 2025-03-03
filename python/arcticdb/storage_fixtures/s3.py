@@ -109,7 +109,6 @@ class S3Bucket(StorageFixture):
             # client_cert_dir is skipped on purpose; It will be tested manually in other tests
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.slow_cleanup(failure_consequence="We will be charged unless we manually delete it.")
         if self.factory.clean_bucket_on_fixture_exit:
             self.factory.cleanup_bucket(self)
 
@@ -633,7 +632,9 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self.use_internal_client_wrapper_for_testing = use_internal_client_wrapper_for_testing
         # This is needed because we might have multiple factories in the same test
         # and we need to make sure the bucket names are unique
-        self.unique_id = "".join(random.choices(string.ascii_letters + string.digits, k=5))
+        # self.unique_id = "".join(random.choices(string.ascii_letters + string.digits, k=5))
+        # set the unique_id to the current UNIX timestamp to avoid conflicts
+        self.unique_id = str(int(time.time()))
 
     def _start_server(self):
         port = self.port = get_ephemeral_port(2)
@@ -737,6 +738,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self._live_buckets.remove(b)
         if len(self._live_buckets):
             b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
+            print(f"Bucket objects for bucket {b.bucket}: {list(b.iter_underlying_object_names())}")
             self._s3_admin.delete_bucket(Bucket=b.bucket)
         else:
             requests.post(

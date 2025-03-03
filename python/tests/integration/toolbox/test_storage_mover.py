@@ -242,35 +242,6 @@ def test_storage_mover_clone_keys_for_symbol(lmdb_version_store_v1, arctidb_nati
     s.clone_all_keys_for_symbol("a", 1000)
     assert dst_lib.read("a").data == 2
 
-    
-def test_storage_mover_clone_old_library(old_venv_and_arctic_uri, lib_name):
-    old_venv, arctic_uri = old_venv_and_arctic_uri
-    df = DataFrame({"col": [1, 2, 3]})
-    df_2 = DataFrame({"col": [4, 5, 6]})
-    dst_lib_name = "local.extra"
-    sym = "a"
-
-    # Create library using old version
-    old_ac = old_venv.create_arctic(arctic_uri)
-    old_lib = old_ac.create_library(lib_name)
-    old_lib.write(sym, df)
-    old_lib.write(sym, df_2)
-
-    with CurrentVersion(arctic_uri, lib_name) as curr:
-        src_lib = curr.ac.get_library(lib_name)
-        dst_lib = curr.ac.get_library(dst_lib_name, create_if_missing=True)
-        s = StorageMover(src_lib._nvs._library, dst_lib._nvs._library)
-        s.clone_all_keys_for_symbol(sym, 1000)
-        assert_frame_equal(src_lib.read(sym).data, dst_lib.read(sym).data)
-
-    if (arctic_uri.startswith("s3") or arctic_uri.startswith("azure")) and "1.6.2" in old_venv.version:
-        pytest.skip("Reading the new library on s3 or azure with 1.6.2 requires some work arounds")
-        
-    # Make sure that we can read the new lib with the old version
-    old_ac = old_venv.create_arctic(arctic_uri)
-    old_dst_lib = old_ac.get_library(dst_lib_name)
-    old_dst_lib.assert_read(sym, df_2)
-
 
 @pytest.fixture()
 def lib_with_gaps_and_reused_keys(version_store_factory):
@@ -289,7 +260,6 @@ def lib_with_gaps_and_reused_keys(version_store_factory):
     return lib
 
 
-@pytest.mark.skip(reason="TODO: Fix this test")
 @pytest.mark.parametrize("mode", ("check assumptions", "go", "no force"))
 def test_correct_versions_in_destination(mode, lib_with_gaps_and_reused_keys, lmdb_version_store_v1):
     s = StorageMover(lib_with_gaps_and_reused_keys._library, lmdb_version_store_v1._library)

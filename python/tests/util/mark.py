@@ -14,9 +14,9 @@ from datetime import date
 from numpy import datetime64
 from copy import deepcopy
 
-MACOS=sys.platform.lower().startswith('darwin')
-LINUX=sys.platform.lower().startswith('linux')
-WINDOWS=sys.platform.lower().startswith('win32')
+MACOS = sys.platform.lower().startswith("darwin")
+LINUX = sys.platform.lower().startswith("linux")
+WINDOWS = sys.platform.lower().startswith("win32")
 
 # TODO: Some tests are either segfaulting or failing on MacOS with conda builds.
 # This is meant to be used as a temporary flag to skip/xfail those tests.
@@ -35,11 +35,13 @@ SKIP_CONDA_MARK = pytest.mark.skipif(
 # These two should become pytest marks as opposed to variables feeding into skipif
 PERSISTENT_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS") == "1"
 FAST_TESTS_ONLY = os.getenv("ARCTICDB_FAST_TESTS_ONLY") == "1"
-
+DISABLE_SLOW_TESTS = os.getenv("ARCTICDB_DISABLE_SLOW_TESTS") == "1"
 
 # !!!!!!!!!!!!!!!!!!!!!! Below mark (variable) names should reflect where they will be used, not what they do.
 # This is to avoid the risk of the name becoming out of sync with the actual condition.
-SLOW_TESTS_MARK = pytest.mark.skipif(FAST_TESTS_ONLY, reason="Skipping test as it takes a long time to run")
+SLOW_TESTS_MARK = pytest.mark.skipif(
+    FAST_TESTS_ONLY or DISABLE_SLOW_TESTS, reason="Skipping test as it takes a long time to run"
+)
 
 AZURE_TESTS_MARK = pytest.mark.skipif(FAST_TESTS_ONLY or MACOS_CONDA_BUILD, reason=_MACOS_CONDA_BUILD_SKIP_REASON)
 """Mark to skip all Azure tests when MACOS_CONDA_BUILD or ARCTICDB_FAST_TESTS_ONLY is set."""
@@ -65,8 +67,8 @@ SSL_TEST_SUPPORTED = sys.platform == "linux"
 ## MEMRAY supports linux and macos and python 3.8 and above
 MEMRAY_SUPPORTED = (sys.version_info >= (3, 8)) and (MACOS or LINUX)
 MEMRAY_TESTS_MARK = pytest.mark.skipif(
-    not MEMRAY_SUPPORTED, 
-    reason="MEMRAY supports linux and macos and python 3.8 and above")
+    not MEMRAY_SUPPORTED, reason="MEMRAY supports linux and macos and python 3.8 and above"
+)
 
 SSL_TESTS_MARK = pytest.mark.skipif(
     not SSL_TEST_SUPPORTED,
@@ -87,8 +89,8 @@ PANDAS_2_COMPAT_TESTS_MARK = pytest.mark.skipif(
     or sys.version.startswith("3.12")
     or sys.version.startswith("3.13"),  # Waiting for https://github.com/man-group/ArcticDB/issues/2008
     reason="Skipping compatibility tests because macOS conda builds don't have an available PyPi arcticdb version and "
-           "need a version that has Pandas 2",
-    )
+    "need a version that has Pandas 2",
+)
 
 
 def _no_op_decorator(fun):
