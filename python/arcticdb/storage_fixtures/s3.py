@@ -25,6 +25,7 @@ from typing import Optional, Any, Type
 
 import werkzeug
 from moto.moto_server.werkzeug_app import DomainDispatcherApplication, create_backend_app
+import botocore.exceptions
 
 from .api import *
 from .utils import (
@@ -738,7 +739,15 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self._live_buckets.remove(b)
         if len(self._live_buckets):
             b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
-            self._s3_admin.delete_bucket(Bucket=b.bucket)
+            try:
+                self._s3_admin.delete_bucket(Bucket=b.bucket)
+            except botocore.exceptions.ClientError as e:
+                if e.response["Error"]["Code"] == "NoSuchBucket":
+                    # Handle the case where the bucket doesn't exist
+                    print("Bucket doesn't exist, nothing to delete")
+                else:
+                    # Re-raise if it's a different error
+                    raise e
         else:
             requests.post(
                 self._iam_endpoint + "/moto-api/reset", verify=False
