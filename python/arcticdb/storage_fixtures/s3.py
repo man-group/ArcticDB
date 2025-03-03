@@ -738,7 +738,6 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self._live_buckets.remove(b)
         if len(self._live_buckets):
             b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
-            print(f"Bucket objects for bucket {b.bucket}: {list(b.iter_underlying_object_names())}")
             self._s3_admin.delete_bucket(Bucket=b.bucket)
         else:
             requests.post(
