@@ -133,25 +133,25 @@ TEST(ArithmeticTypePromotion, Plus) {
     static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, uint32_t, PlusOperator>::type, int64_t>);
     static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, uint64_t, PlusOperator>::type, int64_t>);
     // Mixed integral and floating point types should promote to the floating point type
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  float, PlusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, float, PlusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, float, PlusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, float, PlusOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  float, PlusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, float, PlusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, float, PlusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, float, PlusOperator>::type, float>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint8_t,  PlusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint16_t, PlusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint32_t, PlusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint64_t, PlusOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint8_t,  PlusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint16_t, PlusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint32_t, PlusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint64_t, PlusOperator>::type, float>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  float, PlusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, float, PlusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, float, PlusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, float, PlusOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  float, PlusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, float, PlusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, float, PlusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, float, PlusOperator>::type, float>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int8_t,  PlusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int16_t, PlusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int32_t, PlusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int64_t, PlusOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int8_t,  PlusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int16_t, PlusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int32_t, PlusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int64_t, PlusOperator>::type, float>);
 
     static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  double, PlusOperator>::type, double>);
     static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, double, PlusOperator>::type, double>);
@@ -262,25 +262,25 @@ TEST(ArithmeticTypePromotion, Minus) {
     static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, uint32_t, MinusOperator>::type, int64_t>);
     static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, uint64_t, MinusOperator>::type, int64_t>);
     // Mixed integral and floating point types should promote to the floating point type
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  float, MinusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, float, MinusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, float, MinusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, float, MinusOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  float, MinusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, float, MinusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, float, MinusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, float, MinusOperator>::type, float>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint8_t,  MinusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint16_t, MinusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint32_t, MinusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint64_t, MinusOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint8_t,  MinusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint16_t, MinusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint32_t, MinusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint64_t, MinusOperator>::type, float>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  float, MinusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, float, MinusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, float, MinusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, float, MinusOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  float, MinusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, float, MinusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, float, MinusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, float, MinusOperator>::type, float>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int8_t,  MinusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int16_t, MinusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int32_t, MinusOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int64_t, MinusOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int8_t,  MinusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int16_t, MinusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int32_t, MinusOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int64_t, MinusOperator>::type, float>);
 
     static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  double, MinusOperator>::type, double>);
     static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, double, MinusOperator>::type, double>);
@@ -391,25 +391,25 @@ TEST(ArithmeticTypePromotion, Times) {
     static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, uint32_t, TimesOperator>::type, int64_t>);
     static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, uint64_t, TimesOperator>::type, int64_t>);
     // Mixed integral and floating point types should promote to the floating point type
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  float, TimesOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, float, TimesOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, float, TimesOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, float, TimesOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  float, TimesOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, float, TimesOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, float, TimesOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, float, TimesOperator>::type, float>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint8_t,  TimesOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint16_t, TimesOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint32_t, TimesOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint64_t, TimesOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint8_t,  TimesOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint16_t, TimesOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint32_t, TimesOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint64_t, TimesOperator>::type, float>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  float, TimesOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, float, TimesOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, float, TimesOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, float, TimesOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  float, TimesOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, float, TimesOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, float, TimesOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, float, TimesOperator>::type, float>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int8_t,  TimesOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int16_t, TimesOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int32_t, TimesOperator>::type, double>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int64_t, TimesOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int8_t,  TimesOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int16_t, TimesOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int32_t, TimesOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int64_t, TimesOperator>::type, float>);
 
     static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  double, TimesOperator>::type, double>);
     static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, double, TimesOperator>::type, double>);
