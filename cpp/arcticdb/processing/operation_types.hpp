@@ -139,10 +139,11 @@ struct type_arithmetic_promoted_type {
                     double,
                     float
                 >,
-                // Otherwise, if only one type is floating point, always promote to double
-                // For example when combining int32 and float32 the result can only fit in float64 without loss of precision
-                // Special cases like int16 and float32 can fit in float32, but we always promote up to float64 (as does Pandas)
-                double
+                // Otherwise, if only one type is floating point, promote to this type
+                std::conditional_t<std::is_floating_point_v<LHS>,
+                    LHS,
+                    RHS
+                >
             >,
             // Otherwise, both types are integers
             std::conditional_t<std::is_unsigned_v<LHS> && std::is_unsigned_v<RHS>,
