@@ -255,7 +255,7 @@ def test_with_prune(object_and_mem_and_lmdb_version_store, symbol):
     version_store.write(symbol, df, metadata={"something": "something"}, prune_previous_version=True)
     version_store.write(symbol, modified_df, prune_previous_version=True)
 
-    assert len(version_store.list_versions(symbol)) == 1
+    assert len(version_store.list_versions()) == 1
 
     version_store.snapshot("my_snap")
 
@@ -264,7 +264,7 @@ def test_with_prune(object_and_mem_and_lmdb_version_store, symbol):
     version_store.snapshot("my_snap2")
 
     # previous versions should have been deleted by now.
-    assert len([ver for ver in version_store.list_versions(symbol) if not ver["deleted"]]) == 1
+    assert len([ver for ver in version_store.list_versions() if not ver["deleted"]]) == 1
     # previous versions should be accessible through snapshot
     assert_equal(version_store.read(symbol, as_of="my_snap").data, modified_df)
     assert_equal(version_store.read(symbol, as_of="my_snap2").data, final_df)
@@ -2449,7 +2449,7 @@ def test_missing_first_version_key_batch(basic_store):
 
         write_times.append(pd.Timestamp(vit.timestamp))
         expected.append(df1)
-        time.sleep(1)
+        # time.sleep(1)
         df2 = pd.DataFrame(
             {"d": range(x + 1, l + x + 1), "e": range(x + 2, l + x + 2), "f": range(x + 3, l + x + 3)}, index=idx
         )

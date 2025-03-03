@@ -2,8 +2,10 @@ import pytest
 import sys
 from arcticdb_ext.exceptions import UserInputException
 from arcticdb.util.test import sample_dataframe
+from tests.util.mark import SLOW_TESTS_MARK
 
 
+@SLOW_TESTS_MARK
 @pytest.mark.parametrize("prefix", ["", "prefix"])
 @pytest.mark.parametrize("suffix", ["", "suffix"])
 def test_create_library_with_all_chars(arctic_client_v1, prefix, suffix):
@@ -28,6 +30,7 @@ def test_create_library_with_all_chars(arctic_client_v1, prefix, suffix):
         ac.delete_library(lib)
 
 
+@SLOW_TESTS_MARK
 @pytest.mark.parametrize("prefix", ["", "prefix"])
 @pytest.mark.parametrize("suffix", ["", "suffix"])
 def test_symbol_names_with_all_chars(object_version_store, prefix, suffix):

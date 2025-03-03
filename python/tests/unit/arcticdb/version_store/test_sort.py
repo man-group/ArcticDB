@@ -12,17 +12,21 @@ def test_stage_finalize(arctic_library):
     symbol = "AAPL"
     sort_cols = ["timestamp", "col1"]
 
-    df1 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
-        "col1": np.arange(1, 51),
-        "col2": [f"a{i:02d}" for i in range(1, 51)]
-    }).set_index("timestamp")
+    df1 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
+            "col1": np.arange(1, 51),
+            "col2": [f"a{i:02d}" for i in range(1, 51)],
+        }
+    ).set_index("timestamp")
 
-    df2 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-04", periods=25, freq="H").repeat(2),
-        "col1": np.arange(51, 101),
-        "col2": [f"b{i:02d}" for i in range(1, 51)]
-    }).set_index("timestamp")
+    df2 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-04", periods=25, freq="H").repeat(2),
+            "col1": np.arange(51, 101),
+            "col2": [f"b{i:02d}" for i in range(1, 51)],
+        }
+    ).set_index("timestamp")
 
     df1_shuffled = df1.sample(frac=1)
     df2_shuffled = df2.sample(frac=1)
@@ -46,19 +50,23 @@ def test_stage_finalize_dynamic(arctic_client, lib_name):
     symbol = "AAPL"
     sort_cols = ["timestamp", "col1"]
 
-    df1 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
-        "col1": np.arange(1, 51),
-        "col2": [f"a{i:02d}" for i in range(1, 51)],
-        "col3": np.arange(51, 101)
-    }).set_index("timestamp")
+    df1 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
+            "col1": np.arange(1, 51),
+            "col2": [f"a{i:02d}" for i in range(1, 51)],
+            "col3": np.arange(51, 101),
+        }
+    ).set_index("timestamp")
 
-    df2 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-04", periods=25, freq="H").repeat(2),
-        "col1": np.arange(51, 101),
-        "col2": [f"b{i:02d}" for i in range(1, 51)],
-        "col3": np.arange(101, 151)
-    }).set_index("timestamp")
+    df2 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-04", periods=25, freq="H").repeat(2),
+            "col1": np.arange(51, 101),
+            "col2": [f"b{i:02d}" for i in range(1, 51)],
+            "col3": np.arange(101, 151),
+        }
+    ).set_index("timestamp")
 
     df1_shuffled = df1.sample(frac=1)
     df2_shuffled = df2.sample(frac=1)
@@ -70,25 +78,38 @@ def test_stage_finalize_dynamic(arctic_client, lib_name):
 
     expected = pd.concat([df1, df2]).sort_values(sort_cols)
     pd.testing.assert_frame_equal(result, expected)
+    arctic_client.delete_library(lib_name)
+
+
+def random_strings(count, max_length):
+    result = []
+    for _ in range(count):
+        length = random.randrange(max_length) + 2
+        result.append("".join(random.choice(string.ascii_letters) for _ in range(length)))
+    return result
 
 
 def test_stage_finalize_strings(arctic_library):
     symbol = "AAPL"
     sort_cols = ["timestamp", "col1"]
 
-    df1 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
-        "col1": np.arange(1, 51),
-        "col2": [f"a{i:02d}" for i in range(1, 51)],
-        "col3": random_strings_of_length(50, 12)
-    }).set_index("timestamp")
+    df1 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
+            "col1": np.arange(1, 51),
+            "col2": [f"a{i:02d}" for i in range(1, 51)],
+            "col3": random_strings(50, 12),
+        }
+    ).set_index("timestamp")
 
-    df2 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-04", periods=25, freq="H").repeat(2),
-        "col1": np.arange(51, 101),
-        "col2": [f"b{i:02d}" for i in range(1, 51)],
-        "col3": random_strings_of_length(50, 12)
-    }).set_index("timestamp")
+    df2 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-04", periods=25, freq="H").repeat(2),
+            "col1": np.arange(51, 101),
+            "col2": [f"b{i:02d}" for i in range(1, 51)],
+            "col3": random_strings(50, 12),
+        }
+    ).set_index("timestamp")
 
     df1_shuffled = df1.sample(frac=1)
     df2_shuffled = df2.sample(frac=1)
@@ -107,20 +128,24 @@ def test_stage_finalize_strings_dynamic(arctic_client, lib_name):
     symbol = "AAPL"
     sort_cols = ["timestamp", "col1"]
 
-    df1 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
-        "col1": np.arange(1, 51),
-        "col2": [f"a{i:02d}" for i in range(1, 51)],
-        "col3": random_strings_of_length(50, 12)
-    }).set_index("timestamp")
+    df1 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
+            "col1": np.arange(1, 51),
+            "col2": [f"a{i:02d}" for i in range(1, 51)],
+            "col3": random_strings(50, 12),
+        }
+    ).set_index("timestamp")
 
-    df2 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-04", periods=25, freq="H").repeat(2),
-        "col1": np.arange(51, 101),
-        "col2": [f"b{i:02d}" for i in range(1, 51)],
-        "col4": [f"a{i:02d}" for i in range(101, 151)],
-        "col5": random_strings_of_length(50, 12)
-    }).set_index("timestamp")
+    df2 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-04", periods=25, freq="H").repeat(2),
+            "col1": np.arange(51, 101),
+            "col2": [f"b{i:02d}" for i in range(1, 51)],
+            "col4": [f"a{i:02d}" for i in range(101, 151)],
+            "col5": random_strings(50, 12),
+        }
+    ).set_index("timestamp")
 
     df1_shuffled = df1.sample(frac=1)
     df2_shuffled = df2.sample(frac=1)
@@ -138,17 +163,21 @@ def test_stage_finalize_sort_index(arctic_library):
     symbol = "AAPL"
     sort_cols = ["timestamp"]
 
-    df1 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-01", periods=50, freq="H"),
-        "col1": np.arange(1, 51),
-        "col2": [f"a{i:02d}" for i in range(1, 51)]
-    }).set_index("timestamp")
+    df1 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-01", periods=50, freq="H"),
+            "col1": np.arange(1, 51),
+            "col2": [f"a{i:02d}" for i in range(1, 51)],
+        }
+    ).set_index("timestamp")
 
-    df2 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-04", periods=50, freq="H"),
-        "col1": np.arange(51, 101),
-        "col2": [f"b{i:02d}" for i in range(1, 51)]
-    }).set_index("timestamp")
+    df2 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-04", periods=50, freq="H"),
+            "col1": np.arange(51, 101),
+            "col2": [f"b{i:02d}" for i in range(1, 51)],
+        }
+    ).set_index("timestamp")
 
     df1_shuffled = df1.sample(frac=1)
     df2_shuffled = df2.sample(frac=1)
@@ -164,14 +193,16 @@ def test_stage_finalize_sort_index(arctic_library):
 
 def test_stage_with_sort_index_chunking(lmdb_version_store_tiny_segment):
     symbol = "AAPL"
-    lib = lmdb_version_store_tiny_segment # 2 rows per segment, 2 cols per segment
+    lib = lmdb_version_store_tiny_segment  # 2 rows per segment, 2 cols per segment
 
-    df1 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-01", periods=50, freq="H"),
-        "col1": np.arange(1, 51),
-        "col2": [f"a{i:02d}" for i in range(1, 51)],
-        "col3": np.arange(1, 51)
-    }).set_index("timestamp")
+    df1 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-01", periods=50, freq="H"),
+            "col1": np.arange(1, 51),
+            "col2": [f"a{i:02d}" for i in range(1, 51)],
+            "col3": np.arange(1, 51),
+        }
+    ).set_index("timestamp")
     df1_shuffled = df1.sample(frac=1)
 
     lib.stage(symbol, df1_shuffled, validate_index=False, sort_on_index=True, sort_columns=None)
@@ -199,12 +230,14 @@ def test_stage_with_sort_columns_not_ts(lmdb_version_store_v1):
     symbol = "AAPL"
     lib = lmdb_version_store_v1
 
-    df1 = pd.DataFrame({
-        "idx": np.arange(1, 51),
-        "col1": np.arange(1, 51),
-        "col2": [f"a{i:02d}" for i in range(1, 51)],
-        "col3": np.arange(1, 51)
-    }).set_index("idx")
+    df1 = pd.DataFrame(
+        {
+            "idx": np.arange(1, 51),
+            "col1": np.arange(1, 51),
+            "col2": [f"a{i:02d}" for i in range(1, 51)],
+            "col3": np.arange(1, 51),
+        }
+    ).set_index("idx")
     df1_shuffled = df1.sample(frac=1)
 
     lib.stage(symbol, df1_shuffled, validate_index=False, sort_on_index=False, sort_columns=["idx"])
@@ -226,19 +259,23 @@ def test_stage_finalize_dynamic_with_chunking(arctic_client, lib_name):
     symbol = "AAPL"
     sort_cols = ["timestamp", "col1"]
 
-    df1 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-01", periods=7, freq="H"),
-        "col1": np.arange(1, 8, dtype=np.uint8),
-        "col2": [f"a{i:02d}" for i in range(1, 8)],
-        "col3": np.arange(1, 8, dtype=np.int32)
-    }).set_index("timestamp")
+    df1 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-01", periods=7, freq="H"),
+            "col1": np.arange(1, 8, dtype=np.uint8),
+            "col2": [f"a{i:02d}" for i in range(1, 8)],
+            "col3": np.arange(1, 8, dtype=np.int32),
+        }
+    ).set_index("timestamp")
 
-    df2 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-04", periods=7, freq="H"),
-        "col1": np.arange(8, 15, dtype=np.int32),
-        "col2": [f"b{i:02d}" for i in range(8, 15)],
-        "col3": np.arange(8, 15, dtype=np.uint16)
-    }).set_index("timestamp")
+    df2 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-04", periods=7, freq="H"),
+            "col1": np.arange(8, 15, dtype=np.int32),
+            "col2": [f"b{i:02d}" for i in range(8, 15)],
+            "col3": np.arange(8, 15, dtype=np.uint16),
+        }
+    ).set_index("timestamp")
 
     df1_shuffled = df1.sample(frac=1)
     df2_shuffled = df2.sample(frac=1)
@@ -267,17 +304,21 @@ def test_stage_finalize_index_and_additional(arctic_library):
     symbol = "AAPL"
     sort_cols = ["col1"]
 
-    df1 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
-        "col1": np.arange(1, 51),
-        "col2": [f"a{i:02d}" for i in range(1, 51)]
-    }).set_index("timestamp")
+    df1 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
+            "col1": np.arange(1, 51),
+            "col2": [f"a{i:02d}" for i in range(1, 51)],
+        }
+    ).set_index("timestamp")
 
-    df2 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-04", periods=25, freq="H").repeat(2),
-        "col1": np.arange(51, 101),
-        "col2": [f"b{i:02d}" for i in range(1, 51)]
-    }).set_index("timestamp")
+    df2 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-04", periods=25, freq="H").repeat(2),
+            "col1": np.arange(51, 101),
+            "col2": [f"b{i:02d}" for i in range(1, 51)],
+        }
+    ).set_index("timestamp")
 
     df1_shuffled = df1.sample(frac=1)
     df2_shuffled = df2.sample(frac=1)
@@ -289,4 +330,3 @@ def test_stage_finalize_index_and_additional(arctic_library):
 
     expected = pd.concat([df1, df2]).sort_values(["timestamp", "col1"])
     pd.testing.assert_frame_equal(result, expected)
-

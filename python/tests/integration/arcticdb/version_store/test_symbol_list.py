@@ -45,7 +45,6 @@ def make_read_only(lib):
 def test_with_symbol_list(basic_store):
     syms = []
     df = sample_dataframe(100)
-
     for i in range(100):
         sym = "sym_{}".format(i)
         basic_store.write(sym, df)
@@ -363,14 +362,6 @@ def test_symbol_list_parallel_stress_with_delete(
     missing_symbols = expected_symbols - got_symbols
     for sym in missing_symbols:
         assert not lib.version_store.indexes_sorted(sym)
-
-
-@pytest.mark.skip(reason="TODO: Fix this test")
-def test_symbol_list_exception_and_printout(
-    mock_s3_store_with_mock_storage_exception,
-):  # moto is choosen just because it's easy to give storage error
-    with pytest.raises(InternalException, match="E_S3_RETRYABLE Retry-able error"):
-        mock_s3_store_with_mock_storage_exception.list_symbols()
 
 
 def test_force_compact_symbol_list(lmdb_version_store_v1):

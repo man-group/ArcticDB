@@ -23,17 +23,17 @@ import arcticdb.adapters.lmdb_library_adapter as la
 from arcticdb.exceptions import LmdbOptionsError
 
 
-def test_batch_read_only_segfault_regression(lmdb_storage):
+def test_batch_read_only_segfault_regression(lmdb_storage, lib_name):
     # See Github issue #520
     # This segfaults with arcticdb==1.5.0
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library("test_lib")
+    lib = ac.create_library(lib_name)
     df = pd.DataFrame({"a": list(range(100))}, index=list(range(100)))
     for i in range(100):
         lib.write(str(i), df, prune_previous_versions=True)
 
     # New Arctic instance is essential to repro the bug
-    fresh_lib = lmdb_storage.create_arctic()["test_lib"]
+    fresh_lib = lmdb_storage.create_arctic()[lib_name]
     vis = fresh_lib.read_batch([str(i) for i in range(100)])  # used to crash
     assert len(vis) == 100
     assert_frame_equal(vis[0].data, df)
@@ -43,18 +43,18 @@ def test_library_deletion(tmp_path: Path):
     # See Github issue #517
     # Given
     ac = Arctic(f"lmdb://{tmp_path}/lmdb_instance")
-    path = tmp_path / "lmdb_instance" / "test_lib"
-    ac.create_library("test_lib")
+    path = tmp_path / "lmdb_instance" / "test_library_deletion"
+    ac.create_library("test_library_deletion")
     assert path.exists()
 
-    ac.create_library("test_lib2")
+    ac.create_library("test_library_deletion2")
 
     # When
-    ac.delete_library("test_lib")
+    ac.delete_library("test_library_deletion")
 
     # Then
     assert not path.exists()
-    assert ac.list_libraries() == ["test_lib2"]
+    assert ac.list_libraries() == ["test_library_deletion2"]
 
 
 def test_library_deletion_leave_non_lmdb_files_alone(tmp_path: Path):

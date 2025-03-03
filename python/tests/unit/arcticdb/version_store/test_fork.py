@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import time
 from multiprocessing import Pool
 import numpy as np
@@ -64,15 +65,12 @@ def test_parallel_reads(local_object_version_store):
     p.join()
 
 
-@pytest.mark.parametrize("storage_name", [
-    "s3_storage",
-    "gcp_storage"
-])
+@pytest.mark.parametrize("storage_name", ["s3_storage", "gcp_storage"])
 @SKIP_CONDA_MARK
-def test_parallel_reads_arctic(storage_name, request):
+def test_parallel_reads_arctic(storage_name, request, lib_name):
     storage = request.getfixturevalue(storage_name)
     ac = Arctic(storage.arctic_uri)
-    lib = ac.create_library("test")
+    lib = ac.create_library(lib_name)
     symbols = [f"{i}" for i in range(1)]
     for s in symbols:
         lib.write(s, df("test1"))
@@ -80,3 +78,4 @@ def test_parallel_reads_arctic(storage_name, request):
     p.map(_read_and_assert_symbol, [(lib, s, idx) for idx, s in enumerate(symbols)])
     p.close()
     p.join()
+    ac.delete_library(lib_name)
