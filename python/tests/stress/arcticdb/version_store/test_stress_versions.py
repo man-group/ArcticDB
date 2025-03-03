@@ -8,9 +8,9 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 
 def test_many_versions(object_version_store):
-    for x in range(200):
-        object_version_store.write("symbol_{}".format(x), "thing")
+    syms = [f"symbol_{x}" for x in range(200)]
+
+    data = ["thing" for _ in range(200)]
+    object_version_store.batch_write(syms, data)
 
     object_version_store.snapshot("test_snap")
-
-

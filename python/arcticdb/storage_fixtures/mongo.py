@@ -28,8 +28,7 @@ logger = logging.getLogger("Mongo Storage Fixture")
 log_level = os.getenv("ARCTICDB_mongo_test_fixture_loglevel")
 if log_level:
     log_level = log_level.upper()
-    assert log_level in {"DEBUG", "INFO", "WARN", "ERROR"}, \
-        "Log level must be one of DEBUG, INFO, WARN, ERROR"
+    assert log_level in {"DEBUG", "INFO", "WARN", "ERROR"}, "Log level must be one of DEBUG, INFO, WARN, ERROR"
     logger.setLevel(getattr(logging, log_level))
 
 
@@ -72,9 +71,9 @@ class MongoDatabase(StorageFixture):
 
         with handle_cleanup_exception(self, "prefix_mongo_database"):
             self.client.drop_database("arcticc_" + self.prefix[:-1])
-        with handle_cleanup_exception(self, "pymongo client", consequence="The test process may never exit"):
-            self.client.close()
-            self.client = None
+        # with handle_cleanup_exception(self, "pymongo client", consequence="The test process may never exit"):
+        #     self.client.close()
+        #     self.client = None
 
         # With Mongo, the LibraryManager configuration database is global/reused across fixtures, so must delete the
         # library definitions
@@ -142,6 +141,7 @@ class ManagedMongoDBServer(StorageFixtureFactory):
 
 def is_mongo_host_running(host):
     import requests
+
     try:
         res = requests.get(f"http://{host}")
     except requests.exceptions.ConnectionError:
