@@ -194,9 +194,9 @@ def s3_ssl_disabled_storage_factory() -> Generator[MotoS3StorageFixtureFactory, 
         yield f
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def s3_bucket_versioning_storage_factory() -> Generator[MotoS3StorageFixtureFactory, None, None]:
-    with MotoS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=True) as f:
+    with MotoS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=False) as f:
         yield f
 
 
@@ -243,13 +243,16 @@ def s3_ssl_disabled_storage(s3_ssl_disabled_storage_factory) -> Generator[S3Buck
 
 
 # s3 storage is picked just for its versioning capabilities for verifying arcticdb atomicity
-@pytest.fixture(scope="session")
-def s3_bucket_versioning_storage(s3_bucket_versioning_storage_factory) -> Generator[S3Bucket, None, None]:
-    with s3_bucket_versioning_storage_factory.create_fixture() as f:
-        # s3_admin = f.factory._s3_admin
-        # bucket = f.bucket
-        # assert s3_admin.get_bucket_versioning(Bucket=bucket)["Status"] == "Enabled"
-        yield f
+@pytest.fixture(scope="function")
+def s3_bucket_versioning_storage() -> Generator[S3Bucket, None, None]:
+    with MotoS3StorageFixtureFactory(
+        use_ssl=False, ssl_test_support=False, bucket_versioning=True
+    ) as bucket_versioning_storage:
+        with bucket_versioning_storage.create_fixture() as f:
+            s3_admin = f.factory._s3_admin
+            bucket = f.bucket
+            assert s3_admin.get_bucket_versioning(Bucket=bucket)["Status"] == "Enabled"
+            yield f
 
 
 @pytest.fixture(scope="session")
