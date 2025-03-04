@@ -148,7 +148,7 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
         if (!is_fixed_string_type(val_type) && element_count > 0) {
             auto none = py::none{};
             auto obj = reinterpret_cast<PyObject **>(arr->data);
-            bool empty = false;
+            bool all_none = false;
             bool all_nans = false;
             bool empty_string_placeholder = false;
             PyObject *sample = *obj;
@@ -163,7 +163,7 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
             // Note: ValueType::ASCII_DYNAMIC was used when Python 2 was supported. It is no longer supported, and
             // we're not expected to enter that branch.
             if (sample == none.ptr() || is_py_nan(sample)) {
-                empty = true;
+                all_none = true;
                 all_nans = true;
                 empty_string_placeholder = true;
                 util::check(c_style, "Non contiguous columns with first element as None not supported yet.");
@@ -172,10 +172,10 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
                     if(*current_object == none.ptr()) {
                         all_nans = false;
                     } else if(is_py_nan(*current_object)) {
-                        empty = false;
+                        all_none = false;
                     } else {
                         all_nans = false;
-                        empty = false;
+                        all_none = false;
                         empty_string_placeholder = false;
                         break;
                     }
@@ -188,7 +188,7 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
             // single thing as they have similar meaning. This would mean that [None, np.nan] would be considered empty
             if (empty_string_placeholder) {
                 val_type = ValueType::UTF_DYNAMIC;
-            } else if (empty && kind == 'O') {
+            } else if (all_none && kind == 'O') {
                 val_type = empty_types ? ValueType::EMPTY : ValueType::UTF_DYNAMIC;
             } else if(all_nans || is_unicode(sample)){
                 val_type = ValueType::UTF_DYNAMIC;
