@@ -20,7 +20,7 @@
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/util/optional_defaults.hpp>
-#include <arcticdb/util/stats_query.hpp>
+#include <arcticdb/util/query_stats.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/version/version_tasks.hpp>
@@ -501,7 +501,7 @@ std::set<StreamId> PythonVersionStore::list_streams(
     const std::optional<bool>& opt_all_symbols
 
     ) {
-    STATS_QUERY_ADD_GROUPABLE_STAT_WITH_TIME(arcticdb_call, "list_streams");
+    QUERY_STATS_ADD_GROUPABLE_STAT_WITH_TIME(arcticdb_call, "list_symbols");
     return list_streams_internal(snap_name, regex, prefix, opt_use_symbol_list, opt_all_symbols);
 }
 

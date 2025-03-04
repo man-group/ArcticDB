@@ -150,16 +150,16 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
             ;
 
 
-    using namespace arcticdb::util::stats_query;
+    using namespace arcticdb::util::query_stats;
     
-    // Create StatsQuery submodule
-    auto stats_query_module = tools.def_submodule("StatsQuery", "Stats query functionality");
+    // Create QueryStats submodule
+    auto query_stats_module = tools.def_submodule("QueryStats", "Stats query functionality");
 
     // Move stats query bindings to the submodule
-    stats_query_module.def("register_new_query_stat_tool", []() {StatsQuery::instance().register_new_query_stat_tool(); });
-    stats_query_module.def("deregister_query_stat_tool", []() { StatsQuery::instance().deregister_query_stat_tool(); });
-    stats_query_module.def("is_enabled", []() { return StatsQuery::instance().is_enabled(); });
-    stats_query_module.def("reset", []() { StatsQuery::instance().reset_stats(); });
-    stats_query_module.def("get_stats", []() { return StatsQuery::instance().get_stats();});
+    query_stats_module.def("register_new_query_stat_tool", []() {QueryStats::instance().register_new_query_stat_tool(); });
+    query_stats_module.def("deregister_query_stat_tool", []() { QueryStats::instance().deregister_query_stat_tool(); });
+    query_stats_module.def("is_enabled", []() { return QueryStats::instance().is_enabled(); });
+    query_stats_module.def("reset", []() { QueryStats::instance().reset_stats(); });
+    query_stats_module.def("get_stats", []() { return QueryStats::instance().get_stats();});
 }
 } // namespace arcticdb::toolbox::apy

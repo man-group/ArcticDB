@@ -18,7 +18,7 @@
 #include <chrono>
 #include <fmt/format.h>
 
-namespace arcticdb::util::stats_query {
+namespace arcticdb::util::query_stats {
 using GroupableStats = std::vector<std::shared_ptr<std::pair<std::string, std::string>>>;
 
 
@@ -37,7 +37,7 @@ private:
 // process-global stats entry list
 class GroupableStat;
 using StatsOutputFormat = std::vector<std::map<std::string, std::string>>;
-class StatsQuery {
+class QueryStats {
 public:
     void reset_stats();
     
@@ -51,12 +51,12 @@ public:
     bool is_enabled();
     void register_new_query_stat_tool();
     void deregister_query_stat_tool();
-    static StatsQuery& instance();
+    static QueryStats& instance();
 
     // TODO: Support enable in the work of a particualr python thread only, need to 
     // 1. Convert this to python_thread_local variable; Check Py_tss_t in python.h
     // 2. Remove atomic
-    std::atomic<bool> stats_query_enabled = false;
+    std::atomic<bool> query_stats_enabled = false;
 private:
     std::atomic<int32_t> query_stat_tool_count = 0;
     std::mutex stats_mutex_;
@@ -79,7 +79,7 @@ class GroupableStat {
             if (log_time_) {
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start_);
-                StatsQuery::instance().add_stat(stats_instance_, "time", duration.count());
+                QueryStats::instance().add_stat(stats_instance_, "time", duration.count());
             }
             stats_instance_->info_.pop_back();
         }
@@ -91,28 +91,28 @@ class GroupableStat {
 
 }
 
-#define GROUPABLE_STAT_NAME(x) stats_query_info##x
+#define GROUPABLE_STAT_NAME(x) query_stats_info##x
 
-#define STATS_QUERY_ADD_GROUPABLE_STAT_IMPL(log_time, col_name, value) \
-    std::optional<arcticdb::util::stats_query::GroupableStat> GROUPABLE_STAT_NAME(col_name); \
-    if (arcticdb::util::stats_query::StatsQuery::instance().is_enabled()) { \
-        auto stats_instance = arcticdb::util::stats_query::StatsInstance::instance(); \
+#define QUERY_STATS_ADD_GROUPABLE_STAT_IMPL(log_time, col_name, value) \
+    std::optional<arcticdb::util::query_stats::GroupableStat> GROUPABLE_STAT_NAME(col_name); \
+    if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
+        auto stats_instance = arcticdb::util::query_stats::StatsInstance::instance(); \
         GROUPABLE_STAT_NAME(col_name).emplace(stats_instance, log_time, #col_name, value); \
     }
-#define STATS_QUERY_ADD_GROUPABLE_STAT(col_name, value) STATS_QUERY_ADD_GROUPABLE_STAT_IMPL(false, col_name, value)
-#define STATS_QUERY_ADD_GROUPABLE_STAT_WITH_TIME(col_name, value) STATS_QUERY_ADD_GROUPABLE_STAT_IMPL(true, col_name, value)
+#define QUERY_STATS_ADD_GROUPABLE_STAT(col_name, value) QUERY_STATS_ADD_GROUPABLE_STAT_IMPL(false, col_name, value)
+#define QUERY_STATS_ADD_GROUPABLE_STAT_WITH_TIME(col_name, value) QUERY_STATS_ADD_GROUPABLE_STAT_IMPL(true, col_name, value)
 
-#define STATS_QUERY_ADD_STAT_IMPL(col_name, value) \
-    auto stats_instance = arcticdb::util::stats_query::StatsInstance::instance(); \
-    arcticdb::util::stats_query::StatsQuery::instance().add_stat(stats_instance, #col_name, value);
-#define STATS_QUERY_ADD_STAT(col_name, value) \
-    if (arcticdb::util::stats_query::StatsQuery::instance().is_enabled()) { \
-        STATS_QUERY_ADD_STAT_IMPL(col_name, value) \
+#define QUERY_STATS_ADD_STAT_IMPL(col_name, value) \
+    auto stats_instance = arcticdb::util::query_stats::StatsInstance::instance(); \
+    arcticdb::util::query_stats::QueryStats::instance().add_stat(stats_instance, #col_name, value);
+#define QUERY_STATS_ADD_STAT(col_name, value) \
+    if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
+        QUERY_STATS_ADD_STAT_IMPL(col_name, value) \
     }
-#define STATS_QUERY_ADD_STAT_CONDITIONAL(condition, col_name, value) \
-    if (arcticdb::util::stats_query::StatsQuery::instance().is_enabled()) { \
+#define QUERY_STATS_ADD_STAT_CONDITIONAL(condition, col_name, value) \
+    if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
         if (condition) { \
-            STATS_QUERY_ADD_STAT(col_name, value) \
+            QUERY_STATS_ADD_STAT(col_name, value) \
         } \
     }
 

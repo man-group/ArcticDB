@@ -207,7 +207,6 @@ VariantKey get_ref_key(const SnapshotId& snap_name) {
 
 std::optional<VariantKey> get_snapshot_key(const std::shared_ptr<Store>& store, const SnapshotId &snap_name) {
     ARCTICDB_SAMPLE(getSnapshot, 0)
-    STATS_QUERY_ADD_GROUPABLE_STAT(parallelized, "False") 
 
     if(auto maybe_ref_key = get_ref_key(snap_name); store->key_exists_sync(maybe_ref_key))
         return maybe_ref_key;
