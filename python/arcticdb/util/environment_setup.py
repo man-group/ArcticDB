@@ -128,7 +128,7 @@ class Storage(Enum):
 class StorageInfo:    
 
     def __init__(self, storage: Storage, uris_cache: List[str], library_options: LibraryOptions, prefix: str) :
-        self.storage: str = storage
+        self.storage: Storage = storage
         self.uris_cache: List[str] = uris_cache
         self.library_options: LibraryOptions = library_options
         self.prefix: str = prefix
@@ -527,8 +527,8 @@ class SetupSingleLibrary(EnvConfigurationBase):
         """
         (list_rows, list_cols) = self._get_symbol_bounds()
         lib = self.get_library()
-        symbols = lib.list_symbols()
-        self.logger().info(f"Symbols {lib.list_symbols()}")
+        symbols = set(lib.list_symbols())
+        self.logger().info(f"Symbols {symbols}")
         for rows in list_rows:
             for cols in list_cols:
                 symbol = self.get_symbol_name(rows, cols)
@@ -659,7 +659,7 @@ class SetupLibrariesWithVersionAndSnapshots(EnvConfigurationBase):
 
         for num_symbols in self.get_parameter_list():
             lib = self.get_library(num_symbols)
-            symbols = lib.list_symbols()
+            symbols = set(lib.list_symbols())
             self.logger().info(f"Check library: {lib}")
             versions_list = self.get_versions_list(num_symbols)
             index = 0
@@ -992,7 +992,7 @@ class SetupMultipleLibraries(EnvConfigurationBase):
             lib = self.get_library(num_symbols)
             self.logger().debug(f"Library {lib}")
             for num_symbol in range(num_symbols):
-                symbols = lib.list_symbols()
+                symbols = set(lib.list_symbols())
                 self.logger().debug(f"Symbols {symbols}")
                 for rows in list_rows:
                     for cols in list_cols:
