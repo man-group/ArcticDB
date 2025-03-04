@@ -16,13 +16,13 @@ class QueryStatsTool:
         QueryStats.deregister_query_stat_tool()
 
     def __sub__(self, other):
-        return self._populate_stats(other._create_time)
+        return self._populate_stats(other._create_time, self._create_time)
 
-    def _populate_stats(self, other_time):
+    def _populate_stats(self, start_time, end_time):
         df = pd.DataFrame(QueryStats.get_stats())
         
         df["exec_time"] = pd.to_numeric(df["exec_time"], errors="coerce")
-        df = df[df["exec_time"].between(other_time, self._create_time)]
+        df = df[df["exec_time"].between(start_time, end_time)]
         df = df.drop(columns=["exec_time"])
         
         if "count" in df.columns:
@@ -96,12 +96,12 @@ class QueryStatsTool:
             query_stats_tools = cls()
             query_stats_tools._is_context_manager = True
             yield query_stats_tools
-            query_stats_tools._end_time = datetime.now()
+            query_stats_tools._end_time = time.time_ns()
         return _func()
 
     def get_query_stats(self):
         if self._is_context_manager:
-            return self._populate_stats(self._end_time)
+            return self._populate_stats(self._create_time, self._end_time)
         else:
             raise UserInputException("get_query_stats should be used with a context manager initialized QueryStatsTools")
 
