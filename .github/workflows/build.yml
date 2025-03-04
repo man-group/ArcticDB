@@ -190,7 +190,7 @@ jobs:
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
-            pytest_xdist_mode: "-n auto --dist worksteal"
+            pytest_xdist_mode: "-n auto"
           - python3: 8
             python_deps_ids: ["", -compat38]
             matrix_override:
@@ -246,7 +246,7 @@ jobs:
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{needs.common_config.outputs.windows_matrix}}
       persistent_storage: ${{ inputs.persistent_storage }}
-      pytest_xdist_mode: "-n auto --dist worksteal"
+      pytest_xdist_mode: "-n auto"
       pytest_args: ${{inputs.pytest_args}}
 
   persistent_storage_verify_linux:
