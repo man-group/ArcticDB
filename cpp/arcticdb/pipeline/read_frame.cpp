@@ -244,7 +244,6 @@ void decode_index_field(
                         context.descriptor().fields(0).type(), frame_field_descriptor.type());
 
             std::optional<util::BitMagic> bv;
-            log::version().debug("{}", dump_bytes(begin, (data - begin) + encoding_sizes::field_compressed_size(field), 100u));
             data += decode_field(frame_field_descriptor.type(), field, data, sink, bv, encoding_version);
             util::check(!bv, "Unexpected sparse vector in index field");
             ARCTICDB_DEBUG(log::codec(), "Decoded index column {} to position {}", 0, data - begin);

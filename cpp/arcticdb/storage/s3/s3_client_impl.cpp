@@ -190,7 +190,6 @@ S3Result<std::monostate> S3ClientImpl::put_object(
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Set s3 key {}", request.GetKey().c_str());
     auto [dst, write_size, buffer] = segment.serialize_header();
 
-    auto seg_header [[maybe_unused]] = reinterpret_cast<FixedHeader*>(dst);
     auto body = std::make_shared<boost::interprocess::bufferstream>(reinterpret_cast<char *>(dst), write_size);
     util::check(body->good(), "Overflow of bufferstream with size {}", write_size);
     request.SetBody(body);
