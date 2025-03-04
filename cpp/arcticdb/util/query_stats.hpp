@@ -53,9 +53,6 @@ public:
     void deregister_query_stat_tool();
     static QueryStats& instance();
 
-    // TODO: Support enable in the work of a particualr python thread only, need to 
-    // 1. Convert this to python_thread_local variable; Check Py_tss_t in python.h
-    // 2. Remove atomic
     std::atomic<bool> query_stats_enabled = false;
 private:
     std::atomic<int32_t> query_stat_tool_count = 0;
@@ -79,6 +76,7 @@ class GroupableStat {
             if (log_time_) {
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start_);
+                GroupableStat groupable_stat(stats_instance_, false, "exec_time", end.time_since_epoch().count());
                 QueryStats::instance().add_stat(stats_instance_, "time", duration.count());
             }
             stats_instance_->info_.pop_back();
@@ -87,7 +85,14 @@ class GroupableStat {
         std::shared_ptr<StatsInstance> stats_instance_;
         std::chrono::time_point<std::chrono::high_resolution_clock> start_;
         bool log_time_;
-    };
+};
+
+
+void query_stats_add_stat_impl(auto col_name, auto value) {
+    auto stats_instance = StatsInstance::instance();
+    GroupableStat groupable_stat(stats_instance, false, "exec_time", std::chrono::high_resolution_clock::now().time_since_epoch().count());
+    QueryStats::instance().add_stat(stats_instance, col_name, value);
+}
 
 }
 
@@ -102,17 +107,14 @@ class GroupableStat {
 #define QUERY_STATS_ADD_GROUPABLE_STAT(col_name, value) QUERY_STATS_ADD_GROUPABLE_STAT_IMPL(false, col_name, value)
 #define QUERY_STATS_ADD_GROUPABLE_STAT_WITH_TIME(col_name, value) QUERY_STATS_ADD_GROUPABLE_STAT_IMPL(true, col_name, value)
 
-#define QUERY_STATS_ADD_STAT_IMPL(col_name, value) \
-    auto stats_instance = arcticdb::util::query_stats::StatsInstance::instance(); \
-    arcticdb::util::query_stats::QueryStats::instance().add_stat(stats_instance, #col_name, value);
 #define QUERY_STATS_ADD_STAT(col_name, value) \
     if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
-        QUERY_STATS_ADD_STAT_IMPL(col_name, value) \
+        arcticdb::util::query_stats::query_stats_add_stat_impl(#col_name, value); \
     }
 #define QUERY_STATS_ADD_STAT_CONDITIONAL(condition, col_name, value) \
     if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
         if (condition) { \
-            QUERY_STATS_ADD_STAT(col_name, value) \
+            arcticdb::util::query_stats::query_stats_add_stat_impl(#col_name, value); \
         } \
     }
 

@@ -1,4 +1,4 @@
-from datetime import datetime
+import time
 import pandas as pd
 from contextlib import contextmanager
 import numpy as np
@@ -8,7 +8,7 @@ from arcticdb_ext.tools import QueryStats
 
 class QueryStatsTool:
     def __init__(self):
-        self._create_time = datetime.now()
+        self._create_time = time.time_ns()
         self._is_context_manager = False
         QueryStats.register_new_query_stat_tool()
 
@@ -20,6 +20,10 @@ class QueryStatsTool:
 
     def _populate_stats(self, other_time):
         df = pd.DataFrame(QueryStats.get_stats())
+        
+        df["exec_time"] = pd.to_numeric(df["exec_time"], errors="coerce")
+        df = df[df["exec_time"].between(other_time, self._create_time)]
+        df = df.drop(columns=["exec_time"])
         
         if "count" in df.columns:
             df["count"] = pd.to_numeric(df["count"], errors="coerce")
