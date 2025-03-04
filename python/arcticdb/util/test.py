@@ -397,12 +397,7 @@ def random_integers(size, dtype, min_value: int = None, max_value: int = None):
         min_value = max(iinfo.min, platform_int_info.min)
     if max_value is None:
         max_value = min(iinfo.max, platform_int_info.max)
-    return np.random.randint(
-        min_value,
-        max_value,
-        size=size,
-        dtype=dtype
-    )
+    return np.random.randint(min_value, max_value, size=size, dtype=dtype)
 
 
 def get_wide_dataframe(size=10000, seed=0):
@@ -901,3 +896,8 @@ def generic_resample_test(
         assert_dfs_approximate(expected, received)
     else:
         assert_frame_equal(expected, received, check_dtype=False)
+
+
+def is_pytest_running():
+    """Check if code is currently running as part of a pytest test."""
+    return "PYTEST_CURRENT_TEST" in os.environ
