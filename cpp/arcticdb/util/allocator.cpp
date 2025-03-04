@@ -192,7 +192,7 @@ namespace arcticdb {
             ret = static_cast<uint8_t*>(std::malloc(size));
         }
 #else
-        ret = static_cast<uint8_t*>(std::aligned_alloc(64, size));
+        ret = static_cast<uint8_t*>(std::malloc(size));
 #endif
         return ret;
     }

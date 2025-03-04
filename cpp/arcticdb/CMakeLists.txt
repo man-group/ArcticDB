@@ -755,15 +755,6 @@ set(arcticdb_core_includes
     ${BITMAGIC_INCLUDE_DIRS}
 )
 
-if (SSL_LINK)
-    message("Linking against SSL")
-    find_package(OpenSSL REQUIRED)
-    list(APPEND arcticdb_core_libraries OpenSSL::SSL)
-    if (NOT WIN32)
-        list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
-        list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
-    endif()
-endif ()
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
 
 target_include_directories(arcticdb_core_object
