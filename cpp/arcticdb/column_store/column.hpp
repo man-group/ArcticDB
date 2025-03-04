@@ -198,9 +198,9 @@ public:
         const char *data_;
 
         StringArrayData(ssize_t n, ssize_t s, const char *d) :
-                num_strings_(n),
-                string_size_(s),
-                data_(d) {
+            num_strings_(n),
+            string_size_(s),
+            data_(d) {
         }
     };
 
@@ -232,9 +232,9 @@ public:
         size_t expected_rows,
         AllocationType presize,
         Sparsity allow_sparse) :
-            data_(expected_rows * entity::internal_data_type_size(type), presize),
-            type_(type),
-            allow_sparse_(allow_sparse) {
+        data_(expected_rows * entity::internal_data_type_size(type), presize),
+        type_(type),
+        allow_sparse_(allow_sparse) {
         ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
     }
 
@@ -292,8 +292,8 @@ public:
 
     template<typename TagType>
     auto begin() const {
-            using RawType = typename TagType::DataTypeTag::raw_type;
-            return TypedColumnIterator<TagType, const RawType>(*this, true);
+        using RawType = typename TagType::DataTypeTag::raw_type;
+        return TypedColumnIterator<TagType, const RawType>(*this, true);
     }
 
     template<typename TagType>
@@ -384,8 +384,8 @@ public:
     }
 
     template<class T, template<class> class Tensor, std::enable_if_t<
-            std::is_integral_v<T> || std::is_floating_point_v<T>,
-            int> = 0>
+        std::is_integral_v<T> || std::is_floating_point_v<T>,
+        int> = 0>
     void set_array(ssize_t row_offset, Tensor<T> &val) {
         ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
         magic_.check();
@@ -614,12 +614,12 @@ public:
         const shape_t *shape_ptr = shape_index(idx);
         auto ndim = ssize_t(type_.dimension());
         return TensorType<T>(
-                shape_ptr,
-                ndim,
-                type().data_type(),
-                get_type_size(type().data_type()),
-                reinterpret_cast<const T*>(data_.buffer().ptr_cast<uint8_t>(bytes_offset(idx), calc_elements(shape_ptr, ndim))),
-                ndim);
+            shape_ptr,
+            ndim,
+            type().data_type(),
+            get_type_size(type().data_type()),
+            reinterpret_cast<const T*>(data_.buffer().ptr_cast<uint8_t>(bytes_offset(idx), calc_elements(shape_ptr, ndim))),
+            ndim);
     }
 
     template<typename T>
@@ -709,11 +709,11 @@ public:
             } else {
                 // TODO: Could relax this requirement using something like has_valid_common_type
                 internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
-                        "Column::search_sorted requires input value to be of same type as column");
+                    "Column::search_sorted requires input value to be of same type as column");
             }
         });
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                res.has_value(), "Column::search_sorted should always find an index");
+            res.has_value(), "Column::search_sorted should always find an index");
         return *res;
     }
 
@@ -731,8 +731,8 @@ public:
     );
 
     template <
-            typename input_tdt,
-            typename functor>
+        typename input_tdt,
+        typename functor>
     requires std::is_invocable_r_v<void, functor, typename input_tdt::DataTypeTag::raw_type>
     static void for_each(const Column& input_column, functor&& f) {
         auto input_data = input_column.data();
@@ -740,8 +740,8 @@ public:
     }
 
     template <
-            typename input_tdt,
-            typename functor>
+        typename input_tdt,
+        typename functor>
     requires std::is_invocable_r_v<void, functor, typename ColumnData::Enumeration<typename input_tdt::DataTypeTag::raw_type>>
     static void for_each_enumerated(const Column& input_column, functor&& f) {
         auto input_data = input_column.data();
@@ -755,9 +755,9 @@ public:
     }
 
     template <
-            typename input_tdt,
-            typename output_tdt,
-            typename functor>
+        typename input_tdt,
+        typename output_tdt,
+        typename functor>
     requires std::is_invocable_r_v<typename output_tdt::DataTypeTag::raw_type, functor, typename input_tdt::DataTypeTag::raw_type>
     static void transform(const Column& input_column, Column& output_column, functor&& f) {
         auto input_data = input_column.data();
@@ -772,15 +772,15 @@ public:
     }
 
     template<
-            typename left_input_tdt,
-            typename right_input_tdt,
-            typename output_tdt,
-            typename functor>
+        typename left_input_tdt,
+        typename right_input_tdt,
+        typename output_tdt,
+        typename functor>
     requires std::is_invocable_r_v<
-            typename output_tdt::DataTypeTag::raw_type,
-            functor,
-            typename left_input_tdt::DataTypeTag::raw_type,
-            typename right_input_tdt::DataTypeTag::raw_type>
+        typename output_tdt::DataTypeTag::raw_type,
+        functor,
+        typename left_input_tdt::DataTypeTag::raw_type,
+        typename right_input_tdt::DataTypeTag::raw_type>
     static void transform(const Column& left_input_column,
                           const Column& right_input_column,
                           Column& output_column,
@@ -840,8 +840,8 @@ public:
     }
 
     template <
-            typename input_tdt,
-            std::predicate<typename input_tdt::DataTypeTag::raw_type> functor>
+        typename input_tdt,
+        std::predicate<typename input_tdt::DataTypeTag::raw_type> functor>
     static void transform(const Column& input_column,
                           util::BitSet& output_bitset,
                           bool sparse_missing_value_output,
@@ -862,9 +862,9 @@ public:
     }
 
     template <
-            typename left_input_tdt,
-            typename right_input_tdt,
-            std::relation<typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type> functor>
+        typename left_input_tdt,
+        typename right_input_tdt,
+        std::relation<typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type> functor>
     static void transform(const Column& left_input_column,
                           const Column& right_input_column,
                           util::BitSet& output_bitset,
@@ -886,25 +886,25 @@ public:
             if (left_input_column.row_count() <= right_input_column.row_count()) {
                 auto right_it = right_input_data.cbegin<right_input_tdt>();
                 std::for_each(
-                        left_input_data.cbegin<left_input_tdt>(),
-                        left_input_data.cend<left_input_tdt>(),
-                        [&right_it, &inserter, &pos, f = std::forward<functor>(f)](auto left_value) {
-                            if (f(left_value, *right_it++)) {
-                                inserter = pos;
-                            }
-                            ++pos;
-                        });
+                    left_input_data.cbegin<left_input_tdt>(),
+                    left_input_data.cend<left_input_tdt>(),
+                    [&right_it, &inserter, &pos, f = std::forward<functor>(f)](auto left_value) {
+                        if (f(left_value, *right_it++)) {
+                            inserter = pos;
+                        }
+                        ++pos;
+                    });
             } else {
                 auto left_it = left_input_data.cbegin<left_input_tdt>();
                 std::for_each(
-                        right_input_data.cbegin<right_input_tdt>(),
-                        right_input_data.cend<right_input_tdt>(),
-                        [&left_it, &inserter, &pos, f = std::forward<functor>(f)](auto right_value) {
-                            if (f(*left_it++, right_value)) {
-                                inserter = pos;
-                            }
-                            ++pos;
-                        });
+                    right_input_data.cbegin<right_input_tdt>(),
+                    right_input_data.cend<right_input_tdt>(),
+                    [&left_it, &inserter, &pos, f = std::forward<functor>(f)](auto right_value) {
+                        if (f(*left_it++, right_value)) {
+                            inserter = pos;
+                        }
+                        ++pos;
+                    });
             }
         } else if (left_input_column.is_sparse() && right_input_column.is_sparse()) {
             // Both sparse, only check the intersection of on-bits from both sparse maps
@@ -964,7 +964,7 @@ public:
     ChunkedBuffer& get_extra_buffer(size_t offset) {
         util::check(static_cast<bool>(extra_buffers_), "Extra buffer {} requested but pointer is null", offset);
         return extra_buffers_->get_buffer(offset);
-}
+    }
 
     void set_extra_buffer(size_t offset, ChunkedBuffer&& buffer) {
         init_buffer();
@@ -1001,8 +1001,6 @@ private:
 
     std::optional<util::BitMagic> sparse_map_;
     FieldStatsImpl stats_;
-    util::MagicNum<'D', 'C', 'o', 'l'> magic_;
-};
 
     std::unique_ptr<std::once_flag> init_buffer_ = std::make_unique<std::once_flag>();
     struct ExtraBufferContainer {
@@ -1066,10 +1064,10 @@ inline JiveTable create_jive_table(const std::vector<std::shared_ptr<Column>>& c
             auto column_data = column->data();
             auto accessor = random_accessor<typename type_info::TDT>(&column_data);
             std::stable_sort(std::begin(output.orig_pos_),
-                      std::end(output.orig_pos_),
-                      [&](const auto &a, const auto &b) -> bool {
-                          return accessor.at(a) < accessor.at(b);
-                      });
+                             std::end(output.orig_pos_),
+                             [&](const auto &a, const auto &b) -> bool {
+                                 return accessor.at(a) < accessor.at(b);
+                             });
         });
         // Obtain the sorted_pos_ by reversing the orig_pos_ permutation
         for (auto i = 0u; i < output.orig_pos_.size(); ++i) {

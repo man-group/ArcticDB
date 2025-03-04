@@ -67,6 +67,7 @@ std::pair<TimeseriesDescriptor , std::vector<SliceAndKey>> get_sample_slice_and_
         start_col = end_col;
         end_col += step;
     }
+    std::sort(std::begin(slice_and_keys), std::end(slice_and_keys));
     return std::make_pair(metadata, slice_and_keys);
 }
 }
@@ -176,12 +177,12 @@ TEST(IndexFilter, StaticMulticolumn) {
         false);
 
     pipeline_context->slice_and_keys_ = filter_index(isr, combine_filter_functions(queries));
-    ASSERT_EQ(pipeline_context->slice_and_keys_[0].key_, slice_and_keys[2].key_);
-    ASSERT_EQ(pipeline_context->slice_and_keys_[4].key_, slice_and_keys[6].key_);
-    ASSERT_EQ(pipeline_context->slice_and_keys_[5].key_, slice_and_keys[12].key_);
-    ASSERT_EQ(pipeline_context->slice_and_keys_[9].key_, slice_and_keys[16].key_);
-    ASSERT_EQ(pipeline_context->slice_and_keys_[45].key_, slice_and_keys[92].key_);
-    ASSERT_EQ(pipeline_context->slice_and_keys_[49].key_, slice_and_keys[96].key_);
+    ASSERT_EQ(pipeline_context->slice_and_keys_[0].key_, slice_and_keys[20].key_);
+    ASSERT_EQ(pipeline_context->slice_and_keys_[4].key_, slice_and_keys[24].key_);
+    ASSERT_EQ(pipeline_context->slice_and_keys_[5].key_, slice_and_keys[25].key_);
+    ASSERT_EQ(pipeline_context->slice_and_keys_[9].key_, slice_and_keys[29].key_);
+    ASSERT_EQ(pipeline_context->slice_and_keys_[45].key_, slice_and_keys[65].key_);
+    ASSERT_EQ(pipeline_context->slice_and_keys_[49].key_, slice_and_keys[69].key_);
 }
 
 TEST(IndexFilter, MultiColumnSelectAll) {
@@ -252,9 +253,9 @@ TEST(IndexFilter, StaticMulticolumnFilterColumns) {
         false);
 
     pipeline_context->slice_and_keys_ = filter_index(isr, combine_filter_functions(queries));
-    ASSERT_EQ(pipeline_context->slice_and_keys_[0].key_, slice_and_keys[12].key_);
-    ASSERT_EQ(pipeline_context->slice_and_keys_[1].key_, slice_and_keys[13].key_);
-    ASSERT_EQ(pipeline_context->slice_and_keys_[4].key_, slice_and_keys[16].key_);
-    ASSERT_EQ(pipeline_context->slice_and_keys_[5].key_, slice_and_keys[92].key_);
-    ASSERT_EQ(pipeline_context->slice_and_keys_[9].key_, slice_and_keys[96].key_);
+    ASSERT_EQ(pipeline_context->slice_and_keys_[0].key_, slice_and_keys[21].key_);
+    ASSERT_EQ(pipeline_context->slice_and_keys_[1].key_, slice_and_keys[29].key_);
+    ASSERT_EQ(pipeline_context->slice_and_keys_[4].key_, slice_and_keys[41].key_);
+    ASSERT_EQ(pipeline_context->slice_and_keys_[5].key_, slice_and_keys[49].key_);
+    ASSERT_EQ(pipeline_context->slice_and_keys_[9].key_, slice_and_keys[69].key_);
 }
