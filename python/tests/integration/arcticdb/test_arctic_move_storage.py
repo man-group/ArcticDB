@@ -42,6 +42,9 @@ def test_move_storage(storage_type, host_attr, request):
             # When - we copy the underlying objects without using the Arctic API
             source_storage.copy_underlying_objects_to(dest_storage)
 
+            # TODO: FIX THIS
+            ac.delete_library("lib")
+
         # When - we leave the source_storage context, the storage should have been cleaned up
         assert not source_storage.create_arctic().list_libraries()
 
@@ -52,6 +55,7 @@ def test_move_storage(storage_type, host_attr, request):
         assert lib.list_symbols() == ["sym"]
         assert_frame_equal(df, lib.read("sym").data)
         assert dest_host in lib.read("sym").host
+        new_ac.delete_library("lib")
 
 
 @pytest.mark.skipif(sys.platform == "darwin", reason="Test doesn't raise an exception on MacOS ARM")
@@ -107,6 +111,8 @@ def test_move_lmdb_library_map_size_reduction(tmp_path: Path):
     # stuff should still be readable despite the error
     assert_frame_equal(df, lib.read("sym").data)
 
+    ac.delete_library("lib")
+
 
 def test_move_lmdb_library_map_size_increase(tmp_path: Path):
     # Given - any LMDB library
@@ -138,3 +144,4 @@ def test_move_lmdb_library_map_size_increase(tmp_path: Path):
         df = get_wide_dataframe(size=100)
         lib.write(f"more_sym_{i}", df)
     assert len(lib.list_symbols()) == 30
+    ac.delete_library("lib")

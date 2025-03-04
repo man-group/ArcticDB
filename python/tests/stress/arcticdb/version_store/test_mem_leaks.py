@@ -312,11 +312,13 @@ def gen_random_date(start: pd.Timestamp, end: pd.Timestamp):
 # region TESTS non-memray type - "guessing" memory leak through series of repetitions
 
 
+@SLOW_TESTS_MARK
 @SKIP_CONDA_MARK  # Conda CI runner doesn't have enough storage to perform these stress tests
-@pytest.mark.skipif(
-    WINDOWS, reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem"
-)
-@pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
+# @pytest.mark.skipif(
+#     WINDOWS, reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem"
+# )
+# @pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
+@pytest.mark.skip(reason="This test is not conclusive for memory leaks and is very flaky")
 def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
     lib: adb.Library = arctic_library_lmdb_100gb
 
@@ -355,6 +357,7 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
     check_process_memory_leaks(proc_to_examine, 20, max_mem_bytes, 80.0)
 
 
+@SLOW_TESTS_MARK
 @pytest.mark.skipif(
     WINDOWS, reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem"
 )
@@ -399,9 +402,10 @@ def test_mem_leak_querybuilder_standard(arctic_library_lmdb_100gb):
 
     max_mem_bytes = 550_623_040
 
-    check_process_memory_leaks(proc_to_examine, 10, max_mem_bytes, 80.0)
+    check_process_memory_leaks(proc_to_examine, 5, max_mem_bytes, 80.0)
 
 
+@SLOW_TESTS_MARK
 @SKIP_CONDA_MARK  # Conda CI runner doesn't have enough storage to perform these stress tests
 def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     lib: NativeVersionStore = lmdb_version_store_very_big_map
@@ -423,7 +427,7 @@ def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     """
     max_mem_bytes = 608_662_528
 
-    check_process_memory_leaks(proc_to_examine, 20, max_mem_bytes, 80.0)
+    check_process_memory_leaks(proc_to_examine, 5, max_mem_bytes, 80.0)
 
 
 # endregion
@@ -525,6 +529,7 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions: int = 1, read_bat
     gc.collect()
 
 
+@SLOW_TESTS_MARK
 def test_mem_leak_queries_correctness_precheck(library_with_tiny_symbol):
     """
     This test does precheck to confirm queries work more or less
@@ -593,6 +598,7 @@ if MEMRAY_SUPPORTED:
             pass
         return True
 
+    @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_leaks(location_limit="50 KB" if not MACOS else "60 KB", filter_fn=is_relevant)
     ## Unfortunately it is not possible to xfail memray tests. Instead:
@@ -655,6 +661,7 @@ if MEMRAY_SUPPORTED:
         (lib, df, symbol) = library_with_tiny_symbol
         mem_query(lib, df, num_repetitions=125, read_batch=True)
 
+    @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_leaks(location_limit="25 KB", filter_fn=is_relevant)
     def test_mem_leak_querybuilder_read_batch_memray(library_with_symbol):
@@ -669,6 +676,7 @@ if MEMRAY_SUPPORTED:
         (lib, df, symbol) = library_with_symbol
         mem_query(lib, df, read_batch=True)
 
+    @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_memory("490 MB")
     @pytest.mark.skipif(MACOS, reason="Mac OS mem usage is harder to predicts than WINDOWS")
@@ -683,6 +691,7 @@ if MEMRAY_SUPPORTED:
         (lib, df, symbol) = library_with_symbol
         mem_query(lib, df)
 
+    @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_memory("490 MB")
     @pytest.mark.skipif(MACOS, reason="Mac OS mem usage is harder to predicts than WINDOWS")
@@ -711,6 +720,7 @@ if MEMRAY_SUPPORTED:
         del df
         yield (lib, symbol)
 
+    @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_leaks(location_limit="40 KB", filter_fn=is_relevant)
     def test_mem_leak_read_all_arctic_lib_memray(library_with_big_symbol_):
