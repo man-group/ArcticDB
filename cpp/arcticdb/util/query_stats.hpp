@@ -19,7 +19,7 @@
 #include <fmt/format.h>
 
 namespace arcticdb::util::query_stats {
-using GroupableStats = std::vector<std::shared_ptr<std::pair<std::string, std::string>>>;
+using StatsGroups = std::vector<std::shared_ptr<std::pair<std::string, std::string>>>;
 
 
 // thread-global instance
@@ -29,13 +29,13 @@ public:
     static void copy_instance(std::shared_ptr<StatsInstance>& ptr);
     static void pass_instance(std::shared_ptr<StatsInstance>&& ptr);
 
-    GroupableStats info_;
+    StatsGroups info_;
 private:
     thread_local inline static std::shared_ptr<StatsInstance> instance_;
 };
 
 // process-global stats entry list
-class GroupableStat;
+class StatsGroup;
 using StatsOutputFormat = std::vector<std::map<std::string, std::string>>;
 class QueryStats {
 public:
@@ -57,26 +57,26 @@ public:
 private:
     std::atomic<int32_t> query_stat_tool_count = 0;
     std::mutex stats_mutex_;
-    //TODO: Change to std::list<std::pair<GroupableStats, std::pair<std::string, std::variant<std::string, xxx>>> 
-    std::list<std::pair<GroupableStats, std::pair<std::string, std::string>>> stats;
+    //TODO: Change to std::list<std::pair<StatsGroups, std::pair<std::string, std::variant<std::string, xxx>>> 
+    std::list<std::pair<StatsGroups, std::pair<std::string, std::string>>> stats;
 };
 
 
 // function-local object so the additional info will be removed from the stack when the info object gets detroyed
-class GroupableStat {
+class StatsGroup {
     public:
         template<typename T>
-        GroupableStat(std::shared_ptr<StatsInstance> stats_instance, bool log_time, std::string col_name, T&& value) : 
+        StatsGroup(std::shared_ptr<StatsInstance> stats_instance, bool log_time, std::string col_name, T&& value) : 
                 stats_instance_(std::move(stats_instance)),
                 start_(std::chrono::high_resolution_clock::now()),
                 log_time_(log_time) {
             stats_instance_->info_.push_back(std::make_shared<std::pair<std::string, std::string>>(std::move(col_name), fmt::format("{}", std::forward<T>(value))));
         }
-        ~GroupableStat() {
+        ~StatsGroup() {
             if (log_time_) {
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start_);
-                GroupableStat groupable_stat(stats_instance_, false, "exec_time", end.time_since_epoch().count());
+                StatsGroup stats_group(stats_instance_, false, "exec_time", end.time_since_epoch().count());
                 QueryStats::instance().add_stat(stats_instance_, "time", duration.count());
             }
             stats_instance_->info_.pop_back();
@@ -90,22 +90,22 @@ class GroupableStat {
 
 void query_stats_add_stat_impl(auto col_name, auto value) {
     auto stats_instance = StatsInstance::instance();
-    GroupableStat groupable_stat(stats_instance, false, "exec_time", std::chrono::high_resolution_clock::now().time_since_epoch().count());
+    StatsGroup stats_group(stats_instance, false, "exec_time", std::chrono::high_resolution_clock::now().time_since_epoch().count());
     QueryStats::instance().add_stat(stats_instance, col_name, value);
 }
 
 }
 
-#define GROUPABLE_STAT_NAME(x) query_stats_info##x
+#define STATS_GROUP_NAME(x) query_stats_info##x
 
-#define QUERY_STATS_ADD_GROUPABLE_STAT_IMPL(log_time, col_name, value) \
-    std::optional<arcticdb::util::query_stats::GroupableStat> GROUPABLE_STAT_NAME(col_name); \
+#define QUERY_STATS_ADD_STATS_GROUP_IMPL(log_time, col_name, value) \
+    std::optional<arcticdb::util::query_stats::StatsGroup> STATS_GROUP_NAME(col_name); \
     if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
         auto stats_instance = arcticdb::util::query_stats::StatsInstance::instance(); \
-        GROUPABLE_STAT_NAME(col_name).emplace(stats_instance, log_time, #col_name, value); \
+        STATS_GROUP_NAME(col_name).emplace(stats_instance, log_time, #col_name, value); \
     }
-#define QUERY_STATS_ADD_GROUPABLE_STAT(col_name, value) QUERY_STATS_ADD_GROUPABLE_STAT_IMPL(false, col_name, value)
-#define QUERY_STATS_ADD_GROUPABLE_STAT_WITH_TIME(col_name, value) QUERY_STATS_ADD_GROUPABLE_STAT_IMPL(true, col_name, value)
+#define QUERY_STATS_ADD_STATS_GROUP(col_name, value) QUERY_STATS_ADD_STATS_GROUP_IMPL(false, col_name, value)
+#define QUERY_STATS_ADD_STATS_GROUP_WITH_TIME(col_name, value) QUERY_STATS_ADD_STATS_GROUP_IMPL(true, col_name, value)
 
 #define QUERY_STATS_ADD_STAT(col_name, value) \
     if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \

@@ -51,8 +51,8 @@ def test_query_stats(s3_version_store_v1):
     for key_type in ["l", "r"]:
         assert "storage_ops" in key_types[key_type]
         assert "ListObjectsV2" in key_types[key_type]["storage_ops"]
-        assert "count" in key_types[key_type]["storage_ops"]["ListObjectsV2"]
-        assert key_types[key_type]["storage_ops"]["ListObjectsV2"]["count"] == 1
+        assert "result_count" in key_types[key_type]["storage_ops"]["ListObjectsV2"]
+        assert key_types[key_type]["storage_ops"]["ListObjectsV2"]["result_count"] == 1
         # Not asserting the time values as they are non-deterministic
 
 def test_query_stats_context(s3_version_store_v1):
@@ -63,7 +63,7 @@ def test_query_stats_context(s3_version_store_v1):
         stats = query_stats_tools.get_query_stats()    
         key_types = stats["list_symbols"]["stages"]["list"]["key_types"]
         for key_type in ["l", "r"]:
-            assert key_types[key_type]["storage_ops"]["ListObjectsV2"]["count"] == 1
+            assert key_types[key_type]["storage_ops"]["ListObjectsV2"]["result_count"] == 1
 
 
 def test_query_stats_clear(s3_version_store_v1):

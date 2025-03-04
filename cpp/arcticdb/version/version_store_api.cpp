@@ -501,7 +501,7 @@ std::set<StreamId> PythonVersionStore::list_streams(
     const std::optional<bool>& opt_all_symbols
 
     ) {
-    QUERY_STATS_ADD_GROUPABLE_STAT_WITH_TIME(arcticdb_call, "list_symbols");
+    QUERY_STATS_ADD_STATS_GROUP_WITH_TIME(arcticdb_call, "list_symbols");
     return list_streams_internal(snap_name, regex, prefix, opt_use_symbol_list, opt_all_symbols);
 }
 

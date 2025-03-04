@@ -25,8 +25,8 @@ class QueryStatsTool:
         df = df[df["exec_time"].between(start_time, end_time)]
         df = df.drop(columns=["exec_time"])
         
-        if "count" in df.columns:
-            df["count"] = pd.to_numeric(df["count"], errors="coerce")
+        if "result_count" in df.columns:
+            df["result_count"] = pd.to_numeric(df["result_count"], errors="coerce")
         
         groupby_cols = ["arcticdb_call", "stage", "key_type", "storage_op"]
         
@@ -34,27 +34,43 @@ class QueryStatsTool:
             if col not in df.columns:
                 df[col] = pd.Series(dtype='object')
 
+        def process_time_values(time_values):
+            time_buckets = {}
+            for time_val in time_values:
+                bucket = (time_val // 10) * 10
+                time_buckets[str(bucket)] = time_buckets.get(str(bucket), 0) + 1
+            return time_buckets
+
+        def get_non_grouped_times(data, current_level):
+            # Only process NaN values for the current grouping level
+            mask = data[current_level].isna()
+            if not mask.any():
+                return {}
+            
+            time_values = pd.to_numeric(data.loc[mask, "time"].dropna(), errors="coerce")
+            if not time_values.empty:
+                time_buckets = process_time_values(time_values)
+                if time_buckets:
+                    return {"time": time_buckets}
+            return {}
+
         def process_group(group_data, is_leaf):
             result = {}
             
             if is_leaf:
-                numeric_cols = [col for col in group_data.columns if col not in groupby_cols]
+                numeric_cols = [col for col in group_data.columns if col not in groupby_cols and col != "time"]
                 for col in numeric_cols:
-                    if col == "time":
-                        time_values = pd.to_numeric(group_data[col].dropna(), errors="coerce")
-                        if not time_values.empty:
-                            time_buckets = {}
-                            for time_val in time_values:
-                                bucket = (time_val // 10) * 10
-                                time_buckets[str(bucket)] = time_buckets.get(str(bucket), 0) + 1
-                            if time_buckets:
-                                result[col] = time_buckets
-                    else:
-                        values = pd.to_numeric(group_data[col].dropna(), errors="coerce")
-                        if not values.empty:
-                            total = values.sum()
-                            if not np.isnan(total):
-                                result[col] = int(total)
+                    values = pd.to_numeric(group_data[col].dropna(), errors="coerce")
+                    if not values.empty:
+                        total = values.sum()
+                        if not np.isnan(total):
+                            result[col] = int(total)
+                
+                time_values = pd.to_numeric(group_data["time"].dropna(), errors="coerce")
+                if not time_values.empty:
+                    time_buckets = process_time_values(time_values)
+                    if time_buckets:
+                        result["time"] = time_buckets
             
             return result
 
@@ -64,12 +80,14 @@ class QueryStatsTool:
             
             result = {}
             current_col = columns[0]
-            grouped = data.groupby(current_col)
+            
+            non_grouped = get_non_grouped_times(data, current_col)
+            result.update(non_grouped)
+            
+            grouped = data[~data[current_col].isna()].groupby(current_col)
             nested = {}
             
             for name, group in grouped:
-                if pd.isna(name):
-                    continue
                 sub_result = group_by_level(group, columns[1:])
                 if sub_result:
                     nested[str(name)] = sub_result

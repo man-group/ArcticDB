@@ -245,7 +245,7 @@ std::set<StreamId> LocalVersionedEngine::list_streams_internal(
     const std::optional<bool>& all_symbols
     ) {
     ARCTICDB_SAMPLE(ListStreamsInternal, 0)
-    QUERY_STATS_ADD_GROUPABLE_STAT_WITH_TIME(stage, "list");
+    QUERY_STATS_ADD_STATS_GROUP_WITH_TIME(stage, "list");
     auto res = std::set<StreamId>();
 
     if (snap_name) {
