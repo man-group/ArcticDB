@@ -149,3 +149,10 @@ def test_write_with_nan_none_and_a_string(lmdb_version_store, dtype):
     data = lib.read(sym).data
     assert_frame_equal(data, pd.DataFrame({"a": [None, np.nan, "string"]}, dtype=dtype))
 
+@pytest.mark.parametrize("dtype", [None, object, np.double, np.float32])
+def test_write_only_nan_column(lmdb_version_store, dtype):
+    lib = lmdb_version_store
+    sym = "nan"
+    lib.write(sym, pd.DataFrame({"a": [np.nan]}, dtype=dtype))
+    data = lib.read(sym).data
+    assert_frame_equal(data, pd.DataFrame({"a": [np.nan]}, dtype=dtype))

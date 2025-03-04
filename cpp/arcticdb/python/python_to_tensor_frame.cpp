@@ -148,8 +148,6 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
         if (!is_fixed_string_type(val_type) && element_count > 0) {
             auto none = py::none{};
             auto obj = reinterpret_cast<PyObject **>(arr->data);
-            bool all_none = false;
-            bool all_nans = false;
             bool empty_string_placeholder = false;
             PyObject *sample = *obj;
             PyObject** current_object = obj;
@@ -163,19 +161,11 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
             // Note: ValueType::ASCII_DYNAMIC was used when Python 2 was supported. It is no longer supported, and
             // we're not expected to enter that branch.
             if (sample == none.ptr() || is_py_nan(sample)) {
-                all_none = true;
-                all_nans = true;
                 empty_string_placeholder = true;
                 util::check(c_style, "Non contiguous columns with first element as None not supported yet.");
                 const auto* end = obj + size;
                 while(current_object < end) {
-                    if(*current_object == none.ptr()) {
-                        all_nans = false;
-                    } else if(is_py_nan(*current_object)) {
-                        all_none = false;
-                    } else {
-                        all_nans = false;
-                        all_none = false;
+                    if(!(is_py_nan(*current_object) || *current_object == none.ptr())) {
                         empty_string_placeholder = false;
                         break;
                     }
@@ -184,13 +174,11 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
                 if(current_object != end)
                     sample = *current_object;
             }
-            // TODO: If empty types are brought back to life consider merging empty_string_placeholder and empty into a
-            // single thing as they have similar meaning. This would mean that [None, np.nan] would be considered empty
-            if (empty_string_placeholder) {
-                val_type = ValueType::UTF_DYNAMIC;
-            } else if (all_none && kind == 'O') {
+            // Column full of NaN values is interpreted differently based on the kind. If kind is object "O" the column
+            // is assigned a string type if kind is float "f" the column is assigned a float type.
+            if (empty_string_placeholder && kind == 'O') {
                 val_type = empty_types ? ValueType::EMPTY : ValueType::UTF_DYNAMIC;
-            } else if(all_nans || is_unicode(sample)){
+            } else if(is_unicode(sample)) {
                 val_type = ValueType::UTF_DYNAMIC;
             } else if (PYBIND11_BYTES_CHECK(sample)) {
                 val_type = ValueType::ASCII_DYNAMIC;
