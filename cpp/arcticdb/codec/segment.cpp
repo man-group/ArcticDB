@@ -365,7 +365,7 @@ void Segment::write_to(std::uint8_t* dst) {
 
     size_t header_size;
     if(header_.encoding_version() == EncodingVersion::V1)
-        header_size = write_proto_header(dst, proto_size() + FIXED_HEADER_SIZE);
+        header_size = write_proto_header(dst, proto_size());
     else
         header_size = write_binary_header(dst);
 
