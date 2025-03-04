@@ -281,7 +281,7 @@ std::pair<uint8_t*, size_t> Segment::serialize_v1_header_in_place(size_t hdr_siz
     ARCTICDB_TRACE(log::storage(), "Header fits in internal buffer {:x} with {} bytes space: {}", intptr_t (base_ptr), buffer->preamble_bytes() - total_hdr_size,dump_bytes(buffer->data(), buffer->bytes(), 10u));
     auto check_red_zone = *buffer->data();
     util::check(red_zone == check_red_zone, "Data overwrite occurred {} != {}", check_red_zone, red_zone);
-    util::check(header_bytes_written == total_hdr_size, "Wrote unexpected number of header bytes {} != {}", header_bytes_written, total_hdr_size);
+    util::check(header_bytes_written == hdr_size, "Wrote unexpected number of header bytes {} != {}", header_bytes_written, total_hdr_size);
     return std::make_pair(base_ptr, calculate_size());
 }
 
