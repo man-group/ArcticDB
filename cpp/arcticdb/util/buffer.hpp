@@ -248,11 +248,11 @@ struct Buffer : public BaseBuffer<Buffer, true> {
     }
 
     void check_invariants() const  {
-//#ifdef DEBUG_BUILD
+#ifdef DEBUG_BUILD
         util::check(preamble_bytes_ + body_bytes_ <= capacity_, "total_bytes exceeds capacity {} + {} > {}", preamble_bytes_, body_bytes_, capacity_);
         util::check(total_bytes() == preamble_bytes_ + body_bytes_, "Total bytes calculation is incorrect {} != {} + {}", total_bytes(), preamble_bytes_, body_bytes_);
         util::check(data_ + preamble_bytes_ == ptr_, "Buffer pointer is in the wrong place {} + {} != {}", uintptr_t(data_), preamble_bytes_, uintptr_t(ptr_));
-//#endif
+#endif
     }
 
     uint8_t *data_ = nullptr;
