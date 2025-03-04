@@ -50,7 +50,7 @@ struct Lz4BlockEncoder {
         util::check_arg(compressed_bytes > 0 || (compressed_bytes == 0 && block_utils.bytes_ == 0),
             "expected compressed bytes >= 0, actual {}",
             compressed_bytes);
-        ARCTICDB_TRACE(log::storage(), "Block of size {} compressed to {} bytes", block_utils.bytes_, compressed_bytes);
+        ARCTICDB_TRACE(log::storage(), "Block of size {} compressed to {} bytes: {}", block_utils.bytes_, compressed_bytes, dump_bytes(out, compressed_bytes, 10U));
         hasher(in, block_utils.count_);
         pos += ssize_t(compressed_bytes);
         copy_codec(*out_codec.mutable_lz4(), opts);
