@@ -25,7 +25,6 @@
 #ifdef __APPLE__
 #include <cstdio>
 #endif
-#include <folly/Function.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 

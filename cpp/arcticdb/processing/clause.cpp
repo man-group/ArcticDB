@@ -19,9 +19,8 @@
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/util/test/random_throw.hpp>
 #include <ankerl/unordered_dense.h>
+#include <arcticdb/util/movable_priority_queue.hpp>
 #include <ranges>
-
-
 
 namespace arcticdb {
 
@@ -589,7 +588,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                     idx < expected_fetch_counts.size(),
                     "Index {} in new_structure_offsets out of bounds >{}", idx, expected_fetch_counts.size() - 1);
-            expected_fetch_counts[idx]++;
+            ++expected_fetch_counts[idx];
         }
     }
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -621,7 +620,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     // slice is being computed by the call to process dealing with the row slices above these. Otherwise, this call
     // should do it
     const auto& front_slice = row_slices.front();
-    bool responsible_for_first_overlapping_bucket = front_slice.entity_fetch_count_->at(0) == 1;
+    const bool responsible_for_first_overlapping_bucket = front_slice.entity_fetch_count_->at(0) == 1;
     // Find the iterators into bucket_boundaries_ of the start of the first and the end of the last bucket this call to process is
     // responsible for calculating
     // All segments in a given row slice contain the same index column, so just grab info from the first one
@@ -653,26 +652,37 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
 
     ARCTICDB_DEBUG_THROW(5)
     for (const auto& aggregator: aggregators_) {
-        std::vector<std::optional<ColumnWithStrings>> input_agg_columns;
+        std::vector<ColumnWithStrings> input_agg_columns;
         input_agg_columns.reserve(row_slices.size());
+        size_t slice_index = 0;
+        bm::bvector<> existing_columns;
+        existing_columns.init();
+        existing_columns.resize(row_slices.size());
         for (auto& row_slice: row_slices) {
             auto variant_data = row_slice.get(aggregator.get_input_column_name());
             util::variant_match(variant_data,
-                                [&input_agg_columns](const ColumnWithStrings& column_with_strings) {
+                                [&input_agg_columns, &existing_columns, &slice_index](const ColumnWithStrings& column_with_strings) {
                                     input_agg_columns.emplace_back(column_with_strings);
+                                    existing_columns.set(slice_index);
                                 },
-                                [&input_agg_columns](const EmptyResult&) {
+                                [](const EmptyResult&) {
                                     // Dynamic schema, missing column from this row-slice
                                     // Not currently supported, but will be, hence the argument to aggregate being a vector of optionals
-                                    input_agg_columns.emplace_back();
                                 },
                                 [](const auto&) {
                                     internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected return type from ProcessingUnit::get, expected column-like");
                                 }
             );
+            ++slice_index;
         }
-        auto aggregated_column = std::make_shared<Column>(aggregator.aggregate(input_index_columns, input_agg_columns, bucket_boundaries, *output_index_column, string_pool));
-        seg.add_column(scalar_field(aggregated_column->type().data_type(), aggregator.get_output_column_name().value), aggregated_column);
+        if (!input_agg_columns.empty()) {
+            const bool has_missing_columns = !existing_columns.is_all_one_range(0, row_slices.size() - 1);
+            auto aggregated_column = has_missing_columns ?
+                std::make_shared<Column>(aggregator.aggregate(input_index_columns, input_agg_columns, bucket_boundaries, *output_index_column, string_pool, existing_columns)) :
+                std::make_shared<Column>(aggregator.aggregate(input_index_columns, input_agg_columns, bucket_boundaries, *output_index_column, string_pool));
+            const auto field = scalar_field(aggregated_column->type().data_type(), aggregator.get_output_column_name().value);
+            seg.add_column(field, std::move(aggregated_column));
+        }
     }
     seg.set_row_data(output_index_column->row_count() - 1);
     return push_entities(*component_manager_, ProcessingUnit(std::move(seg), std::move(output_row_range)));

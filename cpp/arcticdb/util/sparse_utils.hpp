@@ -70,11 +70,11 @@ inline void expand_dense_buffer_using_bitmap(const util::BitMagic &bv, const uin
 }
 
 template <typename TagType>
-inline void default_initialize(uint8_t* data, size_t bytes) {
+void default_initialize(uint8_t* data, size_t bytes) {
     using RawType = typename TagType::DataTypeTag::raw_type;
-    const auto num_rows ARCTICDB_UNUSED = bytes / sizeof(RawType);
+    [[maybe_unused]] const auto num_rows = bytes / sizeof(RawType);
     constexpr auto data_type = TagType::DataTypeTag::data_type;
-    auto type_ptr ARCTICDB_UNUSED = reinterpret_cast<RawType*>(data);
+    [[maybe_unused]] auto type_ptr = reinterpret_cast<RawType*>(data);
     if constexpr (is_sequence_type(data_type)) {
         std::fill_n(type_ptr, num_rows, not_a_string());
     } else if constexpr (is_floating_point_type(data_type)) {
