@@ -633,7 +633,6 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self.use_internal_client_wrapper_for_testing = use_internal_client_wrapper_for_testing
         # This is needed because we might have multiple factories in the same test
         # and we need to make sure the bucket names are unique
-        # self.unique_id = "".join(random.choices(string.ascii_letters + string.digits, k=5))
         # set the unique_id to the current UNIX timestamp to avoid conflicts
         self.unique_id = str(int(time.time()))
 
@@ -742,11 +741,9 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
             try:
                 self._s3_admin.delete_bucket(Bucket=b.bucket)
             except botocore.exceptions.ClientError as e:
-                if e.response["Error"]["Code"] == "NoSuchBucket":
-                    # Handle the case where the bucket doesn't exist
-                    print("Bucket doesn't exist, nothing to delete")
-                else:
-                    # Re-raise if it's a different error
+                # There is a problem with xdist on Windows 3.7
+                # where we try to clean up the bucket but it's already gone
+                if e.response["Error"]["Code"] != "NoSuchBucket":
                     raise e
         else:
             requests.post(
