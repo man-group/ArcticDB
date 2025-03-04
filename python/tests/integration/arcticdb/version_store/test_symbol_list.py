@@ -374,11 +374,10 @@ def test_force_compact_symbol_list(lmdb_version_store_v1):
     assert not len(lib.list_symbols())
     lib_tool.remove(symbol_list_keys[0])
 
-    # TOD0: num_syms = 1000
-    num_syms = 100
+    num_syms = 1000
     syms = [f"sym_{idx:03}" for idx in range(num_syms)]
-    for sym in syms:
-        lib.write(sym, 1)
+    data = [1 for _ in range(num_syms)]
+    lib.batch_write(syms, data)
     symbol_list_keys = lib_tool.find_keys(KeyType.SYMBOL_LIST)
     assert len(symbol_list_keys) == num_syms
     assert lib.compact_symbol_list() == num_syms
