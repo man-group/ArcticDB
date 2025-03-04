@@ -991,6 +991,7 @@ if(${TEST})
             util/test/test_string_pool.cpp
             util/test/test_string_utils.cpp
             util/test/test_min_max_float.cpp
+            util/test/test_min_max_integer.cpp
             util/test/test_sum.cpp
             util/test/test_mean.cpp
             util/test/test_tracing_allocator.cpp
