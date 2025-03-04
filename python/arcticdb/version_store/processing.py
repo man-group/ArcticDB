@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 from collections import namedtuple
 import copy
+from collections.abc import Callable
 from dataclasses import dataclass
 import datetime
 from math import inf
@@ -15,7 +16,12 @@ import numpy as np
 import pandas as pd
 from pandas.tseries.frequencies import to_offset
 
-from typing import Dict, NamedTuple, Optional, Tuple, Union
+from typing import Dict, NamedTuple, Optional, Tuple, Union, Any
+
+import sys
+import ast
+
+from functools import singledispatch
 
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, UserInputException
 from arcticdb.version_store._normalization import normalize_dt_range_to_ts
@@ -248,6 +254,155 @@ class ExpressionNode:
                     right = to_string(self.right)
                 self.name = "({} {} {})".format(left, self.operator.name, right)
         return self.name
+
+
+    @classmethod
+    def from_pyarrow_expression_str(cls, expression_str : str, function_map : Optional[Dict[str, Callable]] = None) -> "ExpressionNode":
+        """
+        Builds an ExpressionNode from a pyarrow expression string.
+
+        It is required for an integration with polars predicate pushdown. We get the pyarrow expression as a string
+        because pyarrow doesn't provide any APIs for traversing the expression tree.
+
+        Any of pyarrow's `is_null`, `is_nan` and `is_valid` will get converted to our ArcticDB's `isnull` and `notnull`,
+        which don't differentiate nulls and nans.
+        """
+        if function_map is None:
+            function_map = {}
+        try:
+            expression_ast = ast.parse(expression_str, mode="eval").body
+            return _ast_to_expression(expression_ast, function_map)
+        except Exception as e:
+            msg = f"Could not parse pyarrow expression as an arcticdb expression: {e}"
+            raise ValueError(msg)
+
+
+@singledispatch
+def _ast_to_expression(a: Any, function_map) -> Any:
+    """Walks the AST to convert the PyArrow expression to an ArcticDB expression."""
+    raise ValueError(f"Unexpected symbol: {a}")
+
+
+@_ast_to_expression.register(ast.Constant)
+def _(a: ast.Constant, function_map) -> Any:
+    return a.value
+
+
+if sys.version_info < (3, 8):
+    @_ast_to_expression.register(ast.Str)
+    def _(a: ast.Str, function_map) -> Any:
+        return a.s
+
+    @_ast_to_expression.register(ast.Num)
+    def _(a: ast.Num, function_map) -> Any:
+        return a.n
+
+@_ast_to_expression.register(ast.Name)
+def _(a: ast.Name, function_map) -> Any:
+    return a.id
+
+
+@_ast_to_expression.register(ast.UnaryOp)
+def _(a: ast.UnaryOp, function_map) -> Any:
+    operand = _ast_to_expression(a.operand, function_map)
+    if isinstance(a.op, ast.Invert):
+        return ~operand
+    if isinstance(a.op, ast.USub):
+        # pyarrow expressions don't support unary subrtract, so this branch will not be reached.
+        # Leaving as future-proofing in case they ever introduce it.
+        return -operand
+    raise ValueError(f"Unexpected UnaryOp: {a.op}")
+
+
+@_ast_to_expression.register(ast.Call)
+def _(a: ast.Call, function_map) -> Any:
+    f = _ast_to_expression(a.func, function_map)
+    args = [_ast_to_expression(arg, function_map) for arg in a.args]
+    if callable(f):
+        return f(*args)
+    if isinstance(f, str):
+        if f in function_map:
+            return function_map[f](*args)
+    raise ValueError(f"Unexpected function call: {f}")
+
+
+@_ast_to_expression.register(ast.Attribute)
+def _(a: ast.Attribute, function_map) -> Any:
+    value = _ast_to_expression(a.value, function_map)
+    attr = a.attr
+    if isinstance(value, ExpressionNode):
+        # Handles expression function attributes like (<some expression>).isin([1, 2, 3])
+        if attr == "isin":
+            return value.isin
+        if attr == "is_null" or attr == "is_nan":
+            return value.isnull
+        if attr == "is_valid":
+            return value.notnull
+    if isinstance(value, str):
+        # Handles attributes like "pa.compute.field" or "pc.field"
+        if attr == "field":
+            return ExpressionNode.column_ref
+        if attr == "scalar":
+            return lambda x: x
+        return f"{value}.{attr}"
+    raise ValueError(f"Unexpected attribute {attr} of {value}")
+
+
+@_ast_to_expression.register(ast.BinOp)
+def _(a: ast.BinOp, function_map) -> Any:
+    lhs = _ast_to_expression(a.left, function_map)
+    rhs = _ast_to_expression(a.right, function_map)
+
+    op = a.op
+    if isinstance(op, ast.BitAnd):
+        return lhs & rhs
+    if isinstance(op, ast.BitOr):
+        return lhs | rhs
+    if isinstance(op, ast.BitXor):
+        # pyarrow expressions don't support BitXor, so this branch will not be reached.
+        # Leaving as future-proofing in case they ever introduce it.
+        return lhs ^ rhs
+
+    if isinstance(op, ast.Add):
+        return lhs + rhs
+    if isinstance(op, ast.Sub):
+        return lhs - rhs
+    if isinstance(op, ast.Mult):
+        return lhs * rhs
+    if isinstance(op, ast.Div):
+        return lhs / rhs
+    raise ValueError(f"Unexpected BinOp: {op}")
+
+
+@_ast_to_expression.register(ast.Compare)
+def _(a: ast.Compare, function_map) -> Any:
+    # Compares in pyarrow Expression contain exactly one comparison (i.e. 1 < field("asdf") < 3 is not supported)
+    assert len(a.ops) == 1
+    assert len(a.comparators) == 1
+    op = a.ops[0]
+    left = a.left
+    right = a.comparators[0]
+    lhs = _ast_to_expression(left, function_map)
+    rhs = _ast_to_expression(right, function_map)
+
+    if isinstance(op, ast.Gt):
+        return lhs > rhs
+    if isinstance(op, ast.GtE):
+        return lhs >= rhs
+    if isinstance(op, ast.Eq):
+        return lhs == rhs
+    if isinstance(op, ast.NotEq):
+        return lhs != rhs
+    if isinstance(op, ast.Lt):
+        return lhs < rhs
+    if isinstance(op, ast.LtE):
+        return lhs <= rhs
+    raise ValueError(f"Unknown comparison: {op}")
+
+
+@_ast_to_expression.register(ast.List)
+def _(a: ast.List, function_map) -> Any:
+    return [_ast_to_expression(e, function_map) for e in a.elts]
 
 
 def is_supported_sequence(obj):
