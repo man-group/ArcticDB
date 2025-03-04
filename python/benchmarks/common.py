@@ -6,6 +6,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import inspect
+import logging
 import urllib.parse
 import pandas as pd
 import numpy as np
@@ -53,6 +55,29 @@ def generate_random_floats_dataframe_with_index(num_rows, num_cols, freq="s", en
     df = generate_random_floats_dataframe(num_rows, num_cols)
     df.index = timestamps
     return df
+
+
+def create_asv_logger(name: str = None) -> logging.Logger:
+    '''
+    Only use this method to instantiate logger for ASV 
+    '''
+    #ASV captures console output thus we create console handler
+    if name is None:
+        frame = inspect.currentframe()
+        outer_frames = inspect.getouterframes(frame)
+        calling_module = inspect.getmodule(outer_frames[1].frame)
+        if calling_module is not None:
+          name = calling_module.__name__
+
+    logLevel = logging.INFO
+    logger = logging.getLogger(name)
+    logger.setLevel(logLevel)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logLevel)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    return logger
 
 
 def generate_benchmark_df(n, freq="min", end_timestamp="1/1/2023"):
