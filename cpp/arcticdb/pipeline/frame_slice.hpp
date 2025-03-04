@@ -37,18 +37,17 @@ struct AxisRange : std::pair<size_t, size_t> {
         return second;
     }
 
-    struct Hasher {
+ /*   struct Hasher {
         template<class T>
         std::enable_if_t<std::is_base_of_v<AxisRange, std::decay_t<T>>, std::size_t>
         operator()(const T &r) const {
-            // try to make better use of msb lsb given how F14 is implemented
 #ifdef _WIN32
             return r.first ^ _byteswap_uint64(r.second);
 #else
             return r.first ^ __builtin_bswap64(r.second);
 #endif
         }
-    };
+    };*/
 };
 
 struct ColRange : AxisRange {
@@ -154,8 +153,8 @@ struct FrameSlice {
         return static_cast<ssize_t>(row_range.second);
     }
 
-    friend bool operator< (const FrameSlice& a, const FrameSlice& b) {
-        return std::tie(a.col_range.first, a.row_range.first) < std::tie(b.col_range.first, b.row_range.first);
+    friend bool operator<(const FrameSlice& a, const FrameSlice& b) {
+        return std::tie(a.row_range.first, a.col_range.first) < std::tie(b.row_range.first, b.col_range.first);
     }
 
     friend bool operator==(const FrameSlice& a, const FrameSlice& b) {
@@ -167,7 +166,6 @@ struct FrameSlice {
     }
 
 private:
-    // never contains index field
     std::shared_ptr<entity::StreamDescriptor> desc_;
     std::optional<uint64_t> hash_bucket_;
     std::optional<uint64_t> num_buckets_;
