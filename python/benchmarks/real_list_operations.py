@@ -6,7 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-from arcticdb.util.environment_setup import GeneralSetupSymbolsVersionsSnapshots, Storage
+from arcticdb.util.environment_setup import SetupLibrariesWithVersionAndSnapshots, Storage
 
 class AWSListSymbols:
 
@@ -19,7 +19,7 @@ class AWSListSymbols:
     timeout = 1200
 
     
-    SETUP_CLASS = (GeneralSetupSymbolsVersionsSnapshots(storage=Storage.AMAZON, prefix="LIST_SYMBOLS")
+    SETUP_CLASS = (SetupLibrariesWithVersionAndSnapshots(storage=Storage.AMAZON, prefix="LIST_SYMBOLS")
         .set_with_metadata_for_each_version()
         .set_with_snapshot_for_each_version()
         .set_params([500, 1000]))
@@ -40,7 +40,7 @@ class AWSListSymbols:
         return info
 
     def setup(self, storage_info, num_syms):
-        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)
+        self.aws = SetupLibrariesWithVersionAndSnapshots.from_storage_info(storage_info)
         self.lib = self.aws.get_library(num_syms)
 
     def time_list_symbols(self, storage_info, num_syms):
@@ -68,7 +68,7 @@ class AWSVersionSymbols:
 
     timeout = 1200
 
-    SETUP_CLASS = (GeneralSetupSymbolsVersionsSnapshots(storage=Storage.AMAZON, prefix="LIST_VERSIONS")
+    SETUP_CLASS = (SetupLibrariesWithVersionAndSnapshots(storage=Storage.AMAZON, prefix="LIST_VERSIONS")
         .set_mean_number_versions_per_sym(35) # change to lower for testing
         .set_max_number_versions(50) # number versions is approx = num_syms * mean_number_versions
         .set_with_metadata_for_each_version()
@@ -86,7 +86,7 @@ class AWSVersionSymbols:
         return info
 
     def setup(self, storage_info, num_syms):
-        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)
+        self.aws = SetupLibrariesWithVersionAndSnapshots.from_storage_info(storage_info)
         self.lib = self.aws.get_library(num_syms)
 
     def time_list_versions(self, storage_info, num_syms):
