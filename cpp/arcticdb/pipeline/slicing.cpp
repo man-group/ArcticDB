@@ -88,16 +88,15 @@ std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::Input
 
         auto desc = std::make_shared<StreamDescriptor>(id, index, current_fields);
         for (std::size_t r = first_row, end = last_row; r < end; r += row_per_slice_) {
-            auto rdist = std::min(last_row-r, row_per_slice_);
-            slices.push_back(FrameSlice(desc,
-                                        ColRange{col, col+distance},
-                                        RowRange{r, r+rdist}));
+            auto rdist = std::min(last_row - r, row_per_slice_);
+            slices.push_back(FrameSlice(desc, ColRange{col, col + distance}, RowRange{r, r + rdist}));
         }
 
         col += col_per_slice_;
         tensor_pos = tensor_next;
         fields_pos = fields_next;
     } while (tensor_pos!=std::end(frame.field_tensors));
+
     std::sort(std::begin(slices), std::end(slices));
     return slices;
 }
@@ -152,6 +151,7 @@ std::vector<FrameSlice> HashedSlicer::operator()(const arcticdb::pipelines::Inpu
         col += distance;
     } while(start_pos != std::cend(indices));
 
+    std::sort(std::begin(slices), std::end(slices));
     return slices;
 }
 } //namespace arcticdb::pipelines

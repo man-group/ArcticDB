@@ -116,16 +116,14 @@ std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vec
     std::vector<std::pair<FrameSlice, size_t>> slice_and_rowcount;
     slice_and_rowcount.reserve(slices.size());
     size_t slice_num_for_column = 0;
-    std::optional<size_t> first_row;
+    size_t current_row = slices.empty() ? 0 : slices[0].row_range.first;
     for(const auto& slice : slices) {
-        if (!first_row)
-            first_row = slice.row_range.first;
-
-        if (slice.row_range.first == *first_row)
-            slice_num_for_column = 0;
+        if (slice.row_range.first != current_row) {
+            current_row = slice.row_range.first;
+            ++slice_num_for_column;
+        }
 
         slice_and_rowcount.emplace_back(slice, slice_num_for_column);
-        ++slice_num_for_column;
     }
     return slice_and_rowcount;
 }
