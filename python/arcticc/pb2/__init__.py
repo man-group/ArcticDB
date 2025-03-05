@@ -32,4 +32,4 @@ if _proto_ver in "345":
     )
     __path__.append(_protos_path)
 else:
-    raise NotImplementedError(f"We only support protobuf versions 3 & 4. You have {_protobuf.__version__}")
+    raise NotImplementedError(f"We only support protobuf versions 3, 4 & 5. You have {_protobuf.__version__}")
