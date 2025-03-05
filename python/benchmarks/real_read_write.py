@@ -13,12 +13,12 @@ import numpy as np
 import pandas as pd
 
 from arcticdb.util.utils import DFGenerator, TimestampNumber
-from arcticdb.util.environment_setup import GeneralSetupLibraryWithSymbols, Storage
+from arcticdb.util.environment_setup import SetupSingleLibrary, Storage
 
 
 #region Setup classes
 
-class ReadWriteBenchmarkSettings(GeneralSetupLibraryWithSymbols):
+class ReadWriteBenchmarkSettings(SetupSingleLibrary):
     """
     Setup Read Tests Library for different storages.
     Its aim is to have at one place the responsibility for setting up any supported storage

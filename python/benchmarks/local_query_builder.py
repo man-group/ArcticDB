@@ -11,13 +11,15 @@ from arcticdb.version_store.processing import QueryBuilder
 from .common import *
 
 
+PARAMS_QUERY_BUILDER = [1_000_000, 10_000_000]
+
 class LocalQueryBuilderFunctions:
     number = 5
     timeout = 6000
     LIB_NAME = "query_builder"
     CONNECTION_STRING = "lmdb://query_builder?map_size=5GB"
 
-    params = [1_000_000, 10_000_000]
+    params = PARAMS_QUERY_BUILDER
     param_names = ["num_rows"]
 
     def setup_cache(self):
