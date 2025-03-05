@@ -24,3 +24,6 @@ ENV CXX=/opt/rh/gcc-toolset-10/root/bin/g++
 ENV CMAKE_CXX_COMPILER=/opt/rh/gcc-toolset-10/root/bin/clang++
 ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-10/root/usr/lib64:/opt/rh/gcc-toolset-10/root/usr/lib:/opt/rh/gcc-toolset-10/root/usr/lib64/dyninst
 ENV PATH=/opt/rh/devtoolset-10/root/usr/bin:/opt/python/cp311-cp311/bin:${PATH}
+
+ADD build_clang.sh /opt/
+RUN /opt/build_clang.sh
