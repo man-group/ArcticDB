@@ -72,7 +72,7 @@ jobs:
         run: |
           apt update
           apt install -y git
-          python -m pip install arcticdb[Testing] "protobuf<5"
+          python -m pip install arcticdb[Testing] "protobuf<6"
 
       - name: Setup softlink for SSL
         shell: bash -el {0}
