@@ -729,6 +729,21 @@ def lmdb_version_store_v1(version_store_factory) -> NativeVersionStore:
 
 
 @pytest.fixture
+def lmdb_version_store_modifiable(request, lib_name, version_store_factory) -> NativeVersionStore:
+    """
+    Provides ability to pass parameters from test using notation following leaving decision
+    what options to iterate through to the test:
+
+        @pytest.mark.parametrize("lmdb_library_any", [
+                    {'dynamic_strings': True, 'encoding_version' : int(EncodingVersion.V2)}
+                ], indirect=True)
+        def test_my_test(lmdb_library_any):
+    """
+    params = request.param if hasattr(request, 'param') else {}
+    return version_store_factory(name=lib_name, **params)
+
+
+@pytest.fixture
 def lmdb_version_store_v2(version_store_factory, lib_name) -> NativeVersionStore:
     library_name = lib_name + "_v2"
     return version_store_factory(dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name)

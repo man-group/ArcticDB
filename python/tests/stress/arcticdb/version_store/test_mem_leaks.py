@@ -30,6 +30,7 @@ from arcticdb.util.utils import DFGenerator
 from arcticdb.version_store.library import Library, ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore
+from arcticdb_ext.version_store import PythonVersionStoreReadOptions
 from tests.util.mark import LINUX, MACOS, SLOW_TESTS_MARK, WINDOWS, MEMRAY_SUPPORTED, MEMRAY_TESTS_MARK, SKIP_CONDA_MARK
 
 
@@ -755,8 +756,9 @@ if MEMRAY_SUPPORTED:
 
         gc.collect()
 
+
     @pytest.fixture
-    def prepare_head_tails_symbol(lmdb_library):
+    def prepare_head_tails_symbol(lmdb_version_store_modifiable):               
         """
         This fixture is part of test `test_mem_leak_head_tail_memray`
 
@@ -766,8 +768,9 @@ if MEMRAY_SUPPORTED:
 
         Should not be reused
         """
-        lib: Library = lmdb_library
-        opts: LibraryOptions = lib.options()
+        lib: NativeVersionStore = lmdb_version_store_modifiable
+        opts  = lib._write_options()
+        
         total_number_columns = 1002
         symbol = "asdf12345"
         num_rows_list = [279,199,1,350,999,0,1001]
@@ -791,13 +794,15 @@ if MEMRAY_SUPPORTED:
         yield (lib, symbol, num_rows_list, snapshot_names, all_columns)
         lib.delete(symbol=symbol)
 
+
+
     @MEMRAY_TESTS_MARK
     @SLOW_TESTS_MARK
-    @pytest.mark.parametrize("lmdb_library", [
-            {'library_options': LibraryOptions(rows_per_segment=233, columns_per_segment=197, dynamic_schema=True, encoding_version=EncodingVersion.V2)},
-            {'library_options': LibraryOptions(rows_per_segment=99, columns_per_segment=99, dynamic_schema=False, encoding_version=EncodingVersion.V1)}
-        ], indirect=True)
     @pytest.mark.limit_leaks(location_limit="380 KB" if LINUX else "52 KB", filter_fn=is_relevant)
+    @pytest.mark.parametrize("lmdb_version_store_modifiable", [
+            { 'segment_row_size': 233, 'column_group_size' : 197, 'dynamic_schema': True, 'encoding_version':int(EncodingVersion.V2)},
+            { 'segment_row_size': 99, 'column_group_size' : 99, 'dynamic_schema': False, 'encoding_version':int(EncodingVersion.V1)},
+        ],    indirect=True)
     def test_mem_leak_head_tail_memray(prepare_head_tails_symbol):
         """
         This test aims to test `head` and `tail` functions if they do leak memory.
@@ -857,4 +862,4 @@ if MEMRAY_SUPPORTED:
         time.sleep(10) # collection is not immediate
         logger.info(f"Test completed in {time.time() - start_test}")     
 
-               
+
