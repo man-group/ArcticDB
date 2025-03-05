@@ -2,14 +2,13 @@
 #include <limits>
 #include <type_traits>
 #include <cmath>
-
-#include <cstdint>
-#include <limits>
-#include <type_traits>
+#include <algorithm>
 
 #include <arcticdb/util/vector_common.hpp>
 
 namespace arcticdb {
+
+#ifndef WIN32
 
 template<typename T>
 struct MinMax {
@@ -174,5 +173,21 @@ template<typename T>
 T find_max(const T* data, size_t n) {
     return MaxFinder<T>::find(data, n);
 }
+
+#else
+
+template<typename T>
+typename std::enable_if<std::is_integral<T>::value, T>::type
+find_min(const T *data, size_t n) {
+    return *std::min_element(data, data + n);
+}
+
+template<typename T>
+typename std::enable_if<std::is_integral<T>::value, T>::type
+find_max(const T *data, size_t n) {
+    return *std::max_element(data, data + n);
+}
+
+#endif
 
 } // namespace arcticdb

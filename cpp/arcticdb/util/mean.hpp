@@ -4,8 +4,11 @@
 #include <cstddef>
 
 #include <arcticdb/util/vector_common.hpp>
+#include <arcticdb/util/preconditions.hpp>
 
 namespace arcticdb {
+
+#ifndef _WIN32
 
 template<typename T>
 class MeanFinder {
@@ -77,5 +80,16 @@ template<typename T>
 double find_mean(const T *data, size_t n) {
     return MeanFinder<T>::find(data, n);
 }
+
+#else
+
+template <typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value>::type>
+double find_mean(const T* data, std::size_t size) {
+    util::check(size > 0, "Cannot compute mean of an empty array.");
+    double sum = std::accumulate(data, data + size, 0.0);
+    return sum / size;
+}
+
+#endif
 
 } // namespace arcticdb
