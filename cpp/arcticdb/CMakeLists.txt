@@ -1093,7 +1093,6 @@ if(${TEST})
             processing/test/rapidcheck_resample.cpp
             stream/test/stream_test_common.cpp
             util/test/rapidcheck_decimal.cpp
-            util/test/rapidcheck_generators.cpp
             util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
             util/test/rapidcheck_lru_cache.cpp
@@ -1107,12 +1106,10 @@ if(${TEST})
 
     if(ARCTICDB_USING_CONDA)
         set(RAPIDCHECK_PRIVATE_LIBRARIES
-            ${AWSSDK_LINK_LIBRARIES}
-            Arrow::arrow_shared)
+            ${AWSSDK_LINK_LIBRARIES})
     else()
         set(RAPIDCHECK_PRIVATE_LIBRARIES
-            ${AWSSDK_LINK_LIBRARIES}
-            "$<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Arrow::arrow_static,Arrow::arrow_shared>")
+            ${AWSSDK_LINK_LIBRARIES})
     endif()
 
     if(WIN32)
