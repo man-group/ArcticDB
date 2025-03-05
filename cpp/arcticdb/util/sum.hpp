@@ -8,6 +8,8 @@
 
 namespace arcticdb {
 
+#ifdef _WIN32
+
 template<typename T>
 struct is_supported_type : std::false_type {};
 
@@ -70,4 +72,13 @@ double find_sum(const T *data, size_t n) {
     return SumFinder<T>::find(data, n);
 }
 
+
+#else
+
+template<typename T>
+double find_sum(const T *data, size_t n) {
+    return std::accumulate(data, data + n, T(0));
+}
+
+#endif
 } // namespace arcticdb
