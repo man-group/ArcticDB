@@ -555,6 +555,17 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
     //    TODO: now store this in the version key for this symbol
 }
 
+ChunkIterator PythonVersionStore::read_dataframe_chunked(
+    const StreamId &stream_id,
+    const VersionQuery& version_query,
+    ReadQuery& read_query,
+    const ReadOptions& read_options,
+    std::any& handler_data) {
+    DecodePathData shared_data;
+    auto release_gil = std::make_unique<py::gil_scoped_release>();
+    return read_dataframe_chunked_internal(stream_id, version_query, read_query, read_options, handler_data, shared_data);
+}
+
 VersionedItem PythonVersionStore::write_versioned_composite_data(
     const StreamId& stream_id,
     const py::object &metastruct,

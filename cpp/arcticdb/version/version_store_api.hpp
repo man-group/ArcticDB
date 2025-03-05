@@ -302,6 +302,13 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<VersionQuery>& version_queries,
         const ReadOptions& read_options);
 
+    ChunkIterator read_dataframe_chunked(
+        const StreamId &stream_id,
+        const VersionQuery& version_query,
+        ReadQuery& read_query,
+        const ReadOptions& read_options,
+        std::any& handler_data);
+
     std::set<StreamId> list_streams(
         const std::optional<SnapshotId>& snap_name = std::nullopt,
         const std::optional<std::string> &regex = std::nullopt,

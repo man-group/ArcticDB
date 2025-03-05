@@ -10,6 +10,7 @@
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
+#include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/bitset.hpp>
 
 #include <folly/futures/Future.h>
@@ -74,12 +75,20 @@ void mark_index_slices(
     bool column_groups);
 
 folly::Future<SegmentInMemory> fetch_data(
-    SegmentInMemory&& frame,
+    SegmentInMemory frame,
     const std::shared_ptr<PipelineContext> &context,
     const std::shared_ptr<stream::StreamSource>& ssource,
     const ReadQuery& read_query,
     const ReadOptions& read_options,
     DecodePathData shared_data,
+    std::any& handler_data);
+
+folly::Future<SegmentInMemory> do_direct_read_or_process(
+    const std::shared_ptr<Store>& store,
+    const std::shared_ptr<ReadQuery>& read_query,
+    const ReadOptions& read_options,
+    const std::shared_ptr<PipelineContext>& pipeline_context,
+    const DecodePathData& shared_data,
     std::any& handler_data);
 
 void decode_into_frame_static(
@@ -113,7 +122,19 @@ StreamDescriptor get_filtered_descriptor(
 
 size_t get_index_field_count(const SegmentInMemory& frame);
 
+folly::Future<std::vector<EntityId>> schedule_clause_processing(
+    std::shared_ptr<ComponentManager> component_manager,
+    std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
+    std::vector<std::vector<size_t>>&& processing_unit_indexes,
+    std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses);
 
+folly::Future<std::vector<SliceAndKey>> read_and_process(
+    const std::shared_ptr<Store>& store,
+    const std::shared_ptr<PipelineContext>& pipeline_context,
+    const std::shared_ptr<ReadQuery>& read_query,
+    const ReadOptions& read_options
+);
 
+CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const StreamDescriptor& pipeline_context);
 
 } // namespace  arcticdb::pipelines

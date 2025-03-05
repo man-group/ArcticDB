@@ -102,7 +102,7 @@ void write_dataframe_to_file_internal(
     single_file_store->finalize(storage::KeyData{offset, serialized_key.size()});
 }
 
-version_store::ReadVersionOutput read_dataframe_from_file_internal(
+ReadVersionOutput read_dataframe_from_file_internal(
         const StreamId& stream_id,
         const std::string& path,
         const std::shared_ptr<ReadQuery>& read_query,
