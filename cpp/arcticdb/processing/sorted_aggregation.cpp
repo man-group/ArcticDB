@@ -12,14 +12,17 @@
 namespace arcticdb {
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
+std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
                                                                           const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
                                                                           const std::vector<timestamp>& bucket_boundaries,
                                                                           const Column& output_index_column,
                                                                           StringPool& string_pool) const {
     using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    auto common_input_type = generate_common_input_type(input_agg_columns);
-    Column res(TypeDescriptor(generate_output_data_type(common_input_type), Dimension::Dim0), output_index_column.row_count(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
+    const std::optional<DataType> common_input_type = generate_common_input_type(input_agg_columns);
+    if (!common_input_type.has_value()) {
+        return std::nullopt;
+    }
+    Column res(TypeDescriptor(generate_output_data_type(*common_input_type), Dimension::Dim0), output_index_column.row_count(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
     details::visit_type(
         res.type().data_type(),
         [this,
@@ -128,11 +131,11 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
             }
         }
     );
-    return res;
+    return {std::move(res)};
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-DataType SortedAggregator<aggregation_operator, closed_boundary>::generate_common_input_type(
+std::optional<DataType> SortedAggregator<aggregation_operator, closed_boundary>::generate_common_input_type(
         const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns
         ) const {
     std::optional<DataType> common_input_type;
@@ -141,17 +144,9 @@ DataType SortedAggregator<aggregation_operator, closed_boundary>::generate_commo
             auto input_data_type = opt_input_agg_column->column_->type().data_type();
             check_aggregator_supported_with_data_type(input_data_type);
             add_data_type_impl(input_data_type, common_input_type);
-        } else {
-            // Column is missing from this row-slice due to dynamic schema, currently unsupported
-            schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>("Resample: Cannot aggregate column '{}' as it is missing from some row slices",
-                                                                get_input_column_name().value);
         }
     }
-    // Column is missing from all row-slices due to dynamic schema, currently unsupported
-    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(common_input_type.has_value(),
-                                                        "Resample: Cannot aggregate column '{}' as it is missing from some row slices",
-                                                        get_input_column_name().value);
-    return *common_input_type;
+    return common_input_type;
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
