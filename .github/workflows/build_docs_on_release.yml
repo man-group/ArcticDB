@@ -1,0 +1,44 @@
+name: "Build Docs on Release"
+
+on:
+  release:
+    types: [published]
+
+run-name: "Build and Publish Docs for release ${{ github.event.release.tag_name }}, Publish: ${{ github.event.release.draft == false }}"
+jobs:
+  check-inputs:
+    name: Check inputs
+    runs-on: ubuntu-latest
+    outputs:
+        version: ${{ steps.tag_name.outputs.tag }}
+        latest: ${{ github.event.release.tag_name == steps.latest_tag.outputs.tag }}
+        deploy: ${{ github.event.release.draft == false }}
+
+    steps:
+      - name: Get latest released tag
+        id: latest_tag
+        uses: oprypin/find-latest-tag@v1
+        with:
+          repository: ${{ github.repository }}
+          regex: ^v\d+\.\d+\.\d+$
+          sort-tags: true
+          releases-only: true
+
+      - name: Verify release tag
+        id: tag_name
+        run: |
+          TAG_NAME=${{ github.event.release.tag_name }}
+          if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid tag format. Must be in the form vX.Y.Z"
+            exit 1
+          fi
+          echo "tag=${TAG_NAME#v}" >> $GITHUB_OUTPUT
+
+  build-docs:
+    needs: check-inputs
+    name: "Build docs with version: ${{ needs.check-inputs.outputs.version }}, latest: ${{ needs.check-inputs.outputs.latest }}, deploy: ${{ needs.check-inputs.outputs.deploy }}"
+    uses: ./.github/workflows/docs_build.yml
+    with:
+      version: ${{ needs.check-inputs.outputs.version }}
+      latest: ${{ needs.check-inputs.outputs.latest }}
+      deploy: ${{ needs.check-inputs.outputs.deploy }}
