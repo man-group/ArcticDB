@@ -54,6 +54,8 @@ TEST_F(FloatFinderTest, VectorWithNaNs) {
     EXPECT_FLOAT_EQ(find_float_max(data.data(), data.size()), 62.0f);
 }
 
+#ifdef HAS_VECTOR_EXTENSIONS
+
 TEST_F(FloatFinderTest, LargeArrayPerformance) {
     constexpr size_t size = 100'000'000;
     auto data = create_aligned_data<float>(size);
@@ -83,5 +85,72 @@ TEST_F(FloatFinderTest, LargeArrayPerformance) {
     EXPECT_FLOAT_EQ(max_result, *std_result_max);
 }
 
+#endif
+
+TEST_F(FloatFinderTest, EmptyInputFloat) {
+    std::vector<float> data;
+    EXPECT_FLOAT_EQ(find_float_min(data.data(), 0), std::numeric_limits<float>::infinity());
+    EXPECT_FLOAT_EQ(find_float_max(data.data(), 0), -std::numeric_limits<float>::infinity());
+}
+
+TEST_F(FloatFinderTest, EmptyInputDouble) {
+    std::vector<double> data;
+    EXPECT_DOUBLE_EQ(find_float_min(data.data(), 0), std::numeric_limits<double>::infinity());
+    EXPECT_DOUBLE_EQ(find_float_max(data.data(), 0), -std::numeric_limits<double>::infinity());
+}
+
+TEST_F(FloatFinderTest, UniformDataFloat) {
+    auto data = create_aligned_data<float>(64);
+    std::fill(data.begin(), data.end(), 5.0f);
+    EXPECT_FLOAT_EQ(find_float_min(data.data(), data.size()), 5.0f);
+    EXPECT_FLOAT_EQ(find_float_max(data.data(), data.size()), 5.0f);
+}
+
+TEST_F(FloatFinderTest, UniformDataDouble) {
+    auto data = create_aligned_data<double>(32);
+    std::fill(data.begin(), data.end(), 7.0);
+    EXPECT_DOUBLE_EQ(find_float_min(data.data(), data.size()), 7.0);
+    EXPECT_DOUBLE_EQ(find_float_max(data.data(), data.size()), 7.0);
+}
+
+TEST_F(FloatFinderTest, AllNaNFloat) {
+    auto data = create_aligned_data<float>(64);
+    std::fill(data.begin(), data.end(), std::numeric_limits<float>::quiet_NaN());
+    EXPECT_FLOAT_EQ(find_float_min(data.data(), data.size()), std::numeric_limits<float>::infinity());
+    EXPECT_FLOAT_EQ(find_float_max(data.data(), data.size()), -std::numeric_limits<float>::infinity());
+}
+
+TEST_F(FloatFinderTest, AllNaNDouble) {
+    auto data = create_aligned_data<double>(32);
+    std::fill(data.begin(), data.end(), std::numeric_limits<double>::quiet_NaN());
+    EXPECT_DOUBLE_EQ(find_float_min(data.data(), data.size()), std::numeric_limits<double>::infinity());
+    EXPECT_DOUBLE_EQ(find_float_max(data.data(), data.size()), -std::numeric_limits<double>::infinity());
+}
+
+TEST_F(FloatFinderTest, SingleElementFloat) {
+    std::vector<float> data = { 42.0f };
+    EXPECT_FLOAT_EQ(find_float_min(data.data(), data.size()), 42.0f);
+    EXPECT_FLOAT_EQ(find_float_max(data.data(), data.size()), 42.0f);
+}
+
+TEST_F(FloatFinderTest, SingleElementDouble) {
+    std::vector<double> data = { 3.14159 };
+    EXPECT_DOUBLE_EQ(find_float_min(data.data(), data.size()), 3.14159);
+    EXPECT_DOUBLE_EQ(find_float_max(data.data(), data.size()), 3.14159);
+}
+
+TEST_F(FloatFinderTest, DoubleRemainderCase) {
+    // For doubles the vector is 64 bytes so lane_count = 8.
+    // Create an array of 11 doubles (1 full vector + 3 remainder).
+    std::vector<double> data(11);
+    // Fill with values such that min is 2.0 and max is 10.0
+    // First 8 elements: 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 3.0
+    // Remainder: 2.0, 8.0, 4.0
+    data[0] = 4.0; data[1] = 5.0; data[2] = 6.0; data[3] = 7.0;
+    data[4] = 8.0; data[5] = 9.0; data[6] = 10.0; data[7] = 3.0;
+    data[8] = 2.0; data[9] = 8.0; data[10] = 4.0;
+    EXPECT_DOUBLE_EQ(find_float_min(data.data(), data.size()), 2.0);
+    EXPECT_DOUBLE_EQ(find_float_max(data.data(), data.size()), 10.0);
+}
 
 } // namespace arcticdb

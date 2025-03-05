@@ -7,116 +7,85 @@
 #include <arcticdb/util/vector_common.hpp>
 
 namespace arcticdb {
-#ifndef _WIN32
 
-template<typename T>
-using vector_type __attribute__((vector_size(64))) = T;
+#if HAS_VECTOR_EXTENSIONS
 
-template<typename T>
-class FloatMinFinder {
+template<typename T, typename Comparator>
+class FloatExtremumFinder {
     static_assert(is_supported_float<T>::value, "Type must be float or double");
     static_assert(std::is_floating_point_v<T>, "Type must be floating point");
-
 public:
     static T find(const T* data, size_t n) {
+        if (n == 0)
+            return Comparator::identity();
         using vec_t = vector_type<T>;
-
-        vec_t vmin;
-        for(size_t i = 0; i < sizeof(vec_t)/sizeof(T); i++) {
-            reinterpret_cast<T*>(&vmin)[i] = std::numeric_limits<T>::infinity();
-        }
+        constexpr size_t lane_count = sizeof(vec_t) / sizeof(T);
+        vec_t vext;
+        for (size_t i = 0; i < lane_count; i++)
+            reinterpret_cast<T*>(&vext)[i] = Comparator::identity();
 
         const vec_t* vdata = reinterpret_cast<const vec_t*>(data);
-        const size_t elements_per_vector = sizeof(vec_t) / sizeof(T);
-        const size_t vlen = n / elements_per_vector;
-
-        for(size_t i = 0; i < vlen; i++) {
+        size_t vlen = n / lane_count;
+        for (size_t i = 0; i < vlen; i++) {
             vec_t v = vdata[i];
-            vmin = (v < vmin) ? v : vmin;
+            if constexpr (Comparator::is_min)
+                vext = (v < vext) ? v : vext;
+            else
+                vext = (v > vext) ? v : vext;
         }
-
-        T min_val = std::numeric_limits<T>::infinity();
-        const T* min_arr = reinterpret_cast<const T*>(&vmin);
-        for(size_t i = 0; i < elements_per_vector; i++) {
-            if (min_arr[i] == min_arr[i]) {  // Not NaN
-                min_val = std::min(min_val, min_arr[i]);
-            }
+        T result = Comparator::identity();
+        const T* lanes = reinterpret_cast<const T*>(&vext);
+        for (size_t i = 0; i < lane_count; i++) {
+            if (lanes[i] == lanes[i])
+                result = Comparator::compare(lanes[i], result);
         }
-
-        const T* remain = data + (vlen * elements_per_vector);
-        for(size_t i = 0; i < n % elements_per_vector; i++) {
-            if (remain[i] == remain[i]) {  // Not NaN
-                min_val = std::min(min_val, remain[i]);
-            }
+        const T* remain = data + (vlen * lane_count);
+        size_t remain_count = n % lane_count;
+        for (size_t i = 0; i < remain_count; i++) {
+            if (remain[i] == remain[i])
+                result = Comparator::compare(remain[i], result);
         }
-
-        return min_val;
+        return result;
     }
 };
 
 template<typename T>
-class FloatMaxFinder {
-    static_assert(is_supported_float<T>::value, "Type must be float or double");
-    static_assert(std::is_floating_point_v<T>, "Type must be floating point");
-
-public:
-    static T find(const T* data, size_t n) {
-        using vec_t = vector_type<T>;
-
-        vec_t vmax;
-        for(size_t i = 0; i < sizeof(vec_t)/sizeof(T); i++) {
-            reinterpret_cast<T*>(&vmax)[i] = -std::numeric_limits<T>::infinity();
-        }
-
-        const vec_t* vdata = reinterpret_cast<const vec_t*>(data);
-        const size_t elements_per_vector = sizeof(vec_t) / sizeof(T);
-        const size_t vlen = n / elements_per_vector;
-
-        for(size_t i = 0; i < vlen; i++) {
-            vec_t v = vdata[i];
-            vmax = (v > vmax) ? v : vmax;
-        }
-
-        T max_val = -std::numeric_limits<T>::infinity();
-        const T* max_arr = reinterpret_cast<const T*>(&vmax);
-        for(size_t i = 0; i < elements_per_vector; i++) {
-            if (max_arr[i] == max_arr[i]) {  // Not NaN
-                max_val = std::max(max_val, max_arr[i]);
-            }
-        }
-
-        const T* remain = data + (vlen * elements_per_vector);
-        for(size_t i = 0; i < n % elements_per_vector; i++) {
-            if (remain[i] == remain[i]) {  // Not NaN
-                max_val = std::max(max_val, remain[i]);
-            }
-        }
-
-        return max_val;
-    }
+struct FloatMinComparator {
+    static constexpr bool is_min = true;
+    static T identity() { return std::numeric_limits<T>::infinity(); }
+    static T compare(T a, T b) { return std::min(a, b); }
 };
 
 template<typename T>
-T find_float_min(const T *data, size_t n) {
-    return FloatMinFinder<T>::find(data, n);
+struct FloatMaxComparator {
+    static constexpr bool is_min = false;
+    static T identity() { return -std::numeric_limits<T>::infinity(); }
+    static T compare(T a, T b) { return std::max(a, b); }
+};
+
+template<typename T>
+T find_float_min(const T* data, size_t n) {
+    return FloatExtremumFinder<T, FloatMinComparator<T>>::find(data, n);
 }
 
 template<typename T>
-T find_float_max(const T *data, size_t n) {
-    return FloatMaxFinder<T>::find(data, n);
+T find_float_max(const T* data, size_t n) {
+    return FloatExtremumFinder<T, FloatMaxComparator<T>>::find(data, n);
 }
 
 #else
 
 template<typename T>
-typename std::enable_if<std::is_integral<T>::value, T>::type
+typename std::enable_if<std::is_floating_point<T>::value, T>::type
 find_float_min(const T *data, size_t n) {
+    util::check(size != 0, "Got zero size in find_float_min");
     return *std::min_element(data, data + n);
 }
 
 template<typename T>
-typename std::enable_if<std::is_integral<T>::value, T>::type
+typename std::enable_if<std::is_floating_point<T>::value, T>::type
 find_float_max(const T *data, size_t n) {
+    util::check(size != 0, "Got zero size in find_float_max");
     return *std::max_element(data, data + n);
 }
 

@@ -19,8 +19,7 @@ protected:
         input_data.resize(n);
         std::iota(input_data.begin(), input_data.end(), 42);
     }
-    // 3968 bytes == 496 int64s per block, so 3 blocks here
-    size_t n{1000};
+    size_t n{1100};
     std::vector<int64_t> input_data;
     TypeDescriptor type_descriptor{static_cast<TypeDescriptor>(TDT{})};
 };

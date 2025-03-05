@@ -5,173 +5,111 @@
 #include <algorithm>
 
 #include <arcticdb/util/vector_common.hpp>
+#include <arcticdb/util/preconditions.hpp>
 
 namespace arcticdb {
 
-#ifndef WIN32
-
+#if HAS_VECTOR_EXTENSIONS
 template<typename T>
 struct MinMax {
     T min;
     T max;
 };
 
-template<typename T>
-class MinMaxFinder {
-    static_assert(is_supported_int<T>::value, "Type must be integer");
-    static_assert(std::is_integral_v<T>, "Type must be integral");
-
+template<bool ComputeMin, bool ComputeMax, typename T>
+class ExtremumFinder {
 public:
-    static MinMax<T> find(const T* data, size_t n) {
+    // Return type depends on what is computed.
+    using ReturnType = std::conditional_t<
+        (ComputeMin && ComputeMax),
+        MinMax<T>,
+        T
+    >;
+
+    static ReturnType find(const T* data, size_t n) {
+        util::check(n > 0, "Empty array provided");
+        static_assert(is_supported_int<T>::value, "Type must be integer");
+        static_assert(std::is_integral_v<T>, "Type must be integral");
+
         using VectorType = vector_type<T>;
+        constexpr size_t lane_count = sizeof(VectorType) / sizeof(T);
 
-        VectorType vector_min;
-        VectorType vector_max;
-        T min_val;
-        T max_val;
+        T init_min = std::numeric_limits<T>::max();
+        T init_max = std::numeric_limits<T>::min();
 
-        if constexpr(std::is_signed_v<T>) {
-            min_val = std::numeric_limits<T>::max();
-            max_val = std::numeric_limits<T>::min();
+        VectorType vector_min, vector_max;
+        if constexpr (ComputeMin) {
+            T* lanes = reinterpret_cast<T*>(&vector_min);
+            for (size_t i = 0; i < lane_count; i++) {
+                lanes[i] = init_min;
+            }
+        }
+        if constexpr (ComputeMax) {
+            T* lanes = reinterpret_cast<T*>(&vector_max);
+            for (size_t i = 0; i < lane_count; i++) {
+                lanes[i] = init_max;
+            }
+        }
+
+        size_t num_vectors = n / lane_count;
+        const VectorType* vdata = reinterpret_cast<const VectorType*>(data);
+        for (size_t i = 0; i < num_vectors; i++) {
+            VectorType v = vdata[i];
+            if constexpr (ComputeMin) {
+                vector_min = (v < vector_min) ? v : vector_min;
+            }
+            if constexpr (ComputeMax) {
+                vector_max = (v > vector_max) ? v : vector_max;
+            }
+        }
+
+        T final_min = init_min;
+        T final_max = init_max;
+        if constexpr (ComputeMin) {
+            const T* lanes = reinterpret_cast<const T*>(&vector_min);
+            for (size_t i = 0; i < lane_count; i++) {
+                final_min = std::min(final_min, lanes[i]);
+            }
+        }
+        if constexpr (ComputeMax) {
+            const T* lanes = reinterpret_cast<const T*>(&vector_max);
+            for (size_t i = 0; i < lane_count; i++) {
+                final_max = std::max(final_max, lanes[i]);
+            }
+        }
+
+        const T* remain = data + (num_vectors * lane_count);
+        size_t rem = n % lane_count;
+        for (size_t i = 0; i < rem; i++) {
+            if constexpr (ComputeMin)
+                final_min = std::min(final_min, remain[i]);
+            if constexpr (ComputeMax)
+                final_max = std::max(final_max, remain[i]);
+        }
+
+        if constexpr (ComputeMin && ComputeMax) {
+            return MinMax<T>{ final_min, final_max };
+        } else if constexpr (ComputeMin) {
+            return final_min;
         } else {
-            min_val = std::numeric_limits<T>::max();
-            max_val = 0;
+            return final_max;
         }
-
-        for(size_t i = 0; i < sizeof(VectorType)/sizeof(T); i++) {
-            reinterpret_cast<T*>(&vector_min)[i] = min_val;
-            reinterpret_cast<T*>(&vector_max)[i] = max_val;
-        }
-
-        const auto* vdata = reinterpret_cast<const VectorType*>(data);
-        const size_t elements_per_vector = sizeof(VectorType) / sizeof(T);
-        const size_t vector_len = n / elements_per_vector;
-
-        for(size_t i = 0; i < vector_len; i++) {
-            VectorType v = vdata[i];
-            vector_min = (v < vector_min) ? v : vector_min;
-            vector_max = (v > vector_max) ? v : vector_max;
-        }
-
-        const T* min_arr = reinterpret_cast<const T*>(&vector_min);
-        const T* max_arr = reinterpret_cast<const T*>(&vector_max);
-
-        min_val = min_arr[0];
-        max_val = max_arr[0];
-        for(size_t i = 1; i < elements_per_vector; i++) {
-            min_val = std::min(min_val, min_arr[i]);
-            max_val = std::max(max_val, max_arr[i]);
-        }
-
-        const T* remain = data + (vector_len * elements_per_vector);
-        for(size_t i = 0; i < n % elements_per_vector; i++) {
-            min_val = std::min(min_val, remain[i]);
-            max_val = std::max(max_val, remain[i]);
-        }
-
-        return {min_val, max_val};
     }
 };
-
-template<typename T>
-class MinFinder {
-    static_assert(is_supported_int<T>::value, "Type must be integer");
-    static_assert(std::is_integral_v<T>, "Type must be integral");
-
-public:
-    static T find(const T* data, size_t n) {
-        using VectorType = vector_type<T>;
-
-        VectorType vector_min;
-        T min_val = std::numeric_limits<T>::max();
-
-        for(size_t i = 0; i < sizeof(VectorType)/sizeof(T); i++) {
-            reinterpret_cast<T*>(&vector_min)[i] = min_val;
-        }
-
-        const auto* vdata = reinterpret_cast<const VectorType*>(data);
-        const size_t elements_per_vector = sizeof(VectorType) / sizeof(T);
-        const size_t vector_len = n / elements_per_vector;
-
-        for(size_t i = 0; i < vector_len; i++) {
-            VectorType v = vdata[i];
-            vector_min = (v < vector_min) ? v : vector_min;
-        }
-
-        const T* min_arr = reinterpret_cast<const T*>(&vector_min);
-        min_val = min_arr[0];
-        for(size_t i = 1; i < elements_per_vector; i++) {
-            min_val = std::min(min_val, min_arr[i]);
-        }
-
-        const T* remain = data + (vector_len * elements_per_vector);
-        for(size_t i = 0; i < n % elements_per_vector; i++) {
-            min_val = std::min(min_val, remain[i]);
-        }
-
-        return min_val;
-    }
-};
-
-template<typename T>
-class MaxFinder {
-    static_assert(is_supported_int<T>::value, "Type must be integer");
-    static_assert(std::is_integral_v<T>, "Type must be integral");
-
-public:
-    static T find(const T* data, size_t n) {
-        using VectorType = vector_type<T>;
-
-        VectorType vector_max;
-        T max_val;
-
-        if constexpr(std::is_signed_v<T>) {
-            max_val = std::numeric_limits<T>::min();
-        } else {
-            max_val = 0;
-        }
-
-        for(size_t i = 0; i < sizeof(VectorType)/sizeof(T); i++) {
-            reinterpret_cast<T*>(&vector_max)[i] = max_val;
-        }
-
-        const auto* vdata = reinterpret_cast<const VectorType*>(data);
-        const size_t elements_per_vector = sizeof(VectorType) / sizeof(T);
-        const size_t vector_len = n / elements_per_vector;
-
-        for(size_t i = 0; i < vector_len; i++) {
-            VectorType v = vdata[i];
-            vector_max = (v > vector_max) ? v : vector_max;
-        }
-
-        const auto* max_arr = reinterpret_cast<const T*>(&vector_max);
-        max_val = max_arr[0];
-        for(size_t i = 1; i < elements_per_vector; i++) {
-            max_val = std::max(max_val, max_arr[i]);
-        }
-
-        const T* remain = data + (vector_len * elements_per_vector);
-        for(size_t i = 0; i < n % elements_per_vector; i++) {
-            max_val = std::max(max_val, remain[i]);
-        }
-
-        return max_val;
-    }
-};
-
-template<typename T>
-MinMax<T> find_min_max(const T* data, size_t n) {
-    return MinMaxFinder<T>::find(data, n);
-}
 
 template<typename T>
 T find_min(const T* data, size_t n) {
-    return MinFinder<T>::find(data, n);
+    return ExtremumFinder<true, false, T>::find(data, n);
 }
 
 template<typename T>
 T find_max(const T* data, size_t n) {
-    return MaxFinder<T>::find(data, n);
+    return ExtremumFinder<false, true, T>::find(data, n);
+}
+
+template<typename T>
+MinMax<T> find_min_max(const T* data, size_t n) {
+    return ExtremumFinder<true, true, T>::find(data, n);
 }
 
 #else
@@ -179,12 +117,14 @@ T find_max(const T* data, size_t n) {
 template<typename T>
 typename std::enable_if<std::is_integral<T>::value, T>::type
 find_min(const T *data, size_t n) {
+    util::check(size != 0, "Got zero size in find_min");
     return *std::min_element(data, data + n);
 }
 
 template<typename T>
 typename std::enable_if<std::is_integral<T>::value, T>::type
 find_max(const T *data, size_t n) {
+    util::check(size != 0, "Got zero size in find_max");
     return *std::max_element(data, data + n);
 }
 

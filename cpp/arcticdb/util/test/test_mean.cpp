@@ -34,11 +34,6 @@ TEST_F(MeanFinderTest, SingleElement) {
     EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), 42.0);
 }
 
-TEST_F(MeanFinderTest, EmptyArray) {
-    std::vector<int32_t> data;
-    EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), 0.0);
-}
-
 // Vector Size Tests
 TEST_F(MeanFinderTest, VectorSizedArray) {
     auto data = create_aligned_data<int32_t>(64);
@@ -121,6 +116,58 @@ TEST_F(MeanFinderTest, AlternatingValues) {
     EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), 0.0);
 }
 
+TEST_F(MeanFinderTest, BasicFloat) {
+    std::vector<float> data = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
+    EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), 3.0);
+}
+
+TEST_F(MeanFinderTest, BasicDouble) {
+    std::vector<double> data = {1.0, 2.0, 3.0, 4.0, 5.0};
+    EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), 3.0);
+}
+
+TEST_F(MeanFinderTest, FloatWithNaNs) {
+    std::vector<float> data = {1.0f, std::numeric_limits<float>::quiet_NaN(), 3.0f, std::numeric_limits<float>::quiet_NaN(), 5.0f};
+    double expected = (1.0 + 3.0 + 5.0) / 3.0;
+    EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), expected);
+}
+
+TEST_F(MeanFinderTest, DoubleWithNaNs) {
+    std::vector<double> data = {1.0, std::numeric_limits<double>::quiet_NaN(), 3.0, std::numeric_limits<double>::quiet_NaN(), 5.0};
+    double expected = (1.0 + 3.0 + 5.0) / 3.0;
+    EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), expected);
+}
+
+TEST_F(MeanFinderTest, EmptyArrayFloat) {
+    std::vector<float> data;
+    EXPECT_THROW(find_mean(data.data(), data.size()), std::runtime_error);
+}
+
+TEST_F(MeanFinderTest, EmptyArrayDouble) {
+    std::vector<double> data;
+    EXPECT_THROW(find_mean(data.data(), data.size()), std::runtime_error);
+}
+
+TEST_F(MeanFinderTest, AlternatingFloatValues) {
+    std::vector<float> data(1000);
+    for (size_t i = 0; i < data.size(); ++i) {
+        data[i] = (i % 2 == 0) ? 1000.0f : -1000.0f;
+    }
+    EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), 0.0);
+}
+
+TEST_F(MeanFinderTest, ExtremeFloatAverage) {
+    std::vector<float> data = {std::numeric_limits<float>::lowest(), std::numeric_limits<float>::max()};
+    EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), 0.0);
+}
+
+TEST_F(MeanFinderTest, ExtremeDoubleAverage) {
+    std::vector<double> data = {std::numeric_limits<double>::lowest(), std::numeric_limits<double>::max()};
+    EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), 0.0);
+}
+
+#ifdef HAS_VECTOR_EXTENSIONS
+
 TEST_F(MeanFinderTest, LargeArrayPerformance) {
     constexpr size_t size = 100'000'000;
     auto data = create_aligned_data<int32_t>(size);
@@ -148,5 +195,7 @@ TEST_F(MeanFinderTest, LargeArrayPerformance) {
 
     EXPECT_NEAR(simd_mean, std_mean, 1e-10);
 }
+
+#endif
 
 } // namespace arcticdb
