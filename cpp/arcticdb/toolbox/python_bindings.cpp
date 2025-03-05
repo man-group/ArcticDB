@@ -148,6 +148,18 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
             .def("lock_timeout", &StorageLockWrapper::lock_timeout)
             .def("try_lock", &StorageLockWrapper::try_lock)
             ;
-}
 
+
+    using namespace arcticdb::util::query_stats;
+    
+    // Create QueryStats submodule
+    auto query_stats_module = tools.def_submodule("QueryStats", "Stats query functionality");
+
+    // Move stats query bindings to the submodule
+    query_stats_module.def("register_new_query_stat_tool", []() {QueryStats::instance().register_new_query_stat_tool(); });
+    query_stats_module.def("deregister_query_stat_tool", []() { QueryStats::instance().deregister_query_stat_tool(); });
+    query_stats_module.def("is_enabled", []() { return QueryStats::instance().is_enabled(); });
+    query_stats_module.def("reset", []() { QueryStats::instance().reset_stats(); });
+    query_stats_module.def("get_stats", []() { return QueryStats::instance().get_stats();});
+}
 } // namespace arcticdb::toolbox::apy
