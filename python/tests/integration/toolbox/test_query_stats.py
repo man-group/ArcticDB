@@ -1,4 +1,5 @@
 from arcticdb.toolbox.query_stats import QueryStatsTool
+from arcticdb_ext.tools import QueryStats
 
 def test_query_stats(s3_version_store_v1):
     query_stats_tools_write = QueryStatsTool() # For testing whether stats has been filtered
@@ -78,8 +79,16 @@ def test_query_stats_clear(s3_version_store_v1):
     query_stats_tools_start = QueryStatsTool()
     s3_version_store_v1.list_symbols()
     query_stats_tools_end = QueryStatsTool()
-    assert (query_stats_tools_end - query_stats_tools_start)
-    
-    query_stats_tools_start = QueryStatsTool()
-    query_stats_tools_end = QueryStatsTool()
+    QueryStats.reset()
     assert not (query_stats_tools_end - query_stats_tools_start)
+
+
+def test_query_stats_tool_counter(s3_version_store_v1):
+    query_stats_tools_start = QueryStatsTool()
+    s3_version_store_v1.list_symbols()
+    query_stats_tools_end = QueryStatsTool()
+    del query_stats_tools_start
+    del query_stats_tools_end
+
+    assert not QueryStats.get_stats()
+    

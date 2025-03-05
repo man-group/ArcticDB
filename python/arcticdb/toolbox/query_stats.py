@@ -20,6 +20,8 @@ class QueryStatsTool:
 
     def _populate_stats(self, start_time, end_time):
         df = pd.DataFrame(QueryStats.get_stats())
+        if df.empty:
+            return {}
         
         df["exec_time"] = pd.to_numeric(df["exec_time"], errors="coerce")
         df = df[df["exec_time"].between(start_time, end_time)]
