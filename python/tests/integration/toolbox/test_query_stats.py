@@ -11,15 +11,22 @@ def test_query_stats(s3_version_store_v1):
     Sample output:
     {
         "list_symbols": {
+            "time": {
+                "500": 1
+            },
             "stages": {
                 "list": {
+                    "time": {
+                        "500": 1
+                    },
                     "key_types": {
                         "l": {
                             "storage_ops": {
                                 "ListObjectsV2": {
-                                    "count": 1,
+                                    "result_count": 1,
                                     "time": {
-                                        "20": 2
+                                        "20": 1,
+                                        "10": 1
                                     }
                                 }
                             }
@@ -27,9 +34,9 @@ def test_query_stats(s3_version_store_v1):
                         "r": {
                             "storage_ops": {
                                 "ListObjectsV2": {
-                                    "count": 1,
+                                    "result_count": 1,
                                     "time": {
-                                        "20": 1
+                                        "10": 1
                                     }
                                 }
                             }
