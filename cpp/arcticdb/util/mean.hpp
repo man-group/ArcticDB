@@ -15,14 +15,14 @@ class MeanFinder {
     static_assert(is_supported_int<T>::value || is_supported_float<T>::value, "Unsupported type");
 
 public:
-    static double find(const T* data, size_t n) {
+    static double find(const T* __restrict data, size_t n) {
         using VectorType = vector_type<T>;
         using AccumVectorType = vector_type<double>;
 
         AccumVectorType vsum = {0.0};
-        const size_t elements_per_vector = sizeof(VectorType) / sizeof(T);
-        const size_t doubles_per_vector = sizeof(AccumVectorType) / sizeof(double);
-        const size_t vectors_per_acc = elements_per_vector / doubles_per_vector;
+        constexpr size_t elements_per_vector = sizeof(VectorType) / sizeof(T);
+        constexpr size_t doubles_per_vector = sizeof(AccumVectorType) / sizeof(double);
+        constexpr size_t vectors_per_acc = elements_per_vector / doubles_per_vector;
 
         size_t valid_count = 0;
 
@@ -37,8 +37,10 @@ public:
                 v = v & mask;
 
                 const T* mask_arr = reinterpret_cast<const T*>(&mask);
+
                 for(size_t j = 0; j < elements_per_vector; j++) {
-                    if(mask_arr[j] != 0) valid_count++;
+                    if(mask_arr[j] != 0)
+                        ++valid_count;
                 }
             } else {
                 valid_count += elements_per_vector;
@@ -77,7 +79,7 @@ public:
 };
 
 template<typename T>
-double find_mean(const T *data, size_t n) {
+double find_mean(const T* __restrict data, size_t n) {
     return MeanFinder<T>::find(data, n);
 }
 

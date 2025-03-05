@@ -6,23 +6,12 @@
 #include <cstdint>
 #include <cstddef>
 
+#include <arcticdb/util/vector_common.hpp>
+
 namespace arcticdb {
 
 #ifdef _WIN32
 
-template<typename T>
-struct is_supported_type : std::false_type {};
-
-template<> struct is_supported_type<int8_t> : std::true_type {};
-template<> struct is_supported_type<uint8_t> : std::true_type {};
-template<> struct is_supported_type<int16_t> : std::true_type {};
-template<> struct is_supported_type<uint16_t> : std::true_type {};
-template<> struct is_supported_type<int32_t> : std::true_type {};
-template<> struct is_supported_type<uint32_t> : std::true_type {};
-template<> struct is_supported_type<int64_t> : std::true_type {};
-template<> struct is_supported_type<uint64_t> : std::true_type {};
-template<> struct is_supported_type<float> : std::true_type {};
-template<> struct is_supported_type<double> : std::true_type {};
 
 template<typename T>
 class SumFinder {

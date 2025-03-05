@@ -10,9 +10,6 @@ namespace arcticdb {
 #ifndef _WIN32
 
 template<typename T>
-using vector_type __attribute__((vector_size(64))) = T;
-
-template<typename T>
 class FloatMinFinder {
     static_assert(is_supported_float<T>::value, "Type must be float or double");
     static_assert(std::is_floating_point_v<T>, "Type must be floating point");

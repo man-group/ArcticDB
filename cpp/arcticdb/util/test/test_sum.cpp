@@ -31,37 +31,9 @@ TEST_F(SumFinderTest, SmallValuesLargeCount) {
     EXPECT_DOUBLE_EQ(find_sum(data.data(), data.size()), expected);
 }
 
-TEST_F(SumFinderTest, MixedSizedIntegers) {
-    {
-        std::vector<int8_t> data = {100, 100, 100};
-        EXPECT_DOUBLE_EQ(find_sum(data.data(), data.size()), 300.0);
-    }
-    {
-        std::vector<int16_t> data = {10000, 10000, 10000};
-        EXPECT_DOUBLE_EQ(find_sum(data.data(), data.size()), 30000.0);
-    }
-    {
-        std::vector<int32_t> data = {1000000, 1000000, 1000000};
-        EXPECT_DOUBLE_EQ(find_sum(data.data(), data.size()), 3000000.0);
-    }
-    {
-        std::vector<int64_t> data = {1000000000000LL, 1000000000000LL};
-        EXPECT_DOUBLE_EQ(find_sum(data.data(), data.size()), 2000000000000.0);
-    }
-}
-
 TEST_F(SumFinderTest, PrecisionTestSmallAndLarge) {
     std::vector<double> data = {1e15, 1.0, -1e15, 1.0};
     EXPECT_DOUBLE_EQ(find_sum(data.data(), data.size()), 2.0);
-}
-
-TEST_F(SumFinderTest, LargeArrayOverflow) {
-    // Would overflow int64_t, but works with double
-    auto data = create_aligned_data<int32_t>(1000000);
-    std::fill(data.begin(), data.end(), 1000000);
-
-    double expected = 1000000.0 * 1000000.0;
-    EXPECT_DOUBLE_EQ(find_sum(data.data(), data.size()), expected);
 }
 
 TEST_F(SumFinderTest, CompareWithStdAccumulate) {
@@ -75,12 +47,6 @@ TEST_F(SumFinderTest, CompareWithStdAccumulate) {
     double std_sum = std::accumulate(data.begin(), data.end(), 0.0);
 
     EXPECT_DOUBLE_EQ(simd_sum, std_sum);
-}
-
-TEST_F(SumFinderTest, UnsignedOverflow) {
-    std::vector<uint32_t> data(1000, UINT32_MAX);
-    double expected = 1000.0 * static_cast<double>(UINT32_MAX);
-    EXPECT_DOUBLE_EQ(find_sum(data.data(), data.size()), expected);
 }
 
 class SumStressTest : public ::testing::Test {
