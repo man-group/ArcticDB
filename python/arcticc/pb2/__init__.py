@@ -3,7 +3,7 @@ import sys as _sys
 import google.protobuf as _protobuf
 
 _proto_ver = _protobuf.__version__.split(".")[0]
-if _proto_ver in "3456":
+if _proto_ver in "345":
 
     _python = _sys.version_info[:2]
     if _python >= (3, 11) and _proto_ver == "3":
@@ -32,4 +32,4 @@ if _proto_ver in "3456":
     )
     __path__.append(_protos_path)
 else:
-    raise NotImplementedError(f"We only support protobuf versions 3, 4, 5 and 6. You have {_protobuf.__version__}")
+    raise NotImplementedError(f"We only support protobuf versions 3, 4 & 5. You have {_protobuf.__version__}")
