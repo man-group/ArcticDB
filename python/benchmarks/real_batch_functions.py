@@ -88,9 +88,9 @@ class AWSBatchBasicFunctions:
         percent_5 = int(num_rows * percents)
         end_range: TimestampNumber = start + num_rows
         start_range: TimestampNumber = end_range - percent_5
-        range = pd.date_range(start=start_range.to_timestamp(), end=end_range.to_timestamp(), freq=freq)
+        range = (start_range.to_timestamp(), end_range.to_timestamp())
         return range
-
+    
     def time_read_batch(self, storage_info, num_symbols, num_rows):
         read_batch_result = self.lib.read_batch(self.read_reqs) 
 
