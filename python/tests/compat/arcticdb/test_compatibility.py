@@ -1,39 +1,15 @@
 import pytest
 from packaging import version
 import pandas as pd
-from arcticdb.arctic import Arctic
 from arcticdb.util.test import assert_frame_equal
-from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb.options import ModifiableEnterpriseLibraryOption
 from arcticdb.toolbox.library_tool import LibraryTool
 from tests.util.mark import ARCTICDB_USING_CONDA
 
+from arcticdb.util.venv import CurrentVersion
 
 if ARCTICDB_USING_CONDA:
     pytest.skip("These tests rely on pip based environments", allow_module_level=True)
-
-
-class CurrentVersion:
-    """
-    For many of the compatibility tests we need to maintain a single open connection to the library.
-    For example LMDB on Windows starts to fail if we at the same time we use an old_venv and current connection.
-
-    So we use `with CurrentVersion` construct to ensure we delete all our outstanding references to the library.
-    """
-    def __init__(self, uri, lib_name):
-        self.uri = uri
-        self.lib_name = lib_name
-
-    def __enter__(self):
-        set_config_int("VersionMap.ReloadInterval", 0) # We disable the cache to be able to read the data written from old_venv
-        self.ac = Arctic(self.uri)
-        self.lib = self.ac.get_library(self.lib_name)
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        unset_config_int("VersionMap.ReloadInterval")
-        del self.lib
-        del self.ac
 
 
 def test_compat_write_read(old_venv_and_arctic_uri, lib_name):

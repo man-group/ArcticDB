@@ -21,24 +21,14 @@ namespace entity {
 /// n elements of left type from one buffer to n elements of type right in another buffer and get the same result
 [[nodiscard]] bool trivially_compatible_types(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right);
 
-[[nodiscard]] std::optional<entity::TypeDescriptor> has_valid_type_promotion(
+[[nodiscard]] bool is_valid_type_promotion_to_target(
     const entity::TypeDescriptor& source,
     const entity::TypeDescriptor& target
-);
-
-[[nodiscard]] std::optional<entity::TypeDescriptor> has_valid_type_promotion(
-    const proto::descriptors::TypeDescriptor& source,
-    const proto::descriptors::TypeDescriptor& target
 );
 
 [[nodiscard]] std::optional<entity::TypeDescriptor> has_valid_common_type(
     const entity::TypeDescriptor& left,
     const entity::TypeDescriptor& right
-);
-
-[[nodiscard]] std::optional<entity::TypeDescriptor> has_valid_common_type(
-    const proto::descriptors::TypeDescriptor& left,
-    const proto::descriptors::TypeDescriptor& right
 );
 
 inline std::string get_user_friendly_type_string(const entity::TypeDescriptor& type) {

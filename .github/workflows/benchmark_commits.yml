@@ -6,7 +6,7 @@ on:
       commit:             {required: true, type: string, description: commit hash that will be benchmarked}
       run_on_pr_head:     {required: false, default: false, type: boolean, description: Specifies if the benchmark should run on PR head branch}
       dev_image_tag:      {required: false, default: 'latest', type: string, description: Tag of the ArcticDB development image}
-      suite_to_run:       {required: true, type: string, default: 'LMDB', description: Default benchmark on 'LMDB' storage (or 'REAL' storage)}
+      suite_to_run:       {required: true, type: string, default: 'LMDB', description: Default benchmark on 'LMDB' storage (or 'REAL' storage ond 'ALL' for both)}
       suite_overwrite:       {required: false, type: string, default: '', description: User defined tests to run}
 jobs:
   start_ec2_runner:
@@ -74,12 +74,17 @@ jobs:
           pip install asv virtualenv
           python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
 
-      - name: Confugure what suite or tests to execute
+      - name: Configure what suite or tests to execute
         shell: bash -el {0}
         run: | 
-            if [ "${{ github.event.inputs.suite_to_run }}" == "REAL" ]; then
+            if [ "${{ inputs.suite_to_run }}" == "REAL" ]; then
+              # ASV tests with real storage starts with 'real_' in the test name
               SUITE='^(real_).*'
+            elif [ "${{ inputs.suite_to_run }}" == "ALL" ]; then
+              # Select all tests
+              SUITE='^.*'
             else
+              # LMDB tests are other tests not starting with 'real_'
               SUITE='^(?!real_).*'
             fi
             echo "selection of suite SUITE=$SUITE"
@@ -110,7 +115,7 @@ jobs:
       - name: Add results to ArcticDB database
         shell: bash -el {0}
         run: |
-          pip install arcticdb[Testing]
+          pip install arcticdb[Testing] "protobuf<6"
           python build_tooling/transform_asv_results.py --mode save ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}}
 
   stop-ec2-runner:

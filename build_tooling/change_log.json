@@ -1,12 +1,16 @@
 {
 "categories": [
     {
+        "title": "## ⚠️ Breaking Changes",
+        "labels": ["api break", "major"]
+    },
+    {
         "title": "## 🚀 Features",
-        "labels": ["enhancement"]
+        "labels": ["enhancement", "minor"]
     },
     {
         "title": "## 🐛 Fixes",
-        "labels": ["bug"]
+        "labels": ["bug", "patch"]
     }
 ],
 "pr_template": "- ${{TITLE}} (#${{NUMBER}})",
