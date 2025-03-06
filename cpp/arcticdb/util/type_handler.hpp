@@ -93,7 +93,7 @@ using TypeHandler = folly::Poly<ITypeHandler>;
 
 class TypeHandlerDataFactory {
 public:
-    virtual std::any get_data() const = 0;
+    virtual std::shared_ptr<std::any> get_data() const = 0;
     virtual ~TypeHandlerDataFactory() = default;
 };
 
@@ -115,9 +115,9 @@ public:
         handler_data_factories_[static_cast<uint8_t>(output_format)] = std::move(data);
     }
 
-    std::any get_handler_data(OutputFormat output_format) {
-        util::check(static_cast<bool>(handler_data_factories_[static_cast<uint8_t>(output_format)]), "No type handler set");
-        return handler_data_factories_[static_cast<uint8_t>(output_format)]->get_data();
+    std::shared_ptr<std::any> get_handler_data() {
+        util::check(static_cast<bool>(handler_data_factory_), "No type handler set");
+        return handler_data_factory_->get_data();
     }
 
 private:
@@ -154,7 +154,7 @@ inline std::shared_ptr<TypeHandler> get_type_handler(OutputFormat output_format,
     return TypeHandlerRegistry::instance()->get_handler(output_format, target);
 }
 
-inline std::any get_type_handler_data(OutputFormat output_format) {
+inline std::shared_ptr<std::any> get_type_handler_data(OutputFormat output_format) {
     return TypeHandlerRegistry::instance()->get_handler_data(output_format);
 }
 

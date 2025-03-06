@@ -8,8 +8,8 @@ struct NativeHandlerData {
 };
 
 struct NativeHandlerDataFactory  : public TypeHandlerDataFactory {
-    std::any get_data() const override {
-        return {NativeHandlerData{}};
+    std::shared_ptr<std::any> get_data() const override {
+        return std::make_shared<std::any>(std::make_any<NativeHandlerData>());
     }
 };
 

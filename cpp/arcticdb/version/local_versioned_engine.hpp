@@ -17,6 +17,7 @@
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/chunking.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/versioned_engine.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>
@@ -67,8 +68,6 @@ public:
     explicit LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library,
         const ClockType& = ClockType{});
-
-
 
     virtual ~LocalVersionedEngine() = default;
 
@@ -186,6 +185,14 @@ public:
         bool prune_previous_versions,
         arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta
     );
+
+    ChunkIterator read_dataframe_chunked_internal(
+        const StreamId &stream_id,
+        const VersionQuery& version_query,
+        ReadQuery& read_query,
+        const ReadOptions& read_options,
+        std::any& handler_data,
+        DecodePathData shared_data);
 
     folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata(
         std::optional<AtomKey>&& key);

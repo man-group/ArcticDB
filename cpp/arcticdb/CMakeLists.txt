@@ -760,8 +760,8 @@ if (SSL_LINK)
     find_package(OpenSSL REQUIRED)
     list(APPEND arcticdb_core_libraries OpenSSL::SSL)
     if (NOT WIN32)
-        list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
-        list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
+        #list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
+        #list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
     endif()
 endif ()
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
@@ -1093,7 +1093,6 @@ if(${TEST})
             processing/test/rapidcheck_resample.cpp
             stream/test/stream_test_common.cpp
             util/test/rapidcheck_decimal.cpp
-            util/test/rapidcheck_generators.cpp
             util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
             util/test/rapidcheck_lru_cache.cpp
@@ -1107,12 +1106,10 @@ if(${TEST})
 
     if(ARCTICDB_USING_CONDA)
         set(RAPIDCHECK_PRIVATE_LIBRARIES
-            ${AWSSDK_LINK_LIBRARIES}
-            Arrow::arrow_shared)
+            ${AWSSDK_LINK_LIBRARIES})
     else()
         set(RAPIDCHECK_PRIVATE_LIBRARIES
-            ${AWSSDK_LINK_LIBRARIES}
-            "$<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Arrow::arrow_static,Arrow::arrow_shared>")
+            ${AWSSDK_LINK_LIBRARIES})
     endif()
 
     if(WIN32)
