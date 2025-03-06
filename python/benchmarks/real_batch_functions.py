@@ -29,7 +29,7 @@ class AWSBatchBasicFunctions:
 
     timeout = 1200
 
-    SETUP_CLASS = (SetupMultipleLibraries(storage=Storage.LMDB, 
+    SETUP_CLASS = (SetupMultipleLibraries(storage=Storage.AMAZON, 
                                                       prefix="BASIC_BATCH")
                    .set_params([[500, 1000], [25_000, 50_000]])
                    .set_number_columns(10)
