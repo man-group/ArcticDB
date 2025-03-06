@@ -331,19 +331,37 @@ class EnvConfigurationBase(ABC):
         Returns a library on persistent space. (created if do not exist)
         The name is constructed internally, but user can add a suffix (index)
         Uses `get_library_name` to construct the name
+
+        IMPORTANT: `get_library` will always return Library even if none exist will be created new!
         """
         return self._get_lib(self.get_arctic_client_persistent(), 
                              self.get_library_name(LibraryType.PERSISTENT, library_suffix))
-    
+
+    def has_library(self, library_suffix: Union[str, int] = None) -> bool:
+        """
+        checks if there is a library with that suffix on persistent storage space
+        """
+        return self.get_arctic_client_persistent().has_library(self.get_library_name(LibraryType.PERSISTENT, 
+                                                                                     library_suffix))
+
     def get_modifiable_library(self, library_suffix: Union[str, int] = None) -> Library:
         """
         Returns library to read write and delete after done. (create if not exist is on!)
         The name is constructed internally, but user can add a suffix (index)
         Uses `get_library_name` to construct the name
+
+        IMPORTANT: `get_modifiable_library` will always return Library even if none exist will be created new!
         """
         return self._get_lib(self.get_arctic_client_modifiable(), 
                              self.get_library_name(LibraryType.MODIFIABLE, library_suffix))
 
+    def has_modifiable_library(self, library_suffix: Union[str, int] = None) -> bool:
+        """
+        checks if there is a library with that suffix on persistent storage space
+        """
+        return self.get_arctic_client_persistent().has_library(self.get_library_name(LibraryType.MODIFIABLE, 
+                                                                                     library_suffix))
+    
     def delete_modifiable_library(self, library_suffix: Union[str, int] = None):
         """
         Use this method to delete previously created library on modifiable storage 
@@ -532,6 +550,8 @@ class SetupSingleLibrary(EnvConfigurationBase):
         if OK, setting things up can be skipped
         """
         (list_rows, list_cols) = self._get_symbol_bounds()
+        if not self.has_library():
+            return False
         lib = self.get_library()
         symbols = set(lib.list_symbols())
         self.logger().info(f"Symbols {symbols}")
@@ -664,6 +684,8 @@ class SetupLibrariesWithVersionAndSnapshots(EnvConfigurationBase):
     def check_ok(self) -> bool:
 
         for num_symbols in self.get_parameter_list():
+            if not self.has_library(num_symbols):
+                return False
             lib = self.get_library(num_symbols)
             symbols = set(lib.list_symbols())
             self.logger().info(f"Check library: {lib}")
@@ -995,6 +1017,8 @@ class SetupMultipleLibraries(EnvConfigurationBase):
         (list_rows, list_cols) = self._get_symbol_bounds()
 
         for num_symbols in self._params[self.param_index_num_symbols]:
+            if not self.has_library(num_symbols):
+                return False
             lib = self.get_library(num_symbols)
             self.logger().debug(f"Library {lib}")
             for num_symbol in range(num_symbols):
@@ -1089,6 +1113,7 @@ class TestsClassForSetupEnvironmentFramework:
     	#Delete-setup-all-check
         cls.delete_test_store(setup)
         setup.setup_environment()
+        setup.logger().info(setup.get_arctic_client_persistent().list_libraries())
         assert setup.check_ok()
 
         #Changing parameters should trigger not ok for setup

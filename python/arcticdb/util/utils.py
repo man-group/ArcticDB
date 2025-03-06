@@ -609,16 +609,17 @@ class DFGenerator:
     
     @classmethod
     def generate_random_strings_dataframe(cls, start_name_prefix: str, num_rows: int, num_cols: int,
-                                          column_sizes=None, seed: int = 4543):
+                                          string_sizes: List[int] = None, seed: int = 4543):
         """
         To be used to generate large number of same type columns, when generation time is
         critical
-        If `column_sizes` not supplied default 10 will be used
+        If `string_sizes` not supplied default 10 will be used for all columns as size of strings,
+        otherwise the list will indicate for each string column what string size to be generated
         """
-        if column_sizes is None:
-            column_sizes =  [10] * num_cols
+        if string_sizes is None:
+            string_sizes =  [10] * num_cols
         np.random.seed(seed=seed)
-        data = [[random_string(column_sizes[col]) 
+        data = [[random_string(string_sizes[col]) 
                  for col in range(num_cols)] 
                  for _ in range(num_rows)]
         
