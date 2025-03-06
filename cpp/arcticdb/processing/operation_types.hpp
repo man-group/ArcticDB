@@ -49,6 +49,10 @@ enum class OperationType : uint8_t {
     XOR
 };
 
+constexpr bool is_unary_operation(OperationType o) {
+    return uint8_t(o) <= uint8_t(OperationType::NOT);
+}
+
 constexpr bool is_binary_operation(OperationType o) {
     return uint8_t(o) >= uint8_t(OperationType::ADD);
 }

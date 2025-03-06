@@ -14,6 +14,8 @@
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/entity/types_proto.hpp>
 
+#include <ankerl/unordered_dense.h>
+
 namespace arcticdb::entity {
 
 struct SegmentDescriptorImpl : public SegmentDescriptor {
@@ -269,6 +271,33 @@ struct StreamDescriptor {
     const Field& field(size_t pos) {
         return fields_->at(pos);
     }
+};
+
+struct OutputSchema {
+    StreamDescriptor stream_descriptor_;
+    arcticdb::proto::descriptors::NormalizationMetadata norm_metadata_;
+
+    OutputSchema(StreamDescriptor stream_descriptor,
+                 arcticdb::proto::descriptors::NormalizationMetadata norm_metadata):
+            stream_descriptor_(std::move(stream_descriptor)),
+            norm_metadata_(std::move(norm_metadata)) {};
+
+    ankerl::unordered_dense::map<std::string, DataType>& column_types() {
+        if (!column_types_.has_value()) {
+            column_types_ = ankerl::unordered_dense::map<std::string, DataType>();
+            column_types_->reserve(stream_descriptor_.field_count());
+            for (const auto& field: stream_descriptor_.fields()) {
+                column_types_->emplace(field.name(), field.type().data_type());
+            }
+        }
+        return *column_types_;
+    }
+
+    void clear_column_types() {
+        column_types_ = std::nullopt;
+    }
+private:
+    std::optional<ankerl::unordered_dense::map<std::string, DataType>> column_types_;
 };
 
 template <class IndexType>
