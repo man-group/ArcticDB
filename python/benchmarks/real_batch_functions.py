@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import os
 import numpy as np
 import pandas as pd
-from arcticdb.util.environment_setup import Storage, SetupMultipleLibraries
+from arcticdb.util.environment_setup import SetupMultipleLibraries, Storage
 from arcticdb.util.utils import TimestampNumber
 from arcticdb.version_store.library import Library, ReadRequest, WritePayload
 
@@ -29,12 +29,11 @@ class AWSBatchBasicFunctions:
 
     timeout = 1200
 
-    SETUP_CLASS = (SetupMultipleLibraries(storage=Storage.AMAZON, 
+    SETUP_CLASS = (SetupMultipleLibraries(storage=Storage.LMDB, 
                                                       prefix="BASIC_BATCH")
-                   .set_params([[500, 1000], [25_000, 50_000]]) # For test purposes
-                   .set_number_symbols_parameter_index(0)
-                   .set_number_rows_parameter_index(1)
-                   .set_number_columns_parameter_index(None))
+                   .set_params([[500, 1000], [25_000, 50_000]])
+                   .set_number_columns(10)
+                   )
     params = SETUP_CLASS.get_parameter_list()
     param_names = ["num_symbols", "num_rows"]
 
@@ -54,11 +53,15 @@ class AWSBatchBasicFunctions:
         self.setup_env = SetupMultipleLibraries.from_storage_info(storage_info)
         
         self.lib: Library = self.setup_env.get_library(num_symbols)
+        self.setup_env.logger().info(f"Library {self.lib}") 
+        self.setup_env.logger().info(f"Symbols {self.lib.list_symbols()}") 
         
         # Get generated symbol names
         self.symbols = []
         for num_symb_idx in range(num_symbols):
             sym_name = self.setup_env.get_symbol_name(num_symb_idx, num_rows, self.setup_env.default_number_cols)
+            if not self.lib.has_symbol(sym_name):
+                self.setup_env.logger().error(f"symbol not found {sym_name}") 
             self.symbols.append(sym_name)
 
         #Construct read requests (will equal to number of symbols)
@@ -80,7 +83,7 @@ class AWSBatchBasicFunctions:
 
     def get_last_x_percent_date_range(self, num_rows, percents):
         """
-        Returns a date range selecting last X% of rows of dataframe
+        Returns a date range tuple selecting last X% of rows of dataframe
         pass percents as 0.0-1.0
         """
         freq = self.setup_env.index_freq
@@ -90,7 +93,7 @@ class AWSBatchBasicFunctions:
         start_range: TimestampNumber = end_range - percent_5
         range = (start_range.to_timestamp(), end_range.to_timestamp())
         return range
-    
+        
     def time_read_batch(self, storage_info, num_symbols, num_rows):
         read_batch_result = self.lib.read_batch(self.read_reqs) 
 

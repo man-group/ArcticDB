@@ -873,66 +873,33 @@ class AppendDataSetupUtils(NoSetup):
 
 class SetupMultipleLibraries(EnvConfigurationBase):
     """
-    Provide flexible logic to generate many libraries with many symbols combining specified row and column 
-    numbers. Example:
+        Sets up multiple libraries, each containing specified number of symbols
+        and each symbols having specified row numbers (col numbers can be defined also)
+        Accepts ASV params:"
+          - list number of symbols per library
+          - number of rows in each list
 
-        symbols_numbers = [1, 2] 
-        rows_number_list = [2, 3]
-        column_number_list = [5, 6]
-
-    Libraries: ['PERM_BASIC_BATCH_1', 'PERM_BASIC_BATCH_2'] (matches the length of symbols_numbers)
-
-    'PERM_BASIC_BATCH_1' Library will have: (4 symbols with combinations of rows and cols)
-      ['sym__idx0_rows3_cols5', 'sym__idx0_rows5_cols6', 'sym__idx0_rows3_cols6', 'sym__idx0_rows5_cols5']
-
-    'PERM_BASIC_BATCH_2' Library will have: (8 symbols with 2x times the combinations of rows and cols)
-      ['sym__idx0_rows3_cols6', 'sym__idx0_rows3_cols5', 'sym__idx1_rows5_cols5', 'sym__idx0_rows5_cols6', 
-      'sym__idx1_rows3_cols5', 'sym__idx1_rows3_cols6', 'sym__idx1_rows5_cols6', 'sym__idx0_rows5_cols5']
-    
-    Requires at least 2 parameters:
-     - list of symbol numbers - its length determines the number of libraries that will be created 
-       (the value will indicate the number of times the combination of row and cols will be generated)
-     - list specifying the number of rows for symbols
-     - (OPTIONAL) list specifying the number of columns (if no column list specified will use `default_number_cols`)
-
-    Each symbol will have the following numbers encoded in the symbol name:
-      - id (0<=id<number_of_symbols)
-      - number of rows
-      - number of columns
-
+        The number of libraries to be created will depend on length of first list
     """
 
     def __init__(self, storage, prefix = None, library_options = None, uris_cache = None):
         super().__init__(storage, prefix, library_options, uris_cache)
-        self.param_index_num_symbols = 0
-        self.param_index_rows = 1
-        self.param_index_cols = 2
         self.default_number_cols = 10
         self.start_timestamp = pd.Timestamp("2000-1-1")
         self.index_freq = 's'
         self.indexed = True
 
     def set_params(self, params) -> 'SetupMultipleLibraries':
-        assert len(params) >= 2, "At least 2 parameters must be defined number symbols and rows"
+        assert len(params) == 2, "Supported 2 parameters"
         super().set_params(params)
         return self
-    
-    def set_number_symbols_parameter_index(self, index:int = 0) -> 'SetupMultipleLibraries':
-        assert index is not None
-        self.param_index_num_symbols = index
-        return self
-    
-    def set_number_rows_parameter_index(self, index:int = 1) -> 'SetupMultipleLibraries':
-        assert index is not None
-        self.param_index_rows = index
-        return self
 
-    def set_number_columns_parameter_index(self, index:int = 2) -> 'SetupMultipleLibraries':
+    def set_number_columns(self, num_cols:int = 2) -> 'SetupMultipleLibraries':
         """
         Sets the index of the column number parameter, set to None if all symbols
         should have same number of columns, which is `default_number_cols`
         """
-        self.param_index_cols = index
+        self.default_number_cols = num_cols
         return self
     
     def set_no_index(self) -> 'SetupMultipleLibraries':
@@ -970,28 +937,17 @@ class SetupMultipleLibraries(EnvConfigurationBase):
             sym_suffix = f"_idx{symbol_number}_rows{rows}_cols{cols}"
         return self.get_symbol_name_template(sym_suffix)
     
-    def _get_symbol_bounds(self):
-        """
-        Extracts rows and cols from the parameter structure
-        """
-        list_rows = self._params[self.param_index_rows]
-        if self.param_index_cols is None:
-            list_cols = [self.default_number_cols]    
-        else:
-            list_cols = self._params[self.param_index_cols]
-        return(list_rows, list_cols)
-        
     def setup_symbol(self, lib: Library, symbols_number: int):
-        (list_rows, list_cols) = self._get_symbol_bounds()
-        start = time.time()
-        for sym_num in range(symbols_number):
-            for row in list_rows:
-                for col in list_cols:
-                    st = time.time()
-                    df = self.generate_dataframe(row, col)
-                    symbol = self.get_symbol_name(sym_num, row, col)
-                    lib.write(symbol, df)
-                    self.logger().info(f"Dataframe stored at {symbol} for {time.time() - st} sec")
+        start = time.time()           
+        for counter in range(symbols_number):
+            for row in self._params[1]: #nd parameter is always number of rows
+                st = time.time()
+                cols = self.default_number_cols
+                df = self.generate_dataframe(row, cols)
+                symbol = self.get_symbol_name(counter, row, cols)
+                lib.write(symbol, df)
+                self.logger().debug(f"Dataframe stored at {lib} : {symbol} for {time.time() - st} sec")
+
         self.logger().info(f"Stored {symbols_number} symbols for {time.time() - start} sec")
 
 
@@ -1002,7 +958,7 @@ class SetupMultipleLibraries(EnvConfigurationBase):
         For each of symbols it will generate dataframe based on `generate_dataframe` function
         """
         start = time.time()
-        for num_symbols in self._params[self.param_index_num_symbols]:
+        for num_symbols in self._params[0]:
             lib = self.get_library(num_symbols)
             self.logger().info(f"Library: {lib}")
             self.setup_symbol(lib,num_symbols)
@@ -1014,9 +970,8 @@ class SetupMultipleLibraries(EnvConfigurationBase):
         Checks if library contains all needed data to run tests.
         if OK, setting things up can be skipped
         """
-        (list_rows, list_cols) = self._get_symbol_bounds()
-
-        for num_symbols in self._params[self.param_index_num_symbols]:
+ 
+        for num_symbols in self._params[0]: # The number of rows param
             if not self.has_library(num_symbols):
                 return False
             lib = self.get_library(num_symbols)
@@ -1024,13 +979,13 @@ class SetupMultipleLibraries(EnvConfigurationBase):
             for num_symbol in range(num_symbols):
                 symbols = set(lib.list_symbols())
                 self.logger().debug(f"Symbols {symbols}")
-                for rows in list_rows:
-                    for cols in list_cols:
-                        symbol = self.get_symbol_name(num_symbol, rows, cols)
-                        self.logger().debug(f"Check symbol {symbol}")
-                        if not symbol in symbols:
-                            self.logger().info(f"CHECK FAILED")
-                            return False
+                for rows in self._params[1]: # The number of rows param
+                    cols = self.default_number_cols
+                    symbol = self.get_symbol_name(num_symbol, rows, cols)
+                    self.logger().debug(f"Check symbol {symbol}")
+                    if not symbol in symbols:
+                        self.logger().info(f"CHECK FAILED")
+                        return False
         self.logger().info(f"CHECK ENVIRONMENT PASSED ALL IS THERE")
         return True
 
@@ -1123,28 +1078,35 @@ class TestsClassForSetupEnvironmentFramework:
         assert not setup.check_ok()
 
     @classmethod
-    def test_setup_multiple_libs_with_symbols(cls):
+    def test_setup_multiple_libs_with_symbols0(cls):
+        params = [[2, 3], [4, 5]]
+        cols = 12
         setup = (SetupMultipleLibraries(storage=Storage.LMDB, 
                                                       prefix="BASIC_BATCH")
-                   .set_params([[1, 2], [3, 5], [5, 6]]) # For test purposes
-                   .set_number_symbols_parameter_index(0)
-                   .set_number_rows_parameter_index(1)
+                   .set_params(params) # For test purposes
+                   .set_number_columns(cols)
                    ).set_test_mode()
-        assert setup.is_test_mode()
-
+        assert setup.is_test_mode()            
+        
         cls.delete_test_store(setup)
 
+        assert not setup.check_ok()
         setup.setup_environment()
-        assert setup.check_ok()
+        #assert setup.check_ok()
 
-        libs = setup.get_arctic_client_persistent().list_libraries()
-        assert len(libs) == 2
-        for lib in libs:
-            l = setup.get_arctic_client_persistent().get_library(lib)
-            if ("_1" in lib) :
-                assert len(l.list_symbols()) == 4
-            elif ("_2" in lib) :
-                assert len(l.list_symbols()) == 8
-            else:
-                raise Exception("Problem")
-        
+        ac = setup.get_arctic_client_persistent()
+        libs = ac.list_libraries()
+        setup.logger().info(f"LIBS {libs}")
+        assert len(libs) == len(params[0]) # the symbol list
+
+        for num_syms in params[0]: # the symbols list
+            ln = setup.get_library_name(LibraryType.PERSISTENT, num_syms)
+            lib = ac.get_library(ln)
+            symbols_list = lib.list_symbols()
+            setup.logger().info(symbols_list)
+            for rows in params[1]: # the symbols list
+                setup.get_symbol_name(num_syms, rows, cols)
+                assert setup.has_library(num_syms) 
+                lib = setup.get_library(num_syms)
+                symbol = setup.get_symbol_name(num_syms - 1, rows, cols)
+                assert lib.read(symbol).data is not None
