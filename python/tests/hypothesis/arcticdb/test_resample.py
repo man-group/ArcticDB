@@ -6,8 +6,7 @@ import hypothesis.extra.pandas as hs_pd
 import hypothesis.extra.numpy as hs_np
 import hypothesis.strategies as st
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
-from arcticdb import QueryBuilder
-from arcticdb.util.test import assert_frame_equal, generic_resample_test
+from arcticdb.util.test import generic_resample_test
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 
@@ -108,3 +107,5 @@ def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
                     raise pandas_error
                 else:
                     return
+
+

@@ -1,0 +1,21 @@
+name: Check Pull Request Labels
+on:
+  pull_request:
+    types: [opened, labeled, unlabeled, synchronize]
+    branches: master
+jobs:
+  check_labels:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: mheap/github-action-required-labels@v5
+        with:
+          mode: exactly
+          count: 1
+          labels: |
+            patch
+            minor
+            major
+          add_comment: true
