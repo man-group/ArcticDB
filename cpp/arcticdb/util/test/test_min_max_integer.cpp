@@ -284,6 +284,8 @@ TEST(MinMaxFinder, Stress) {
     EXPECT_EQ(result.max, *std_result.second);
 }
 
+#ifdef HAS_VECTOR_EXTENSIONS
+
 class MinMaxStressTest : public ::testing::Test {
 protected:
     std::mt19937_64 rng{std::random_device{}()};
@@ -483,5 +485,7 @@ TEST_F(MinMaxStressTest, UnalignedSize) {
 
     run_benchmark(data, "Unaligned Size");
 }
+
+#endif
 
 } //namespace arcticdb

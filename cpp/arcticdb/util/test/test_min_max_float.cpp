@@ -54,6 +54,8 @@ TEST_F(FloatFinderTest, VectorWithNaNs) {
     EXPECT_FLOAT_EQ(find_float_max(data.data(), data.size()), 62.0f);
 }
 
+#ifdef HAS_VECTOR_EXTENSIONS
+
 TEST_F(FloatFinderTest, LargeArrayPerformance) {
     constexpr size_t size = 100'000'000;
     auto data = create_aligned_data<float>(size);
@@ -82,6 +84,8 @@ TEST_F(FloatFinderTest, LargeArrayPerformance) {
     EXPECT_FLOAT_EQ(min_result, *std_result_min);
     EXPECT_FLOAT_EQ(max_result, *std_result_max);
 }
+
+#endif
 
 TEST_F(FloatFinderTest, EmptyInputFloat) {
     std::vector<float> data;

@@ -82,6 +82,8 @@ TEST_F(SumFinderTest, SingleElementFloat) {
     EXPECT_NEAR(find_sum(data.data(), data.size()), 3.37, 1e-6);
 }
 
+#ifdef HAS_VECTOR_EXTENSIONS
+
 class SumStressTest : public ::testing::Test {
 protected:
     std::mt19937_64 rng{std::random_device{}()};
@@ -250,5 +252,7 @@ TEST_F(SumStressTest, ExtremeValues) {
 
     run_benchmark(data, "Extreme Values");
 }
+
+#endif
 
 } // namespace arcticdb

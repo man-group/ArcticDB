@@ -166,6 +166,8 @@ TEST_F(MeanFinderTest, ExtremeDoubleAverage) {
     EXPECT_DOUBLE_EQ(find_mean(data.data(), data.size()), 0.0);
 }
 
+#ifdef HAS_VECTOR_EXTENSIONS
+
 TEST_F(MeanFinderTest, LargeArrayPerformance) {
     constexpr size_t size = 100'000'000;
     auto data = create_aligned_data<int32_t>(size);
@@ -193,5 +195,7 @@ TEST_F(MeanFinderTest, LargeArrayPerformance) {
 
     EXPECT_NEAR(simd_mean, std_mean, 1e-10);
 }
+
+#endif
 
 } // namespace arcticdb

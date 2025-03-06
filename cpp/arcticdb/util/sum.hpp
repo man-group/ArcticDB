@@ -82,6 +82,7 @@ double find_sum(const T* data, size_t n) {
 
 template<typename T>
 double find_sum(const T *data, size_t n) {
+    util::check(size != 0, "Got zero size in find_sum");
     return std::accumulate(data, data + n, T(0));
 }
 
