@@ -125,6 +125,11 @@ class Storage(Enum):
     LMDB = 2
 
 
+class LibraryType(Enum):
+    PERSISTENT = 1
+    MODIFIABLE = 2
+
+
 class StorageInfo:    
 
     def __init__(self, storage: Storage, uris_cache: List[str], library_options: LibraryOptions, prefix: str) :
@@ -303,40 +308,41 @@ class EnvConfigurationBase(ABC):
         return lib_names
     
     def _get_lib(self, ac: Arctic, lib_name: str) -> Library:
+        """
+        Returns a library requested or constructs one if does not exist
+        keeps track of all libs requested
+        """
         lib_opts = self.__library_options
         self.__libraries.add(lib_name)
         return ac.get_library(lib_name, create_if_missing=True, 
                                 library_options=lib_opts)
 
-    def get_library_name(self, library_suffix: Union[str, int] = None) -> str:
+    def get_library_name(self, lib_type: LibraryType, library_suffix: Union[str, int] = None) -> str:
         """
         Returns library name on persistent space
         """
-        return self._get_library_names(library_suffix)[0]
+        if lib_type == LibraryType.PERSISTENT:
+            return self._get_library_names(library_suffix)[0]
+        else: 
+            return self._get_library_names(library_suffix)[1]
 
     def get_library(self, library_suffix: Union[str, int] = None) -> Library:
         """
         Returns a library on persistent space. (created if do not exist)
         The name is constructed internally, but user can add a suffix (index)
-        Uses `get_modifiable_library_name` to construct the name
+        Uses `get_library_name` to construct the name
         """
         return self._get_lib(self.get_arctic_client_persistent(), 
-                             self.get_library_name(library_suffix))
-    
-    def get_modifiable_library_name(self, library_suffix: Union[str, int] = None) -> str:
-        """
-        Returns library name for the modifiable storage
-        """
-        return self._get_library_names(library_suffix)[1]
+                             self.get_library_name(LibraryType.PERSISTENT, library_suffix))
     
     def get_modifiable_library(self, library_suffix: Union[str, int] = None) -> Library:
         """
         Returns library to read write and delete after done. (create if not exist is on!)
         The name is constructed internally, but user can add a suffix (index)
-        Uses `get_modifiable_library_name` to construct the name
+        Uses `get_library_name` to construct the name
         """
         return self._get_lib(self.get_arctic_client_modifiable(), 
-                             self.get_modifiable_library_name(library_suffix))
+                             self.get_library_name(LibraryType.MODIFIABLE, library_suffix))
 
     def delete_modifiable_library(self, library_suffix: Union[str, int] = None):
         """
@@ -345,7 +351,7 @@ class EnvConfigurationBase(ABC):
         NOTE: will assert if library is not delete
         """
         ac = self.get_arctic_client_modifiable()
-        name = self.get_modifiable_library_name(library_suffix)
+        name = self.get_library_name(LibraryType.MODIFIABLE, library_suffix)
         logger.info(f"Deleting modifiable library {name}")
         ac.delete_library(name)
         assert name not in ac.list_libraries(), f"Library successfully deleted {name}"
@@ -407,7 +413,7 @@ class EnvConfigurationBase(ABC):
             ac = self.get_arctic_client_persistent()
             ## Delete all PERSISTENT libraries before setting up them
             for i in indexes:
-                lib = self.get_library_name(i)
+                lib = self.get_library_name(LibraryType.PERSISTENT, i)
                 logger.info(f"REMOVING LIBRARY: {lib}")
                 ac.delete_library(lib)
             self.setup_all()
@@ -1066,7 +1072,7 @@ class TestsClassForSetupEnvironmentFramework:
         lib = setup.get_modifiable_library()
         lib.write(symbol, setup.generate_dataframe(10,10))
         ac = setup.get_arctic_client_modifiable()
-        assert ac.get_library(setup.get_modifiable_library_name())
+        assert ac.get_library(setup.get_library_name(LibraryType.MODIFIABLE))
         setup.delete_modifiable_library()
         assert len(ac.list_libraries()) == 0
         assert len(setup.get_arctic_client_modifiable().list_libraries()) == 0
