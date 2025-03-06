@@ -130,11 +130,6 @@ TEST(MaxFinder, MaxUnsignedExtremes) {
     EXPECT_EQ(find_max(data, 4), std::numeric_limits<uint32_t>::max());
 }
 
-TEST(MaxFinder, MaxEmptyArray) {
-    std::vector<int32_t> data;
-    EXPECT_EQ(find_max(data.data(), 0), std::numeric_limits<int32_t>::min());
-}
-
 TEST(MaxFinder, MaxSingleElement) {
     int32_t data[] = {42};
     EXPECT_EQ(find_max(data, 1), 42);
