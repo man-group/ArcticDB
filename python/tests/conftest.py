@@ -125,20 +125,8 @@ def lmdb_storage(tmp_path) -> Generator[LmdbStorageFixture, None, None]:
 
 
 @pytest.fixture
-def lmdb_library(lmdb_storage, lib_name, request) -> Generator[Library, None, None]:
-    """
-    Allows passing library creation parameters as parameters of the test or other fixture.
-    Example: 
-
-
-        @pytest.mark.parametrize("lmdb_library_any", [
-                    {'library_options': LibraryOptions(rows_per_segment=100, columns_per_segment=100)}
-                ], indirect=True)
-        def test_my_test(lmdb_library_any):
-           .....
-    """
-    params = request.param if hasattr(request, 'param') else {}
-    yield lmdb_storage.create_arctic().create_library(name=lib_name, **params)
+def lmdb_library(lmdb_storage, lib_name) -> Generator[Library, None, None]:
+    return lmdb_storage.create_arctic().create_library(lib_name)
 
 
 @pytest.fixture
@@ -726,21 +714,6 @@ def lmdb_version_store_string_coercion(version_store_factory) -> NativeVersionSt
 @pytest.fixture
 def lmdb_version_store_v1(version_store_factory) -> NativeVersionStore:
     return version_store_factory(dynamic_strings=True)
-
-
-@pytest.fixture
-def lmdb_version_store_modifiable(request, lib_name, version_store_factory) -> NativeVersionStore:
-    """
-    Provides ability to pass parameters from test using notation following leaving decision
-    what options to iterate through to the test:
-
-        @pytest.mark.parametrize("lmdb_library_any", [
-                    {'dynamic_strings': True, 'encoding_version' : int(EncodingVersion.V2)}
-                ], indirect=True)
-        def test_my_test(lmdb_library_any):
-    """
-    params = request.param if hasattr(request, 'param') else {}
-    return version_store_factory(name=lib_name, **params)
 
 
 @pytest.fixture

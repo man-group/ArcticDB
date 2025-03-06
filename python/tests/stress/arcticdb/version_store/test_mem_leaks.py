@@ -756,9 +756,25 @@ if MEMRAY_SUPPORTED:
 
         gc.collect()
 
+    @pytest.fixture
+    def lmdb_library(lmdb_storage, lib_name, request) -> Generator[Library, None, None]:
+        """
+        Allows passing library creation parameters as parameters of the test or other fixture.
+        Example: 
+
+
+            @pytest.mark.parametrize("lmdb_library_any", [
+                        {'library_options': LibraryOptions(rows_per_segment=100, columns_per_segment=100)}
+                    ], indirect=True)
+            def test_my_test(lmdb_library_any):
+            .....
+        """
+        params = request.param if hasattr(request, 'param') else {}
+        yield lmdb_storage.create_arctic().create_library(name=lib_name, **params)
+
 
     @pytest.fixture
-    def prepare_head_tails_symbol(lmdb_version_store_modifiable):               
+    def prepare_head_tails_symbol(lmdb_library):               
         """
         This fixture is part of test `test_mem_leak_head_tail_memray`
 
@@ -768,8 +784,8 @@ if MEMRAY_SUPPORTED:
 
         Should not be reused
         """
-        lib: NativeVersionStore = lmdb_version_store_modifiable
-        opts  = lib._write_options()
+        lib: Library = lmdb_library
+        opts  = lib.options()
         
         total_number_columns = 1002
         symbol = "asdf12345"
@@ -795,14 +811,13 @@ if MEMRAY_SUPPORTED:
         lib.delete(symbol=symbol)
 
 
-
     @MEMRAY_TESTS_MARK
     @SLOW_TESTS_MARK
     @pytest.mark.limit_leaks(location_limit="380 KB" if LINUX else "52 KB", filter_fn=is_relevant)
-    @pytest.mark.parametrize("lmdb_version_store_modifiable", [
-            { 'segment_row_size': 233, 'column_group_size' : 197, 'dynamic_schema': True, 'encoding_version':int(EncodingVersion.V2)},
-            { 'segment_row_size': 99, 'column_group_size' : 99, 'dynamic_schema': False, 'encoding_version':int(EncodingVersion.V1)},
-        ],    indirect=True)
+    @pytest.mark.parametrize("lmdb_library", [
+                {'library_options': LibraryOptions(rows_per_segment=233, columns_per_segment=197, dynamic_schema=True, encoding_version=EncodingVersion.V2)},
+                {'library_options': LibraryOptions(rows_per_segment=99, columns_per_segment=99, dynamic_schema=False, encoding_version=EncodingVersion.V1)}
+            ], indirect=True)
     def test_mem_leak_head_tail_memray(prepare_head_tails_symbol):
         """
         This test aims to test `head` and `tail` functions if they do leak memory.
