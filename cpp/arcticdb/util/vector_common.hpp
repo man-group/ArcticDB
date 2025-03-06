@@ -13,6 +13,8 @@
 
 namespace arcticdb {
 
+#if HAS_VECTOR_EXTENSIONS
+
 template<typename T>
 using vector_type __attribute__((vector_size(64))) = T;
 
@@ -33,5 +35,10 @@ struct is_supported_float : std::false_type {};
 
 template<> struct is_supported_float<float> : std::true_type {};
 template<> struct is_supported_float<double> : std::true_type {};
+
+template <typename T>
+struct is_supported_type : std::integral_constant<bool, is_supported_int<T>::value || is_supported_float<T>::value> {};
+
+#endif
 
 } // namespace arcticdb

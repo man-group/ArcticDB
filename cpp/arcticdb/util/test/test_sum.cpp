@@ -49,6 +49,39 @@ TEST_F(SumFinderTest, CompareWithStdAccumulate) {
     EXPECT_DOUBLE_EQ(simd_sum, std_sum);
 }
 
+TEST_F(SumFinderTest, SingleElementInt32) {
+    std::vector<int32_t> data = {42};
+    EXPECT_DOUBLE_EQ(find_sum(data.data(), data.size()), 42.0);
+}
+
+TEST_F(SumFinderTest, AllZerosInt32) {
+    std::vector<int32_t> data(100, 0);
+    EXPECT_DOUBLE_EQ(find_sum(data.data(), data.size()), 0.0);
+}
+
+TEST_F(SumFinderTest, MixedValuesInt32) {
+    std::vector<int32_t> data = {-50, 100, -25, 75};
+    double expected = -50.0 + 100.0 - 25.0 + 75.0;
+    EXPECT_DOUBLE_EQ(find_sum(data.data(), data.size()), expected);
+}
+
+TEST_F(SumFinderTest, UnsignedIntSum) {
+    std::vector<uint32_t> data = {1, 2, 3, 4, 5};
+    double expected = 15.0;
+    EXPECT_DOUBLE_EQ(find_sum(data.data(), data.size()), expected);
+}
+
+TEST_F(SumFinderTest, FloatSumTest) {
+    std::vector<float> data = {1.5f, 2.5f, 3.0f};
+    double expected = 1.5 + 2.5 + 3.0;
+    EXPECT_DOUBLE_EQ(find_sum(data.data(), data.size()), expected);
+}
+
+TEST_F(SumFinderTest, SingleElementFloat) {
+    std::vector<float> data = {3.37f};
+    EXPECT_NEAR(find_sum(data.data(), data.size()), 3.37, 1e-6);
+}
+
 class SumStressTest : public ::testing::Test {
 protected:
     std::mt19937_64 rng{std::random_device{}()};

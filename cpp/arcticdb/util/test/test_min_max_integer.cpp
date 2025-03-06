@@ -39,13 +39,6 @@ TEST(MinMaxFinder, Int64Extremes) {
     EXPECT_EQ(result.min, INT64_MIN);
     EXPECT_EQ(result.max, INT64_MAX);
 }
-TEST(MinMaxFinder, EmptyArray) {
-    std::vector<int> data;
-    auto result = find_min_max(data.data(), 0);
-    EXPECT_EQ(result.min, std::numeric_limits<int>::max());
-    EXPECT_EQ(result.max, std::numeric_limits<int>::min());
-}
-
 TEST(MinMaxFinder, SingleElement) {
     int data[] = {42};
     auto result = find_min_max(data, 1);
@@ -102,11 +95,6 @@ TEST(MinMaxFinder, MinUnsignedExtremes) {
         std::numeric_limits<uint32_t>::max() - 1
     };
     EXPECT_EQ(find_min(data, 4), 0);
-}
-
-TEST(MinMaxFinder, MinEmptyArray) {
-    std::vector<int32_t> data;
-    EXPECT_EQ(find_min(data.data(), 0), std::numeric_limits<int32_t>::max());
 }
 
 TEST(MinMaxFinder, MinSingleElement) {
@@ -224,6 +212,48 @@ TEST(MinMaxFinder, RandomUInt32) {
 
     EXPECT_EQ(min_result, std_min);
     EXPECT_EQ(max_result, std_max);
+}
+
+TEST(MinMaxFinder, EmptyArrayMinMax) {
+    std::vector<int32_t> data;
+    EXPECT_THROW(find_min_max(data.data(), data.size()), std::runtime_error);
+}
+
+TEST(MinMaxFinder, EmptyArrayMin) {
+    std::vector<int32_t> data;
+    EXPECT_THROW(find_min(data.data(), data.size()), std::runtime_error);
+}
+
+TEST(MinMaxFinder, EmptyArrayMax) {
+    std::vector<int32_t> data;
+    EXPECT_THROW(find_max(data.data(), data.size()), std::runtime_error);
+}
+
+TEST(MinMaxFinder, ExactVectorMultipleInt32) {
+    constexpr size_t lane_count = 64 / sizeof(int32_t);
+    const size_t n = lane_count * 3;
+    std::vector<int32_t> data(n);
+    for (size_t i = 0; i < n; i++)
+        data[i] = static_cast<int32_t>(i);
+    auto result = find_min_max(data.data(), data.size());
+    EXPECT_EQ(result.min, 0);
+    EXPECT_EQ(result.max, static_cast<int32_t>(n - 1));
+}
+
+TEST(MinMaxFinder, AllExtremeMaxInt32) {
+    std::vector<int32_t> data(100, std::numeric_limits<int32_t>::max());
+    auto min_val = find_min(data.data(), data.size());
+    auto max_val = find_max(data.data(), data.size());
+    EXPECT_EQ(min_val, std::numeric_limits<int32_t>::max());
+    EXPECT_EQ(max_val, std::numeric_limits<int32_t>::max());
+}
+
+TEST(MinMaxFinder, AllExtremeMinInt32) {
+    std::vector<int32_t> data(100, std::numeric_limits<int32_t>::min());
+    auto min_val = find_min(data.data(), data.size());
+    auto max_val = find_max(data.data(), data.size());
+    EXPECT_EQ(min_val, std::numeric_limits<int32_t>::min());
+    EXPECT_EQ(max_val, std::numeric_limits<int32_t>::min());
 }
 
 TEST(MinMaxFinder, Stress) {
