@@ -12,7 +12,7 @@
 
 
 #if defined(__clang__)
-#define ALWAYS_INLINE __attribute__((always_inline))
+    #define ALWAYS_INLINE __attribute__((always_inline))
     #define VECTOR_HINT __attribute__((vectorcall))
     #define RESTRICT __restrict__
     #define ASSUME_ALIGNED(ptr, alignment) __builtin_assume_aligned(ptr, alignment)
@@ -62,7 +62,7 @@ template<class T, T... inds, class F>
 constexpr void loop(std::integer_sequence<T, inds...>, F &&f) {
     (f(std::integral_constant<T, inds>{}), ...);
 }
-}
+} // namespace fastlanes
 
 template<class T, T count, class F>
 constexpr void loop(F &&f) {

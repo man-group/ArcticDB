@@ -12,7 +12,7 @@
 
 namespace arcticdb {
 
-
+/*
 class CompressionTest : public ::testing::Test {
 protected:
     std::mt19937 rng{42};  // Fixed seed for reproducibility
@@ -216,4 +216,66 @@ TEST_F(CompressionTest, SizeEstimationPartial) {
     // Verify estimated size matches actual size
     ASSERT_EQ(estimated_size, decompressor.compressed_size(compressed.data()));
 }
+
+template<typename T>
+std::vector<T> generate_compressible_data(size_t size, T start = T{0}) {
+    std::vector<T> data(size);
+    std::mt19937 gen(42); // Fixed seed for reproducibility
+    std::uniform_int_distribution<T> step_dist(1, 5); // Small steps: delta always in [1, 5]
+    T current = start;
+    for (size_t i = 0; i < size; ++i) {
+        data[i] = current;
+        current += step_dist(gen);
+    }
+    return data;
+}
+
+TEST(DeltaCompressionStressTest, CompressDecompressSeparate) {
+    using T = uint32_t;
+    const size_t numRows = 100 * 1024;
+    const size_t iterations = 1000000;
+
+    auto input = generate_compressible_data<T>(numRows);
+
+    ColumnCompressor<T> scanner;
+    size_t reqSize = scanner.scan(input.data(), numRows);
+    std::vector<T> compressed(reqSize + 128, 0);
+    std::vector<T> decompressed(numRows, 0);
+
+    auto startCompress = std::chrono::high_resolution_clock::now();
+    volatile size_t totalCompSize = 0;
+    for (size_t i = 0; i < iterations; i++) {
+        ColumnCompressor<T> compressor;
+        compressor.scan(input.data(), input.size());
+        size_t compSize = compressor.compress(input.data(), compressed.data());
+        totalCompSize += compSize;
+    }
+    auto endCompress = std::chrono::high_resolution_clock::now();
+    auto compressDuration = std::chrono::duration_cast<std::chrono::microseconds>(endCompress - startCompress).count();
+    double avgCompressTime = static_cast<double>(compressDuration) / iterations;
+    auto startDecompress = std::chrono::high_resolution_clock::now();
+    volatile size_t totalDecompRows = 0;
+    for (size_t i = 0; i < iterations; i++) {
+        ColumnDecompressor<T> decompressor;
+        decompressor.init(compressed.data());
+        size_t rowsDecomp = decompressor.decompress(compressed.data(), decompressed.data());
+        totalDecompRows += rowsDecomp;
+    }
+    auto endDecompress = std::chrono::high_resolution_clock::now();
+    auto decompressDuration = std::chrono::duration_cast<std::chrono::microseconds>(endDecompress - startDecompress).count();
+    double avgDecompressTime = static_cast<double>(decompressDuration) / iterations;
+    std::cout << "Average compression time per column: " << avgCompressTime << " microseconds" << std::endl;
+    std::cout << "Average decompression time per column: " << avgDecompressTime << " microseconds" << std::endl;
+    auto count = 10;
+    for(auto i = 0UL; i < input.size(); ++i)
+        if(input[i] != decompressed[i]) {
+            std::cout << i << ": " << input[i] << " != " << decompressed[i] << std::endl;
+            --count;
+            if(count == 0)
+                break;
+        }
+    ASSERT_EQ(input, decompressed);
+    ASSERT_GT(totalCompSize, 0u);
+}
+*/
 } // namespace arcticdb

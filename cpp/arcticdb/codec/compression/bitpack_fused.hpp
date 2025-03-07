@@ -70,7 +70,6 @@ void bitpack_lane(
     static constexpr auto mask = p::mask;
 
     ALIGN_HINT(32) T tmp;
-
     loop<T, num_bits>([&](auto r) {
         constexpr size_t row = r;
         size_t idx = row * p::num_lanes + lane;
@@ -92,7 +91,7 @@ void bitpack_lane(
     });
 }
 
-template<typename T, size_t bit_width>
+/*template<typename T, size_t bit_width>
 struct ALIGN_HINT(64) BitPackFused : public BitPackHelper<T, bit_width> {
     using Parent = BitPackHelper<T, bit_width>;
     static constexpr auto num_lanes = Parent::num_lanes;
@@ -114,55 +113,106 @@ struct ALIGN_HINT(64) BitPackFused : public BitPackHelper<T, bit_width> {
         __builtin_prefetch(in);
         __builtin_prefetch(out);
 
-        VECTORIZE_LOOP
-        ALIGNED_ACCESS
+        //VECTORIZE_LOOP
+        //ALIGNED_ACCESS
         for(auto lane = 0UL; lane < num_lanes; ++lane) {
             bitpack_lane<T, Parent, bit_width>(lane, in, out, kernel);
         }
 
         return compressed_size();
     }
+}; */
+
+template<typename T, size_t bit_width>
+struct BitPackFused : public BitPackHelper<T, bit_width> {
+    using Parent = BitPackHelper<T, bit_width>;
+    static constexpr auto num_bits = Parent::num_bits;
+    static constexpr auto num_lanes = Parent::num_lanes;
+    static constexpr auto mask = Parent::mask;
+    using p = Parent;
+    static constexpr size_t BLOCK_SIZE = 1024;
+
+    static constexpr size_t compressed_size() {
+        constexpr size_t total_bits = BLOCK_SIZE * bit_width;
+        return (total_bits + sizeof(T) * 8 - 1) / (sizeof(T) * 8);
+    }
+    template <typename Kernel>
+    static size_t go(const T *__restrict in, T *__restrict out, Kernel &&kernel) {
+        for(auto lane = 0UL; lane < num_lanes; ++lane) {
+            T tmp = 0;
+            loop<T, num_bits>([lane, in, out, &tmp, &kernel](auto r) {
+                constexpr size_t row =   r;
+                size_t idx = index(row, lane);
+                T src = kernel(in, idx, lane);
+                src &= mask;
+
+                if constexpr(row == 0) {
+                    tmp = src;
+                } else {
+                    tmp |= src << ((row * bit_width) & (num_bits - 1));
+                }
+
+                if constexpr(p::at_end(row)) {
+                    constexpr auto current_word =  p::current_word(row);
+                    constexpr auto remaining_bits = p::remaining_bits(row);
+                    out[num_lanes * current_word + lane] = tmp;
+                    //log::version().info("Writing to index {}", num_bits * current_word + lane);
+                    tmp = src >> (bit_width - remaining_bits);
+                }
+            });
+        };
+        return compressed_size();
+    }
 };
 
-template<typename T, typename p, size_t bit_width, typename Kernel>
-HOT_FUNCTION
-VECTOR_HINT
-void bitunpack_lane(
-    const size_t lane,
-    const T* RESTRICT in,
-    T* RESTRICT out,
-    Kernel& kernel) {
-    static constexpr auto num_bits = p::num_bits;
-    static constexpr auto num_lanes = p::num_lanes;
-    static constexpr auto mask = p::mask;
+template<typename T, size_t bit_width>
+struct BitUnpackFused : public BitPackHelper<T, bit_width> {
+    using Parent = BitPackHelper<T, bit_width>;
+    static constexpr auto num_bits = Parent::num_bits;
+    static constexpr auto num_lanes = Parent::num_lanes;
+    static constexpr auto mask = Parent::mask;
+    using p = Parent;
+    static constexpr size_t BLOCK_SIZE = 1024;
 
-    ALIGN_HINT(32) T src = in[lane];
-    ALIGN_HINT(32) T tmp;
 
-    loop<T, num_bits>([&](auto r) {
-        constexpr size_t row = r;
-        constexpr auto shift = p::shift(row);
+    static constexpr size_t compressed_size() {
+        constexpr size_t total_bits = BLOCK_SIZE * bit_width;
+        return (total_bits + sizeof(T) * 8 - 1) / (sizeof(T) * 8);
+    }
+    template<typename Kernel>
+    static size_t go(const T *__restrict in, T *__restrict out, Kernel &&kernel) {
+        //loop<T, num_lanes>([in, out, &kernel](auto l) {
+        //    constexpr size_t lane = l;
+        for(auto lane = 0UL; lane < num_lanes; ++lane) {
+            T src = in[lane];
+            T tmp;
+            loop<T, num_bits>([lane, in, out, &tmp, &kernel, &src](auto row) {
+                constexpr auto shift = p::shift(row);
+                if constexpr (p::at_end(row)) {
+                    constexpr auto current_bits = p::current_bits(row);
+                    constexpr auto current_bits_mask = construct_mask<T, current_bits>();
+                    tmp = (src >> shift) & current_bits_mask;
+                    if constexpr (p::next_word(row) < bit_width) {
+                        constexpr auto next_word = p::next_word(row);
+                        constexpr auto remaining_bits_mask = construct_mask<T, p::remaining_bits(row)>();
+                        src = in[num_lanes * next_word + lane];
+                        tmp |= (src & remaining_bits_mask) << current_bits;
+                    }
+                } else {
+                    tmp = (src >> shift) & mask;
+                }
 
-        if constexpr (p::at_end(row)) {
-            constexpr auto current_bits = p::current_bits(row);
-            constexpr auto current_bits_mask = construct_mask<T, current_bits>();
-            tmp = (src >> shift) & current_bits_mask;
-
-            if constexpr (p::next_word(row) < bit_width) {
-                constexpr auto next_word = p::next_word(row);
-                constexpr auto remaining_bits_mask = construct_mask<T, p::remaining_bits(row)>();
-                src = in[num_lanes * next_word + lane];
-                tmp |= (src & remaining_bits_mask) << current_bits;
-            }
-        } else {
-            tmp = (src >> shift) & mask;
+                size_t idx = index(row, lane);
+                kernel(out, idx, tmp, lane);
+            });
         }
+        return compressed_size();
+    }
+};
 
-        size_t idx = row * p::num_lanes + lane;
-        out[idx] = kernel(tmp, lane);
-    });
-}
 
+
+/*
 template<typename T, size_t bit_width>
 struct ALIGN_HINT(64) BitUnpackFused : public BitPackHelper<T, bit_width> {
     using Parent = BitPackHelper<T, bit_width>;
@@ -183,22 +233,79 @@ struct ALIGN_HINT(64) BitUnpackFused : public BitPackHelper<T, bit_width> {
         Kernel&& kernel) {
 
         // Prefetch cache lines
-        __builtin_prefetch(in);
-        __builtin_prefetch(out);
+        //__builtin_prefetch(in);
+        //__builtin_prefetch(out);
 
-        VECTORIZE_LOOP
-        ALIGNED_ACCESS
-        for(auto lane = 0UL; lane < num_lanes; ++lane) {
-            bitunpack_lane<T, Parent, bit_width>(
-                lane, in, out, kernel);
-        }
+        //VECTORIZE_LOOP
+        //ALIGNED_ACCESS
+        //for(auto lane = 0UL; lane < num_lanes; ++lane) {
+        //    bitunpack_lane<T, Parent, bit_width>(
+        //        lane, in, out, kernel);
+        //}
+
+        unroll_bitunpack<T, Parent, bit_width>(
+            in, out, kernel, std::make_index_sequence<num_lanes>{}
+        );
 
         return compressed_size();
     }
+};*/
+
+/*template<typename T, size_t bit_width>
+struct ALIGN_HINT(64) BitUnpackFused : public BitPackHelper<T, bit_width> {
+    using Parent = BitPackHelper<T, bit_width>;
+    static constexpr auto num_lanes = Parent::num_lanes;
+    static constexpr size_t BLOCK_SIZE = 1024;
+    static constexpr auto num_bits = Parent::num_bits;
+    static constexpr auto mask = Parent::mask;
+    using p = Parent;
+
+    static constexpr size_t compressed_size() {
+        constexpr size_t total_bits = BLOCK_SIZE * bit_width;
+        return (total_bits + sizeof(T) * 8 - 1) / (sizeof(T) * 8);
+    }
+
+
+    template<typename Kernel>
+    static size_t go(
+        const T* RESTRICT in,
+        T* RESTRICT out,
+        Kernel&& kernel) {
+
+
+        for(auto lane = 0UL; lane < num_lanes; ++lane) {
+        T src = in[lane];
+        T tmp;
+            loop<T, num_bits>([&](auto r) {
+                constexpr size_t row = r;
+                constexpr auto shift = p::shift(row);
+
+                if constexpr (p::at_end(row)) {
+                    constexpr auto current_bits = p::current_bits(row);
+                    constexpr auto current_bits_mask = construct_mask<T, current_bits>();
+                    tmp = (src >> shift) & current_bits_mask;
+
+                    if constexpr (p::next_word(row) < bit_width) {
+                        constexpr auto next_word = p::next_word(row);
+                        constexpr auto remaining_bits_mask = construct_mask<T, p::remaining_bits(row)>();
+                        src = in[num_lanes * next_word + lane];
+                        tmp |= (src & remaining_bits_mask) << current_bits;
+                    }
+                } else {
+                    tmp = (src >> shift) & mask;
+                }
+
+                size_t idx = row * p::num_lanes + lane;
+                out[idx] = kernel(tmp, lane);
+            });
+
+        }
+        return compressed_size();
+    }
 };
+*/
 
 template<typename T, template<typename, size_t> class FusedType, typename Kernel, size_t... Is>
-ALWAYS_INLINE
 size_t dispatch_bitwidth_impl(
     const T* RESTRICT in,
     T* RESTRICT out,
@@ -218,7 +325,6 @@ size_t dispatch_bitwidth_impl(
 }
 
 template<typename T, template<typename, size_t> class FusedType, typename Kernel>
-ALWAYS_INLINE
 size_t dispatch_bitwidth(
     const T* RESTRICT in,
     T* RESTRICT out,
@@ -244,7 +350,7 @@ size_t dispatch_bitwidth(
 template<typename T>
 void scalar_pack(T value, size_t bit_width, size_t& bit_offset, T& current_word, T*& out) {  // out by reference
     static constexpr size_t bits_per_word = sizeof(T) * CHAR_BIT;
-    ARCTICDB_DEBUG(log::codec(), "Packing value {} at word {}", value, current_word);
+    ARCTICDB_TRACE(log::codec(), "Packing value {} at word {}", value, current_word);
 
     if (bit_offset + bit_width > bits_per_word) {
         size_t bits_remaining = bits_per_word - bit_offset;

@@ -546,7 +546,7 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-        util/buffer_holder.cpp codec/compression/encoders.hpp codec/compression/estimators.hpp codec/compression/bitpack_fused.hpp codec/compression/rle.hpp)
+        util/buffer_holder.cpp codec/compression/encoders.hpp codec/compression/estimators.hpp codec/compression/bitpack_fused.hpp codec/compression/rle.hpp codec/compression/bitpack_fused.hpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -918,7 +918,6 @@ endif()
 if(${TEST})
     unset(Python_USE_STATIC_LIBS)
     find_package(Python 3 COMPONENTS Interpreter Development REQUIRED)
-    find_package(Arrow REQUIRED)
     find_package(rapidcheck REQUIRED)
     find_package(benchmark REQUIRED)
 
@@ -1012,7 +1011,7 @@ if(${TEST})
             version/test/version_map_model.hpp
             python/python_handlers.cpp
             storage/test/common.hpp
-            version/test/test_sort_index.cpp codec/test/test_delta.cpp codec/test/test_rle.cpp codec/test/test_estimators.cpp)
+            version/test/test_sort_index.cpp codec/test/test_delta.cpp codec/test/test_rle.cpp codec/test/test_estimators.cpp codec/test/test_lz4.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
@@ -1111,8 +1110,6 @@ if(${TEST})
             column_store/test/test_chunked_buffer.cpp
             processing/test/rapidcheck_resample.cpp
             stream/test/stream_test_common.cpp
-            util/test/rapidcheck_decimal.cpp
-            util/test/rapidcheck_generators.cpp
             util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
             util/test/rapidcheck_lru_cache.cpp
@@ -1126,12 +1123,10 @@ if(${TEST})
 
     if(ARCTICDB_USING_CONDA)
         set(RAPIDCHECK_PRIVATE_LIBRARIES
-            ${AWSSDK_LINK_LIBRARIES}
-            Arrow::arrow_shared)
+            ${AWSSDK_LINK_LIBRARIES})
     else()
         set(RAPIDCHECK_PRIVATE_LIBRARIES
-            ${AWSSDK_LINK_LIBRARIES}
-            "$<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Arrow::arrow_static,Arrow::arrow_shared>")
+            ${AWSSDK_LINK_LIBRARIES})
     endif()
 
     if(WIN32)

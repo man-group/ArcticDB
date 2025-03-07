@@ -17,14 +17,10 @@ class FForCompressKernel {
     const T reference_;
 
 public:
-    ALWAYS_INLINE
     explicit FForCompressKernel(T reference) : reference_(reference) {}
 
-    HOT_FUNCTION
-    ALWAYS_INLINE
-    VECTOR_HINT
-    T operator()(T value, size_t /*lane*/) const {
-        return value - reference_;
+    T operator()(const T* __restrict ptr, size_t offset, size_t /*lane*/) const {
+        return ptr[offset] - reference_;
     }
 };
 
@@ -33,14 +29,10 @@ class FForUncompressKernel {
     const T reference_;
 
 public:
-    ALWAYS_INLINE
     explicit FForUncompressKernel(T reference) : reference_(reference) {}
 
-    HOT_FUNCTION
-    ALWAYS_INLINE
-    VECTOR_HINT
-    T operator()(T value, size_t /*lane*/) const {  // Removed initial_values parameter
-        return value + reference_;
+    T operator()(T* __restrict ptr, size_t offset, T value, size_t /*lane*/) const {
+        return ptr[offset] = value + reference_;
     }
 };
 
@@ -116,7 +108,7 @@ size_t encode_ffor_with_header(const T* in, T* out, size_t count) {
     if (count == 0) return 0;
 
     T reference = in[0];
-    log::codec().info("Encoding {} rows FFOR with reference {}", count, reference);
+    ARCTICDB_DEBUG(log::codec(), "Encoding {} rows FFOR with reference {}", count, reference);
     for (size_t i = 1; i < count; ++i) {
         reference = std::min(reference, in[i]);
     }
@@ -126,7 +118,7 @@ size_t encode_ffor_with_header(const T* in, T* out, size_t count) {
         max_delta = std::max(max_delta, in[i] - reference);
     }
     size_t bits_needed = std::bit_width(static_cast<std::make_unsigned_t<T>>(max_delta));
-    log::codec().info("Max delta {} requires {} bits", max_delta, bits_needed);
+    ARCTICDB_DEBUG(log::codec(), "Max delta {} requires {} bits", max_delta, bits_needed);
 
     auto* header [[maybe_unused]] = new (out) FForHeader<T>{
         reference,
@@ -149,10 +141,10 @@ size_t encode_ffor_with_header(const T* in, T* out, size_t count) {
             kernel
         );
     }
-    log::codec().info("Encoded {} full blocks to {} bytes", num_full_blocks, compressed_size * sizeof(T));
+    ARCTICDB_DEBUG(log::codec(), "Encoded {} full blocks to {} bytes", num_full_blocks, compressed_size * sizeof(T));
 
     size_t remaining = count % 1024;
-    log::codec().info("Compressing {} remainder values", remaining);
+    ARCTICDB_DEBUG(log::codec(), "Compressing {} remainder values", remaining);
     if (remaining > 0) {
         const T* remaining_in = in + num_full_blocks * 1024;
         T* remaining_out = out_ptr + compressed_size - header_size_in_t<FForHeader<T>, T>();
@@ -165,7 +157,7 @@ size_t encode_ffor_with_header(const T* in, T* out, size_t count) {
             reference
         );
     }
-    log::codec().info("Compressed size including remainder: {} from {} bytes",
+    ARCTICDB_DEBUG(log::codec(), "Compressed size including remainder: {} from {} bytes",
       compressed_size * sizeof(T),
       count * sizeof(T));
 
@@ -183,7 +175,7 @@ size_t decode_ffor_with_header(const T* in, T* out) {
     const T reference = header->reference;
     const size_t bits_needed = header->bits_needed;
 
-    log::codec().info("Decompressing FFOR data packed to {} bits with reference {}", bits_needed, reference);
+    ARCTICDB_DEBUG(log::codec(), "Decompressing FFOR data packed to {} bits with reference {}", bits_needed, reference);
 
     const T* in_ptr = in + header_size_in_t<FForHeader<T>, T>();
     size_t input_offset = 0;
@@ -205,7 +197,7 @@ size_t decode_ffor_with_header(const T* in, T* out) {
         }
     }
 
-    log::codec().info("Decompressed {} full blocks to offset {}", num_full_blocks, input_offset);
+    ARCTICDB_DEBUG(log::codec(), "Decompressed {} full blocks to offset {}", num_full_blocks, input_offset);
     size_t remaining = count % 1024;
     if (remaining > 0) {
         input_offset += decompress_remainder(
@@ -213,8 +205,9 @@ size_t decode_ffor_with_header(const T* in, T* out) {
             out + num_full_blocks * 1024
         );
     }
-    log::codec().info("Decompresed {} remaining values to offset {}", remaining, input_offset * sizeof(T) + sizeof(FForHeader<T>));
+    ARCTICDB_DEBUG(log::codec(), "Decompressed {} remaining values to offset {}", remaining, input_offset * sizeof(T) + sizeof(FForHeader<T>));
     return count;
 }
+
 
 } // namespace arcticdb

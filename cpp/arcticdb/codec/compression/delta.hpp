@@ -18,12 +18,12 @@
 
 namespace arcticdb {
 
-struct DeltaSize {
+struct __attribute__((packed)) DeltaSize {
     uint32_t num_rows_;
 };
 
 template<typename T>
-struct DeltaHeader : public DeltaSize {
+struct __attribute__((packed)) DeltaHeader : public DeltaSize {
     using h = Helper<T>;
 
     uint32_t bit_width_;
@@ -65,13 +65,11 @@ struct DeltaCompressKernel {
         std::copy(lane_initial_values, lane_initial_values + h::num_lanes, prev_);
     }
 
-    HOT_FUNCTION
     ALWAYS_INLINE
-    VECTOR_HINT
-    T operator()(T value, size_t lane) {
-        T result = value - prev_[lane];
+    T operator()(T* ptr, size_t offset, size_t lane) {
+        T result = ptr[offset] - prev_[lane];
         //ARCTICDB_DEBUG(log::codec(), "Encoding value {} ({} - {})", value, prev_[lane], result);
-        prev_[lane] = value;
+        prev_[lane] = ptr[offset];
         return result;
     }
 };
@@ -126,7 +124,7 @@ size_t compress_remainder(const T* input, size_t count, T* output, size_t bit_wi
 
     for (size_t i = 1; i < count; ++i) {
         T delta = input[i] - prev;
-        ARCTICDB_DEBUG(log::codec(), "Value {}, delta = {}", input[i], delta);
+        ARCTICDB_TRACE(log::codec(), "Value {}, delta = {}", input[i], delta);
         scalar_pack(delta, bit_width, bit_pos, current_word, data_out);
         prev = input[i];
     }
@@ -138,7 +136,7 @@ size_t compress_remainder(const T* input, size_t count, T* output, size_t bit_wi
 }
 
 template<typename T>
-size_t decompress_remainder(const T* input, T* output) {
+size_t decompress_delta_remainder(const T* input, T* output) {
     const auto* metadata = reinterpret_cast<const RemainderMetadata*>(input);
     const uint32_t count = metadata->size;
     const uint32_t bit_width = metadata->bit_width;
@@ -227,11 +225,11 @@ public:
         const auto initials_size = full_blocks_ > 0 ? h::num_lanes : 0;
         compressed_rows_ = rows - initials_size;
         remainder_ = compressed_rows_ % BLOCK_SIZE;
-        ARCTICDB_INFO(log::codec(), "Compressing {} rows, {} total blocks with {} initial value and remainder of {}",
+        ARCTICDB_DEBUG(log::codec(), "Compressing {} rows, {} total blocks with {} initial value and remainder of {}",
                           rows, full_blocks_, initials_size, remainder_);
 
         size_t total_size = 0UL;
-        log::codec().info("Total size including header: {}", total_size);
+        ARCTICDB_DEBUG(log::codec(), "Total size including header: {}", total_size);
         if (full_blocks_ > 0) {
             total_size += sizeof(Header) / sizeof(T);
             copy_input_to_initial_values(input);
@@ -249,7 +247,7 @@ public:
             total_size += sizeof(DeltaSize) / sizeof(T);
         }
 
-        log::codec().info("Total size including full blocks: {}", total_size);
+        ARCTICDB_DEBUG(log::codec(), "Total size including full blocks: {}", total_size);
         if (remainder_ > 0) {
             const T* remainder_ptr = input + remainder_offset();
             T prev = remainder_ptr[0];
@@ -263,19 +261,20 @@ public:
             remainder_bit_width_ = max_delta == 0 ? 1 : std::bit_width(max_delta);
             total_size += calc_remainder_size<T>(remainder_, remainder_bit_width_);
         }
-        log::codec().info("Total size including remainder: {}", total_size);
+        ARCTICDB_DEBUG(log::codec(), "Total size including remainder: {}", total_size);
         return total_size;
     }
 
     size_t compress(const T* input, T* output) {
         size_t output_offset = 0;
+        util::check(simd_bit_width_ < h::num_bits, "Bit width is {}, no compression possible", h::num_bits);
 
         if (full_blocks_ > 0) {
             output_offset += create_full_header(output);
-            log::codec().info("Compressed to offset {}", output_offset);
+            ARCTICDB_DEBUG(log::codec(), "Compressed to offset {}", output_offset);
             advance_input_past_initials(input);
             DeltaCompressKernel<T> compress_kernel(initial_values_.data());
-            log::codec().info("Writing full blocks at offset {}", output_offset);
+            ARCTICDB_DEBUG(log::codec(), "Writing full blocks at offset {}", output_offset);
             for (size_t block = 0; block < full_blocks_; block++) {
                 output_offset += dispatch_bitwidth<T, BitPackFused>(
                     input + block * BLOCK_SIZE,
@@ -287,10 +286,10 @@ public:
         } else {
             output_offset += create_size_only_header(output);
         }
-        log::codec().info("Writing remainder at {}", output_offset);
+        ARCTICDB_DEBUG(log::codec(), "Writing remainder at {}", output_offset);
         if (remainder_ > 0) {
             const auto offset = remainder_offset();
-            ARCTICDB_DEBUG(log::codec(), "Remainder offset: {}, first value {}", offset, input[offset]);
+            ARCTICDB_DEBUG(log::codec(), "Remainder offset: {} ({}), first value {}", offset, output_offset, input[offset]);
             output_offset += compress_remainder(
                 input + offset,
                 remainder_,
@@ -298,7 +297,7 @@ public:
                 remainder_bit_width_
             );
         }
-        log::codec().info("Compressed to {} bytes", output_offset);
+        ARCTICDB_DEBUG(log::codec(), "Compressed to {} bytes", output_offset);
         return output_offset;
     }
 };
@@ -363,7 +362,8 @@ public:
         }
 
         if (remainder_ > 0) {
-            input_offset += decompress_remainder(
+            ARCTICDB_DEBUG(log::codec(), "Decompressing remainder at offset {}", input_offset);
+            input_offset += decompress_delta_remainder(
                 input + input_offset,
                 output + remainder_offset()
             );
