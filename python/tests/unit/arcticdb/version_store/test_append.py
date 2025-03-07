@@ -32,28 +32,6 @@ def test_append_simple(lmdb_version_store):
     assert_frame_equal(vit.data, expected)
 
 
-def test_append_unicode(lmdb_version_store):
-    symbol = "test_append_unicode"
-    uc = "\u0420\u043e\u0441\u0441\u0438\u044f"
-
-    df1 = pd.DataFrame(
-        index=[pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03")],
-        data={"a": ["123", uc]},
-    )
-    lmdb_version_store.write(symbol, df1)
-    vit = lmdb_version_store.read(symbol)
-    assert_frame_equal(vit.data, df1)
-
-    df2 = pd.DataFrame(
-        index=[pd.Timestamp("2018-01-04"), pd.Timestamp("2018-01-05")],
-        data={"a": ["123", uc]},
-    )
-    lmdb_version_store.append(symbol, df2)
-    vit = lmdb_version_store.read(symbol)
-    expected = pd.concat([df1, df2])
-    assert_frame_equal(vit.data, expected)
-
-
 @pytest.mark.parametrize("empty_types", (True, False))
 @pytest.mark.parametrize("dynamic_schema", (True, False))
 def test_append_range_index(version_store_factory, empty_types, dynamic_schema):

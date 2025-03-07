@@ -7,7 +7,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import gc
 import random
-import string
 import sys
 
 import numpy as np
@@ -16,13 +15,7 @@ import pytest
 
 from datetime import datetime as dt
 
-
-def random_strings(count, max_length):
-    result = []
-    for _ in range(count):
-        length = random.randrange(max_length + 1)
-        result.append("".join(random.choice(string.ascii_letters) for _ in range(length)))
-    return result
+from arcticdb.util.test import random_ascii_strings
 
 
 def generate_dataframe(columns, number_of_rows, strings, index_start="2000-1-1"):
@@ -50,7 +43,7 @@ def getsize(df):
 def test_string_dedup_basic(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_string_dedup_basic"
-    original_df = generate_dataframe(["col1", "col2", "col3", "col4"], 1000, random_strings(100, 10))
+    original_df = generate_dataframe(["col1", "col2", "col3", "col4"], 1000, random_ascii_strings(100, 10))
     lib.write(symbol, original_df, dynamic_strings=True)
     read_df_with_dedup = lib.read(symbol, optimise_string_memory=True).data
     read_df_without_dedup = lib.read(symbol, optimise_string_memory=False).data
@@ -63,7 +56,7 @@ def test_string_dedup_basic(lmdb_version_store_tiny_segment):
 def test_string_dedup_dynamic_schema(lmdb_version_store_dynamic_schema):
     lib = lmdb_version_store_dynamic_schema
     symbol = "test_string_dedup_dynamic_schema"
-    unique_strings = random_strings(100, 10)
+    unique_strings = random_ascii_strings(100, 10)
     original_df = generate_dataframe(["col1"], 1000, unique_strings, "2000-1-1")
     # This will be different to original_df, as the value in each row is chosen at random from the unique string pool
     append_df = generate_dataframe(["col1"], 1000, unique_strings, "2010-1-1")
@@ -91,7 +84,7 @@ def test_string_dedup_nans(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_string_dedup_nans"
     # Throw a nan into the unique string pool
-    unique_strings = random_strings(9, 10)
+    unique_strings = random_ascii_strings(9, 10)
     unique_strings.append(np.nan)
     columns = ["col1", "col2", "col3", "col4"]
     original_df = generate_dataframe(columns, 1000, unique_strings)
@@ -141,7 +134,7 @@ def test_string_dedup_performance(lmdb_version_store):
 
     for unique_string in unique_strings:
         for string_length in string_lengths:
-            string_pool = random_strings(unique_string, string_length)
+            string_pool = random_ascii_strings(unique_string, string_length)
             for rows in number_of_rows:
                 print("Unique strings:  {}".format(unique_string))
                 print("String length:   {}".format(string_length))
