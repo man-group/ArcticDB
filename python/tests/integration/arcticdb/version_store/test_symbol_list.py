@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 from arcticdb.config import Defaults
-from arcticdb.util.test import sample_dataframe
+from arcticdb.util.test import sample_dataframe, random_ascii_strings
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.toolbox.library_tool import (
     VariantKey,
@@ -25,9 +25,8 @@ from arcticdb_ext.exceptions import InternalException, PermissionException
 
 from multiprocessing import Pool
 from arcticdb_ext import set_config_int
-import random
-import string
 from tests.util.mark import MACOS_CONDA_BUILD
+
 
 @pytest.fixture
 def small_max_delta():
@@ -278,16 +277,6 @@ def test_lock_contention(small_max_delta, basic_store, mode):
         assert lt.find_keys(KeyType.SYMBOL_LIST) != orig_sl
 
 
-def random_strings(count, max_length):
-    result = []
-    for _ in range(count):
-        length = random.randrange(max_length) + 2
-        result.append(
-            "".join(random.choice(string.ascii_letters) for _ in range(length))
-        )
-    return result
-
-
 def _tiny_df(idx):
     return pd.DataFrame(
         {"x": np.arange(idx % 10, idx % 10 + 10)},
@@ -346,16 +335,16 @@ def test_symbol_list_parallel_stress_with_delete(
     num_cycles = 1
     symbol_length = 6
 
-    pre_existing_symbols = random_strings(num_pre_existing_symbols, symbol_length)
+    pre_existing_symbols = random_ascii_strings(num_pre_existing_symbols, symbol_length)
     for idx, existing in enumerate(pre_existing_symbols):
         lib.write(existing, _tiny_df(idx))
 
     if same_symbols:
-        frozen_symbols = random_strings(num_symbols, symbol_length)
+        frozen_symbols = random_ascii_strings(num_symbols, symbol_length)
         symbols = [frozen_symbols for _ in range(num_workers)]
     else:
         symbols = [
-            random_strings(num_symbols, symbol_length) for _ in range(num_workers)
+            random_ascii_strings(num_symbols, symbol_length) for _ in range(num_workers)
         ]
 
     with Pool(num_workers) as p:
