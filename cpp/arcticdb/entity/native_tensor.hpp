@@ -237,9 +237,17 @@ struct TypedTensor : public NativeTensor {
         // The new column shape * the column stride tells us how far to move the data pointer from the origin
 
         ptr = reinterpret_cast<const uint8_t*>(tensor.data()) + (slice_num * stride_offset);
-        util::check(ptr < static_cast<const uint8_t*>(tensor.ptr) + std::abs(tensor.extent(0)),
+        if (tensor.extent(0) == 0) {
+            // For empty tensors, we can't perform the normal bounds check
+            // Just ensure we're not trying to access beyond the first element
+            util::check(slice_num == 0, 
+                "Cannot put slice pointer at position {} in an empty tensor", 
+                slice_num);
+        } else {
+            util::check(ptr < static_cast<const uint8_t*>(tensor.ptr) + std::abs(tensor.extent(0)),
                 "Tensor overflow, cannot put slice pointer at byte {} in a tensor of {} bytes",
                 slice_num * stride_offset, tensor.extent(0));
+        }
     }
 };
 template<typename T>
