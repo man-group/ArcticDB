@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -100,6 +101,18 @@ class VenvArctic:
         self.uri = uri
         self.init_storage()
 
+    def add_traceability_prints(self, python_commands):
+        """
+        Adds prints before and after each python command. This will help with debugging segfaults occurring within the
+        venv as it will show which operation failed in the logs.
+        """
+        result = []
+        for command in python_commands:
+            result.append(f"print('About to run:', {repr(command)})")
+            result.append(command)
+            result.append(f"print('Done with:', {repr(command)})")
+        return result
+
     def execute(self, python_commands: List[str], dfs: Optional[Dict] = None) -> None:
         """
         Prepares the dataframe parquet files and the python script to be run from within the venv.
@@ -126,6 +139,8 @@ class VenvArctic:
                 + df_load_commands
                 + python_commands
             )
+
+            python_commands = self.add_traceability_prints(python_commands)
 
             python_path = os.path.join(dir, "run.py")
             with open(python_path, "w") as python_file:
