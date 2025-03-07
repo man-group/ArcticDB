@@ -54,7 +54,7 @@ class AWSBatchBasicFunctions:
         
         self.lib: Library = self.setup_env.get_library(num_symbols)
         self.setup_env.logger().info(f"Library {self.lib}") 
-        self.setup_env.logger().info(f"Symbols {self.lib.list_symbols()}") 
+        self.setup_env.logger().debug(f"Symbols {self.lib.list_symbols()}") 
         
         # Get generated symbol names
         self.symbols = []
