@@ -1020,6 +1020,7 @@ void LocalVersionedEngine::write_parallel_frame(
     bool validate_index,
     bool sort_on_index,
     const std::optional<std::vector<std::string>>& sort_columns) const {
+    py::gil_scoped_release release_gil;
     WriteIncompleteOptions options{
         .validate_index=validate_index,
         .write_options=get_write_options(),
