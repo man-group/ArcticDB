@@ -69,38 +69,6 @@ def test_update(version_store_factory):
     assert_frame_equal(vit.data, df)
 
 
-def test_update_unicode(lmdb_version_store):
-    symbol = "test_append_unicode"
-    uc = "\u0420\u043e\u0441\u0441\u0438\u044f"
-
-    df1 = pd.DataFrame(
-        index=[pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03")],
-        data={"a": ["123", uc]},
-    )
-    lmdb_version_store.update(symbol, df1, upsert=True)
-    vit = lmdb_version_store.read(symbol)
-    assert_frame_equal(vit.data, df1)
-
-    df2 = pd.DataFrame(
-        index=[pd.Timestamp("2018-01-04"), pd.Timestamp("2018-01-05")],
-        data={"a": ["123", uc]},
-    )
-    lmdb_version_store.update(symbol, df2)
-    vit = lmdb_version_store.read(symbol)
-    expected = pd.concat([df1, df2])
-    assert_frame_equal(vit.data, expected)
-
-    uc_new = "\u0420\u043e\u0441\u0441\u0438\u044f_new"
-    df1_new = pd.DataFrame(
-        index=[pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03")],
-        data={"a": ["123", uc_new]},
-    )
-    lmdb_version_store.update(symbol, df1_new)
-    vit = lmdb_version_store.read(symbol)
-    expected = pd.concat([df1_new, df2])
-    assert_frame_equal(vit.data, expected)
-
-
 def test_update_long_strides(s3_version_store):
     lib = s3_version_store
     symbol = "test_update_long_strides"

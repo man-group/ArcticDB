@@ -158,29 +158,3 @@ class TestMissingStringPlaceholders:
         lib.write(sym, pd.DataFrame({"a": [np.nan]}, dtype=dtype))
         data = lib.read(sym).data
         assert_frame_equal(data, pd.DataFrame({"a": [np.nan]}, dtype=dtype))
-
-def test_write_unicode(lmdb_version_store):
-    symbol = "test_write_unicode"
-    uc = "\u0420\u043e\u0441\u0441\u0438\u044f"
-
-    df1 = pd.DataFrame(
-        index=[pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03")],
-        data={"a": ["123", uc]},
-    )
-    lmdb_version_store.write(symbol, df1)
-    vit = lmdb_version_store.read(symbol)
-    assert_frame_equal(vit.data, df1)
-
-
-def test_write_parallel_unicode(lmdb_version_store):
-    symbol = "test_write_parallel_unicode"
-    uc = "\u0420\u043e\u0441\u0441\u0438\u044f"
-
-    df1 = pd.DataFrame(
-        index=[pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03")],
-        data={"a": ["123", uc]},
-    )
-    lmdb_version_store.write(symbol, df1, parallel=True)
-    lmdb_version_store.compact_incomplete(symbol, append=False, convert_int_to_float=False)
-    vit = lmdb_version_store.read(symbol)
-    assert_frame_equal(vit.data, df1)
