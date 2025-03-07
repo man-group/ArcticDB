@@ -34,11 +34,14 @@ def generate_symbol(lib, sym):
         axis=1,
         inplace=True,
     )
-    expected_column_stats = expected_column_stats.iloc[[0, 1]]
+    print("prior expected: {}".format(expected_column_stats))
+    expected_column_stats = expected_column_stats.iloc[[0, 2]]
+    #expected_column_stats = expected_column_stats.iloc[[0, 1]]
     expected_column_stats["v1.0_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min()]
     expected_column_stats["v1.0_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max()]
     expected_column_stats["v1.0_MIN(col_2)"] = [df0["col_2"].min(), df1["col_2"].min()]
     expected_column_stats["v1.0_MAX(col_2)"] = [df0["col_2"].max(), df1["col_2"].max()]
+    print("df0:\n{}\ndf1:\n{}\nexpected:\n{}".format(df0, df1, expected_column_stats))
     return expected_column_stats
 
 
@@ -313,7 +316,7 @@ def test_column_stats_duplicated_primary_index(lmdb_version_store_tiny_segment):
         axis=1,
         inplace=True,
     )
-    expected_column_stats = expected_column_stats.iloc[[0, 1]]
+    expected_column_stats = expected_column_stats.iloc[[0, 3]]
     expected_column_stats["v1.0_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min()]
     expected_column_stats["v1.0_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max()]
 

@@ -1683,7 +1683,9 @@ VersionedItem sort_merge_impl(
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), *read_query, ReadOptions{});
         if (!write_options.dynamic_schema) {
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                pipeline_context->slice_and_keys_.front().slice().columns() == pipeline_context->slice_and_keys_.back().slice().columns(),
+                std::adjacent_find(std::begin(pipeline_context->slice_and_keys_), std::end(pipeline_context->slice_and_keys_), [] (const SliceAndKey& a, const SliceAndKey& b) {
+                   return a.slice().columns() != b.slice().columns();
+                }) == std::end(pipeline_context->slice_and_keys_),
                 "Appending using sort and finalize is not supported when existing data being appended to is column sliced."
             );
         }
