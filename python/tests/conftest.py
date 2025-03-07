@@ -129,7 +129,7 @@ def lmdb_storage(tmp_path) -> Generator[LmdbStorageFixture, None, None]:
 
 
 @pytest.fixture
-def lmdb_library(lmdb_storage, lib_name) -> Library:
+def lmdb_library(lmdb_storage, lib_name) -> Generator[Library, None, None]:
     return lmdb_storage.create_arctic().create_library(lib_name)
 
 
