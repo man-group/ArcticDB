@@ -11,7 +11,7 @@
 
 namespace arcticdb {
 struct BatchReadArgs {
-    BatchReadArgs() {}
+    BatchReadArgs() = default;
 
     explicit BatchReadArgs(size_t batch_size) :
         batch_size_(batch_size) {}

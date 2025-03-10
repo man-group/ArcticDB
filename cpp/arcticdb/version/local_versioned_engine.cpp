@@ -1708,13 +1708,15 @@ struct AtomicKeySizesInfo {
 
 using KeySizeCalculators = std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>>;
 
-static void read_ignoring_key_not_found(Store* store, KeySizeCalculators&& calculators) {
+static void read_ignoring_key_not_found(Store& store, KeySizeCalculators&& calculators) {
     if (calculators.empty()) {
         return;
     }
 
+    auto read_futures = store.batch_read_compressed(std::move(calculators), BatchReadArgs{});
     std::vector<folly::Future<folly::Unit>> res;
-    for (auto&& fut : store->batch_read_compressed(std::move(calculators), BatchReadArgs{})) {
+    res.reserve(read_futures.size());
+    for (auto&& fut : std::move(read_futures)) {
         // Ignore some exceptions, someone might be deleting while we scan
         res.push_back(std::move(fut)
                           .thenValue([](auto&&) {return folly::Unit{};})
@@ -1740,7 +1742,7 @@ std::unordered_map<KeyType, KeySizesInfo> LocalVersionedEngine::scan_object_size
             });
         });
 
-        read_ignoring_key_not_found(store.get(), std::move(key_size_calculators));
+        read_ignoring_key_not_found(*store, std::move(key_size_calculators));
     });
 
     std::unordered_map<KeyType, KeySizesInfo> result;
@@ -1756,7 +1758,7 @@ std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> LocalVer
     auto streams = symbol_list().get_symbols(store());
 
     foreach_key_type([&store=store(), &sizes, &mutex](KeyType key_type) {
-        std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>> key_size_calculators;
+        KeySizeCalculators key_size_calculators;
 
         store->iterate_type(key_type, [&key_size_calculators, &mutex, &sizes, key_type](const VariantKey&& k){
             key_size_calculators.emplace_back(std::forward<const VariantKey>(k), [key_type, &sizes, &mutex] (auto&& ks) {
@@ -1780,7 +1782,7 @@ std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> LocalVer
 
         });
 
-        read_ignoring_key_not_found(store.get(), std::move(key_size_calculators));
+        read_ignoring_key_not_found(*store, std::move(key_size_calculators));
     });
 
     return sizes;
