@@ -1,6 +1,7 @@
 import pytest
 from packaging import version
 import pandas as pd
+import numpy as np
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.options import ModifiableEnterpriseLibraryOption
 from arcticdb.toolbox.library_tool import LibraryTool
@@ -171,3 +172,49 @@ lib.snapshot("old_snap", metadata={"old_key": "old_value"})
         snaps = curr.lib.list_snapshots()
         meta = snaps["old_snap"]
         assert meta == {"old_key": "old_value"}
+
+
+def test_compat_read_incomplete(old_venv_and_arctic_uri, lib_name):
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    sym = "sym"
+    df = pd.DataFrame({
+        "col": np.arange(10),
+        "float_col": np.arange(10, dtype=np.float64),
+        "str_col": [f"str_{i}" for i in range(10)]
+    }, pd.date_range("2024-01-01", periods=10))
+    df_1 = df.iloc[:8]
+    df_2 = df.iloc[8:]
+
+    old_ac = old_venv.create_arctic(arctic_uri)
+    old_lib = old_ac.create_library(lib_name)
+
+    if version.Version(old_venv.version) >= version.Version("5.1.0"):
+        # In version 5.1.0 (with commit a3b7545) we moved the streaming incomplete python API to the library tool.
+        old_lib.execute([
+            """
+lib_tool = lib.library_tool()
+lib_tool.append_incomplete("sym", df_1)
+lib_tool.append_incomplete("sym", df_2)
+            """
+        ], dfs={"df_1": df_1, "df_2": df_2})
+    else:
+        old_lib.execute([
+            """
+lib._nvs.append("sym", df_1, incomplete=True)
+lib._nvs.append("sym", df_2, incomplete=True)
+            """
+        ], dfs={"df_1": df_1, "df_2": df_2})
+
+
+    with CurrentVersion(arctic_uri, lib_name) as curr:
+        read_df = curr.lib._nvs.read(sym, date_range=(None, None), incomplete=True).data
+        assert_frame_equal(read_df, df)
+
+        read_df = curr.lib._nvs.read(sym, date_range=(None, None), incomplete=True, columns=["float_col"]).data
+        assert_frame_equal(read_df, df[["float_col"]])
+
+        read_df = curr.lib._nvs.read(sym, date_range=(None, None), incomplete=True, columns=["float_col", "str_col"]).data
+        assert_frame_equal(read_df, df[["float_col", "str_col"]])
+
+        read_df = curr.lib._nvs.read(sym, date_range=(pd.Timestamp(2024, 1, 5), pd.Timestamp(2024, 1, 9)), incomplete=True, columns=["float_col", "str_col"]).data
+        assert_frame_equal(read_df, df[["float_col", "str_col"]].iloc[4:9])

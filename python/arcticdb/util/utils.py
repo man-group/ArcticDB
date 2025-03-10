@@ -664,4 +664,3 @@ class DFGenerator:
             
         return  frame
 
-

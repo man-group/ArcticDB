@@ -88,6 +88,7 @@ struct Buffer : public BaseBuffer<Buffer, true> {
     }
 
     void set_preamble(size_t pos) {
+        util::check(preamble_bytes_ == 0, "Cannot reset buffer preabmle");
         util::check(pos <= capacity_, "Can't set preamble past the end of the buffer");
         preamble_bytes_ = pos;
         ptr_ += pos;
@@ -177,7 +178,7 @@ struct Buffer : public BaseBuffer<Buffer, true> {
             resize(total_size);
         } else {
             ARCTICDB_TRACE(log::version(), "Buffer {} has sufficient bytes for {}, ptr {} data {}, capacity {}",
-                                uintptr_t(this), bytes, uintptr_t(ptr_), uintptr_t(data_), capacity_, body_bytes_);
+                                uintptr_t(this), bytes, uintptr_t(ptr_), uintptr_t(data_), capacity_);
         }
 
         body_bytes_ = bytes;
@@ -239,7 +240,7 @@ struct Buffer : public BaseBuffer<Buffer, true> {
             body_bytes_ = bytes;
             capacity_ = body_bytes_ + preamble_bytes_;
             ARCTICDB_TRACE(log::version(), "Buffer {} did realloc for {}, ptr {} data {}, capacity {}",
-                                uintptr_t(this), bytes,  uintptr_t(ptr_), uintptr_t(data_), capacity_, body_bytes_);
+                                uintptr_t(this), bytes,  uintptr_t(ptr_), uintptr_t(data_), capacity_);
         } else {
             throw std::bad_alloc();
         }
