@@ -1191,7 +1191,7 @@ class Library:
     ) -> List[Union[VersionedItem, DataError]]:
         """
         Perform an update operation on a list of symbols in parallel. All constrains on
-        [update](/api/library/#arcticdb.version_store.library.Library.update) apply to this call as well.
+        [update](#arcticdb.version_store.library.Library.update) apply to this call as well.
 
         Parameters
         ----------
@@ -1577,9 +1577,6 @@ class Library:
         lazy: bool, default=False:
             Defer query execution until `collect` is called on the returned `LazyDataFrame` object. See documentation
             on `LazyDataFrame` for more details.
-
-        output_format: OutputFormat, default=OutputFormat.PANDAS:
-            What format to return the output in. One of PANDAS or ARROW.
 
         Returns
         -------

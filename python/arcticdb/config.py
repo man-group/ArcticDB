@@ -25,6 +25,7 @@ from typing import AnyStr, Optional, Dict
 
 from arcticdb.exceptions import ArcticNativeException
 from arcticdb.log import logger_by_name, configure
+from arcticdb_ext import set_config_int, get_config_int
 
 _HOME = osp.expanduser("~/.arctic/native")
 
@@ -161,7 +162,7 @@ def save_loggers_config(config=None, path=Defaults.LOG_CONF_FILE_PATH):
 
 
 def make_loggers_config(
-    default_level=Defaults.DEFAULT_LOG_LEVEL,
+    default_level: str = Defaults.DEFAULT_LOG_LEVEL,
     specific_log_levels: Optional[Dict[str, str]] = None,
     console_output: bool = True,
     file_output_path: Optional[str] = None,
@@ -171,14 +172,15 @@ def make_loggers_config(
 
     Parameters
     ----------
-    default_level
+    default_level: str
         Default log level for all the loggers unless overriden with specific_log_levels.
         Valid values are "DEBUG", "INFO", "WARN", "ERROR".
-    specific_log_levels
-        Optional overrides for specific logger(s). The possible logger names can be found in log.py.
-    console_output
+    specific_log_levels: Optional[Dict[str, str]]
+        Optional overrides for specific logger(s).
+        The possible logger names can be found in `arcticdb.log.logger_by_name.keys()` (subject to change).
+    console_output: bool
         Boolean indicating whether to output logs to the terminal.
-    file_output_path
+    file_output_path: str
         If None, logs will not be written to a file. Otherwise, this value should be set to the path of a file to which
         logging output will be written.
 
@@ -216,12 +218,27 @@ def make_loggers_config(
 
 
 def set_log_level(
-    default_level=Defaults.DEFAULT_LOG_LEVEL, specific_log_levels=None, console_output=True, file_output_path=None
+    default_level: str = Defaults.DEFAULT_LOG_LEVEL,
+    specific_log_levels: Optional[Dict[str, str]] = None,
+    console_output: bool = True,
+    file_output_path: Optional[str] = None,
 ):
     """
-    Passes the arguments to ``make_loggers_config`` and then configures the loggers, overwriting any existing config.
+    Set log levels, overwriting any existing config.
 
-    For more information on the parameters this method takes, please see the documentation for `make_loggers_config`.
+    Parameters
+    ----------
+    default_level: str
+        Default log level for all the loggers unless overriden with specific_log_levels.
+        Valid values are "DEBUG", "INFO", "WARN", "ERROR".
+    specific_log_levels: Optional[Dict[str, str]]
+        Optional overrides for specific logger(s).
+        The possible logger names can be found in `arcticdb.log.logger_by_name.keys()` (subject to change).
+    console_output: bool
+        Boolean indicating whether to output logs to the terminal.
+    file_output_path: str
+        If None, logs will not be written to a file. Otherwise, this value should be set to the path of a file to which
+        logging output will be written.
     """
     return configure(
         make_loggers_config(default_level, specific_log_levels, console_output, file_output_path), force=True

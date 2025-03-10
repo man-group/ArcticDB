@@ -17,16 +17,23 @@ and diagrams are generated, even undocumented classes / functions. This gives ab
 
 ### mkdocs
 
-Install
-```
-pip3 install mkdocs-material mkdocs-jupyter 'mkdocstrings[python]' black pybind11-stubgen mike wheel
-```
+Dependencies
+
 - mkdocs-material: theme
 - mkdocs-jupyter: jupyter notebook support
 - mkdocstrings[python]: python docstring support, like sphinx docs
 - black: for signature formatting
 - pybind11-stubgen: for generating stubs for pybind11 extensions, so that mkdocstrings can parse them
 - mike: for deploying versioned docs
+
+Install
+```
+pip3 install mkdocs-material mkdocs-jupyter 'mkdocstrings[python]' black pybind11-stubgen mike wheel
+```
+or
+```
+mamba install mkdocs-material mkdocs-jupyter mkdocstrings-python black pybind11-stubgen mike wheel
+```
 
 You need to have ArcticDB installed to generate the API docs, so install it from source:
 
@@ -45,18 +52,18 @@ pip install arcticdb
 ```
 cd docs/mkdocs
 # TODO fix these errors!
-pybind11-stubgen arcticdb_ext.version_store --ignore-all-errors -o .
+pybind11-stubgen arcticdb_ext --ignore-all-errors -o .
 ```
 
 To build the latest mkdocs to docs/mkdocs/site:
 ```
 cd docs/mkdocs
-mkdocs build -s
+mkdocs build
 ```
 
 Development server 
 ```
-mkdocs serve -s -a 0.0.0.0:8000
+mkdocs serve -a 0.0.0.0:8000
 ```
 
 The python docstring parser, griffe, will struggle with some built-in (C++) modules

@@ -4,6 +4,14 @@ repo_url: https://github.com/man-group/ArcticDB
 repo_name: man-group/ArcticDB
 remote_branch: docs-pages
 
+strict: true
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
 markdown_extensions:
   - admonition
   - pymdownx.details
@@ -103,6 +111,7 @@ nav:
     - On-Disk Storage: 'technical/on_disk_storage.md'
     - Arctic Migration: 'technical/migration.md'
     - Contributing: 'technical/contributing.md'
+    - Upgrade Storage: 'technical/upgrade_storage.md'
   - Configuration:
     - Library Configuration: 'lib_config.md'
     - Runtime Configuration: 'runtime_config.md'
@@ -125,3 +134,9 @@ nav:
   - Library related objects: 'api/library_types.md'
   - DataFrame Processing Operations API: 'api/processing.md'
   - Exceptions: 'api/exceptions.md'
+  - Config: 'api/config.md'
+
+exclude_docs: |
+  *.py
+  /notebooks/README.md
+  technical/linting.md
