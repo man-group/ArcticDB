@@ -276,7 +276,7 @@ public:
             DeltaCompressKernel<T> compress_kernel(initial_values_.data());
             ARCTICDB_DEBUG(log::codec(), "Writing full blocks at offset {}", output_offset);
             for (size_t block = 0; block < full_blocks_; block++) {
-                output_offset += dispatch_bitwidth<T, BitPackFused>(
+                output_offset += dispatch_bitwidth_fused<T, BitPackFused>(
                     input + block * BLOCK_SIZE,
                     output + output_offset,
                     simd_bit_width_,
@@ -352,7 +352,7 @@ public:
             DeltaUncompressKernel<T> decompress_kernel(full_header->initial_values_.data());
 
             for (size_t block = 0; block < full_blocks_; block++) {
-                input_offset += dispatch_bitwidth<T, BitUnpackFused>(
+                input_offset += dispatch_bitwidth_fused<T, BitUnpackFused>(
                     input + input_offset,
                     output + h::num_lanes + block * BLOCK_SIZE,
                     full_header->bit_width_,

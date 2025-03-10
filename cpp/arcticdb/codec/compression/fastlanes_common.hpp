@@ -10,6 +10,7 @@
 #include <utility>
 #include <limits>
 
+#include <arcticdb/util/preconditions.hpp>
 
 #if defined(__clang__)
     #define ALWAYS_INLINE __attribute__((always_inline))
@@ -112,6 +113,97 @@ static_assert(transposed_index(1022) == 959);
 template<typename HeaderType, typename T>
 static constexpr size_t header_size_in_t() {
     return (sizeof(HeaderType) + sizeof(T) - 1) / sizeof(T);
+}
+
+
+
+template<typename T, size_t bit_width>
+constexpr T construct_mask() {
+    if constexpr (bit_width == type_bits<T>())
+        return T(-1);
+    else
+        return (T(1) << bit_width) - 1;
+}
+
+template<typename T, size_t width>
+struct BitPackHelper {
+    static constexpr size_t bit_width = width;
+    static constexpr size_t num_bits = Helper<T>::num_bits;
+    static constexpr size_t num_lanes = Helper<T>::num_lanes;
+    static_assert(bit_width <= num_bits);
+
+    static constexpr T mask = construct_mask<T, bit_width>();
+
+    static constexpr size_t remaining_bits(size_t row) {
+        return ((row + 1) * bit_width) % num_bits;
+    };
+
+    static constexpr size_t current_bits(size_t row) {
+        return bit_width - remaining_bits(row);
+    }
+
+    static constexpr size_t current_word (size_t row) {
+        return (row * bit_width) / num_bits;
+    }
+
+    static constexpr size_t next_word (size_t row) {
+        return ((row + 1) * bit_width) / num_bits;
+    }
+
+    static constexpr bool at_end(size_t row) {
+        return next_word(row) > current_word(row);
+    }
+
+    static constexpr size_t shift(size_t row) {
+        return (row * bit_width) % num_bits;
+    }
+};
+
+static_assert(BitPackHelper<uint8_t, 3>::mask == 7);
+static_assert(BitPackHelper<uint8_t, 3>::at_end(2));
+static_assert(!BitPackHelper<uint8_t, 3>::at_end(3));
+
+
+template<typename T, template<typename, size_t> class FusedType, size_t... Is>
+size_t dispatch_bitwidth_impl(
+    const T* RESTRICT in,
+    T* RESTRICT out,
+    size_t bit_width,
+    const T* __restrict base,
+    std::index_sequence<Is...>) {
+
+    size_t result = 0;
+
+    (void)((bit_width == Is + 1
+            ? (result = FusedType<T, Is + 1>::go(
+            in,
+            out,
+            base), true)
+            : false) || ...);
+
+    return result;
+}
+
+template<typename T, template<typename, size_t> class FusedType>
+size_t dispatch_bitwidth(
+    const T* RESTRICT in,
+    T* RESTRICT out,
+    const T* __restrict base,
+    size_t bit_width) {
+
+    constexpr size_t max_bits_allowed = sizeof(T) * 8;
+
+    if (EXPECT(bit_width <= max_bits_allowed, 1)) {
+        return dispatch_bitwidth_impl<T, FusedType>(
+            in,
+            out,
+            bit_width,
+            base,
+            std::make_index_sequence<max_bits_allowed - 1>{}
+        );
+    } else {
+        util::raise_rte("Bit width exceeds type size");
+    }
 }
 
 } // namespace arcticdb

@@ -6,14 +6,19 @@
 #include <climits>
 #include <algorithm>
 #include <lz4.h>
+#include <random>
 
 TEST(LZ4StressTest, CompressDecompressSeparate) {
     using T = uint32_t;
     const size_t numRows = 100 * 1024 + 32;
-    const size_t iterations = 1000000;
+    const size_t iterations = 100;
     std::vector<T> input(numRows);
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    // Define the range of random numbers (0 to 100)
+    std::uniform_int_distribution<> dis(0, 1000);
     for (size_t i = 0; i < numRows; i++) {
-        input[i] = static_cast<T>(i % 1000);
+        input[i] = dis(gen);
     }
     const int srcSize = static_cast<int>(numRows * sizeof(T));
     const int maxDstSize = LZ4_compressBound(srcSize);

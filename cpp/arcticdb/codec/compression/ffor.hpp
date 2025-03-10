@@ -134,7 +134,7 @@ size_t encode_ffor_with_header(const T* in, T* out, size_t count) {
     FForCompressKernel<T> kernel(reference);
 
     for (size_t block = 0; block < num_full_blocks; ++block) {
-        compressed_size += dispatch_bitwidth<T, BitPackFused>(
+        compressed_size += dispatch_bitwidth_fused<T, BitPackFused>(
             in + block * 1024,
             out_ptr + compressed_size - header_size_in_t<FForHeader<T>, T>(),
             bits_needed,
@@ -188,7 +188,7 @@ size_t decode_ffor_with_header(const T* in, T* out) {
         input_offset += num_full_blocks * BLOCK_SIZE ;
     } else {
         for (size_t block = 0; block < num_full_blocks; ++block) {
-            input_offset += dispatch_bitwidth<T, BitUnpackFused>(
+            input_offset += dispatch_bitwidth_fused<T, BitUnpackFused>(
                 in_ptr + input_offset,
                 out + block * 1024,
                 bits_needed,

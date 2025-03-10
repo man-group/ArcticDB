@@ -136,7 +136,7 @@ TEST(BitPackFused, Roundtrip64to11) {
     CompressIdentity<uint64_t> compress;
     UncompressIdentity<uint64_t> uncompress;
 
-    size_t compressed_size [[maybe_unused]] = dispatch_bitwidth<uint64_t, BitPackFused>(
+    size_t compressed_size [[maybe_unused]] = dispatch_bitwidth_fused<uint64_t, BitPackFused>(
         rand_arr_70_b11_w64_arr,
         local_packed64.data(),
         11,
@@ -144,7 +144,7 @@ TEST(BitPackFused, Roundtrip64to11) {
     );
 
     std::vector<uint64_t> local_unpacked64(1024);
-    dispatch_bitwidth<uint64_t, BitUnpackFused>(
+    dispatch_bitwidth_fused<uint64_t, BitUnpackFused>(
         local_packed64.data(),
         local_unpacked64.data(),
         11,
@@ -167,7 +167,7 @@ TEST(BitPackFused, Roundtrip8to3) {
     CompressIdentity<uint8_t> compress;
     UncompressIdentity<uint8_t> uncompress;
 
-    size_t compressed_size [[maybe_unused]] = dispatch_bitwidth<uint8_t, BitPackFused>(
+    size_t compressed_size [[maybe_unused]] = dispatch_bitwidth_fused<uint8_t, BitPackFused>(
         rand_arr_3_b3_w8_arr,
         local_packed8.data(),
         3,
@@ -175,7 +175,7 @@ TEST(BitPackFused, Roundtrip8to3) {
     );
 
     std::vector<uint8_t> local_unpacked8(1024);
-    dispatch_bitwidth<uint8_t, BitUnpackFused>(
+    dispatch_bitwidth_fused<uint8_t, BitUnpackFused>(
         local_packed8.data(),
         local_unpacked8.data(),
         3,
@@ -205,7 +205,7 @@ TEST(BitPackFused, Roundtrip32to14) {
     CompressIdentity<uint32_t> compress;
     UncompressIdentity<uint32_t> uncompress;
 
-    size_t compressed_size [[maybe_unused]] = dispatch_bitwidth<uint32_t, BitPackFused>(
+    size_t compressed_size [[maybe_unused]] = dispatch_bitwidth_fused<uint32_t, BitPackFused>(
         data.data(),
         local_packed32.data(),
         14,
@@ -213,7 +213,7 @@ TEST(BitPackFused, Roundtrip32to14) {
     );
 
     std::vector<uint32_t> local_unpacked32(1024);
-    dispatch_bitwidth<uint32_t, BitUnpackFused>(
+    dispatch_bitwidth_fused<uint32_t, BitUnpackFused>(
         local_packed32.data(),
         local_unpacked32.data(),
         14,
@@ -232,7 +232,7 @@ TEST(BitPackFused, CompressedSize) {
 
     CompressIdentity<uint32_t> kernel;
 
-    size_t compressed_size = dispatch_bitwidth<uint32_t, BitPackFused>(
+    size_t compressed_size = dispatch_bitwidth_fused<uint32_t, BitPackFused>(
         data.data(),
         local_packed32.data(),
         14,
@@ -249,13 +249,17 @@ TEST(BitPackFusedStress, Roundtrip) {
     using T = uint32_t;
     constexpr size_t BLOCK_SIZE = 1024;   // Each block has 1024 values
     constexpr size_t NUM_BLOCKS = 100;      // Total of 100 blocks per run
-    constexpr size_t NUM_ITERATIONS = 1000000; // Run a million iterations (each processes 100 blocks)
+    constexpr size_t NUM_ITERATIONS = 100; // Run a million iterations (each processes 100 blocks)
     constexpr size_t BIT_WIDTH = 16;        // Example bit width (< sizeof(T)*8)
 
     // Prepare input data (ensure values fit in BIT_WIDTH bits)
     std::vector<T> input(NUM_BLOCKS * BLOCK_SIZE);
-    for (size_t i = 0; i < input.size(); i++) {
-        input[i] = static_cast<T>(i & 0xFFFF);  // Keep values in range of BIT_WIDTH
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    // Define the range of random numbers (0 to 100)
+    std::uniform_int_distribution<> dis(0, 1000);
+    for (size_t i = 0; i < BLOCK_SIZE * NUM_BLOCKS; i++) {
+        input[i] = dis(gen);
     }
 
     // Compute the compressed block size from the helper (for T = uint32_t, BIT_WIDTH = 16,

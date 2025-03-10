@@ -10,53 +10,6 @@
 
 namespace arcticdb {
 
-
-template<typename T, size_t bit_width>
-constexpr T construct_mask() {
-    if constexpr (bit_width == type_bits<T>())
-        return T(-1);
-    else
-        return (T(1) << bit_width) - 1;
-}
-
-template<typename T, size_t width>
-struct BitPackHelper {
-    static constexpr size_t bit_width = width;
-    static constexpr size_t num_bits = Helper<T>::num_bits;
-    static constexpr size_t num_lanes = Helper<T>::num_lanes;
-    static_assert(bit_width <= num_bits);
-
-    static constexpr T mask = construct_mask<T, bit_width>();
-
-    static constexpr size_t remaining_bits(size_t row) {
-        return ((row + 1) * bit_width) % num_bits;
-    };
-
-    static constexpr size_t current_bits(size_t row) {
-        return bit_width - remaining_bits(row);
-    }
-
-    static constexpr size_t current_word (size_t row) {
-        return (row * bit_width) / num_bits;
-    }
-
-    static constexpr size_t next_word (size_t row) {
-        return ((row + 1) * bit_width) / num_bits;
-    }
-
-    static constexpr bool at_end(size_t row) {
-        return next_word(row) > current_word(row);
-    }
-
-    static constexpr size_t shift(size_t row) {
-        return (row * bit_width) % num_bits;
-    }
-};
-
-static_assert(BitPackHelper<uint8_t, 3>::mask == 7);
-static_assert(BitPackHelper<uint8_t, 3>::at_end(2));
-static_assert(!BitPackHelper<uint8_t, 3>::at_end(3));
-
 template<typename T, typename p, size_t bit_width, typename Kernel>
 HOT_FUNCTION
 VECTOR_HINT
@@ -306,7 +259,7 @@ struct ALIGN_HINT(64) BitUnpackFused : public BitPackHelper<T, bit_width> {
 */
 
 template<typename T, template<typename, size_t> class FusedType, typename Kernel, size_t... Is>
-size_t dispatch_bitwidth_impl(
+size_t dispatch_bitwidth_fused_impl(
     const T* RESTRICT in,
     T* RESTRICT out,
     size_t bit_width,
@@ -325,7 +278,7 @@ size_t dispatch_bitwidth_impl(
 }
 
 template<typename T, template<typename, size_t> class FusedType, typename Kernel>
-size_t dispatch_bitwidth(
+size_t dispatch_bitwidth_fused(
     const T* RESTRICT in,
     T* RESTRICT out,
     size_t bit_width,
@@ -334,7 +287,7 @@ size_t dispatch_bitwidth(
     constexpr size_t max_bits_allowed = sizeof(T) * 8;
 
     if (EXPECT(bit_width <= max_bits_allowed, 1)) {
-        return dispatch_bitwidth_impl<T, FusedType>(
+        return dispatch_bitwidth_fused_impl<T, FusedType>(
             in,
             out,
             bit_width,
