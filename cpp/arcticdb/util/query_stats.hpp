@@ -37,6 +37,14 @@
  * - StatsGroupLayer: Hierarchical node containing stats and references to child layers
  * - StatsGroup: RAII wrapper that temporarily extends the layer chain during its lifetime
  *   When created, it adds a new layer and when destroyed, it restores the previous layer state
+ * 
+ * Note:
+ * To make the query stats model works, there are two requirements:
+ * 1. All calls from python layer must mark "QUERY_STATS_ADD_GROUP...." at least once in the call stack
+ *    so the stats logged in folly threads will be aggregated to the master map
+ *    (Checking will be added after all log entries are added)
+ * 2. All folly tasks must be submitted through the TaskScheduler::submit_cpu_task/submit_io_task
+ * 3. All folly tasks must complete ("collected") before last StatsGroup object is destroyed in the call stack
  */
 
 #include <mutex>
@@ -73,29 +81,8 @@ class StatsGroupLayer {
 public:
     std::array<int64_t, 3> stats_ = {0}; // sizeof(StatsName)
     std::array<std::map<std::string, std::shared_ptr<StatsGroupLayer>>, 3> next_layer_maps_; // sizeof(StatsGroupName)
-    void reset_stats() {
-        stats_.fill(0);
-        for (auto& next_layer_map : next_layer_maps_) {
-            next_layer_map.clear();
-        }
-    }
-    
-    void merge_from(const StatsGroupLayer& other) {
-        // Merge stats counters
-        for (size_t i = 0; i < stats_.size(); ++i) {
-            stats_[i] += other.stats_[i];
-        }
-        
-        for (size_t i = 0; i < next_layer_maps_.size(); ++i) {
-            for (const auto& [key, other_layer] : other.next_layer_maps_[i]) {
-                if (next_layer_maps_[i].find(key) == next_layer_maps_[i].end()) {
-                    next_layer_maps_[i][key] = std::make_shared<StatsGroupLayer>();
-                }
-                
-                next_layer_maps_[i][key]->merge_from(*other_layer);
-            }
-        }
-    }
+    void reset_stats();
+    void merge_from(const StatsGroupLayer& other);
 };
 
 

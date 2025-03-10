@@ -14,8 +14,8 @@ namespace arcticdb::util::query_stats {
 
 std::shared_ptr<StatsGroupLayer> QueryStats::current_layer(){
     if (!current_layer_) {
-        util::check(!async::is_folly_thread, "Folly thread should have its StatsGroupLayer passed by caller only");
-        util::check(!root_layer_, "QueryStats root_layer_ should be null if current_layer_ is null");
+        check(!async::is_folly_thread, "Folly thread should have its StatsGroupLayer passed by caller only");
+        check(!root_layer_, "QueryStats root_layer_ should be null if current_layer_ is null");
         root_layer_ = std::make_shared<StatsGroupLayer>();
         current_layer_ = root_layer_;
         ARCTICDB_DEBUG(log::version(), "Current StatsGroupLayer created");
@@ -39,10 +39,41 @@ QueryStats& QueryStats::instance() {
 }
 
 void QueryStats::merge_layers() {
+    auto cpu_stats = async::TaskScheduler::instance()->cpu_exec().getPoolStats();
+    auto io_stats = async::TaskScheduler::instance()->io_exec().getPoolStats();
+    check(cpu_stats.activeThreadCount == 0 && 
+        cpu_stats.pendingTaskCount == 0 && 
+        io_stats.activeThreadCount == 0 && 
+        io_stats.pendingTaskCount == 0,
+        "Folly tasks are not still running while aggregating query stats");
     for (auto& [parent_layer, child_layer] : child_layers_) {
         parent_layer->merge_from(*child_layer);
     }
     child_layers_.clear();
+}
+
+void StatsGroupLayer::reset_stats() {
+    stats_.fill(0);
+    for (auto& next_layer_map : next_layer_maps_) {
+        next_layer_map.clear();
+    }
+}
+
+void StatsGroupLayer::merge_from(const StatsGroupLayer& other) {
+    for (size_t i = 0; i < stats_.size(); ++i) {
+        stats_[i] += other.stats_[i];
+    }
+    
+    for (size_t i = 0; i < next_layer_maps_.size(); ++i) {
+        for (const auto& [key, other_layer] : other.next_layer_maps_[i]) {
+            auto& next_layer_map = next_layer_maps_[i];
+            auto it = next_layer_map.find(key);
+            if (it == next_layer_map.end()) {
+                it = next_layer_map.emplace(key, std::make_shared<StatsGroupLayer>()).first;
+            }
+            it->second->merge_from(*other_layer);
+        }
+    }
 }
 
 std::shared_ptr<StatsGroupLayer> QueryStats::root_layer() {
