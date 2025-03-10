@@ -12,79 +12,84 @@
 
 namespace arcticdb::util::query_stats {
 
-std::shared_ptr<StatsInstance> StatsInstance::instance(){
-    if (!instance_) {
-        
-        util::check(async::is_python_thread, "Folly thread should have its StatsInstance passed by caller only");
-        ARCTICDB_DEBUG(log::version(), "StatsInstance created");
-        instance_ = std::make_shared<StatsInstance>();
+std::shared_ptr<StatsGroupLayer> QueryStats::current_layer(){
+    if (!current_layer_) {
+        util::check(!async::is_folly_thread, "Folly thread should have its StatsGroupLayer passed by caller only");
+        util::check(!root_layer_, "QueryStats root_layer_ should be null if current_layer_ is null");
+        root_layer_ = std::make_shared<StatsGroupLayer>();
+        current_layer_ = root_layer_;
+        ARCTICDB_DEBUG(log::version(), "Current StatsGroupLayer created");
     }
-    return instance_;
+    return current_layer_;
 }
 
-
-// Could be called in 3 situations:
-// 1. By the head of the chain of task - Need copy of the instance
-// 2. By the appended task of the chain of task that runs on the same thread immediately after the preceding - Nothing needs to be done
-// 3. None of the above - Need to pass the instance
-// Case 1
-void StatsInstance::copy_instance(std::shared_ptr<StatsInstance>& ptr){
-    ARCTICDB_DEBUG(log::version(), "StatsInstance being copied");
-    instance_ = std::make_shared<StatsInstance>(*ptr);
+void QueryStats::set_layer(std::shared_ptr<StatsGroupLayer> &layer) {
+    current_layer_ = layer;
 }
-
-// Case 2 and 3
-void StatsInstance::pass_instance(std::shared_ptr<StatsInstance>&& ptr){
-    ARCTICDB_DEBUG(log::version(), "StatsInstance being passed");
-    instance_ = std::move(ptr);
-}
-
 
 void QueryStats::reset_stats(){
-    std::lock_guard<std::mutex> lock(stats_mutex_);
-    stats.clear();
+    root_layer_.reset();
+    child_layers_.clear();
+    current_layer_.reset();
 }
 
-StatsOutputFormat QueryStats::get_stats() { 
-    std::lock_guard<std::mutex> lock(stats_mutex_);
-    StatsOutputFormat result;
-    for (const auto& [infos, value] : stats) {
-        StatsOutputFormat::value_type items;
-        for (const auto &info : infos ) {
-            if (!items.emplace(info->first, info->second).second) {
-                arcticdb::log::storage().warn("Duplicate key in stats query {}:{}", info->first, info->second);
-            }
-        }
-        if (!items.emplace(value.first, value.second).second) {
-            arcticdb::log::storage().warn("Duplicate key in stats query {}:{}", value.first, value.second);
-        }
-        result.push_back(std::move(items));
+QueryStats& QueryStats::instance() {
+    static QueryStats instance;
+    return instance;
+}
+
+void QueryStats::merge_layers() {
+    for (auto& [parent_layer, child_layer] : child_layers_) {
+        parent_layer->merge_from(*child_layer);
     }
-    return result;
+    child_layers_.clear();
 }
 
-bool QueryStats::is_enabled(){
-    return query_stats_enabled.load(std::memory_order_relaxed);
-}
-
-void QueryStats::register_new_query_stat_tool() {
-    auto new_stat_tool_count = query_stat_tool_count.fetch_add(1, std::memory_order_relaxed) + 1;
-    if (new_stat_tool_count) {
-        query_stats_enabled.store(true, std::memory_order_relaxed);
+std::shared_ptr<StatsGroupLayer> QueryStats::root_layer() {
+    if (!root_layer_) {
+        util::check(!current_layer_, "QueryStats current_layer_ should be null if root_layer_ is null");
+        root_layer_ = std::make_shared<StatsGroupLayer>();
+        current_layer_ = root_layer_;
+        ARCTICDB_DEBUG(log::version(), "Root StatsGroupLayer created");
     }
+    return root_layer_;
 }
 
-void QueryStats::deregister_query_stat_tool() {
-    auto new_stat_tool_count = query_stat_tool_count.fetch_sub(1, std::memory_order_relaxed) - 1;
-    util::check(new_stat_tool_count >= 0,
-                "Stat Query Tool count cannot be negative");
-    if (new_stat_tool_count == 0) {
-        query_stats_enabled.store(false, std::memory_order_relaxed);
-        reset_stats();
-    }
+bool QueryStats::is_root_layer_set() {
+    return root_layer_.operator bool();
 }
-QueryStats& QueryStats::instance(){
-    static QueryStats query_stats;
-    return query_stats;
+
+void QueryStats::create_child_layer(std::shared_ptr<StatsGroupLayer>& layer) {
+    auto child_layer = std::make_shared<StatsGroupLayer>();
+    current_layer_ = child_layer;
+    std::lock_guard<std::mutex> lock(child_layer_creation_mutex_);
+    child_layers_.emplace_back(layer, child_layer);
+}
+
+StatsGroup::StatsGroup(bool log_time, StatsGroupName col, const std::string& value) : 
+        prev_layer_(QueryStats::instance().current_layer()),
+        start_(std::chrono::high_resolution_clock::now()),
+        log_time_(log_time) {
+        auto& next_layer_map = prev_layer_->next_layer_maps_[static_cast<size_t>(col)];
+    std::shared_ptr<StatsGroupLayer> cur_layer_ = nullptr;
+    if (next_layer_map.find(value) == next_layer_map.end()) {
+        next_layer_map[value] = std::make_shared<StatsGroupLayer>();
+    }
+    QueryStats::instance().set_layer(next_layer_map[value]);
+}
+
+StatsGroup::~StatsGroup() {
+    auto& query_stats_instance = QueryStats::instance();
+    if (log_time_) {
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start_);
+            auto& stats = query_stats_instance.current_layer()->stats_;
+            stats[static_cast<size_t>(StatsName::total_time_ms)] += duration.count();
+            stats[static_cast<size_t>(StatsName::count)]++;
+    }
+    query_stats_instance.set_layer(prev_layer_);
+    if (!async::is_folly_thread && query_stats_instance.current_layer() == query_stats_instance.root_layer()) {
+        query_stats_instance.merge_layers();
+    }
 }
 }

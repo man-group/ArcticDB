@@ -9,7 +9,7 @@
 
 namespace arcticdb::async {
 
-thread_local bool is_python_thread = true;
+thread_local bool is_folly_thread = false;
 
 TaskScheduler* TaskScheduler::instance() {
     std::call_once(TaskScheduler::init_flag_, &TaskScheduler::init);

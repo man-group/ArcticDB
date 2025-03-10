@@ -16,6 +16,7 @@
 #include <string>
 #include <ctime>
 #include <chrono>
+#include <array>
 #include <fmt/format.h>
 
 namespace arcticdb::util::query_stats {
@@ -23,98 +24,107 @@ using StatsGroups = std::vector<std::shared_ptr<std::pair<std::string, std::stri
 
 
 // thread-global instance
-class StatsInstance { // this will be passed to folly worker threads
-public:
-    static std::shared_ptr<StatsInstance> instance();
-    static void copy_instance(std::shared_ptr<StatsInstance>& ptr);
-    static void pass_instance(std::shared_ptr<StatsInstance>&& ptr);
+// class StatsInstance { // this will be passed to folly worker threads
+// public:
+//     static std::shared_ptr<StatsInstance> instance();
+//     static void copy_instance(std::shared_ptr<StatsInstance>& ptr);
+//     static void pass_instance(std::shared_ptr<StatsInstance>&& ptr);
 
-    StatsGroups info_;
-private:
-    thread_local inline static std::shared_ptr<StatsInstance> instance_;
-};
+//     StatsGroups info_;
+// private:
+//     thread_local inline static std::shared_ptr<StatsInstance> instance_;
+// };
 
 // process-global stats entry list
-class StatsGroup;
-using StatsOutputFormat = std::vector<std::map<std::string, std::string>>;
+enum class StatsGroupName : size_t {
+    arcticdb_call = 0,
+    key_type = 1,
+    storage_ops = 2
+};
+
+enum class StatsName : size_t {
+    result_count = 0,
+    total_time_ms = 1,
+    count = 2
+};
+
+class StatsGroupLayer {
+public:
+    std::array<int64_t, 3> stats_ = {0}; // sizeof(StatsName)
+    std::array<std::map<std::string, std::shared_ptr<StatsGroupLayer>>, 3> next_layer_maps_; // sizeof(StatsGroupName)
+    void reset_stats() {
+        stats_.fill(0);
+        for (auto& next_layer_map : next_layer_maps_) {
+            next_layer_map.clear();
+        }
+    }
+    
+    void merge_from(const StatsGroupLayer& other) {
+        // Merge stats counters
+        for (size_t i = 0; i < stats_.size(); ++i) {
+            stats_[i] += other.stats_[i];
+        }
+        
+        for (size_t i = 0; i < next_layer_maps_.size(); ++i) {
+            for (const auto& [key, other_layer] : other.next_layer_maps_[i]) {
+                if (next_layer_maps_[i].find(key) == next_layer_maps_[i].end()) {
+                    next_layer_maps_[i][key] = std::make_shared<StatsGroupLayer>();
+                }
+                
+                next_layer_maps_[i][key]->merge_from(*other_layer);
+            }
+        }
+    }
+};
+
 class QueryStats {
 public:
+    std::shared_ptr<StatsGroupLayer> current_layer();
+    std::shared_ptr<StatsGroupLayer> root_layer();
+    bool is_root_layer_set();
+    void create_child_layer(std::shared_ptr<StatsGroupLayer>& layer);
+    void set_layer(std::shared_ptr<StatsGroupLayer> &layer);
     void reset_stats();
-    
-    template<typename T>
-    void add_stat(std::shared_ptr<StatsInstance>& stats_instance, const std::string& col_name, T&& value) {
-        std::lock_guard<std::mutex> lock(stats_mutex_);
-        stats.emplace_back(stats_instance->info_, std::make_pair(col_name, fmt::format("{}", std::forward<T>(value))));
-    }
-
-    StatsOutputFormat get_stats();
-    bool is_enabled();
-    void register_new_query_stat_tool();
-    void deregister_query_stat_tool();
     static QueryStats& instance();
-
-    std::atomic<bool> query_stats_enabled = false;
+    bool is_enabled_ = false;
+    
+    void merge_layers();
+    
 private:
-    std::atomic<int32_t> query_stat_tool_count = 0;
-    std::mutex stats_mutex_;
-    //TODO: Change to std::list<std::pair<StatsGroups, std::pair<std::string, std::variant<std::string, xxx>>> 
-    std::list<std::pair<StatsGroups, std::pair<std::string, std::string>>> stats;
+    std::vector<std::pair<std::shared_ptr<StatsGroupLayer>, std::shared_ptr<StatsGroupLayer>>> child_layers_;
+    std::mutex child_layer_creation_mutex_;
+    thread_local inline static std::shared_ptr<StatsGroupLayer> root_layer_ = nullptr;
+    thread_local inline static std::shared_ptr<StatsGroupLayer> current_layer_ = nullptr;
 };
-
-
+    
+    
 // function-local object so the additional info will be removed from the stack when the info object gets detroyed
 class StatsGroup {
-    public:
-        template<typename T>
-        StatsGroup(std::shared_ptr<StatsInstance> stats_instance, bool log_time, std::string col_name, T&& value) : 
-                stats_instance_(std::move(stats_instance)),
-                start_(std::chrono::high_resolution_clock::now()),
-                log_time_(log_time) {
-            stats_instance_->info_.push_back(std::make_shared<std::pair<std::string, std::string>>(std::move(col_name), fmt::format("{}", std::forward<T>(value))));
-        }
-        ~StatsGroup() {
-            if (log_time_) {
-                auto end = std::chrono::high_resolution_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start_);
-                StatsGroup stats_group(stats_instance_, false, "exec_time", end.time_since_epoch().count());
-                QueryStats::instance().add_stat(stats_instance_, "time", duration.count());
-            }
-            stats_instance_->info_.pop_back();
-        }
-    private:
-        std::shared_ptr<StatsInstance> stats_instance_;
-        std::chrono::time_point<std::chrono::high_resolution_clock> start_;
-        bool log_time_;
+public:
+    StatsGroup(bool log_time, StatsGroupName col, const std::string& value);
+    ~StatsGroup();
+private:
+    std::shared_ptr<StatsGroupLayer> prev_layer_;
+    std::chrono::time_point<std::chrono::high_resolution_clock> start_;
+    bool log_time_;
 };
 
-
-void query_stats_add_stat_impl(auto col_name, auto value) {
-    auto stats_instance = StatsInstance::instance();
-    StatsGroup stats_group(stats_instance, false, "exec_time", std::chrono::high_resolution_clock::now().time_since_epoch().count());
-    QueryStats::instance().add_stat(stats_instance, col_name, value);
 }
 
-}
+#define STATS_GROUP_VAR_NAME(x) query_stats_info##x
 
-#define STATS_GROUP_NAME(x) query_stats_info##x
-
-#define QUERY_STATS_ADD_STATS_GROUP_IMPL(log_time, col_name, value) \
-    std::optional<arcticdb::util::query_stats::StatsGroup> STATS_GROUP_NAME(col_name); \
-    if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
-        auto stats_instance = arcticdb::util::query_stats::StatsInstance::instance(); \
-        STATS_GROUP_NAME(col_name).emplace(stats_instance, log_time, #col_name, value); \
+#define QUERY_STATS_ADD_GROUP_IMPL(log_time, col_name, value) \
+    std::optional<arcticdb::util::query_stats::StatsGroup> STATS_GROUP_VAR_NAME(col_name); \
+    if (arcticdb::util::query_stats::QueryStats::instance().is_enabled_) { \
+        STATS_GROUP_VAR_NAME(col_name).emplace(log_time, arcticdb::util::query_stats::StatsGroupName::col_name, fmt::format("{}", value)); \
     }
-#define QUERY_STATS_ADD_STATS_GROUP(col_name, value) QUERY_STATS_ADD_STATS_GROUP_IMPL(false, col_name, value)
-#define QUERY_STATS_ADD_STATS_GROUP_WITH_TIME(col_name, value) QUERY_STATS_ADD_STATS_GROUP_IMPL(true, col_name, value)
+#define QUERY_STATS_ADD_GROUP(col_name, value) QUERY_STATS_ADD_GROUP_IMPL(false, col_name, value)
+#define QUERY_STATS_ADD_GROUP_WITH_TIME(col_name, value) QUERY_STATS_ADD_GROUP_IMPL(true, col_name, value)
 
-#define QUERY_STATS_ADD_STAT(col_name, value) \
-    if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
-        arcticdb::util::query_stats::query_stats_add_stat_impl(#col_name, value); \
-    }
-#define QUERY_STATS_ADD_STAT_CONDITIONAL(condition, col_name, value) \
-    if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
-        if (condition) { \
-            arcticdb::util::query_stats::query_stats_add_stat_impl(#col_name, value); \
-        } \
+#define QUERY_STATS_ADD(col_name, value) \
+    if (arcticdb::util::query_stats::QueryStats::instance().is_enabled_) { \
+        auto& query_stats_instance = arcticdb::util::query_stats::QueryStats::instance(); \
+        auto& stats = query_stats_instance.current_layer()->stats_; \
+        stats[static_cast<size_t>(arcticdb::util::query_stats::StatsName::col_name)] += value; \
     }
 

@@ -34,7 +34,7 @@
 namespace arcticdb::async {
 class TaskScheduler;
 
-extern thread_local bool is_python_thread;
+extern thread_local bool is_folly_thread;
 
 struct TaskSchedulerPtrWrapper{
     TaskScheduler* ptr_;
@@ -69,7 +69,7 @@ public:
         std::lock_guard lock{mutex_};
         return named_factory_.newThread(
                 [func = std::move(func)]() mutable {
-                is_python_thread = false;
+                is_folly_thread = true;
                 ARCTICDB_SAMPLE_THREAD();
                 func();
             });
@@ -186,8 +186,8 @@ class ExecutorWithStatsInstance : public T{
         void add(folly::Func func,
             std::chrono::milliseconds expiration,
             folly::Func expireCallback) override {
-            auto func_with_stat_query_wrap = [parent_instance = util::query_stats::StatsInstance::instance(), func = std::move(func)](auto&&... vars) mutable{
-                util::query_stats::StatsInstance::pass_instance(std::move(parent_instance));
+            auto func_with_stat_query_wrap = [layer = util::query_stats::QueryStats::instance().current_layer(), func = std::move(func)](auto&&... vars) mutable{
+                util::query_stats::QueryStats::instance().set_layer(layer);
                 return func(std::forward<decltype(vars)>(vars)...);
             };
             T::add(std::move(func_with_stat_query_wrap), expiration, std::move(expireCallback));
@@ -226,8 +226,10 @@ class TaskScheduler {
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only supports Task derived from BaseTask");
         ARCTICDB_DEBUG(log::schedule(), "{} Submitting CPU task {}: {} of {}", uintptr_t(this), typeid(task).name(), cpu_exec_.getTaskQueueSize(), cpu_exec_.kDefaultMaxQueueSize);
         // Executor::Add will be called before below function
-        auto task_with_stat_query_instance = [parent_instance = util::query_stats::StatsInstance::instance(), task = std::move(task)]() mutable{
-            util::query_stats::StatsInstance::copy_instance(parent_instance);
+        // TODO: Add checking to make sure QUERY_STATS_ADD_GROUP is called once before folly tasks, once all query stats entries are added
+        // so the query stats could be presented
+        auto task_with_stat_query_instance = [layer = util::query_stats::QueryStats::instance().current_layer(), task = std::move(task)]() mutable{
+            util::query_stats::QueryStats::instance().create_child_layer(layer);
             return task();
         };
         std::lock_guard lock{cpu_mutex_};
@@ -240,8 +242,10 @@ class TaskScheduler {
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only support Tasks derived from BaseTask");
         ARCTICDB_DEBUG(log::schedule(), "{} Submitting IO task {}: {}", uintptr_t(this), typeid(task).name(), io_exec_.getPendingTaskCount());
         // Executor::Add will be called before below function
-        auto task_with_stat_query_instance = [parent_instance = util::query_stats::StatsInstance::instance(), task = std::move(task)]() mutable{
-            util::query_stats::StatsInstance::copy_instance(parent_instance);
+        // TODO: Add checking to make sure QUERY_STATS_ADD_GROUP is called once before folly tasks, once all query stats entries are added
+        // so the query stats could be presented
+        auto task_with_stat_query_instance = [layer = util::query_stats::QueryStats::instance().current_layer(), task = std::move(task)]() mutable{
+            util::query_stats::QueryStats::instance().create_child_layer(layer);
             return task();
         };
         std::lock_guard lock{io_mutex_};
