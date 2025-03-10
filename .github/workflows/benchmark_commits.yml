@@ -77,11 +77,14 @@ jobs:
       - name: Configure what suite or tests to execute
         shell: bash -el {0}
         run: | 
-            if [ "${{ github.event.inputs.suite_to_run }}" == "REAL" ]; then
+            if [ "${{ inputs.suite_to_run }}" == "REAL" ]; then
+              # ASV tests with real storage starts with 'real_' in the test name
               SUITE='^(real_).*'
-            elif [ "${{ github.event.inputs.suite_to_run }}" == "ALL" ]; then
+            elif [ "${{ inputs.suite_to_run }}" == "ALL" ]; then
+              # Select all tests
               SUITE='^.*'
             else
+              # LMDB tests are other tests not starting with 'real_'
               SUITE='^(?!real_).*'
             fi
             echo "selection of suite SUITE=$SUITE"
@@ -112,7 +115,7 @@ jobs:
       - name: Add results to ArcticDB database
         shell: bash -el {0}
         run: |
-          pip install arcticdb[Testing]
+          pip install arcticdb[Testing] "protobuf<6"
           python build_tooling/transform_asv_results.py --mode save ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}}
 
   stop-ec2-runner:

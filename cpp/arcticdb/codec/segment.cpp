@@ -30,7 +30,7 @@ arcticdb::proto::encoding::SegmentHeader generate_v1_header(const SegmentHeader&
     segment_header.set_compacted(header.compacted());
     segment_header.set_encoding_version(static_cast<uint16_t>(header.encoding_version()));
 
-    ARCTICDB_TRACE(log::codec(), "Encoded segment header {}", segment_header.DebugString());
+    ARCTICDB_TRACE(log::codec(), "Encoded segment header bytes {}: {}", segment_header.ByteSizeLong(), segment_header.DebugString());
     return segment_header;
 }
 
@@ -139,6 +139,7 @@ struct DeserializedSegmentData {
 };
 
 DeserializedSegmentData decode_header_and_fields(const uint8_t*& src, bool copy_data) {
+    util::check(src != nullptr, "Got null data ptr from segment");
     auto* fixed_hdr = reinterpret_cast<const FixedHeader*>(src);
     ARCTICDB_DEBUG(log::codec(), "Reading header: {} + {} = {}", FIXED_HEADER_SIZE, fixed_hdr->header_bytes, FIXED_HEADER_SIZE + fixed_hdr->header_bytes);
 
@@ -152,7 +153,8 @@ DeserializedSegmentData decode_header_and_fields(const uint8_t*& src, bool copy_
         auto segment_header = deserialize_segment_header_from_proto(proto_wrapper->proto());
         util::check(segment_header.encoding_version() == EncodingVersion::V1, "Expected v1 header to contain legacy encoding version");
         auto fields = std::make_shared<FieldCollection>(field_collection_from_proto(proto_wrapper->proto().stream_descriptor().fields()));
-        src += FIXED_HEADER_SIZE + fixed_hdr->header_bytes;
+        const auto total_header_size = FIXED_HEADER_SIZE + fixed_hdr->header_bytes;
+        src += total_header_size;
         auto stream_id = stream_id_from_proto(proto_wrapper->proto().stream_descriptor());
         return {std::move(segment_header), std::move(fields), std::move(data), std::move(proto_wrapper), stream_id};
     } else {
@@ -238,12 +240,12 @@ Segment Segment::from_buffer(const std::shared_ptr<Buffer>& buffer) {
     return{std::move(seg_hdr), buffer, std::move(desc_data), std::move(fields), stream_id, readable_size};
 }
 
-size_t Segment::write_proto_header(uint8_t* dst) {
+size_t Segment::write_proto_header(uint8_t* dst, size_t header_size) {
     const auto& header = generate_header_proto();
     const auto hdr_size = proto_size();
     FixedHeader hdr = {MAGIC_NUMBER, HEADER_VERSION_V1, std::uint32_t(hdr_size)};
     write_fixed_header(dst, hdr);
-
+    util::check(header_size == proto_size(), "Header size mismatch: {} != {}", header_size, proto_size());
     google::protobuf::io::ArrayOutputStream aos(dst + FIXED_HEADER_SIZE, static_cast<int>(hdr_size));
     header.SerializeToZeroCopyStream(&aos);
     return hdr_size;
@@ -268,34 +270,59 @@ std::pair<uint8_t*, size_t> Segment::serialize_header_v2(size_t expected_bytes) 
     return std::make_pair(buffer->preamble(), calculate_size());
 }
 
-std::pair<uint8_t*, size_t> Segment::serialize_v1_header_in_place(size_t total_hdr_size) {
+std::pair<uint8_t*, size_t> Segment::serialize_v1_header_in_place(size_t hdr_size) {
+    const auto total_hdr_size = hdr_size + FIXED_HEADER_SIZE;
     const auto &buffer = buffer_.get_owning_buffer();
     auto base_ptr = buffer->preamble() + (buffer->preamble_bytes() - total_hdr_size);
+    util::check(buffer->data() != nullptr, "Unexpected null base pointer in v1 header serialization");
     util::check(base_ptr + total_hdr_size == buffer->data(), "Expected base ptr to align with data ptr, {} != {}",fmt::ptr(base_ptr + total_hdr_size),fmt::ptr(buffer->data()));
-    write_proto_header(base_ptr);
-    ARCTICDB_TRACE(log::storage(), "Header fits in internal buffer {:x} with {} bytes space: {}", intptr_t (base_ptr), buffer->preamble_bytes() - total_hdr_size,dump_bytes(buffer->data(), buffer->bytes(), 100u));
+    auto red_zone = *buffer->data();
+    auto header_bytes_written = write_proto_header(base_ptr, hdr_size);
+    ARCTICDB_TRACE(log::storage(), "Header fits in internal buffer {:x} with {} bytes space: {}", intptr_t (base_ptr), buffer->preamble_bytes() - total_hdr_size,dump_bytes(buffer->data(), buffer->bytes(), 10u));
+    auto check_red_zone = *buffer->data();
+    util::check(red_zone == check_red_zone, "Data overwrite occurred {} != {}", check_red_zone, red_zone);
+    util::check(header_bytes_written == hdr_size, "Wrote unexpected number of header bytes {} != {}", header_bytes_written, total_hdr_size);
     return std::make_pair(base_ptr, calculate_size());
 }
 
 std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_v1_header_to_buffer(size_t hdr_size) {
     auto tmp = std::make_unique<Buffer>();
-    ARCTICDB_TRACE(log::storage(), "Header doesn't fit in internal buffer, needed {} bytes but had {}, writing to temp buffer at {:x}", hdr_size, buffer_.preamble_bytes(),uintptr_t(tmp->data()));
-    tmp->ensure(calculate_size());
+    auto bytes_to_copy = buffer().bytes();
+    auto offset = FIXED_HEADER_SIZE + hdr_size;
+
+    auto total_size = offset + bytes_to_copy;
+    tmp->ensure(total_size);
+
+    util::check(tmp->available() >= total_size, "Buffer available space {} is less than required size {}",tmp->available(), total_size);
+
+    auto calculated_size = calculate_size();
+    util::check(total_size == calculated_size, "Expected total size {} to be equal to calculated size {}", total_size, calculated_size);
+
     auto* dst = tmp->preamble();
-    write_proto_header(dst);
-    std::memcpy(dst + FIXED_HEADER_SIZE + hdr_size,
-                buffer().data(),
-                buffer().bytes());
+    util::check(dst != nullptr, "Expected dst to be non-null");
+    auto header_bytes_written = write_proto_header(dst, hdr_size);
+
+    // This is a bit redundant since the size is also checked in write_proto_header, but the consequences of getting
+    // it wrong are pretty bad (corrupt data) so will leave it in for future-proofing
+    util::check(header_bytes_written == hdr_size, "Expected written header size {} to be equal to expected header size {}", header_bytes_written, hdr_size);
+
+    if(buffer().data() != nullptr) {
+        std::memcpy(dst + offset, buffer().data(), buffer().bytes());
+    } else {
+        util::check(bytes_to_copy == 0, "Expected bytes_to_copy to be 0 when src is nullptr");
+        ARCTICDB_DEBUG(log::codec(), "src is nullptr, skipping memcpy");
+    }
+
     return std::make_tuple(tmp->preamble(), calculate_size(), std::move(tmp));
 }
 
 std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_header_v1() {
-    auto proto_header = generate_v1_header(header_, desc_);
-    const auto hdr_size = proto_header.ByteSizeLong();
+    auto proto_header = generate_header_proto();
+    const auto hdr_size = proto_size();
     auto total_hdr_size = hdr_size + FIXED_HEADER_SIZE;
 
     if (buffer_.is_owning_buffer() && buffer_.preamble_bytes() >= total_hdr_size) {
-        auto [dst, size] = serialize_v1_header_in_place(total_hdr_size);
+        auto [dst, size] = serialize_v1_header_in_place(hdr_size);
         return std::make_tuple(dst, size, std::unique_ptr<Buffer>());
     } else {
         return serialize_v1_header_to_buffer(hdr_size);
@@ -324,8 +351,10 @@ std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_header(
 }
 
 const arcticdb::proto::encoding::SegmentHeader& Segment::generate_header_proto() {
-    if(!proto_)
+    if(!proto_) {
         proto_ = std::make_unique<arcticdb::proto::encoding::SegmentHeader>(generate_v1_header(header_, desc_));
+        proto_size_ = proto_->ByteSizeLong();
+    }
 
     return *proto_;
 }
@@ -336,7 +365,7 @@ void Segment::write_to(std::uint8_t* dst) {
 
     size_t header_size;
     if(header_.encoding_version() == EncodingVersion::V1)
-        header_size = write_proto_header(dst);
+        header_size = write_proto_header(dst, proto_size());
     else
         header_size = write_binary_header(dst);
 

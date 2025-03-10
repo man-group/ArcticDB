@@ -105,8 +105,8 @@ struct ColumnExpression {
     ColumnExpression(const IterableContainer& left, const IterableContainer& right) :
         left_(left),
         right_(right) {
-        auto promoted_type = has_valid_type_promotion(left_->type(), right_->type());
-        util::check(static_cast<bool>(promoted_type), "Cannot promote from type {} and type {} in column expression", left_->type(), right_->type());
+        auto promoted_type = has_valid_common_type(left_->type(), right_->type());
+        util::check(promoted_type, "Cannot promote from type {} and type {} in column expression", left_->type(), right_->type());
         type_ = promoted_type.value();
     }
 

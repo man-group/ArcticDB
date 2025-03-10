@@ -216,5 +216,3 @@ def test_query_builder_sparse_hypothesis(lmdb_version_store_v1, df):
     received = lib.read(sym, query_builder=q).data
     received.sort_index(inplace=True)
     assert_frame_equal(expected, received)
-
-

@@ -8,8 +8,9 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 import pandas as pd
 import pytest
-from arcticdb.exceptions import SortingException, NormalizationException
+from arcticdb.exceptions import SortingException
 from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb.util.test import assert_frame_equal
 from pandas import MultiIndex
 from arcticdb.util.test import assert_frame_equal
 
@@ -133,26 +134,53 @@ def test_write_non_timestamp_index(lmdb_version_store, index_type, sorted, valid
     info = lib.get_info(symbol)
     assert info["sorted"] == "UNKNOWN"
 
-@pytest.mark.parametrize("dtype", [None, object, np.float32, np.double])
-def test_write_with_nan_none(lmdb_version_store, dtype):
-    lib = lmdb_version_store
-    sym = "nan"
-    lib.write(sym, pd.DataFrame({"a": [None, np.nan]}, dtype=dtype))
-    data = lib.read(sym).data
-    assert_frame_equal(data, pd.DataFrame({"a": [None, np.nan]}, dtype=dtype))
+class TestMissingStringPlaceholders:
+    @pytest.mark.parametrize("dtype", [None, object, np.float32, np.double])
+    def test_write_with_nan_none(self, lmdb_version_store, dtype):
+        lib = lmdb_version_store
+        sym = "nan"
+        lib.write(sym, pd.DataFrame({"a": [None, np.nan]}, dtype=dtype))
+        data = lib.read(sym).data
+        assert_frame_equal(data, pd.DataFrame({"a": [None, np.nan]}, dtype=dtype))
 
-@pytest.mark.parametrize("dtype", [None, object])
-def test_write_with_nan_none_and_a_string(lmdb_version_store, dtype):
-    lib = lmdb_version_store
-    sym = "nan"
-    lib.write(sym, pd.DataFrame({"a": [None, np.nan, "string"]}, dtype=dtype))
-    data = lib.read(sym).data
-    assert_frame_equal(data, pd.DataFrame({"a": [None, np.nan, "string"]}, dtype=dtype))
+    @pytest.mark.parametrize("dtype", [None, object])
+    def test_write_with_nan_none_and_a_string(self, lmdb_version_store, dtype):
+        lib = lmdb_version_store
+        sym = "nan"
+        lib.write(sym, pd.DataFrame({"a": [None, np.nan, "string"]}, dtype=dtype))
+        data = lib.read(sym).data
+        assert_frame_equal(data, pd.DataFrame({"a": [None, np.nan, "string"]}, dtype=dtype))
 
-@pytest.mark.parametrize("dtype", [None, object, np.double, np.float32])
-def test_write_only_nan_column(lmdb_version_store, dtype):
-    lib = lmdb_version_store
-    sym = "nan"
-    lib.write(sym, pd.DataFrame({"a": [np.nan]}, dtype=dtype))
-    data = lib.read(sym).data
-    assert_frame_equal(data, pd.DataFrame({"a": [np.nan]}, dtype=dtype))
+    @pytest.mark.parametrize("dtype", [None, object, np.double, np.float32])
+    def test_write_only_nan_column(self, lmdb_version_store, dtype):
+        lib = lmdb_version_store
+        sym = "nan"
+        lib.write(sym, pd.DataFrame({"a": [np.nan]}, dtype=dtype))
+        data = lib.read(sym).data
+        assert_frame_equal(data, pd.DataFrame({"a": [np.nan]}, dtype=dtype))
+
+def test_write_unicode(lmdb_version_store):
+    symbol = "test_write_unicode"
+    uc = "\u0420\u043e\u0441\u0441\u0438\u044f"
+
+    df1 = pd.DataFrame(
+        index=[pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03")],
+        data={"a": ["123", uc]},
+    )
+    lmdb_version_store.write(symbol, df1)
+    vit = lmdb_version_store.read(symbol)
+    assert_frame_equal(vit.data, df1)
+
+
+def test_write_parallel_unicode(lmdb_version_store):
+    symbol = "test_write_parallel_unicode"
+    uc = "\u0420\u043e\u0441\u0441\u0438\u044f"
+
+    df1 = pd.DataFrame(
+        index=[pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03")],
+        data={"a": ["123", uc]},
+    )
+    lmdb_version_store.write(symbol, df1, parallel=True)
+    lmdb_version_store.compact_incomplete(symbol, append=False, convert_int_to_float=False)
+    vit = lmdb_version_store.read(symbol)
+    assert_frame_equal(vit.data, df1)
