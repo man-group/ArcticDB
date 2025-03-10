@@ -60,6 +60,8 @@ def test_recursively_written_data(basic_store, read):
         assert pickled_vit.symbol == pickled_sym
         assert_vit_equals_except_data(recursive_write_vit, recursive_vit)
         assert_vit_equals_except_data(pickled_write_vit, pickled_vit)
+        assert basic_store.get_info(recursive_sym)["type"] != "pickled"
+        assert basic_store.get_info(pickled_sym)["type"] == "pickled"
 
 
 
@@ -80,6 +82,7 @@ def test_recursively_written_data_with_metadata(basic_store, read):
         assert read_vit.symbol == sym
         assert read_vit.metadata == metadata
         assert_vit_equals_except_data(read_vit, write_vit)
+        assert basic_store.get_info(sym)["type"] != "pickled"
 
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
@@ -98,6 +101,7 @@ def test_recursively_written_data_with_nones(basic_store, read):
     assert pickled_read_vit.symbol == pickled_sym
     assert_vit_equals_except_data(recursive_write_vit, recursive_read_vit)
     assert_vit_equals_except_data(pickled_write_vit, pickled_read_vit)
+    assert basic_store.get_info(recursive_sym)["type"] != "pickled"
 
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
@@ -130,26 +134,29 @@ def test_recursive_normalizer_with_custom_class():
 def test_nested_custom_types(basic_store):
     data = AlmostAList([1, 2, 3, AlmostAList([5, np.arange(6)])])
     fl = Flattener()
-    meta, to_write = fl.create_meta_structure(data, "sym")
+    sym = "sym"
+    meta, to_write = fl.create_meta_structure(data, sym)
     equals(list(to_write.values())[0], np.arange(6))
-    write_vit = basic_store.write("sym", data, recursive_normalizers=True)
-    read_vit = basic_store.read("sym")
+    write_vit = basic_store.write(sym, data, recursive_normalizers=True)
+    read_vit = basic_store.read(sym)
     got_back = read_vit.data
     assert isinstance(got_back, AlmostAList)
     assert isinstance(got_back[3], AlmostAList)
     assert got_back[0] == 1
     assert_vit_equals_except_data(write_vit, read_vit)
+    assert basic_store.get_info(sym)["type"] != "pickled"
 
 def test_data_directly_msgpackable(basic_store):
     data = {"a": [1, 2, 3], "b": {"c": 5}}
     fl = Flattener()
-    meta, to_write = fl.create_meta_structure(data, "sym")
+    meta, to_write = fl.create_meta_structure(data, "s")
     assert len(to_write) == 0
     assert meta["leaf"] is True
     write_vit = basic_store.write("s", data, recursive_normalizers=True)
     read_vit = basic_store.read("s")
     equals(read_vit.data, data)
     assert_vit_equals_except_data(write_vit, read_vit)
+    assert basic_store.get_info("s")["type"] == "pickled"
 
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
@@ -164,6 +171,7 @@ def test_really_large_symbol_for_recursive_data(basic_store, read):
     equals(read_vit.data, data)
     assert read_vit.symbol == sym
     assert_vit_equals_except_data(write_vit, read_vit)
+    assert basic_store.get_info(sym)["type"] != "pickled"
 
 
 def test_too_much_recursive_metastruct_data(monkeypatch, lmdb_version_store_v1):
