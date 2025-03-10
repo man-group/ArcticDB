@@ -175,7 +175,9 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
                     sample = *current_object;
             }
             // Column full of NaN values is interpreted differently based on the kind. If kind is object "O" the column
-            // is assigned a string type if kind is float "f" the column is assigned a float type.
+            // is assigned a string type if kind is float "f" the column is assigned a float type. This is done in
+            // order to preserve a legacy behavior of ArcticDB allowing to use both NaN and None as a placeholder for
+            // missing string values.
             if (empty_string_placeholder && kind == 'O') {
                 val_type = empty_types ? ValueType::EMPTY : ValueType::UTF_DYNAMIC;
             } else if(is_unicode(sample)) {

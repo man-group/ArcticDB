@@ -133,7 +133,7 @@ def test_write_non_timestamp_index(lmdb_version_store, index_type, sorted, valid
     info = lib.get_info(symbol)
     assert info["sorted"] == "UNKNOWN"
 
-@pytest.mark.parametrize("dtype", [None, object])
+@pytest.mark.parametrize("dtype", [None, object, np.float32, np.double])
 def test_write_with_nan_none(lmdb_version_store, dtype):
     lib = lmdb_version_store
     sym = "nan"
