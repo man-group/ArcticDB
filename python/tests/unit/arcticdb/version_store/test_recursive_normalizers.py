@@ -9,6 +9,7 @@ from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from 
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.util.venv import CurrentVersion
 from arcticdb.util.test import assert_frame_equal
+from arcticdb_ext.storage import KeyType
 
 
 class AlmostAList(list):
@@ -187,7 +188,7 @@ def test_too_much_recursive_metastruct_data(monkeypatch, lmdb_version_store_v1):
     assert "recursive" in str(e.value).lower()
 
 class TestRecursiveNormalizersCompat:
-    def test_compat_read_incomplete(self, old_venv_and_arctic_uri, lib_name):
+    def test_compat_write_old_read_new(self, old_venv_and_arctic_uri, lib_name):
         old_venv, arctic_uri = old_venv_and_arctic_uri
         old_ac = old_venv.create_arctic(arctic_uri)
         old_lib = old_ac.create_library(lib_name)
@@ -208,3 +209,24 @@ assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
             assert set(data.keys()) == set(expected.keys())
             for key in data.keys():
                 assert_frame_equal(data[key], expected[key])
+
+    def test_write_new_read_old(self, old_venv_and_arctic_uri, lib_name):
+        old_venv, arctic_uri = old_venv_and_arctic_uri
+        old_ac = old_venv.create_arctic(arctic_uri)
+        old_lib = old_ac.create_library(lib_name)
+        dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]}), "df_2": pd.DataFrame({"b": ["a", "b"]})}
+        with CurrentVersion(arctic_uri, lib_name) as curr:
+            curr.lib._nvs.write('sym', {"a": dfs["df_1"], "b": dfs["df_2"]}, recursive_normalizers=True, pickle_on_failure=True)
+            lib_tool = curr.lib._nvs.library_tool()
+            assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
+
+        old_lib.execute([
+            """
+from pandas.testing import assert_frame_equal
+data = lib.read('sym').data
+expected = {'a': df_1, 'b': df_2}
+assert set(data.keys()) == set(expected.keys())
+for key in data.keys():
+    assert_frame_equal(data[key], expected[key])
+            """
+        ], dfs=dfs)
