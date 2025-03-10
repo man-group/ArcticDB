@@ -110,20 +110,21 @@ Use the configuration in ArcticDB:
 >>> arctic = adb.Arctic('s3://s3.REGION.amazonaws.com:BUCKET?aws_auth=sts&aws_profile=PROFILE')
 ```
 
+## Common Errors When Working with STS
+
 Due to limitations in the AWS C++ SDK, if ArcticDB fails to obtain the temporary token by assuming a role, an assertion error similar to the one below will occur:
 ```
 virtual void Aws::Auth::STSProfileCredentialsProvider::Reload(): Assertion `!profileIt->second.GetCredentials().IsEmpty()' failed.
 ```
 This is usually due to an incorrect IAM account setup or an incorrect configuration file.
 
-'Access Denied' error most probably mean incorrect aws configuration file:
 ```
 arcticdb_ext.exceptions.PermissionException: E_PERMISSION Permission error: S3Error#15 AccessDenied: Access Denied for object '_arctic_cfg/cref/'
 ```
-Check Role Arn and base source profile in the file.
+This error suggests problems with configuration file. Check Role Arn and base source profile in the file.
 
-A loss of network connectivity would trigger error similar to this:
+
 ```
 Actual: arcticdb_ext.exceptions.StorageException: E_S3_RETRYABLE Retry-able error: S3Error#99 : Encountered network error when sending http request for object '_arctic_cfg/cref/'
 ```
-Note that this error will appear after several attempts to re-establish the connection
+A loss of network connectivity would triggers such error. Note, that this error will appear after several attempts to re-establish the connection
