@@ -85,25 +85,32 @@ public:
     void merge_from(const StatsGroupLayer& other);
 };
 
+struct ThreadLocalQueryStatsVar {
+    std::mutex child_layer_creation_mutex_;
+    std::vector<std::pair<std::shared_ptr<StatsGroupLayer>, std::shared_ptr<StatsGroupLayer>>> child_layers_;
+    std::shared_ptr<StatsGroupLayer> root_layer_ = nullptr;
+    std::shared_ptr<StatsGroupLayer> current_layer_ = nullptr;
+};
+
 
 class QueryStats {
 public:
     std::shared_ptr<StatsGroupLayer> current_layer();
     std::shared_ptr<StatsGroupLayer> root_layer();
+    const std::vector<std::shared_ptr<StatsGroupLayer>>& root_layers() const;
     bool is_root_layer_set();
-    void create_child_layer(std::shared_ptr<StatsGroupLayer>& layer);
+    void create_child_layer(ThreadLocalQueryStatsVar& parent_thread_local_var);
+    void set_root_layer(std::shared_ptr<StatsGroupLayer> &layer);
     void set_layer(std::shared_ptr<StatsGroupLayer> &layer);
     void reset_stats();
     static QueryStats& instance();
     bool is_enabled_ = false;
-    
     void merge_layers();
-    
+
+    thread_local inline static ThreadLocalQueryStatsVar thread_local_var_;
 private:
-    std::vector<std::pair<std::shared_ptr<StatsGroupLayer>, std::shared_ptr<StatsGroupLayer>>> child_layers_;
-    std::mutex child_layer_creation_mutex_;
-    thread_local inline static std::shared_ptr<StatsGroupLayer> root_layer_ = nullptr;
-    thread_local inline static std::shared_ptr<StatsGroupLayer> current_layer_ = nullptr;
+    std::mutex root_layer_mutex_; 
+    std::vector<std::shared_ptr<StatsGroupLayer>> root_layers_; 
 };
     
     

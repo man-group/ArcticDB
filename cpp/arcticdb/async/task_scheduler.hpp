@@ -186,11 +186,16 @@ class ExecutorWithStatsInstance : public T{
         void add(folly::Func func,
             std::chrono::milliseconds expiration,
             folly::Func expireCallback) override {
-            auto func_with_stat_query_wrap = [layer = util::query_stats::QueryStats::instance().current_layer(), func = std::move(func)](auto&&... vars) mutable{
-                util::query_stats::QueryStats::instance().set_layer(layer);
-                return func(std::forward<decltype(vars)>(vars)...);
-            };
-            T::add(std::move(func_with_stat_query_wrap), expiration, std::move(expireCallback));
+            if (arcticdb::util::query_stats::QueryStats::instance().is_enabled_) {
+                auto func_with_stat_query_wrap = [layer = util::query_stats::QueryStats::instance().current_layer(), func = std::move(func)](auto&&... vars) mutable{
+                    util::query_stats::QueryStats::instance().set_root_layer(layer);
+                    return func(std::forward<decltype(vars)>(vars)...);
+                };
+                T::add(std::move(func_with_stat_query_wrap), expiration, std::move(expireCallback));
+            }
+            else {
+                T::add(std::move(func), expiration, std::move(expireCallback));
+            }
         }
 };
 
@@ -228,12 +233,17 @@ class TaskScheduler {
         // Executor::Add will be called before below function
         // TODO: Add checking to make sure QUERY_STATS_ADD_GROUP is called once before folly tasks, once all query stats entries are added
         // so the query stats could be presented
-        auto task_with_stat_query_instance = [layer = util::query_stats::QueryStats::instance().current_layer(), task = std::move(task)]() mutable{
-            util::query_stats::QueryStats::instance().create_child_layer(layer);
-            return task();
-        };
         std::lock_guard lock{cpu_mutex_};
-        return cpu_exec_.addFuture(std::move(task_with_stat_query_instance));
+        if (arcticdb::util::query_stats::QueryStats::instance().is_enabled_) {
+            auto task_with_stat_query_instance = [&parent_thread_local_var = util::query_stats::QueryStats::instance().thread_local_var_, task = std::move(task)]() mutable{
+                util::query_stats::QueryStats::instance().create_child_layer(parent_thread_local_var);
+                return task();
+            };
+            return cpu_exec_.addFuture(std::move(task_with_stat_query_instance));
+        }
+        else {
+            return cpu_exec_.addFuture(std::move(task));
+        }
     }
 
     template<class Task>
@@ -244,13 +254,20 @@ class TaskScheduler {
         // Executor::Add will be called before below function
         // TODO: Add checking to make sure QUERY_STATS_ADD_GROUP is called once before folly tasks, once all query stats entries are added
         // so the query stats could be presented
-        auto task_with_stat_query_instance = [layer = util::query_stats::QueryStats::instance().current_layer(), task = std::move(task)]() mutable{
-            util::query_stats::QueryStats::instance().create_child_layer(layer);
-            return task();
-        };
         std::lock_guard lock{io_mutex_};
-        return io_exec_.addFuture(std::move(task_with_stat_query_instance));
+        if (arcticdb::util::query_stats::QueryStats::instance().is_enabled_) {
+            auto task_with_stat_query_instance = [&parent_thread_local_var = util::query_stats::QueryStats::instance().thread_local_var_, task = std::move(task)]() mutable{
+                util::query_stats::QueryStats::instance().create_child_layer(parent_thread_local_var);
+                return task();
+            };
+            return io_exec_.addFuture(std::move(task_with_stat_query_instance));
+        }
+        else {
+            return io_exec_.addFuture(std::move(task));
+        }
     }
+
+    bool tasks_pending();
 
     static std::shared_ptr<TaskSchedulerPtrWrapper> instance_;
     static std::once_flag init_flag_;

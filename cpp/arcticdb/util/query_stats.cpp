@@ -13,24 +13,39 @@
 namespace arcticdb::util::query_stats {
 
 std::shared_ptr<StatsGroupLayer> QueryStats::current_layer(){
-    if (!current_layer_) {
+    // current_layer_ != nullptr && root_layer_ != nullptr -> stats has been setup; Nothing to do
+    // current_layer_ == nullptr && root_layer_ == nullptr -> clean slate; Need to setup
+    // current_layer_ != nullptr && root_layer_ == nullptr -> stats have been reset; Need to setup
+    // current_layer_ == nullptr && root_layer_ != nullptr -> Something is off
+    if (!thread_local_var_.current_layer_ || !thread_local_var_.root_layer_) {
         check(!async::is_folly_thread, "Folly thread should have its StatsGroupLayer passed by caller only");
-        check(!root_layer_, "QueryStats root_layer_ should be null if current_layer_ is null");
-        root_layer_ = std::make_shared<StatsGroupLayer>();
-        current_layer_ = root_layer_;
+        check(thread_local_var_.current_layer_ || !thread_local_var_.root_layer_, "QueryStats root_layer_ should be null if current_layer_ is null");
+        thread_local_var_.root_layer_ = std::make_shared<StatsGroupLayer>();
+        {
+            std::lock_guard<std::mutex> lock(root_layer_mutex_);
+            root_layers_.emplace_back(thread_local_var_.root_layer_);
+        }
+        thread_local_var_.current_layer_ = thread_local_var_.root_layer_;
         ARCTICDB_DEBUG(log::version(), "Current StatsGroupLayer created");
     }
-    return current_layer_;
+    return thread_local_var_.current_layer_;
 }
 
 void QueryStats::set_layer(std::shared_ptr<StatsGroupLayer> &layer) {
-    current_layer_ = layer;
+    thread_local_var_.current_layer_ = layer;
 }
 
-void QueryStats::reset_stats(){
-    root_layer_.reset();
-    child_layers_.clear();
-    current_layer_.reset();
+void QueryStats::set_root_layer(std::shared_ptr<StatsGroupLayer> &layer) {
+    thread_local_var_.current_layer_ = layer;
+    thread_local_var_.root_layer_ = layer;
+}
+
+void QueryStats::reset_stats() {
+    check(!async::TaskScheduler::instance()->tasks_pending(), "Folly tasks are still running");
+    std::lock_guard<std::mutex> lock(root_layer_mutex_);
+    for (auto& layer : root_layers_) {
+        layer.reset();
+    }
 }
 
 QueryStats& QueryStats::instance() {
@@ -39,17 +54,10 @@ QueryStats& QueryStats::instance() {
 }
 
 void QueryStats::merge_layers() {
-    auto cpu_stats = async::TaskScheduler::instance()->cpu_exec().getPoolStats();
-    auto io_stats = async::TaskScheduler::instance()->io_exec().getPoolStats();
-    check(cpu_stats.activeThreadCount == 0 && 
-        cpu_stats.pendingTaskCount == 0 && 
-        io_stats.activeThreadCount == 0 && 
-        io_stats.pendingTaskCount == 0,
-        "Folly tasks are not still running while aggregating query stats");
-    for (auto& [parent_layer, child_layer] : child_layers_) {
+    for (auto& [parent_layer, child_layer] : thread_local_var_.child_layers_) {
         parent_layer->merge_from(*child_layer);
     }
-    child_layers_.clear();
+    thread_local_var_.child_layers_.clear();
 }
 
 void StatsGroupLayer::reset_stats() {
@@ -77,24 +85,29 @@ void StatsGroupLayer::merge_from(const StatsGroupLayer& other) {
 }
 
 std::shared_ptr<StatsGroupLayer> QueryStats::root_layer() {
-    if (!root_layer_) {
-        util::check(!current_layer_, "QueryStats current_layer_ should be null if root_layer_ is null");
-        root_layer_ = std::make_shared<StatsGroupLayer>();
-        current_layer_ = root_layer_;
+    if (!thread_local_var_.root_layer_) {
+        util::check(!thread_local_var_.current_layer_, "QueryStats current_layer_ should be null if root_layer_ is null");
+        thread_local_var_.root_layer_ = std::make_shared<StatsGroupLayer>();
+        thread_local_var_.current_layer_ = thread_local_var_.root_layer_;
         ARCTICDB_DEBUG(log::version(), "Root StatsGroupLayer created");
     }
-    return root_layer_;
+    return thread_local_var_.root_layer_;
+}
+
+const std::vector<std::shared_ptr<StatsGroupLayer>>& QueryStats::root_layers() const{
+    check(!async::TaskScheduler::instance()->tasks_pending(), "Folly tasks are still running");
+    return root_layers_;
 }
 
 bool QueryStats::is_root_layer_set() {
-    return root_layer_.operator bool();
+    return thread_local_var_.root_layer_.operator bool();
 }
 
-void QueryStats::create_child_layer(std::shared_ptr<StatsGroupLayer>& layer) {
+void QueryStats::create_child_layer(ThreadLocalQueryStatsVar& parent_thread_local_var) {
     auto child_layer = std::make_shared<StatsGroupLayer>();
-    current_layer_ = child_layer;
-    std::lock_guard<std::mutex> lock(child_layer_creation_mutex_);
-    child_layers_.emplace_back(layer, child_layer);
+    set_root_layer(child_layer);
+    std::lock_guard<std::mutex> lock(parent_thread_local_var.child_layer_creation_mutex_);
+    parent_thread_local_var.child_layers_.emplace_back(parent_thread_local_var.current_layer_, child_layer);
 }
 
 StatsGroup::StatsGroup(bool log_time, StatsGroupName col, const std::string& value) : 
@@ -112,15 +125,18 @@ StatsGroup::StatsGroup(bool log_time, StatsGroupName col, const std::string& val
 StatsGroup::~StatsGroup() {
     auto& query_stats_instance = QueryStats::instance();
     if (log_time_) {
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start_);
-            auto& stats = query_stats_instance.current_layer()->stats_;
-            stats[static_cast<size_t>(StatsName::total_time_ms)] += duration.count();
-            stats[static_cast<size_t>(StatsName::count)]++;
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start_);
+        auto& stats = query_stats_instance.current_layer()->stats_;
+        stats[static_cast<size_t>(StatsName::total_time_ms)] += duration.count();
+        stats[static_cast<size_t>(StatsName::count)]++;
     }
     query_stats_instance.set_layer(prev_layer_);
     if (!async::is_folly_thread && query_stats_instance.current_layer() == query_stats_instance.root_layer()) {
         query_stats_instance.merge_layers();
     }
+    auto& root_layers = QueryStats::instance().root_layers();
+    
+    ARCTICDB_INFO(log::version(), "root_layers {}", root_layers.size());
 }
 }
