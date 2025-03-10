@@ -125,6 +125,6 @@ This error suggests problems with configuration file. Check Role Arn and base so
 
 
 ```
-Actual: arcticdb_ext.exceptions.StorageException: E_S3_RETRYABLE Retry-able error: S3Error#99 : Encountered network error when sending http request for object '_arctic_cfg/cref/'
+arcticdb_ext.exceptions.StorageException: E_S3_RETRYABLE Retry-able error: S3Error#99 : Encountered network error when sending http request for object '_arctic_cfg/cref/'
 ```
-A loss of network connectivity would triggers such error. Note, that this error will appear after several attempts to re-establish the connection
+A loss of network connectivity could trigger such an error. Note, that this error will appear after several attempts to re-establish the connection
