@@ -500,10 +500,13 @@ VersionedItem update_impl(
 folly::Future<ReadVersionOutput> read_multi_key(
     const std::shared_ptr<Store>& store,
     const SegmentInMemory& index_key_seg,
-    std::any& handler_data) {
+    std::any& handler_data,
+    AtomKey&& key
+    ) {
     std::vector<AtomKey> keys;
+    keys.reserve(index_key_seg.row_count());
     for (size_t idx = 0; idx < index_key_seg.row_count(); idx++) {
-        keys.emplace_back(stream::read_key_row(index_key_seg, static_cast<ssize_t>(idx)));
+        keys.emplace_back(read_key_row(index_key_seg, static_cast<ssize_t>(idx)));
     }
 
     AtomKey dup{keys[0]};
@@ -511,10 +514,11 @@ folly::Future<ReadVersionOutput> read_multi_key(
     TimeseriesDescriptor multi_key_desc{index_key_seg.index_descriptor()};
 
     return read_frame_for_version(store, versioned_item, std::make_shared<ReadQuery>(), ReadOptions{}, handler_data)
-    .thenValue([multi_key_desc=std::move(multi_key_desc), keys=std::move(keys)](ReadVersionOutput&& read_version_output) mutable {
+    .thenValue([multi_key_desc=std::move(multi_key_desc), keys=std::move(keys), key=std::move(key)](ReadVersionOutput&& read_version_output) mutable {
         multi_key_desc.mutable_proto().mutable_normalization()->CopyFrom(read_version_output.frame_and_descriptor_.desc_.proto().normalization());
         read_version_output.frame_and_descriptor_.desc_ = std::move(multi_key_desc);
         read_version_output.frame_and_descriptor_.keys_ = std::move(keys);
+        read_version_output.versioned_item_ = VersionedItem(std::move(key));
         return std::move(read_version_output);
     });
 }
@@ -2046,7 +2050,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 
     if(pipeline_context->multi_key_) {
         check_multi_key_is_not_index_only(*pipeline_context, *read_query);
-        return read_multi_key(store, *pipeline_context->multi_key_, handler_data);
+        return read_multi_key(store, *pipeline_context->multi_key_, handler_data, std::move(res_versioned_item.key_));
     }
 
     if(opt_false(read_options.incompletes())) {
@@ -2067,7 +2071,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
 
     DecodePathData shared_data;
-    return version_store::do_direct_read_or_process(store, read_query, read_options, pipeline_context, shared_data, handler_data)
+    return do_direct_read_or_process(store, read_query, read_options, pipeline_context, shared_data, handler_data)
     .thenValue([res_versioned_item, pipeline_context, read_options, &handler_data, read_query, shared_data](auto&& frame) mutable {
         ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
         return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
