@@ -6,6 +6,39 @@
  */
 
 #pragma once
+
+/*
+ * Class Structure Diagram:
+ *                                    
+ *                                    +------------------+                     
+ *                                    |    QueryStats    |                         
+ * Temp. storing folly thread root    +------------------+                        
+ * layer. Will be aggregated to   <...| - child_layers_[]|                    +---------------------+
+ * root_layer when func. is finished  | - root_layer_ ---|------------------->|  StatsGroupLayer    |
+ *                                    | - is_enabled_    |                    +---------------------+
+ *    Ref. pointer to the layer   <...| - current_layer_ |                    | - stats_[]          | .......> Storing non-groupable stats
+ *    in use                          +------------------+                    | - next_layer_maps_[]|
+ *                                            ^                               +---------------------+                     
+ *                                            |                                        |
+ *                                            |                                        |
+ *                                            |                                        |
+ *                                            |               Extend the chain         |
+ *                                            |               and temporarily update   |
+ *                                    +-------+-------+   QueryStats's current_layer_  |
+ *                                    |  StatsGroup   |................................|
+ *                                    +---------------+                                v
+ *                                    | - prev_layer_ |                       +-------------------+          
+ *                                    | - start_      |                       | StatsGroupLayer   |-----> ... (more layers)          
+ *                                    | - log_time_   |                       +-------------------+          
+ *                                    +---------------+                                 
+ *                     
+ * Structure:
+ * - QueryStats: Singleton manager class holding the stats collection framework
+ * - StatsGroupLayer: Hierarchical node containing stats and references to child layers
+ * - StatsGroup: RAII wrapper that temporarily extends the layer chain during its lifetime
+ *   When created, it adds a new layer and when destroyed, it restores the previous layer state
+ */
+
 #include <mutex>
 #include <memory>
 #include <vector>
@@ -22,18 +55,6 @@
 namespace arcticdb::util::query_stats {
 using StatsGroups = std::vector<std::shared_ptr<std::pair<std::string, std::string>>>;
 
-
-// thread-global instance
-// class StatsInstance { // this will be passed to folly worker threads
-// public:
-//     static std::shared_ptr<StatsInstance> instance();
-//     static void copy_instance(std::shared_ptr<StatsInstance>& ptr);
-//     static void pass_instance(std::shared_ptr<StatsInstance>&& ptr);
-
-//     StatsGroups info_;
-// private:
-//     thread_local inline static std::shared_ptr<StatsInstance> instance_;
-// };
 
 // process-global stats entry list
 enum class StatsGroupName : size_t {
@@ -76,6 +97,7 @@ public:
         }
     }
 };
+
 
 class QueryStats {
 public:
