@@ -213,6 +213,12 @@ def s3_clean_bucket(s3_storage_factory) -> Generator[S3Bucket, None, None]:
 
 
 @pytest.fixture(scope="function")
+def azurite_clean_bucket(azurite_storage_factory) -> Generator[S3Bucket, None, None]:
+    with azurite_storage_factory.create_fixture() as f:
+        yield f
+
+
+@pytest.fixture(scope="function")
 def nfs_clean_bucket(nfs_backed_s3_storage_factory) -> Generator[NfsS3Bucket, None, None]:
     with nfs_backed_s3_storage_factory.create_fixture() as f:
         yield f
@@ -476,6 +482,13 @@ def arctic_client_lmdb(request, encoding_version) -> Arctic:
 @pytest.fixture
 def arctic_library(arctic_client, lib_name) -> Library:
     yield arctic_client.create_library(lib_name)
+    arctic_client.delete_library(lib_name)
+
+
+@pytest.fixture
+def arctic_library_dynamic(arctic_client, lib_name) -> Library:
+    lib_opts = LibraryOptions(dynamic_schema=True)
+    yield arctic_client.create_library(lib_name, library_options=lib_opts)
     arctic_client.delete_library(lib_name)
 
 

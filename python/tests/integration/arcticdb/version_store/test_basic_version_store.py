@@ -2449,7 +2449,7 @@ def test_missing_first_version_key_batch(basic_store):
 
         write_times.append(pd.Timestamp(vit.timestamp))
         expected.append(df1)
-        # time.sleep(1)
+
         df2 = pd.DataFrame(
             {"d": range(x + 1, l + x + 1), "e": range(x + 2, l + x + 2), "f": range(x + 3, l + x + 3)}, index=idx
         )

@@ -42,9 +42,6 @@ def test_move_storage(storage_type, host_attr, request):
             # When - we copy the underlying objects without using the Arctic API
             source_storage.copy_underlying_objects_to(dest_storage)
 
-            # TODO: FIX THIS
-            ac.delete_library("lib")
-
         # When - we leave the source_storage context, the storage should have been cleaned up
         assert not source_storage.create_arctic().list_libraries()
 
@@ -55,7 +52,6 @@ def test_move_storage(storage_type, host_attr, request):
         assert lib.list_symbols() == ["sym"]
         assert_frame_equal(df, lib.read("sym").data)
         assert dest_host in lib.read("sym").host
-        new_ac.delete_library("lib")
 
 
 @pytest.mark.skipif(sys.platform == "darwin", reason="Test doesn't raise an exception on MacOS ARM")

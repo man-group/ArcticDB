@@ -13,6 +13,8 @@ import pytest
 import numpy as np
 import pandas as pd
 
+from tests.util.mark import SLOW_TESTS_MARK
+
 from arcticdb.util.test import (
     assert_frame_equal,
     dataframe_for_date,
@@ -63,7 +65,7 @@ def test_write_and_update_large_df_in_chunks(lmdb_version_store_very_big_map):
     assert_frame_equal(lib.head(symbol).data, expected_head)
 
 
-@pytest.mark.skip(reason="Uses too much storage and fails on GitHub runners")
+@SLOW_TESTS_MARK
 def test_write_large_df_in_chunks(lmdb_version_store_big_map):
     symbol = "symbol"
     lib = lmdb_version_store_big_map

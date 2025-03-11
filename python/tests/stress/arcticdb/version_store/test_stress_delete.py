@@ -50,8 +50,9 @@ def test_stress_delete(object_store_factory):
     print("Delete took {}".format(datetime.now() - start_time))
 
     # Make sure that the symbols are deleted
-    with pytest.raises(NoDataFoundException) as e:
-        lib1.batch_read(syms)
+    for x in range(num_tests):
+        with pytest.raises(NoDataFoundException) as e:
+            lib1.read(f"symbol_{x}")
 
     res = lib2.batch_read(syms)
     for i, sym in enumerate(syms):
@@ -63,5 +64,6 @@ def test_stress_delete(object_store_factory):
     check_no_keys(lib2)
 
     # Make sure that the symbols are deleted
-    with pytest.raises(NoDataFoundException) as e:
-        lib2.batch_read(syms)
+    for x in range(num_tests):
+        with pytest.raises(NoDataFoundException) as e:
+            lib2.read(f"symbol_{x}")

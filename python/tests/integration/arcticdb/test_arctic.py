@@ -1157,12 +1157,10 @@ def test_segment_slicing(arctic_client, lib_name):
     assert num_data_segments == math.ceil(rows / rows_per_segment) * math.ceil(columns / columns_per_segment)
 
 
-# skip this test for now
-@pytest.mark.skip(reason="There is a strange problem with this one TODO")
 @pytest.mark.parametrize("fixture", ["s3_storage", pytest.param("azurite_storage", marks=AZURE_TESTS_MARK)])
-def test_reload_symbol_list(fixture, request, lib_name):
+def test_reload_symbol_list(fixture, request):
     storage_fixture: StorageFixture = request.getfixturevalue(fixture)
-    lib_name = f"{lib_name}_reload_symbol_list"
+    lib_name = "test_reload_symbol_list"
 
     def get_symbol_list_keys(lib_name):
         keys = storage_fixture.iter_underlying_object_names()
