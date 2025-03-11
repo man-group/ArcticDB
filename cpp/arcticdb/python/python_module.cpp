@@ -142,9 +142,19 @@ void register_log(py::module && log) {
 void register_configs_map_api(py::module& m) {
     using namespace arcticdb;
 #define EXPOSE_TYPE(LABEL, TYPE) \
-    m.def("get_config_" #LABEL, [](const std::string& label) { return ConfigsMap::instance()->get_##LABEL(label); }); \
-    m.def("set_config_" #LABEL, [](const std::string& label, TYPE value)  { ConfigsMap::instance()->set_##LABEL(label, value); }); \
-    m.def("unset_config_" #LABEL, [](const std::string& label)  { ConfigsMap::instance()->unset_##LABEL(label); });
+    m.def("get_config_" #LABEL, \
+        [](const std::string& label) { return ConfigsMap::instance()->get_##LABEL(label); }, \
+        "Get configured value, returns None if not set.", \
+        py::arg("label")); \
+    m.def("set_config_" #LABEL, \
+        [](const std::string& label, TYPE value)  { ConfigsMap::instance()->set_##LABEL(label, value); }, \
+        "Set configured value.", \
+        py::arg("label"), \
+        py::arg("value")); \
+    m.def("unset_config_" #LABEL, \
+        [](const std::string& label)  { ConfigsMap::instance()->unset_##LABEL(label); }, \
+        "Unset configured value.", \
+        py::arg("label"));
 
     EXPOSE_TYPE(int, int64_t)
     EXPOSE_TYPE(string, std::string)
