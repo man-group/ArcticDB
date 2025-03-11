@@ -377,8 +377,14 @@ def _(a: ast.BinOp, function_map) -> Any:
 @_ast_to_expression.register(ast.Compare)
 def _(a: ast.Compare, function_map) -> Any:
     # Compares in pyarrow Expression contain exactly one comparison (i.e. 1 < field("asdf") < 3 is not supported)
-    assert len(a.ops) == 1
-    assert len(a.comparators) == 1
+    check(
+        len(a.ops) == 1,
+        f"Received a series of {len(a.ops)} comparisons, but only series of 1 comparison is supported. "
+        "Use `(a < b) & (b < c)` instead of `a < b < c`.")
+    check(
+        len(a.comparators) == 1,
+        f"Received a series of {len(a.comparators)} comparators, but only series of 1 comparison is supported. "
+        "Use `(a < b) & (b < c)` instead of `a < b < c`.")
     op = a.ops[0]
     left = a.left
     right = a.comparators[0]
@@ -403,6 +409,16 @@ def _(a: ast.Compare, function_map) -> Any:
 @_ast_to_expression.register(ast.List)
 def _(a: ast.List, function_map) -> Any:
     return [_ast_to_expression(e, function_map) for e in a.elts]
+
+
+@_ast_to_expression.register(ast.Set)
+def _(a: ast.Set, function_map) -> Any:
+    return set([_ast_to_expression(e, function_map) for e in a.elts])
+
+
+@_ast_to_expression.register(ast.Tuple)
+def _(a: ast.Tuple, function_map) -> Any:
+    return tuple([_ast_to_expression(e, function_map) for e in a.elts])
 
 
 def is_supported_sequence(obj):

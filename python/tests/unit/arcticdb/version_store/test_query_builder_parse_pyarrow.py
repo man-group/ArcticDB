@@ -21,9 +21,11 @@ def df_with_all_column_types(num_rows=100):
     return pd.DataFrame(data=data, index=index)
 
 
-def compare_against_pyarrow(pyarrow_expr_str, expected_adb_expr, lib, function_map = None, expect_equal=True):
+def compare_against_pyarrow(pyarrow_expr_str, expected_adb_qb, lib, function_map = None, expect_equal=True):
     adb_expr = ExpressionNode.from_pyarrow_expression_str(pyarrow_expr_str, function_map)
-    assert str(adb_expr) == str(expected_adb_expr)
+    q = QueryBuilder()
+    q = q[adb_expr]
+    assert q == expected_adb_qb
     pa_expr = eval(pyarrow_expr_str)
 
     # Setup
@@ -33,8 +35,6 @@ def compare_against_pyarrow(pyarrow_expr_str, expected_adb_expr, lib, function_m
     pa_table = pa.Table.from_pandas(df)
 
     # Apply filter to adb
-    q = QueryBuilder()
-    q = q[adb_expr]
     adb_result = lib.read(sym, query_builder=q).data
 
     # Apply filter to pyarrow
@@ -48,63 +48,73 @@ def compare_against_pyarrow(pyarrow_expr_str, expected_adb_expr, lib, function_m
 
 def test_basic_filters(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    q = QueryBuilder()
 
     # Filter by boolean column
     expr = f"pc.field('bool_col')"
-    expected_expr = ExpressionNode.column_ref('bool_col')
-    compare_against_pyarrow(expr, expected_expr, lib)
+    expected_q = q[q['bool_col']]
+    compare_against_pyarrow(expr, expected_q, lib)
 
     # Filter by comparison
     for op in ["<", "<=", "==", ">=", ">"]:
         expr = f"pc.field('int_col') {op} 50"
-        expected_expr = eval(f"ExpressionNode.column_ref('int_col') {op} 50")
-        compare_against_pyarrow(expr, expected_expr, lib)
+        expected_q = q[eval(f"q['int_col'] {op} 50")]
+        compare_against_pyarrow(expr, expected_q, lib)
 
     # Filter with unary operators
     expr = "~pc.field('bool_col')"
-    expected_expr = ~ExpressionNode.column_ref('bool_col')
-    compare_against_pyarrow(expr, expected_expr, lib)
+    expected_q = q[~q['bool_col']]
+    compare_against_pyarrow(expr, expected_q, lib)
 
     # Filter with binary operators
     for op in ["+", "-", "*", "/"]:
         expr = f"pc.field('float_col') {op} 5.0 < 50.0"
-        expected_expr = eval(f"ExpressionNode.column_ref('float_col') {op} 5.0 < 50.0")
-        compare_against_pyarrow(expr, expected_expr, lib)
+        expected_q = q[eval(f"q['float_col'] {op} 5.0 < 50.0")]
+        compare_against_pyarrow(expr, expected_q, lib)
 
     for op in ["&", "|"]:
         expr = f"pc.field('bool_col') {op} (pc.field('int_col') < 50)"
-        expected_expr = eval(f"ExpressionNode.column_ref('bool_col') {op} (ExpressionNode.column_ref('int_col') < 50)")
-        compare_against_pyarrow(expr, expected_expr, lib)
+        expected_q = q[eval(f"q['bool_col'] {op} (q['int_col'] < 50)")]
+        compare_against_pyarrow(expr, expected_q, lib)
 
     # Filter with expression method calls
     expr = "pc.field('str_col').isin(['str_0', 'str_10', 'str_20'])"
-    expected_expr = ExpressionNode.column_ref('str_col').isin(['str_0', 'str_10', 'str_20'])
-    compare_against_pyarrow(expr, expected_expr, lib)
+    expected_q = q[q['str_col'].isin(['str_0', 'str_10', 'str_20'])]
+    compare_against_pyarrow(expr, expected_q, lib)
+
+    expr = "pc.field('str_col').isin(('str_0', 'str_10', 'str_20'))"
+    expected_q = q[q['str_col'].isin(('str_0', 'str_10', 'str_20'))]
+    compare_against_pyarrow(expr, expected_q, lib)
+
+    expr = "pc.field('str_col').isin({'str_0', 'str_10', 'str_20'})"
+    expected_q = q[q['str_col'].isin({'str_0', 'str_10', 'str_20'})]
+    compare_against_pyarrow(expr, expected_q, lib)
 
     expr = "pc.field('float_col').is_nan()"
-    expected_expr = ExpressionNode.column_ref('float_col').isnull()
+    expected_q = q[q['float_col'].isnull()]
     # We expect a different result between adb and pyarrow because of the different nan/null handling
-    compare_against_pyarrow(expr, expected_expr, lib, expect_equal=False)
+    compare_against_pyarrow(expr, expected_q, lib, expect_equal=False)
 
     expr = "pc.field('float_col').is_null()"
-    expected_expr = ExpressionNode.column_ref('float_col').isnull()
-    compare_against_pyarrow(expr, expected_expr, lib)
+    expected_q = q[q['float_col'].isnull()]
+    compare_against_pyarrow(expr, expected_q, lib)
 
     expr = "pc.field('float_col').is_valid()"
-    expected_expr = ExpressionNode.column_ref('float_col').notnull()
-    compare_against_pyarrow(expr, expected_expr, lib)
+    expected_q = q[q['float_col'].notnull()]
+    compare_against_pyarrow(expr, expected_q, lib)
 
 def test_complex_filters(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    q = QueryBuilder()
 
     # Nested complex filters
     expr = "((pc.field('float_col') * 2) > 20.0) & (pc.field('int_col') <= pc.scalar(60)) | pc.field('bool_col')"
-    expected_expr = (ExpressionNode.column_ref('float_col') * 2 > 20.0) & (ExpressionNode.column_ref('int_col') <= 60) | ExpressionNode.column_ref('bool_col')
-    compare_against_pyarrow(expr, expected_expr, lib)
+    expected_q = q[(q['float_col'] * 2 > 20.0) & (q['int_col'] <= 60) | q['bool_col']]
+    compare_against_pyarrow(expr, expected_q, lib)
 
     expr = "((pc.field('float_col') / 2) > 20.0) & (pc.field('float_col') <= pc.scalar(60)) & pc.field('str_col').isin(['str_30', 'str_41', 'str_42', 'str_53', 'str_99'])"
-    expected_expr = (ExpressionNode.column_ref('float_col') / 2 > 20.0) & (ExpressionNode.column_ref('float_col') <= 60) & ExpressionNode.column_ref('str_col').isin(['str_30', 'str_41', 'str_42', 'str_53', 'str_99'])
-    compare_against_pyarrow(expr, expected_expr, lib)
+    expected_q = q[(q['float_col'] / 2 > 20.0) & (q['float_col'] <= 60) & q['str_col'].isin(['str_30', 'str_41', 'str_42', 'str_53', 'str_99'])]
+    compare_against_pyarrow(expr, expected_q, lib)
 
     # Filters with function calls
     function_map = {
@@ -112,12 +122,12 @@ def test_complex_filters(lmdb_version_store_v1):
         "abs": abs,
     }
     expr = "pc.field('datetime_col') < datetime.datetime(2025, 1, 20)"
-    expected_expr = ExpressionNode.column_ref('datetime_col') < datetime.datetime(2025, 1, 20)
-    compare_against_pyarrow(expr, expected_expr, lib, function_map)
+    expected_q = q[q['datetime_col'] < datetime.datetime(2025, 1, 20)]
+    compare_against_pyarrow(expr, expected_q, lib, function_map)
 
     expr = "(pc.field('datetime_col') < datetime.datetime(2025, 1, abs(-20))) & (pc.field('int_col') >= abs(-5))"
-    expected_expr = (ExpressionNode.column_ref('datetime_col') < datetime.datetime(2025, 1, abs(-20))) & (ExpressionNode.column_ref('int_col') >= abs(-5))
-    compare_against_pyarrow(expr, expected_expr, lib, function_map)
+    expected_q = q[(q['datetime_col'] < datetime.datetime(2025, 1, abs(-20))) & (q['int_col'] >= abs(-5))]
+    compare_against_pyarrow(expr, expected_q, lib, function_map)
 
 def test_broken_filters():
     # ill-formated filter
