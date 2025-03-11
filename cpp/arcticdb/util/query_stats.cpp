@@ -137,7 +137,5 @@ StatsGroup::~StatsGroup() {
         query_stats_instance.merge_layers();
     }
     auto& root_layers = QueryStats::instance().root_layers();
-    
-    ARCTICDB_INFO(log::version(), "root_layers {}", root_layers.size());
 }
 }
