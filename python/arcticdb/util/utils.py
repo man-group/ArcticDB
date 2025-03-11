@@ -363,8 +363,10 @@ class RandomStringPool:
     with certain size of each string and limited number of strings in the pool
     """
 
-    def __init__(self, str_length: int, pool_size: int):
-        self.__pool = ListGenerators.generate_random_string_pool(str_length, pool_size)
+    def __init__(self, str_length: int, pool_size: int, include_unicode: bool = False, seed = 3):
+        self.__pool = ListGenerators.generate_random_string_pool(str_length=str_length, 
+                                                                 pool_size=pool_size, include_unicode=include_unicode,
+                                                                 seed=seed)
 
     def get_list(self, size: int) -> List[str]:
         return [random.choice(self.__pool) for _ in range(size)]
@@ -395,17 +397,23 @@ class ListGenerators:
             return np.round(np.random.uniform(min_value, max_value, size), round_to).astype(dtype)
         
     @classmethod
-    def generate_random_string_pool(cls, str_length: int, pool_size: int, seed = 1) -> List[str]:
+    def generate_random_string_pool(cls, str_length: int, pool_size: int, 
+                                    include_unicode: bool = False, seed = 1) -> List[str]:
         np.random.seed(seed)
+        random.seed(seed)
         unique_values = set()
         while len(unique_values) < pool_size:
-            unique_values.add(ListGenerators.random_string(str_length))
+            unique_values.add(ListGenerators.random_string(length=str_length, include_unicode=include_unicode,
+                                                           seed=None))
         return list(unique_values)
 
     @classmethod
-    def generate_random_strings(cls, str_size: int, length: int, seed = 1) -> List[str]:
+    def generate_random_strings(cls, str_size: int, length: int, 
+                                    include_unicode: bool = False, seed = 1) -> List[str]:
         np.random.seed(seed)
-        return [ListGenerators.random_string(str_size) for _ in range(length)]
+        random.seed(seed)
+        return [ListGenerators.random_string(length=str_size, 
+                                             include_unicode=include_unicode, seed=None) for _ in range(length)]
     
     @classmethod
     def generate_random_ints(cls, dtype: ArcticIntType, 
@@ -420,10 +428,16 @@ class ListGenerators:
         return np.random.choice([True, False], size=size) 
     
     @classmethod
-    def random_string(cls, length: int, seed = 1):
-        np.random.seed(seed)
-        return "".join(random.choice(string.ascii_uppercase 
-                                       + string.digits + string.ascii_lowercase + ' ') for _ in range(length))
+    def random_string(cls, length: int, include_unicode: bool = False, seed: int = 1):
+        if seed:
+            random.seed(seed)
+        unicode_symbol = "\u00A0"  # start of latin extensions
+        unicode_symbols = "".join([chr(ord(unicode_symbol) + i) for i in range(100)])
+        characters = string.ascii_letters + string.digits + string.punctuation + (" " * 5)
+        if include_unicode:
+            characters = characters + unicode_symbols
+        result = ''.join(random.choice(characters) for _ in range(length))
+        return result
     
     @classmethod
     def generate_random_list_with_mean(cls, number_elements, specified_mean, value_range=(0, 100), 
@@ -476,7 +490,8 @@ class DFGenerator:
         self.__types[name] = dtype
         return self
     
-    def add_string_col(self, name: str, str_size: int, num_unique_values: int = None) -> 'DFGenerator':
+    def add_string_col(self, name: str, str_size: int, include_unicode: bool = False,
+                        num_unique_values: int = None) -> 'DFGenerator':
         """
         Generates a list of strings with length 'str_size', and if 'num_unique_values' values is None
         the list will be of unique values if 'num_unique_values' is a number then this will be the length
@@ -484,9 +499,15 @@ class DFGenerator:
         """
         list = []
         if num_unique_values is None:
-            list = ListGenerators.generate_random_strings(str_size, self.__size)
+            list = ListGenerators.generate_random_strings(str_size=str_size, 
+                                                          length=self.__size, 
+                                                          include_unicode=include_unicode,seed=self.__seed)
         else:
-            list = RandomStringPool(str_size, num_unique_values).get_list(self.__size)
+            list = RandomStringPool(str_length=str_size, 
+                                    pool_size=num_unique_values,
+                                    include_unicode=include_unicode,
+                                    seed=self.__seed
+                                    ).get_list(self.__size)
         self.__data[name] = list
         self.__types[name] = str
         return self
@@ -550,7 +571,7 @@ class DFGenerator:
                 elif 'float' in str(dtype):
                     gen.add_float_col(f"col_{i}", dtype)
                 elif 'str' in str(dtype):
-                    gen.add_string_col(f"col_{i}", 10)
+                    gen.add_string_col(name=f"col_{i}", str_size=10)
                 else:
                     return f"Unsupported type {dtype}"
         if indexed:
