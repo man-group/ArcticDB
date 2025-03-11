@@ -22,7 +22,7 @@ PARAMS = ([1_000_000, 1_500_000])
 PARAM_NAMES = ["rows"]
 BATCH_PARAMS = ([25_000, 50_000], [500, 1000])
 BATCH_PARAM_NAMES = ["rows", "num_symbols"]
-DATE_RANGE = pd.date_range("2022-12-31", "2023-01-01")
+DATE_RANGE = (pd.Timestamp("2022-12-31"), pd.Timestamp("2023-01-01"))
 
 
 class BasicFunctions:
