@@ -743,7 +743,8 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
             except botocore.exceptions.ClientError as e:
                 # There is a problem with xdist on Windows 3.7
                 # where we try to clean up the bucket but it's already gone
-                if e.response["Error"]["Code"] != "NoSuchBucket":
+                is_win_37 = platform.system() == "Windows" and sys.version_info[:2] == (3, 7)
+                if e.response["Error"]["Code"] != "NoSuchBucket" and not is_win_37:
                     raise e
         else:
             requests.post(
