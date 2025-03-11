@@ -138,7 +138,7 @@ Due to a [bug](https://github.com/aws/aws-sdk-cpp/issues/2920) in AWS C++ SDK, S
 * Other Linux distributions
 
 The workaround is making symlink for the CA cert in use to `/etc/pki/tls/certs`.
-Below is the **example** of doing so for the default CA cert in Ubuntu:
+Below is the *example* of doing so for the default CA cert in Ubuntu:
 
 ```
 ln -s /usr/lib/ssl/cert.pem /etc/pki
