@@ -736,8 +736,8 @@ class AppendDataSetupUtils(NoSetup):
     of dataframes in `setup_cache` as the actual writing should happen in asv `setup` method, where each method
     ideally should use process id as identification for symbol, library etc.
 
-    Typical use is to generate 4 or more dataframes. With first you will initiate 
-    write to a symbol and with next you can do appends poping out from list
+    Typically, you would generate four or more dataframes. The first dataframe initiates writing to a symbol,
+    while subsequent dataframes allow you to append by popping out from a list.
     """
 
     # Default frequency
@@ -757,7 +757,7 @@ class AppendDataSetupUtils(NoSetup):
         self.__init_time_number = TimestampNumber.from_timestamp(initial_timestamp, self._frequency)
         return self
 
-    def set_frquency(self, freq):
+    def set_frequency(self, freq):
         self._frequency = freq
         return self
 
@@ -857,8 +857,8 @@ class AppendDataSetupUtils(NoSetup):
         Returns first and last timestamp of the list of indexed dataframes
         """
         assert len(sequence_df_list) > 0
-        start = sequence_df_list[0].head(1).index.array[0]
-        last = sequence_df_list[-1].tail(1).index.array[0]
+        start = sequence_df_list[0].index[0]
+        last = sequence_df_list[-1].index[-1]
         return (start, last)
     
     def get_next_timestamp_number(self, sequence_df_list: List[pd.DataFrame], freq: str) -> TimestampNumber:
@@ -875,7 +875,7 @@ class SetupMultipleLibraries(EnvConfigurationBase):
     """
         Sets up multiple libraries, each containing specified number of symbols
         and each symbols having specified row numbers (col numbers can be defined also)
-        Accepts ASV params:"
+        Accepted ASV params:
           - list number of symbols per library
           - number of rows in each list
 
@@ -1078,7 +1078,11 @@ class TestsClassForSetupEnvironmentFramework:
         assert not setup.check_ok()
 
     @classmethod
-    def test_setup_multiple_libs_with_symbols0(cls):
+    def test_setup_multiple_libraries_with_symbols(cls):
+        """
+        Tests for `SetupMultipleLibraries` correctness
+        (not used in ASV)
+        """
         params = [[2, 3], [4, 5]]
         cols = 12
         setup = (SetupMultipleLibraries(storage=Storage.LMDB, 
@@ -1092,7 +1096,7 @@ class TestsClassForSetupEnvironmentFramework:
 
         assert not setup.check_ok()
         setup.setup_environment()
-        #assert setup.check_ok()
+        assert setup.check_ok()
 
         ac = setup.get_arctic_client_persistent()
         libs = ac.list_libraries()
