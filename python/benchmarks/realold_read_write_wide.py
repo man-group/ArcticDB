@@ -12,7 +12,7 @@ from typing import List, Union
 import numpy as np
 import pandas as pd
 from arcticdb.options import LibraryOptions
-from arcticdb.util.environment_setup import SetupSingleLibrary, Storage
+from arcticdb.util.environment_setup_v1 import SetupSingleLibrary, Storage
 
 
 class AWSWideDataFrameTests:
