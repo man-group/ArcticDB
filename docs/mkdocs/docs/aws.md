@@ -133,7 +133,7 @@ arcticdb_ext.exceptions.StorageException: E_S3_RETRYABLE Retry-able error: S3Err
 A loss of network connectivity could trigger such an error. Note, that this error will appear after several attempts to re-establish the connection
 ### Custom CA cert support
 
-Due to a [bug](https://github.com/aws/aws-sdk-cpp/issues/2920) in AWS C++ SDK, STS authentication users on below OS are required to turn off [S3Storage.VerifySSL](https://docs.arcticdb.io/latest/runtime_config/#s3storageverifyssl):
+Due to a known [issue](https://github.com/aws/aws-sdk-cpp/issues/2920) in AWS C++ SDK, STS authentication users on below OS are required to turn off [S3Storage.VerifySSL](https://docs.arcticdb.io/latest/runtime_config/#s3storageverifyssl):
 * RHEL Distributions with custom CA cert
 * Other Linux distributions
 
