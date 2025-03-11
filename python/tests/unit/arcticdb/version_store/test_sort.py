@@ -40,13 +40,8 @@ def test_stage_finalize(arctic_library):
     pd.testing.assert_frame_equal(result, expected)
 
 
-def create_lib_dynamic(ac, lib_name):
-    lib_opts = adb.LibraryOptions(dynamic_schema=True)
-    return ac.get_library(lib_name, create_if_missing=True, library_options=lib_opts)
-
-
-def test_stage_finalize_dynamic(arctic_client, lib_name):
-    arctic_library = create_lib_dynamic(arctic_client, lib_name)
+def test_stage_finalize_dynamic(arctic_library_dynamic):
+    arctic_library = arctic_library_dynamic
     symbol = "AAPL"
     sort_cols = ["timestamp", "col1"]
 
@@ -78,7 +73,6 @@ def test_stage_finalize_dynamic(arctic_client, lib_name):
 
     expected = pd.concat([df1, df2]).sort_values(sort_cols)
     pd.testing.assert_frame_equal(result, expected)
-    arctic_client.delete_library(lib_name)
 
 
 def random_strings(count, max_length):
@@ -123,8 +117,8 @@ def test_stage_finalize_strings(arctic_library):
     pd.testing.assert_frame_equal(result, expected)
 
 
-def test_stage_finalize_strings_dynamic(arctic_client, lib_name):
-    arctic_library = create_lib_dynamic(arctic_client, lib_name)
+def test_stage_finalize_strings_dynamic(arctic_library_dynamic):
+    arctic_library = arctic_library_dynamic
     symbol = "AAPL"
     sort_cols = ["timestamp", "col1"]
 

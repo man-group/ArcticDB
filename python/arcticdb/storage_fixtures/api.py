@@ -132,7 +132,14 @@ class StorageFixture(_SaferContextManager):
         self.libs_from_factory.clear()
 
         arctic = self.create_arctic()
-        for lib in self.libs_names_from_arctic[:]:
+        libs = set(self.libs_names_from_arctic[:])
+        with handle_cleanup_exception(self, arctic, consequence=failure_consequence):
+            # There are some tests that add libraries without using the factory directly (e.g. test_move_storage)
+            # so make sure that we capture all of the libraries
+            for lib in arctic.list_libraries():
+                libs.add(lib)
+
+        for lib in libs:
             with handle_cleanup_exception(self, lib, consequence=failure_consequence):
                 arctic.delete_library(lib)
 
@@ -155,7 +162,7 @@ class StorageFixture(_SaferContextManager):
         regex = cls._FIELD_REGEX[field]
         match = regex.search(uri)
         assert match, f"{uri} does not have {field}"
-        return f"{uri[:match.start(start)]}{replacement}{uri[match.end(end):]}"
+        return f"{uri[: match.start(start)]}{replacement}{uri[match.end(end) :]}"
 
 
 class StorageFixtureFactory(_SaferContextManager):
@@ -188,5 +195,4 @@ class StorageFixtureFactory(_SaferContextManager):
             self.enforcing_permissions = saved
 
     @abstractmethod
-    def create_fixture(self) -> StorageFixture:
-        ...
+    def create_fixture(self) -> StorageFixture: ...
