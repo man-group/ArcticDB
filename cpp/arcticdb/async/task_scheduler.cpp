@@ -9,6 +9,8 @@
 
 namespace arcticdb::async {
 
+thread_local bool is_folly_thread = false;
+
 TaskScheduler* TaskScheduler::instance() {
     std::call_once(TaskScheduler::init_flag_, &TaskScheduler::init);
     return instance_->ptr_;
@@ -51,6 +53,20 @@ void TaskScheduler::set_forked(bool val) {
 
 void TaskScheduler::init(){
     TaskScheduler::instance_ = std::make_shared<TaskSchedulerPtrWrapper>(new TaskScheduler);
+}
+
+bool TaskScheduler::tasks_pending() {
+    folly::ThreadPoolExecutor::PoolStats cpu_stats, io_stats;
+    {
+        std::lock_guard lock{cpu_mutex_};
+        cpu_stats = cpu_exec_.getPoolStats();
+    }
+    {
+        std::lock_guard lock{io_mutex_};
+        io_stats = io_exec_.getPoolStats();
+    }
+    return cpu_stats.activeThreadCount != 0 || cpu_stats.pendingTaskCount != 0 || 
+        io_stats.activeThreadCount != 0 || io_stats.pendingTaskCount != 0;
 }
 
 TaskSchedulerPtrWrapper::~TaskSchedulerPtrWrapper() {
