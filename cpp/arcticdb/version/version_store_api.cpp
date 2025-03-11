@@ -571,11 +571,16 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     ARCTICDB_DEBUG(log::version(), "write_versioned_composite_data for stream_id: {} , version_id = {}", stream_id, version_id);
     // TODO: Assuming each sub key is always going to have the same version attached to it.
     std::vector<VersionId> version_ids;
+    version_ids.reserve(sub_keys.size());
+
     std::vector<py::object> user_metas;
+    user_metas.reserve(sub_keys.size());
+
+    std::vector<std::shared_ptr<DeDupMap>> de_dup_maps;
+    de_dup_maps.reserve(sub_keys.size());
 
     auto write_options = get_write_options();
     auto de_dup_map = get_de_dup_map(stream_id, maybe_prev, write_options);
-    std::vector<std::shared_ptr<DeDupMap>> de_dup_maps;
     for (auto i = 0u; i < sub_keys.size(); ++i) {
         version_ids.emplace_back(version_id);
         user_metas.emplace_back(py::none());
