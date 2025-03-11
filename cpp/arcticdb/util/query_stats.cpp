@@ -55,8 +55,8 @@ QueryStats& QueryStats::instance() {
 }
 
 void QueryStats::merge_layers() {
-    for (auto& [parent_layer, child_layer] : thread_local_var_.child_layers_) {
-        parent_layer->merge_from(*child_layer);
+    for (auto& child_layer : thread_local_var_.child_layers_) {
+        child_layer.parent_layer_->merge_from(*child_layer.root_layer_);
     }
     thread_local_var_.child_layers_.clear();
 }

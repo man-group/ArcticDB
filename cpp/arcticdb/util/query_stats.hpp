@@ -10,30 +10,42 @@
 /*
  * Class Structure Diagram:
  *                                    
- *                                    +------------------+                     
- *                                    |    QueryStats    |                         
- * Temp. storing folly thread root    +------------------+                        
- * layer. Will be aggregated to   <...| - child_layers_[]|                    +---------------------+
- * root_layer when func. is finished  | - root_layer_ ---|------------------->|  StatsGroupLayer    |
- *                                    | - is_enabled_    |                    +---------------------+
- *    Ref. pointer to the layer   <...| - current_layer_ |                    | - stats_[]          | .......> Storing non-groupable stats
- *    in use                          +------------------+                    | - next_layer_maps_[]|
- *                                            ^                               +---------------------+                     
- *                                            |                                        |
- *                                            |                                        |
- *                                            |                                        |
- *                                            |               Extend the chain         |
- *                                            |               and temporarily update   |
- *                                    +-------+-------+   QueryStats's current_layer_  |
- *                                    |  StatsGroup   |................................|
- *                                    +---------------+                                v
+ *                                    +--------------------+                     
+ *                                    |    QueryStats      |                         
+ *                                    +--------------------+                        
+ *                                    | - is_enabled_      |                    
+ *                                    | - root_layers_[]   |
+ *                                    | - thread_local_var_|                  
+ *                                    +------|-------------+                    
+ *                                           |                                
+ *                                           v                                
+ *                              +-------------------------+                   +---------------------+  
+ *                              | ThreadLocalQueryStatsVar|                   |  StatsGroupLayer    | 
+ *                              +-------------------------+                   +---------------------+ 
+ *  Temp. storing folly thread<-| - child_layers_[]       |                   | - stats_[]          | --> Storing non-groupable stats
+ *  layer. Will be aggregated   | - root_layer_           |                   | - next_layer_maps_[]|
+ *  to root_layer when          | - current_layer_ -------|------------------>+---------------------+ 
+ *  function is finished        +-------------------------+                           |
+ *                                            |                                       |
+ *                                            |               Extend the chain        |
+ *                                            |               and temporarily update  |
+ *                                            v               current_layer_          |
+ *                                    +---------------+                               |
+ *                                    |  StatsGroup   |-------------------------------|
+ *                                    +---------------+                               v
  *                                    | - prev_layer_ |                       +-------------------+          
- *                                    | - start_      |                       | StatsGroupLayer   |-----> ... (more layers)          
- *                                    | - log_time_   |                       +-------------------+          
- *                                    +---------------+                                 
- *                     
+ *                                    | - start_      |                       | StatsGroupLayer   |          
+ *                                    |               |                        +-------------------+          
+ *                                    +---------------+                               |          
+ *                                                                                    v                         
+ *                                                                            .. (more layers)                          
+ *                                                                                                      
+ *                                                                                                      
+ *                                                                                                      
+ *                                                                                                      
  * Structure:
  * - QueryStats: Singleton manager class holding the stats collection framework
+ * - ThreadLocalQueryStatsVar: Thread-local storage for stats layers and management
  * - StatsGroupLayer: Hierarchical node containing stats and references to child layers
  * - StatsGroup: RAII wrapper that temporarily extends the layer chain during its lifetime
  *   When created, it adds a new layer and when destroyed, it restores the previous layer state
@@ -61,10 +73,6 @@
 #include <fmt/format.h>
 
 namespace arcticdb::util::query_stats {
-using StatsGroups = std::vector<std::shared_ptr<std::pair<std::string, std::string>>>;
-
-
-// process-global stats entry list
 enum class StatsGroupName : size_t {
     arcticdb_call = 0,
     key_type = 1,
@@ -85,9 +93,15 @@ public:
     void merge_from(const StatsGroupLayer& other);
 };
 
+struct ChildLayer{
+    std::shared_ptr<StatsGroupLayer> parent_layer_;
+    std::shared_ptr<StatsGroupLayer> root_layer_;
+};
+
+// Collection of thread-local variables that reside in class QueryStats simply for the sake of convenience
 struct ThreadLocalQueryStatsVar {
     std::mutex child_layer_creation_mutex_;
-    std::vector<std::pair<std::shared_ptr<StatsGroupLayer>, std::shared_ptr<StatsGroupLayer>>> child_layers_;
+    std::vector<ChildLayer> child_layers_;
     std::shared_ptr<StatsGroupLayer> root_layer_ = nullptr;
     std::shared_ptr<StatsGroupLayer> current_layer_ = nullptr;
 };

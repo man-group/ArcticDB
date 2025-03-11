@@ -153,8 +153,6 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
 
 
     using namespace arcticdb::util::query_stats;
-    
-    // Create QueryStats submodule
     auto query_stats_module = tools.def_submodule("QueryStats", "Stats query functionality");    
     py::enum_<StatsGroupName>(query_stats_module, "StatsGroupName")
         .value("arcticdb_call", StatsGroupName::arcticdb_call)
@@ -168,7 +166,6 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
         .value("count", StatsName::count)
         .export_values();
     
-    // Expose StatsGroupLayer class directly
     py::class_<StatsGroupLayer, std::shared_ptr<StatsGroupLayer>>(query_stats_module, "StatsGroupLayer")
         .def(py::init<>())
         .def_readwrite("stats", &StatsGroupLayer::stats_)
@@ -176,16 +173,12 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
             return self.next_layer_maps_;
         });
     
-    // Expose QueryStats class
     query_stats_module.def("current_layer", []() { 
         return QueryStats::instance().current_layer(); 
     });
-    
-    // This is what we'll use instead of get_stats_as_dict
     query_stats_module.def("root_layers", []() { 
         return QueryStats::instance().root_layers(); 
     });
-    
     query_stats_module.def("is_root_layer_set", []() { 
         return QueryStats::instance().is_root_layer_set(); 
     });
@@ -194,9 +187,7 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
     });
     query_stats_module.def("merge_layers", []() { 
         QueryStats::instance().merge_layers(); 
-    });
-    
-    // Enable/disable QueryStats
+    });    
     query_stats_module.def("enable", []() { 
         QueryStats::instance().is_enabled_ = true; 
     });
@@ -206,12 +197,5 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
     query_stats_module.def("is_enabled", []() { 
         return QueryStats::instance().is_enabled_; 
     });
-    
-    // Previous commented-out bindings were:
-    // query_stats_module.def("register_new_query_stat_tool", []() {QueryStats::instance().register_new_query_stat_tool(); });
-    // query_stats_module.def("deregister_query_stat_tool", []() { QueryStats::instance().deregister_query_stat_tool(); });
-    // query_stats_module.def("is_enabled", []() { return QueryStats::instance().is_enabled(); });
-    // query_stats_module.def("reset", []() { QueryStats::instance().reset_stats(); });
-    // query_stats_module.def("get_stats", []() { return QueryStats::instance().get_stats();});
 }
 } // namespace arcticdb::toolbox::apy
