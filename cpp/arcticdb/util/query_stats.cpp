@@ -136,6 +136,5 @@ StatsGroup::~StatsGroup() {
     if (!async::is_folly_thread && query_stats_instance.current_layer() == query_stats_instance.root_layer()) {
         query_stats_instance.merge_layers();
     }
-    auto& root_layers = QueryStats::instance().root_layers();
 }
 }

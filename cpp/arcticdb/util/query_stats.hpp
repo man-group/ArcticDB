@@ -85,8 +85,7 @@ enum class StatsName : size_t {
     count = 2
 };
 
-class StatsGroupLayer {
-public:
+struct StatsGroupLayer {
     std::array<int64_t, 3> stats_ = {0}; // sizeof(StatsName)
     std::array<std::map<std::string, std::shared_ptr<StatsGroupLayer>>, 3> next_layer_maps_; // sizeof(StatsGroupName)
     void reset_stats();
@@ -98,7 +97,7 @@ struct ChildLayer{
     std::shared_ptr<StatsGroupLayer> root_layer_;
 };
 
-// Collection of thread-local variables that reside in class QueryStats simply for the sake of convenience
+// Collection of thread-local variables. Resides in class QueryStats simply for the sake of convenience
 struct ThreadLocalQueryStatsVar {
     std::mutex child_layer_creation_mutex_;
     std::vector<ChildLayer> child_layers_;
@@ -124,7 +123,8 @@ public:
     thread_local inline static ThreadLocalQueryStatsVar thread_local_var_;
 private:
     std::mutex root_layer_mutex_; 
-    std::vector<std::shared_ptr<StatsGroupLayer>> root_layers_; 
+    // As GIL could be released, each python thread will have their own root layer.
+    std::vector<std::shared_ptr<StatsGroupLayer>> root_layers_;
 };
     
     

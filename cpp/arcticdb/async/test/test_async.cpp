@@ -141,6 +141,90 @@ TEST(Async, CollectWithThrow) {
    ARCTICDB_DEBUG(log::version(), "Collect returned");
 }
 
+TEST(Async, StatsQueryDemo) {
+    using namespace arcticdb::util::query_stats;
+    class EnableQueryStatsRAII {
+    public:
+        EnableQueryStatsRAII() {
+            QueryStats::instance().is_enabled_ = true;
+        }
+        ~EnableQueryStatsRAII() {
+            QueryStats::instance().is_enabled_ = false;
+        }
+    };
+    EnableQueryStatsRAII enable_query_stats;
+    async::TaskScheduler sched{20, 20};
+    auto& instance = QueryStats::instance();
+    auto work = [&]() {
+        std::vector<folly::Future<folly::Unit>> stuff;
+        {
+            /*
+            "AddFuture": {
+                "count": 2,
+            }
+            */
+            QUERY_STATS_ADD_GROUP(storage_ops, "AddFuture") // Always add group at the bottom of the C++ call stack
+            QUERY_STATS_ADD(count, 1)
+            QUERY_STATS_ADD(count, 1)
+            stuff.push_back(sched.submit_cpu_task(MaybeThrowTask(false))
+                .thenValue([](auto)
+                {
+                    /*
+                    "key_type": {
+                        "l": {
+                            "storage_ops": {
+                                "ListObjectsV2": {
+                                    "result_count": 123,
+                                }
+                            }
+                        }
+                    }
+                    */
+                    QUERY_STATS_ADD_GROUP(key_type, "l")
+                    QUERY_STATS_ADD_GROUP(storage_ops, "ListObjectsV2")
+                    QUERY_STATS_ADD(result_count, 123)
+                    return folly::Unit{};
+                })
+                .via(&async::io_executor()) // switching executor in the chain won't create a new child layer
+            );
+            stuff.push_back(sched.submit_io_task(MaybeThrowTask(false))
+                .thenValue([](auto)
+                {
+                    /*
+                    "key_type": {
+                        "l": {
+                            "storage_ops": {
+                                "ListObjectsV2": {
+                                    "result_count": 456,
+                                }
+                            }
+                        }
+                    }
+                    */
+                    QUERY_STATS_ADD_GROUP(key_type, "l")
+                    QUERY_STATS_ADD_GROUP(storage_ops, "ListObjectsV2")
+                    QUERY_STATS_ADD(result_count, 456)
+                    return folly::Unit{};
+                })
+            );
+            folly::collect(stuff).get();
+            ASSERT_EQ(instance.thread_local_var_.child_layers_.size(), 2); // One child_layers_ for each chain of tasks
+            const auto& add_future_layer = instance.root_layer()->next_layer_maps_[static_cast<size_t>(StatsGroupName::storage_ops)]["AddFuture"];
+            ASSERT_EQ(add_future_layer->stats_[static_cast<size_t>(StatsName::count)], 2);
+        }
+        ASSERT_EQ(instance.thread_local_var_.child_layers_.size(), 0); // child maps should be folded into root map when the root add group stat deconstructs
+        const auto& list_objects_layer = instance.root_layer()->next_layer_maps_[static_cast<size_t>(StatsGroupName::storage_ops)]["AddFuture"]
+            ->next_layer_maps_[static_cast<size_t>(StatsGroupName::key_type)]["l"]
+            ->next_layer_maps_[static_cast<size_t>(StatsGroupName::storage_ops)]["ListObjectsV2"]; 
+        ASSERT_EQ(list_objects_layer->stats_[static_cast<size_t>(StatsName::result_count)], 579); // child map stats should be summed
+    };
+    std::thread t1(work), t2(work); // mimic multithreading at python level
+    t1.join();
+    t2.join();
+    auto root_layers = instance.root_layers();
+    ASSERT_EQ(root_layers.size(), 2); // Each pseudo-python thread will create one root layer
+}
+
 using IndexSegmentReader = int;
 
 int get_index_segment_reader_impl(arcticdb::StreamId id) {
