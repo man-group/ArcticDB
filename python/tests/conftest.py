@@ -55,6 +55,7 @@ from .util.mark import (
     SSL_TEST_SUPPORTED,
 )
 from arcticdb.storage_fixtures.utils import safer_rmtree
+from arcticdb.toolbox.query_stats import QueryStatsTool
 
 
 # region =================================== Misc. Constants & Setup ====================================
@@ -1089,3 +1090,9 @@ def in_memory_version_store_tiny_segment(in_memory_store_factory):
 @pytest.fixture(params=["lmdb_version_store_tiny_segment", "in_memory_version_store_tiny_segment"])
 def lmdb_or_in_memory_version_store_tiny_segment(request):
     return request.getfixturevalue(request.param)
+
+
+@pytest.fixture
+def clear_query_stats():
+    yield
+    QueryStatsTool.reset_stats()

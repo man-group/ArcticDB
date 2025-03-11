@@ -1,46 +1,33 @@
 from arcticdb.toolbox.query_stats import QueryStatsTool
-from arcticdb_ext.tools import QueryStats
 
-def test_query_stats(s3_version_store_v1):
-    query_stats_tools_write = QueryStatsTool() # For testing whether stats has been filtered
+def test_query_stats(s3_version_store_v1, clear_query_stats):
     s3_version_store_v1.write("a", 1)
-    query_stats_tools_start = QueryStatsTool()
+    QueryStatsTool.enable()
     s3_version_store_v1.list_symbols()
-    query_stats_tools_end = QueryStatsTool()
-    stats = query_stats_tools_end - query_stats_tools_start
+    QueryStatsTool.disable()
+    stats = QueryStatsTool.get_query_stats()
     """
     Sample output:
     {
         "list_symbols": {
-            "time": {
-                "500": 1
-            },
-            "stages": {
-                "list": {
-                    "time": {
-                        "500": 1
-                    },
-                    "key_types": {
-                        "l": {
-                            "storage_ops": {
-                                "ListObjectsV2": {
-                                    "result_count": 1,
-                                    "time": {
-                                        "20": 1,
-                                        "10": 1
-                                    }
-                                }
-                            }
-                        },
-                        "r": {
-                            "storage_ops": {
-                                "ListObjectsV2": {
-                                    "result_count": 1,
-                                    "time": {
-                                        "10": 1
-                                    }
-                                }
-                            }
+            "total_time_ms": 476,
+            "count": 1,
+            "key_type": {
+                "l": {
+                    "storage_ops": {
+                        "ListObjectsV2": {
+                            "result_count": 1,
+                            "total_time_ms": 48,
+                            "count": 2
+                        }
+                    }
+                },
+                "r": {
+                    "storage_ops": {
+                        "ListObjectsV2": {
+                            "result_count": 1,
+                            "total_time_ms": 21,
+                            "count": 1
                         }
                     }
                 }
@@ -49,10 +36,8 @@ def test_query_stats(s3_version_store_v1):
     }
     """
     assert "list_symbols" in stats
-    assert "stages" in stats["list_symbols"]
-    assert "list" in stats["list_symbols"]["stages"]
-    assert "key_types" in stats["list_symbols"]["stages"]["list"]
-    key_types = stats["list_symbols"]["stages"]["list"]["key_types"]
+    assert "key_type" in stats["list_symbols"]
+    key_types = stats["list_symbols"]["key_type"]
     assert "l" in key_types
     assert "r" in key_types
     
@@ -63,32 +48,22 @@ def test_query_stats(s3_version_store_v1):
         assert key_types[key_type]["storage_ops"]["ListObjectsV2"]["result_count"] == 1
         # Not asserting the time values as they are non-deterministic
 
-def test_query_stats_context(s3_version_store_v1):
-    with QueryStatsTool.context_manager(): # For testing whether stats has been filtered
-        s3_version_store_v1.write("a", 1)
-        with QueryStatsTool.context_manager() as query_stats_tools:
-            s3_version_store_v1.list_symbols()
-        stats = query_stats_tools.get_query_stats()    
-        key_types = stats["list_symbols"]["stages"]["list"]["key_types"]
-        for key_type in ["l", "r"]:
-            assert key_types[key_type]["storage_ops"]["ListObjectsV2"]["result_count"] == 1
-
-
-def test_query_stats_clear(s3_version_store_v1):
+def test_query_stats_context(s3_version_store_v1, clear_query_stats):
     s3_version_store_v1.write("a", 1)
-    query_stats_tools_start = QueryStatsTool()
+    with QueryStatsTool.context_manager():
+        s3_version_store_v1.list_symbols()
+    stats = QueryStatsTool.get_query_stats()
+    key_types = stats["list_symbols"]["key_type"]
+    for key_type in ["l", "r"]:
+        assert key_types[key_type]["storage_ops"]["ListObjectsV2"]["result_count"] == 1
+
+
+def test_query_stats_clear(s3_version_store_v1, clear_query_stats):
+    s3_version_store_v1.write("a", 1)
+    QueryStatsTool.enable()
     s3_version_store_v1.list_symbols()
-    query_stats_tools_end = QueryStatsTool()
-    QueryStats.reset()
-    assert not (query_stats_tools_end - query_stats_tools_start)
-
-
-def test_query_stats_tool_counter(s3_version_store_v1):
-    query_stats_tools_start = QueryStatsTool()
-    s3_version_store_v1.list_symbols()
-    query_stats_tools_end = QueryStatsTool()
-    del query_stats_tools_start
-    del query_stats_tools_end
-
-    assert not QueryStats.get_stats()
+    QueryStatsTool.disable()
+    QueryStatsTool.get_query_stats()
+    QueryStatsTool.reset_stats()
+    assert not QueryStatsTool.get_query_stats()
     

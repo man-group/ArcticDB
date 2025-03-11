@@ -15,11 +15,12 @@ namespace arcticdb::util::query_stats {
 std::shared_ptr<StatsGroupLayer> QueryStats::current_layer(){
     // current_layer_ != nullptr && root_layer_ != nullptr -> stats has been setup; Nothing to do
     // current_layer_ == nullptr && root_layer_ == nullptr -> clean slate; Need to setup
-    // current_layer_ != nullptr && root_layer_ == nullptr -> stats have been reset; Need to setup
+    // current_layer_ != nullptr && root_layer_ == nullptr -> Something is off
     // current_layer_ == nullptr && root_layer_ != nullptr -> Something is off
     if (!thread_local_var_.current_layer_ || !thread_local_var_.root_layer_) {
         check(!async::is_folly_thread, "Folly thread should have its StatsGroupLayer passed by caller only");
-        check(thread_local_var_.current_layer_ || !thread_local_var_.root_layer_, "QueryStats root_layer_ should be null if current_layer_ is null");
+        check(thread_local_var_.current_layer_.operator bool() == thread_local_var_.root_layer_.operator bool(), 
+            "QueryStats root_layer_ and current_layer_ should be either both null or both non-null");
         thread_local_var_.root_layer_ = std::make_shared<StatsGroupLayer>();
         {
             std::lock_guard<std::mutex> lock(root_layer_mutex_);
@@ -44,7 +45,7 @@ void QueryStats::reset_stats() {
     check(!async::TaskScheduler::instance()->tasks_pending(), "Folly tasks are still running");
     std::lock_guard<std::mutex> lock(root_layer_mutex_);
     for (auto& layer : root_layers_) {
-        layer.reset();
+        layer->reset_stats();
     }
 }
 
