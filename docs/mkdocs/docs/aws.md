@@ -55,12 +55,15 @@ arctic = adb.Arctic('s3://s3.<REGION>.amazonaws.com:<BUCKET_NAME>?aws_auth=true'
 
 ## Checking connectivity to the S3 bucket.
 
-ArcticDB currently uses five S3 methods, those are:
-- GetObject
-- PutObject
-- HeadObject
-- DeleteObject
-- ListObjectsV2
+ArcticDB currently uses five S3 methods.
+
+ Method       | Permission required
+------------- | -------------------
+GetObject     | s3:GetObject
+HeadObject    | s3:GetObject
+PutObject     | s3:PutObject
+DeleteObject  | s3:DeleteObject
+ListObjectsV2 | s3:ListBucket
 
 Here is a short script you can use to check connectivity to a bucket from your client.  If this works, then the configuration should be correct for read and write with ArcticDB.
 

@@ -96,7 +96,7 @@ library = ac.get_library('intro', create_if_missing=True)
 
     The one exception where schemas are needed is in the case of functions that modify existing symbols: `update` and `append`. When modifying a symbol, the new data must have the same schema as the existing data. The schema here means the index type and the name, order, and type of each column in the DataFrame. In other words when you are appending new rows they must look like the existing rows. This is the default option and is called `static schema`.
 
-    However, if you need to add, remove or change the type of columns via `update` or `append`, then you can do that. You simply need to create the library with the `dynamic_schema` option set. See the `library_options` parameter of the ([`create_library`](api/arctic/#arcticdb.Arctic.create_library)) method.
+    However, if you need to add, remove or change the type of columns via `update` or `append`, then you can do that. You simply need to create the library with the `dynamic_schema` option set. See the `library_options` parameter of the ([`create_library`](api/arctic.md#arcticdb.Arctic.create_library)) method.
 
     So you have the best of both worlds - you can choose to either enforce a static schema on your data so it cannot be changed by modifying operations, or allow it to be flexible.
     
@@ -388,7 +388,7 @@ Note the timestamps - we've read the data prior to the `append` operation. Pleas
     
     This behaviour can be can be controlled via the `prune_previous_versions` keyword argument. Space will be saved but the previous versions will then not be available.
 
-    A compromise can be achieved by using snapshots, which allow states of the library to be saved and read back later. This allows certain versions to be protected from deletion, they will be deleted when the snapshot is deleted. See [snapshot documentation](api/library/#arcticdb.version_store.library.Library.snapshot) for details.
+    A compromise can be achieved by using snapshots, which allow states of the library to be saved and read back later. This allows certain versions to be protected from deletion, they will be deleted when the snapshot is deleted. See [snapshot documentation](api/library.md#arcticdb.version_store.library.Library.snapshot) for details.
 
 
 

@@ -25,9 +25,11 @@ anything, but will log the affected libraries with "Config NOT OK for <library_n
 
 If no libraries were shown as affected after following the steps above, you can stop now. You do not need to do any more.
 
-> :warning: Running this script will break access for clients on less than version 3.0.0 of ArcticDB for affected libraries.
-> The affected libraries were shown in the step above.
-> Ensure users have upgraded to at least version `arcticdb==3.0.0` first.
+!!! warning
+
+    Running this script will break access for clients on less than version 3.0.0 of ArcticDB for affected libraries.
+    The affected libraries were shown in the step above.
+    Ensure users have upgraded to at least version `arcticdb==3.0.0` first.
 
 - Run `arcticdb_update_storage --uri "<uri>" --run` where `<uri>` is the same as the one above.
 

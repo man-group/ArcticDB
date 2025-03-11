@@ -11,7 +11,7 @@ All of the integer options detailed on this page can be configured using the fol
 For integer options, the following code snippet demonstrates how to set values in code:
 
 ```python
-from arcticdb_ext import set_config_int
+from arcticdb.config import set_config_int
 set_config_int(setting, value)
 ```
 

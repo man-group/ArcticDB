@@ -130,7 +130,7 @@ Pickled data cannot be index or column-sliced, and neither `update` nor `append`
 
 ### *How does indexing work in ArcticDB?*
 
-See the [Getting Started](index.md#reading-and-writing-dataframes) page for details of supported index types.
+See the [Getting Started](index.md#reading-and-writing-data) page for details of supported index types.
 
 ### *Can I `append` with additional columns / What is Dynamic Schema?*
 
@@ -140,7 +140,7 @@ You can also change the type of numerical columns - for example, integers will b
 
 ### *How does ArcticDB segment data?*
 
-See [On Disk Storage Format](technical/on_disk_storage.md) and the [documentation](api/arctic.md#LibraryOptions) for the `rows_per_segment` and `columns_per_segment` library configuration options for more details. 
+See [On Disk Storage Format](technical/on_disk_storage.md) and the [documentation](api/arctic.md#arcticdb.LibraryOptions) for the `rows_per_segment` and `columns_per_segment` library configuration options for more details. 
 
 ### *How does ArcticDB handle streaming data?*
 
@@ -182,4 +182,4 @@ The handling of `NaN` in ArcticDB depends on the type of the column under consid
 
 * For string columns, `NaN`, as well as Python `None`, are fully supported.
 * For floating-point numeric columns, `NaN` is also fully supported.
-* For integer numeric columns `NaN` is not supported. A column that otherwise contains only integers will be treated as a floating point column if a `NaN` is encountered by ArcticDB, at which point [the usual rules](api/arctic.md#LibraryOptions) around type promotion for libraries configured with or without dynamic schema all apply as usual.
+* For integer numeric columns `NaN` is not supported. A column that otherwise contains only integers will be treated as a floating point column if a `NaN` is encountered by ArcticDB, at which point [the usual rules](api/arctic.md#arcticdb.LibraryOptions) around type promotion for libraries configured with or without dynamic schema all apply as usual.
