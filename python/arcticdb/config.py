@@ -174,7 +174,7 @@ def make_loggers_config(
     ----------
     default_level: str
         Default log level for all the loggers unless overriden with specific_log_levels.
-        Valid values are "DEBUG", "INFO", "WARN", "ERROR".
+        Valid values are "TRACE" (most verbose), "DEBUG", "INFO", "WARN", "ERROR", "CRITICAL", "OFF" (no logging).
     specific_log_levels: Optional[Dict[str, str]]
         Optional overrides for specific logger(s).
         The possible logger names can be found in `arcticdb.log.logger_by_name.keys()` (subject to change).
@@ -230,7 +230,7 @@ def set_log_level(
     ----------
     default_level: str
         Default log level for all the loggers unless overriden with specific_log_levels.
-        Valid values are "DEBUG", "INFO", "WARN", "ERROR".
+        Valid values are "TRACE" (most verbose), "DEBUG", "INFO", "WARN", "ERROR", "CRITICAL", "OFF" (no logging).
     specific_log_levels: Optional[Dict[str, str]]
         Optional overrides for specific logger(s).
         The possible logger names can be found in `arcticdb.log.logger_by_name.keys()` (subject to change).
