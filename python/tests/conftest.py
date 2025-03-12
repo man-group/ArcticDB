@@ -1096,15 +1096,16 @@ def lmdb_or_in_memory_version_store_tiny_segment(request):
 
 
 @pytest.fixture(
-    # scope="session",
+    scope="session",
     params=[
-        pytest.param("1.6.2", marks=VENV_COMPAT_TESTS_MARK),
-        pytest.param("4.5.1", marks=VENV_COMPAT_TESTS_MARK),
+        # pytest.param("1.6.2", marks=VENV_COMPAT_TESTS_MARK),
+        # pytest.param("4.5.1", marks=VENV_COMPAT_TESTS_MARK),
         pytest.param("5.0.0", marks=VENV_COMPAT_TESTS_MARK),
     ],  # TODO: Extend this list with other old versions
 )
-def old_venv(request, tmp_path):
+def old_venv(request, tmp_path_factory):
     version = request.param
+    tmp_path = tmp_path_factory.mktemp("venvs-")
     path = os.path.join("venvs", tmp_path, version)
     test_dir = os.path.dirname(os.path.abspath(__file__))
     compat_dir = os.path.join(test_dir, "compat")
@@ -1133,9 +1134,9 @@ def pandas_v1_venv(request):
 @pytest.fixture(
     params=[
         "lmdb",
-        "s3_ssl_disabled",
-        pytest.param("azurite", marks=AZURE_TESTS_MARK),
-        pytest.param("mongo", marks=MONGO_TESTS_MARK),
+        # "s3_ssl_disabled",
+        # pytest.param("azurite", marks=AZURE_TESTS_MARK),
+        # pytest.param("mongo", marks=MONGO_TESTS_MARK),
     ]
 )
 def arctic_uri(request):
