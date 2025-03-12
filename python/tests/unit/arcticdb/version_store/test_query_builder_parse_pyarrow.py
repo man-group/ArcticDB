@@ -22,7 +22,7 @@ def df_with_all_column_types(num_rows=100):
 
 
 def compare_against_pyarrow(pyarrow_expr_str, expected_adb_qb, lib, function_map = None, expect_equal=True):
-    adb_expr = ExpressionNode.from_pyarrow_expression_str(pyarrow_expr_str, function_map)
+    adb_expr = ExpressionNode._from_pyarrow_expression_str(pyarrow_expr_str, function_map)
     q = QueryBuilder()
     q = q[adb_expr]
     assert q == expected_adb_qb
@@ -133,14 +133,14 @@ def test_broken_filters():
     # ill-formated filter
     expr = "pc.field('float_col'"
     with pytest.raises(ValueError):
-        ExpressionNode.from_pyarrow_expression_str(expr)
+        ExpressionNode._from_pyarrow_expression_str(expr)
 
     # pyarrow expressions only support single comparisons
     expr = "1 < pc.field('int_col') < 10"
     with pytest.raises(ValueError):
-        ExpressionNode.from_pyarrow_expression_str(expr)
+        ExpressionNode._from_pyarrow_expression_str(expr)
 
     # calling a mising function
     expr = "some.missing.function(5)"
     with pytest.raises(ValueError):
-        ExpressionNode.from_pyarrow_expression_str(expr)
+        ExpressionNode._from_pyarrow_expression_str(expr)
