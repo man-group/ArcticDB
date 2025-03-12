@@ -27,6 +27,8 @@ The best practices for using AWS S3 depend on your specific use case. If you're 
 
 5. Click **Create Policy**.  
 
+---
+
 ### 2. Create an IAM User
 
 It is best practice to manage and access S3 buckets using a non-root IAM account in AWS. For trial purposes, it is recommended to create a dedicated IAM account specifically for testing ArcticDB.
@@ -36,7 +38,7 @@ Follow these steps to create an IAM user:
 1. Navigate to [IAM > Users](https://console.aws.amazon.com/iamv2/home#/users).
 2. Click **Add users**.
 3. Choose a username, such as `arcticdbtrial`, and click **Next**.
-4. Select **Attach policies directly** and attach the policy created in [step 1](###1-create-a-policy-for-accessing-s3-buckets) to the user.
+4. Select **Attach policies directly** and attach the policy created in [step 1](#1-create-a-policy-for-accessing-s3-buckets) to the user.
 5. Click **Next** to review.
 6. Click **Create user**.
 
