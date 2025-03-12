@@ -130,9 +130,8 @@ class VenvArctic:
 
             # Add prints for tracebility
             def add_prints(python_commands):
-                python_command_str = "\n".join(python_commands)
                 result = []
-                for command in python_command_str.split("\n"):
+                for command in python_commands:
                     result.append(f"print('About to run:', {repr(command)})")
                     result.append(command)
                     result.append(f"print('Done with:', {repr(command)})")
