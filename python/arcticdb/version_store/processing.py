@@ -257,7 +257,7 @@ class ExpressionNode:
 
 
     @classmethod
-    def from_pyarrow_expression_str(cls, expression_str : str, function_map : Optional[Dict[str, Callable]] = None) -> "ExpressionNode":
+    def _from_pyarrow_expression_str(cls, expression_str : str, function_map : Optional[Dict[str, Callable]] = None) -> "ExpressionNode":
         """
         Builds an ExpressionNode from a pyarrow expression string.
 
