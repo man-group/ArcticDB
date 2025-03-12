@@ -10,7 +10,7 @@ import os
 from typing import List
 import pandas as pd
 from arcticdb.options import LibraryOptions
-from arcticdb.util.environment_setup import Storage, StorageInfo, AppendDataSetupUtils
+from arcticdb.util.environment_setup_v1 import Storage, StorageInfo, AppendDataSetupUtils
 from arcticdb.version_store.library import Library
 
 

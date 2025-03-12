@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 
 import os
-from arcticdb.util.environment_setup import Storage, NoSetup
+from arcticdb.util.environment_setup_v1 import Storage, NoSetup
 from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
 from arcticdb.version_store.library import StagedDataFinalizeMethod
 

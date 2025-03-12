@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import time
 import pandas as pd
-from arcticdb.util.environment_setup import SetupSingleLibrary, Storage
+from arcticdb.util.environment_setup_v1 import SetupSingleLibrary, Storage
 from arcticdb.version_store.library import Library
 from arcticdb.version_store.processing import QueryBuilder
 

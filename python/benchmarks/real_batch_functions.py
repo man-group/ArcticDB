@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import os
 import numpy as np
 import pandas as pd
-from arcticdb.util.environment_setup import SetupMultipleLibraries, Storage
+from arcticdb.util.environment_setup_v1 import SetupMultipleLibraries, Storage
 from arcticdb.util.utils import TimestampNumber
 from arcticdb.version_store.library import Library, ReadRequest, WritePayload
 

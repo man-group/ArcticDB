@@ -1,6 +1,7 @@
 import copy
 from abc import ABC, abstractmethod
 from enum import Enum
+import inspect
 import logging
 import os
 import socket
@@ -24,12 +25,23 @@ PERSISTENT_LIBS_PREFIX = "PERMANENT_LIBRARIES"
 MODIFIABLE_LIBS_PREFIX = 'MODIFIABLE_LIBRARIES' 
 TEST_LIBS_PREFIX = 'TESTS_LIBRARIES' 
 
-def get_logger_for_asv(bencmhark_cls = None):
+def get_logger_for_asv(bencmhark_cls: Union[str, Any] = None):
+    """
+    Creates logger instance with associated console handler.
+    The logger name can be either passed as string or class,
+    or if not automatically will assume the caller module name
+    """
     logLevel = logging.INFO
     if bencmhark_cls:
-        logger = logging.getLogger(bencmhark_cls.__name__)
+        if isinstance(bencmhark_cls, str):
+            value = bencmhark_cls
+        else:
+            value = type(bencmhark_cls).__name__
+        logger = logging.getLogger(value)
     else:
-        logger = logging.getLogger("ASV")
+        frame = inspect.stack()[1]
+        module = inspect.getmodule(frame[0])
+        logger = logging.getLogger(module.__name__)
     logger.setLevel(logLevel)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logLevel)
@@ -82,24 +94,59 @@ class StorageSetup:
         return  id
 
     @classmethod
-    def get_aws_s3_arctic_uri(cls, prefix: str = MODIFIABLE_LIBS_PREFIX, confirm_persistent_storage_need: bool = False) -> str:
-        """
-        Persistent libraries should be created in `prefix` None!
-        Temporary should be created in prexies other than None
-        """
+    def _create_prefix(cls, lib_type: LibraryType, add_to_prefix: str ) -> str:
+        def is_valid_string(s: str) -> bool:
+            return bool(s and s.strip())
+        
+        def create_prefix(mandatory_part:str, optional:str) -> str:
+            if is_valid_string(add_to_prefix):
+                return f"{mandatory_part}/{optional if optional is not None else ''}"
+            else:
+                return mandatory_part
+            
+        if lib_type == LibraryType.PERSISTENT:
+            prefix = create_prefix(PERSISTENT_LIBS_PREFIX, add_to_prefix)
+        elif lib_type == LibraryType.MODIFIABLE:
+            assert is_valid_string(add_to_prefix), "Empty string prefix for modifiable library is not supported!"
+            prefix = create_prefix(MODIFIABLE_LIBS_PREFIX, add_to_prefix)
+        else:
+            prefix = create_prefix(TEST_LIBS_PREFIX, add_to_prefix)   
+
+        return prefix     
+    
+    @classmethod
+    def _check_persistance_access_asked(cls, lib_type: LibraryType, confirm_persistent_storage_need: bool = False) -> str:
         assert cls._aws_default_factory, "Environment variables not initialized (ARCTICDB_REAL_S3_ACCESS_KEY,ARCTICDB_REAL_S3_SECRET_KEY)"
-        assert (prefix is not None) and (prefix.strip() != ""), "None or empty string prefix is not supported!"
-        if prefix == PERSISTENT_LIBS_PREFIX:
+        if lib_type == LibraryType.PERSISTENT:
             assert confirm_persistent_storage_need, f"Use of persistent store not confirmed!"
-        cls._aws_default_factory.default_prefix = prefix
+    
+    @classmethod
+    def get_aws_s3_arctic_uri2(cls, lib_type: LibraryType, add_to_prefix: str = None, 
+                               confirm_persistent_storage_need: bool = False) -> str:
+        """
+        Constructs correct AWS s3 URI for accessing specified type of storage space
+        For test storage space pass lib_type None
+        """
+        StorageSetup._check_persistance_access_asked(lib_type, confirm_persistent_storage_need)
+        cls._aws_default_factory.default_prefix = StorageSetup._create_prefix(lib_type, add_to_prefix)
         return cls._aws_default_factory.create_fixture().arctic_uri
 
+    @classmethod
+    def get_lmdb_arctic_uri2(cls, lib_type: LibraryType, add_to_prefix: str = None, confirm_persistent_storage_need: bool = False) -> str:
+        """
+        Constructs correct LMDB URI for accessing specified type of storage space
+        For test storage space pass lib_type None
+        """
+        StorageSetup._check_persistance_access_asked(lib_type, confirm_persistent_storage_need)
+        prefix = StorageSetup._create_prefix(lib_type, add_to_prefix)
+        return f"lmdb://{tempfile.gettempdir()}/benchmarks_{prefix}" 
 
-class StorageAccess:
+
+class LibraryManager:
 
     def __init__(self, storage: Storage, name_benchmark: str, library_options: LibraryOptions = None) :
         """
-        Populate `name_benchamrk` to get separate modifiable space for 
+        Populate `name_benchamrk` to get separate modifiable space for each benchmark
         """
         self.storage: Storage = storage
         self.library_options: LibraryOptions = library_options
@@ -118,21 +165,23 @@ class StorageAccess:
     # Currently we're using the same arctic client for both persistant and modifiable libraries.
     # We might decide that we want different arctic clients (e.g. different buckets) but probably not needed for now.
     def _get_arctic_client(self) -> Arctic:
-        prefix = PERSISTENT_LIBS_PREFIX
+        lib_type = LibraryType.PERSISTENT
         if self._test_mode == True:
-            prefix = TEST_LIBS_PREFIX
-        return self.__get_arctic_client_internal(prefix, confirm_persistent_storage_need = True)
+            lib_type = None # For test mode is None
+        return self.__get_arctic_client_internal(lib_type, None, 
+                                                  confirm_persistent_storage_need = True)
 
     def _get_arctic_client_modifiable(self) -> Arctic:
-        prefix = f"{MODIFIABLE_LIBS_PREFIX}_{StorageSetup.get_machine_id()}/{self.name_benchmark}"
-        return self.__get_arctic_client_internal(prefix, confirm_persistent_storage_need = False)
+        add_to_prefix = f"{StorageSetup.get_machine_id()}/{self.name_benchmark}"
+        return self.__get_arctic_client_internal(LibraryType.MODIFIABLE, add_to_prefix, 
+                                                  confirm_persistent_storage_need = False)
 
-    def __get_arctic_client_internal(self, prefix, confirm_persistent_storage_need: bool = False) -> Arctic:
+    def __get_arctic_client_internal(self, lib_type: LibraryType, add_to_prefix: str, 
+                                      confirm_persistent_storage_need: bool = False) -> Arctic:
         if self.storage == Storage.AMAZON:
-            arctic_url = StorageSetup.get_aws_s3_arctic_uri(prefix, confirm_persistent_storage_need)
+            arctic_url = StorageSetup.get_aws_s3_arctic_uri2(lib_type, add_to_prefix, confirm_persistent_storage_need)
         elif self.storage == Storage.LMDB:
-            ## We create fpr each object unique library in temp dir
-            arctic_url = f"lmdb://{tempfile.gettempdir()}/benchmarks_{prefix}" 
+            arctic_url = StorageSetup.get_lmdb_arctic_uri2(lib_type, add_to_prefix, confirm_persistent_storage_need)
         else:
             raise Exception("Unsupported storage type :", self.storage)
         ac =  self._ac_cache.get(arctic_url, None)
@@ -140,6 +189,7 @@ class StorageAccess:
             ac = Arctic(arctic_url)    
         self._ac_cache[arctic_url] = ac
         return ac    
+
 
     def get_library_name(self, library_type, lib_name_suffix):
         if library_type == LibraryType.PERSISTENT:
@@ -167,7 +217,6 @@ class StorageAccess:
         else:
             raise Exception(f"Unsupported library type: {library_type}")
 
-    # Not sure how useful is this, one can always just keep track of the libraries created and clear them
     def clear_all_modifiable_libs_from_this_process(self):
         ac = self._get_arctic_client_modifiable()
         lib_names = set(ac.list_libraries())
@@ -175,6 +224,22 @@ class StorageAccess:
                       if f"_{os.getpid()}_" in lib_name]
         for to_delete in to_deletes:
             ac.delete_library(to_delete)
+
+    def clear_all_modifiable_libs(self):
+        ac = self._get_arctic_client_modifiable()
+        lib_names = set(ac.list_libraries())
+        for to_delete in lib_names:
+            ac.delete_library(to_delete)
+
+    @classmethod
+    def clear_all_test_libs(cls, storage_type: Storage):
+        lm = LibraryManager(storage_type, "not needed")
+        lm._test_mode = True
+        ac = lm._get_arctic_client()
+        lib_names = set(ac.list_libraries())
+        for to_delete in lib_names:
+            ac.delete_library(to_delete)            
+
 
 
 # It is quite clear what is this responsible for: only dataframe generation
@@ -224,7 +289,7 @@ class LibraryPopulationPolicy(ABC):
         """
 
 
-sa = StorageAccess(Storage.AMAZON, "MY_NAME")
+sa = LibraryManager(Storage.AMAZON, "MY_NAME")
 print(sa._get_arctic_client().list_libraries())
 sa._test_mode = True
 sa.get_library(LibraryType.PERSISTENT, "haho")
@@ -233,6 +298,11 @@ sa.get_library(LibraryType.MODIFIABLE, "bebo")
 print(sa._get_arctic_client_modifiable().list_libraries())
 sa.log_info()
 sa.clear_all_modifiable_libs_from_this_process()
+print(sa._get_arctic_client_modifiable().list_libraries())
+
+sa.clear_all_test_libs(Storage.AMAZON)
+sa.clear_all_modifiable_libs()
+print(sa._get_arctic_client().list_libraries())
 print(sa._get_arctic_client_modifiable().list_libraries())
 
 
