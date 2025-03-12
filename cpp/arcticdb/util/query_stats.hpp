@@ -85,9 +85,10 @@ enum class StatsName : size_t {
     count = 2
 };
 
+using GroupSubMap = std::map<std::string, std::shared_ptr<StatsGroupLayer>>;
 struct StatsGroupLayer {
     std::array<int64_t, 3> stats_ = {0}; // sizeof(StatsName)
-    std::array<std::map<std::string, std::shared_ptr<StatsGroupLayer>>, 3> next_layer_maps_; // sizeof(StatsGroupName)
+    std::array<GroupSubMap, 3> next_layer_maps_; // sizeof(StatsGroupName)
     void reset_stats();
     void merge_from(const StatsGroupLayer& other);
 };
