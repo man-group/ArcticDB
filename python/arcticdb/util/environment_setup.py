@@ -56,6 +56,16 @@ class Storage(Enum):
     LMDB = 2
 
 
+class StorageSpace(Enum):
+    """
+    Defines the type of storage space.
+    Will be used as prefixes to separate shared storage 
+    """
+    PERSISTENT = "PERMANENT_LIBRARIES"
+    MODIFIABLE = "MODIFIABLE_LIBRARIES"
+    TEST = "TESTS_LIBRARIES"
+
+
 class LibraryType(Enum):
     PERSISTENT = "PERMANENT"
     MODIFIABLE = "MODIFIABLE"
@@ -94,7 +104,7 @@ class StorageSetup:
         return  id
 
     @classmethod
-    def _create_prefix(cls, lib_type: LibraryType, add_to_prefix: str ) -> str:
+    def _create_prefix(cls, storage_space: StorageSpace, add_to_prefix: str ) -> str:
         def is_valid_string(s: str) -> bool:
             return bool(s and s.strip())
         
@@ -104,42 +114,52 @@ class StorageSetup:
             else:
                 return mandatory_part
             
-        if lib_type == LibraryType.PERSISTENT:
-            prefix = create_prefix(PERSISTENT_LIBS_PREFIX, add_to_prefix)
-        elif lib_type == LibraryType.MODIFIABLE:
+        if storage_space == StorageSpace.PERSISTENT:
+            prefix = create_prefix(StorageSpace.PERSISTENT.value, add_to_prefix)
+        elif storage_space == StorageSpace.MODIFIABLE:
             assert is_valid_string(add_to_prefix), "Empty string prefix for modifiable library is not supported!"
-            prefix = create_prefix(MODIFIABLE_LIBS_PREFIX, add_to_prefix)
+            prefix = create_prefix(StorageSpace.MODIFIABLE.value, add_to_prefix)
         else:
-            prefix = create_prefix(TEST_LIBS_PREFIX, add_to_prefix)   
+            prefix = create_prefix(StorageSpace.TEST.value, add_to_prefix)   
 
         return prefix     
     
     @classmethod
-    def _check_persistance_access_asked(cls, lib_type: LibraryType, confirm_persistent_storage_need: bool = False) -> str:
+    def _check_persistance_access_asked(cls, storage_space: StorageSpace, confirm_persistent_storage_need: bool = False) -> str:
         assert cls._aws_default_factory, "Environment variables not initialized (ARCTICDB_REAL_S3_ACCESS_KEY,ARCTICDB_REAL_S3_SECRET_KEY)"
-        if lib_type == LibraryType.PERSISTENT:
+        if storage_space == StorageSpace.PERSISTENT:
             assert confirm_persistent_storage_need, f"Use of persistent store not confirmed!"
     
     @classmethod
-    def get_aws_s3_arctic_uri2(cls, lib_type: LibraryType, add_to_prefix: str = None, 
+    def _get_aws_s3_arctic_uri(cls, storage_space: StorageSpace, add_to_prefix: str = None, 
                                confirm_persistent_storage_need: bool = False) -> str:
         """
         Constructs correct AWS s3 URI for accessing specified type of storage space
-        For test storage space pass lib_type None
+        For test storage space pass storage_space None
         """
-        StorageSetup._check_persistance_access_asked(lib_type, confirm_persistent_storage_need)
-        cls._aws_default_factory.default_prefix = StorageSetup._create_prefix(lib_type, add_to_prefix)
+        StorageSetup._check_persistance_access_asked(storage_space, confirm_persistent_storage_need)
+        cls._aws_default_factory.default_prefix = StorageSetup._create_prefix(storage_space, add_to_prefix)
         return cls._aws_default_factory.create_fixture().arctic_uri
 
     @classmethod
-    def get_lmdb_arctic_uri2(cls, lib_type: LibraryType, add_to_prefix: str = None, confirm_persistent_storage_need: bool = False) -> str:
+    def _get_lmdb_arctic_uri(cls, storage_space: StorageSpace, add_to_prefix: str = None, confirm_persistent_storage_need: bool = False) -> str:
         """
         Constructs correct LMDB URI for accessing specified type of storage space
         For test storage space pass lib_type None
         """
-        StorageSetup._check_persistance_access_asked(lib_type, confirm_persistent_storage_need)
-        prefix = StorageSetup._create_prefix(lib_type, add_to_prefix)
+        StorageSetup._check_persistance_access_asked(storage_space, confirm_persistent_storage_need)
+        prefix = StorageSetup._create_prefix(storage_space, add_to_prefix)
         return f"lmdb://{tempfile.gettempdir()}/benchmarks_{prefix}" 
+
+    @classmethod
+    def get_arctic_uri(cls, storage: Storage, storage_space: StorageSpace, add_to_prefix: str = None, confirm_persistent_storage_need: bool = False) -> str:
+        if storage == Storage.AMAZON:
+            arctic_url = StorageSetup._get_aws_s3_arctic_uri(storage_space, add_to_prefix, confirm_persistent_storage_need)
+        elif storage == Storage.LMDB:
+            arctic_url = StorageSetup._get_lmdb_arctic_uri(storage_space, add_to_prefix, confirm_persistent_storage_need)
+        else:
+            raise Exception("Unsupported storage type :", self.storage)
+        return arctic_url
 
 
 class LibraryManager:
@@ -165,25 +185,20 @@ class LibraryManager:
     # Currently we're using the same arctic client for both persistant and modifiable libraries.
     # We might decide that we want different arctic clients (e.g. different buckets) but probably not needed for now.
     def _get_arctic_client(self) -> Arctic:
-        lib_type = LibraryType.PERSISTENT
+        lib_type = StorageSpace.PERSISTENT
         if self._test_mode == True:
-            lib_type = None # For test mode is None
+            lib_type = StorageSpace.TEST
         return self.__get_arctic_client_internal(lib_type, None, 
                                                   confirm_persistent_storage_need = True)
 
     def _get_arctic_client_modifiable(self) -> Arctic:
         add_to_prefix = f"{self.name_benchmark}/{StorageSetup.get_machine_id()}"
-        return self.__get_arctic_client_internal(LibraryType.MODIFIABLE, add_to_prefix, 
+        return self.__get_arctic_client_internal(StorageSpace.MODIFIABLE, add_to_prefix, 
                                                   confirm_persistent_storage_need = False)
 
-    def __get_arctic_client_internal(self, lib_type: LibraryType, add_to_prefix: str, 
+    def __get_arctic_client_internal(self, storage_space: StorageSpace, add_to_prefix: str, 
                                       confirm_persistent_storage_need: bool = False) -> Arctic:
-        if self.storage == Storage.AMAZON:
-            arctic_url = StorageSetup.get_aws_s3_arctic_uri2(lib_type, add_to_prefix, confirm_persistent_storage_need)
-        elif self.storage == Storage.LMDB:
-            arctic_url = StorageSetup.get_lmdb_arctic_uri2(lib_type, add_to_prefix, confirm_persistent_storage_need)
-        else:
-            raise Exception("Unsupported storage type :", self.storage)
+        arctic_url = StorageSetup.get_arctic_uri(self.storage, storage_space, add_to_prefix,confirm_persistent_storage_need)
         ac =  self._ac_cache.get(arctic_url, None)
         if ac is None:
             ac = Arctic(arctic_url)    
