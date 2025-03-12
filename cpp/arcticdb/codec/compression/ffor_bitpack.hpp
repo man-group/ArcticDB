@@ -7,8 +7,6 @@
 
 namespace arcticdb {
 
-
-
 template<typename T, size_t bit_width>
 struct FFORBitPack : public BitPackHelper<T, bit_width> {
     using Parent = BitPackHelper<T, bit_width>;

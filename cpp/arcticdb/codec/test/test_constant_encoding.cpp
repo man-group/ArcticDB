@@ -22,7 +22,6 @@ TEST(ConstantEncoding, Basic) {
     auto bytes = encoding.encode(data.data(), data.size(), output.data());
     ASSERT_EQ(bytes, 12);
     std::vector<uint32_t> decompressed(data.size());
-    //(void)run_length_decode(output.data(), bytes, decompressed.data());
     auto num_rows = encoding.decode(output.data(), bytes, decompressed.data());
     ASSERT_EQ(num_rows, data.size());
     ASSERT_EQ(decompressed, data);

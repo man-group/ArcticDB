@@ -65,6 +65,8 @@ constexpr void loop(std::integer_sequence<T, inds...>, F &&f) {
 }
 } // namespace fastlanes
 
+static constexpr size_t BLOCK_SIZE = 1024;
+
 template<class T, T count, class F>
 constexpr void loop(F &&f) {
     fastlanes::loop(std::make_integer_sequence<T, count>{}, std::forward<F>(f));
@@ -102,20 +104,13 @@ constexpr size_t index(size_t row, size_t lane) {
     return (FL_ORDER[o] * 16) + (s * 128) + lane;
 }
 
-static_assert(transposed_index(1) == 64);
-static_assert(transposed_index(57) == 624);
-static_assert(transposed_index(1022) == 959);
-
 static_assert(index(1, 0) == 128);
-static_assert(transposed_index(57) == 624);
-static_assert(transposed_index(1022) == 959);
+static_assert(index(0, 1) == 1);
 
 template<typename HeaderType, typename T>
 static constexpr size_t header_size_in_t() {
     return (sizeof(HeaderType) + sizeof(T) - 1) / sizeof(T);
 }
-
-
 
 template<typename T, size_t bit_width>
 constexpr T construct_mask() {

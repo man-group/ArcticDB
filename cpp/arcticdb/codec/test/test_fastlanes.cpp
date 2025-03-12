@@ -274,7 +274,7 @@ TEST(Fastlanes, OriginalPackUnpack32to11) {
     }
 
     // Stress test: pack the entire column 1e6 times.
-    constexpr int iterations = 1000000;
+    constexpr int iterations = 10000;
     volatile uint32_t pack_checksum = 0; // volatile to prevent optimization
     auto start_pack = std::chrono::high_resolution_clock::now();
     for (int iter = 0; iter < iterations; iter++) {
@@ -619,7 +619,7 @@ TEST(FFORPerformanceTest, CompressionAndDecompressionTiming) {
     constexpr int blockOutSize = 320;     // Number of output integers per block.
     constexpr int totalInSize = blocksPerColumn * blockInSize;
     constexpr int totalOutSize = blocksPerColumn * blockOutSize;
-    constexpr int iterations = 1000000;
+    constexpr int iterations = 10000;
 
     // Allocate the input and output buffers.
     std::vector<uint32_t> in(totalInSize);

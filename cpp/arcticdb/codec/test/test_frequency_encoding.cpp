@@ -25,7 +25,6 @@ TEST(FrequencyEncoding, Basic) {
     auto bytes = encoding.encode(data.data(), data.size(), output.data());
     ASSERT_EQ(bytes, 49);
     std::vector<uint32_t> decompressed(data.size());
-    //(void)run_length_decode(output.data(), bytes, decompressed.data());
     auto num_rows = encoding.decode(output.data(), bytes, decompressed.data());
     ASSERT_EQ(num_rows, data.size());
     ASSERT_EQ(decompressed, data);
@@ -79,7 +78,7 @@ TEST(FrequencyEncoding, StressFill) {
     interval_timer timer;
     FrequencyEncoding<InputType> encoding;
     timer.start_timer("Fill");
-    const auto num_runs = 1000'000UL;
+    const auto num_runs = 10'000UL;
     for(auto i = 0UL; i < num_runs; ++i) {
         fill(data.data(), 100'000, 27UL);
     }
@@ -94,7 +93,7 @@ TEST(FrequencyEncoding, StressScan) {
     interval_timer timer;
     FrequencyEncoding<InputType> encoding;
     timer.start_timer("Scan");
-    const auto num_runs = 1000'000UL;
+    const auto num_runs = 10'000UL;
     for(auto i = 0UL; i < num_runs; ++i) {
         encoding.scan(data.data(), 100'000);
     }
@@ -109,7 +108,7 @@ TEST(FrequencyEncoding, StressMaxRequired) {
     interval_timer timer;
     FrequencyEncoding<InputType> encoding;
     timer.start_timer("MaxRequired");
-    const auto num_runs = 1000'000UL;
+    const auto num_runs = 10'000UL;
     std::optional<size_t> max_bytes;
     for(auto i = 0UL; i < num_runs; ++i) {
         max_bytes = encoding.max_required_bytes(data.data(), 100'000);

@@ -31,8 +31,8 @@ class FForUncompressKernel {
 public:
     explicit FForUncompressKernel(T reference) : reference_(reference) {}
 
-    T operator()(T* __restrict ptr, size_t offset, T value, size_t /*lane*/) const {
-        return ptr[offset] = value + reference_;
+    void operator()(T* __restrict ptr, size_t offset, T value, size_t /*lane*/) const {
+        ptr[offset] = value + reference_;
     }
 };
 
@@ -103,12 +103,10 @@ size_t decompress_remainder(const T* input, T* output) {
     return calculate_remainder_data_size<T>(count, bit_width);
 }
 
-template<typename T>
-size_t encode_ffor_with_header(const T* in, T* out, size_t count) {
-    if (count == 0) return 0;
-
+template <typename T>
+std::pair<T, size_t> reference_and_bitwidth(const T* __restrict in, size_t count) {
+    //TODO use vector min_max
     T reference = in[0];
-    ARCTICDB_DEBUG(log::codec(), "Encoding {} rows FFOR with reference {}", count, reference);
     for (size_t i = 1; i < count; ++i) {
         reference = std::min(reference, in[i]);
     }
@@ -117,8 +115,18 @@ size_t encode_ffor_with_header(const T* in, T* out, size_t count) {
     for (size_t i = 0; i < count; ++i) {
         max_delta = std::max(max_delta, in[i] - reference);
     }
+
     size_t bits_needed = std::bit_width(static_cast<std::make_unsigned_t<T>>(max_delta));
-    ARCTICDB_DEBUG(log::codec(), "Max delta {} requires {} bits", max_delta, bits_needed);
+    return {reference, bits_needed};
+}
+
+template<typename T>
+size_t encode_ffor_with_header(const T* __restrict in, T* __restrict out, size_t count) {
+    if (count == 0)
+        return 0;
+
+    const auto [reference, bits_needed] = reference_and_bitwidth(in, count);
+    ARCTICDB_DEBUG(log::codec(), "FFOR bitpacking requires {} bits", bits_needed);
 
     auto* header [[maybe_unused]] = new (out) FForHeader<T>{
         reference,
@@ -165,7 +173,7 @@ size_t encode_ffor_with_header(const T* in, T* out, size_t count) {
 }
 
 template<typename T>
-size_t decode_ffor_with_header(const T* in, T* out) {
+size_t decode_ffor_with_header(const T* __restrict in, T* __restrict out) {
     static constexpr size_t BLOCK_SIZE = 1024;
     const auto* header = reinterpret_cast<const FForHeader<T>*>(in);
     const size_t count = header->num_rows;
