@@ -172,7 +172,7 @@ class LibraryManager:
                                                   confirm_persistent_storage_need = True)
 
     def _get_arctic_client_modifiable(self) -> Arctic:
-        add_to_prefix = f"{StorageSetup.get_machine_id()}/{self.name_benchmark}"
+        add_to_prefix = f"{self.name_benchmark}/{StorageSetup.get_machine_id()}"
         return self.__get_arctic_client_internal(LibraryType.MODIFIABLE, add_to_prefix, 
                                                   confirm_persistent_storage_need = False)
 
