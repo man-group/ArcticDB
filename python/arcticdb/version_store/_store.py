@@ -40,19 +40,22 @@ from arcticdb_ext.storage import (
 )
 from arcticdb_ext.types import IndexKind
 from arcticdb.version_store.read_result import ReadResult
-from arcticdb_ext.version_store import IndexRange as _IndexRange
-from arcticdb_ext.version_store import RowRange as _RowRange
-from arcticdb_ext.version_store import SignedRowRange as _SignedRowRange
-from arcticdb_ext.version_store import PythonVersionStore as _PythonVersionStore
-from arcticdb_ext.version_store import PythonVersionStoreReadQuery as _PythonVersionStoreReadQuery
-from arcticdb_ext.version_store import PythonVersionStoreUpdateQuery as _PythonVersionStoreUpdateQuery
-from arcticdb_ext.version_store import PythonVersionStoreReadOptions as _PythonVersionStoreReadOptions
-from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _PythonVersionStoreVersionQuery
-from arcticdb_ext.version_store import ColumnStats as _ColumnStats
-from arcticdb_ext.version_store import StreamDescriptorMismatch
-from arcticdb_ext.version_store import DataError
-from arcticdb_ext.version_store import sorted_value_name
-from arcticdb_ext.version_store import OutputFormat
+from arcticdb_ext.version_store import (
+    IndexRange as _IndexRange,
+    RowRange as _RowRange,
+    SignedRowRange as _SignedRowRange,
+    PythonVersionStore as _PythonVersionStore,
+    PythonVersionStoreReadQuery as _PythonVersionStoreReadQuery,
+    PythonVersionStoreUpdateQuery as _PythonVersionStoreUpdateQuery,
+    PythonVersionStoreReadOptions as _PythonVersionStoreReadOptions,
+    PythonVersionStoreVersionQuery as _PythonVersionStoreVersionQuery,
+    ColumnStats as _ColumnStats,
+    StreamDescriptorMismatch,
+    DataError,
+    sorted_value_name,
+    OutputFormat,
+    CachedIndex,
+)
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException
 from arcticdb.flattener import Flattener
@@ -1588,7 +1591,7 @@ class NativeVersionStore:
             for result, meta in zip(read_results, metadatas)
         ]
 
-    def _get_version_query(self, as_of: VersionQueryInput, **kwargs):
+    def _get_version_query(self, as_of: VersionQueryInput, cached_index: Optional[CachedIndex] = None, **kwargs):
         version_query = _PythonVersionStoreVersionQuery()
         iterate_snapshots_if_tombstoned = _assume_true("iterate_snapshots_if_tombstoned", kwargs)
 
@@ -1600,6 +1603,9 @@ class NativeVersionStore:
             version_query.set_timestamp(Timestamp(as_of).value, iterate_snapshots_if_tombstoned)
         elif as_of is not None:
             raise ArcticNativeException("Unexpected combination of read parameters")
+
+        if cached_index is not None:
+            version_query._set_cached_index(cached_index)
 
         return version_query
 
@@ -1721,8 +1727,8 @@ class NativeVersionStore:
         read_options.set_incompletes(self.resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
         return read_options
 
-    def _get_queries(self, as_of, date_range, row_range, columns=None, query_builder=None, **kwargs):
-        version_query = self._get_version_query(as_of, **kwargs)
+    def _get_queries(self, as_of, date_range, row_range, columns=None, query_builder=None, cached_index=None, **kwargs):
+        version_query = self._get_version_query(as_of, cached_index, **kwargs)
         read_options = self._get_read_options(**kwargs)
         read_query = self._get_read_query(
             date_range=date_range, row_range=row_range, columns=columns, query_builder=query_builder
@@ -2953,6 +2959,31 @@ class NativeVersionStore:
             else:
                 description_results.append(self._process_info(symbol, dit, as_of, date_range_ns_precision))
         return description_results
+
+    def _read_output_schema(
+            self,
+            symbol,
+            as_of,
+            date_range,
+            row_range,
+            columns,
+            query_builder,
+            **kwargs,
+    ):
+        # TODO: Think about the empty columns munging
+        # implement_read_index = kwargs.get("implement_read_index", False)
+        # columns = self._resolve_empty_columns(columns, implement_read_index)
+        # Take a copy as _get_queries can modify the input argument, which makes reusing the input counter-intuitive
+        query_builder = copy.deepcopy(query_builder)
+        version_query, read_options, read_query = self._get_queries(
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+            **kwargs
+        )
+        return self.version_store._read_output_schema(symbol, version_query, read_query, read_options)
 
     def write_metadata(
         self, symbol: str, metadata: Any, prune_previous_version: Optional[bool] = None

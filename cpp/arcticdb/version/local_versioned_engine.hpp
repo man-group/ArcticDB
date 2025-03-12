@@ -137,6 +137,11 @@ public:
         const VersionQuery& version_query
     );
 
+    IndexSource get_index_source(
+        const StreamId& stream_id,
+        const VersionQuery& version_query,
+        const ReadOptions& read_options);
+
     ReadVersionOutput read_dataframe_version_internal(
         const StreamId &stream_id,
         const VersionQuery& version_query,
@@ -147,6 +152,12 @@ public:
     DescriptorItem read_descriptor_internal(
             const StreamId& stream_id,
             const VersionQuery& version_query);
+
+    DescriptorItem read_output_schema_internal(
+        const StreamId& stream_id,
+        const VersionQuery& version_query,
+        const ReadQuery& read_query,
+        const ReadOptions& read_options);
 
     void write_parallel_frame(
         const StreamId& stream_id,
@@ -196,7 +207,7 @@ public:
         const VersionQuery& version_query);
 
     folly::Future<DescriptorItem> get_descriptor(
-        AtomKey&& key);
+        IndexSource&& index_source);
 
     folly::Future<DescriptorItem> get_descriptor_async(
         folly::Future<std::optional<AtomKey>>&& opt_index_key_fut,

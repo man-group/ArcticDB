@@ -22,7 +22,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError, OutputFormat
+from arcticdb_ext.version_store import DataError, CachedIndex, DescriptorItem
 import pandas as pd
 import numpy as np
 import logging
@@ -258,6 +258,8 @@ class ReadRequest(NamedTuple):
         See `read` method.
     query_builder: Optional[Querybuilder], default=none
         See `read` method.
+    cached_index: Optional[CachedIndex], default=none
+        See `read` method.
 
     See Also
     --------
@@ -270,6 +272,7 @@ class ReadRequest(NamedTuple):
     row_range: Optional[Tuple[int, int]] = None
     columns: Optional[List[str]] = None
     query_builder: Optional[QueryBuilder] = None
+    cached_index: Optional[CachedIndex] = None
 
     def __repr__(self):
         res = f"ReadRequest(symbol={self.symbol}"
@@ -365,6 +368,28 @@ class LazyDataFrame(QueryBuilder):
         self.lib = lib
         self.read_request = read_request._replace(query_builder=None)
 
+    def select_columns(self, columns):
+        self.read_request = ReadRequest(
+            symbol=self.read_request.symbol,
+            as_of=self.read_request.as_of,
+            date_range=self.read_request.date_range,
+            row_range=self.read_request.row_range,
+            columns=columns,
+            query_builder=self.read_request.query_builder,
+            cached_index=self.read_request.cached_index,
+        )
+
+    def _set_cached_index(self, cached_index):
+        self.read_request = ReadRequest(
+            symbol=self.read_request.symbol,
+            as_of=self.read_request.as_of,
+            date_range=self.read_request.date_range,
+            row_range=self.read_request.row_range,
+            columns=self.read_request.columns,
+            query_builder=self.read_request.query_builder,
+            cached_index=cached_index,
+        )
+
     def _to_read_request(self) -> ReadRequest:
         """
         Convert this object into a ReadRequest, including any queries applied to this object since the read call.
@@ -383,18 +408,50 @@ class LazyDataFrame(QueryBuilder):
             row_range=self.read_request.row_range,
             columns=self.read_request.columns,
             query_builder=q,
+            cached_index=self.read_request.cached_index
         )
 
-    def collect(self) -> VersionedItem:
+    def collect(self, use_latest_version=False) -> VersionedItem:
         """
         Read the data and execute any queries applied to this object since the read call.
+
+        Parameters
+        ----------
+        use_latest_version : `bool`, default=False
+            Whether to overwrite the cached version to read and collect the latest version of the symbol.
 
         Returns
         -------
         VersionedItem
             Object that contains a .data and .metadata element.
         """
-        return self.lib.read(**self._to_read_request()._asdict())
+        if use_latest_version:
+            # This is kinda broken to modify in place
+            self._set_cached_index(None)
+        vit = self.lib._nvs.read(**self._to_read_request()._asdict())
+        # TODO: We probably also want to cache index for multiple collects
+        return vit
+
+
+    def collect_schema(self, use_latest_version=False) -> DescriptorItem:
+        """
+        Read only the schema of the output dataframe.
+
+        Parameters
+        ----------
+        use_latest_version : `bool`, default=False
+            Whether to overwrite the cached version to read and collect the latest version of the symbol.
+
+        Returns
+        -------
+        DescriptorItem
+        """
+        if use_latest_version:
+            self._set_cached_index(None)
+        # TODO: We need to parse output_format and use a variant type for schema (pyarrow.Schema / TimeseriesDescriptor?).
+        dit = self.lib._nvs._read_output_schema(**self._to_read_request()._asdict())
+        self._set_cached_index(dit.cached_index)
+        return dit
 
     def __str__(self) -> str:
         query_builder_repr = super().__str__()

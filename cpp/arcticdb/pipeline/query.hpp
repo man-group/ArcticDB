@@ -52,17 +52,28 @@ using VersionQueryType = std::variant<
 
 struct VersionQuery {
     VersionQueryType content_;
+    // TODO: Doc explaining this
+    // We can't escape from the shared pointer because this needs to be able to live in python
+    // TODO: Think about const
+    std::optional<std::shared_ptr<index::CachedIndex>> cached_index_;
 
     void set_snap_name(const std::string& snap_name) {
         content_ = SnapshotVersionQuery{snap_name};
+        cached_index_ = std::nullopt;
     }
 
     void set_timestamp(timestamp ts, bool iterate_snapshots_if_tombstoned) {
         content_ = TimestampVersionQuery{ts, iterate_snapshots_if_tombstoned};
+        cached_index_ = std::nullopt;
     }
 
     void set_version(SignedVersionId version, bool iterate_snapshots_if_tombstoned) {
         content_ = SpecificVersionQuery{version, iterate_snapshots_if_tombstoned};
+        cached_index_ = std::nullopt;
+    }
+
+    void set_cached_index(std::shared_ptr<index::CachedIndex> cached_index) {
+        cached_index_ = cached_index;
     }
 };
 

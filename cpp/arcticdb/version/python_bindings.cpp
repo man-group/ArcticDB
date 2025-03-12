@@ -209,7 +209,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def(py::init())
         .def("set_snap_name", &VersionQuery::set_snap_name)
         .def("set_timestamp", &VersionQuery::set_timestamp)
-        .def("set_version", &VersionQuery::set_version);
+        .def("set_version", &VersionQuery::set_version)
+        .def("_set_cached_index", &VersionQuery::set_cached_index);
 
     py::enum_<OutputFormat>(version, "OutputFormat")
         .value("PANDAS", OutputFormat::PANDAS)
@@ -311,13 +312,16 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("timestamp", &VersionedItem::timestamp)
         .def_property_readonly("version", &VersionedItem::version);
 
+    py::class_<index::CachedIndex, std::shared_ptr<index::CachedIndex>>(version, "CachedIndex");
+
     py::class_<DescriptorItem>(version, "DescriptorItem")
         .def_property_readonly("symbol", &DescriptorItem::symbol)
         .def_property_readonly("version", &DescriptorItem::version)
         .def_property_readonly("start_index", &DescriptorItem::start_index)
         .def_property_readonly("end_index", &DescriptorItem::end_index)
         .def_property_readonly("creation_ts", &DescriptorItem::creation_ts)
-        .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor);
+        .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor)
+        .def_property_readonly("cached_index", &DescriptorItem::cached_index);
 
     py::class_<pipelines::FrameSlice, std::shared_ptr<pipelines::FrameSlice>>(version, "FrameSlice")
         .def_property_readonly("col_range", &pipelines::FrameSlice::columns)
@@ -724,6 +728,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("batch_read_descriptor",
              &PythonVersionStore::batch_read_descriptor,
              py::call_guard<SingleThreadMutexHolder>(), "Get back the descriptor of a list of symbols.")
+        .def("_read_output_schema",
+            &PythonVersionStore::read_output_schema
+            )
         .def("restore_version",
              [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, const ReadOptions& read_options) {
                 auto [vit, tsd] = v.restore_version(sid, version_query);
