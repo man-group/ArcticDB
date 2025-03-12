@@ -607,6 +607,11 @@ if MEMRAY_SUPPORTED:
             # print(f"SAMPLE >>> {frame.filename}:{frame.function}[{frame.lineno}]")
             frame_info_str = f"{frame.filename}:{frame.function}:[{frame.lineno}]"
 
+            # Check if the frame has unknown information
+            if frame.filename == "<unknown>" and frame.function == "<unknown>" and frame.lineno == 0:
+                logger.warning(f"Frame excluded : {frame_info_str}")
+                return False
+
             if "folly::CPUThreadPoolExecutor::CPUTask" in frame_info_str:
                 logger.warning(f"Frame excluded : {frame_info_str}")
                 logger.warning(f"""Explanation    : These are on purpose, and they come from the interaction of 
