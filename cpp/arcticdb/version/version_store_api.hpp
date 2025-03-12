@@ -184,6 +184,12 @@ class PythonVersionStore : public LocalVersionedEngine {
         const StreamId& stream_id,
         const VersionQuery& version_query);
 
+    DescriptorItem read_output_schema(
+        const StreamId& stream_id,
+        const VersionQuery& version_query,
+        const ReadQuery& read_query,
+        const ReadOptions& read_options);
+
     ReadResult read_index(
         const StreamId& stream_id,
         const VersionQuery& version_query);

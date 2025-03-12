@@ -2954,6 +2954,30 @@ class NativeVersionStore:
                 description_results.append(self._process_info(symbol, dit, as_of, date_range_ns_precision))
         return description_results
 
+    def _read_output_schema(
+            self,
+            symbol,
+            as_of,
+            date_range,
+            row_range,
+            columns,
+            query_builder,
+    ):
+        # TODO: Think about the empty columns munging
+        # implement_read_index = kwargs.get("implement_read_index", False)
+        # columns = self._resolve_empty_columns(columns, implement_read_index)
+        # Take a copy as _get_queries can modify the input argument, which makes reusing the input counter-intuitive
+        query_builder = copy.deepcopy(query_builder)
+        version_query, read_options, read_query = self._get_queries(
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+            # **kwargs,
+        )
+        return self.version_store._read_output_schema(symbol, version_query, read_query, read_options)
+
     def write_metadata(
         self, symbol: str, metadata: Any, prune_previous_version: Optional[bool] = None
     ) -> VersionedItem:

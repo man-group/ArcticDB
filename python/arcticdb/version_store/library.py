@@ -22,7 +22,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError, OutputFormat
+from arcticdb_ext.version_store import DataError, OutputFormat, AtomKey
 import pandas as pd
 import numpy as np
 import logging
@@ -385,16 +385,50 @@ class LazyDataFrame(QueryBuilder):
             query_builder=q,
         )
 
-    def collect(self) -> VersionedItem:
+    def collect(self, use_latest_version=False) -> VersionedItem:
         """
         Read the data and execute any queries applied to this object since the read call.
+
+        Parameters
+        ----------
+        use_latest_version : `bool`, default=False
+            Whether to overwrite the cached version to read and collect the latest version of the symbol.
 
         Returns
         -------
         VersionedItem
             Object that contains a .data and .metadata element.
         """
-        return self.lib.read(**self._to_read_request()._asdict())
+        if use_latest_version:
+            self.read_request.as_of = None
+        vit = self.lib.read(**self._to_read_request()._asdict())
+        # TODO: This is a slight API break
+        # Maybe just disallow it
+        self.read_request.as_of = vit.version
+        return vit
+
+
+    # TODO: Type hint
+    def collect_schema(self, use_latest_version=False):
+        """
+        Read only the schema of the output dataframe.
+
+        Parameters
+        ----------
+        use_latest_version : `bool`, default=False
+            Whether to overwrite the cached version to read and collect the latest version of the symbol.
+
+        Returns
+        -------
+        Schema
+            TODO: Write this
+        """
+        if use_latest_version:
+            self.read_request.as_of = None
+        # TODO: We need to parse output_format and use a variant type for schema (pyarrow.Schema / TimeseriesDescriptor?).
+        dit = self.lib._nvs._read_output_schema(**self._to_read_request()._asdict())
+        self.read_request.as_of = dit.version
+        return dit
 
     def __str__(self) -> str:
         query_builder_repr = super().__str__()

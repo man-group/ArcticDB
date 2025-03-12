@@ -42,6 +42,7 @@ bool IndexSegmentReader::empty() const {
     return seg_.empty();
 }
 
+    // TODO: Remove
 IndexRange get_index_segment_range(
     const AtomKey& prev_index,
     const std::shared_ptr<Store>& store) {
