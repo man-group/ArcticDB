@@ -83,7 +83,7 @@ s3.delete_object(Bucket=bucket, Key='_arctic_check/check.txt')
 ```
 The check object written in that script should not interfere with normal ArcticDB operation on the bucket.
 
-# AWS Security Token Service (STS) setup
+## AWS Security Token Service (STS) setup
 
 STS allows users to assume specfic roles in order to gain temporary access to AWS resources. Please refer to [the offical website](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp.html) for more details.
 To use it with ArcticDB, please setup the credential in the AWS shared **config** file.
@@ -131,3 +131,17 @@ This error suggests problems with configuration file. Check Role Arn and base so
 arcticdb_ext.exceptions.StorageException: E_S3_RETRYABLE Retry-able error: S3Error#99 : Encountered network error when sending http request for object '_arctic_cfg/cref/'
 ```
 A loss of network connectivity could trigger such an error. Note, that this error will appear after several attempts to re-establish the connection
+### Custom CA cert support
+
+Due to a known [issue](https://github.com/aws/aws-sdk-cpp/issues/2920) in AWS C++ SDK, STS authentication users on below OS are required to turn off [S3Storage.VerifySSL](https://docs.arcticdb.io/latest/runtime_config/#s3storageverifyssl):
+* RHEL Distributions with custom CA cert
+* Other Linux distributions
+
+The workaround is making symlink for the CA cert in use to `/etc/pki/tls/certs`.
+Below is the *example* of doing so for the default CA cert in Ubuntu:
+
+```
+ln -s /usr/lib/ssl/cert.pem /etc/pki
+ln -s /usr/lib/ssl/certs /etc/pki/tls/certs
+ln -s /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt
+```
