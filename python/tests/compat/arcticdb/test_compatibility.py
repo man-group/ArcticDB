@@ -174,7 +174,7 @@ lib.snapshot("old_snap", metadata={"old_key": "old_value"})
         assert meta == {"old_key": "old_value"}
 
 
-@pytest.mark.parametrize("run", list(range(50)))
+@pytest.mark.parametrize("run", list(range(100)))
 def test_compat_read_incomplete(old_venv_and_arctic_uri, lib_name, run):
     print("Run number:", run)
     old_venv, arctic_uri = old_venv_and_arctic_uri
