@@ -81,6 +81,8 @@ Bucket names must be globally unique, so you will need to create your own unique
 $ aws s3 mb s3://<BUCKET_NAME>
 ```
 
+---
+
 ### 5. Connect to the bucket
 
 - [Install ArcticDB](https://github.com/man-group/ArcticDB#readme).
@@ -90,6 +92,8 @@ $ aws s3 mb s3://<BUCKET_NAME>
 import arcticdb as adb
 arctic = adb.Arctic('s3://s3.<REGION>.amazonaws.com:<BUCKET_NAME>?aws_auth=true')
 ```
+
+---
 
 ### 6. Checking Connectivity to the S3 Bucket - Troubleshooting
 
@@ -245,7 +249,9 @@ Use the configuration in ArcticDB:
 
 For more in-depth documentation please refer to [the offical website](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp.html).
 
-## Common Errors When Working with STS
+---
+
+## Common Errors When Working with STS - Troubleshooting
 
 When using STS with ArcticDB, the following common errors may occur. These are typically caused by issues with the AWS C++ SDK, incorrect IAM account setup, or misconfigured files.
 
@@ -304,4 +310,3 @@ This error occurs when:
 #### Solution:
 - Verify your network connection.
 - Ensure that the S3 endpoint is reachable from your environment.
-
