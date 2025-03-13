@@ -215,7 +215,7 @@ TEST(Async, StatsQueryDemo) {
                     return folly::Unit{};
                 })
             );
-            folly::collect(stuff);
+            folly::collectAll(stuff);
             ASSERT_EQ(instance.thread_local_var_.child_levels_.size(), 2); // One child_levels_ for each chain of tasks
             const auto& add_future_level = instance.root_level()->next_level_maps_[static_cast<size_t>(GroupName::arcticdb_call)]["AddFuture"];
             ASSERT_EQ(add_future_level->stats_[static_cast<size_t>(StatsName::count)], 2);

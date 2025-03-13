@@ -153,7 +153,7 @@ std::string format_group_value(GroupName col_value, auto&& value) {
         "arcticdb_call group name is reserved"
     );
     if constexpr (is_value_key_type) {
-        return arcticdb::entity::key_type_long_name(value);
+        return arcticdb::entity::get_key_description(value);
     }
     else {
         return fmt::format("{}", std::forward<decltype(value)>(value));
