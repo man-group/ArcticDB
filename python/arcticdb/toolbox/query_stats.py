@@ -1,13 +1,13 @@
 from contextlib import contextmanager
 import numpy as np
 
-from arcticdb_ext.tools import QueryStats
-from arcticdb_ext.tools.QueryStats import StatsGroupName, StatsName
+from arcticdb_ext.tools import query_stats
+from arcticdb_ext.tools.query_stats import GroupName, StatsName
 
 class QueryStatsTool:
     # Define enum values as lists since pybind11 enums are not iterable
     _STATS_NAME_VALUES = [StatsName.result_count, StatsName.total_time_ms, StatsName.count]
-    _STATS_GROUP_NAME_VALUES = [StatsGroupName.arcticdb_call, StatsGroupName.key_type, StatsGroupName.storage_ops]
+    _STATS_GROUP_NAME_VALUES = [GroupName.arcticdb_call, GroupName.key_type, GroupName.storage_ops]
 
     @classmethod
     def context_manager(cls):
@@ -21,7 +21,7 @@ class QueryStatsTool:
     @classmethod
     def get_query_stats(cls):
         # Get raw stats from C++ layer
-        raw_stats = QueryStats.root_layers()
+        raw_stats = query_stats.root_levels()
         
         # Transform raw stats into structured dictionary
         result = {}
@@ -60,7 +60,7 @@ class QueryStatsTool:
             next_layer_map = next_layer_maps[group_idx]
             
             # top level
-            if group_enum == StatsGroupName.arcticdb_call:
+            if group_enum == GroupName.arcticdb_call:
                 for op_name, op_layer in next_layer_map.items():
                     if op_name not in current_dict:
                         current_dict[op_name] = {}
@@ -77,13 +77,13 @@ class QueryStatsTool:
 
     @classmethod
     def reset_stats(cls):
-        QueryStats.reset_stats()
+        query_stats.reset_stats()
 
     @classmethod
     def enable(cls):
-        QueryStats.enable()
+        query_stats.enable()
 
     @classmethod
     def disable(cls):
-        QueryStats.disable()
+        query_stats.disable()
 

@@ -146,10 +146,11 @@ TEST(Async, StatsQueryDemo) {
     class EnableQueryStatsRAII {
     public:
         EnableQueryStatsRAII() {
-            QueryStats::instance().is_enabled_ = true;
+            QueryStats::instance().enable();
         }
         ~EnableQueryStatsRAII() {
-            QueryStats::instance().is_enabled_ = false;
+            QueryStats::instance().disable();
+            QueryStats::instance().reset_stats();
         }
     };
     EnableQueryStatsRAII enable_query_stats;
@@ -163,12 +164,11 @@ TEST(Async, StatsQueryDemo) {
                 "count": 2,
             }
             */
-            QUERY_STATS_ADD_GROUP(storage_ops, "AddFuture") // Always add group at the bottom of the C++ call stack
+            QUERY_STATS_ADD_GROUP(arcticdb_call, "AddFuture") // Always add group at the bottom of the C++ call stack
             QUERY_STATS_ADD(count, 1)
             QUERY_STATS_ADD(count, 1)
             stuff.push_back(sched.submit_cpu_task(MaybeThrowTask(false))
-                .thenValue([](auto)
-                {
+                .thenValue([](auto) {
                     /*
                     "key_type": {
                         "l": {
@@ -185,11 +185,10 @@ TEST(Async, StatsQueryDemo) {
                     QUERY_STATS_ADD(result_count, 123)
                     return folly::Unit{};
                 })
-                .via(&async::io_executor()) // switching executor in the chain won't create a new child layer
+                .via(&async::io_executor()) // switching executor in the chain won't create a new child level
             );
             stuff.push_back(sched.submit_io_task(MaybeThrowTask(false))
-                .thenValue([](auto)
-                {
+                .thenValue([](auto) {
                     /*
                     "key_type": {
                         "l": {
@@ -206,23 +205,31 @@ TEST(Async, StatsQueryDemo) {
                     QUERY_STATS_ADD(result_count, 456)
                     return folly::Unit{};
                 })
+                .thenValue([](auto) {
+                    throw std::runtime_error("Test exception"); // Exception will not affect query stats
+                }).thenValue([](auto) {
+                    // Below won't be logged as preceeding task throws
+                    QUERY_STATS_ADD_GROUP(key_type, "l")
+                    QUERY_STATS_ADD_GROUP(storage_ops, "ListObjectsV2")
+                    QUERY_STATS_ADD(result_count, 9999)
+                    return folly::Unit{};
+                })
             );
-            folly::collect(stuff).get();
-            ASSERT_EQ(instance.thread_local_var_.child_layers_.size(), 2); // One child_layers_ for each chain of tasks
-            const auto& add_future_layer = instance.root_layer()->next_layer_maps_[static_cast<size_t>(StatsGroupName::storage_ops)]["AddFuture"];
-            ASSERT_EQ(add_future_layer->stats_[static_cast<size_t>(StatsName::count)], 2);
+            folly::collect(stuff);
+            ASSERT_EQ(instance.thread_local_var_.child_levels_.size(), 2); // One child_levels_ for each chain of tasks
+            const auto& add_future_level = instance.root_level()->next_level_maps_[static_cast<size_t>(GroupName::arcticdb_call)]["AddFuture"];
+            ASSERT_EQ(add_future_level->stats_[static_cast<size_t>(StatsName::count)], 2);
         }
-        ASSERT_EQ(instance.thread_local_var_.child_layers_.size(), 0); // child maps should be folded into root map when the root add group stat deconstructs
-        const auto& list_objects_layer = instance.root_layer()->next_layer_maps_[static_cast<size_t>(StatsGroupName::storage_ops)]["AddFuture"]
-            ->next_layer_maps_[static_cast<size_t>(StatsGroupName::key_type)]["l"]
-            ->next_layer_maps_[static_cast<size_t>(StatsGroupName::storage_ops)]["ListObjectsV2"]; 
-        ASSERT_EQ(list_objects_layer->stats_[static_cast<size_t>(StatsName::result_count)], 579); // child map stats should be summed
+        ASSERT_EQ(instance.thread_local_var_.child_levels_.size(), 0); // child maps should be folded into root map when the root add group stat deconstructs
+        const auto& list_objects_level = instance.root_level()->next_level_maps_[static_cast<size_t>(GroupName::arcticdb_call)]["AddFuture"]
+            ->next_level_maps_[static_cast<size_t>(GroupName::key_type)]["l"]
+            ->next_level_maps_[static_cast<size_t>(GroupName::storage_ops)]["ListObjectsV2"]; 
+        ASSERT_EQ(list_objects_level->stats_[static_cast<size_t>(StatsName::result_count)], 579); // child map stats should be summed
     };
     std::thread t1(work), t2(work); // mimic multithreading at python level
     t1.join();
     t2.join();
-    auto root_layers = instance.root_layers();
-    ASSERT_EQ(root_layers.size(), 2); // Each pseudo-python thread will create one root layer
+    ASSERT_EQ(instance.root_levels().size(), 2); // Each pseudo-python thread will create one root level
 }
 
 using IndexSegmentReader = int;
