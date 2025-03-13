@@ -72,6 +72,8 @@
 #include <array>
 #include <fmt/format.h>
 
+#include <arcticdb/entity/key.hpp>
+
 namespace arcticdb::util::query_stats {
 enum class GroupName : size_t {
     arcticdb_call = 0,
@@ -164,7 +166,7 @@ std::string format_group_value(GroupName col_value, auto&& value) {
 
 #define QUERY_STATS_ADD_GROUP_IMPL(log_time, col_name, value) \
     std::optional<arcticdb::util::query_stats::StatsGroup> STATS_GROUP_VAR_NAME(col_name); \
-    namespace arcticdb::util::query_stats {\
+    namespace arcticdb::util::query_stats { \
         if (QueryStats::instance().is_enabled()) { \
             STATS_GROUP_VAR_NAME(col_name).emplace( \
                 log_time, \
