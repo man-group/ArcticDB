@@ -171,7 +171,7 @@ TEST(Async, StatsQueryDemo) {
                 .thenValue([](auto) {
                     /*
                     "key_type": {
-                        "l": {
+                        "SYMBOL_LIST": {
                             "storage_ops": {
                                 "ListObjectsV2": {
                                     "result_count": 123,
@@ -191,7 +191,7 @@ TEST(Async, StatsQueryDemo) {
                 .thenValue([](auto) {
                     /*
                     "key_type": {
-                        "l": {
+                        "SYMBOL_LIST": {
                             "storage_ops": {
                                 "ListObjectsV2": {
                                     "result_count": 456,

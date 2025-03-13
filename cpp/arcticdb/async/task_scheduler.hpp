@@ -239,8 +239,6 @@ class TaskScheduler {
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only supports Task derived from BaseTask");
         ARCTICDB_DEBUG(log::schedule(), "{} Submitting CPU task {}: {} of {}", uintptr_t(this), typeid(task).name(), cpu_exec_.getTaskQueueSize(), cpu_exec_.kDefaultMaxQueueSize);
         // Executor::Add will be called before below function
-        // TODO: Add checking to make sure QUERY_STATS_ADD_GROUP is called once before folly tasks, once all query stats entries are added
-        // so the query stats could be presented
         std::lock_guard lock{cpu_mutex_};
         if (util::query_stats::QueryStats::instance().is_enabled()) {
             if (util::query_stats::QueryStats::instance().root_level() == util::query_stats::QueryStats::instance().current_level()) { 
@@ -266,8 +264,6 @@ class TaskScheduler {
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only support Tasks derived from BaseTask");
         ARCTICDB_DEBUG(log::schedule(), "{} Submitting IO task {}: {}", uintptr_t(this), typeid(task).name(), io_exec_.getPendingTaskCount());
         // Executor::Add will be called before below function
-        // TODO: Add checking to make sure QUERY_STATS_ADD_GROUP is called once before folly tasks, once all query stats entries are added
-        // so the query stats could be presented
         std::lock_guard lock{io_mutex_};
         if (util::query_stats::QueryStats::instance().is_enabled()) {
             if (util::query_stats::QueryStats::instance().root_level() == util::query_stats::QueryStats::instance().current_level()) { 
