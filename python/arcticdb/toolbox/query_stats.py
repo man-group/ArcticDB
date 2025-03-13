@@ -71,6 +71,8 @@ class QueryStatsTool:
                 if layer_type not in current_dict:
                     current_dict[layer_type] = {}
                 for sub_name, sub_layer in next_layer_map.items():
+                    if group_enum == GroupName.key_type:
+                        sub_name = sub_name.split("::")[1] # e.g. KeyType::VERSION_REF -> VERSION_REF
                     if sub_name not in current_dict[layer_type]:
                         current_dict[layer_type][sub_name] = {}
                     cls._process_layer(sub_layer, current_dict[layer_type][sub_name])
