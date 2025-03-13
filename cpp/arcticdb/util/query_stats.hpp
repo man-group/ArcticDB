@@ -145,7 +145,7 @@ private:
 };
 
 std::string format_group_value(GroupName col_value, auto&& value) {
-    constexpr bool is_value_key_type = std::is_same_v<std::remove_cv_t<std::remove_reference_t<decltype(value)>>, entity::KeyType>;
+    constexpr bool is_value_key_type = std::is_same_v<std::remove_cv_t<std::remove_reference_t<decltype(value)>>, arcticdb::entity::KeyType>;
     check(
         col_value != util::query_stats::GroupName::key_type || is_value_key_type, 
         "arcticdb_call group name is reserved"
