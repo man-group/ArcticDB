@@ -168,8 +168,8 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
     
     py::class_<GroupingLevel, std::shared_ptr<GroupingLevel>>(query_stats_module, "GroupingLevel")
         .def(py::init<>())
-        .def_readwrite("stats", &GroupingLevel::stats_)
-        .def_property_readonly("next_layer_maps", [](const GroupingLevel& self) {
+        .def_readonly("stats", &GroupingLevel::stats_)
+        .def_property_readonly("next_level_maps", [](const GroupingLevel& self) {
             return self.next_level_maps_;
         });
     

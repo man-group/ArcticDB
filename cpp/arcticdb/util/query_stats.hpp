@@ -57,6 +57,7 @@
  *    (Checking will be added after all log entries are added)
  * 2. All folly tasks must be submitted through the TaskScheduler::submit_cpu_task/submit_io_task
  * 3. All folly tasks must complete ("collected") before last StatsGroup object is destroyed in the call stack
+ * 4. Non-groupable stats (e.g. result_count, total_time_ms) support integer values only as they will be aggregated
  */
 
 #include <mutex>

@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-import numpy as np
+from typing import Dict, Any, Iterator
 import arcticdb_ext.tools.query_stats as qs
 from arcticdb_ext.exceptions import UserInputException
 
@@ -9,7 +9,7 @@ _STATS_GROUP_NAME_VALUES = [qs.GroupName.arcticdb_call, qs.GroupName.key_type, q
 
 
 @contextmanager
-def query_stats():
+def query_stats() -> Iterator[None]:
     if qs.is_enabled():
         raise UserInputException("Query Stats is already enabled")
     enable()
@@ -17,73 +17,98 @@ def query_stats():
     disable()
 
 
-def get_query_stats():
+def get_query_stats() -> Dict[str, Any]:
     # Get raw stats from C++ layer
     raw_stats = qs.root_levels()
     
     # Transform raw stats into structured dictionary
     result = {}
     
-    # Process each layer
-    for layer in raw_stats:
-        if layer:
-            _process_layer(layer, result)
+    # Process each level
+    for level in raw_stats:
+        if level:
+            _process_level(level, result)
         
     return result
 
 
-def _process_layer(layer, current_dict):
+def _process_level(level: Any, current_dict: Dict[str, Any]) -> None:
     def _get_enum_name(enum_value):
         return str(enum_value).split('.')[-1]
-    
-    # Process stats array
-    stats_array = layer.stats
+    '''
+    Process stats array
+    e.g.
+    {
+        "result_count": 1,
+        "total_time_ms": 35,
+        "count": 2
+    }
+    '''
+    stats_array = level.stats
     for stat_enum in _STATS_NAME_VALUES:
         stat_idx = int(stat_enum)
         if stats_array[stat_idx] > 0:
             stat_name = _get_enum_name(stat_enum)
-            if stat_name not in current_dict:
-                current_dict[stat_name] = stats_array[stat_idx]
-            else:
+            if stat_name in current_dict:
                 current_dict[stat_name] += stats_array[stat_idx]
-    
-    # Process next_layer_maps
-    next_layer_maps = layer.next_layer_maps
+            else:
+                current_dict[stat_name] = stats_array[stat_idx]
+    '''
+    Process next_level_maps
+    e.g.
+    [
+        arcticdb_call : {
+            "list_symbols": {
+                ...more_next_level_maps...
+            }
+        },
+        key_type : {
+            "SYMBOL_LIST": {
+                ...more_next_level_maps...
+            },
+            "VERSION_REF": {
+                ...more_next_level_maps...
+            }
+        },
+        storage_ops : {}
+    ]
+    '''
+    next_level_maps = level.next_level_maps
     for group_enum in _STATS_GROUP_NAME_VALUES:
         group_idx = int(group_enum)
         
-        if not next_layer_maps[group_idx]:
+        if not next_level_maps[group_idx]:
             continue
             
-        next_layer_map = next_layer_maps[group_idx]
+        next_level_map = next_level_maps[group_idx]
         
         # top level
         if group_enum == qs.GroupName.arcticdb_call:
-            for op_name, op_layer in next_layer_map.items():
+            for op_name, op_level in next_level_map.items():
                 if op_name not in current_dict:
                     current_dict[op_name] = {}
-                _process_layer(op_layer, current_dict[op_name])
+                _process_level(op_level, current_dict[op_name])
         else:
-            layer_type = _get_enum_name(group_enum)
+            level_type = _get_enum_name(group_enum)
 
-            if layer_type not in current_dict:
-                current_dict[layer_type] = {}
-            for sub_name, sub_layer in next_layer_map.items():
+            if level_type not in current_dict:
+                current_dict[level_type] = {}
+            for sub_name, sub_layer in next_level_map.items():
                 if group_enum == qs.GroupName.key_type:
                     sub_name = sub_name.split("::")[1] # e.g. KeyType::VERSION_REF -> VERSION_REF
-                if sub_name not in current_dict[layer_type]:
-                    current_dict[layer_type][sub_name] = {}
-                _process_layer(sub_layer, current_dict[layer_type][sub_name])
+                if sub_name not in current_dict[level_type]:
+                    current_dict[level_type][sub_name] = {}
+                _process_level(sub_layer, current_dict[level_type][sub_name])
 
 
-def reset_stats():
+def reset_stats() -> None:
     qs.reset_stats()
 
 
-def enable():
+def enable() -> None:
     qs.enable()
 
 
-def disable():
+def disable() -> None:
     qs.disable()
 

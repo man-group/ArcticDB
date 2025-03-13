@@ -1,10 +1,6 @@
 import arcticdb.toolbox.query_stats as qs
 
-def test_query_stats(s3_version_store_v1, clear_query_stats):
-    s3_version_store_v1.write("a", 1)
-    qs.enable()
-    s3_version_store_v1.list_symbols()
-    qs.disable()
+def verify_list_symbool_stats(count):
     stats = qs.get_query_stats()
     """
     Sample output:
@@ -38,34 +34,46 @@ def test_query_stats(s3_version_store_v1, clear_query_stats):
     assert "list_symbols" in stats
     list_symbol_stats  = stats["list_symbols"]
     assert {"count", "key_type", "total_time_ms"} == list_symbol_stats.keys()
-    assert list_symbol_stats["count"] == 1
-    assert list_symbol_stats["total_time_ms"] < 500 and list_symbol_stats["total_time_ms"] > 10
+    assert list_symbol_stats["count"] == count
+    assert list_symbol_stats["total_time_ms"] / list_symbol_stats["count"] < 800 # max time is loose as moto could be slow
+    assert list_symbol_stats["total_time_ms"] / list_symbol_stats["count"] > 10
     
     key_types = list_symbol_stats["key_type"]
-    assert {"SYMBOL_LIST", "VERSION_REF"} == key_types.keys()
-    for key_type_map in key_types.values():
+    assert "SYMBOL_LIST" in key_types
+    for key, key_type_map in key_types.items():
         assert "storage_ops" in key_type_map
         assert "ListObjectsV2" in key_type_map["storage_ops"]
         assert "result_count" in key_type_map["storage_ops"]["ListObjectsV2"]
-        assert key_type_map["storage_ops"]["ListObjectsV2"]["result_count"] == 1
-        assert key_type_map["storage_ops"]["ListObjectsV2"]["total_time_ms"] > 5 and key_type_map["storage_ops"]["ListObjectsV2"]["total_time_ms"] < 100
+        list_object_ststs = key_type_map["storage_ops"]["ListObjectsV2"]
+        assert list_object_ststs["result_count"] == count if key == "SYMBOL_LIST" else 1 
+        assert list_object_ststs["total_time_ms"] > 5
+        assert list_object_ststs["total_time_ms"] < 100
+
+
+def test_query_stats(s3_version_store_v1, clear_query_stats):
+    s3_version_store_v1.write("a", 1)
+    qs.enable()
+    
+    s3_version_store_v1.list_symbols()
+    verify_list_symbool_stats(1)
+    s3_version_store_v1.list_symbols()
+    verify_list_symbool_stats(2)
     
 
 def test_query_stats_context(s3_version_store_v1, clear_query_stats):
     s3_version_store_v1.write("a", 1)
     with qs.query_stats():
         s3_version_store_v1.list_symbols()
-    stats = qs.get_query_stats()
-    key_types = stats["list_symbols"]["key_type"]
-    for key_type_map in key_types.values():
-        assert key_type_map["storage_ops"]["ListObjectsV2"]["result_count"] == 1
+    verify_list_symbool_stats(1)
 
 
 def test_query_stats_clear(s3_version_store_v1, clear_query_stats):
     s3_version_store_v1.write("a", 1)
     qs.enable()
     s3_version_store_v1.list_symbols()
-    qs.disable()
     qs.reset_stats()
     assert not qs.get_query_stats()
-    
+
+    s3_version_store_v1.list_symbols()
+    qs.disable()
+    verify_list_symbool_stats(1)

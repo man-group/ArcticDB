@@ -55,7 +55,7 @@ from .util.mark import (
     SSL_TEST_SUPPORTED,
 )
 from arcticdb.storage_fixtures.utils import safer_rmtree
-from arcticdb.toolbox.query_stats import reset_stats as query_stats_reset_stats
+import arcticdb.toolbox.query_stats as query_stats
 
 
 # region =================================== Misc. Constants & Setup ====================================
@@ -1095,4 +1095,5 @@ def lmdb_or_in_memory_version_store_tiny_segment(request):
 @pytest.fixture
 def clear_query_stats():
     yield
-    query_stats_reset_stats()
+    query_stats.disable()
+    query_stats.reset_stats()
