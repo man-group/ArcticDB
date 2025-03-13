@@ -170,8 +170,8 @@ std::string format_group_value(GroupName col_value, auto&& value) {
                 log_time, \
                 GroupName::col_name, \
                 format_group_value(GroupName::col_name, value)); \
-        }
-    } \
+        }\
+    }
 #define QUERY_STATS_ADD_GROUP(col_name, value) QUERY_STATS_ADD_GROUP_IMPL(false, col_name, value)
 #define QUERY_STATS_ADD_GROUP_WITH_TIME(col_name, value) QUERY_STATS_ADD_GROUP_IMPL(true, col_name, value)
 
