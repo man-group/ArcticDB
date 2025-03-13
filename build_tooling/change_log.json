@@ -14,5 +14,8 @@
     }
 ],
 "pr_template": "- ${{TITLE}} (#${{NUMBER}})",
-"template": "${{CHANGELOG}}\n\n<details>\n<summary>Uncategorized</summary>\n\n${{UNCATEGORIZED}}\n</details>"
+"template": "${{CHANGELOG}}\n\n<details>\n<summary>Uncategorized</summary>\n\n${{UNCATEGORIZED}}\n</details>",
+"ignore_labels": [
+    "no-release-notes"
+]
 }
