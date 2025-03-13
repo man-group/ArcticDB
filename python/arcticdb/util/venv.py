@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -126,6 +127,17 @@ class VenvArctic:
                 + df_load_commands
                 + python_commands
             )
+
+            # Add prints for tracebility
+            def add_prints(python_commands):
+                python_command_str = "\n".join(python_commands)
+                result = []
+                for command in python_command_str.split("\n"):
+                    result.append(f"print('About to run:', {repr(command)})")
+                    result.append(command)
+                    result.append(f"print('Done with:', {repr(command)})")
+                return result
+            python_commands = add_prints(python_commands)
 
             python_path = os.path.join(dir, "run.py")
             with open(python_path, "w") as python_file:
