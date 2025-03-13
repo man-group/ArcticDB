@@ -22,11 +22,9 @@ std::shared_ptr<GroupingLevel> QueryStats::current_level(){
         check(thread_local_var_.current_level_.operator bool() == thread_local_var_.root_level_.operator bool(), 
             "QueryStats root_level_ and current_level_ should be either both null or both non-null");
         thread_local_var_.root_level_ = std::make_shared<GroupingLevel>();
-        {
-            std::lock_guard<std::mutex> lock(root_level_mutex_);
-            root_levels_.emplace_back(thread_local_var_.root_level_);
-        }
         thread_local_var_.current_level_ = thread_local_var_.root_level_;
+        std::lock_guard<std::mutex> lock(root_level_mutex_);
+        root_levels_.emplace_back(thread_local_var_.root_level_);
         ARCTICDB_DEBUG(log::version(), "Current GroupingLevel created");
     }
     return thread_local_var_.current_level_;
@@ -90,6 +88,8 @@ std::shared_ptr<GroupingLevel> QueryStats::root_level() {
         util::check(!thread_local_var_.current_level_, "QueryStats current_level_ should be null if root_level_ is null");
         thread_local_var_.root_level_ = std::make_shared<GroupingLevel>();
         thread_local_var_.current_level_ = thread_local_var_.root_level_;
+        std::lock_guard<std::mutex> lock(root_level_mutex_);
+        root_levels_.emplace_back(thread_local_var_.root_level_);
         ARCTICDB_DEBUG(log::version(), "Root GroupingLevel created");
     }
     return thread_local_var_.root_level_;

@@ -45,9 +45,10 @@ def verify_list_symbool_stats(count):
         assert "ListObjectsV2" in key_type_map["storage_ops"]
         assert "result_count" in key_type_map["storage_ops"]["ListObjectsV2"]
         list_object_ststs = key_type_map["storage_ops"]["ListObjectsV2"]
-        assert list_object_ststs["result_count"] == count if key == "SYMBOL_LIST" else 1 
-        assert list_object_ststs["total_time_ms"] > 5
-        assert list_object_ststs["total_time_ms"] < 100
+        result_count = list_object_ststs["result_count"]
+        assert result_count == count if key == "SYMBOL_LIST" else 1 
+        assert list_object_ststs["total_time_ms"] / result_count > 5
+        assert list_object_ststs["total_time_ms"] / result_count < 100
 
 
 def test_query_stats(s3_version_store_v1, clear_query_stats):
@@ -65,6 +66,10 @@ def test_query_stats_context(s3_version_store_v1, clear_query_stats):
     with qs.query_stats():
         s3_version_store_v1.list_symbols()
     verify_list_symbool_stats(1)
+    
+    with qs.query_stats():
+        s3_version_store_v1.list_symbols()
+    verify_list_symbool_stats(2)
 
 
 def test_query_stats_clear(s3_version_store_v1, clear_query_stats):
@@ -75,5 +80,4 @@ def test_query_stats_clear(s3_version_store_v1, clear_query_stats):
     assert not qs.get_query_stats()
 
     s3_version_store_v1.list_symbols()
-    qs.disable()
     verify_list_symbool_stats(1)

@@ -6,8 +6,6 @@
  */
 
 #include <pybind11/functional.h>
-#include <pybind11/stl.h>
-#include <pybind11/stl_bind.h>
 
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/storage/library.hpp>
@@ -169,10 +167,8 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
     py::class_<GroupingLevel, std::shared_ptr<GroupingLevel>>(query_stats_module, "GroupingLevel")
         .def(py::init<>())
         .def_readonly("stats", &GroupingLevel::stats_)
-        .def_property_readonly("next_level_maps", [](const GroupingLevel& self) {
-            return self.next_level_maps_;
-        });
-    
+        .def_readonly("next_level_maps", &GroupingLevel::next_level_maps_);
+        
     query_stats_module.def("current_level", []() { 
         return QueryStats::instance().current_level(); 
     });
