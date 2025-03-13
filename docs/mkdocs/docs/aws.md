@@ -253,7 +253,7 @@ For more in-depth documentation please refer to [the offical website](https://do
 
 ## Common Errors When Working with STS - Troubleshooting
 
-When using STS with ArcticDB, the following common errors may occur. These are typically caused by issues with the AWS C++ SDK, incorrect IAM account setup, or misconfigured files.
+When using STS with ArcticDB, the following common errors may occur. These are typically caused by issues with the AWS C++ SDK, incorrect IAM account setup, or misconfigured files. To enable additional logging, refer to [this guide](runtime_config.md#logging-configuration).
 
 ---
 
@@ -310,3 +310,4 @@ This error occurs when:
 #### Solution:
 - Verify your network connection.
 - Ensure that the S3 endpoint is reachable from your environment.
+
