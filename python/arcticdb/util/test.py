@@ -244,8 +244,16 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     assert_frame_equal(left=expected, right=actual)
 
 
+unicode_symbol = "\u00A0"  # start of latin extensions
+unicode_symbols = "".join([chr(ord(unicode_symbol) + i) for i in range(100)])
+
+
 def random_string(length: int):
-    return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
+    if random.randint(0, 3) == 0:
+        # (probably) Give a unicode string one time in three, we have special handling in C++ for unicode
+        return "".join(random.choice(string.ascii_uppercase + unicode_symbols) for _ in range(length))
+    else:
+        return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
 
 
 def get_sample_dataframe(size=1000, seed=0, str_size=10):
@@ -433,7 +441,15 @@ def get_pickle():
     )[np.random.randint(0, 2)]
 
 
-def random_strings_of_length(num, length, unique):
+def random_ascii_strings(count, max_length):
+    result = []
+    for _ in range(count):
+        length = random.randrange(max_length + 1)
+        result.append("".join(random.choice(string.ascii_letters) for _ in range(length)))
+    return result
+
+
+def random_strings_of_length(num, length, unique=False):
     out = []
     for i in range(num):
         out.append(random_string(length))
