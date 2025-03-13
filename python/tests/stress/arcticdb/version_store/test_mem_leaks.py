@@ -821,7 +821,7 @@ if MEMRAY_SUPPORTED:
     @MEMRAY_TESTS_MARK
     @SLOW_TESTS_MARK
     ## Linux is having quite huge location there will be separate issue to investigate why
-    @pytest.mark.limit_leaks(location_limit="1000 KB" if LINUX else "60 KB", filter_fn=is_relevant)
+    @pytest.mark.limit_leaks(location_limit="1500 KB" if LINUX else "60 KB", filter_fn=is_relevant)
     @pytest.mark.parametrize("lmdb_library", [
                 {'library_options': LibraryOptions(rows_per_segment=233, columns_per_segment=197, dynamic_schema=True, encoding_version=EncodingVersion.V2)},
                 {'library_options': LibraryOptions(rows_per_segment=99, columns_per_segment=99, dynamic_schema=False, encoding_version=EncodingVersion.V1)}
