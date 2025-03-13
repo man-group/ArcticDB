@@ -180,7 +180,7 @@ TEST(Async, StatsQueryDemo) {
                         }
                     }
                     */
-                    QUERY_STATS_ADD_GROUP(key_type, "l")
+                    QUERY_STATS_ADD_GROUP(key_type, KeyType::SYMBOL_LIST)
                     QUERY_STATS_ADD_GROUP(storage_ops, "ListObjectsV2")
                     QUERY_STATS_ADD(result_count, 123)
                     return folly::Unit{};
@@ -200,7 +200,7 @@ TEST(Async, StatsQueryDemo) {
                         }
                     }
                     */
-                    QUERY_STATS_ADD_GROUP(key_type, "l")
+                    QUERY_STATS_ADD_GROUP(key_type, KeyType::SYMBOL_LIST)
                     QUERY_STATS_ADD_GROUP(storage_ops, "ListObjectsV2")
                     QUERY_STATS_ADD(result_count, 456)
                     return folly::Unit{};

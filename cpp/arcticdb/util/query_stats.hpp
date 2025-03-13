@@ -121,8 +121,8 @@ public:
     void enable();
     void disable();
     bool is_enabled() const;
-    // QueryStats(const QueryStats&) = delete;
-    // QueryStats() = default;
+    QueryStats(const QueryStats&) = delete;
+    QueryStats() = default;
 
     thread_local inline static ThreadLocalQueryStatsVar thread_local_var_;
 private:
@@ -144,6 +144,20 @@ private:
     bool log_time_;
 };
 
+std::string format_group_value(GroupName col_value, auto&& value) {
+    constexpr bool is_value_key_type = std::is_same_v<std::remove_cv_t<std::remove_reference_t<decltype(value)>>, entity::KeyType>;
+    check(
+        col_value != util::query_stats::GroupName::key_type || is_value_key_type, 
+        "arcticdb_call group name is reserved"
+    );
+    if constexpr (is_value_key_type) {
+        return arcticdb::entity::key_type_long_name(value);
+    }
+    else {
+        return fmt::format("{}", std::forward<decltype(value)>(value));
+    }
+}
+
 }
 
 #define STATS_GROUP_VAR_NAME(x) query_stats_info##x
@@ -151,7 +165,10 @@ private:
 #define QUERY_STATS_ADD_GROUP_IMPL(log_time, col_name, value) \
     std::optional<arcticdb::util::query_stats::StatsGroup> STATS_GROUP_VAR_NAME(col_name); \
     if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
-        STATS_GROUP_VAR_NAME(col_name).emplace(log_time, arcticdb::util::query_stats::GroupName::col_name, fmt::format("{}", value)); \
+        STATS_GROUP_VAR_NAME(col_name).emplace( \
+            log_time, \
+            arcticdb::util::query_stats::GroupName::col_name, \
+            arcticdb::util::query_stats::format_group_value(col_name, value)); \
     }
 #define QUERY_STATS_ADD_GROUP(col_name, value) QUERY_STATS_ADD_GROUP_IMPL(false, col_name, value)
 #define QUERY_STATS_ADD_GROUP_WITH_TIME(col_name, value) QUERY_STATS_ADD_GROUP_IMPL(true, col_name, value)
