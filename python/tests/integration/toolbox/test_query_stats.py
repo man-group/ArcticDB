@@ -1,11 +1,11 @@
-from arcticdb.toolbox.query_stats import QueryStatsTool
+import arcticdb.toolbox.query_stats as qs
 
 def test_query_stats(s3_version_store_v1, clear_query_stats):
     s3_version_store_v1.write("a", 1)
-    QueryStatsTool.enable()
+    qs.enable()
     s3_version_store_v1.list_symbols()
-    QueryStatsTool.disable()
-    stats = QueryStatsTool.get_query_stats()
+    qs.disable()
+    stats = qs.get_query_stats()
     """
     Sample output:
     {
@@ -53,20 +53,19 @@ def test_query_stats(s3_version_store_v1, clear_query_stats):
 
 def test_query_stats_context(s3_version_store_v1, clear_query_stats):
     s3_version_store_v1.write("a", 1)
-    with QueryStatsTool.context_manager():
+    with qs.query_stats():
         s3_version_store_v1.list_symbols()
-    stats = QueryStatsTool.get_query_stats()
+    stats = qs.get_query_stats()
     key_types = stats["list_symbols"]["key_type"]
-    for key_type in ["l", "r"]:
-        assert key_types[key_type]["storage_ops"]["ListObjectsV2"]["result_count"] == 1
+    for key_type_map in key_types.values():
+        assert key_type_map["storage_ops"]["ListObjectsV2"]["result_count"] == 1
 
 
 def test_query_stats_clear(s3_version_store_v1, clear_query_stats):
     s3_version_store_v1.write("a", 1)
-    QueryStatsTool.enable()
+    qs.enable()
     s3_version_store_v1.list_symbols()
-    QueryStatsTool.disable()
-    QueryStatsTool.get_query_stats()
-    QueryStatsTool.reset_stats()
-    assert not QueryStatsTool.get_query_stats()
+    qs.disable()
+    qs.reset_stats()
+    assert not qs.get_query_stats()
     
