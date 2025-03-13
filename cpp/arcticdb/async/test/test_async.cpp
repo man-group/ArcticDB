@@ -222,7 +222,7 @@ TEST(Async, StatsQueryDemo) {
         }
         ASSERT_EQ(instance.thread_local_var_.child_levels_.size(), 0); // child maps should be folded into root map when the root add group stat deconstructs
         const auto& list_objects_level = instance.root_level()->next_level_maps_[static_cast<size_t>(GroupName::arcticdb_call)]["AddFuture"]
-            ->next_level_maps_[static_cast<size_t>(GroupName::key_type)]["l"]
+            ->next_level_maps_[static_cast<size_t>(GroupName::key_type)]["KeyType::SYMBOL_LIST"]
             ->next_level_maps_[static_cast<size_t>(GroupName::storage_ops)]["ListObjectsV2"]; 
         ASSERT_EQ(list_objects_level->stats_[static_cast<size_t>(StatsName::result_count)], 579); // child map stats should be summed
     };
