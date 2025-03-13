@@ -166,13 +166,11 @@ std::string format_group_value(GroupName col_value, auto&& value) {
 
 #define QUERY_STATS_ADD_GROUP_IMPL(log_time, col_name, value) \
     std::optional<arcticdb::util::query_stats::StatsGroup> STATS_GROUP_VAR_NAME(col_name); \
-    namespace arcticdb::util::query_stats { \
-        if (QueryStats::instance().is_enabled()) { \
-            STATS_GROUP_VAR_NAME(col_name).emplace( \
-                log_time, \
-                GroupName::col_name, \
-                format_group_value(GroupName::col_name, value)); \
-        }\
+    if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
+        STATS_GROUP_VAR_NAME(col_name).emplace( \
+            log_time, \
+            arcticdb::util::query_stats::GroupName::col_name, \
+            format_group_value(arcticdb::util::query_stats::GroupName::col_name, value)); \
     }
 #define QUERY_STATS_ADD_GROUP(col_name, value) QUERY_STATS_ADD_GROUP_IMPL(false, col_name, value)
 #define QUERY_STATS_ADD_GROUP_WITH_TIME(col_name, value) QUERY_STATS_ADD_GROUP_IMPL(true, col_name, value)
