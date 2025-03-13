@@ -41,7 +41,8 @@ def _process_level(level: Any, current_dict: Dict[str, Any]) -> None:
     {
         "result_count": 1,
         "total_time_ms": 35,
-        "count": 2
+        "count": 2,
+        ...more stats...
     }
     '''
     stats_array = level.stats
@@ -59,18 +60,19 @@ def _process_level(level: Any, current_dict: Dict[str, Any]) -> None:
     [
         arcticdb_call : {
             "list_symbols": {
-                ...more_next_level_maps...
+                ...more next_level_maps...
             }
         },
         key_type : {
             "SYMBOL_LIST": {
-                ...more_next_level_maps...
+                ...more next_level_maps...
             },
             "VERSION_REF": {
-                ...more_next_level_maps...
+                ...more next_level_maps...
             }
         },
-        storage_ops : {}
+        storage_ops : {},
+        ...more groupable columns...
     ]
     '''
     next_level_maps = level.next_level_maps
