@@ -169,7 +169,15 @@ inline auto get_default_num_cpus([[maybe_unused]] const std::string& cgroup_fold
     #endif
 }
 
-
+/*
+* Possible areas of inprovement in the future:
+* 1/ Task/op decoupling: push task and then use strategy to implement smart batching to
+* amortize costs wherever possible
+* 2/ Worker thread Affinity - would better locality improve throughput by keeping hot structure in
+* hot cachelines and not jumping from one thread to the next (assuming thread/core affinity in hw too) ?
+* 3/ Priority: How to assign priorities to task in order to treat the most pressing first.
+* 4/ Throttling: (similar to priority) how to absorb work spikes and apply memory backpressure
+*/
 template <typename T>
 class ExecutorWithStatsInstance : public T{
     public:
@@ -186,12 +194,12 @@ class ExecutorWithStatsInstance : public T{
         void add(folly::Func func,
             std::chrono::milliseconds expiration,
             folly::Func expireCallback) override {
-            if (arcticdb::util::query_stats::QueryStats::instance().is_enabled_) {
-                auto func_with_stat_query_wrap = [layer = util::query_stats::QueryStats::instance().current_layer(), func = std::move(func)](auto&&... vars) mutable{
-                    util::query_stats::QueryStats::instance().set_root_layer(layer);
+            if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) {
+                auto wrapped_func = [level = util::query_stats::QueryStats::instance().current_level(), func = std::move(func)](auto&&... vars) mutable{
+                    util::query_stats::QueryStats::instance().set_root_level(level);
                     return func(std::forward<decltype(vars)>(vars)...);
                 };
-                T::add(std::move(func_with_stat_query_wrap), expiration, std::move(expireCallback));
+                T::add(std::move(wrapped_func), expiration, std::move(expireCallback));
             }
             else {
                 T::add(std::move(func), expiration, std::move(expireCallback));
@@ -234,12 +242,12 @@ class TaskScheduler {
         // TODO: Add checking to make sure QUERY_STATS_ADD_GROUP is called once before folly tasks, once all query stats entries are added
         // so the query stats could be presented
         std::lock_guard lock{cpu_mutex_};
-        if (arcticdb::util::query_stats::QueryStats::instance().is_enabled_) {
-            auto task_with_stat_query_instance = [&parent_thread_local_var = util::query_stats::QueryStats::instance().thread_local_var_, task = std::move(task)]() mutable{
-                util::query_stats::QueryStats::instance().create_child_layer(parent_thread_local_var);
+        if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) {
+            auto wrapped_task = [&parent_thread_local_var = util::query_stats::QueryStats::instance().thread_local_var_, task = std::move(task)]() mutable{
+                util::query_stats::QueryStats::instance().create_child_level(parent_thread_local_var);
                 return task();
             };
-            return cpu_exec_.addFuture(std::move(task_with_stat_query_instance));
+            return cpu_exec_.addFuture(std::move(wrapped_task));
         }
         else {
             return cpu_exec_.addFuture(std::move(task));
@@ -255,12 +263,12 @@ class TaskScheduler {
         // TODO: Add checking to make sure QUERY_STATS_ADD_GROUP is called once before folly tasks, once all query stats entries are added
         // so the query stats could be presented
         std::lock_guard lock{io_mutex_};
-        if (arcticdb::util::query_stats::QueryStats::instance().is_enabled_) {
-            auto task_with_stat_query_instance = [&parent_thread_local_var = util::query_stats::QueryStats::instance().thread_local_var_, task = std::move(task)]() mutable{
-                util::query_stats::QueryStats::instance().create_child_layer(parent_thread_local_var);
+        if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) {
+            auto wrapped_task = [&parent_thread_local_var = util::query_stats::QueryStats::instance().thread_local_var_, task = std::move(task)]() mutable{
+                util::query_stats::QueryStats::instance().create_child_level(parent_thread_local_var);
                 return task();
             };
-            return io_exec_.addFuture(std::move(task_with_stat_query_instance));
+            return io_exec_.addFuture(std::move(wrapped_task));
         }
         else {
             return io_exec_.addFuture(std::move(task));

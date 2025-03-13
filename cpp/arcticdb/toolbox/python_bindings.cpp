@@ -6,8 +6,8 @@
  */
 
 #include <pybind11/functional.h>
-#include <pybind11/stl.h>  // Add STL container conversions
-#include <pybind11/stl_bind.h>  // For more advanced STL container bindings
+#include <pybind11/stl.h>
+#include <pybind11/stl_bind.h>
 
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/storage/library.hpp>
@@ -153,11 +153,11 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
 
 
     using namespace arcticdb::util::query_stats;
-    auto query_stats_module = tools.def_submodule("QueryStats", "Stats query functionality");    
-    py::enum_<StatsGroupName>(query_stats_module, "StatsGroupName")
-        .value("arcticdb_call", StatsGroupName::arcticdb_call)
-        .value("key_type", StatsGroupName::key_type)
-        .value("storage_ops", StatsGroupName::storage_ops)
+    auto query_stats_module = tools.def_submodule("query_stats", "Query stats functionality");    
+    py::enum_<GroupName>(query_stats_module, "GroupName")
+        .value("arcticdb_call", GroupName::arcticdb_call)
+        .value("key_type", GroupName::key_type)
+        .value("storage_ops", GroupName::storage_ops)
         .export_values();
     
     py::enum_<StatsName>(query_stats_module, "StatsName")
@@ -166,36 +166,36 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
         .value("count", StatsName::count)
         .export_values();
     
-    py::class_<StatsGroupLayer, std::shared_ptr<StatsGroupLayer>>(query_stats_module, "StatsGroupLayer")
+    py::class_<GroupingLevel, std::shared_ptr<GroupingLevel>>(query_stats_module, "GroupingLevel")
         .def(py::init<>())
-        .def_readwrite("stats", &StatsGroupLayer::stats_)
-        .def_property_readonly("next_layer_maps", [](const StatsGroupLayer& self) {
-            return self.next_layer_maps_;
+        .def_readwrite("stats", &GroupingLevel::stats_)
+        .def_property_readonly("next_layer_maps", [](const GroupingLevel& self) {
+            return self.next_level_maps_;
         });
     
-    query_stats_module.def("current_layer", []() { 
-        return QueryStats::instance().current_layer(); 
+    query_stats_module.def("current_level", []() { 
+        return QueryStats::instance().current_level(); 
     });
-    query_stats_module.def("root_layers", []() { 
-        return QueryStats::instance().root_layers(); 
+    query_stats_module.def("root_levels", []() { 
+        return QueryStats::instance().root_levels(); 
     });
-    query_stats_module.def("is_root_layer_set", []() { 
-        return QueryStats::instance().is_root_layer_set(); 
+    query_stats_module.def("is_root_level_set", []() { 
+        return QueryStats::instance().is_root_level_set(); 
     });
     query_stats_module.def("reset_stats", []() { 
         QueryStats::instance().reset_stats(); 
     });
-    query_stats_module.def("merge_layers", []() { 
-        QueryStats::instance().merge_layers(); 
+    query_stats_module.def("merge_levels", []() { 
+        QueryStats::instance().merge_levels(); 
     });    
     query_stats_module.def("enable", []() { 
-        QueryStats::instance().is_enabled_ = true; 
+        QueryStats::instance().enable(); 
     });
     query_stats_module.def("disable", []() { 
-        QueryStats::instance().is_enabled_ = false; 
+        QueryStats::instance().disable(); 
     });
     query_stats_module.def("is_enabled", []() { 
-        return QueryStats::instance().is_enabled_; 
+        return QueryStats::instance().is_enabled(); 
     });
 }
 } // namespace arcticdb::toolbox::apy
