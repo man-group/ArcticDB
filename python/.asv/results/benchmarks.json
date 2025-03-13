@@ -2660,7 +2660,7 @@
         "warmup_time": 0
     },
     "real_read_write.AWSListSymbols.peakmem_list_symbols": {
-        "code": "class AWSListSymbols:\n    def peakmem_list_symbols(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.list_symbols()\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        self.lib._nvs.version_store._clear_symbol_list_keys() # clear cache\n\n    def setup_cache(self):\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        lgp = self.get_population_policy()\n        for number_symbols in AWSListSymbols.params:\n            lgp.set_parameters([AWSListSymbols.number_rows] * number_symbols)\n            lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT, number_symbols)\n        lgp.manager.log_info() # Always log the ArcticURIs",
+        "code": "class AWSListSymbols:\n    def peakmem_list_symbols(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.list_symbols()\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        self.lib._nvs.version_store._clear_symbol_list_keys() # clear cache\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        policy = self.get_population_policy()\n        for number_symbols in AWSListSymbols.params:\n            policy.set_parameters([AWSListSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n    \n        manager.log_info() # Always log the ArcticURIs",
         "name": "real_read_write.AWSListSymbols.peakmem_list_symbols",
         "param_names": [
             "num_syms"
@@ -2671,14 +2671,14 @@
                 "8"
             ]
         ],
-        "setup_cache_key": "real_read_write:216",
+        "setup_cache_key": "real_read_write:214",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "cdde07f716f982b57ebe2623e3da95855b12f2aaf8233d4081a1e39ee3af87c2"
+        "version": "a4d8b0449c70ccd23fd80965c3ef411160f80ea331f3d54f46db4987f4a28cd1"
     },
     "real_read_write.AWSListSymbols.time_has_symbol_nonexisting": {
-        "code": "class AWSListSymbols:\n    def time_has_symbol_nonexisting(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.has_symbol(\"250_sym\")\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        self.lib._nvs.version_store._clear_symbol_list_keys() # clear cache\n\n    def setup_cache(self):\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        lgp = self.get_population_policy()\n        for number_symbols in AWSListSymbols.params:\n            lgp.set_parameters([AWSListSymbols.number_rows] * number_symbols)\n            lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT, number_symbols)\n        lgp.manager.log_info() # Always log the ArcticURIs",
+        "code": "class AWSListSymbols:\n    def time_has_symbol_nonexisting(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.has_symbol(\"250_sym\")\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        self.lib._nvs.version_store._clear_symbol_list_keys() # clear cache\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        policy = self.get_population_policy()\n        for number_symbols in AWSListSymbols.params:\n            policy.set_parameters([AWSListSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n    \n        manager.log_info() # Always log the ArcticURIs",
         "min_run_count": 1,
         "name": "real_read_write.AWSListSymbols.time_has_symbol_nonexisting",
         "number": 1,
@@ -2694,15 +2694,15 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:216",
+        "setup_cache_key": "real_read_write:214",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "780552c830adb81608e4b098a4f453bddbe4eedf93a1fe8cab1cf5a25209a89d",
+        "version": "db978597c8aeaf5294153974b49c41533df3301170eee5c881964ec7ef06aa74",
         "warmup_time": 0
     },
     "real_read_write.AWSListSymbols.time_list_symbols": {
-        "code": "class AWSListSymbols:\n    def time_list_symbols(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.list_symbols()\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        self.lib._nvs.version_store._clear_symbol_list_keys() # clear cache\n\n    def setup_cache(self):\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        lgp = self.get_population_policy()\n        for number_symbols in AWSListSymbols.params:\n            lgp.set_parameters([AWSListSymbols.number_rows] * number_symbols)\n            lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT, number_symbols)\n        lgp.manager.log_info() # Always log the ArcticURIs",
+        "code": "class AWSListSymbols:\n    def time_list_symbols(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.list_symbols()\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        self.lib._nvs.version_store._clear_symbol_list_keys() # clear cache\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        policy = self.get_population_policy()\n        for number_symbols in AWSListSymbols.params:\n            policy.set_parameters([AWSListSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n    \n        manager.log_info() # Always log the ArcticURIs",
         "min_run_count": 1,
         "name": "real_read_write.AWSListSymbols.time_list_symbols",
         "number": 1,
@@ -2718,15 +2718,15 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:216",
+        "setup_cache_key": "real_read_write:214",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "9fabc9109203eac7186c625601428ad93625ae2e8ff14135f90d4a13d3f1b6ec",
+        "version": "f5089dc5618949b5fc335ec79a3fc54a6a7a9d902a0e85b50b3070f0b071e1c6",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.peakmem_read": {
-        "code": "class AWSReadWrite:\n    def peakmem_read(self, num_rows):\n        self.read_lib.read(self.symbol)\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        lgp = self.get_population_policy()\n        lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT)\n        lgp.manager.log_info()",
+        "code": "class AWSReadWrite:\n    def peakmem_read(self, num_rows):\n        self.read_lib.read(self.symbol)\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
         "name": "real_read_write.AWSReadWrite.peakmem_read",
         "param_names": [
             "num_rows"
@@ -2737,14 +2737,14 @@
                 "500"
             ]
         ],
-        "setup_cache_key": "real_read_write:74",
+        "setup_cache_key": "real_read_write:73",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "82573a38adb398f06a567e650ec69810108e1998fccf3e18c32c3e7c8f9d1fe0"
+        "version": "62c57f74d4712a468b6ea0f9c44220d1f7545268c1ae220a6c44d42c8426620c"
     },
     "real_read_write.AWSReadWrite.peakmem_read_with_column_float": {
-        "code": "class AWSReadWrite:\n    def peakmem_read_with_column_float(self, num_rows):\n        COLS = [\"float2\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        lgp = self.get_population_policy()\n        lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT)\n        lgp.manager.log_info()",
+        "code": "class AWSReadWrite:\n    def peakmem_read_with_column_float(self, num_rows):\n        COLS = [\"float2\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
         "name": "real_read_write.AWSReadWrite.peakmem_read_with_column_float",
         "param_names": [
             "num_rows"
@@ -2755,14 +2755,14 @@
                 "500"
             ]
         ],
-        "setup_cache_key": "real_read_write:74",
+        "setup_cache_key": "real_read_write:73",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "da9a29f67f9268fdb2bec0def10a2f896a38e3ea5ea6165f68a0e194b4c963b8"
+        "version": "461503f63725ddea436cb270ff4c1d8374c4bac847014307e384c4db234a3d9f"
     },
     "real_read_write.AWSReadWrite.peakmem_read_with_columns_all_types": {
-        "code": "class AWSReadWrite:\n    def peakmem_read_with_columns_all_types(self, num_rows):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        lgp = self.get_population_policy()\n        lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT)\n        lgp.manager.log_info()",
+        "code": "class AWSReadWrite:\n    def peakmem_read_with_columns_all_types(self, num_rows):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
         "name": "real_read_write.AWSReadWrite.peakmem_read_with_columns_all_types",
         "param_names": [
             "num_rows"
@@ -2773,14 +2773,14 @@
                 "500"
             ]
         ],
-        "setup_cache_key": "real_read_write:74",
+        "setup_cache_key": "real_read_write:73",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "7636cb2a06896496357787d127380a3d9caa4095003efb9834e4cd98fc7c86a9"
+        "version": "c34adf0639e7b06b805ae6220b49f1f787e7313b89f1e583875505d4b6210c19"
     },
     "real_read_write.AWSReadWrite.peakmem_write": {
-        "code": "class AWSReadWrite:\n    def peakmem_write(self, num_rows):\n        self.write_lib.write(self.symbol, self.to_write_df)\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        lgp = self.get_population_policy()\n        lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT)\n        lgp.manager.log_info()",
+        "code": "class AWSReadWrite:\n    def peakmem_write(self, num_rows):\n        self.write_lib.write(self.symbol, self.to_write_df)\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
         "name": "real_read_write.AWSReadWrite.peakmem_write",
         "param_names": [
             "num_rows"
@@ -2791,14 +2791,14 @@
                 "500"
             ]
         ],
-        "setup_cache_key": "real_read_write:74",
+        "setup_cache_key": "real_read_write:73",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "c16a017631589f48b348d21094b7c7f489808f48d6ab08e19a18d21f711b9d58"
+        "version": "644e15b30c3accb517b677527c9a62b9368bc7e50bba68b171e46ad76e304b2c"
     },
     "real_read_write.AWSReadWrite.peakmem_write_staged": {
-        "code": "class AWSReadWrite:\n    def peakmem_write_staged(self, num_rows):\n        lib = self.write_lib\n        lib.write(self.symbol, self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(self.symbol, False, False)\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        lgp = self.get_population_policy()\n        lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT)\n        lgp.manager.log_info()",
+        "code": "class AWSReadWrite:\n    def peakmem_write_staged(self, num_rows):\n        lib = self.write_lib\n        lib.write(self.symbol, self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(self.symbol, False, False)\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
         "name": "real_read_write.AWSReadWrite.peakmem_write_staged",
         "param_names": [
             "num_rows"
@@ -2809,14 +2809,14 @@
                 "500"
             ]
         ],
-        "setup_cache_key": "real_read_write:74",
+        "setup_cache_key": "real_read_write:73",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "d0d90e08135c51c5398b4f4a8ba8c9f8ef8bd7dcd78a22745b0c277627e4f0b7"
+        "version": "05ef0ca9a21effdfd2f7291dd9484d3998accea53118c37cc7023c40208849e0"
     },
     "real_read_write.AWSReadWrite.time_read": {
-        "code": "class AWSReadWrite:\n    def time_read(self, num_rows):\n        self.read_lib.read(self.symbol)\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        lgp = self.get_population_policy()\n        lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT)\n        lgp.manager.log_info()",
+        "code": "class AWSReadWrite:\n    def time_read(self, num_rows):\n        self.read_lib.read(self.symbol)\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWrite.time_read",
         "number": 3,
@@ -2832,15 +2832,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:74",
+        "setup_cache_key": "real_read_write:73",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "1f2067839f98f82423a2d3b59aee7590701198759bf2b911b7c85afcf1982928",
+        "version": "64a20d8046373ca8de098bc69e381df4e414d472444cc39cd61ba2cb58b651d9",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.time_read_with_column_float": {
-        "code": "class AWSReadWrite:\n    def time_read_with_column_float(self, num_rows):\n        COLS = [\"float2\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        lgp = self.get_population_policy()\n        lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT)\n        lgp.manager.log_info()",
+        "code": "class AWSReadWrite:\n    def time_read_with_column_float(self, num_rows):\n        COLS = [\"float2\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWrite.time_read_with_column_float",
         "number": 3,
@@ -2856,15 +2856,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:74",
+        "setup_cache_key": "real_read_write:73",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "58484c90d0ab5890f898c73b32bcfe3671ccbb1f1bef734541d7934ab8d84949",
+        "version": "c6dc5e078df3187d76d25ec3711d312b5519e484506356fafcddd8b90f9c986e",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.time_read_with_columns_all_types": {
-        "code": "class AWSReadWrite:\n    def time_read_with_columns_all_types(self, num_rows):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        lgp = self.get_population_policy()\n        lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT)\n        lgp.manager.log_info()",
+        "code": "class AWSReadWrite:\n    def time_read_with_columns_all_types(self, num_rows):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWrite.time_read_with_columns_all_types",
         "number": 3,
@@ -2880,15 +2880,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:74",
+        "setup_cache_key": "real_read_write:73",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "20d1e2160a7b75b59b23b2c60c1e97b94f685d9bd249e2ac9292e1065c16650a",
+        "version": "b2b4c79ea6c6a08b65d1ca9f24b14a25822f416bc11bdf0d68fc51c5cb0847d8",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.time_write": {
-        "code": "class AWSReadWrite:\n    def time_write(self, num_rows):\n        self.write_lib.write(self.symbol, self.to_write_df)\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        lgp = self.get_population_policy()\n        lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT)\n        lgp.manager.log_info()",
+        "code": "class AWSReadWrite:\n    def time_write(self, num_rows):\n        self.write_lib.write(self.symbol, self.to_write_df)\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWrite.time_write",
         "number": 3,
@@ -2904,15 +2904,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:74",
+        "setup_cache_key": "real_read_write:73",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "410418bf12d9282e9ace46d78d781d7acc094847f8536212445be5c12b76dfcc",
+        "version": "6c66f323efefef5e1a0dab2adcb84d261769189c8f1c69dfc2afe5e99af0e5f1",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.time_write_staged": {
-        "code": "class AWSReadWrite:\n    def time_write_staged(self, num_rows):\n        lib = self.write_lib\n        lib.write(self.symbol, self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(self.symbol, False, False)\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        lgp = self.get_population_policy()\n        lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT)\n        lgp.manager.log_info()",
+        "code": "class AWSReadWrite:\n    def time_write_staged(self, num_rows):\n        lib = self.write_lib\n        lib.write(self.symbol, self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(self.symbol, False, False)\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        #self.last_20 = utils.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWrite.time_write_staged",
         "number": 3,
@@ -2928,11 +2928,11 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:74",
+        "setup_cache_key": "real_read_write:73",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "9d9adc86e77d1de6215bc210cdec349e2a6d4cd3bf7a82e0ee612e76c1d1dbd3",
+        "version": "7d9ed48b497f97e2583b43cb86955b907a3f4e0ecde68279d1e5dec7861f7d89",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWriteWide.peakmem_read": {
@@ -3146,7 +3146,7 @@
         "warmup_time": 0
     },
     "real_read_write.AWSVersionSymbols.peakmem_list_snapshots": {
-        "code": "class AWSVersionSymbols:\n    def peakmem_list_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        lgp = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            lgp.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snaps = lib.list_snapshots(load_metadata=False)\n            snap = snaps[-1]\n            last_snapshot_names_dict[number_symbols] = snap\n        lgp.manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def peakmem_list_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "name": "real_read_write.AWSVersionSymbols.peakmem_list_snapshots",
         "param_names": [
             "num_syms"
@@ -3157,14 +3157,14 @@
                 "7"
             ]
         ],
-        "setup_cache_key": "real_read_write:280",
+        "setup_cache_key": "real_read_write:279",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "89c86d5ffc48bd29f5f5969f548897a7fdf6a67f4ebc536ffaef6eb91efa5edc"
+        "version": "caeda92d5b3cab11f5aa0f56566f8eac68e80358cc29f759bdbd532a34bb2fd0"
     },
     "real_read_write.AWSVersionSymbols.peakmem_list_snapshots_without_metadata": {
-        "code": "class AWSVersionSymbols:\n    def peakmem_list_snapshots_without_metadata(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots(load_metadata=False)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        lgp = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            lgp.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snaps = lib.list_snapshots(load_metadata=False)\n            snap = snaps[-1]\n            last_snapshot_names_dict[number_symbols] = snap\n        lgp.manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def peakmem_list_snapshots_without_metadata(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots(load_metadata=False)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "name": "real_read_write.AWSVersionSymbols.peakmem_list_snapshots_without_metadata",
         "param_names": [
             "num_syms"
@@ -3175,14 +3175,14 @@
                 "7"
             ]
         ],
-        "setup_cache_key": "real_read_write:280",
+        "setup_cache_key": "real_read_write:279",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "d694b7ce40b4b5235f66ad4d84db4d2a1fd3c8e886c1d8b3a22ff8cae573f791"
+        "version": "02c61b6a7f11f1fa7851a35a6ce4d82158d18596d736a3222470973539c09fba"
     },
     "real_read_write.AWSVersionSymbols.peakmem_list_versions": {
-        "code": "class AWSVersionSymbols:\n    def peakmem_list_versions(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        lgp = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            lgp.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snaps = lib.list_snapshots(load_metadata=False)\n            snap = snaps[-1]\n            last_snapshot_names_dict[number_symbols] = snap\n        lgp.manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def peakmem_list_versions(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "name": "real_read_write.AWSVersionSymbols.peakmem_list_versions",
         "param_names": [
             "num_syms"
@@ -3193,14 +3193,14 @@
                 "7"
             ]
         ],
-        "setup_cache_key": "real_read_write:280",
+        "setup_cache_key": "real_read_write:279",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "2b0984fe0b64155a0e94711161a4484143e59f27bd576d6bc6cbab5c8c1975d9"
+        "version": "3d5cf36d82bb6d02e764a07c8ed2ccc95d6c8dbaddaa94c14568af2e7c2199c1"
     },
     "real_read_write.AWSVersionSymbols.time_list_snapshots": {
-        "code": "class AWSVersionSymbols:\n    def time_list_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        lgp = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            lgp.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snaps = lib.list_snapshots(load_metadata=False)\n            snap = snaps[-1]\n            last_snapshot_names_dict[number_symbols] = snap\n        lgp.manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def time_list_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "min_run_count": 1,
         "name": "real_read_write.AWSVersionSymbols.time_list_snapshots",
         "number": 3,
@@ -3216,15 +3216,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:280",
+        "setup_cache_key": "real_read_write:279",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "413307dbf95fc72c6aaf96f2b2651a0f95f4fb5491712b1910b55c338f98733a",
+        "version": "78e5aa4a90eb370039ae809e7c046107267e16e1bc35c9a4f4b3dea9aa50c937",
         "warmup_time": 0
     },
     "real_read_write.AWSVersionSymbols.time_list_snapshots_without_metadata": {
-        "code": "class AWSVersionSymbols:\n    def time_list_snapshots_without_metadata(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots(load_metadata=False)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        lgp = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            lgp.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snaps = lib.list_snapshots(load_metadata=False)\n            snap = snaps[-1]\n            last_snapshot_names_dict[number_symbols] = snap\n        lgp.manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def time_list_snapshots_without_metadata(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots(load_metadata=False)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "min_run_count": 1,
         "name": "real_read_write.AWSVersionSymbols.time_list_snapshots_without_metadata",
         "number": 3,
@@ -3240,15 +3240,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:280",
+        "setup_cache_key": "real_read_write:279",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "31776f9aac0e282392ffe7fd2b189ccc355356a3c496921d037d680bc17ed740",
+        "version": "a15719c4fec06e506591a793b5d2d2fc1ab1569df8e39226736f4868fed3f359",
         "warmup_time": 0
     },
     "real_read_write.AWSVersionSymbols.time_list_versions": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        lgp = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            lgp.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snaps = lib.list_snapshots(load_metadata=False)\n            snap = snaps[-1]\n            last_snapshot_names_dict[number_symbols] = snap\n        lgp.manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def time_list_versions(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "min_run_count": 1,
         "name": "real_read_write.AWSVersionSymbols.time_list_versions",
         "number": 3,
@@ -3264,15 +3264,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:280",
+        "setup_cache_key": "real_read_write:279",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "b9f657f02efedd06b8a038c65fa0cadd13a47c29265ea21e5cfa8876cf774831",
+        "version": "4780217bff43eb0866b666b51b9169e874b53d56f80b40191c4d87d7f036ff64",
         "warmup_time": 0
     },
     "real_read_write.AWSVersionSymbols.time_list_versions_latest_only": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions_latest_only(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(latest_only=True)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        lgp = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            lgp.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snaps = lib.list_snapshots(load_metadata=False)\n            snap = snaps[-1]\n            last_snapshot_names_dict[number_symbols] = snap\n        lgp.manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def time_list_versions_latest_only(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(latest_only=True)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "min_run_count": 1,
         "name": "real_read_write.AWSVersionSymbols.time_list_versions_latest_only",
         "number": 3,
@@ -3288,15 +3288,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:280",
+        "setup_cache_key": "real_read_write:279",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "6e1ba90cbab5f81870ed5363928be42fb49a3849e96fda2e99ef642057aef86b",
+        "version": "a6b5c728af76d00e272a8f47bc413324f20d80b96c35047acf12d9d2f79c2440",
         "warmup_time": 0
     },
     "real_read_write.AWSVersionSymbols.time_list_versions_latest_only_and_skip_snapshots": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions_latest_only_and_skip_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(latest_only=True, skip_snapshots=True)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        lgp = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            lgp.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snaps = lib.list_snapshots(load_metadata=False)\n            snap = snaps[-1]\n            last_snapshot_names_dict[number_symbols] = snap\n        lgp.manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def time_list_versions_latest_only_and_skip_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(latest_only=True, skip_snapshots=True)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "min_run_count": 1,
         "name": "real_read_write.AWSVersionSymbols.time_list_versions_latest_only_and_skip_snapshots",
         "number": 3,
@@ -3312,15 +3312,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:280",
+        "setup_cache_key": "real_read_write:279",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "edf29558b0cbbb8deea9411197c8b1b10c62da8e575b7bd74642dbaf75c6d362",
+        "version": "2ea38591bce4b6965ac66adc384aac3876e3f108c1bbd65d487d69ece7e22c32",
         "warmup_time": 0
     },
     "real_read_write.AWSVersionSymbols.time_list_versions_skip_snapshots": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions_skip_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(skip_snapshots=True)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        lgp = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            lgp.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snaps = lib.list_snapshots(load_metadata=False)\n            snap = snaps[-1]\n            last_snapshot_names_dict[number_symbols] = snap\n        lgp.manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def time_list_versions_skip_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(skip_snapshots=True)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "min_run_count": 1,
         "name": "real_read_write.AWSVersionSymbols.time_list_versions_skip_snapshots",
         "number": 3,
@@ -3336,15 +3336,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:280",
+        "setup_cache_key": "real_read_write:279",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "d04d2f41b73edcaa0201e8ec06102074f82d19dbc6402597e34b5d09ad76d88f",
+        "version": "9d9734b4dc0acc24ef74b7d8913b5b9387c2bcac874733eec983dfcbad7164c3",
         "warmup_time": 0
     },
     "real_read_write.AWSVersionSymbols.time_list_versions_snapshot": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions_snapshot(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(snapshot=last_snapshot_names_dict[num_syms])\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        lgp = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            lgp.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snaps = lib.list_snapshots(load_metadata=False)\n            snap = snaps[-1]\n            last_snapshot_names_dict[number_symbols] = snap\n        lgp.manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def time_list_versions_snapshot(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(snapshot=last_snapshot_names_dict[num_syms])\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "min_run_count": 1,
         "name": "real_read_write.AWSVersionSymbols.time_list_versions_snapshot",
         "number": 3,
@@ -3360,11 +3360,11 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:280",
+        "setup_cache_key": "real_read_write:279",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "6a2f87ae905b39cb7875c930313856efac4b79186089436e04e04ede6932cf2f",
+        "version": "b64b791a1725d84a4f026bc5d12abe027858ff68fc6453ad1c0698012770246d",
         "warmup_time": 0
     },
     "real_read_write_wide.AWSReadWrite.peakmem_read": {

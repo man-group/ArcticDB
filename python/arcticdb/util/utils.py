@@ -556,28 +556,11 @@ class DFGenerator:
         types
         `indexed` defined if the generated dataframe will have index
         """
-        cols=int(cols)
-        rows=int(rows)
-        np.random.seed(seed)
-        dtypes = supported_types_list
-        gen = DFGenerator(size=rows, seed=seed) 
-        for i in range(cols):
-                dtype = dtypes[i % len(dtypes)]
-                if 'int' in str(dtype):
-                    gen.add_int_col(f"col_{i}", dtype)
-                    pass
-                elif 'bool' in str(dtype):
-                    gen.add_bool_col(f"col_{i}")
-                elif 'float' in str(dtype):
-                    gen.add_float_col(f"col_{i}", dtype)
-                elif 'str' in str(dtype):
-                    gen.add_string_col(name=f"col_{i}", str_size=10)
-                else:
-                    return f"Unsupported type {dtype}"
         if indexed:
-            gen.add_timestamp_index("index", "s", pd.Timestamp(0))
-        return gen.generate_dataframe()
-
+            return cls.generate_normal_dataframe(num_rows=rows, num_cols=cols, 
+                                          start_time=pd.Timestamp(0), freq='s', seed=seed)
+        else: 
+            return cls.generate_normal_dataframe(num_rows=rows, num_cols=cols, seed=seed)
 
     @classmethod
     def generate_random_int_dataframe(cls, start_name_prefix: str, 
@@ -684,4 +667,30 @@ class DFGenerator:
             frame.index = range
             
         return  frame
+
+    @classmethod
+    def generate_normal_dataframe(cls, num_rows: int, num_cols: int,  
+                            start_time: pd.Timestamp = None,
+                            freq: Union[str , timedelta , pd.Timedelta , pd.DateOffset] = 's',
+                            seed = 1234):
+        cols=int(num_cols)
+        rows=int(num_rows)
+        dtypes = supported_types_list
+        gen = DFGenerator(size=rows, seed=seed) 
+        for i in range(cols):
+                dtype = dtypes[i % len(dtypes)]
+                if 'int' in str(dtype):
+                    gen.add_int_col(f"col_{i}", dtype)
+                    pass
+                elif 'bool' in str(dtype):
+                    gen.add_bool_col(f"col_{i}")
+                elif 'float' in str(dtype):
+                    gen.add_float_col(f"col_{i}", dtype)
+                elif 'str' in str(dtype):
+                    gen.add_string_col(name=f"col_{i}", str_size=10)
+                else:
+                    return f"Unsupported type {dtype}"
+        if start_time is not None:
+            gen.add_timestamp_index("index", freq, start_time)
+        return gen.generate_dataframe()        
 

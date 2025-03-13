@@ -13,7 +13,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-from arcticdb.util.environment_setup import DataFrameGenerator, LibraryManager, LibraryPopulationPolicy, LibraryType, Storage, get_console_logger
+from arcticdb.util.environment_setup import DataFrameGenerator, LibraryManager, LibraryPopulationPolicy, LibraryType, Storage, get_console_logger, populate_library_if_missing
 from arcticdb.util.utils import DFGenerator, TimestampNumber
 from benchmarks.common import AsvBase
 
@@ -58,7 +58,7 @@ class AWSReadWrite(AsvBase):
     param_names = ["num_rows"]
     params = [250, 500]
 
-    library_manager = LibraryManager(Storage.AMAZON, "READ_WRITE")
+    library_manager = LibraryManager(Storage.LMDB, "READ_WRITE")
 
     def get_logger(self) -> Logger:
         return get_console_logger(self)
@@ -68,16 +68,16 @@ class AWSReadWrite(AsvBase):
     
     def get_population_policy(self) -> LibraryPopulationPolicy:
         lpp = LibraryPopulationPolicy(AWSReadWrite.params, self.get_logger(), AllColumnTypesGenerator())
-        lpp.set_manager(self.get_library_manager())
         return lpp
 
     def setup_cache(self):
         '''
         In setup_cache we only populate the persistent libraries if they are missing.
         '''
-        lgp = self.get_population_policy()
-        lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT)
-        lgp.manager.log_info()
+        manager = self.get_library_manager()
+        policy = self.get_population_policy()
+        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)
+        manager.log_info() # Logs info about ArcticURI - do always use last
 
     def setup(self, num_rows):
         self.population_policy = self.get_population_policy()
@@ -137,6 +137,7 @@ class AWSReadWrite(AsvBase):
         lib._nvs.compact_incomplete(self.symbol, False, False)
 
     """
+
     def time_read_with_date_ranges_last20_percent_rows(self, num_rows):
         self.read_lib.read(symbol=self.sym, date_range=self.last_20).data
 
@@ -163,7 +164,7 @@ class AWSReadWriteWide(AWSReadWrite):
 
     timeout = 1200
 
-    library_manager = LibraryManager(Storage.AMAZON, "READ_WRITE_WIDE")
+    library_manager = LibraryManager(Storage.LMDB, "READ_WRITE_WIDE")
 
     param_names = ["num_cols"]
     params = [400, 1000]
@@ -176,14 +177,12 @@ class AWSReadWriteWide(AWSReadWrite):
     def get_population_policy(self) -> LibraryPopulationPolicy:
         lpp = LibraryPopulationPolicy(AWSReadWriteWide.params, self.get_logger())
         lpp.use_parameters_are_columns().set_rows(AWSReadWriteWide.number_rows)
-        lpp.set_manager(self.get_library_manager())
         return lpp
     
     def setup_cache(self):
         # Each class that has specific setup and inherits from another class,
         # must implement setup_cache
         super().setup_cache()
-
 
 class AWSListSymbols(AsvBase):
 
@@ -195,7 +194,7 @@ class AWSListSymbols(AsvBase):
 
     timeout = 1200
     
-    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="LIST_SYMBOLS")
+    library_manager = LibraryManager(storage=Storage.LMDB, name_benchmark="LIST_SYMBOLS")
 
     params = [6,8]
     param_names = ["num_syms"]
@@ -210,16 +209,17 @@ class AWSListSymbols(AsvBase):
         lpp = LibraryPopulationPolicy(None, self.get_logger())
         lpp.set_columns(AWSListSymbols.number_columns)
         lpp.use_auto_increment_index()
-        lpp.set_manager(self.get_library_manager())
         return lpp
 
     def setup_cache(self):
+        manager = self.get_library_manager()
         assert AWSListSymbols.number == 1, "There must be always one test between setup and tear down"
-        lgp = self.get_population_policy()
+        policy = self.get_population_policy()
         for number_symbols in AWSListSymbols.params:
-            lgp.set_parameters([AWSListSymbols.number_rows] * number_symbols)
-            lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT, number_symbols)
-        lgp.manager.log_info() # Always log the ArcticURIs 
+            policy.set_parameters([AWSListSymbols.number_rows] * number_symbols)
+            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)
+
+        manager.log_info() # Always log the ArcticURIs 
     
     def setup(self, num_syms):
         self.population_policy = self.get_population_policy()
@@ -254,7 +254,7 @@ class AWSVersionSymbols(AsvBase):
 
     timeout = 1200
 
-    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="LIST_SYMBOLS")
+    library_manager = LibraryManager(storage=Storage.LMDB, name_benchmark="LIST_SYMBOLS")
 
     params = [5,7]
     param_names = ["num_syms"]
@@ -274,20 +274,19 @@ class AWSVersionSymbols(AsvBase):
         lpp.generate_versions(versions_max=int(1.5 * AWSVersionSymbols.mean_number_versions_per_symbol), 
                               mean=AWSVersionSymbols.mean_number_versions_per_symbol)
         lpp.generate_metadata().generate_snapshots()
-        lpp.set_manager(self.get_library_manager())
         return lpp
 
     def setup_cache(self):
-        lgp = self.get_population_policy()
+        manager = self.get_library_manager()
+        policy = self.get_population_policy()
         last_snapshot_names_dict = {}
         for number_symbols in AWSVersionSymbols.params:
-            lgp.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)
-            lgp.populate_persistent_library_if_missing(LibraryType.PERSISTENT, number_symbols)
+            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)
+            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)
             lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)
-            snaps = lib.list_snapshots(load_metadata=False)
-            snap = snaps[-1]
-            last_snapshot_names_dict[number_symbols] = snap
-        lgp.manager.log_info() # Always log the ArcticURIs 
+            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]
+            last_snapshot_names_dict[number_symbols] = snapshot_name
+        manager.log_info() # Always log the ArcticURIs 
         return last_snapshot_names_dict
     
     def setup(self, last_snapshot_names_dict, num_syms):

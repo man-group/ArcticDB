@@ -21,9 +21,6 @@ from arcticdb.version_store.library import Library
 
 ## Amazon s3 storage bucket dedicated for ASV performance tests
 AWS_S3_DEFAULT_BUCKET = 'arcticdb-asv-real-storage'
-PERSISTENT_LIBS_PREFIX = "PERMANENT_LIBRARIES" 
-MODIFIABLE_LIBS_PREFIX = 'MODIFIABLE_LIBRARIES' 
-TEST_LIBS_PREFIX = 'TESTS_LIBRARIES' 
 
 loggers:Dict[str, logging.Logger] = {}
 
@@ -284,7 +281,8 @@ class VariableSizeDataframe(DataFrameGenerator):
     
     def get_dataframe(self, number_rows, number_columns):
         if number_columns < self.wide_dataframe_generation_threshold:
-            df = (DFGenerator.generate_random_dataframe(rows=number_rows, cols=number_columns))
+            df = (DFGenerator.generate_normal_dataframe(num_rows=number_rows, num_cols=number_columns,
+                                                      freq = "s", start_time=pd.Timestamp(0)))
         else:
             # The wider the dataframe the more time it needs to generate per row
             # This algo is much better for speed with wide dataframes
@@ -324,7 +322,6 @@ class LibraryPopulationPolicy:
         """
         self.logger = logger
         self.df_generator = df_generator
-        self.manager = None
         self.parameters = parameters
         # defines if parameters is list of row numbers or column numbers
         self.parameters_is_number_rows_list = True 
@@ -337,10 +334,6 @@ class LibraryPopulationPolicy:
         self.symbol_fixed_str = ""
         self.index_is_auto_increment = False
 
-    def set_manager(self, manager: LibraryManager) -> 'LibraryPopulationPolicy':
-        self.manager = manager
-        return self
-    
     def set_parameters(self, parameters: List[int]) -> 'LibraryPopulationPolicy':
         """
         Useful for passing different sets of parameters populating many libraries
@@ -412,6 +405,194 @@ class LibraryPopulationPolicy:
         return self
 
     def get_symbol_name(self, index: int) -> str:
+        """
+        This method is used during population and should be used by readers also
+        Normally the index will be one of:
+         - autoincrement - when many symbols of same size are generated
+         - number of rows (columns) - when parameters is list of row/column symbol sizes
+        """
+        return f"symbol_{self.symbol_fixed_str}_{index}"
+
+    def populate_library(self, lib: Library):
+        assert lib is not None
+        self.logger.info(f"Populating library {lib}")
+        start_time = time.time()
+        df_generator = self.df_generator
+        meta = None if not self.with_metadata else self._generate_metadata()
+        versions_list = self._get_versions_list(len(self.parameters))
+        index = 0
+        for param_value in self.parameters:
+            versions = versions_list[index]
+            
+            if self.index_is_auto_increment:
+                symbol = self.get_symbol_name(index)
+            else:
+                symbol = self.get_symbol_name(param_value)
+
+            if self.parameters_is_number_rows_list:
+                df = df_generator.get_dataframe(number_rows=param_value, number_columns=self.number_columns)
+            else:
+                df = df_generator.get_dataframe(number_rows=self.number_rows, number_columns=param_value)
+            self.logger.info(f"Dataframe generated [{df.shape}]")
+
+            for ver in range(versions):
+                lib.write(symbol=symbol, data=df, metadata=meta)
+
+                if self.with_snapshot:
+                    snapshot_name = f"snap_{symbol}_{ver}"
+                    lib.snapshot(snapshot_name, metadata=meta)
+                
+            index += 1
+        self.logger.info(f"Population completed for: {time.time() - start_time}")
+
+
+    def _get_versions_list(self, number_symbols: int) -> List[np.int64]:
+        if self.versions_max == 1:
+            versions_list = [1] * number_symbols
+        else:
+            versions_list = ListGenerators.generate_random_list_with_mean(
+                number_elements=number_symbols,
+                specified_mean=self.mean, 
+                value_range=(1, self.versions_max), 
+                seed=365)
+        return versions_list
+
+    def _generate_metadata(self):
+        return DFGenerator.generate_random_dataframe(rows=3, cols=10).to_dict()                 
+
+def populate_library_if_missing(manager: LibraryManager, policy: LibraryPopulationPolicy, lib_type: LibraryType, lib_name_suffix: str = ""):
+    assert manager is not None
+    name = manager.get_library_name(lib_type, lib_name_suffix)
+    if not manager.has_library(lib_type, lib_name_suffix):
+        lib = manager.get_library(lib_type, lib_name_suffix)
+        policy.populate_library(lib)
+    else:
+        policy.logger.info(f"Existing library has been found {name}. Will be reused")      
+
+
+
+    def __init__(self, parameters: List[int], logger: logging.Logger, df_generator: DataFrameGenerator = VariableSizeDataframe()):
+        """
+        By default library population policy uses a list of number of rows per symbol, where numbers would be unique. 
+        It will generate same number of symbols as the length of the list and each symbol will have the same number of 
+        rows as the index of the number.
+
+        It is possible to also define a custom DataFrameGenerator specific for test needs. Default one is generating dataframe 
+        with random data and you can specify any number of columns and rows
+
+        It is possible to also configure through methods snapshots and versions to be created and metadata to be set to them or not
+
+        Example A:
+            LibraryPopulationPolicy([10,20], some_logger).set_columns(5)
+            This configures generation of 2 symbols with 10 and 20 rows. The number of rows can later be used to get symbol name.
+            Note that this defined that all symbols will have fixed number of columns = 5
+
+        Example B:
+            LibraryPopulationPolicy([10,20], some_logger).use_parameters_are_columns().set_rows(3) - 
+            This configures generation of 2 symbols with 10 and 20 columns. The number columns can later be used to get symbol name.
+            Note that this defined that all symbols will have fixed number of rows = 3
+
+        Example C: Populating library with many identical symbols
+            LibraryPopulationPolicy([10] * 10, some_logger).use_auto_increment_index().set_columns(30) - 
+            This configures generation of 10 symbols with 10 rows each. Also instructs that the symbol names will be constructed 
+            with auto incrementing index - you can access each symbol using its index 0-9
+        """
+        self.logger = logger
+        self.df_generator = df_generator
+        self.manager = None
+        self.parameters = parameters
+        # defines if parameters is list of row numbers or column numbers
+        self.parameters_is_number_rows_list = True 
+        self.number_rows = 1
+        self.number_columns = 1
+        self.with_metadata = False
+        self.versions_max = 1
+        self.mean = 1
+        self.with_snapshot = False
+        self.symbol_fixed_str = ""
+        self.index_is_auto_increment = False
+
+    def set_manager(self, manager: LibraryManager) -> 'LibraryPopulationPolicyOld':
+        self.manager = manager
+        return self
+    
+    def set_parameters(self, parameters: List[int]) -> 'LibraryPopulationPolicyOld':
+        """
+        Useful for passing different sets of parameters populating many libraries
+        with unique number of symbols
+        """
+        self.parameters = parameters
+        return self
+
+    def set_symbol_fixed_str(self, symbol_fixed_str) -> 'LibraryPopulationPolicyOld':
+        """
+        Whenever you want to use one library and have different policies creating symbols
+        in it specify unique meaningful fixed string that will become part of the name
+        of the generated symbol
+        """
+        self.symbol_fixed_str = symbol_fixed_str
+        return self
+
+    def use_parameters_are_columns(self) -> 'LibraryPopulationPolicyOld':
+        """
+        By default the parameter list is considered as 
+        """
+        self.parameters_is_number_rows_list = False
+        return self
+
+    def set_rows(self, number_rows) -> 'LibraryPopulationPolicyOld':
+        """
+        Sets number of rows if we are using fixed number of rows
+        """
+        self.number_rows = number_rows
+        return self
+
+    def set_columns(self, number_columns) -> 'LibraryPopulationPolicyOld':
+        """
+        Sets number of columns if we are using fixed number of columns
+        """
+        self.number_columns = number_columns
+        return self
+    
+    def generate_versions(self, versions_max, mean) -> 'LibraryPopulationPolicyOld':
+        """
+        For each symbol maximum `versions_max` version and mean value `mean`
+        """
+        self.versions_max = versions_max
+        self.mean = mean
+        return self
+    
+    def generate_snapshots(self) -> 'LibraryPopulationPolicyOld':
+        """
+        Will create snapshots for each symbol. For each version of a symbol 
+        will be added one snapshot
+        """
+        self.with_snapshot = True
+        return self
+    
+    def generate_metadata(self) -> 'LibraryPopulationPolicyOld':
+        """
+        All snapshots and symbols will have metadata
+        """
+        self.with_metadata = True
+        return self
+    
+    def use_auto_increment_index(self) -> 'LibraryPopulationPolicyOld':
+        """
+            During population of symbols will use auto increment index
+            for symbol names instead of using the current value of the 
+            parameters list
+        """
+        self.index_is_auto_increment = True
+        return self
+
+    def get_symbol_name(self, index: int) -> str:
+        """
+        This method is used during population and should be used by readers also
+        Normally the index will be one of:
+         - autoincrement - when many symbols of same size are generated
+         - number of rows (columns) - when parameters is list of row/column symbol sizes
+        """
         return f"symbol_{self.symbol_fixed_str}_{index}"
 
     def populate_library(self, lib_type: LibraryType, lib_name_suffix: str = ""):
@@ -468,14 +649,3 @@ class LibraryPopulationPolicy:
 
     def _generate_metadata(self):
         return DFGenerator.generate_random_dataframe(rows=3, cols=10).to_dict()                 
-
-
-
-
-
-
-
-
-
-
-
