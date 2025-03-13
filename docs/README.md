@@ -51,8 +51,7 @@ pip install arcticdb
 `mkdocstrings[python]` doesn't support python extensions very well, so create interface files (pyi) for the extensions first.
 ```
 cd docs/mkdocs
-# TODO fix these errors!
-pybind11-stubgen arcticdb_ext --ignore-all-errors -o .
+pybind11-stubgen arcticdb_ext -o .
 ```
 
 To build the latest mkdocs to docs/mkdocs/site:

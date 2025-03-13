@@ -793,6 +793,7 @@ GENERATE_EXPORT_HEADER(arcticdb_core)
 
 ## Core python bindings, private only ##
 set(arcticdb_python_srcs
+        entity/python_bindings.cpp
         async/python_bindings.cpp
         codec/python_bindings.cpp
         column_store/python_bindings.cpp

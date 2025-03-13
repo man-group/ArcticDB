@@ -66,8 +66,7 @@ jobs:
           set -x
           cd docs/mkdocs
           # stubfiles will be generated into docs/mkdocs/arcticdb_ext and so imported as arcticdb_ext by mkdocs when it builds
-          # FIXME --ignore-all-errors may mask new errors and should be removed when we are compliant
-          pybind11-stubgen arcticdb_ext --ignore-all-errors -o .
+          pybind11-stubgen arcticdb_ext -o .
 
       - name: List docs versions before deploy
         run: |

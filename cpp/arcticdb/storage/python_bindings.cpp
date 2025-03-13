@@ -109,6 +109,12 @@ py::tuple to_tuple(const s3::S3Settings& settings) {
 void register_bindings(py::module& storage, py::exception<arcticdb::ArcticException>& base_exception) {
     storage.attr("CONFIG_LIBRARY_NAME") = py::str(arcticdb::storage::CONFIG_LIBRARY_NAME);
 
+    py::enum_<SortedValue>(storage, "SortedValue")
+            .value("UNKNOWN", SortedValue::UNKNOWN)
+            .value("UNSORTED", SortedValue::UNSORTED)
+            .value("ASCENDING", SortedValue::ASCENDING)
+            .value("DESCENDING", SortedValue::DESCENDING);
+
     py::enum_<KeyType>(storage, "KeyType")
         .value("VERSION", KeyType::VERSION)
         .value("VERSION_JOURNAL", KeyType::VERSION_JOURNAL)
@@ -165,8 +171,6 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
 
     py::register_exception<UnknownLibraryOption>(storage, "UnknownLibraryOption", base_exception.ptr());
     py::register_exception<UnsupportedLibraryOptionValue>(storage, "UnsupportedLibraryOptionValue", base_exception.ptr());
-
-    storage.def("create_library_index", &create_library_index);
 
     py::enum_<s3::AWSAuthMethod>(storage, "AWSAuthMethod")
         .value("DISABLED", s3::AWSAuthMethod::DISABLED)
@@ -249,6 +253,8 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
 
     py::implicitly_convertible<NativeVariantStorage::VariantStorageConfig, NativeVariantStorage>();
 
+    py::class_<ConfigResolver, std::shared_ptr<ConfigResolver>>(storage, "ConfigResolver");
+
     storage.def("create_mem_config_resolver", [](const py::object & env_config_map_py) -> std::shared_ptr<ConfigResolver> {
         arcticdb::proto::storage::EnvironmentConfigsMap ecm;
         pb_from_python(env_config_map_py, ecm);
@@ -264,8 +270,6 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         }
         return resolver;
     });
-
-    py::class_<ConfigResolver, std::shared_ptr<ConfigResolver>>(storage, "ConfigResolver");
 
     py::class_<Library, std::shared_ptr<Library>>(storage, "Library")
         .def_property_readonly("library_path", [](const Library &library){ return library.library_path().to_delim_path(); })
@@ -395,6 +399,8 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
             return library_index.get_library(path, open_mode, UserAuth{}, native_storage_config);
         })
         ;
+
+    storage.def("create_library_index", &create_library_index);
 }
 
 } // namespace arcticdb::storage::apy

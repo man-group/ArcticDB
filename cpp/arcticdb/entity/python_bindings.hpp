@@ -1,4 +1,4 @@
-/* Copyright 2023 Man Group Operations Limited
+/* Copyright 2025 Man Group Operations Limited
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
@@ -11,19 +11,18 @@
 
 namespace py = pybind11;
 
-namespace arcticdb::stream {
+namespace arcticdb::entity {
 
-void register_stream_bindings(py::module &m);
+void register_types_bindings(py::module &m);
 
 inline void register_bindings(py::module &m) {
 
-    auto arcticxx_stream = m.def_submodule("stream", R"pydoc(
-    arcticdb Streams
+    auto arcticxx_types = m.def_submodule("types", R"pydoc(
+    Fundamental types
     -----------------
-    Contains the stream api classes used to write/read streams of values
-    )pydoc");
+    Contains definition of the types used to define the descriptors)pydoc");
 
-    arcticdb::stream::register_stream_bindings(arcticxx_stream);
-}
+    arcticdb::entity::register_types_bindings(arcticxx_types);
+    }
 
-} // namespace arcticdb::stream
+} // namespace arcticdb::entity

@@ -6,7 +6,7 @@ import random
 import string
 
 from arcticdb_ext.storage import KeyType
-from arcticdb_ext.version_store import SortedValue
+from arcticdb_ext.storage import SortedValue
 
 
 def test_stage_finalize(arctic_library):
