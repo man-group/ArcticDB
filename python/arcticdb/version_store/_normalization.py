@@ -33,7 +33,7 @@ from arcticdb.exceptions import (
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
 from arcticdb.version_store.read_result import ReadResult
-from arcticdb_ext.version_store import SortedValue as _SortedValue
+from arcticdb_ext.storage import SortedValue as _SortedValue
 from pandas.core.internals import make_block
 
 from pandas import DataFrame, MultiIndex, Series, DatetimeIndex, Index, RangeIndex

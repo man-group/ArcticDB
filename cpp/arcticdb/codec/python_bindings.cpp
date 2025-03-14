@@ -156,6 +156,15 @@ void register_codec(py::module &m) {
         .def(py::init<TypeDescriptor, py::buffer, py::buffer>())
         .def("as_field", &DynamicFieldBuffer::as_field, py::call_guard<SingleThreadMutexHolder>());
 
+    py::class_<Buffer, std::shared_ptr<Buffer>>(m, "Buffer", py::buffer_protocol())
+        .def(py::init(), py::call_guard<SingleThreadMutexHolder>())
+        .def("size", &Buffer::bytes)
+        .def_buffer([](Buffer &buffer) {
+            return py::buffer_info{
+                buffer.data(), 1, py::format_descriptor<std::uint8_t>::format(), 1, {buffer.bytes()}, {1}
+            };
+        });
+
     py::class_<FieldEncodingResult, std::shared_ptr<FieldEncodingResult>>(m, "FieldEncodingResult")
         .def(py::init<>())
         .def_property_readonly("buffer", [](const FieldEncodingResult& self) {
@@ -174,14 +183,7 @@ void register_codec(py::module &m) {
             return self.values_buffer_;
         });
 
-    py::class_<Buffer, std::shared_ptr<Buffer>>(m, "Buffer", py::buffer_protocol())
-        .def(py::init(), py::call_guard<SingleThreadMutexHolder>())
-        .def("size", &Buffer::bytes)
-        .def_buffer([](Buffer &buffer) {
-            return py::buffer_info{
-                buffer.data(), 1, py::format_descriptor<std::uint8_t>::format(), 1, {buffer.bytes()}, {1}
-            };
-        });
+    py::class_<SegmentHeader>(m, "SegmentHeader");
 
     py::class_<Segment>(m, "Segment")
             .def(py::init<>())
@@ -193,6 +195,8 @@ void register_codec(py::module &m) {
             .def_property_readonly("bytes", [](const Segment& self) {
                 return py::bytes(reinterpret_cast<char *>(self.buffer().data()), self.buffer().bytes());
             });
+
+    py::class_<EncodingVersion>(m, "EncodingVersion");
 
     m.def("encode_segment", &encode_segment);
     m.def("decode_segment", &decode_python_segment, py::return_value_policy::move);

@@ -3,7 +3,7 @@ import numpy as np
 import arcticdb as adb
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.storage import KeyType
-from arcticdb_ext.version_store import SortedValue
+from arcticdb_ext.storage import SortedValue
 
 from arcticdb.util.test import random_strings_of_length
 
