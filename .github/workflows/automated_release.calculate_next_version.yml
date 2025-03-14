@@ -52,9 +52,6 @@ jobs:
           MINOR_LABEL: "enhancement"
           PATCH_LABEL: "bug"
         run: |
-          if [ -z "$PULL_REQUESTS" ]; then
-            echo "Error: No PRs found between branches" && exit 1
-          fi
           labels=$(echo "$PULL_REQUESTS" | jq -r '.[].labels[].name')
           echo Labels: $labels
           increment_type="patch"
