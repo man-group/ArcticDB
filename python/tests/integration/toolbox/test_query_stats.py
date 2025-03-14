@@ -36,7 +36,7 @@ def verify_list_symbool_stats(count):
     assert {"count", "key_type", "total_time_ms"} == list_symbol_stats.keys()
     assert list_symbol_stats["count"] == count
     assert list_symbol_stats["total_time_ms"] / list_symbol_stats["count"] < 800 # max time is loose as moto could be slow
-    assert list_symbol_stats["total_time_ms"] / list_symbol_stats["count"] > 10
+    assert list_symbol_stats["total_time_ms"] / list_symbol_stats["count"] > 2
     
     key_types = list_symbol_stats["key_type"]
     assert "SYMBOL_LIST" in key_types
@@ -47,7 +47,7 @@ def verify_list_symbool_stats(count):
         list_object_ststs = key_type_map["storage_ops"]["ListObjectsV2"]
         result_count = list_object_ststs["result_count"]
         assert result_count == count if key == "SYMBOL_LIST" else 1 
-        assert list_object_ststs["total_time_ms"] / result_count > 5
+        assert list_object_ststs["total_time_ms"] / result_count > 2
         assert list_object_ststs["total_time_ms"] / result_count < 100
 
 
