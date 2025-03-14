@@ -42,6 +42,7 @@ jobs:
           github_token: ${{ github.token }}
           current_tag: ${{ inputs.from_branch }}
           previous_tag: ${{ steps.latest_tag.outputs.tag }}
+          commit_limit: 40 # Limitation because this action outputs the PRs payload in an env variable and GH actions has a limit how large that can be. FUTURE: Find other action or create own implementation. 
           return_type: "all"
 
       - name: Get labels of PRs and determine increment type
