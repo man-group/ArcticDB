@@ -43,43 +43,30 @@ jobs:
           current_tag: ${{ inputs.from_branch }}
           previous_tag: ${{ steps.latest_tag.outputs.tag }}
           return_type: "all"
-      
+
       - name: Get labels of PRs and determine increment type
         id: get_increment_type
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const pullRequests = JSON.parse('${{ steps.pull_requests.outputs.pull_requests }}');
-
-            if (!pullRequests || pullRequests.length === 0) {
-              core.setFailed("Error: No PRs found between branches");
-              return;
-            }
-
-            const labels = pullRequests.flatMap(pr => pr.labels.map(label => label.name));
-            console.log(`Labels: ${labels.join(', ')}`);
-
-            const MAJOR_LABEL = "major";
-            const MINOR_LABEL = "minor";
-            const PATCH_LABEL = "patch";
-
-            let incrementType = 'patch';
-            if (labels.includes(MAJOR_LABEL)) {
-              incrementType = 'major';
-              console.log("Major changes found! Should increase major version.");
-            } else if (labels.includes(MINOR_LABEL)) {
-              incrementType = 'minor';
-              console.log("Minor changes found! Should increase minor version.");
-            } else if (labels.includes(PATCH_LABEL)) {
-              console.log("Patch changes found! Should increase patch version.");
-            } else {
-              console.log("No PRs labeled patch, minor or major found! Defaulting to 'patch'.");
-            }
-
-            core.setOutput('increment_type', incrementType);
-
-            const tag = '${{ steps.latest_tag.outputs.tag }}';
-            core.setOutput('tag', tag.replace(/rc.*/, ''));
+        env:
+          PULL_REQUESTS: ${{ steps.pull_requests.outputs.pull_requests }}
+          MAJOR_LABEL: "api break"
+          MINOR_LABEL: "enhancement"
+          PATCH_LABEL: "bug"
+        run: |
+          if [ -z "$PULL_REQUESTS" ]; then
+            echo "Error: No PRs found between branches" && exit 1
+          fi
+          labels=$(echo "$PULL_REQUESTS" | jq -r '.[].labels[].name')
+          echo Labels: $labels
+          increment_type="patch"
+          case "$labels" in
+            *"${{ env.MAJOR_LABEL }}"*) increment_type="major"; echo "Major changes found! Should increase major version." ;;
+            *"${{ env.MINOR_LABEL }}"*) increment_type="minor"; echo "Minor changes found! Should increase minor version." ;;
+            *"${{ env.PATCH_LABEL }}"*) echo "Patch changes found! Should increase patch version." ;;
+            *) echo "No PRs labeled patch, minor or major found! Defaulting to 'patch'." ;;
+          esac
+          echo "increment_type=$increment_type" >> $GITHUB_OUTPUT
+          TAG=${{ steps.latest_tag.outputs.tag }}
+          echo "tag=${TAG%rc*}" >> $GITHUB_OUTPUT
 
       - name: Calculate next version. Increment type - ${{ steps.get_increment_type.outputs.increment_type }}
         id: get-next-version
