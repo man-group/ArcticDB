@@ -12,10 +12,12 @@
 #include <bit>
 
 #include <arcticdb/codec/compression/fastlanes_common.hpp>
+#include <arcticdb/codec/compression/encoder_data.hpp>
 #include <arcticdb/codec/compression/bitpack_fused.hpp>
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/codec/compression/transpose.hpp>
+
 
 namespace arcticdb {
 
@@ -148,16 +150,11 @@ constexpr size_t full_header_size() {
 }
 
 template<typename T>
-class ColumnCompressor {
+class DeltaCompressor : public DeltaCompressData {
     using Header = DeltaHeader<T>;
     using h = Helper<T>;
 
 private:
-    uint32_t simd_bit_width_ = 0;
-    uint32_t remainder_bit_width_ = 0;
-    uint32_t compressed_rows_ = 0;
-    size_t full_blocks_ = 0;
-    size_t remainder_ = 0;
     std::array<T, h::num_lanes> initial_values_ = {};
 
     static constexpr size_t t_bits = h::num_bits;
@@ -281,10 +278,14 @@ public:
         util::check(output_offset <= output_size, "Buffer overflow on compression: {} > {}", output_offset, output_size);
         return output_offset;
     }
+
+    EncoderData data() {
+        return {static_cast<DeltaCompressData>(*this)};
+    }
 };
 
 template<typename T>
-class ColumnDecompressor {
+class DeltaDecompressor {
     using Header = DeltaSize;
     using h = Helper<T>;
     static constexpr size_t BLOCK_SIZE = 1024;

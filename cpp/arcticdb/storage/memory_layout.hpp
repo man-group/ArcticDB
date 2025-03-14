@@ -61,10 +61,30 @@ struct PassthroughCodec {
     uint16_t padding_ = 0;
 };
 
+
+enum class EncodingType : uint16_t {
+    PLAIN,
+    FFOR ,
+    DELTA,
+    FREQUENCY,
+    CONSTANT,
+    RLE,
+    ALP,
+    BITPACK,
+    COUNT
+};
+
 struct AdaptiveCodec {
     static constexpr Codec type_ = Codec::ADAPTIVE;
 
-    uint32_t unused_ = 0;
+    AdaptiveCodec() = default;
+
+    AdaptiveCodec(EncodingType type) :
+        encoding_type_(type) {
+    }
+
+    EncodingType encoding_type_;
+    uint16_t unused_ = 0;
     uint16_t padding_ = 0;
 };
 
@@ -117,18 +137,6 @@ struct FieldStats {
     SortedValue sorted_ = SortedValue::UNKNOWN;
     uint8_t set_ = 0U;
     bool unused_ = false;
-};
-
-enum class EncodingType : uint8_t {
-    PLAIN,
-    FFOR ,
-    DELTA,
-    FREQUENCY,
-    CONSTANT,
-    RLE,
-    ALP,
-    BITPACK,
-    COUNT
 };
 
 static_assert(sizeof(FieldStats) == 24);

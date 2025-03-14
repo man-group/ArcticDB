@@ -21,7 +21,7 @@
 template <typename T>
 void test_encoder() {
     using namespace arcticdb;
-    FrequencyEncoding<T> encoder;
+    FrequencyCompressor<T> encoder;
 
     rc::check("Encode and decode should be reversible", [&] {
         int length = *rc::gen::inRange(1, 1000);
@@ -49,7 +49,7 @@ void test_encoder() {
     });
 }
 
-RC_GTEST_PROP(FrequencyEncoding, ReversibleEncodingDecoding, ()) {
+RC_GTEST_PROP(FrequencyCompressor, ReversibleEncodingDecoding, ()) {
     test_encoder<uint8_t>();
     test_encoder<int8_t>();
     test_encoder<uint16_t>();
@@ -67,7 +67,7 @@ void test_encoder_random_data() {
     using namespace arcticdb;
     rc::check("frequency_encode random data",
               [](const std::vector<T> &input) {
-                  FrequencyEncoding<T> encoding;
+                  FrequencyCompressor<T> encoding;
                   auto required_bytes = encoding.max_required_bytes(input.data(), input.size());
                   if (!required_bytes.has_value())
                       RC_SUCCEED("No single value comprises more than 90% of the array");
@@ -83,7 +83,7 @@ void test_encoder_random_data() {
               });
 }
 
-RC_GTEST_PROP(FrequencyEncoding, GeneratedData, ()) {
+RC_GTEST_PROP(FrequencyCompressor, GeneratedData, ()) {
     test_encoder_random_data<int8_t>();
     test_encoder_random_data<uint8_t>();
     test_encoder_random_data<int16_t>();

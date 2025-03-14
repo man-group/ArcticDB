@@ -12,11 +12,11 @@
 
 #include <random>
 
-TEST(FrequencyEncoding, Basic) {
+TEST(FrequencyCompressor, Basic) {
     using namespace arcticdb;
     using InputType = uint32_t;
     std::vector<InputType> data {1, 1, 1, 2, 1, 1, 1, 1, 2, 2, 5};
-    FrequencyEncoding<InputType, 60> encoding;
+    FrequencyCompressor<InputType, 60> encoding;
     encoding.scan(data.data(), data.size());
     auto estimated_size = encoding.max_required_bytes(data.data(), data.size());
     ASSERT_EQ(estimated_size.has_value(), true);
@@ -30,23 +30,23 @@ TEST(FrequencyEncoding, Basic) {
     ASSERT_EQ(decompressed, data);
 }
 
-TEST(FrequencyEncoding, Scan) {
+TEST(FrequencyCompressor, Scan) {
     using namespace arcticdb;
     using InputType = uint32_t;
     std::vector<uint32_t> data {1, 1, 1, 2, 1, 1, 1, 2, 1, 1, 5, 1, 1, 1};
 
-    FrequencyEncoding<InputType, 60> encoding;
+    FrequencyCompressor<InputType, 60> encoding;
     encoding.scan(data.data(), data.size());
     auto estimated_size = encoding.max_required_bytes(data.data(), data.size());
     ASSERT_EQ(estimated_size.has_value(), true);
     ASSERT_EQ(*estimated_size, 9066); // TODO this value is too large
 }
 
-TEST(FrequencyEncoding, Stress) {
+TEST(FrequencyCompressor, Stress) {
     using namespace arcticdb;
     using InputType = uint32_t;
     auto data = random_numbers_with_leader<InputType>(100000, 23, 0.9);
-    FrequencyEncoding<InputType> encoding;
+    FrequencyCompressor<InputType> encoding;
     interval_timer timer;
     encoding.scan(data.data(), data.size());
     auto estimated_size = encoding.max_required_bytes(data.data(), data.size());
@@ -71,12 +71,12 @@ TEST(FrequencyEncoding, Stress) {
 }
 
 
-TEST(FrequencyEncoding, StressFill) {
+TEST(FrequencyCompressor, StressFill) {
     using namespace arcticdb;
     using InputType = uint64_t;
     std::vector<InputType> data(100'000);
     interval_timer timer;
-    FrequencyEncoding<InputType> encoding;
+    FrequencyCompressor<InputType> encoding;
     timer.start_timer("Fill");
     const auto num_runs = 10'000UL;
     for(auto i = 0UL; i < num_runs; ++i) {
@@ -86,12 +86,12 @@ TEST(FrequencyEncoding, StressFill) {
     log::version().info("{}", timer.display_all());
 }
 
-TEST(FrequencyEncoding, StressScan) {
+TEST(FrequencyCompressor, StressScan) {
     using namespace arcticdb;
     using InputType = uint64_t;
     auto data = random_numbers_with_leader<InputType>(100000, 23, 0.9);
     interval_timer timer;
-    FrequencyEncoding<InputType> encoding;
+    FrequencyCompressor<InputType> encoding;
     timer.start_timer("Scan");
     const auto num_runs = 10'000UL;
     for(auto i = 0UL; i < num_runs; ++i) {
@@ -101,12 +101,12 @@ TEST(FrequencyEncoding, StressScan) {
     log::version().info("{}", timer.display_all());
 }
 
-TEST(FrequencyEncoding, StressMaxRequired) {
+TEST(FrequencyCompressor, StressMaxRequired) {
     using namespace arcticdb;
     using InputType = uint64_t;
     auto data = random_numbers_with_leader<InputType>(100000, 23, 0.9);
     interval_timer timer;
-    FrequencyEncoding<InputType> encoding;
+    FrequencyCompressor<InputType> encoding;
     timer.start_timer("MaxRequired");
     const auto num_runs = 10'000UL;
     std::optional<size_t> max_bytes;

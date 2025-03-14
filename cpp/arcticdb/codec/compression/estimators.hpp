@@ -44,17 +44,14 @@ CompressionEstimate<T> estimate_compression(
     static constexpr size_t bits_per_block = 1024;
     static constexpr size_t values_per_block = bits_per_block / (sizeof(T) * CHAR_BIT);
 
-    // Calculate how many complete blocks we have
     const size_t num_blocks = row_count / values_per_block;
     if (num_blocks == 0) {
         throw std::runtime_error("Data size too small for sampling");
     }
 
-    // Calculate sampling stride to spread samples across the data
     const size_t samples_to_take = std::min(num_samples, num_blocks);
     const size_t block_stride = num_blocks / samples_to_take;
 
-    // Collect samples
     std::vector<CompressionSample<T>> samples;
     samples.reserve(samples_to_take);
 
@@ -75,9 +72,9 @@ CompressionEstimate<T> estimate_compression(
     }
 
     return {
-        total_ratio / samples_to_take,  // average ratio
-        max_bits_needed,                // conservative estimate of bits needed
-        std::move(samples)             // individual sample data
+        total_ratio / samples_to_take,
+        max_bits_needed,
+        std::move(samples)
     };
 }
 
@@ -140,10 +137,10 @@ struct FForEstimator {
 };
 
 template<typename T>
-struct FrequencyBitsCalculator {
+struct FrequencyEstimator {
     const double required_percentage_;
 
-    explicit FrequencyBitsCalculator(double required_percentage = 90.0) :
+    explicit FrequencyEstimator(double required_percentage = 90.0) :
         required_percentage_(required_percentage) {}
 
     size_t operator()(const T* data, size_t block_size) const {
@@ -174,7 +171,7 @@ struct FrequencyBitsCalculator {
         if (percent > required_percentage_) {
             size_t num_exceptions = block_size - frequency;
 
-            size_t header_bits = sizeof(typename FrequencyEncoding<T>::Data) * 8;
+            size_t header_bits = sizeof(typename FrequencyCompressor<T>::Data) * 8;
             size_t exception_bits = num_exceptions * sizeof(T) * 8;
             size_t bitmap_bits = block_size + 64;  // Rough estimate of bitmap overhead
 

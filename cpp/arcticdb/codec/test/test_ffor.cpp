@@ -17,7 +17,7 @@ protected:
         std::vector<T> compressed(original.size() + header_size_in_t<FForHeader<T>, T>());
         std::vector<T> decompressed(original.size());
 
-        size_t compressed_size = encode_ffor_with_header(
+        size_t compressed_size = FForCompressor<T>::compress(
             original.data(),
             compressed.data(),
             original.size()
@@ -33,7 +33,7 @@ protected:
         T min_value = *std::min_element(original.begin(), original.end());
         EXPECT_EQ(header->reference, min_value);
 
-        size_t decompressed_size = decode_ffor_with_header(
+        size_t decompressed_size = FForCompressor<T>::decompress(
             compressed.data(),
             decompressed.data()
         );
@@ -224,7 +224,7 @@ TEST(FFORStressTest, CompressDecompressSeparate) {
     auto start_compress = std::chrono::high_resolution_clock::now();
     size_t total_comp_size = 0;
     for (size_t iter = 0; iter < iterations; iter++) {
-        size_t compressed_size = encode_ffor_with_header(input.data(), compressed.data(), num_rows);
+        size_t compressed_size = FForCompressor<T>::compress(input.data(), compressed.data(), num_rows);
         total_comp_size += compressed_size;
     }
     auto end_compress = std::chrono::high_resolution_clock::now();
@@ -232,7 +232,7 @@ TEST(FFORStressTest, CompressDecompressSeparate) {
     double avg_compress_time = static_cast<double>(compress_duration) / iterations;
     auto start_decompress = std::chrono::high_resolution_clock::now();
     for (size_t iter = 0; iter < iterations; iter++) {
-        decode_ffor_with_header(compressed.data(), decompressed.data());
+        FForCompressor<T>::decompress(compressed.data(), decompressed.data());
     }
     auto end_decompress = std::chrono::high_resolution_clock::now();
     auto decompress_duration = std::chrono::duration_cast<std::chrono::microseconds>(end_decompress - start_decompress).count();

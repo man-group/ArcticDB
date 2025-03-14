@@ -43,7 +43,7 @@ struct AdaptiveEncoder {
         std::ptrdiff_t &pos,
         EncodedBlockType* output_block) {
         using namespace arcticdb::entity;
-        using CodecHelperType = CodecHelper<TD>;
+        using CodecHelperType = arcticdb::detail::CodecHelper<TD>;
         using T = typename CodecHelperType::T;
         CodecHelperType helper;
         const T* d = block.data();

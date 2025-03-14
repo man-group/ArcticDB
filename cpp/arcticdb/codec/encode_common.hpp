@@ -143,6 +143,11 @@ void calc_columns_size(
     }
 }
 
+//void scan_adaptive_encodings(
+//    const SegmentInMemory& in_mem_seg,
+ //   std::vector<Enco
+  //  )
+
 template<typename EncodingPolicyType>
 void calc_string_pool_size(
     const SegmentInMemory &in_mem_seg,
@@ -218,8 +223,12 @@ void encode_string_pool(
     const SegmentInMemory &in_mem_seg,
     const BlockCodecImpl& codec_opts);
 
+struct EncodingScanResultsSet;
+
 [[nodiscard]] SizeResult max_compressed_size_v2(
     const SegmentInMemory &in_mem_seg,
-    const BlockCodecImpl& codec_opts);
+    const BlockCodecImpl& codec_opts,
+    std::vector<EncodingScanResultsSet>& adaptive_encodings
+    );
 
 } //namespace arcticdb

@@ -296,14 +296,16 @@ public:
         const Buffer* shapes,
         const TypeDescriptor &type,
         const util::BitMagic* bit_vector,
-        const FieldStatsImpl* statistics) :
+        const FieldStatsImpl* statistics,
+        size_t row_count) :
         data_(data),
         shapes_(shapes),
         pos_(0),
         shape_pos_(0),
         type_(type),
         bit_vector_(bit_vector),
-        statistics_(statistics) { }
+        statistics_(statistics),
+        row_count_(row_count) { }
 
     ColumnData(
         const ChunkedBuffer* data,
@@ -417,10 +419,16 @@ public:
         };
     }
 
-    /// @brief Get non-owning pointer to the shapes array for the column
     [[nodiscard]] const Buffer* shapes() const noexcept;
 
-  private:
+    [[nodiscard]] const FieldStatsImpl& field_stats() const {
+        return *statistics_;
+    }
+
+    [[nodiscard]] size_t row_count() const {
+        return row_count_;
+    }
+private:
     template<typename TDT>
     TypedBlockData<TDT> next_typed_block(MemBlock* block) {
         size_t num_elements = 0;
@@ -480,7 +488,8 @@ public:
     size_t shape_pos_ = 0;
     TypeDescriptor type_;
     const util::BitMagic* bit_vector_ = nullptr;
-    const FieldStatsImpl* statistics_ [[maybe_unused]] = nullptr;
+    const FieldStatsImpl* statistics_ = nullptr;
+    size_t row_count_ = 0;
 };
 
 

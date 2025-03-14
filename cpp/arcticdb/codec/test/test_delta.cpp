@@ -39,8 +39,8 @@ protected:
 
     template<typename T>
     void verify_roundtrip(const std::vector<T>& input) {
-        ColumnCompressor<T> compressor;
-        ColumnDecompressor<T> decompressor{};
+        DeltaCompressor<T> compressor;
+        DeltaDecompressor<T> decompressor{};
 
         size_t compressed_size = compressor.scan(input.data(), input.size());
         std::vector<T> compressed(compressed_size);
@@ -145,14 +145,14 @@ TEST_F(CompressionTest, MonotonicSequences) {
 TEST_F(CompressionTest, SizeEstimation) {
     auto input = generate_data<uint16_t>(2000, 0, 1);
 
-    ColumnCompressor<uint16_t> compressor;
+    DeltaCompressor<uint16_t> compressor;
     size_t estimated_size = compressor.scan(input.data(), input.size());
 
     std::vector<uint16_t> compressed(estimated_size);
     auto compressed_size = compressor.compress(input.data(), compressed.data(), estimated_size);
     ASSERT_EQ(compressed_size, estimated_size);
 
-    ColumnDecompressor<uint16_t> decompressor{};
+    DeltaDecompressor<uint16_t> decompressor{};
     decompressor.init(compressed.data());
 
     ASSERT_EQ(estimated_size, decompressor.compressed_size(compressed.data()));
@@ -161,14 +161,14 @@ TEST_F(CompressionTest, SizeEstimation) {
 TEST_F(CompressionTest, SizeEstimationPartial) {
     auto input = generate_data<uint16_t>(500, 0, 1);
 
-    ColumnCompressor<uint16_t> compressor;
+    DeltaCompressor<uint16_t> compressor;
     size_t estimated_size = compressor.scan(input.data(), input.size());
 
     std::vector<uint16_t> compressed(estimated_size);
     auto compressed_size = compressor.compress(input.data(), compressed.data(), estimated_size);
     ASSERT_EQ(compressed_size, estimated_size);
 
-    ColumnDecompressor<uint16_t> decompressor{};
+    DeltaDecompressor<uint16_t> decompressor{};
     decompressor.init(compressed.data());
 
     ASSERT_EQ(estimated_size, decompressor.compressed_size(compressed.data()));
@@ -194,7 +194,7 @@ TEST(DeltaCompressionStressTest, CompressDecompressSeparate) {
 
     auto input = generate_compressible_data<T>(numRows);
 
-    ColumnCompressor<T> scanner;
+    DeltaCompressor<T> scanner;
     size_t reqSize = scanner.scan(input.data(), numRows);
     std::vector<T> compressed(reqSize + 128, 0);
     std::vector<T> decompressed(numRows, 0);
@@ -202,7 +202,7 @@ TEST(DeltaCompressionStressTest, CompressDecompressSeparate) {
     auto start_compress = std::chrono::high_resolution_clock::now();
     volatile size_t total_comp_size = 0;
     for (size_t i = 0; i < iterations; i++) {
-        ColumnCompressor<T> compressor;
+        DeltaCompressor<T> compressor;
         auto estimated_size = compressor.scan(input.data(), input.size());
         size_t comp_size = compressor.compress(input.data(), compressed.data(), estimated_size);
         total_comp_size += comp_size;
@@ -213,7 +213,7 @@ TEST(DeltaCompressionStressTest, CompressDecompressSeparate) {
     auto start_decompress = std::chrono::high_resolution_clock::now();
     volatile size_t total_decomp_rows = 0;
     for (size_t i = 0; i < iterations; i++) {
-        ColumnDecompressor<T> decompressor{};
+        DeltaDecompressor<T> decompressor{};
         decompressor.init(compressed.data());
         size_t rows_decomp = decompressor.decompress(compressed.data(), decompressed.data());
         total_decomp_rows += rows_decomp;

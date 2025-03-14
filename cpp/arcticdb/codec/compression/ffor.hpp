@@ -120,102 +120,108 @@ std::pair<T, size_t> reference_and_bitwidth(const T* __restrict in, size_t count
     return {reference, bits_needed};
 }
 
-template<typename T>
-size_t encode_ffor_with_header(const T* __restrict in, T* __restrict out, size_t count) {
-    if (count == 0)
-        return 0;
+template <typename T>
+struct FForCompressor {
+    static size_t compress(const T *__restrict in, T *__restrict out, size_t count) {
+        if (count == 0)
+            return 0;
 
-    const auto [reference, bits_needed] = reference_and_bitwidth(in, count);
-    ARCTICDB_DEBUG(log::codec(), "FFOR bitpacking requires {} bits", bits_needed);
+        const auto [reference, bits_needed] = reference_and_bitwidth(in, count);
+        ARCTICDB_DEBUG(log::codec(), "FFOR bitpacking requires {} bits", bits_needed);
 
-    auto* header [[maybe_unused]] = new (out) FForHeader<T>{
-        reference,
-        static_cast<uint32_t>(bits_needed),
-        static_cast<uint32_t>(count)
-    };
+        auto *header [[maybe_unused]] = new(out) FForHeader<T>{
+            reference,
+            static_cast<uint32_t>(bits_needed),
+            static_cast<uint32_t>(count)
+        };
 
-    T* out_ptr = out + header_size_in_t<FForHeader<T>, T>();
+        T *out_ptr = out + header_size_in_t<FForHeader<T>, T>();
 
-    const size_t num_full_blocks = count / 1024;
-    size_t compressed_size = sizeof(FForHeader<T>) / sizeof(T);
+        const size_t num_full_blocks = count / 1024;
+        size_t compressed_size = sizeof(FForHeader<T>) / sizeof(T);
 
-    FForCompressKernel<T> kernel(reference);
+        FForCompressKernel<T> kernel(reference);
 
-    for (size_t block = 0; block < num_full_blocks; ++block) {
-        compressed_size += dispatch_bitwidth_fused<T, BitPackFused>(
-            in + block * 1024,
-            out_ptr + compressed_size - header_size_in_t<FForHeader<T>, T>(),
-            bits_needed,
-            kernel
-        );
-    }
-    ARCTICDB_DEBUG(log::codec(), "Encoded {} full blocks to {} bytes", num_full_blocks, compressed_size * sizeof(T));
-
-    size_t remaining = count % 1024;
-    ARCTICDB_DEBUG(log::codec(), "Compressing {} remainder values", remaining);
-    if (remaining > 0) {
-        const T* remaining_in = in + num_full_blocks * 1024;
-        T* remaining_out = out_ptr + compressed_size - header_size_in_t<FForHeader<T>, T>();
-
-        compressed_size += compress_remainder(
-            remaining_in,
-            remaining,
-            remaining_out,
-            bits_needed,
-            reference
-        );
-    }
-    ARCTICDB_DEBUG(log::codec(), "Compressed size including remainder: {} from {} bytes",
-      compressed_size * sizeof(T),
-      count * sizeof(T));
-
-    return compressed_size;
-}
-
-template<typename T>
-size_t decode_ffor_with_header(const T* __restrict in, T* __restrict out) {
-    static constexpr size_t BLOCK_SIZE = 1024;
-    const auto* header = reinterpret_cast<const FForHeader<T>*>(in);
-    const size_t count = header->num_rows;
-    if (count == 0)
-        return 0;
-
-    const T reference = header->reference;
-    const size_t bits_needed = header->bits_needed;
-
-    ARCTICDB_DEBUG(log::codec(), "Decompressing FFOR data packed to {} bits with reference {}", bits_needed, reference);
-
-    const T* in_ptr = in + header_size_in_t<FForHeader<T>, T>();
-    size_t input_offset = 0;
-
-    const size_t num_full_blocks = count / BLOCK_SIZE;
-    FForUncompressKernel<T> kernel(reference);
-
-    if(bits_needed == 0) {
-        std::fill(out, out + num_full_blocks * BLOCK_SIZE, reference);
-        input_offset += num_full_blocks * BLOCK_SIZE ;
-    } else {
         for (size_t block = 0; block < num_full_blocks; ++block) {
-            input_offset += dispatch_bitwidth_fused<T, BitUnpackFused>(
-                in_ptr + input_offset,
-                out + block * 1024,
+            compressed_size += dispatch_bitwidth_fused<T, BitPackFused>(
+                in + block * 1024,
+                out_ptr + compressed_size - header_size_in_t<FForHeader<T>, T>(),
                 bits_needed,
                 kernel
             );
         }
+        ARCTICDB_DEBUG(log::codec(),
+                       "Encoded {} full blocks to {} bytes",
+                       num_full_blocks,
+                       compressed_size * sizeof(T));
+
+        size_t remaining = count % 1024;
+        ARCTICDB_DEBUG(log::codec(), "Compressing {} remainder values", remaining);
+        if (remaining > 0) {
+            const T *remaining_in = in + num_full_blocks * 1024;
+            T *remaining_out = out_ptr + compressed_size - header_size_in_t<FForHeader<T>, T>();
+
+            compressed_size += compress_remainder(
+                remaining_in,
+                remaining,
+                remaining_out,
+                bits_needed,
+                reference
+            );
+        }
+        ARCTICDB_DEBUG(log::codec(), "Compressed size including remainder: {} from {} bytes",
+                       compressed_size * sizeof(T),
+                       count * sizeof(T));
+
+        return compressed_size;
     }
 
-    ARCTICDB_DEBUG(log::codec(), "Decompressed {} full blocks to offset {}", num_full_blocks, input_offset);
-    size_t remaining = count % 1024;
-    if (remaining > 0) {
-        input_offset += decompress_remainder(
-            in_ptr + input_offset,
-            out + num_full_blocks * 1024
-        );
-    }
-    ARCTICDB_DEBUG(log::codec(), "Decompressed {} remaining values to offset {}", remaining, input_offset * sizeof(T) + sizeof(FForHeader<T>));
-    return count;
-}
+    static size_t decompress(const T *__restrict in, T *__restrict out) {
+        static constexpr size_t BLOCK_SIZE = 1024;
+        const auto *header = reinterpret_cast<const FForHeader<T> *>(in);
+        const size_t count = header->num_rows;
+        if (count == 0)
+            return 0;
 
+        const T reference = header->reference;
+        const size_t bits_needed = header->bits_needed;
+
+        ARCTICDB_DEBUG(log::codec(),
+                       "Decompressing FFOR data packed to {} bits with reference {}",
+                       bits_needed,
+                       reference);
+
+        const T *in_ptr = in + header_size_in_t<FForHeader<T>, T>();
+        size_t input_offset = 0;
+
+        const size_t num_full_blocks = count / BLOCK_SIZE;
+        FForUncompressKernel<T> kernel(reference);
+
+        if (bits_needed == 0) {
+            std::fill(out, out + num_full_blocks * BLOCK_SIZE, reference);
+            input_offset += num_full_blocks * BLOCK_SIZE;
+        } else {
+            for (size_t block = 0; block < num_full_blocks; ++block) {
+                input_offset += dispatch_bitwidth_fused<T, BitUnpackFused>(
+                    in_ptr + input_offset,
+                    out + block * 1024,
+                    bits_needed,
+                    kernel
+                );
+            }
+        }
+
+        ARCTICDB_DEBUG(log::codec(), "Decompressed {} full blocks to offset {}", num_full_blocks, input_offset);
+        size_t remaining = count % 1024;
+        if (remaining > 0) {
+            input_offset += decompress_remainder(
+                in_ptr + input_offset,
+                out + num_full_blocks * 1024
+            );
+        }
+        ARCTICDB_DEBUG(log::codec(), "Decompressed {} remaining values to offset {}", remaining, input_offset * sizeof(T) + sizeof(FForHeader<T>));
+        return count;
+    }
+};
 
 } // namespace arcticdb

@@ -12,6 +12,7 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/codec/segment_identifier.hpp>
 #include <arcticdb/codec/adaptive.hpp>
+#include <arcticdb/codec/scanner.hpp>
 
 namespace arcticdb {
 void add_bitmagic_compressed_size(
@@ -45,14 +46,17 @@ void write_segment_descriptor(Buffer& buffer, std::ptrdiff_t& pos, const Segment
     pos += sizeof(SegmentDescriptorImpl);
 }
 
-/// @brief Utility class used to encode and compute the max encoding size for regular data columns for V2 encoding
-/// What differs this from the already existing ColumnEncoder is that ColumnEncoder encodes the shapes of
-/// multidimensional data as part of each block. ColumnEncoder2 uses a better strategy and encodes the shapes for the
-/// whole column upfront (before all blocks).
-/// @note Although ArcticDB did not support multidimensional user data prior to creating ColumnEncoder2 some of the
-/// internal data was multidimensional and used ColumnEncoder. More specifically: string pool and metadata.
-/// @note This should be used for V2 encoding. V1 encoding can't use it as there is already data written the other
-///	way and it will be hard to distinguish both.
+/*  Utility class used to encode and compute the max encoding size for regular data columns for V2 encoding
+    What differs this from the already existing ColumnEncoder is that ColumnEncoder encodes the shapes of
+    multidimensional data as part of each block. ColumnEncoder2 uses a better strategy and encodes the shapes for the
+    whole column upfront (before all blocks).
+
+    Although ArcticDB did not support multidimensional user data prior to creating ColumnEncoder2 some of the
+    internal data was multidimensional and used ColumnEncoder. More specifically: string pool and metadata.
+
+    This should be used for V2 encoding. V1 encoding can't use it as there is already data written the other
+	way and it will be hard to distinguish both.
+*/
 struct ColumnEncoderV2 {
 public:
     static void encode(
@@ -65,6 +69,7 @@ public:
     static std::pair<size_t, size_t> max_compressed_size(
         const BlockCodecImpl& codec_opts,
         ColumnData& column_data);
+
 private:
     static void encode_shapes(
         const ColumnData& column_data,
@@ -277,22 +282,28 @@ static void calc_stream_descriptor_fields_size(
 
 [[nodiscard]] SizeResult max_compressed_size_v2(
         const SegmentInMemory& in_mem_seg,
-        const BlockCodecImpl& codec_opts) {
+        const BlockCodecImpl& default_codec_opts,
+        std::vector<EncodingScanResult> adaptive_encodings) {
     ARCTICDB_SAMPLE(GetSegmentCompressedSize, 0)
     SizeResult result{};
+    auto non_data_codec_opts = codec::default_lz4_codec();
     result.max_compressed_bytes_ += sizeof(MetadataMagic);
-    calc_metadata_size<EncodingPolicyV2>(in_mem_seg, codec_opts, result);
+    calc_metadata_size<EncodingPolicyV2>(in_mem_seg, non_data_codec_opts, result);
     result.max_compressed_bytes_ += sizeof(DescriptorFieldsMagic);
     result.max_compressed_bytes_ += sizeof(IndexMagic);
-    calc_stream_descriptor_fields_size(in_mem_seg, codec_opts, result);
+    calc_stream_descriptor_fields_size(in_mem_seg, non_data_codec_opts, result);
     result.max_compressed_bytes_ += sizeof(EncodedMagic);
-    calc_encoded_blocks_size(in_mem_seg, codec_opts, result);
+    calc_encoded_blocks_size(in_mem_seg, non_data_codec_opts, result);
 
     if(in_mem_seg.row_count() > 0) {
         result.max_compressed_bytes_ += sizeof(ColumnMagic) * in_mem_seg.descriptor().field_count();
-        calc_columns_size<EncodingPolicyV2>(in_mem_seg, codec_opts, result);
+        if(!adaptive_encodings.empty())
+            log::version().info("oops");
+        else
+            calc_columns_size<EncodingPolicyV2>(in_mem_seg, default_codec_opts, result);
+
         result.max_compressed_bytes_ += sizeof(StringPoolMagic);
-        calc_string_pool_size<EncodingPolicyV2>(in_mem_seg, codec_opts, result);
+        calc_string_pool_size<EncodingPolicyV2>(in_mem_seg, non_data_codec_opts, result);
     }
     ARCTICDB_TRACE(log::codec(), "Max compressed size {}", result.max_compressed_bytes_);
     return result;
@@ -315,6 +326,31 @@ static void encode_encoded_fields(
     ARCTICDB_DEBUG(log::codec(), "Encoded encoded blocks to position {}", pos);
 }
 
+SizeResult resolve_adaptive_encodings_size(const SegmentInMemory& seg, std::vector<EncodingScanResultSet>& encodings) {
+    util::check(encodings.size() == seg.num_columns(), "Expected equality of encoding scan results to columns: {} != {}", encodings.size(), seg.num_columns());
+    for (std::size_t column_index = 0; column_index < seg.num_columns(); ++column_index) {
+        auto& results = encodings[column_index];
+        for(auto i = 0UL; i < results.size(); ++i) {
+            if(results[i].is_deterministic_) {
+                results.select(i);
+                break;
+            }
+
+
+        }
+
+    }
+}
+
+std::vector<EncodingScanResultSet> get_encodings(const SegmentInMemory& seg) {
+    std::vector<EncodingScanResultSet> output;
+    output.reserve(seg.num_columns());
+    for (std::size_t column_index = 0; column_index < seg.num_columns(); ++column_index)
+        output.emplace_back(predicted_optimal_encodings(seg.column(column_index).data()));
+
+    return output;
+}
+
 [[nodiscard]] Segment encode_v2(
         SegmentInMemory&& s,
         const BlockCodecImpl& codec_opts) {
@@ -329,9 +365,12 @@ static void encode_encoded_fields(
 
     SegmentHeader segment_header{EncodingVersion::V2};
     segment_header.set_compacted(in_mem_seg.compacted());
+    std::vector<EncodingScanResultsSet> encodings;
+    if(codec_opts.codec_type() == Codec::ADAPTIVE)
+        encodings = get_encodings(in_mem_seg);
 
     std::ptrdiff_t pos = 0;
-    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(in_mem_seg, codec_opts);
+    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(in_mem_seg, codec_opts, encodings);
     ARCTICDB_TRACE(log::codec(), "Estimated max buffer requirement: {}", max_compressed_size);
     const auto preamble = segment_header.required_bytes(in_mem_seg);
     auto out_buffer = std::make_shared<Buffer>(max_compressed_size + encoded_buffer_size, preamble);

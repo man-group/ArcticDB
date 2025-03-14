@@ -48,7 +48,7 @@ void fill(T* data, size_t num_rows, const T value) {
 }
 
 template <typename T, size_t required_percentage = 90>
-struct FrequencyEncoding {
+struct FrequencyCompressor {
     static_assert(required_percentage != 0);
     T value_;
     uint32_t count_ = 0;
