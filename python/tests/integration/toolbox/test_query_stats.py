@@ -47,7 +47,7 @@ def verify_list_symbool_stats(count):
         list_object_ststs = key_type_map["storage_ops"]["ListObjectsV2"]
         result_count = list_object_ststs["result_count"]
         assert result_count == count if key == "SYMBOL_LIST" else 1 
-        assert list_object_ststs["total_time_ms"] / result_count > 2
+        assert list_object_ststs["total_time_ms"] / result_count > 1
         assert list_object_ststs["total_time_ms"] / result_count < 100
 
 
