@@ -5,7 +5,7 @@ from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import SortedValue
 
-from arcticdb.util.test import random_strings_of_length_of_length
+from arcticdb.util.test import random_strings_of_length
 
 
 def test_stage_finalize(arctic_library):
