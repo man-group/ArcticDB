@@ -434,6 +434,7 @@ void PythonVersionStore::snapshot(
     ) {
     ARCTICDB_SAMPLE(CreateSnapshot, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: snapshot");
+    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "snapshot");
 
     util::check_arg(skip_symbols.empty() || versions.empty(), "Only one of skip_symbols and versions can be set");
 
@@ -501,7 +502,6 @@ std::set<StreamId> PythonVersionStore::list_streams(
     const std::optional<bool>& opt_all_symbols
 
     ) {
-    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "list_symbols");
     return list_streams_internal(snap_name, regex, prefix, opt_use_symbol_list, opt_all_symbols);
 }
 

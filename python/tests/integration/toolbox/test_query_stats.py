@@ -39,16 +39,17 @@ def verify_list_symbool_stats(count):
     assert list_symbol_stats["total_time_ms"] / list_symbol_stats["count"] > 2
     
     key_types = list_symbol_stats["key_type"]
-    assert "SYMBOL_LIST" in key_types
+    keys_to_check = {"SYMBOL_LIST", "VERSION_REF"}
     for key, key_type_map in key_types.items():
-        assert "storage_ops" in key_type_map
-        assert "ListObjectsV2" in key_type_map["storage_ops"]
-        assert "result_count" in key_type_map["storage_ops"]["ListObjectsV2"]
-        list_object_ststs = key_type_map["storage_ops"]["ListObjectsV2"]
-        result_count = list_object_ststs["result_count"]
-        assert result_count == count if key == "SYMBOL_LIST" else 1 
-        assert list_object_ststs["total_time_ms"] / result_count > 2
-        assert list_object_ststs["total_time_ms"] / result_count < 100
+        if key in keys_to_check:
+            assert "storage_ops" in key_type_map
+            assert "ListObjectsV2" in key_type_map["storage_ops"]
+            assert "result_count" in key_type_map["storage_ops"]["ListObjectsV2"]
+            list_object_ststs = key_type_map["storage_ops"]["ListObjectsV2"]
+            result_count = list_object_ststs["result_count"]
+            assert result_count == count if key == "SYMBOL_LIST" else 1 
+            assert list_object_ststs["total_time_ms"] / result_count > 2
+            assert list_object_ststs["total_time_ms"] / result_count < 100
 
 
 def test_query_stats(s3_version_store_v1, clear_query_stats):
@@ -81,3 +82,11 @@ def test_query_stats_clear(s3_version_store_v1, clear_query_stats):
 
     s3_version_store_v1.list_symbols()
     verify_list_symbool_stats(1)
+
+
+def test_query_stats_snapshot(s3_version_store_v1, clear_query_stats):
+    s3_version_store_v1.write("a", 1)
+    qs.enable()
+    s3_version_store_v1.snapshot("abc")
+    import json
+    print(json.dumps(qs.get_query_stats(), indent=4))

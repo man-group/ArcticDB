@@ -491,14 +491,20 @@ bool do_key_exists_impl(
     const S3ClientInterface& s3_client,
     KeyBucketizer&& b
 ) {
-    auto key_type_dir = key_type_folder(root_folder, variant_key_type(key));
+    auto key_type = variant_key_type(key);
+    QUERY_STATS_ADD_GROUP(key_type, key_type)
+    auto key_type_dir = key_type_folder(root_folder, key_type);
     auto s3_object_name = object_path(b.bucketize(key_type_dir, key), key);
 
+    QUERY_STATS_ADD_GROUP_WITH_TIME(storage_ops, "HeadObject")
     auto head_object_result = s3_client.head_object(
         s3_object_name,
         bucket_name);
 
-    if (!head_object_result.is_success()) {
+    if (head_object_result.is_success()) {
+        QUERY_STATS_ADD(result_count, 1)
+    }
+    else {
         auto& error = head_object_result.get_error();
         raise_if_unexpected_error(error, s3_object_name);
 
