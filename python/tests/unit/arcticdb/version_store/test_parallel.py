@@ -1593,3 +1593,68 @@ def test_staging_in_chunks_default_settings(lmdb_storage, lib_name):
     df = lib.read("test").data
     assert_frame_equal(df, data)
     assert df.index.is_monotonic_increasing
+
+class TestConvertIntToFloat:
+    @pytest.mark.parametrize("dtype", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64])
+    @pytest.mark.parametrize("version_store", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
+    def test_write_convert_same_types(self, version_store, dtype, request):
+        lib = request.getfixturevalue(version_store)
+        sym = "sym"
+        df1 = pd.DataFrame({"a": np.array([1, 2, 3], dtype=dtype)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
+        df2 = pd.DataFrame({"a": np.array([4, 5, 6], dtype=dtype)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns"))
+        lib.write(sym, df1, parallel=True)
+        lib.write(sym, df2, parallel=True)
+        lib.compact_incomplete(sym, append=False, convert_int_to_float=True)
+        expected = pd.DataFrame({"a": np.arange(1, 7, dtype=np.double)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns"))
+        assert_frame_equal(expected, lib.read(sym).data, check_dtype=True)
+
+    @pytest.mark.parametrize("dtype1", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64])
+    @pytest.mark.parametrize("dtype2", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64])
+    @pytest.mark.parametrize("version_store", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
+    def test_write_convert_different_types(self, version_store, dtype1, dtype2, request):
+        lib = request.getfixturevalue(version_store)
+        sym = "sym"
+        df1 = pd.DataFrame({"a": np.array([1, 2, 3], dtype=dtype1)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
+        df2 = pd.DataFrame({"a": np.array([4, 5, 6], dtype=dtype2)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns"))
+        lib.write(sym, df1, parallel=True)
+        lib.write(sym, df2, parallel=True)
+        lib.compact_incomplete(sym, append=False, convert_int_to_float=True)
+        expected = pd.DataFrame({"a": np.arange(1, 7, dtype=np.double)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns"))
+        assert_frame_equal(expected, lib.read(sym).data, check_dtype=True)
+
+    @pytest.mark.parametrize("dtype2", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64])
+    @pytest.mark.parametrize("version_store", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
+    def test_append_convert_different_types(self, version_store, dtype2, request):
+        lib = request.getfixturevalue(version_store)
+        sym = "sym"
+        df1 = pd.DataFrame({"a": np.array([1, 2, 3], dtype=np.float64)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
+        df2 = pd.DataFrame({"a": np.array([4, 5, 6], dtype=dtype2)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns"))
+        lib.write(sym, df1)
+        lib.write(sym, df2, parallel=True)
+        lib.compact_incomplete(sym, append=True, convert_int_to_float=True)
+        expected = pd.DataFrame({"a": np.arange(1, 7, dtype=np.double)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns"))
+        assert_frame_equal(expected, lib.read(sym).data, check_dtype=True)
+    @pytest.mark.parametrize("dtype", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64])
+    def test_float32_is_not_converted_write(self, lmdb_version_store_v1, dtype):
+        lib = lmdb_version_store_v1
+        sym = "sym"
+        df1 = pd.DataFrame({"a": np.array([1, 2, 3], dtype=dtype)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
+        df2 = pd.DataFrame({"a": np.array([4, 5, 6], dtype=np.float32)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns"))
+        lib.write(sym, df1, parallel=True)
+        lib.write(sym, df2, parallel=True)
+        with pytest.raises(SchemaException) as exception_info:
+            lib.compact_incomplete(sym, append=False, convert_int_to_float=True)
+        assert "FLOAT32" in str(exception_info.value)
+        assert "FLOAT64" in str(exception_info.value)
+
+    def test_float32_is_not_converted_append(self, lmdb_version_store_v1):
+        lib = lmdb_version_store_v1
+        sym = "sym"
+        df1 = pd.DataFrame({"a": np.array([1, 2, 3], dtype=np.double)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
+        df2 = pd.DataFrame({"a": np.array([4, 5, 6], dtype=np.float32)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns"))
+        lib.write(sym, df1)
+        lib.write(sym, df2, parallel=True)
+        with pytest.raises(SchemaException) as exception_info:
+            lib.compact_incomplete(sym, append=True, convert_int_to_float=True)
+        assert "FLOAT32" in str(exception_info.value)
+        assert "FLOAT64" in str(exception_info.value)
