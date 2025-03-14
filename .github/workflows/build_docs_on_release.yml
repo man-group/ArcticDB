@@ -44,7 +44,6 @@ jobs:
             DOCS_TAG_NAME=v${{ steps.tag_name.outputs.tag }}-docs
             git tag $DOCS_TAG_NAME
             git push origin $DOCS_TAG_NAME
-        continue-on-error: true
 
   build-docs:
     needs: check-inputs
