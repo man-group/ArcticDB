@@ -9,9 +9,10 @@ As of the Change Date specified in that file, in accordance with the Business So
 import os
 from typing import List
 import pandas as pd
-from arcticdb.options import LibraryOptions
-from arcticdb.util.environment_setup_v1 import Storage, StorageInfo, AppendDataSetupUtils
+from arcticdb.util.environment_setup import LibraryManager, LibraryType, SequentialDataframesGenerator, Storage
+from arcticdb.util.utils import TimestampNumber
 from arcticdb.version_store.library import Library
+from benchmarks.common import AsvBase
 
 
 #region Setup classes
@@ -25,7 +26,6 @@ class LargeAppendDataModifyCache:
     """
 
     def __init__(self, ):
-        self.storage_info: StorageInfo = None
         self.write_and_append_dict = {}
         self.update_full_dict = {}
         self.update_full_dict = {}
@@ -37,7 +37,7 @@ class LargeAppendDataModifyCache:
 #endregion
 
 
-class AWSLargeAppendDataModify:
+class AWSLargeAppendTests(AsvBase):
 
     rounds = 1
     number = 3 # invokes 3 times the test runs between each setup-teardown 
@@ -47,98 +47,113 @@ class AWSLargeAppendDataModify:
 
     timeout = 1200
 
-    SETUP_CLASS = (AppendDataSetupUtils(storage=Storage.AMAZON, 
-                                      prefix="BASIC_APPEND",
-                                      ).set_default_columns(20))
-    
-    params = [500_000, 1_000_000] # [1000, 1500] # for test purposes
+    params = [500, 1000] # [1000, 1500] # for test purposes
     param_names = ["num_rows"]
 
-    def setup_cache(self):
-        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,
-                                     AWSLargeAppendDataModify.warmup_time,
-                                     AWSLargeAppendDataModify.params,
-                                     AWSLargeAppendDataModify.number)
+    library_manager = LibraryManager(Storage.LMDB, "APPEND_LARGE")
+
+    number_columns = 30
+
+    def get_library_manager(self) -> LibraryManager:
+        return AWSLargeAppendTests.library_manager
     
-    def initialize_cache(self, setup_obj: AppendDataSetupUtils, warmup_time, params, num_sequenced_dataframes):
+    def get_population_policy(self):
+        pass
+    
+    def get_index_info(self):
+        """
+        Returns initial timestamp and index frequency
+        """
+        return (pd.Timestamp("2-2-1986"), 's')
+
+    def setup_cache(self):
+        return self.initialize_cache(AWSLargeAppendTests.warmup_time,
+                                     AWSLargeAppendTests.params,
+                                     AWSLargeAppendTests.number_columns,
+                                     AWSLargeAppendTests.number)
+    
+    def initialize_cache(self, warmup_time, params, num_cols, num_sequential_dataframes):
         # warmup will execute tests additional time and we do not want that at all for write
         # update and append tests. We want exact specified `number` of times to be executed between
         assert warmup_time == 0, "warm up must be 0"
 
-        set_env = setup_obj
-        num_sequenced_dataframes = num_sequenced_dataframes + 1
+        num_sequential_dataframes = num_sequential_dataframes + 1
         cache = LargeAppendDataModifyCache()
+        generator = SequentialDataframesGenerator()
+
+        initial_timestamp, freq = self.get_index_info()
 
         for num_rows in params:
-            cache.write_and_append_dict[num_rows] = set_env.generate_chained_writes(num_rows, num_sequenced_dataframes)
-            self.initialize_update_dataframes(num_rows=num_rows, cached_results=cache, set_env=set_env)
+            df_list = generator.generate_sequential_dataframes(number_data_frames=num_sequential_dataframes,
+                                                               number_rows=num_rows, number_columns=num_cols, 
+                                                               start_timestamp=initial_timestamp, freq=freq)
+            cache.write_and_append_dict[num_rows] = df_list
+            self.initialize_update_dataframes(num_rows=num_rows, num_cols=num_cols, cached_results=cache, 
+                                              generator=generator)
     
-        #only create the library
-        set_env.remove_all_modifiable_libraries(True)
-        lib = set_env.get_modifiable_library()
+        self.get_library_manager().clear_all_modifiable_libs()
 
-        set_env.logger().info(f"Storage info: {set_env.get_storage_info()}")
-        set_env.logger().info(f"Library: {lib}")
-        # With modifiable tests we do not prepare libraries here,
-        # but we do still return storage info as it has to be unique across processes
-        # We also leave each process to setup its initial library in setup
-        cache.storage_info = set_env.get_storage_info()
+        self.get_library_manager().log_info()
+
         return cache
     
-    def initialize_update_dataframes(self, num_rows, cached_results: LargeAppendDataModifyCache, 
-                                     set_env: AppendDataSetupUtils):
-        timestamp_number = set_env.get_initial_time_number()
+    def initialize_update_dataframes(self, num_rows: int, num_cols: int, cached_results: LargeAppendDataModifyCache, 
+                                     generator: SequentialDataframesGenerator):
+        
+        logger = self.get_logger()
+        initial_timestamp, freq = self.get_index_info()
+        timestamp_number = TimestampNumber.from_timestamp(initial_timestamp, freq)
         end_timestamp_number = timestamp_number + num_rows
-        set_env.logger().info(f"Frame START-LAST Timestamps {timestamp_number} == {end_timestamp_number}")
+        logger.info(f"Frame START-LAST Timestamps {timestamp_number} == {end_timestamp_number}")
 
         # calculate update dataframes
         # update same size same date range start-end
-        cached_results.update_full_dict[num_rows] = set_env.generate_dataframe(num_rows, timestamp_number)
-        time_range = set_env.get_first_and_last_timestamp([cached_results.update_full_dict[num_rows]])
-        set_env.logger().info(f"Time range FULL update { time_range }")
+        cached_results.update_full_dict[num_rows] = generator.df_generator.get_dataframe(number_rows=num_rows, 
+                        number_columns=num_cols, start_timestamp=initial_timestamp, freq=freq)
+        time_range = generator.get_first_and_last_timestamp([cached_results.update_full_dict[num_rows]])
+        logger.info(f"Time range FULL update { time_range }")
 
         # update 2nd half of initial date range
         half = (num_rows // 2) 
         timestamp_number.inc(half - 3) 
-        cached_results.update_half_dict[num_rows] = set_env.generate_dataframe(half, timestamp_number)
-        time_range = set_env.get_first_and_last_timestamp([cached_results.update_half_dict[num_rows]])
-        set_env.logger().info(f"Time range HALF update { time_range }")
+        cached_results.update_half_dict[num_rows] = generator.df_generator.get_dataframe(number_rows=half, 
+                        number_columns=num_cols, start_timestamp=timestamp_number.to_timestamp(), freq=freq)
+        time_range = generator.get_first_and_last_timestamp([cached_results.update_half_dict[num_rows]])
+        logger.info(f"Time range HALF update { time_range }")
 
         # update from the half with same size dataframe (end period is outside initial bounds)
-        cached_results.update_upsert_dict[num_rows] = set_env.generate_dataframe(num_rows, timestamp_number)
-        time_range = set_env.get_first_and_last_timestamp([cached_results.update_upsert_dict[num_rows]])
-        set_env.logger().info(f"Time range UPSERT update { time_range }")
+        cached_results.update_upsert_dict[num_rows] = generator.df_generator.get_dataframe(number_rows=num_rows, 
+                        number_columns=num_cols, start_timestamp=timestamp_number.to_timestamp(), freq=freq)
+        time_range = generator.get_first_and_last_timestamp([cached_results.update_upsert_dict[num_rows]])
+        logger.info(f"Time range UPSERT update { time_range }")
 
         # update one line at the end
         timestamp_number.inc(half) 
-        cached_results.update_single_dict[num_rows] = set_env.generate_dataframe(1, timestamp_number)
-        time_range = set_env.get_first_and_last_timestamp([cached_results.update_single_dict[num_rows]])
-        set_env.logger().info(f"Time range SINGLE update { time_range }")
+        cached_results.update_single_dict[num_rows] = generator.df_generator.get_dataframe(number_rows=1, 
+                        number_columns=num_cols, start_timestamp=timestamp_number.to_timestamp(), freq=freq)
+        time_range = generator.get_first_and_last_timestamp([cached_results.update_single_dict[num_rows]])
+        logger.info(f"Time range SINGLE update { time_range }")
 
-        next_timestamp =  set_env.get_next_timestamp_number(cached_results.write_and_append_dict[num_rows],
-                                                           set_env.FREQ )
-        cached_results.append_single_dict[num_rows] = set_env.generate_dataframe(1, 
-                                                                                next_timestamp)
-        time_range = set_env.get_first_and_last_timestamp([cached_results.append_single_dict[num_rows]])
-        set_env.logger().info(f"Time range SINGLE append { time_range }")
+        next_timestamp =  generator.get_next_timestamp_number(cached_results.write_and_append_dict[num_rows], freq)
+        cached_results.append_single_dict[num_rows] = generator.df_generator.get_dataframe(number_rows=1, 
+                        number_columns=num_cols, start_timestamp=next_timestamp.to_timestamp(), freq=freq)
+        time_range = generator.get_first_and_last_timestamp([cached_results.append_single_dict[num_rows]])
+        logger.info(f"Time range SINGLE append { time_range }")
             
     def setup(self, cache: LargeAppendDataModifyCache, num_rows):
-        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)
+        manager = self.get_library_manager()
         self.cache = cache
         writes_list = self.cache.write_and_append_dict[num_rows]
         
-        self.pid = os.getpid()
-        self.set_env.remove_all_modifiable_libraries(True)
-        self.set_env.delete_modifiable_library(self.pid)
-        self.lib = self.set_env.get_modifiable_library(self.pid)
+        self.lib = manager.get_library(LibraryType.MODIFIABLE)
 
-        self.symbol = self.set_env.get_symbol_name_template(f"_pid-{self.pid}")
+        self.symbol = f"symbol-{os.getpid()}"
         self.lib.write(self.symbol, writes_list[0])
 
         self.appends_list = writes_list[1:]
 
     def teardown(self, cache, num_rows):
-        self.set_env.delete_modifiable_library( self.pid )
+        self.get_library_manager().clear_all_modifiable_libs_from_this_process()
 
     def time_update_single(self, cache, num_rows):
         self.lib.update(self.symbol, self.cache.update_single_dict[num_rows])
@@ -159,12 +174,9 @@ class AWSLargeAppendDataModify:
 
     def time_append_single(self, cache, num_rows):
         self.lib.append(self.symbol, self.cache.append_single_dict[num_rows])
-    
-    ## Following test is marked for exclusion due to problem that needs further investigation
-    ## and isolation : 
-    ## Same test  works fine on LMDB (next test is left in)
 
-class AWS30kColsWideDFLargeAppendDataModify(AWSLargeAppendDataModify):
+
+class AWS30kColsWideDFLargeAppendTests(AWSLargeAppendTests):
     """
     Inherits from previous test all common functionalities.
     Defines specific such that the test targets operations with very wide dataframe
@@ -178,54 +190,21 @@ class AWS30kColsWideDFLargeAppendDataModify(AWSLargeAppendDataModify):
 
     timeout = 1200
 
-    SETUP_CLASS = (AppendDataSetupUtils(storage=Storage.AMAZON, 
-                                    prefix="WIDE_APPEND",
-                                    # causing issues: https://github.com/man-group/ArcticDB/actions/runs/13393930969/job/37408222827
-                                    # library_options=LibraryOptions(rows_per_segment=1000,columns_per_segment=1000)
-                                    )
-                                    .set_default_columns(WIDE_DATAFRAME_NUM_COLS))
-    
-    params = [2_500, 5_000] #[100, 150] for test purposes
+    params = [25, 50] #[100, 150] for test purposes
     param_names = ["num_rows"]
 
-    def setup_cache(self):
-        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,
-                                    AWS30kColsWideDFLargeAppendDataModify.warmup_time,
-                                    AWS30kColsWideDFLargeAppendDataModify.params,
-                                    AWS30kColsWideDFLargeAppendDataModify.number)
+    library_manager = LibraryManager(Storage.LMDB, "APPEND_LARGE_WIDE")
 
-
-class LMDB30kColsWideDFLargeAppendDataModify(AWSLargeAppendDataModify):
-    """
-    Inherits from previous test all common functionalities.
-    Defines specific such that the test targets operations with very wide dataframe
-    """
-
-    rounds = 1
-    number = 3 # invokes 3 times the test runs between each setup-teardown 
-    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
-    min_run_count = 1
-    warmup_time = 0
-
-    timeout = 1200
-
-    SETUP_CLASS = (AppendDataSetupUtils(storage=Storage.LMDB, 
-                                      prefix="WIDE_APPEND",
-                                      library_options=LibraryOptions(rows_per_segment=10000,columns_per_segment=10000)
-                                      )
-                                      .set_default_columns(WIDE_DATAFRAME_NUM_COLS))
-    
-    params = [2_500, 5_000] #[100, 150] for test purposes
-    param_names = ["num_rows"]
+    number_columns = 3_000
 
     def setup_cache(self):
-        return self.initialize_cache(LMDB30kColsWideDFLargeAppendDataModify.SETUP_CLASS,
-                                     LMDB30kColsWideDFLargeAppendDataModify.warmup_time,
-                                     LMDB30kColsWideDFLargeAppendDataModify.params,
-                                     LMDB30kColsWideDFLargeAppendDataModify.number)
-    
+        return self.initialize_cache(AWS30kColsWideDFLargeAppendTests.warmup_time,
+                                     AWS30kColsWideDFLargeAppendTests.params,
+                                     AWS30kColsWideDFLargeAppendTests.number_columns,
+                                     AWS30kColsWideDFLargeAppendTests.number)    
 
-class AWSDeleteTestsFewLarge:
+
+class AWSDeleteTestsFewLarge(AsvBase):
     """
     Delete is a special case and must not be with other tests.
     Main reason is because it is easy to create false results as
@@ -242,14 +221,21 @@ class AWSDeleteTestsFewLarge:
     warmup_time = 0
 
     timeout = 1200
-
-    SETUP_CLASS = (AppendDataSetupUtils(storage=Storage.AMAZON, 
-                                      prefix="BASIC_DELETE", 
-                                      library_options=LibraryOptions(rows_per_segment=1000,columns_per_segment=1000)))
     
     params = [500_000, 1_000_000] # [100, 150] # for test purposes
-
     param_names = ["num_rows"]
+
+    library_manager = LibraryManager(Storage.LMDB, "BASIC_DELETE_NEW")
+
+    number_columns = 10
+
+    number_appends_to_symbol = 3 
+
+    def get_library_manager(self) -> LibraryManager:
+        return AWSLargeAppendTests.library_manager
+    
+    def get_population_policy(self):
+        pass
 
     def setup_cache(self):
         # warmup will execute tests additional time and we do not want that at all for write
@@ -257,52 +243,48 @@ class AWSDeleteTestsFewLarge:
         assert AWSDeleteTestsFewLarge.warmup_time == 0, "warm up must be 0"
         assert AWSDeleteTestsFewLarge.number == 1, "delete works only once per setup=teardown"
 
-        set_env = AWSDeleteTestsFewLarge.SETUP_CLASS
-        num_sequenced_dataframes = AWSDeleteTestsFewLarge.number + 1
+        num_sequential_dataframes = AWSDeleteTestsFewLarge.number_appends_to_symbol + 1 # for initial dataframe
         cache = LargeAppendDataModifyCache()
 
-        for num_rows in AWSDeleteTestsFewLarge.params:
-            set_env.set_default_columns(20)
-            cache.write_and_append_dict[num_rows] = set_env.generate_chained_writes(
-                num_rows, num_sequenced_dataframes)
-    
-        #only create the library
-        set_env.remove_all_modifiable_libraries(True)
+        generator = SequentialDataframesGenerator()
 
-        set_env.logger().info(f"Storage info: {set_env.get_storage_info()}")
-        # With modifiable tests we do not prepare libraries here,
-        # but we do still return storage info as it has to be unique across processes
-        # We also leave each process to setup its initial library in setup
-        cache.storage_info = set_env.get_storage_info()
+        for num_rows in AWSDeleteTestsFewLarge.params:
+            num_cols = AWSDeleteTestsFewLarge.number_columns
+            df_list = generator.generate_sequential_dataframes(number_data_frames=num_sequential_dataframes,
+                                                               number_rows=num_rows, number_columns=num_cols, 
+                                                               start_timestamp=pd.Timestamp("1-1-1980"), freq='s')
+            cache.write_and_append_dict[num_rows] = df_list
+    
+        manager = self.get_library_manager()
+        manager.clear_all_modifiable_libs()
+        manager.log_info()
+
         return cache
     
     def setup(self, cache: LargeAppendDataModifyCache, num_rows):
-        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)
+        manager = self.get_library_manager()
         writes_list = cache.write_and_append_dict[num_rows]
 
-        self.pid = os.getpid()
-        self.set_env.remove_all_modifiable_libraries(True)
-        self.set_env.delete_modifiable_library(self.pid)
-        self.lib = self.set_env.get_modifiable_library(self.pid)
+        self.lib = manager.get_library(LibraryType.MODIFIABLE)
 
         self.setup_symbol(self.lib, writes_list)
-        assert self.lib.has_symbol
+        self.get_logger().info(f"Library {self.lib}")
+        assert self.lib.has_symbol(self.symbol)
 
     def setup_symbol(self, lib: Library, writes_list: List[pd.DataFrame]):
-        self.symbol = self.set_env.get_symbol_name_template(f"_pid-{self.pid}")
+        logger = self.get_logger()
+        self.symbol = f"_pid-{os.getpid()}"
         lib.write(self.symbol, writes_list[0])
-        self.set_env.logger().info(f"Written first version {writes_list[0].shape[0]}")
+        logger.info(f"Written first version {writes_list[0].shape[0]}")
+
 
         for frame in writes_list[1:]:
             lib.append(self.symbol, frame)
-            self.set_env.logger().info(f"Appended frame {frame.shape[0]}")
+            logger.info(f"Appended frame {frame.shape[0]}")
 
     def teardown(self, cache, num_rows):
         assert not self.lib.has_symbol(self.symbol)
-        self.set_env.delete_modifiable_library( self.pid )
+        self.get_library_manager().clear_all_modifiable_libs_from_this_process()
 
     def time_delete(self, cache, num_rows):
-        self.lib.delete(self.symbol)
-        
-
-
+        self.lib.delete(self.symbol)    

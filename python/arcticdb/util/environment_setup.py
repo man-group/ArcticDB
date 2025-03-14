@@ -1,5 +1,6 @@
 import copy
 from abc import ABC, abstractmethod
+from datetime import timedelta
 from enum import Enum
 import inspect
 import logging
@@ -163,7 +164,7 @@ class StorageSetup:
         elif storage == Storage.LMDB:
             arctic_url = StorageSetup._get_lmdb_arctic_uri(storage_space, add_to_prefix, confirm_persistent_storage_need)
         else:
-            raise Exception("Unsupported storage type :", self.storage)
+            raise Exception("Unsupported storage type :", storage)
         return arctic_url
 
 
@@ -183,9 +184,12 @@ class LibraryManager:
 
     def log_info(self):
         logger = get_console_logger()
-        mes = f"{self} information: \n"
+        if len(self._ac_cache) < 2:
+            self._get_arctic_client() # Forces uri generation
+            self._get_arctic_client_modifiable() # Forces uri generation
+        mes = f"{self} arcticdb URI information for this test: \n"
         for key in self._ac_cache.keys():
-            mes += f"Arctic URI: {key}"
+            mes += f"arcticdb URI: {key}"
         logger.info(mes) 
 
     # Currently we're using the same arctic client for both persistant and modifiable libraries.
@@ -210,7 +214,6 @@ class LibraryManager:
             ac = Arctic(arctic_url)    
         self._ac_cache[arctic_url] = ac
         return ac    
-
 
     def get_library_name(self, library_type: LibraryType, lib_name_suffix):
         if library_type == LibraryType.PERSISTENT:
@@ -274,7 +277,7 @@ class DataFrameGenerator(ABC):
         self.freq = 's'
 
     @abstractmethod
-    def get_dataframe(self, number_rows, number_columns, **kwargs) -> pd.DataFrame:
+    def get_dataframe(self, number_rows: int, number_columns:int, **kwargs) -> pd.DataFrame:
         pass
 
 
@@ -283,17 +286,21 @@ class VariableSizeDataframe(DataFrameGenerator):
     def __init__(self):
         super().__init__()
         self.wide_dataframe_generation_threshold = 400
-    
-    def get_dataframe(self, number_rows, number_columns):
+        
+    def get_dataframe(self, number_rows:int, number_columns:int, 
+                            start_timestamp: pd.Timestamp = None,
+                            freq: Union[str , timedelta , pd.Timedelta , pd.DateOffset] = None, seed = 888):
+        start_timestamp = self.initial_timestamp if start_timestamp is None else start_timestamp
+        freq = self.freq if freq is None else freq
         if number_columns < self.wide_dataframe_generation_threshold:
             df = (DFGenerator.generate_normal_dataframe(num_rows=number_rows, num_cols=number_columns,
-                                                      freq = self.freq, start_time=self.initial_timestamp))
+                                                      freq = freq, start_time=start_timestamp, seed=seed))
         else:
             # The wider the dataframe the more time it needs to generate per row
             # This algo is much better for speed with wide dataframes
             df = (DFGenerator.generate_wide_dataframe(num_rows=number_rows, num_cols=number_columns,
                                                       num_string_cols=200, 
-                                                      freq = self.freq, start_time=self.initial_timestamp))
+                                                      freq = freq, start_time=start_timestamp, seed=seed))
         return df
 
 
@@ -474,7 +481,55 @@ def populate_library_if_missing(manager: LibraryManager, policy: LibraryPopulati
     else:
         policy.logger.info(f"Existing library has been found {name}. Will be reused")      
 
+
 def populate_library(manager: LibraryManager, policy: LibraryPopulationPolicy, lib_type: LibraryType, lib_name_suffix: str = ""):
     assert manager is not None
     lib = manager.get_library(lib_type, lib_name_suffix)
     policy.populate_library(lib)
+
+
+class SequentialDataframesGenerator:
+
+    def __init__(self, df_generator: DataFrameGenerator = VariableSizeDataframe()):
+        self.df_generator = df_generator
+
+    def generate_sequential_dataframes(self, 
+                               number_data_frames: int, 
+                               number_rows: int, 
+                               number_columns: int = 10,
+                               start_timestamp: pd.Timestamp = None,
+                               freq: str = 's') -> List[pd.DataFrame]:
+        """
+        Generates specified number of data frames each having specified number of rows and columns
+        The dataframes are in chronological order one after the other. Date range starts with the specified 
+        initial timestamp setup and frequency
+        """
+        cache = []
+        timestamp_number = TimestampNumber.from_timestamp(start_timestamp, freq)
+
+        for i in range(number_data_frames):
+            df = self.df_generator.get_dataframe(number_rows=number_rows, number_columns=number_columns,
+                                                 start_timestamp= timestamp_number.to_timestamp(),
+                                                 freq = freq)
+            cache.append(df)
+            timestamp_number.inc(df.shape[0])
+        
+        return cache
+    
+    def get_first_and_last_timestamp(self, sequence_df_list: List[pd.DataFrame]) -> List[pd.Timestamp]:
+        """
+        Returns first and last timestamp of the list of indexed dataframes
+        """
+        assert len(sequence_df_list) > 0
+        start = sequence_df_list[0].index[0]
+        last = sequence_df_list[-1].index[-1]
+        return (start, last)
+    
+    def get_next_timestamp_number(self, sequence_df_list: List[pd.DataFrame], freq: str) -> TimestampNumber:
+        """
+        Returns next timestamp after the last timestamp in passed sequence of 
+        indexed dataframes.
+        """
+        last = self.get_first_and_last_timestamp(sequence_df_list)[1]
+        next = TimestampNumber.from_timestamp(last, freq) + 1
+        return next
