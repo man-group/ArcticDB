@@ -270,14 +270,6 @@ def test_lock_contention(small_max_delta, basic_store, mode):
         assert lt.find_keys(KeyType.SYMBOL_LIST) != orig_sl
 
 
-def random_strings(count, max_length):
-    result = []
-    for _ in range(count):
-        length = random.randrange(max_length) + 2
-        result.append("".join(random.choice(string.ascii_letters) for _ in range(length)))
-    return result
-
-
 def _tiny_df(idx):
     return pd.DataFrame(
         {"x": np.arange(idx % 10, idx % 10 + 10)},
@@ -344,7 +336,7 @@ def test_symbol_list_parallel_stress_with_delete(
         frozen_symbols = random_ascii_strings(num_symbols, symbol_length)
         symbols = [frozen_symbols for _ in range(num_workers)]
     else:
-        symbols = [random_strings(num_symbols, symbol_length) for _ in range(num_workers)]
+        symbols = [random_ascii_strings(num_symbols, symbol_length) for _ in range(num_workers)]
 
     with Pool(num_workers) as p:
         p.map(

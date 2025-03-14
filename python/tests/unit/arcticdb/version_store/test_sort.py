@@ -5,7 +5,7 @@ from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import SortedValue
 
-from arcticdb.util.test import random_strings_of_length
+from arcticdb.util.test import random_strings_of_length_of_length
 
 
 def test_stage_finalize(arctic_library):
@@ -75,14 +75,6 @@ def test_stage_finalize_dynamic(arctic_library_dynamic):
     pd.testing.assert_frame_equal(result, expected)
 
 
-def random_strings(count, max_length):
-    result = []
-    for _ in range(count):
-        length = random.randrange(max_length) + 2
-        result.append("".join(random.choice(string.ascii_letters) for _ in range(length)))
-    return result
-
-
 def test_stage_finalize_strings(arctic_library):
     symbol = "AAPL"
     sort_cols = ["timestamp", "col1"]
@@ -92,7 +84,7 @@ def test_stage_finalize_strings(arctic_library):
             "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
             "col1": np.arange(1, 51),
             "col2": [f"a{i:02d}" for i in range(1, 51)],
-            "col3": random_strings(50, 12),
+            "col3": random_strings_of_length(50, 12),
         }
     ).set_index("timestamp")
 
@@ -101,7 +93,7 @@ def test_stage_finalize_strings(arctic_library):
             "timestamp": pd.date_range("2023-01-04", periods=25, freq="H").repeat(2),
             "col1": np.arange(51, 101),
             "col2": [f"b{i:02d}" for i in range(1, 51)],
-            "col3": random_strings(50, 12),
+            "col3": random_strings_of_length(50, 12),
         }
     ).set_index("timestamp")
 
@@ -127,7 +119,7 @@ def test_stage_finalize_strings_dynamic(arctic_library_dynamic):
             "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
             "col1": np.arange(1, 51),
             "col2": [f"a{i:02d}" for i in range(1, 51)],
-            "col3": random_strings(50, 12),
+            "col3": random_strings_of_length(50, 12),
         }
     ).set_index("timestamp")
 
@@ -137,7 +129,7 @@ def test_stage_finalize_strings_dynamic(arctic_library_dynamic):
             "col1": np.arange(51, 101),
             "col2": [f"b{i:02d}" for i in range(1, 51)],
             "col4": [f"a{i:02d}" for i in range(101, 151)],
-            "col5": random_strings(50, 12),
+            "col5": random_strings_of_length(50, 12),
         }
     ).set_index("timestamp")
 
