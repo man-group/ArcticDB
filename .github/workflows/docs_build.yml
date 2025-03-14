@@ -5,7 +5,11 @@ on:
       version: { type: string, required: false, description: "The version to build (used in git and pypi). git-tag='v{version}-docs'.  If not specified then use selected branch and wheel from the last successful build."}
       latest: { type: boolean, required: false, description: Alias this version as the 'latest' stable docs.  This should be set for the latest stable release.}
       deploy: { type: boolean, required: false, description: Push the built docs to the docs-pages branch on github.}
-
+  workflow_call:
+    inputs:
+      version: { type: string, required: true, description: "The version to build (used in git and pypi). git-tag='v{version}-docs'."}
+      latest: { type: boolean, required: true, description: Alias this version as the 'latest' stable docs.  This should be set for the latest stable release.}
+      deploy: { type: boolean, required: true, description: Push the built docs to the docs-pages branch on github.}
 jobs:
   docs_build:
     runs-on: ubuntu-22.04
