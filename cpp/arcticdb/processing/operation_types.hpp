@@ -49,6 +49,35 @@ enum class OperationType : uint8_t {
     XOR
 };
 
+inline std::string_view operation_type_to_str(const OperationType ot) {
+    switch (ot) {
+#define TO_STR(ARG) case OperationType::ARG: return std::string_view(#ARG);
+        TO_STR(ABS)
+        TO_STR(NEG)
+        TO_STR(ISNULL)
+        TO_STR(NOTNULL)
+        TO_STR(IDENTITY)
+        TO_STR(NOT)
+        TO_STR(ADD)
+        TO_STR(SUB)
+        TO_STR(MUL)
+        TO_STR(DIV)
+        TO_STR(EQ)
+        TO_STR(NE)
+        TO_STR(LT)
+        TO_STR(LE)
+        TO_STR(GT)
+        TO_STR(GE)
+        TO_STR(ISIN)
+        TO_STR(ISNOTIN)
+        TO_STR(AND)
+        TO_STR(OR)
+        TO_STR(XOR)
+#undef TO_STR
+        default:return std::string_view("UNKNOWN");
+    }
+}
+
 constexpr bool is_unary_operation(OperationType o) {
     return uint8_t(o) <= uint8_t(OperationType::NOT);
 }
@@ -532,6 +561,17 @@ bool operator()(T t, const ankerl::unordered_dense::set<U>& u) const {
 } //namespace arcticdb
 
 namespace fmt {
+template<>
+struct formatter<arcticdb::OperationType> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::OperationType ot, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", operation_type_to_str(ot));
+    }
+};
+
 template<>
 struct formatter<arcticdb::AbsOperator> {
     template<typename ParseContext>

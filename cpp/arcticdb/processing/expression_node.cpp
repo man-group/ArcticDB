@@ -70,20 +70,20 @@ VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
     }
 }
 
-    std::variant<BitSetTag, DataType> ExpressionNode::compute(
-            const ExpressionContext& expression_context,
-            const ankerl::unordered_dense::map<std::string, DataType>& column_types) const {
+std::variant<BitSetTag, DataType> ExpressionNode::compute(
+        const ExpressionContext& expression_context,
+        const ankerl::unordered_dense::map<std::string, DataType>& column_types) const {
     // Default to BitSetTag
     std::variant<BitSetTag, DataType> res;
     ValueSetState left_value_set_state;
     auto left_type = child_return_type(left_, expression_context, column_types, left_value_set_state);
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(left_value_set_state == ValueSetState::NOT_A_SET,
-                                                          "Unexpected value set operand");
+                                                          "Unexpected value set input to {}", operation_type_);
     if (is_unary_operation(operation_type_)) {
         switch (operation_type_) {
             case OperationType::ABS:
             case OperationType::NEG:
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(left_type), "Unexpected bitset input to unary arithmetic operation");
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(left_type), "Unexpected bitset input to {}", operation_type_);
                 details::visit_type(std::get<DataType>(left_type), [this, &res](auto tag) {
                     using type_info = ScalarTypeInfo<decltype(tag)>;
                     if constexpr (is_numeric_type(type_info::data_type)) {
@@ -96,25 +96,33 @@ VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
                             res = data_type_from_raw_type<TargetType>();
                         }
                     } else {
-                        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unexpected data type input to unary arithmetic operation {}",
-                                                                              type_info::data_type);
+                        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unexpected data type {} input to {}",
+                                                                              type_info::data_type, operation_type_);
                     }
                 });
                 break;
             case OperationType::ISNULL:
             case OperationType::NOTNULL:
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                        std::holds_alternative<DataType>(left_type) && (is_floating_point_type(std::get<DataType>(left_type)) || is_sequence_type(std::get<DataType>(left_type)) ||
-                                is_time_type(std::get<DataType>(left_type))),
-                        "Unexpected data type input to unary comparison operation");
+                        std::holds_alternative<DataType>(left_type),
+                        "Unexpected bitset input to {}", operation_type_);
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        is_floating_point_type(std::get<DataType>(left_type)) || is_sequence_type(std::get<DataType>(left_type)) ||
+                        is_time_type(std::get<DataType>(left_type)),
+                        "Unexpected data type {} input to {}",
+                        std::get<DataType>(left_type), operation_type_);
                 break;
             case OperationType::IDENTITY:
             case OperationType::NOT:
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(!std::holds_alternative<DataType>(left_type) || std::get<DataType>(left_type) == DataType::BOOL8,
-                                                                    "Unexpected data type input to unary boolean operation");
+                if (!std::holds_alternative<BitSetTag>(left_type)) {
+                    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                            std::get<DataType>(left_type) == DataType::BOOL8,
+                            "Unexpected data type {} input to {}",
+                            std::get<DataType>(left_type), operation_type_);
+                }
                 break;
             default:
-                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected unary operator");
+                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected unary operator {}", operation_type_);
         }
     } else {
         // Binary operation
@@ -125,8 +133,9 @@ VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
             case OperationType::SUB:
             case OperationType::MUL:
             case OperationType::DIV:
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(left_type), "Unexpected bitset input to binary arithmetic operator");
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(right_type) && right_value_set_state == ValueSetState::NOT_A_SET, "Unexpected input to binary arithmetic operator");
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(left_type), "Unexpected bitset input as left operand to {}", operation_type_);
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(right_type), "Unexpected bitset input as right operand to {}", operation_type_);
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(right_value_set_state == ValueSetState::NOT_A_SET, "Unexpected value set input to {}", operation_type_);
                 details::visit_type(std::get<DataType>(left_type), [this, &res, right_type](auto left_tag) {
                     using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
                     details::visit_type(std::get<DataType>(right_type), [this, &res](auto right_tag) {
@@ -157,8 +166,8 @@ VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
                                     internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected binary operator");
                             }
                         } else {
-                            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unexpected data types input to binary arithmetic operation {} {}",
-                                                                                  left_type_info::data_type, right_type_info::data_type);
+                            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unexpected data types {} {} input to {}",
+                                                                                  left_type_info::data_type, right_type_info::data_type, operation_type_);
                         }
                     });
                 });
@@ -169,35 +178,46 @@ VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
             case OperationType::LE:
             case OperationType::GT:
             case OperationType::GE:
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(left_type), "Unexpected bitset input to binary comparison operator");
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(right_type) && right_value_set_state == ValueSetState::NOT_A_SET, "Unexpected input to binary comparison operator");
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(left_type), "Unexpected bitset input as left operand to {}", operation_type_);
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(right_type), "Unexpected bitset input as right operand to {}", operation_type_);
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(right_value_set_state == ValueSetState::NOT_A_SET, "Unexpected value set input to {}", operation_type_);
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         (is_numeric_type(std::get<DataType>(left_type)) && is_numeric_type(std::get<DataType>(right_type))) ||
                         (is_bool_type(std::get<DataType>(left_type)) && is_bool_type(std::get<DataType>(right_type))) ||
                         (is_sequence_type(std::get<DataType>(left_type)) && is_sequence_type(std::get<DataType>(right_type)) && (operation_type_ == OperationType::EQ || operation_type_ == OperationType::NE)),
-                        "Incompatible data types provided in binary comparison {}, {}",
-                        std::get<DataType>(left_type), std::get<DataType>(right_type));
+                        "Unexpected data types {} {} input to {}",
+                        std::get<DataType>(left_type), std::get<DataType>(right_type), operation_type_);
                 break;
             case OperationType::ISIN:
             case OperationType::ISNOTIN:
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(left_type), "Unexpected bitset input to binary comparison operator");
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(right_type) && right_value_set_state != ValueSetState::NOT_A_SET, "Unexpected input to binary comparison operator");
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(left_type), "Unexpected bitset input as left operand to {}", operation_type_);
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(right_type), "Unexpected bitset input as right operand to {}", operation_type_);
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(right_value_set_state != ValueSetState::NOT_A_SET, "Unexpected non value-set input as right operand to {}", operation_type_);
                 if (right_value_set_state == ValueSetState::NON_EMPTY_SET) {
                     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                             (is_sequence_type(std::get<DataType>(left_type)) && is_sequence_type(std::get<DataType>(right_type))) || (is_numeric_type(std::get<DataType>(left_type)) && is_numeric_type(std::get<DataType>(right_type))),
-                            "Incompatible data types provided in set membership operator {}, {}",
-                            std::get<DataType>(left_type), std::get<DataType>(right_type));
+                            "Unexpected data types {} {} input to {}",
+                            std::get<DataType>(left_type), std::get<DataType>(right_type), operation_type_);
                 } // else - Empty value set compatible with all data types
                 break;
             case OperationType::AND:
             case OperationType::OR:
             case OperationType::XOR:
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                        (!std::holds_alternative<DataType>(left_type) || std::get<DataType>(left_type) == DataType::BOOL8) && (!std::holds_alternative<DataType>(right_type) || std::get<DataType>(right_type) == DataType::BOOL8),
-                        "Unexpected data types input to binary boolean operation");
+                if (!std::holds_alternative<BitSetTag>(left_type)) {
+                    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                            std::get<DataType>(left_type) == DataType::BOOL8,
+                            "Unexpected data type {} input as left operand to {}",
+                            std::get<DataType>(left_type), operation_type_);
+                }
+                if (!std::holds_alternative<BitSetTag>(right_type)) {
+                    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                            std::get<DataType>(right_type) == DataType::BOOL8,
+                            "Unexpected data type {} input as right operand to {}",
+                            std::get<DataType>(right_type), operation_type_);
+                }
                 break;
             default:
-                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected binary operator");
+                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected binary operator {}", operation_type_);
         }
     }
     return res;

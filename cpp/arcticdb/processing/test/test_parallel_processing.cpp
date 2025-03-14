@@ -60,6 +60,10 @@ struct RowSliceClause {
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
         component_manager_ = component_manager;
     }
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const {
+        return output_schema;
+    }
 };
 
 struct RestructuringClause {
@@ -108,6 +112,10 @@ struct RestructuringClause {
 
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
         component_manager_ = component_manager;
+    }
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const {
+        return output_schema;
     }
 };
 

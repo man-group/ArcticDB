@@ -274,13 +274,21 @@ struct StreamDescriptor {
 };
 
 struct OutputSchema {
-    StreamDescriptor stream_descriptor_;
     arcticdb::proto::descriptors::NormalizationMetadata norm_metadata_;
 
     OutputSchema(StreamDescriptor stream_descriptor,
                  arcticdb::proto::descriptors::NormalizationMetadata norm_metadata):
-            stream_descriptor_(std::move(stream_descriptor)),
-            norm_metadata_(std::move(norm_metadata)) {};
+            norm_metadata_(std::move(norm_metadata)),
+            stream_descriptor_(std::move(stream_descriptor)) {};
+
+    const StreamDescriptor& stream_descriptor() const {
+        return stream_descriptor_;
+    }
+
+    void set_stream_descriptor(StreamDescriptor&& stream_descriptor) {
+        stream_descriptor_ = std::move(stream_descriptor);
+        column_types_ = std::nullopt;
+    }
 
     ankerl::unordered_dense::map<std::string, DataType>& column_types() {
         if (!column_types_.has_value()) {
@@ -293,10 +301,13 @@ struct OutputSchema {
         return *column_types_;
     }
 
-    void clear_column_types() {
-        column_types_ = std::nullopt;
+    void add_field(std::string_view name, DataType data_type) {
+        stream_descriptor_.add_scalar_field(data_type, name);
+        column_types().emplace(name, data_type);
     }
+
 private:
+    StreamDescriptor stream_descriptor_;
     std::optional<ankerl::unordered_dense::map<std::string, DataType>> column_types_;
 };
 

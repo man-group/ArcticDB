@@ -143,15 +143,14 @@ DataType SumAggregatorData::get_output_data_type() {
     if (output_type_.has_value()) {
         return *output_type_;
     }
-    // If data_type_ has no value, it means there is no data for this aggregation
-    // For sums, we want this to display as zero rather than NaN
-    if (!common_input_type_.has_value() || *common_input_type_ == DataType::EMPTYVAL) {
-        output_type_ = DataType::FLOAT64;
-    }
     // On the first call to this method, common_input_type_ will be a type capable of representing all the values in all the input columns
     // This may be too small to hold the result, as summing 2 values of the same type cannot necessarily be represented by that type
     // For safety, use the widest type available for the 3 numeric flavours (unsigned int, signed int, float) to have the best chance of avoiding overflow
-    if (is_bool_type(*common_input_type_)) {
+    if (!common_input_type_.has_value() || *common_input_type_ == DataType::EMPTYVAL) {
+        // If data_type_ has no value or is empty type, it means there is no data for this aggregation
+        // For sums, we want this to display as zero rather than NaN
+        output_type_ = DataType::FLOAT64;
+    } else if (is_bool_type(*common_input_type_)) {
         output_type_ = DataType::BOOL8;
     } else if (is_unsigned_type(*common_input_type_)) {
         output_type_ = DataType::UINT64;
@@ -356,7 +355,7 @@ void MaxAggregatorData::add_data_type(DataType data_type)
 
 DataType MaxAggregatorData::get_output_data_type() {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-            is_numeric_type(*data_type_) || is_bool_type(*data_type_),
+            is_numeric_type(*data_type_) || is_bool_type(*data_type_) || is_empty_type(*data_type_),
             "Max aggregation not supported with type {}",
             *data_type_);
     return *data_type_;
@@ -383,7 +382,7 @@ void MinAggregatorData::add_data_type(DataType data_type)
 
 DataType MinAggregatorData::get_output_data_type() {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-            is_numeric_type(*data_type_) || is_bool_type(*data_type_),
+            is_numeric_type(*data_type_) || is_bool_type(*data_type_) || is_empty_type(*data_type_),
             "Min aggregation not supported with type {}",
             *data_type_);
     return *data_type_;
@@ -406,7 +405,7 @@ SegmentInMemory MinAggregatorData::finalize(const ColumnName& output_column_name
 void MeanAggregatorData::add_data_type(DataType data_type) {
     // Mean values are always doubles so just check a numeric type was provided
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-            is_numeric_type(data_type) || is_bool_type(data_type),
+            is_numeric_type(data_type) || is_bool_type(data_type) || is_empty_type(data_type),
             "Mean aggregation not supported with type {}",
             data_type);
 }
