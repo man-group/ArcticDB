@@ -62,7 +62,7 @@ StreamDescriptor merge_descriptors(
         for (size_t idx = has_index ? 1u : 0u; idx < fields->size(); ++idx) {
             const auto& field = fields->at(idx);
             const auto& type_desc = field.type();
-            if (!filtered_set.contains(field.name())) {
+            if (filtered_set.empty() || filtered_set.contains(field.name())) {
                 if(auto existing = merged_fields_map.find(field.name()); existing != merged_fields_map.end()) {
                     auto existing_type_desc = existing->second;
                     if(existing_type_desc != type_desc) {
