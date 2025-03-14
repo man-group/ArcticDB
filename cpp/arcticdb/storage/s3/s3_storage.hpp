@@ -29,6 +29,8 @@
 
 namespace arcticdb::storage::s3 {
 
+using PrefixHandler = std::function<std::string(const std::string&, const std::string&, const KeyDescriptor&, KeyType)>;
+
 const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
 
 class S3Storage : public Storage, AsyncStorage {
@@ -48,6 +50,8 @@ class S3Storage : public Storage, AsyncStorage {
         return dynamic_cast<AsyncStorage*>(this);
     }
 
+    bool supports_object_size_calculation() const final override;
+
   protected:
     void do_write(KeySegmentPair& key_seg) final;
 
@@ -66,6 +70,8 @@ class S3Storage : public Storage, AsyncStorage {
     void do_remove(VariantKey&& variant_key, RemoveOpts opts);
 
     void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts);
+
+    ObjectSizes do_get_object_sizes(KeyType key_type, const std::string& prefix) override final;
 
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
 

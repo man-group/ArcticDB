@@ -326,6 +326,10 @@ public:
         }
     }
 
+    [[nodiscard]] folly::Future<storage::ObjectSizes> get_object_sizes(KeyType, const std::string&) override {
+        util::raise_rte("get_object_sizes not implemented for InMemoryStore");
+    }
+
     bool scan_for_matching_key(
             KeyType,
             const IterateTypePredicate&) override {
