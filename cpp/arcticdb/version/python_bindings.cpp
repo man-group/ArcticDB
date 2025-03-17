@@ -785,13 +785,11 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                                      user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                                              clause->clause_info().multi_symbol_,
                                              "Single-symbol clause cannot be used to join multiple symbols together");
-                                     _clauses.emplace_back(std::make_shared<Clause>(*clause));
                                      first_clause = false;
                                  } else {
                                      user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                                              !clause->clause_info().multi_symbol_,
                                              "Multi-symbol clause cannot be used on a single symbol");
-                                     _clauses.emplace_back(std::make_shared<Clause>(*clause));
                                  }
                                  _clauses.emplace_back(std::make_shared<Clause>(*clause));
                              }
