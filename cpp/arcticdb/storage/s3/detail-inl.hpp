@@ -171,7 +171,10 @@ KeySegmentPair do_read_impl(
 	    KeyDecoder&& key_decoder,
         ReadKeyOpts opts) {
     ARCTICDB_SAMPLE(S3StorageRead, 0)
-    auto key_type_dir = key_type_folder(root_folder, variant_key_type(variant_key));
+    QUERY_STATS_ADD_GROUP(storage_ops, "GetObject")
+    auto key_type = variant_key_type(variant_key);
+    QUERY_STATS_ADD_GROUP_WITH_TIME(key_type, key_type)
+    auto key_type_dir = key_type_folder(root_folder, key_type);
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
     auto get_object_result = s3_client.get_object(s3_object_name, bucket_name);
     auto unencoded_key = key_decoder(std::move(variant_key));
@@ -428,7 +431,6 @@ bool do_iterate_type_impl(
     if (prefix.empty()) {
         key_type_dir += "/";
     }
-    QUERY_STATS_ADD_GROUP(key_type, key_type)
 
     // Generally we get the key descriptor from the AtomKey, but in the case of iterating version journals
     // where we want to have a narrower prefix, we can use the info that it's a version journal and derive
@@ -444,7 +446,8 @@ bool do_iterate_type_impl(
 
     auto continuation_token = std::optional<std::string>();
     do {
-        QUERY_STATS_ADD_GROUP_WITH_TIME(storage_ops, "ListObjectsV2")
+        QUERY_STATS_ADD_GROUP(storage_ops, "ListObjectsV2")
+        QUERY_STATS_ADD_GROUP_WITH_TIME(key_type, key_type)
         auto list_objects_result = s3_client.list_objects(key_prefix, bucket_name, continuation_token);
         if (list_objects_result.is_success()) {
             auto& output = list_objects_result.get_output();
@@ -491,12 +494,12 @@ bool do_key_exists_impl(
     const S3ClientInterface& s3_client,
     KeyBucketizer&& b
 ) {
+    QUERY_STATS_ADD_GROUP(storage_ops, "HeadObject")
     auto key_type = variant_key_type(key);
-    QUERY_STATS_ADD_GROUP(key_type, key_type)
+    QUERY_STATS_ADD_GROUP_WITH_TIME(key_type, key_type)
     auto key_type_dir = key_type_folder(root_folder, key_type);
     auto s3_object_name = object_path(b.bucketize(key_type_dir, key), key);
 
-    QUERY_STATS_ADD_GROUP_WITH_TIME(storage_ops, "HeadObject")
     auto head_object_result = s3_client.head_object(
         s3_object_name,
         bucket_name);

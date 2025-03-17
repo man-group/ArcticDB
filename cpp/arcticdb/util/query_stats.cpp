@@ -138,7 +138,7 @@ std::string get_runtime_arcticdb_call(const std::string& default_arcticdb_call){
     {
         py::object relevant_frame = stack_summary.attr("__getitem__")(py::len(stack_summary) - i);
         std::string filename = py::cast<std::string>(relevant_frame.attr("filename"));
-        if (filename.rfind("arcticdb/version_store/_store.py") == 0 || filename.rfind("arcticdb/version_store/library.py") == 0) {
+        if (filename.find("arcticdb/version_store/_store.py") != std::string::npos || filename.rfind("arcticdb/version_store/library.py") != std::string::npos) {
             func_name = py::cast<std::string>(relevant_frame.attr("name"));
         }
     }
@@ -170,7 +170,8 @@ StatsGroup::~StatsGroup() {
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start_);
         auto& stats = query_stats_instance.current_level()->stats_;
-        stats[static_cast<size_t>(StatsName::total_time_ms)] += duration.count();
+        // The 1 ms minimum is for giving meaningful result in local test with moto. In real world the S3 API will take >1 ms
+        stats[static_cast<size_t>(StatsName::total_time_ms)] += std::max(static_cast<int64_t>(1), duration.count());
         stats[static_cast<size_t>(StatsName::count)]++;
     }
     query_stats_instance.set_level(prev_level_);
