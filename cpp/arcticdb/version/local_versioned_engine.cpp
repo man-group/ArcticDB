@@ -1258,33 +1258,43 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
         clause->set_component_manager(component_manager);
     }
     auto clauses_ptr = std::make_shared<std::vector<std::shared_ptr<Clause>>>(std::move(clauses));
-
+    auto pipeline_context = std::make_shared<PipelineContext>();
     return folly::collect(symbol_processing_result_futs).via(&async::io_executor())
-    .thenValueInline([clauses_ptr](auto&& symbol_processing_results) {
+    .thenValueInline([this, &handler_data, pipeline_context, clauses_ptr, component_manager](auto&& symbol_processing_results) mutable {
         util::check(!clauses_ptr->empty(), "Cannot join with no joining clause provided");
         std::vector<OutputSchema> output_schemas;
+        std::vector<std::vector<EntityId>> entity_ids;
+        std::vector<VersionedItem> res_versioned_items;
+        std::vector<arcticdb::proto::descriptors::UserDefinedMetadata> res_metadatas;
         output_schemas.reserve(symbol_processing_results.size());
+        entity_ids.reserve(symbol_processing_results.size());
+        res_versioned_items.reserve(symbol_processing_results.size());
+        res_metadatas.reserve(symbol_processing_results.size());
         for (const auto& symbol_processing_result: symbol_processing_results) {
             output_schemas.emplace_back(std::move(symbol_processing_result.output_schema_));
+            entity_ids.emplace_back(std::move(symbol_processing_result.entity_ids_));
+            res_versioned_items.emplace_back(std::move(symbol_processing_result.versioned_item_));
+            res_metadatas.emplace_back(std::move(symbol_processing_result.metadata_));
         }
-        auto output_schema = clauses_ptr->front()->join_schema(std::move(output_schemas));
-    }).thenValueInline(
-    return schedule_remaining_iterations(std::move(entity_ids_vec_fut), clauses_ptr, true)
-    .thenValueInline([component_manager](std::vector<EntityId>&& processed_entity_ids) {
-        auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
-        return collect_segments(std::move(proc));
-    }).thenValueInline([store=store(), &handler_data, pipeline_context](std::vector<SliceAndKey>&& slice_and_keys) {
-        // TODO: Make constructing the output descriptor a standard end of pipeline operation
-        pipeline_context->set_descriptor(descriptor_from_segments(slice_and_keys));
-        return prepare_output_frame(std::move(slice_and_keys), pipeline_context, store, ReadOptions{}, handler_data);
-    }).thenValueInline([&handler_data, pipeline_context, res_versioned_items, res_metadatas](SegmentInMemory&& frame) mutable {
-        return reduce_and_fix_columns(pipeline_context, frame, ReadOptions{}, handler_data)
-        .thenValue([pipeline_context, frame, res_versioned_items, res_metadatas](auto&&) mutable {
-            return MultiSymbolReadOutput{std::move(*res_versioned_items),
-                                     std::move(*res_metadatas),
-                                     {frame, timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}}};
+        auto output_schema = clauses_ptr->front()->join_schemas(std::move(output_schemas));
+        pipeline_context->set_descriptor(output_schema.stream_descriptor());
+        pipeline_context->norm_meta_ = std::make_shared<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(output_schema.norm_metadata_));
+        return schedule_remaining_iterations(std::move(entity_ids), clauses_ptr, true)
+                .thenValueInline([component_manager](std::vector<EntityId>&& processed_entity_ids) {
+                    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
+                    return collect_segments(std::move(proc));
+                }).thenValueInline([store=store(), &handler_data, pipeline_context](std::vector<SliceAndKey>&& slice_and_keys) mutable {
+            return prepare_output_frame(std::move(slice_and_keys), pipeline_context, store, ReadOptions{}, handler_data);
+        }).thenValueInline([&handler_data, pipeline_context, &res_versioned_items, &res_metadatas](SegmentInMemory&& frame) mutable {
+            return reduce_and_fix_columns(pipeline_context, frame, ReadOptions{}, handler_data)
+                    .thenValue([pipeline_context, frame, &res_versioned_items, &res_metadatas](auto&&) mutable {
+                        return MultiSymbolReadOutput{std::move(res_versioned_items),
+                                                     std::move(res_metadatas),
+                                                     {frame, timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}}};
+                    });
         });
     }).get();
+
 }
 
 void LocalVersionedEngine::write_version_and_prune_previous(

@@ -8,6 +8,8 @@
 #include <vector>
 #include <variant>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
@@ -1389,7 +1391,7 @@ OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& output_schem
                 "Mismatching fields in multi-symbol join"
                 );
         schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                reference_schema.norm_metadata_ == schema.norm_metadata_,
+                google::protobuf::util::MessageDifferencer::Equals(reference_schema.norm_metadata_, schema.norm_metadata_),
                 "Mismatching normalization metadata in multi-symbol join"
         );
     }

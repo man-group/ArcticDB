@@ -810,8 +810,8 @@ struct ConcatClause {
         component_manager_ = component_manager;
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const {
-        return output_schema;
+    OutputSchema modify_schema(OutputSchema&&) const {
+        util::raise_rte("ConcatClause::modify_schema should never be called");
     }
 
     OutputSchema join_schemas(std::vector<OutputSchema>&& output_schemas) const;
