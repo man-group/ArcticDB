@@ -72,7 +72,7 @@ TEST(Clause, AggregationEmptyColumn) {
 
     size_t num_rows{100};
     size_t unique_grouping_values{10};
-    auto proc_unit = ProcessingUnit{generate_groupby_testing_segment(num_rows, unique_grouping_values)};
+    auto proc_unit = ProcessingUnit{generate_groupby_testing_empty_segment(num_rows, unique_grouping_values)};
     auto entity_ids = push_entities(*component_manager, std::move(proc_unit));
 
     auto aggregated = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, aggregation.process(std::move(entity_ids)));
@@ -95,8 +95,6 @@ TEST(Clause, AggregationEmptyColumn) {
     ASSERT_FALSE(segment->column_index("empty_max").has_value());
     ASSERT_FALSE(segment->column_index("empty_mean").has_value());
     ASSERT_FALSE(segment->column_index("empty_count").has_value());
-    ASSERT_FALSE(segment->column_index("empty_first").has_value());
-    ASSERT_FALSE(segment->column_index("empty_last").has_value());
 }
 
 namespace aggregation_test

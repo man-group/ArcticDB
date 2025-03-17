@@ -98,6 +98,28 @@ struct SegmentWrapper {
     }
 };
 
+void check_column_presence(OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns, std::string_view clause_name) {
+    const auto& column_types = output_schema.column_types();
+    for (const auto& input_column: required_columns) {
+        schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
+                column_types.contains(input_column),
+                "{}Clause requires column '{}' to exist in input data",
+                clause_name,
+                input_column
+        );
+    }
+}
+
+void check_is_timeseries(const StreamDescriptor& stream_descriptor, std::string_view clause_name) {
+    schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
+            stream_descriptor.index().type() == IndexDescriptor::Type::TIMESTAMP &&
+            stream_descriptor.index().field_count() >= 1 &&
+            stream_descriptor.field(0).type() == make_scalar_type(DataType::NANOSECONDS_UTC64),
+            "{}Clause can only be applied to timeseries",
+            clause_name
+    );
+}
+
 std::vector<EntityId> PassthroughClause::process(std::vector<EntityId>&& entity_ids) const {
     return std::move(entity_ids);
 }
@@ -131,6 +153,14 @@ std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) 
                             util::raise_rte("Expected bitset from filter clause");
                         });
     return output;
+}
+
+OutputSchema FilterClause::modify_schema(OutputSchema&& output_schema) const {
+    check_column_presence(output_schema, *clause_info_.input_columns_, "Filter");
+    auto root_expr = expression_context_->expression_nodes_.get_value(expression_context_->root_node_name_.value);
+    std::variant<BitSetTag, DataType> return_type = root_expr->compute(*expression_context_, output_schema.column_types());
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<BitSetTag>(return_type), "FilterClause AST would produce a column, not a bitset");
+    return output_schema;
 }
 
 std::string FilterClause::to_string() const {
@@ -168,6 +198,15 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
                             util::raise_rte("Expected column from projection clause");
                         });
     return output;
+}
+
+OutputSchema ProjectClause::modify_schema(OutputSchema&& output_schema) const {
+    check_column_presence(output_schema, *clause_info_.input_columns_, "Project");
+    auto root_expr = expression_context_->expression_nodes_.get_value(expression_context_->root_node_name_.value);
+    std::variant<BitSetTag, DataType> return_type = root_expr->compute(*expression_context_, output_schema.column_types());
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(return_type), "ProjectClause AST would produce a bitset, not a column");
+    output_schema.add_field(output_column_, std::get<DataType>(return_type));
+    return output_schema;
 }
 
 [[nodiscard]] std::string ProjectClause::to_string() const {
@@ -432,6 +471,31 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
     return push_entities(*component_manager_, ProcessingUnit(std::move(seg)));
 }
 
+OutputSchema AggregationClause::modify_schema(OutputSchema&& output_schema) const {
+    check_column_presence(output_schema, *clause_info_.input_columns_, "Aggregation");
+    const auto& input_stream_desc = output_schema.stream_descriptor();
+    StreamDescriptor stream_desc(input_stream_desc.id());
+    stream_desc.add_field(input_stream_desc.field(*input_stream_desc.find_field(grouping_column_)));
+    stream_desc.set_index({0, IndexDescriptorImpl::Type::ROWCOUNT});
+
+    for (const auto& agg: aggregators_){
+        const auto& input_column_name = agg.get_input_column_name().value;
+        const auto& output_column_name = agg.get_output_column_name().value;
+        const auto& input_column_type = input_stream_desc.field(*input_stream_desc.find_field(input_column_name)).type().data_type();
+        auto agg_data = agg.get_aggregator_data();
+        agg_data.add_data_type(input_column_type);
+        const auto& output_column_type = agg_data.get_output_data_type();
+        stream_desc.add_scalar_field(output_column_type, output_column_name);
+    }
+
+    output_schema.set_stream_descriptor(std::move(stream_desc));
+    auto mutable_index = output_schema.norm_metadata_.mutable_df()->mutable_common()->mutable_index();
+    mutable_index->set_name(grouping_column_);
+    mutable_index->clear_fake_name();
+    mutable_index->set_is_physically_stored(true);
+    return output_schema;
+}
+
 [[nodiscard]] std::string AggregationClause::to_string() const {
     return str_;
 }
@@ -461,6 +525,45 @@ const ClauseInfo& ResampleClause<closed_boundary>::clause_info() const {
 template<ResampleBoundary closed_boundary>
 void ResampleClause<closed_boundary>::set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
     component_manager_ = std::move(component_manager);
+}
+
+template<ResampleBoundary closed_boundary>
+OutputSchema ResampleClause<closed_boundary>::modify_schema(OutputSchema&& output_schema) const {
+    check_is_timeseries(output_schema.stream_descriptor(), "Resample");
+    check_column_presence(output_schema, *clause_info_.input_columns_, "Resample");
+    const auto& input_stream_desc = output_schema.stream_descriptor();
+    StreamDescriptor stream_desc(input_stream_desc.id());
+    stream_desc.add_field(input_stream_desc.field(0));
+    stream_desc.set_index(IndexDescriptorImpl(1, IndexDescriptor::Type::TIMESTAMP));
+
+    for (const auto& agg: aggregators_){
+        const auto& input_column_name = agg.get_input_column_name().value;
+        const auto& output_column_name = agg.get_output_column_name().value;
+        const auto& input_column_type = input_stream_desc.field(*input_stream_desc.find_field(input_column_name)).type().data_type();
+        agg.check_aggregator_supported_with_data_type(input_column_type);
+        auto output_column_type = agg.generate_output_data_type(input_column_type);
+        stream_desc.add_scalar_field(output_column_type, output_column_name);
+    }
+    output_schema.set_stream_descriptor(std::move(stream_desc));
+
+    if (output_schema.norm_metadata_.df().common().has_multi_index()) {
+        const auto& multi_index = output_schema.norm_metadata_.mutable_df()->mutable_common()->multi_index();
+        auto name = multi_index.name();
+        auto tz = multi_index.tz();
+        bool fake_name{false};
+        for (auto pos: multi_index.fake_field_pos()) {
+            if (pos == 0) {
+                fake_name = true;
+                break;
+            }
+        }
+        auto mutable_index = output_schema.norm_metadata_.mutable_df()->mutable_common()->mutable_index();
+        mutable_index->set_tz(tz);
+        mutable_index->set_is_physically_stored(true);
+        mutable_index->set_name(name);
+        mutable_index->set_fake_name(fake_name);
+    }
+    return output_schema;
 }
 
 template<ResampleBoundary closed_boundary>
@@ -903,6 +1006,11 @@ const ClauseInfo& MergeClause::clause_info() const {
     return clause_info_;
 }
 
+OutputSchema MergeClause::modify_schema(OutputSchema&& output_schema) const {
+    check_is_timeseries(output_schema.stream_descriptor(), "Merge");
+    return output_schema;
+}
+
 std::vector<std::vector<EntityId>> MergeClause::structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
 
     // TODO this is a hack because we don't currently have a way to
@@ -1211,6 +1319,11 @@ std::vector<EntityId> DateRangeClause::process(std::vector<EntityId> &&entity_id
         proc.truncate(start_row, end_row);
     } // else all rows in the processing unit are required, do nothing
     return push_entities(*component_manager_, std::move(proc));
+}
+
+OutputSchema DateRangeClause::modify_schema(OutputSchema&& output_schema) const {
+    check_is_timeseries(output_schema.stream_descriptor(), "DateRange");
+    return output_schema;
 }
 
 std::string DateRangeClause::to_string() const {
