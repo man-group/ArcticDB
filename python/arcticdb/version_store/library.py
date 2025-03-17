@@ -523,10 +523,13 @@ class LazyDataFrameAfterJoin(QueryBuilder):
         return self.__str__()
 
 
-def concat(lazy_dataframes: Union[List[LazyDataFrame], LazyDataFrameCollection]) -> LazyDataFrameAfterJoin:
+def concat(
+        lazy_dataframes: Union[List[LazyDataFrame], LazyDataFrameCollection],
+        join: str = "outer",
+) -> LazyDataFrameAfterJoin:
     if not isinstance(lazy_dataframes, LazyDataFrameCollection):
         lazy_dataframes = LazyDataFrameCollection(lazy_dataframes)
-    return LazyDataFrameAfterJoin(lazy_dataframes, QueryBuilder().concat())
+    return LazyDataFrameAfterJoin(lazy_dataframes, QueryBuilder().concat(join))
 
 
 def col(name: str) -> ExpressionNode:

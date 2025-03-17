@@ -1331,9 +1331,10 @@ std::string DateRangeClause::to_string() const {
     return fmt::format("DATE RANGE {} - {}", start_, end_);
 }
 
-ConcatClause::ConcatClause() {
+ConcatClause::ConcatClause(JoinType join_type) {
     clause_info_.input_structure_ = ProcessingStructure::MULTI_SYMBOL;
     clause_info_.multi_symbol_ = true;
+    join_type_ = join_type;
 }
 
 std::vector<std::vector<EntityId>> ConcatClause::structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {

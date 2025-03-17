@@ -719,12 +719,18 @@ struct DateRangeClause {
     [[nodiscard]] std::string to_string() const;
 };
 
+enum class JoinType: uint8_t {
+    OUTER,
+    INNER
+};
+
 struct ConcatClause {
 
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
+    JoinType join_type_;
 
-    ConcatClause();
+    ConcatClause(JoinType join_type);
 
     ARCTICDB_MOVE_COPY_DEFAULT(ConcatClause)
 

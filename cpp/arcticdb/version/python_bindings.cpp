@@ -394,6 +394,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .value("TAIL", RowRangeClause::RowRangeType::TAIL)
             .value("RANGE", RowRangeClause::RowRangeType::RANGE);
 
+    py::enum_<JoinType>(version, "JoinType")
+            .value("OUTER", JoinType::OUTER)
+            .value("INNER", JoinType::INNER);
+
     py::class_<RowRangeClause, std::shared_ptr<RowRangeClause>>(version, "RowRangeClause")
             .def(py::init<RowRangeClause::RowRangeType, int64_t>())
             .def(py::init<int64_t, int64_t>())
@@ -406,7 +410,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def("__str__", &DateRangeClause::to_string);
 
     py::class_<ConcatClause, std::shared_ptr<ConcatClause>>(version, "ConcatClause")
-            .def(py::init<>())
+            .def(py::init<JoinType>())
             .def("__str__", &ConcatClause::to_string);
 
     py::class_<ReadQuery, std::shared_ptr<ReadQuery>>(version, "PythonVersionStoreReadQuery")

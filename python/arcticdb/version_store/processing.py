@@ -34,6 +34,7 @@ from arcticdb_ext.version_store import ResampleBoundary as _ResampleBoundary
 from arcticdb_ext.version_store import RowRangeClause as _RowRangeClause
 from arcticdb_ext.version_store import DateRangeClause as _DateRangeClause
 from arcticdb_ext.version_store import ConcatClause as _ConcatClause
+from arcticdb_ext.version_store import JoinType as _JoinType
 from arcticdb_ext.version_store import RowRangeType as _RowRangeType
 from arcticdb_ext.version_store import ExpressionName as _ExpressionName
 from arcticdb_ext.version_store import ColumnName as _ColumnName
@@ -326,7 +327,7 @@ class PythonResampleClause:
 
 @dataclass
 class PythonConcatClause:
-    pass
+    join: str
 
 
 class QueryBuilder:
@@ -910,9 +911,11 @@ class QueryBuilder:
         self._python_clauses = self._python_clauses + [PythonDateRangeClause(start.value, end.value)]
         return self
 
-    def concat(self):
-        self.clauses = self.clauses + [_ConcatClause()]
-        self._python_clauses = self._python_clauses + [PythonConcatClause()]
+    def concat(self, join: str = "outer"):
+        join_lowercase = join.lower()
+        check(join_lowercase in ["outer", "inner"], f"concat 'join' argument must be one of 'outer' or 'inner', received {join}")
+        self.clauses = self.clauses + [_ConcatClause(_JoinType.OUTER if join_lowercase == "outer" else _JoinType.INNER)]
+        self._python_clauses = self._python_clauses + [PythonConcatClause(join_lowercase)]
         return self
 
     def __eq__(self, right):
@@ -977,7 +980,7 @@ class QueryBuilder:
             elif isinstance(python_clause, PythonDateRangeClause):
                 self.clauses = self.clauses + [_DateRangeClause(python_clause.start, python_clause.end)]
             elif isinstance(python_clause, PythonConcatClause):
-                self.clauses = self.clauses + [_ConcatClause()]
+                self.clauses = self.clauses + [_ConcatClause(_JoinType.OUTER if python_clause.join == "outer" else _JoinType.INNER)]
             else:
                 raise ArcticNativeException(
                     f"Unrecognised clause type {type(python_clause)} when unpickling QueryBuilder"
