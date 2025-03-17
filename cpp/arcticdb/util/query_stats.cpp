@@ -10,7 +10,11 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/log/log.hpp>
 
+#include <pybind11/pybind11.h>
+
 namespace arcticdb::util::query_stats {
+
+namespace py = pybind11;
 
 std::shared_ptr<GroupingLevel> QueryStats::current_level(){
     // current_level_ != nullptr && root_level_ != nullptr -> stats has been setup; Nothing to do
@@ -123,7 +127,25 @@ bool QueryStats::is_enabled() const {
     return is_enabled_;
 }
 
-StatsGroup::StatsGroup(bool log_time, GroupName col, const std::string& value) : 
+std::string get_runtime_arcticdb_call(const std::string& default_arcticdb_call){
+    // Inside your C++ function
+    py::object traceback_module = py::module::import("traceback");
+    py::object stack_summary = traceback_module.attr("extract_stack")();
+
+    // Extract last 1 or 2 frames based on list size
+    std::string func_name = default_arcticdb_call;
+    for (size_t i = std::min(py::len(stack_summary), size_t(2)); i > 0 ; i--) 
+    {
+        py::object relevant_frame = stack_summary.attr("__getitem__")(py::len(stack_summary) - i);
+        std::string filename = py::cast<std::string>(relevant_frame.attr("filename"));
+        if (filename.rfind("arcticdb/version_store/_store.py") == 0 || filename.rfind("arcticdb/version_store/library.py")) {
+            func_name = py::cast<std::string>(relevant_frame.attr("name"));
+        }
+    }
+    return func_name;
+}
+
+StatsGroup::StatsGroup(bool log_time, GroupName col, const std::string& default_value) : 
         prev_level_(QueryStats::instance().current_level()),
         start_(std::chrono::high_resolution_clock::now()),
         log_time_(log_time) {
@@ -132,6 +154,10 @@ StatsGroup::StatsGroup(bool log_time, GroupName col, const std::string& value) :
         col == GroupName::arcticdb_call,
         "Root of query stats map should always be set to arcticdb_call");
     auto& next_level_map = prev_level_->next_level_maps_[static_cast<size_t>(col)];
+    std::string value = default_value;
+    if (col == GroupName::arcticdb_call) {
+        value = get_runtime_arcticdb_call(default_value);
+    }
     if (next_level_map.find(value) == next_level_map.end()) {
         next_level_map[value] = std::make_shared<GroupingLevel>();
     }

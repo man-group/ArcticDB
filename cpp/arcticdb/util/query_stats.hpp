@@ -71,7 +71,6 @@
 #include <ctime>
 #include <chrono>
 #include <array>
-#include <fmt/format.h>
 
 #include <arcticdb/entity/key.hpp>
 
@@ -139,7 +138,7 @@ private:
 // function-local object so the additional info will be removed from the stack when the info object gets detroyed
 class StatsGroup {
 public:
-    StatsGroup(bool log_time, GroupName col, const std::string& value);
+    StatsGroup(bool log_time, GroupName col, const std::string& default_value);
     ~StatsGroup();
 private:
     std::shared_ptr<GroupingLevel> prev_level_;
@@ -157,7 +156,7 @@ std::string format_group_value(GroupName col_value, auto&& value) {
         return arcticdb::entity::get_key_description(value);
     }
     else {
-        return fmt::format("{}", std::forward<decltype(value)>(value));
+        return std::forward<decltype(value)>(value);
     }
 }
 

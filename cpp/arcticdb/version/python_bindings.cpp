@@ -519,62 +519,121 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
 
     py::class_<PythonVersionStore>(version, "PythonVersionStore")
         .def(py::init([](const std::shared_ptr<storage::Library>& library, std::optional<std::string>) {
-                return PythonVersionStore(library);
-             }),
-             py::arg("library"),
-             py::arg("license_key") = std::nullopt)
+            return PythonVersionStore(library);
+            }),
+            py::arg("library"),
+            py::arg("license_key") = std::nullopt)
         .def("write_partitioned_dataframe",
-             &PythonVersionStore::write_partitioned_dataframe, 
-             py::call_guard<SingleThreadMutexHolder>(), "Write a dataframe to the store")
+            [](PythonVersionStore& v, const StreamId& stream_id, const py::tuple &item, const py::object &norm_meta, const std::vector<std::string>& partition_value) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "write_partitioned_dataframe")
+                return v.write_partitioned_dataframe(stream_id, item, norm_meta, partition_value);
+            }, 
+            py::call_guard<SingleThreadMutexHolder>(), "Write a dataframe to the store")
         .def("delete_snapshot",
-             &PythonVersionStore::delete_snapshot,
+            [](PythonVersionStore& v, const SnapshotId& snap_name) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "delete_snapshot")
+                v.delete_snapshot(snap_name);
+            },
              py::call_guard<SingleThreadMutexHolder>(), "Delete snapshot from store")
         .def("delete",
-             &PythonVersionStore::delete_all_versions,
-             py::call_guard<SingleThreadMutexHolder>(), "Delete all versions of the given symbol")
+            [](PythonVersionStore& v, const StreamId& stream_id) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "delete")
+                v.delete_all_versions(stream_id);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Delete all versions of the given symbol")
         .def("delete_range",
-             &PythonVersionStore::delete_range,
-             py::call_guard<SingleThreadMutexHolder>(), "Delete the date range from the symbol")
+            [](PythonVersionStore& v, const StreamId& stream_id, const UpdateQuery& query, bool dynamic_schema, bool prune_previous_versions) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "delete_range")
+                return v.delete_range(stream_id, query, dynamic_schema, prune_previous_versions);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Delete the date range from the symbol")
         .def("delete_version",
-             &PythonVersionStore::delete_version,
-             py::call_guard<SingleThreadMutexHolder>(), "Delete specific version of the given symbol")
+            [](PythonVersionStore& v, const StreamId& stream_id, VersionId version_id) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "delete_version")
+                v.delete_version(stream_id, version_id);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Delete specific version of the given symbol")
          .def("prune_previous_versions",
-              &PythonVersionStore::prune_previous_versions,
-              py::call_guard<SingleThreadMutexHolder>(), "Delete all but the latest version of the given symbol")
+            [](PythonVersionStore& v, const StreamId& stream_id) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "prune_previous_versions")
+                v.prune_previous_versions(stream_id);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Delete all but the latest version of the given symbol")
         .def("sort_index",
-             &PythonVersionStore::sort_index,
-             py::call_guard<SingleThreadMutexHolder>(), "Sort the index of a time series whose segments are internally sorted")
+            [](PythonVersionStore& v, const StreamId& stream_id, bool dynamic_schema, bool prune_previous_versions) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "sort_index")
+                return v.sort_index(stream_id, dynamic_schema, prune_previous_versions);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Sort the index of a time series whose segments are internally sorted")
         .def("append",
-             &PythonVersionStore::append,
-             py::call_guard<SingleThreadMutexHolder>(), "Append a dataframe to the most recent version")
+            [](PythonVersionStore& v, const StreamId& stream_id, const py::tuple &item, const py::object &norm, const py::object & user_meta, bool upsert, bool prune_previous_versions, bool validate_index) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "append")
+                return v.append(stream_id, item, norm, user_meta, upsert, prune_previous_versions, validate_index);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Append a dataframe to the most recent version")
         .def("append_incomplete",
-             &PythonVersionStore::append_incomplete,
-             py::call_guard<SingleThreadMutexHolder>(), "Append a partial dataframe to the most recent version")
+            [](PythonVersionStore& v, const StreamId& stream_id, const py::tuple &item, const py::object &norm, const py::object & user_meta, bool validate_index) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "append_incomplete")
+                v.append_incomplete(stream_id, item, norm, user_meta, validate_index);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Append a partial dataframe to the most recent version")
          .def("write_parallel",
-             &PythonVersionStore::write_parallel,
-             py::call_guard<SingleThreadMutexHolder>(), "Append to a symbol in parallel")
+            [](PythonVersionStore& v, const StreamId& stream_id, const py::tuple& item, const py::object& norm, bool validate_index, bool sort_on_index, std::optional<std::vector<std::string>> sort_columns) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "write_parallel")
+                v.write_parallel(stream_id, item, norm, validate_index, sort_on_index, sort_columns);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Append to a symbol in parallel")
          .def("write_metadata",
-             &PythonVersionStore::write_metadata,
-             py::call_guard<SingleThreadMutexHolder>(), "Create a new version with new metadata and data from the last version")
+            [](PythonVersionStore& v, const StreamId& stream_id, const py::object & user_meta, bool prune_previous_versions) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "write_metadata")
+                return v.write_metadata(stream_id, user_meta, prune_previous_versions);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Create a new version with new metadata and data from the last version")
         .def("create_column_stats_version",
-             &PythonVersionStore::create_column_stats_version,
-             py::call_guard<SingleThreadMutexHolder>(), "Create column stats")
+            [](PythonVersionStore& v, const StreamId& stream_id, ColumnStats& column_stats, const VersionQuery& version_query) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "create_column_stats_version")
+                v.create_column_stats_version(stream_id, column_stats, version_query);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Create column stats")
         .def("drop_column_stats_version",
-             &PythonVersionStore::drop_column_stats_version,
-             py::call_guard<SingleThreadMutexHolder>(), "Drop column stats")
+            [](PythonVersionStore& v, const StreamId& stream_id, const std::optional<ColumnStats>& column_stats_to_drop, const VersionQuery& version_query) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "drop_column_stats_version")
+                v.drop_column_stats_version(stream_id, column_stats_to_drop, version_query);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Drop column stats")
         .def("read_column_stats_version",
-             [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query){
-                 return adapt_read_df(v.read_column_stats_version(sid, version_query));
-             },
-             py::call_guard<SingleThreadMutexHolder>(), "Read the column stats")
+            [&](PythonVersionStore& v, StreamId stream_id, const VersionQuery& version_query){
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "read_column_stats_version")
+                return adapt_read_df(v.read_column_stats_version(stream_id, version_query));
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Read the column stats")
         .def("get_column_stats_info_version",
-             &PythonVersionStore::get_column_stats_info_version,
-             py::call_guard<SingleThreadMutexHolder>(), "Get info about column stats")
+            [](PythonVersionStore& v, const StreamId& stream_id, const VersionQuery& version_query) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "get_column_stats_info_version")
+                return v.get_column_stats_info_version(stream_id, version_query);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Get info about column stats")
          .def("remove_incomplete",
-             &PythonVersionStore::remove_incomplete,
-             py::call_guard<SingleThreadMutexHolder>(), "Delete incomplete segments")
+            [](PythonVersionStore& v, const StreamId& stream_id) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "remove_incomplete")
+                return v.remove_incomplete(stream_id);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Delete incomplete segments")
          .def("compact_incomplete",
-             &PythonVersionStore::compact_incomplete,
+            [](PythonVersionStore& v, 
+            const StreamId& stream_id,
+            bool append,
+            bool convert_int_to_float,
+            bool via_iteration,
+            bool sparsify,
+            const std::optional<py::object>& user_meta,
+            bool prune_previous_versions,
+            bool validate_index,
+            bool delete_staged_data_on_failure) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "compact_incomplete")
+                return v.compact_incomplete(stream_id, append, convert_int_to_float, via_iteration, sparsify, user_meta,
+                                        prune_previous_versions, validate_index, delete_staged_data_on_failure);
+            },
              py::arg("stream_id"),
              py::arg("append"),
              py::arg("convert_int_to_float"),
@@ -586,7 +645,19 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::arg("delete_staged_data_on_failure") = false,
              py::call_guard<SingleThreadMutexHolder>(), "Compact incomplete segments")
          .def("sort_merge",
-             &PythonVersionStore::sort_merge,
+            [](PythonVersionStore& v,
+            const StreamId& stream_id,
+            const py::object& user_meta,
+            bool append,
+            bool convert_int_to_float,
+            bool via_iteration,
+            bool sparsify,
+            bool prune_previous_versions,
+            bool delete_staged_data_on_failure) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "sort_merge")
+                return v.sort_merge(stream_id, user_meta, append, convert_int_to_float, via_iteration, 
+                                sparsify, prune_previous_versions, delete_staged_data_on_failure);
+             },
              py::arg("stream_id"),
              py::arg("user_meta") = std::nullopt,
              py::arg("append") = false,
@@ -597,128 +668,247 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::arg("delete_staged_data_on_failure") = false,
              py::call_guard<SingleThreadMutexHolder>(), "sort_merge will sort and merge incomplete segments. The segments do not have to be ordered - incomplete segments can contain interleaved time periods but the final result will be fully ordered")
         .def("compact_library",
-             &PythonVersionStore::compact_library,
-             py::call_guard<SingleThreadMutexHolder>(), "Compact the whole library wherever necessary")
+            [](PythonVersionStore& v, size_t batch_size) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "compact_library")
+                v.compact_library(batch_size);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Compact the whole library wherever necessary")
         .def("is_symbol_fragmented",
-             &PythonVersionStore::is_symbol_fragmented,
-             py::call_guard<SingleThreadMutexHolder>(), "Check if there are enough small data segments which can be compacted")
+            [](PythonVersionStore& v, const StreamId& stream_id, std::optional<size_t> segment_size) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "is_symbol_fragmented")
+                return v.is_symbol_fragmented(stream_id, segment_size);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Check if there are enough small data segments which can be compacted")
         .def("defragment_symbol_data",
-             &PythonVersionStore::defragment_symbol_data,
-             py::call_guard<SingleThreadMutexHolder>(), "Compact small data segments into larger data segments")
+            [](PythonVersionStore& v, const StreamId& stream_id, std::optional<size_t> segment_size, bool prune_previous_versions) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "defragment_symbol_data")
+                return v.defragment_symbol_data(stream_id, segment_size, prune_previous_versions);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Compact small data segments into larger data segments")
         .def("get_incomplete_symbols",
-             &PythonVersionStore::get_incomplete_symbols,
-             py::call_guard<SingleThreadMutexHolder>(), "Get all the symbols that have incomplete entries")
+            [](PythonVersionStore& v) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "get_incomplete_symbols")
+                return v.get_incomplete_symbols();
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Get all the symbols that have incomplete entries")
         .def("get_incomplete_refs",
-             &PythonVersionStore::get_incomplete_refs,
-             py::call_guard<SingleThreadMutexHolder>(), "Get all the symbols that have incomplete entries")
+            [](PythonVersionStore& v) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "get_incomplete_refs")
+                return v.get_incomplete_refs();
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Get all the symbols that have incomplete entries")
         .def("get_active_incomplete_refs",
-             &PythonVersionStore::get_active_incomplete_refs,
-             py::call_guard<SingleThreadMutexHolder>(), "Get all the symbols that have incomplete entries and some appended data")
+            [](PythonVersionStore& v) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "get_active_incomplete_refs")
+                return v.get_active_incomplete_refs();
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Get all the symbols that have incomplete entries and some appended data")
         .def("update",
-             &PythonVersionStore::update,
-             py::call_guard<SingleThreadMutexHolder>(), "Update the most recent version of a dataframe")
-       .def("indexes_sorted",
-             &PythonVersionStore::indexes_sorted,
-             py::call_guard<SingleThreadMutexHolder>(), "Returns the sorted indexes of a symbol")
+            [](PythonVersionStore& v, const StreamId &stream_id, const UpdateQuery &query, const py::tuple &item, 
+            const py::object &norm, const py::object &user_meta, bool upsert, bool dynamic_schema, bool prune_previous_versions) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "update")
+                return v.update(stream_id, query, item, norm, user_meta, upsert, dynamic_schema, prune_previous_versions);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Update the most recent version of a dataframe")
+        .def("indexes_sorted",
+            [](PythonVersionStore& v, const StreamId& stream_id) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "indexes_sorted")
+                return v.indexes_sorted(stream_id);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Returns the sorted indexes of a symbol")
         .def("snapshot",
-             &PythonVersionStore::snapshot,
-             py::call_guard<SingleThreadMutexHolder>(), "Create a snapshot")
+            [](PythonVersionStore& v,
+                const SnapshotId &snap_name,
+                const py::object &user_meta,
+                const std::vector<StreamId> &skip_symbols,
+                std::map<StreamId, VersionId> &versions,
+                bool allow_partial_snapshot) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "snapshot");
+                return v.snapshot(snap_name, user_meta, skip_symbols, versions, allow_partial_snapshot);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Create a snapshot")
         .def("list_snapshots",
-             &PythonVersionStore::list_snapshots,
-             py::call_guard<SingleThreadMutexHolder>(), "List all snapshots")
+            [](PythonVersionStore& v, std::optional<bool> load_metadata) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "list_snapshots")
+                return v.list_snapshots(load_metadata);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "List all snapshots")
         .def("add_to_snapshot",
-             &PythonVersionStore::add_to_snapshot,
-             py::call_guard<SingleThreadMutexHolder>(), "Add an item to a snapshot")
+            [](PythonVersionStore& v, const SnapshotId& snap_name, const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "add_to_snapshot")
+                v.add_to_snapshot(snap_name, stream_ids, version_queries);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Add an item to a snapshot")
         .def("remove_from_snapshot",
-             &PythonVersionStore::remove_from_snapshot,
+            [](PythonVersionStore& v, const SnapshotId& snap_name, const std::vector<StreamId>& stream_ids, const std::vector<VersionId>& version_ids) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "remove_from_snapshot")
+                v.remove_from_snapshot(snap_name, stream_ids, version_ids);
+            },
             py::call_guard<SingleThreadMutexHolder>(),  "Remove an item from a snapshot")
         .def("clear",
-             &PythonVersionStore::clear,
-             py::arg("continue_on_error") = true,
-             py::call_guard<SingleThreadMutexHolder>(), "Delete everything. Don't use this unless you want to delete everything")
+            [](PythonVersionStore& v, const bool continue_on_error) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "clear")
+                v.clear(continue_on_error);
+            },
+            py::arg("continue_on_error") = true,
+            py::call_guard<SingleThreadMutexHolder>(), "Delete everything. Don't use this unless you want to delete everything")
         .def("empty",
-             &PythonVersionStore::empty,
-             py::call_guard<SingleThreadMutexHolder>(), "Deprecated - prefer is_empty_excluding_key_types. Returns True "
-                                                        "if there are no keys other than those of the excluded types in "
+            [](PythonVersionStore& v) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "empty")
+                return v.empty();
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Deprecated - prefer is_empty_excluding_key_types. Returns True "
+                                                    "if there are no keys other than those of the excluded types in "
                                                         "the library, and False otherwise")
         .def("is_empty_excluding_key_types",
-             &PythonVersionStore::is_empty_excluding_key_types,
-             py::arg("excluded_key_types"),
-             py::call_guard<SingleThreadMutexHolder>(), "Returns True if there are no keys other than those of the "
-                                                        "excluded types in the library, and False otherwise")
+            [](PythonVersionStore& v, const std::vector<KeyType>& excluded_key_types) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "is_empty_excluding_key_types")
+                return v.is_empty_excluding_key_types(excluded_key_types);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Returns True if there are no keys other than those of the "
+                                                    "excluded types in the library, and False otherwise")
         .def("force_delete_symbol",
-             &PythonVersionStore::force_delete_symbol,
-             py::call_guard<SingleThreadMutexHolder>(), "Delete everything. Don't use this unless you want to delete everything")
+            [](PythonVersionStore& v, const StreamId& stream_id) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "force_delete_symbol")
+                v.force_delete_symbol(stream_id);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Delete everything. Don't use this unless you want to delete everything")
         .def("_get_all_tombstoned_versions",
-             &PythonVersionStore::get_all_tombstoned_versions,
-             py::call_guard<SingleThreadMutexHolder>(), "Get a list of all the versions for a symbol which are tombstoned")
+            [](PythonVersionStore& v, const StreamId& stream_id) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "_get_all_tombstoned_versions")
+                return v.get_all_tombstoned_versions(stream_id);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Get a list of all the versions for a symbol which are tombstoned")
         .def("delete_storage",
-             &PythonVersionStore::delete_storage,
-             py::arg("continue_on_error") = true,
-             py::call_guard<SingleThreadMutexHolder>(), "Delete everything. Don't use this unless you want to delete everything")
+            [](PythonVersionStore& v, const bool continue_on_error) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "delete_storage")
+                v.delete_storage(continue_on_error);
+            },
+            py::arg("continue_on_error") = true,
+            py::call_guard<SingleThreadMutexHolder>(), "Delete everything. Don't use this unless you want to delete everything")
         .def("write_versioned_dataframe",
-             &PythonVersionStore::write_versioned_dataframe,
-             py::call_guard<SingleThreadMutexHolder>(), "Write the most recent version of this dataframe to the store")
+            [](PythonVersionStore& v, const StreamId& stream_id, const py::tuple& item, const py::object& norm, const py::object& user_meta, bool prune_previous_versions, bool allow_sparse, bool validate_index) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "write_versioned_dataframe")
+                return v.write_versioned_dataframe(stream_id, item, norm, user_meta, prune_previous_versions, allow_sparse, validate_index);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Write the most recent version of this dataframe to the store")
         .def("write_versioned_composite_data",
-             &PythonVersionStore::write_versioned_composite_data,
-             py::call_guard<SingleThreadMutexHolder>(), "Allows the user to write multiple dataframes in a batch with one version entity")
+            [](PythonVersionStore& v, const StreamId& stream_id, const py::object& metastruct, const std::vector<StreamId>& sub_keys,
+            const std::vector<py::tuple>& items, const std::vector<py::object>& norm_metas, const py::object& user_meta, bool prune_previous_versions) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "write_versioned_composite_data")
+                return v.write_versioned_composite_data(stream_id, metastruct, sub_keys, items, norm_metas, user_meta, prune_previous_versions);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Allows the user to write multiple dataframes in a batch with one version entity")
         .def("write_dataframe_specific_version",
-            &PythonVersionStore::write_dataframe_specific_version,
-             py::call_guard<SingleThreadMutexHolder>(), "Write a specific  version of this dataframe to the store")
+            [](PythonVersionStore& v, const StreamId& stream_id, const py::tuple& item, const py::object& norm, const py::object& user_meta, VersionId version_id) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "write_dataframe_specific_version")
+                return v.write_dataframe_specific_version(stream_id, item, norm, user_meta, version_id);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Write a specific version of this dataframe to the store")
         .def("read_dataframe_version",
-             [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options) {
-                auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
-                return adapt_read_df(v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data));
-              },
-             py::call_guard<SingleThreadMutexHolder>(),
-             "Read the specified version of the dataframe from the store")
+            [&](PythonVersionStore& v, const StreamId& sid, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options) {
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "read_dataframe_version")
+            auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
+            return adapt_read_df(v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data));
+            },
+            py::call_guard<SingleThreadMutexHolder>(),
+            "Read the specified version of the dataframe from the store")
          .def("read_index",
-             [&](PythonVersionStore& v, StreamId sid, const VersionQuery& version_query){
-                 return adapt_read_df(v.read_index(sid, version_query));
-             },
-             py::call_guard<SingleThreadMutexHolder>(), "Read the most recent dataframe from the store")
+            [&](PythonVersionStore& v, const StreamId& sid, const VersionQuery& version_query){
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "read_index")
+                return adapt_read_df(v.read_index(sid, version_query));
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Read the most recent dataframe from the store")
          .def("get_update_time",
-              &PythonVersionStore::get_update_time,
-             py::call_guard<SingleThreadMutexHolder>(), "Get the most recent update time for the stream ids")
+            [](PythonVersionStore& v, const StreamId& stream_id, const VersionQuery& version_query) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "get_update_time")
+                return v.get_update_time(stream_id, version_query);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Get the most recent update time for the stream ids")
          .def("get_update_times",
-              &PythonVersionStore::get_update_times,
-             py::call_guard<SingleThreadMutexHolder>(), "Get the most recent update time for a list of stream ids")
+            [](PythonVersionStore& v, const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "get_update_times")
+                return v.get_update_times(stream_ids, version_queries);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Get the most recent update time for a list of stream ids")
          .def("scan_object_sizes",
-              &PythonVersionStore::scan_object_sizes,
-              py::call_guard<SingleThreadMutexHolder>(),
-              "Scan the compressed sizes of all objects in the library. Sizes are in bytes. Returns a dict "
-              "{KeyType: KeySizesInfo}")
+            [](PythonVersionStore& v) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "scan_object_sizes")
+                return v.scan_object_sizes();
+            },
+            py::call_guard<SingleThreadMutexHolder>(),
+            "Scan the compressed sizes of all objects in the library. Sizes are in bytes. Returns a dict "
+            "{KeyType: KeySizesInfo}")
         .def("scan_object_sizes_by_stream",
-             &PythonVersionStore::scan_object_sizes_by_stream,
-             py::call_guard<SingleThreadMutexHolder>(),
-             "Scan the compressed sizes of all objects in the library, grouped by stream ID and KeyType. Sizes are in bytes. "
-             "Returns a dict {symbol_id: {KeyType: KeySizesInfo}")
+            [](PythonVersionStore& v) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "scan_object_sizes_by_stream")
+                return v.scan_object_sizes_by_stream();
+            },
+            py::call_guard<SingleThreadMutexHolder>(),
+            "Scan the compressed sizes of all objects in the library, grouped by stream ID and KeyType. Sizes are in bytes. "
+            "Returns a dict {symbol_id: {KeyType: KeySizesInfo}")
         .def("find_version",
-             &PythonVersionStore::get_version_to_read,
-             py::call_guard<SingleThreadMutexHolder>(), "Check if a specific stream has been written to previously")
+            [](PythonVersionStore& v, const StreamId& stream_id, const VersionQuery& version_query) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "find_version")
+                return v.get_version_to_read(stream_id, version_query);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Check if a specific stream has been written to previously")
         .def("list_streams",
-             &PythonVersionStore::list_streams,
-             py::call_guard<SingleThreadMutexHolder>(), "List all the stream ids that have been written")
+            [](PythonVersionStore& v,
+                const std::optional<SnapshotId>& snap_name = std::nullopt,
+                const std::optional<std::string>& regex = std::nullopt,
+                const std::optional<std::string>& prefix = std::nullopt,
+                const std::optional<bool>& use_symbol_list = std::nullopt,
+                const std::optional<bool>& all_symbols = std::nullopt) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "list_streams");
+                return v.list_streams(snap_name, regex, prefix, use_symbol_list, all_symbols);
+            },
+            py::arg("snap_name") = std::nullopt,
+            py::arg("regex") = std::nullopt,
+            py::arg("prefix") = std::nullopt,
+            py::arg("use_symbol_list") = std::nullopt,
+            py::arg("all_symbols") = std::nullopt,
+            py::call_guard<SingleThreadMutexHolder>(), 
+            "List all the stream ids that have been written")
         .def("compact_symbol_list",
-             &PythonVersionStore::compact_symbol_list,
-             py::call_guard<SingleThreadMutexHolder>(), "Compacts the symbol list cache into a single key in the storage")
+            [](PythonVersionStore& v) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "compact_symbol_list")
+                return v.compact_symbol_list();
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Compacts the symbol list cache into a single key in the storage")
         .def("read_metadata",
-             &PythonVersionStore::read_metadata,
-             py::call_guard<SingleThreadMutexHolder>(), "Get back the metadata and version info for a symbol.")
+            [](PythonVersionStore& v, const StreamId& stream_id, const VersionQuery& version_query) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "read_metadata")
+                return v.read_metadata(stream_id, version_query);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Get back the metadata and version info for a symbol.")
          .def("fix_symbol_trees",
-             &PythonVersionStore::fix_symbol_trees,
-             py::call_guard<SingleThreadMutexHolder>(), "Regenerate symbol tree by adding indexes from snapshots")
+            [](PythonVersionStore& v, const std::vector<StreamId>& symbols) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "fix_symbol_trees")
+                v.fix_symbol_trees(symbols);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Regenerate symbol tree by adding indexes from snapshots")
          .def("flush_version_map",
-             &PythonVersionStore::flush_version_map,
-             py::call_guard<SingleThreadMutexHolder>(), "Flush the version cache")
+            [](PythonVersionStore& v) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "flush_version_map")
+                v.flush_version_map();
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Flush the version cache")
         .def("read_descriptor",
-             &PythonVersionStore::read_descriptor,
-             py::call_guard<SingleThreadMutexHolder>(), "Get back the descriptor for a symbol.")
+            [](PythonVersionStore& v, const StreamId& stream_id, const VersionQuery& version_query) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "read_descriptor")
+                return v.read_descriptor(stream_id, version_query);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Get back the descriptor for a symbol.")
         .def("batch_read_descriptor",
-             &PythonVersionStore::batch_read_descriptor,
-             py::call_guard<SingleThreadMutexHolder>(), "Get back the descriptor of a list of symbols.")
+            [](PythonVersionStore& v, const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries, const ReadOptions& read_options) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "batch_read_descriptor")
+                return v.batch_read_descriptor(stream_ids, version_queries, read_options);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Get back the descriptor of a list of symbols.")
         .def("restore_version",
-             [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, const ReadOptions& read_options) {
+            [&](PythonVersionStore& v, StreamId sid, const VersionQuery& version_query, const ReadOptions& read_options) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "restore_version")
                 auto [vit, tsd] = v.restore_version(sid, version_query);
                 const auto& tsd_proto = tsd.proto();
                 ReadResult res{
@@ -731,80 +921,158 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                         std::vector<entity::AtomKey>{}
                 };
                 return adapt_read_df(std::move(res)); },
-             py::call_guard<SingleThreadMutexHolder>(), "Restore a previous version of a symbol.")
+            py::call_guard<SingleThreadMutexHolder>(), "Restore a previous version of a symbol.")
         .def("check_ref_key",
-             &PythonVersionStore::check_ref_key,
-             py::call_guard<SingleThreadMutexHolder>(), "Fix reference keys.")
+            [](PythonVersionStore& v, StreamId stream_id) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "check_ref_key")
+                return v.check_ref_key(stream_id);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Fix reference keys.")
         .def("dump_versions",
-             &PythonVersionStore::dump_versions,
-             py::call_guard<SingleThreadMutexHolder>(), "Dump version data.")
+            [](PythonVersionStore& v, const StreamId& stream_id) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "dump_versions")
+                return v.dump_versions(stream_id);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Dump version data.")
         .def("_set_validate_version_map",
-             &PythonVersionStore::_test_set_validate_version_map,
-             py::call_guard<SingleThreadMutexHolder>(), "Validate the version map.")
+            [](PythonVersionStore& v) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "_set_validate_version_map")
+                v._test_set_validate_version_map();
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Validate the version map.")
         .def("_clear_symbol_list_keys",
-             &PythonVersionStore::_clear_symbol_list_keys,
-             py::call_guard<SingleThreadMutexHolder>(), "Delete all ref keys of type SYMBOL_LIST.")
+            [](PythonVersionStore& v) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "clear_symbol_list_keys")
+                v._clear_symbol_list_keys();
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Delete all ref keys of type SYMBOL_LIST.")
         .def("reload_symbol_list",
-             &PythonVersionStore::reload_symbol_list,
+            [](PythonVersionStore& v) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "reload_symbol_list")
+                v.reload_symbol_list();
+            },
             py::call_guard<SingleThreadMutexHolder>(),  "Regenerate symbol list for library.")
         .def("write_partitioned_dataframe",
-             &PythonVersionStore::write_partitioned_dataframe,
-             py::call_guard<SingleThreadMutexHolder>(), "Write a dataframe and partition it into sub symbols using partition key")
+            [](PythonVersionStore& v,
+                const StreamId& stream_id,
+                const py::tuple &item,
+                const py::object &norm_meta,
+                const std::vector<std::string>& partition_cols) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "write_partitioned_dataframe")
+                v.write_partitioned_dataframe(stream_id, item, norm_meta, partition_cols);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Write a dataframe and partition it into sub symbols using partition key")
         .def("fix_ref_key",
-             &PythonVersionStore::fix_ref_key,
-             py::call_guard<SingleThreadMutexHolder>(), "Fix reference keys.")
+            [](PythonVersionStore& v, StreamId stream_id) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "fix_ref_key")
+                v.fix_ref_key(stream_id);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Fix reference keys.")
         .def("remove_and_rewrite_version_keys",
-             &PythonVersionStore::remove_and_rewrite_version_keys,
-             py::call_guard<SingleThreadMutexHolder>(), "Remove all version keys and rewrite all indexes - useful in case a version has been tombstoned but not deleted")
+            [](PythonVersionStore& v, StreamId stream_id) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "remove_and_rewrite_version_keys")
+                v.remove_and_rewrite_version_keys(stream_id);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Remove all version keys and rewrite all indexes - useful in case a version has been tombstoned but not deleted")
         .def("force_release_lock",
-             &PythonVersionStore::force_release_lock,
-             py::call_guard<SingleThreadMutexHolder>(), "Force release a lock.")
+            [](PythonVersionStore& v, const StreamId& name) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "force_release_lock")
+                v.force_release_lock(name);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Force release a lock.")
         .def("batch_read",
              [&](PythonVersionStore& v,
                  const std::vector<StreamId> &stream_ids,
                  const std::vector<VersionQuery>& version_queries,
                  std::vector<std::shared_ptr<ReadQuery>>& read_queries,
                  const ReadOptions& read_options){
+                 QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "batch_read")
                  auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
                  return python_util::adapt_read_dfs(v.batch_read(stream_ids, version_queries, read_queries, read_options));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
         .def("batch_read_keys",
              [&](PythonVersionStore& v, std::vector<AtomKey> atom_keys) {
+                 QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "batch_read_keys")
                  return python_util::adapt_read_dfs(frame_to_read_result(v.batch_read_keys(atom_keys)));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a specific version of a dataframe from the store")
         .def("batch_write",
-             &PythonVersionStore::batch_write,
-             py::call_guard<SingleThreadMutexHolder>(), "Batch write latest versions of multiple symbols.")
+            [](PythonVersionStore& v,
+                const std::vector<StreamId>& stream_ids,
+                const std::vector<py::tuple> &items,
+                const std::vector<py::object> &norms,
+                const std::vector<py::object> &user_metas,
+                bool prune_previous_versions,
+                bool validate_index,
+                bool throw_on_error) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "batch_write")
+                return v.batch_write(stream_ids, items, norms, user_metas, prune_previous_versions, validate_index, throw_on_error);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Batch write latest versions of multiple symbols.")
         .def("batch_read_metadata",
-             &PythonVersionStore::batch_read_metadata,
-             py::call_guard<SingleThreadMutexHolder>(), "Batch read the metadata of a list of symbols for the latest version")
+            [](PythonVersionStore& v,
+                const std::vector<StreamId>& stream_ids,
+                const std::vector<VersionQuery>& version_queries,
+                const ReadOptions& read_options) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "batch_read_metadata")
+                return v.batch_read_metadata(stream_ids, version_queries, read_options);
+             },
+            py::call_guard<SingleThreadMutexHolder>(), "Batch read the metadata of a list of symbols for the latest version")
         .def("batch_write_metadata",
-             &PythonVersionStore::batch_write_metadata,
-             py::call_guard<SingleThreadMutexHolder>(), "Batch write the metadata of a list of symbols")
+            [](PythonVersionStore& v,
+                const std::vector<StreamId>& stream_ids,
+                const std::vector<py::object>& user_meta,
+                bool prune_previous_versions,
+                bool throw_on_error) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "batch_write_metadata")
+                return v.batch_write_metadata(stream_ids, user_meta, prune_previous_versions, throw_on_error);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Batch write the metadata of a list of symbols")
         .def("batch_append",
-             &PythonVersionStore::batch_append,
-             py::call_guard<SingleThreadMutexHolder>(), "Batch append to a list of symbols")
+            [](PythonVersionStore& v,
+                const std::vector<StreamId> &stream_ids,
+                const std::vector<py::tuple> &items,
+                const std::vector<py::object> &norms,
+                const std::vector<py::object> &user_metas,
+                bool prune_previous_versions,
+                bool validate_index,
+                bool upsert,
+                bool throw_on_error) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "batch_append")
+                return v.batch_append(stream_ids, items, norms, user_metas, prune_previous_versions, validate_index, upsert, throw_on_error);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Batch append to a list of symbols")
         .def("batch_update",
-             &PythonVersionStore::batch_update,
-             py::call_guard<SingleThreadMutexHolder>(), "Batch update a list of symbols")
+            [](PythonVersionStore& v,
+                const std::vector<StreamId>& stream_ids,
+                const std::vector<py::tuple>& items,
+                const std::vector<py::object>& norms,
+                const std::vector<py::object>& user_metas,
+                const std::vector<UpdateQuery>& update_qeries,
+                bool prune_previous_versions,
+                bool upsert) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "batch_update")
+                return v.batch_update(stream_ids, items, norms, user_metas, update_qeries, prune_previous_versions, upsert);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Batch update a list of symbols")
         .def("batch_restore_version",
              [&](PythonVersionStore& v, const std::vector<StreamId>& ids, const std::vector<VersionQuery>& version_queries, const ReadOptions& read_options){
-                 auto results = v.batch_restore_version(ids, version_queries);
-                 std::vector<py::object> output;
-                 output.reserve(results.size());
-                 for(auto& [vit, tsd] : results) {
-                     const auto& tsd_proto = tsd.proto();
-                     ReadResult res{vit, PythonOutputFrame{
-                         SegmentInMemory{tsd.as_stream_descriptor()}, read_options.output_format()},
-                                    tsd_proto.normalization(),
-                                    tsd_proto.user_meta(),
-                                    tsd_proto.multi_key_meta(), {}};
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "batch_restore_version")
+                auto results = v.batch_restore_version(ids, version_queries);
+                std::vector<py::object> output;
+                output.reserve(results.size());
+                for(auto& [vit, tsd] : results) {
+                    const auto& tsd_proto = tsd.proto();
+                    ReadResult res{vit, PythonOutputFrame{
+                        SegmentInMemory{tsd.as_stream_descriptor()}, read_options.output_format()},
+                                tsd_proto.normalization(),
+                                tsd_proto.user_meta(),
+                                tsd_proto.multi_key_meta(), {}};
 
-                     output.emplace_back(adapt_read_df(std::move(res)));
-                 }
-                 return output;
+                    output.emplace_back(adapt_read_df(std::move(res)));
+                }
+                return output;
              },
             py::call_guard<SingleThreadMutexHolder>(), "Batch restore a group of versions to the versions indicated")
         .def("list_versions",[](
@@ -812,34 +1080,53 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 const std::optional<StreamId> & s_id,
                 const std::optional<SnapshotId> & snap_id,
                 const std::optional<bool>& latest,
-                const std::optional<bool>& skip_snapshots
-                ){
-                 return v.list_versions(s_id, snap_id, latest, skip_snapshots);
-             },
-             py::call_guard<SingleThreadMutexHolder>(), "List all the version ids for this store.")
+                const std::optional<bool>& skip_snapshots) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "list_versions")
+                return v.list_versions(s_id, snap_id, latest, skip_snapshots);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "List all the version ids for this store.")
         .def("_compact_version_map",
-             &PythonVersionStore::_compact_version_map,
-             py::call_guard<SingleThreadMutexHolder>(), "Compact the version map contents for a given symbol")
+            [](PythonVersionStore& v, const StreamId& id) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "_compact_version_map")
+                v._compact_version_map(id);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Compact the version map contents for a given symbol")
         .def("get_storage_lock",
-             &PythonVersionStore::get_storage_lock,
-             py::call_guard<SingleThreadMutexHolder>(), "Get a coarse-grained storage lock in the library")
+            [](PythonVersionStore& v, const StreamId& stream_id) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "get_storage_lock")
+                return v.get_storage_lock(stream_id);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Get a coarse-grained storage lock in the library")
         .def("list_incompletes",
-             &PythonVersionStore::list_incompletes,
-             py::call_guard<SingleThreadMutexHolder>(), "List incomplete chunks for stream id")
+            [](PythonVersionStore& v, const StreamId& stream_id) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "list_incompletes")
+                return v.list_incompletes(stream_id);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "List incomplete chunks for stream id")
         .def("_get_version_history",
-             &PythonVersionStore::get_version_history,
-             py::call_guard<SingleThreadMutexHolder>(), "Returns a list of index and tombstone keys in chronological order")
+            [](PythonVersionStore& v, const StreamId& stream_id) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "_get_version_history")
+                return v.get_version_history(stream_id);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Returns a list of index and tombstone keys in chronological order")
         .def("latest_timestamp",
-             &PythonVersionStore::latest_timestamp,
-             py::call_guard<SingleThreadMutexHolder>(), "Returns latest timestamp of a symbol")
+            [](PythonVersionStore& v, const std::string& symbol) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "latest_timestamp")
+                return v.latest_timestamp(symbol);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Returns latest timestamp of a symbol")
         .def("get_store_current_timestamp_for_tests",
-             &PythonVersionStore::get_store_current_timestamp_for_tests,
-             py::call_guard<SingleThreadMutexHolder>(), "For testing purposes only")
+            [](PythonVersionStore& v) {
+                QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "get_store_current_timestamp_for_tests")
+                return v.get_store_current_timestamp_for_tests();
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "For testing purposes only")
         .def("trim",
-             [](ARCTICDB_UNUSED PythonVersionStore& v) {
+            [](ARCTICDB_UNUSED PythonVersionStore& v) {
+               QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "trim")
                Allocator::instance()->trim();
-              },
-             py::call_guard<SingleThreadMutexHolder>(), "Call trim on the native store's underlining memory allocator")
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Call trim on the native store's underlining memory allocator")
         .def_static("reuse_storage_for_testing",
             [](PythonVersionStore& from, PythonVersionStore& to) {
                 to._test_set_store(from._test_get_store());
