@@ -1226,49 +1226,49 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
         std::any& handler_data) {
     py::gil_scoped_release release_gil;
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
-    std::vector<folly::Future<std::vector<EntityId>>> symbol_entities_futs;
-    symbol_entities_futs.reserve(opt_index_key_futs.size());
+    std::vector<folly::Future<SymbolProcessingResult>> symbol_processing_result_futs;
+    symbol_processing_result_futs.reserve(opt_index_key_futs.size());
     auto component_manager = std::make_shared<ComponentManager>();
-    auto pipeline_context = std::make_shared<PipelineContext>();
-    auto norm_meta_mtx = std::make_shared<std::mutex>();
-    // TODO: Generate these in a less hacky way
-    auto res_versioned_items = std::make_shared<std::vector<VersionedItem>>(stream_ids.size());
-    auto res_metadatas = std::make_shared<std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>(stream_ids.size());
     for (auto&& [idx, opt_index_key_fut]: folly::enumerate(opt_index_key_futs)) {
-        symbol_entities_futs.emplace_back(
+        symbol_processing_result_futs.emplace_back(
                 std::move(opt_index_key_fut).thenValue([store = store(),
+                                                        &stream_ids,
+                                                        &version_queries,
                                                         read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
                                                         idx,
                                                         &read_options,
-                                                        &component_manager,
-                                                        pipeline_context,
-                                                        norm_meta_mtx,
-                                                        res_versioned_items,
-                                                        res_metadatas](auto&& opt_index_key) mutable {
+                                                        &component_manager](auto&& opt_index_key) mutable {
                     std::variant<VersionedItem, StreamId> version_info;
-                    // TODO: Add support for symbols that only have incomplete segments
-                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_index_key.has_value(), "batch_read_with_join_internal not supported with non-indexed data");
-                    // TODO: Only read the index segment once
-                    auto index_key_seg = store->read_sync(*opt_index_key).second;
-                    {
-                        std::lock_guard<std::mutex> lock(*norm_meta_mtx);
-                        // TODO: Construct this at the end of the pipeline, instead of reusing input data
-                        pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_key_seg.mutable_index_descriptor().mutable_proto().mutable_normalization()));
+                    if (opt_index_key.has_value()) {
+                        version_info = VersionedItem(std::move(*opt_index_key));
+                    } else {
+                        if (opt_false(read_options.incompletes())) {
+                            log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", stream_ids[idx]);
+                            version_info = stream_ids[idx];
+                        } else {
+                            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
+                                    "batch_read_internal: version matching query '{}' not found for symbol '{}'", version_queries[idx], stream_ids[idx]);
+                        }
                     }
-                    // Shouldn't need mutex protecting as vectors are presized and each element is only accessed once
-                    res_versioned_items->at(idx) = VersionedItem(*opt_index_key);
-                    res_metadatas->at(idx) = index_key_seg.mutable_index_descriptor().user_metadata();
-                    version_info = VersionedItem(std::move(*opt_index_key));
                     return read_entity_ids_for_version(store, version_info, read_query, read_options, component_manager);
                 })
         );
     }
-    auto entity_ids_vec_fut = folly::collect(symbol_entities_futs).via(&async::io_executor());
     for (auto& clause: clauses) {
         clause->set_component_manager(component_manager);
     }
     auto clauses_ptr = std::make_shared<std::vector<std::shared_ptr<Clause>>>(std::move(clauses));
 
+    return folly::collect(symbol_processing_result_futs).via(&async::io_executor())
+    .thenValueInline([clauses_ptr](auto&& symbol_processing_results) {
+        util::check(!clauses_ptr->empty(), "Cannot join with no joining clause provided");
+        std::vector<OutputSchema> output_schemas;
+        output_schemas.reserve(symbol_processing_results.size());
+        for (const auto& symbol_processing_result: symbol_processing_results) {
+            output_schemas.emplace_back(std::move(symbol_processing_result.output_schema_));
+        }
+        auto output_schema = clauses_ptr->front()->join_schema(std::move(output_schemas));
+    }).thenValueInline(
     return schedule_remaining_iterations(std::move(entity_ids_vec_fut), clauses_ptr, true)
     .thenValueInline([component_manager](std::vector<EntityId>&& processed_entity_ids) {
         auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));

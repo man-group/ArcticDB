@@ -2151,7 +2151,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
     });
 }
 
-folly::Future<std::vector<EntityId>> read_entity_ids_for_version(
+folly::Future<SymbolProcessingResult> read_entity_ids_for_version(
         const std::shared_ptr<Store>& store,
         const std::variant<VersionedItem, StreamId>& version_info,
         const std::shared_ptr<ReadQuery>& read_query ,
@@ -2162,6 +2162,16 @@ folly::Future<std::vector<EntityId>> read_entity_ids_for_version(
     VersionedItem res_versioned_item;
 
     if(std::holds_alternative<StreamId>(version_info)) {
+        pipeline_context->stream_id_ = std::get<StreamId>(version_info);
+        // This isn't ideal. It would be better if the version() and timestamp() methods on the C++ VersionedItem class
+        // returned optionals, but this change would bubble up to the Python VersionedItem class defined in _store.py.
+        // This class is very hard to change at this point, as users do things like pickling them to pass them around.
+        // This at least gets the symbol attribute of VersionedItem correct. The creation timestamp will be zero, which
+        // corresponds to 1970, and so with this obviously ridiculous version ID, it should be clear to users that these
+        // values are meaningless before an indexed version exists.
+        res_versioned_item = VersionedItem(AtomKeyBuilder()
+                                                   .version_id(std::numeric_limits<VersionId>::max())
+                                                   .build<KeyType::TABLE_INDEX>(std::get<StreamId>(version_info)));
         pipeline_context->stream_id_ = std::get<StreamId>(version_info);
     } else {
         pipeline_context->stream_id_ = std::get<VersionedItem>(version_info).key_.id();
@@ -2179,14 +2189,34 @@ folly::Future<std::vector<EntityId>> read_entity_ids_for_version(
     }
 
     if(std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {
-        return std::vector<EntityId>{};
+        return SymbolProcessingResult{std::move(res_versioned_item), {}, {}, {}};
     }
 
     modify_descriptor(pipeline_context, read_options);
     generate_filtered_field_descriptors(pipeline_context, read_query->columns);
+    StreamDescriptor output_stream_descriptor;
+    if (read_query->columns.has_value()) {
+        output_stream_descriptor = StreamDescriptor(
+                pipeline_context->descriptor().id(),
+                pipeline_context->descriptor().index(),
+                std::make_shared<FieldCollection>(pipeline_context->filter_columns_->clone()));
+    } else {
+        output_stream_descriptor = pipeline_context->descriptor().clone();
+    }
+    OutputSchema output_schema(std::move(output_stream_descriptor), *pipeline_context->norm_meta_);
+    for (const auto& clause: read_query->clauses_) {
+        output_schema = clause->modify_schema(std::move(output_schema));
+    }
+
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
 
-    return do_process(store, read_query, read_options, pipeline_context, component_manager);
+    return std::move(do_process(store, read_query, read_options, pipeline_context, component_manager))
+    .thenValueInline([res_versioned_item, pipeline_context, output_stream_descriptor](auto&& entity_ids) {
+        return SymbolProcessingResult{std::move(res_versioned_item),
+                                      std::move(*pipeline_context->user_meta_),
+                                      {std::move(output_stream_descriptor), std::move(*pipeline_context->norm_meta_)},
+                                      std::move(entity_ids)};
+    });
 }
 } //namespace arcticdb::version_store
 

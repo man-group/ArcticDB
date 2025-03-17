@@ -1379,6 +1379,23 @@ std::vector<EntityId> ConcatClause::process(std::vector<EntityId>&& entity_ids) 
     return std::move(entity_ids);
 }
 
+OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& output_schemas) const {
+    // TODO: Implement this properly for inner/outer options
+    // For now, just check they are all the same
+    const auto& reference_schema = output_schemas.front();
+    for (const auto& schema: output_schemas) {
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                reference_schema.stream_descriptor() == schema.stream_descriptor(),
+                "Mismatching fields in multi-symbol join"
+                );
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                reference_schema.norm_metadata_ == schema.norm_metadata_,
+                "Mismatching normalization metadata in multi-symbol join"
+        );
+    }
+    return reference_schema;
+}
+
 std::string ConcatClause::to_string() const {
     return "CONCAT";
 }

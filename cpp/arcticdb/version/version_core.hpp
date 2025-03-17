@@ -40,6 +40,13 @@ struct CompactIncompleteOptions {
     bool delete_staged_data_on_failure_{false};
 };
 
+struct SymbolProcessingResult {
+    VersionedItem versioned_item_;
+    arcticdb::proto::descriptors::UserDefinedMetadata metadata_;
+    OutputSchema output_schema_;
+    std::vector<EntityId> entity_ids_;
+};
+
 struct ReadVersionOutput {
     ReadVersionOutput() = delete;
     ReadVersionOutput(VersionedItem&& versioned_item, FrameAndDescriptor&& frame_and_descriptor):
@@ -241,7 +248,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
     std::any& handler_data
 );
 
-folly::Future<std::vector<EntityId>> read_entity_ids_for_version(
+folly::Future<SymbolProcessingResult> read_entity_ids_for_version(
         const std::shared_ptr<Store>& store,
         const std::variant<VersionedItem, StreamId>& version_info,
         const std::shared_ptr<ReadQuery>& read_query,
