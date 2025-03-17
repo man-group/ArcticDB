@@ -5,9 +5,12 @@
 
 namespace arcticdb {
     std::string date_and_time(int64_t ts) {
-        const std::time_t seconds_since_epoch = ts / BILLION;
-        return boost::posix_time::to_simple_string(
-            boost::posix_time::from_time_t(0) + boost::posix_time::seconds(seconds_since_epoch)
-        );
+        const auto epoch = boost::posix_time::from_time_t(0);
+#ifndef BOOST_DATE_TIME_POSIX_TIME_STD_CONFIG
+        const auto offest = boost::posix_time::microseconds(ts / 1000);
+#else
+        const auto offset = boost::posix_time::nanoseconds(ts);
+#endif
+        return boost::posix_time::to_simple_string(epoch + offset);
     }
 }
