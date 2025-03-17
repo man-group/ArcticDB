@@ -26,7 +26,10 @@ StreamDescriptor merge_descriptors(
 
     for (const auto &field : original.fields()) {
         merged_fields.push_back(field.name());
-        merged_fields_map.try_emplace(field.name(), field.type());
+        const TypeDescriptor type = convert_int_to_float && is_integer_type(field.type().data_type())
+                                        ? TypeDescriptor{DataType::FLOAT64, field.type().dimension()}
+                                        : field.type();
+        merged_fields_map.try_emplace(field.name(), type);
     }
 
     auto index = empty_index();
@@ -61,8 +64,10 @@ StreamDescriptor merge_descriptors(
 
         for (size_t idx = has_index ? 1u : 0u; idx < fields->size(); ++idx) {
             const auto& field = fields->at(idx);
-            const auto& type_desc = field.type();
             if (filtered_set.empty() || filtered_set.contains(field.name())) {
+                const auto type_desc = convert_int_to_float && is_integer_type(field.type().data_type())
+                                           ? TypeDescriptor{DataType::FLOAT64, field.type().dimension()}
+                                           : field.type();
                 if(auto existing = merged_fields_map.find(field.name()); existing != merged_fields_map.end()) {
                     auto existing_type_desc = existing->second;
                     if(existing_type_desc != type_desc) {
@@ -72,22 +77,17 @@ StreamDescriptor merge_descriptors(
                                 "New type descriptor                     : {}",
                                 field.name(), existing_type_desc, type_desc
                         );
-                        if (convert_int_to_float && is_integer_type(existing_type_desc.data_type()) && is_integer_type(type_desc.data_type())) {
-                            merged_fields_map[field.name()] = TypeDescriptor{DataType::FLOAT64, existing_type_desc.dimension()};
+                        auto new_descriptor = has_valid_common_type(existing_type_desc, type_desc);
+                        if(new_descriptor) {
+                            merged_fields_map[field.name()] = *new_descriptor;
                         } else {
-                            auto new_descriptor = has_valid_common_type(existing_type_desc, type_desc);
-                            if(new_descriptor) {
-                                merged_fields_map[field.name()] = *new_descriptor;
-                            } else {
-                                schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                                    "No valid common type between {} and {} for column {}",
-                                    existing_type_desc,
-                                    type_desc,
-                                    field.name()
-                                );
-                            }
+                            schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                                "No valid common type between {} and {} for column {}",
+                                existing_type_desc,
+                                type_desc,
+                                field.name()
+                            );
                         }
-
                     }
                 } else {
                     merged_fields.emplace_back(field.name());
@@ -100,7 +100,7 @@ StreamDescriptor merge_descriptors(
     for(const auto& field_name : merged_fields) {
         new_fields->add_field(merged_fields_map[field_name], field_name);
     }
-    return arcticdb::entity::StreamDescriptor{original.id(), get_descriptor_from_index(index), std::move(new_fields)};
+    return StreamDescriptor{original.id(), get_descriptor_from_index(index), std::move(new_fields)};
 }
 
 StreamDescriptor merge_descriptors(
@@ -148,8 +148,9 @@ StreamDescriptor merge_descriptors(
     const std::optional<IndexDescriptorImpl>& default_index,
     bool convert_int_to_float) {
     std::vector<std::shared_ptr<FieldCollection>> fields;
+    fields.reserve(entries.size());
     for (const auto &entry : entries) {
-        fields.push_back(std::make_shared<FieldCollection>(entry.segment(store).descriptor().fields().clone()));
+        fields.emplace_back(std::make_shared<FieldCollection>(entry.segment(store).descriptor().fields().clone()));
     }
     return merge_descriptors(original, fields, filtered_set, default_index, convert_int_to_float);
 }

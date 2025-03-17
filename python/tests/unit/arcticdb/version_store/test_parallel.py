@@ -1595,7 +1595,7 @@ def test_staging_in_chunks_default_settings(lmdb_storage, lib_name):
     assert df.index.is_monotonic_increasing
 
 class TestConvertIntToFloat:
-    @pytest.mark.parametrize("dtype", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64])
+    @pytest.mark.parametrize("dtype", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64, np.float32])
     @pytest.mark.parametrize("version_store", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
     def test_write_convert_same_types(self, version_store, dtype, request):
         lib = request.getfixturevalue(version_store)
@@ -1605,26 +1605,58 @@ class TestConvertIntToFloat:
         lib.write(sym, df1, parallel=True)
         lib.write(sym, df2, parallel=True)
         lib.compact_incomplete(sym, append=False, convert_int_to_float=True)
-        expected = pd.DataFrame({"a": np.arange(1, 7, dtype=np.double)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns"))
+        # convert_int_to_float is applied only to integer dtypes and it always converts the dtype to np.float64
+        # If the dtype is np.float32 it should not be changed
+        expected_dtype = np.float32 if dtype == np.float32 else np.float64
+        expected = pd.DataFrame({"a": np.arange(1, 7, dtype=expected_dtype)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns"))
         assert_frame_equal(expected, lib.read(sym).data, check_dtype=True)
 
-    @pytest.mark.parametrize("dtype1", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64])
-    @pytest.mark.parametrize("dtype2", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64])
-    @pytest.mark.parametrize("version_store", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-    def test_write_convert_different_types(self, version_store, dtype1, dtype2, request):
-        lib = request.getfixturevalue(version_store)
+    @pytest.mark.parametrize("dtype1", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64, np.float32])
+    @pytest.mark.parametrize("dtype2", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64, np.float32])
+    @pytest.mark.parametrize("append", [True, False])
+    def test_write_convert_different_types_dynamic_schema(self, lmdb_version_store_dynamic_schema_v1, dtype1, dtype2, append):
+        lib = lmdb_version_store_dynamic_schema_v1
         sym = "sym"
         df1 = pd.DataFrame({"a": np.array([1, 2, 3], dtype=dtype1)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
         df2 = pd.DataFrame({"a": np.array([4, 5, 6], dtype=dtype2)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns"))
         lib.write(sym, df1, parallel=True)
         lib.write(sym, df2, parallel=True)
-        lib.compact_incomplete(sym, append=False, convert_int_to_float=True)
-        expected = pd.DataFrame({"a": np.arange(1, 7, dtype=np.double)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns"))
+        lib.compact_incomplete(sym, append=append, convert_int_to_float=True)
+        # Convert int to float should not affect columns of float32 type. However, if one column is of float32 type and
+        # the other is of integer type, the integer column will be promoted to float64 and then the float32 will
+        # be promoted to float64.
+        expected_dtype = np.float32 if dtype1 == dtype2 == np.float32 else np.float64
+        expected = pd.DataFrame({"a": np.arange(1, 7, dtype=expected_dtype)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns"))
         assert_frame_equal(expected, lib.read(sym).data, check_dtype=True)
+
+    @pytest.mark.parametrize("dtype1", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64, np.float32])
+    @pytest.mark.parametrize("dtype2", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64, np.float32])
+    @pytest.mark.parametrize("append", [True, False])
+    def test_write_convert_different_types_static_schema(self, lmdb_version_store_v1, dtype1, dtype2, append):
+        lib = lmdb_version_store_v1
+        sym = "sym"
+        df1 = pd.DataFrame({"a": np.array([1, 2, 3], dtype=dtype1)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
+        df2 = pd.DataFrame({"a": np.array([4, 5, 6], dtype=dtype2)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns"))
+        lib.write(sym, df1, parallel=True)
+        lib.write(sym, df2, parallel=True)
+        # Convert int to float should not affect columns of float32 type. However, if one column is of float32 type and
+        # the other is of integer type, the integer column will be promoted to float64 and there will be conflicting
+        # types
+        exactly_one_float = (dtype1 == np.float32) ^ (dtype2 == np.float32)
+        if exactly_one_float:
+            with pytest.raises(SchemaException) as exception_info:
+                lib.compact_incomplete(sym, append=append, convert_int_to_float=True)
+                assert "FLOAT32" in str(exception_info.value)
+                assert "FLOAT64" in str(exception_info.value)
+        else:
+            lib.compact_incomplete(sym, append=append, convert_int_to_float=True)
+            expected_dtype = np.float32 if dtype1 == dtype2 == np.float32 else np.float64
+            expected = pd.DataFrame({"a": np.arange(1, 7, dtype=expected_dtype)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns"))
+            assert_frame_equal(expected, lib.read(sym).data, check_dtype=True)
 
     @pytest.mark.parametrize("dtype2", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64])
     @pytest.mark.parametrize("version_store", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-    def test_append_convert_different_types(self, version_store, dtype2, request):
+    def test_append_to_existing_convert_different_types(self, version_store, dtype2, request):
         lib = request.getfixturevalue(version_store)
         sym = "sym"
         df1 = pd.DataFrame({"a": np.array([1, 2, 3], dtype=np.float64)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
@@ -1658,3 +1690,25 @@ class TestConvertIntToFloat:
             lib.compact_incomplete(sym, append=True, convert_int_to_float=True)
         assert "FLOAT32" in str(exception_info.value)
         assert "FLOAT64" in str(exception_info.value)
+
+    @pytest.mark.parametrize("data_dtype", [("string_value", object), (pd.Timestamp(0), "datetime64[ns]"), (3.14, np.float32)])
+    @pytest.mark.parametrize("append", [True, False])
+    def test_non_int_columns_are_not_affected(self, lmdb_version_store_v1, data_dtype, append):
+        lib = lmdb_version_store_v1
+        sym = "sym"
+        df1 = pd.DataFrame({"a": np.array([data_dtype[0]], dtype=data_dtype[1])}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
+        lib.write(sym, df1, parallel=True)
+        lib.compact_incomplete(sym, append=append, convert_int_to_float=True)
+        assert_frame_equal(lib.read(sym).data, df1, check_dtype=True)
+
+    @pytest.mark.parametrize("dtype", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64])
+    @pytest.mark.parametrize("version_store", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
+    @pytest.mark.parametrize("append", [True, False])
+    def test_single_segment(self, version_store, dtype, request, append):
+        lib = request.getfixturevalue(version_store)
+        sym = "sym"
+        df1 = pd.DataFrame({"a": np.array([1, 2, 3], dtype=dtype)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
+        lib.write(sym, df1, parallel=True)
+        lib.compact_incomplete(sym, append=append, convert_int_to_float=True)
+        expected = pd.DataFrame({"a": np.array([1, 2, 3], dtype=np.float64)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
+        assert_frame_equal(lib.read(sym).data, expected, check_dtype=True)
