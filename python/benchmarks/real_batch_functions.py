@@ -6,8 +6,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import os
-import numpy as np
 import pandas as pd
 from arcticdb.util.environment_setup import LibraryManager, LibraryPopulationPolicy, LibraryType, Storage, populate_library
 from arcticdb.util.utils import TimestampNumber
@@ -30,10 +28,10 @@ class AWSBatchBasicFunctions(AsvBase):
 
     timeout = 1200
 
-    params = [[5, 10], [250, 500]]
+    params = [500, 1000], [25_000, 50_000] #[[5, 10], [250, 500]]
     param_names = ["num_symbols", "num_rows"]
 
-    library_manager = LibraryManager(Storage.LMDB, "BASIC_BATCH")
+    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="BASIC_BATCH")
 
     number_columns = 10
     initial_timestamp = pd.Timestamp("10-11-1978")

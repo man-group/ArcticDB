@@ -10,7 +10,8 @@ from logging import Logger
 import numpy as np
 import pandas as pd
 
-from arcticdb.util.environment_setup import DataFrameGenerator, LibraryManager, LibraryPopulationPolicy, LibraryType, SequentialDataframesGenerator, Storage, get_console_logger, populate_library, populate_library_if_missing
+from arcticdb.options import LibraryOptions
+from arcticdb.util.environment_setup import DataFrameGenerator, LibraryManager, LibraryPopulationPolicy, LibraryType, Storage, get_console_logger, populate_library_if_missing
 from arcticdb.util.utils import DFGenerator, TimestampNumber
 from benchmarks.common import AsvBase
 
@@ -40,7 +41,7 @@ class AllColumnTypesGenerator(DataFrameGenerator):
 
 class AWSReadWrite(AsvBase):
     """
-    This class is for general read write tests on LMDB
+    This class is for general read write tests 
 
     Uses 1 persistent library for read tests
     Uses 1 modifiable library for write tests
@@ -55,9 +56,9 @@ class AWSReadWrite(AsvBase):
     timeout = 1200
 
     param_names = ["num_rows"]
-    params = [250, 500]
+    params = [1_000_000, 2_000_000]
 
-    library_manager = LibraryManager(Storage.LMDB, "READ_WRITE")
+    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="READ_WRITE")
 
     def get_logger(self) -> Logger:
         return get_console_logger(self)
@@ -173,12 +174,13 @@ class AWSWideDataFrameTests(AWSReadWrite):
 
     timeout = 1200
 
-    library_manager = LibraryManager(Storage.LMDB, "READ_WRITE_WIDE")
+    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="READ_WRITE_WIDE",
+                                     library_options=LibraryOptions(rows_per_segment=1000, columns_per_segment=1000))
 
     param_names = ["num_cols"]
-    params = [400, 1000]
+    params = [15000, 30000]
 
-    number_rows= 100
+    number_rows= 3000
 
     def get_library_manager(self) -> LibraryManager:
         return AWSWideDataFrameTests.library_manager

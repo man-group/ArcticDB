@@ -32,7 +32,7 @@ class AWSFinalizeStagedData(AsvBase):
     params = [500, 1000] # Test data [10, 20]
     param_names = ["num_chunks"]
 
-    library_manager = LibraryManager(Storage.LMDB, "FINALIZE")
+    library_manager = LibraryManager(Storage.AMAZON, "FINALIZE")
 
     def get_library_manager(self) -> LibraryManager:
         return AWSFinalizeStagedData.library_manager

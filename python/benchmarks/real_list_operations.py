@@ -20,9 +20,9 @@ class AWSListSymbols(AsvBase):
 
     timeout = 1200
     
-    library_manager = LibraryManager(storage=Storage.LMDB, name_benchmark="LIST_SYMBOLS")
+    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="LIST_SYMBOLS")
 
-    params = [6,8]
+    params = [500, 1000]
     param_names = ["num_syms"]
 
     number_columns = 2
@@ -80,9 +80,9 @@ class AWSVersionSymbols(AsvBase):
 
     timeout = 1200
 
-    library_manager = LibraryManager(storage=Storage.LMDB, name_benchmark="LIST_SYMBOLS")
+    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="LIST_SYMBOLS")
 
-    params = [5,7]
+    params = [25, 50]
     param_names = ["num_syms"]
 
     number_columns = 2

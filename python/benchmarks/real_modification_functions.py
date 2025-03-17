@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import os
 from typing import List
 import pandas as pd
+from arcticdb.options import LibraryOptions
 from arcticdb.util.environment_setup import LibraryManager, LibraryType, SequentialDataframesGenerator, Storage
 from arcticdb.util.utils import TimestampNumber
 from arcticdb.version_store.library import Library
@@ -47,10 +48,10 @@ class AWSLargeAppendTests(AsvBase):
 
     timeout = 1200
 
-    params = [500, 1000] # [1000, 1500] # for test purposes
+    params = [500_000, 1_000_000] # [1000, 1500] # for test purposes
     param_names = ["num_rows"]
 
-    library_manager = LibraryManager(Storage.LMDB, "APPEND_LARGE")
+    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="APPEND_LARGE")
 
     number_columns = 30
 
@@ -190,10 +191,10 @@ class AWS30kColsWideDFLargeAppendTests(AWSLargeAppendTests):
 
     timeout = 1200
 
-    params = [25, 50] #[100, 150] for test purposes
+    params = [2_500, 5_000] #[100, 150] for test purposes
     param_names = ["num_rows"]
 
-    library_manager = LibraryManager(Storage.LMDB, "APPEND_LARGE_WIDE")
+    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="APPEND_LARGE_WIDE")
 
     number_columns = 3_000
 
@@ -225,7 +226,8 @@ class AWSDeleteTestsFewLarge(AsvBase):
     params = [500_000, 1_000_000] # [100, 150] # for test purposes
     param_names = ["num_rows"]
 
-    library_manager = LibraryManager(Storage.LMDB, "BASIC_DELETE_NEW")
+    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="BASIC_DELETE_NEW", 
+                                     library_options=LibraryOptions(rows_per_segment=1000,columns_per_segment=1000))
 
     number_columns = 10
 
