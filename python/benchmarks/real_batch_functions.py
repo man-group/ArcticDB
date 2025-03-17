@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import time
 import pandas as pd
 from arcticdb.util.environment_setup import LibraryManager, LibraryPopulationPolicy, LibraryType, Storage, populate_library
 from arcticdb.util.utils import TimestampNumber
@@ -41,7 +42,7 @@ class AWSBatchBasicFunctions(AsvBase):
         return AWSBatchBasicFunctions.library_manager
     
     def get_population_policy(self) -> LibraryPopulationPolicy:
-        lpp = LibraryPopulationPolicy(AWSBatchBasicFunctions.params, self.get_logger())
+        lpp = LibraryPopulationPolicy(AWSBatchBasicFunctions.params, None) # Silence logger when too noisy
         lpp.set_columns(AWSBatchBasicFunctions.number_columns)
         lpp.use_auto_increment_index()
         return lpp
@@ -49,10 +50,12 @@ class AWSBatchBasicFunctions(AsvBase):
     def setup_cache(self):
         manager = self.get_library_manager()
         policy = self.get_population_policy()
+        logger = self.get_logger()
         number_symbols_list, number_rows_list = AWSBatchBasicFunctions.params
         for number_symbols in number_symbols_list:
             lib_suffix = number_symbols
             if not manager.has_library(LibraryType.PERSISTENT, lib_suffix):
+                start = time.time()
                 for number_rows in number_rows_list:
                     policy.set_parameters([number_rows] * lib_suffix)
                     # the name of symbols during generation will have now 2 parameters:
@@ -60,6 +63,7 @@ class AWSBatchBasicFunctions(AsvBase):
                     # that allows generating more than one symbol in a library
                     policy.set_symbol_fixed_str(number_rows) 
                     populate_library(manager, policy, LibraryType.PERSISTENT, lib_suffix)
+                    logger.info(f"Generated {number_symbols} with {number_rows} each for {time.time()- start}")
         manager.log_info() # Always log the ArcticURIs 
 
     def teardown(self, num_symbols, num_rows):
