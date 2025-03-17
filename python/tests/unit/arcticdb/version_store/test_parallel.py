@@ -1531,17 +1531,17 @@ def test_chunks_match_at_ends(lmdb_storage, lib_name):
     assert result["a"][-1] == 6
 
 
-def test_chunks_the_same(lmdb_storage, lib_name):
+@pytest.mark.parametrize("n_runs", range(10))
+def test_chunks_the_same(lmdb_storage, lib_name, n_runs):
     """Given - we stage chunks with indexes:
 
-    b:test:0:0xc7ad4135da54cd6e@1739968588832977666[1000,2001]
-    b:test:0:0x68d8759aba38bcf0@1739968588832775570[1000,1001]
-    b:test:0:0x68d8759aba38bcf0@1739968588832621000[1000,1001]
+    b:test:0:h1@1739968588832977666[1000,2001]
+    b:test:0:h2@1739968588832775570[1000,1001]
+    b:test:0:h3@1739968588832621000[1000,1001]
 
     When - We finalize the staged segments
     
-    Then - We should succeed even though the segments seem to be identical, since they are just covering a duplicated
-    index value
+    Then - We should succeed even though the segments are covering a duplicated index value
     """
     lib: Library = lmdb_storage.create_arctic().create_library(
         lib_name,
@@ -1556,7 +1556,7 @@ def test_chunks_the_same(lmdb_storage, lib_name):
         pd.Timestamp(2000),
     ]
 
-    data = pd.DataFrame({"a": len(idx)}, index=idx)
+    data = pd.DataFrame({"a": np.arange(len(idx))}, index=idx, dtype=np.int64)
     lib.write("test", data, staged=True)
 
     lt = lib._nvs.library_tool()
@@ -1568,7 +1568,13 @@ def test_chunks_the_same(lmdb_storage, lib_name):
     lib.finalize_staged_data("test")
 
     df = lib.read("test").data
-    assert_frame_equal(df, data)
+    try:
+        assert_frame_equal(df, data)
+    except AssertionError:
+        # Where the identical segments end up is arbitrary
+        other_order = pd.DataFrame({"a": [2, 3, 0, 1, 4, 5]}, index=idx, dtype=np.int64)
+        assert_frame_equal(df, other_order)
+
     assert df.index.is_monotonic_increasing
 
 

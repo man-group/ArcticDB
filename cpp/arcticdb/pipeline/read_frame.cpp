@@ -900,7 +900,8 @@ folly::Future<SegmentInMemory> fetch_data(
         }
     }
     ARCTICDB_SUBSAMPLE_DEFAULT(DoBatchReadCompressed)
-    return ssource->batch_read_compressed(std::move(keys_and_continuations), BatchReadArgs{})
+    return folly::collect(ssource->batch_read_compressed(std::move(keys_and_continuations), BatchReadArgs{}))
+    .via(&async::io_executor())
     .thenValue([frame](auto&&){ return frame; });
 }
 

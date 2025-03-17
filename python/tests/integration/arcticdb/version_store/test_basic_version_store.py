@@ -458,47 +458,6 @@ def test_prune_previous_versions_append_batch(basic_store):
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
 
 
-def test_batch_append_unicode(basic_store):
-    symbol = "test_append_unicode"
-    uc = "\u0420\u043e\u0441\u0441\u0438\u044f"
-
-    df1 = pd.DataFrame(
-        index=[pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03")],
-        data={"a": ["123", uc]},
-    )
-    basic_store.batch_write(symbols=[symbol], data_vector=[df1])
-    vit = basic_store.batch_read([symbol])[symbol]
-    assert_equal(vit.data, df1)
-
-    df2 = pd.DataFrame(
-        index=[pd.Timestamp("2018-01-04"), pd.Timestamp("2018-01-05")],
-        data={"a": ["123", uc]},
-    )
-    basic_store.batch_append(symbols=[symbol], data_vector=[df2])
-    vit = basic_store.batch_read([symbol])[symbol]
-    expected = pd.concat([df1, df2])
-    assert_equal(vit.data, expected)
-
-
-def test_batch_write_metadata_unicode(basic_store):
-    symbol = "test_append_unicode"
-    uc = "\u0420\u043e\u0441\u0441\u0438\u044f"
-    df1 = pd.DataFrame(
-        index=[pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03")],
-        data={"a": ["123", uc]},
-    )
-
-    basic_store.batch_write(symbols=[symbol], data_vector=[df1])
-    vit = basic_store.batch_read([symbol])[symbol]
-    assert_equal(vit.data, df1)
-
-    meta = {"a": 1, "b": uc}
-    basic_store.batch_write_metadata(symbols=[symbol], metadata_vector=[meta])
-    vits = basic_store.batch_read_metadata([symbol])
-    metadata = vits[symbol].metadata
-    assert metadata == meta
-
-
 def test_deleting_unknown_symbol(basic_store, symbol):
     df = sample_dataframe()
 

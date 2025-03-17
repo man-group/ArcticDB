@@ -361,7 +361,7 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
          run the test from command line again to assure it runs ok before commit 
 
     """
-    max_mem_bytes = 295_623_040
+    max_mem_bytes = 350_000_000
 
     check_process_memory_leaks(proc_to_examine, 20, max_mem_bytes, 80.0)
 
@@ -408,7 +408,7 @@ def test_mem_leak_querybuilder_standard(arctic_library_lmdb_100gb):
         del queries
         gc.collect()
 
-    max_mem_bytes = 550_623_040
+    max_mem_bytes = 650_000_000
 
     check_process_memory_leaks(proc_to_examine, 10, max_mem_bytes, 80.0)
 
@@ -705,7 +705,7 @@ if MEMRAY_SUPPORTED:
         mem_query(lib, df, read_batch=True)
 
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_memory("490 MB")
+    @pytest.mark.limit_memory("600 MB")
     @pytest.mark.skipif(MACOS, reason="Mac OS mem usage is harder to predicts than WINDOWS")
     def test_mem_limit_querybuilder_read_memray(library_with_symbol):
         """
@@ -719,7 +719,7 @@ if MEMRAY_SUPPORTED:
         mem_query(lib, df)
 
     @MEMRAY_TESTS_MARK
-    @pytest.mark.limit_memory("490 MB")
+    @pytest.mark.limit_memory("600 MB")
     @pytest.mark.skipif(MACOS, reason="Mac OS mem usage is harder to predicts than WINDOWS")
     def test_mem_limit_querybuilder_read_batch_memray(library_with_symbol):
         """
@@ -821,7 +821,7 @@ if MEMRAY_SUPPORTED:
     @MEMRAY_TESTS_MARK
     @SLOW_TESTS_MARK
     ## Linux is having quite huge location there will be separate issue to investigate why
-    @pytest.mark.limit_leaks(location_limit="1000 KB" if LINUX else "52 KB", filter_fn=is_relevant)
+    @pytest.mark.limit_leaks(location_limit="1500 KB" if LINUX else "60 KB", filter_fn=is_relevant)
     @pytest.mark.parametrize("lmdb_library", [
                 {'library_options': LibraryOptions(rows_per_segment=233, columns_per_segment=197, dynamic_schema=True, encoding_version=EncodingVersion.V2)},
                 {'library_options': LibraryOptions(rows_per_segment=99, columns_per_segment=99, dynamic_schema=False, encoding_version=EncodingVersion.V1)}

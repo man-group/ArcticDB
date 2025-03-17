@@ -122,14 +122,18 @@ struct BatchCopier {
                                 ++skipped_;
                             }
                         }
-                        auto collected_kvs = source_store_->batch_read_compressed(std::move(keys_to_copy), BatchReadArgs{}).get();
-                        if (!collected_kvs.empty()) {
+
+                        size_t n_keys = keys_to_copy.size();
+                        auto collected_kvs = folly::collect(source_store_->batch_read_compressed(std::move(keys_to_copy), BatchReadArgs{}))
+                            .via(&async::io_executor())
+                            .get();
+                        if (n_keys > 0) {
                             const size_t bytes_being_copied = std::accumulate(segments_ptr->begin(), segments_ptr->end(), size_t{0}, [] (size_t a, const storage::KeySegmentPair& ks) {
                                 return a + ks.segment().size();
                             });
                             target_store_->batch_write_compressed(*segments_ptr.release()).get();
                             bytes_moved_.fetch_add(bytes_being_copied, std::memory_order_relaxed);
-                            objects_moved_.fetch_add(collected_kvs.size(), std::memory_order_relaxed);
+                            objects_moved_.fetch_add(n_keys, std::memory_order_relaxed);
                         }
                         ++count_;
                         if (count_.compare_exchange_strong(logging_frequency, 0)) {
@@ -177,8 +181,11 @@ struct BatchCopier {
             }
         );
         keys_.clear();
-        auto collected_kvs = source_store_->batch_read_compressed(std::move(keys_to_copy), BatchReadArgs{}).get();
-        if (!collected_kvs.empty()) {
+        size_t n_keys = keys_to_copy.size();
+        auto collected_kvs = folly::collect(source_store_->batch_read_compressed(std::move(keys_to_copy), BatchReadArgs{}))
+            .via(&async::io_executor())
+            .get();
+        if (n_keys > 0) {
             bytes_moved_ += std::accumulate(segments.begin(), segments.end(), size_t{0}, [] (size_t a, const storage::KeySegmentPair& ks) {
                 return a + ks.segment().size();
             });
@@ -523,7 +530,9 @@ public:
             }
 
             total_copied += copied;
-            auto keys = source_store_->batch_read_compressed(std::move(keys_to_copy), BatchReadArgs{}).get();
+            [[maybe_unused]] auto keys = folly::collect(source_store_->batch_read_compressed(std::move(keys_to_copy), BatchReadArgs{}))
+                .via(&async::io_executor())
+                .get();
             std::erase_if(segments, [](const auto& segment) { return variant_key_type(segment.variant_key()) == KeyType::UNDEFINED; });
             util::check(keys.size() == segments.size(), "Keys and segments size mismatch, maybe due to parallel deletes");
             write_futs.push_back(target_store_->batch_write_compressed(std::move(segments)));
