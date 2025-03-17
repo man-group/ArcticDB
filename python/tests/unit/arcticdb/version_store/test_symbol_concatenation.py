@@ -62,7 +62,6 @@ def test_symbol_concat_basic(lmdb_library_factory, rows_per_segment, columns_per
         assert version.metadata == (None if idx == 1 else idx)
 
 
-# TODO: Get working with column slicing
 @pytest.mark.xfail(reason="Not yet working with column slicing")
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])

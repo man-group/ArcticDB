@@ -324,7 +324,6 @@ class PythonResampleClause:
     origin: Union[str, pd.Timestamp] = "epoch"
 
 
-# TODO: Test pickling of this
 @dataclass
 class PythonConcatClause:
     pass

@@ -1132,7 +1132,6 @@ class NativeVersionStore:
         version_queries = self._get_version_queries(len(symbols), as_ofs, iterate_snapshots_if_tombstoned=False)
         # Take a copy as _get_read_queries can modify the input argument, which makes reusing the input counter-intuitive
         per_symbol_query_builders = copy.deepcopy(per_symbol_query_builders)
-        # TODO: Less hacky way for date ranges (and most likely row ranges) as part of ReadRequests to work
         force_ranges_to_queries = True
         read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, per_symbol_query_builders, force_ranges_to_queries)
         read_options = self._get_read_options(iterate_snapshots_if_tombstoned=False)

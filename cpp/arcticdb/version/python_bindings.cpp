@@ -788,7 +788,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                                      _clauses.emplace_back(std::make_shared<Clause>(*clause));
                                      first_clause = false;
                                  } else {
-                                     // TODO: Add this check to ReadQuery.add_clauses
                                      user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                                              !clause->clause_info().multi_symbol_,
                                              "Multi-symbol clause cannot be used on a single symbol");

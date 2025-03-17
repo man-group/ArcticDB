@@ -728,9 +728,7 @@ struct ConcatClause {
 
     ARCTICDB_MOVE_COPY_DEFAULT(ConcatClause)
 
-    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(ARCTICDB_UNUSED std::vector<RangesAndKey>& ranges_and_keys) {
-        // TODO: This isn't a long term requirement, for simplicity at the moment we force all input symbols through their own
-        // processing pipeline right now, even if they have no clauses
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>&) {
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>("ConcatClause should never be first in the pipeline");
     }
 
