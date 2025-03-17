@@ -164,6 +164,7 @@ TEST(Async, StatsQueryDemo) {
                 "count": 2,
             }
             */
+            py::gil_scoped_acquire acquire;
             QUERY_STATS_ADD_GROUP(arcticdb_call, "AddFuture") // Always add group at the bottom of the C++ call stack
             QUERY_STATS_ADD(count, 1)
             QUERY_STATS_ADD(count, 1)
@@ -226,6 +227,7 @@ TEST(Async, StatsQueryDemo) {
             ->next_level_maps_[static_cast<size_t>(GroupName::storage_ops)]["ListObjectsV2"]; 
         ASSERT_EQ(list_objects_level->stats_[static_cast<size_t>(StatsName::result_count)], 579); // child map stats should be summed
     };
+    py::gil_scoped_release release;
     std::thread t1(work), t2(work); // mimic multithreading at python level
     t1.join();
     t2.join();

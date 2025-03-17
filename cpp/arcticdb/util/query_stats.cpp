@@ -138,7 +138,7 @@ std::string get_runtime_arcticdb_call(const std::string& default_arcticdb_call){
     {
         py::object relevant_frame = stack_summary.attr("__getitem__")(py::len(stack_summary) - i);
         std::string filename = py::cast<std::string>(relevant_frame.attr("filename"));
-        if (filename.rfind("arcticdb/version_store/_store.py") == 0 || filename.rfind("arcticdb/version_store/library.py")) {
+        if (filename.rfind("arcticdb/version_store/_store.py") == 0 || filename.rfind("arcticdb/version_store/library.py") == 0) {
             func_name = py::cast<std::string>(relevant_frame.attr("name"));
         }
     }
