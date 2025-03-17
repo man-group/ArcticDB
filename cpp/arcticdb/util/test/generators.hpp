@@ -194,7 +194,7 @@ inline SegmentInMemory generate_filter_and_project_testing_sparse_segment() {
     return seg;
 }
 
-// Generate a segment in memory suitable for testing groupby's empty type column behaviour with 5 columns:
+// Generate a segment in memory suitable for testing groupby's empty type column behaviour with 6 columns:
 // * int_repeating_values - an int64_t column with unique_values repeating values
 // * empty_<agg> - an empty column for each supported aggregation
 inline SegmentInMemory generate_groupby_testing_empty_segment(size_t num_rows, size_t unique_values) {
@@ -205,6 +205,7 @@ inline SegmentInMemory generate_groupby_testing_empty_segment(size_t num_rows, s
     seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_min"), std::make_shared<Column>(generate_empty_column()));
     seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_max"), std::make_shared<Column>(generate_empty_column()));
     seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_mean"), std::make_shared<Column>(generate_empty_column()));
+    seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_count"), std::make_shared<Column>(generate_empty_column()));
     seg.set_row_id(num_rows - 1);
     return seg;
 }
@@ -476,6 +477,18 @@ struct SegmentSinkWrapperImpl {
 
 using TestSegmentAggregatorNoSegment = SegmentAggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy>;
 using SegmentSinkWrapper = SegmentSinkWrapperImpl<TestSegmentAggregatorNoSegment>;
+
+inline ResampleClause<ResampleBoundary::LEFT> generate_resample_clause(const std::vector<NamedAggregator>& named_aggregators) {
+    ResampleClause<ResampleBoundary::LEFT> res{
+            "dummy_rule",
+            ResampleBoundary::LEFT,
+            [](timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, ResampleOrigin) -> std::vector<timestamp> { return {}; },
+            0,
+            "dummy_origin"
+    };
+    res.set_aggregations(named_aggregators);
+    return res;
+}
 
 
 } //namespace arcticdb

@@ -70,13 +70,15 @@ class SumAggregatorData : private AggregatorDataBase
 public:
 
     void add_data_type(DataType data_type);
+    DataType get_output_data_type();
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
 
 private:
 
     std::vector<uint8_t> aggregated_;
-    std::optional<DataType> data_type_;
+    std::optional<DataType> common_input_type_;
+    std::optional<DataType> output_type_;
 };
 
 class MaxAggregatorData : private AggregatorDataBase
@@ -84,6 +86,7 @@ class MaxAggregatorData : private AggregatorDataBase
 public:
 
     void add_data_type(DataType data_type);
+    DataType get_output_data_type();
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
 
@@ -98,6 +101,7 @@ class MinAggregatorData : private AggregatorDataBase
 public:
 
     void add_data_type(DataType data_type);
+    DataType get_output_data_type();
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
 
@@ -111,8 +115,10 @@ class MeanAggregatorData : private AggregatorDataBase
 {
 public:
 
-    // Mean values are always doubles so this is a no-op
-    void add_data_type(DataType) {}
+    void add_data_type(DataType);
+    DataType get_output_data_type() {
+        return DataType::FLOAT64;
+    }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
 
@@ -135,6 +141,9 @@ public:
 
     // Count values are always integers so this is a no-op
     void add_data_type(DataType) {}
+    DataType get_output_data_type() {
+        return DataType::UINT64;
+    }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
 
@@ -148,6 +157,9 @@ class FirstAggregatorData : private AggregatorDataBase
 public:
 
     void add_data_type(DataType data_type);
+    DataType get_output_data_type() {
+        return *data_type_;
+    }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
 
@@ -164,6 +176,9 @@ class LastAggregatorData : private AggregatorDataBase
 public:
 
     void add_data_type(DataType data_type);
+    DataType get_output_data_type() {
+        return *data_type_;
+    }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
 

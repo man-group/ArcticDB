@@ -71,6 +71,10 @@ struct IClause {
         void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
             folly::poly_call<5>(*this, component_manager);
         }
+
+        OutputSchema modify_schema(OutputSchema&& output_schema) const {
+            return folly::poly_call<6>(*this, std::move(output_schema));
+        }
     };
 
     template<class T>
@@ -80,10 +84,15 @@ struct IClause {
             &T::process,
             &T::clause_info,
             &T::set_processing_config,
-            &T::set_component_manager>;
+            &T::set_component_manager,
+            &T::modify_schema>;
 };
 
 using Clause = folly::Poly<IClause>;
+
+void check_column_presence(OutputSchema& output_schema,
+                           const std::unordered_set<std::string>& required_columns,
+                           std::string_view clause_name);
 
 struct PassthroughClause {
     ClauseInfo clause_info_;
@@ -109,6 +118,10 @@ struct PassthroughClause {
     void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig&) {}
 
     void set_component_manager(ARCTICDB_UNUSED std::shared_ptr<ComponentManager>) {}
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const {
+        return output_schema;
+    }
 };
 
 struct FilterClause {
@@ -151,6 +164,8 @@ struct FilterClause {
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
         component_manager_ = component_manager;
     }
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const;
 
     [[nodiscard]] std::string to_string() const;
 
@@ -200,6 +215,8 @@ struct ProjectClause {
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
         component_manager_ = component_manager;
     }
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const;
 
     [[nodiscard]] std::string to_string() const;
 };
@@ -259,6 +276,11 @@ struct PartitionClause {
         component_manager_ = component_manager;
     }
 
+    OutputSchema modify_schema(OutputSchema&& output_schema) const {
+        check_column_presence(output_schema, *clause_info_.input_columns_, "GroupBy");
+        return output_schema;
+    }
+
     [[nodiscard]] std::string to_string() const {
         return fmt::format("GROUPBY Column[\"{}\"]", grouping_column_);
     }
@@ -314,6 +336,8 @@ struct AggregationClause {
         component_manager_ = component_manager;
     }
 
+    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+
     [[nodiscard]] std::string to_string() const;
 };
 
@@ -357,6 +381,8 @@ struct ResampleClause {
     void set_processing_config(const ProcessingConfig& processing_config);
 
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const;
 
     [[nodiscard]] std::string to_string() const;
 
@@ -414,6 +440,10 @@ struct RemoveColumnPartitioningClause {
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
         component_manager_ = component_manager;
     }
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const {
+        return output_schema;
+    }
 };
 
 struct SplitClause {
@@ -444,6 +474,10 @@ struct SplitClause {
 
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
         component_manager_ = component_manager;
+    }
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const {
+        return output_schema;
     }
 };
 
@@ -479,6 +513,10 @@ struct SortClause {
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
         component_manager_ = component_manager;
     }
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const {
+        return output_schema;
+    }
 };
 
 struct MergeClause {
@@ -513,6 +551,8 @@ struct MergeClause {
     void set_processing_config(const ProcessingConfig& processing_config);
 
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const;
 };
 
 struct ColumnStatsGenerationClause {
@@ -554,6 +594,10 @@ struct ColumnStatsGenerationClause {
 
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
         component_manager_ = component_manager;
+    }
+
+    OutputSchema modify_schema(ARCTICDB_UNUSED OutputSchema&& output_schema) const {
+        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("ColumnStatsGenerationClause::modify_schema should never be called");
     }
 };
 
@@ -617,6 +661,10 @@ struct RowRangeClause {
         component_manager_ = component_manager;
     }
 
+    OutputSchema modify_schema(OutputSchema&& output_schema) const {
+        return output_schema;
+    }
+
     [[nodiscard]] std::string to_string() const;
 
     void calculate_start_and_end(size_t total_rows);
@@ -657,6 +705,8 @@ struct DateRangeClause {
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
         component_manager_ = component_manager;
     }
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const;
 
     [[nodiscard]] timestamp start() const {
         return start_;

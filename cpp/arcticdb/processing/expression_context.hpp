@@ -38,7 +38,7 @@ struct ExpressionContext {
         void set_value(std::string name, std::shared_ptr<T> val) {
             map_.try_emplace(name, val);
         }
-        std::shared_ptr<T> get_value(std::string name) {
+        std::shared_ptr<T> get_value(std::string name) const {
             return map_.at(name);
         }
     };
