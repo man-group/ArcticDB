@@ -1676,7 +1676,7 @@
                 "50000"
             ]
         ],
-        "setup_cache_key": "real_batch_functions:50",
+        "setup_cache_key": "real_batch_functions:52",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1699,7 +1699,7 @@
                 "50000"
             ]
         ],
-        "setup_cache_key": "real_batch_functions:50",
+        "setup_cache_key": "real_batch_functions:52",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1722,7 +1722,7 @@
                 "50000"
             ]
         ],
-        "setup_cache_key": "real_batch_functions:50",
+        "setup_cache_key": "real_batch_functions:52",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1745,7 +1745,7 @@
                 "50000"
             ]
         ],
-        "setup_cache_key": "real_batch_functions:50",
+        "setup_cache_key": "real_batch_functions:52",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1773,7 +1773,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_batch_functions:50",
+        "setup_cache_key": "real_batch_functions:52",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -1802,7 +1802,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_batch_functions:50",
+        "setup_cache_key": "real_batch_functions:52",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -1831,7 +1831,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_batch_functions:50",
+        "setup_cache_key": "real_batch_functions:52",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -1860,7 +1860,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_batch_functions:50",
+        "setup_cache_key": "real_batch_functions:52",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -1882,7 +1882,7 @@
                 "'arcticdb-amazon-s3'"
             ]
         ],
-        "setup_cache_key": "real_comparison_benchmarks:64",
+        "setup_cache_key": "real_comparison_benchmarks:66",
         "timeout": 60000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1903,7 +1903,7 @@
                 "'arcticdb-amazon-s3'"
             ]
         ],
-        "setup_cache_key": "real_comparison_benchmarks:64",
+        "setup_cache_key": "real_comparison_benchmarks:66",
         "timeout": 60000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1924,7 +1924,7 @@
                 "'arcticdb-amazon-s3'"
             ]
         ],
-        "setup_cache_key": "real_comparison_benchmarks:64",
+        "setup_cache_key": "real_comparison_benchmarks:66",
         "timeout": 60000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1950,7 +1950,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_comparison_benchmarks:64",
+        "setup_cache_key": "real_comparison_benchmarks:66",
         "timeout": 60000,
         "type": "time",
         "unit": "seconds",
@@ -2000,7 +2000,7 @@
         "warmup_time": 0
     },
     "real_list_operations.AWSListSymbols.peakmem_list_symbols": {
-        "code": "class AWSListSymbols:\n    def peakmem_list_symbols(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.list_symbols()\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        self.lib._nvs.version_store._clear_symbol_list_keys() # clear cache\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        policy = self.get_population_policy()\n        for number_symbols in AWSListSymbols.params:\n            policy.set_parameters([AWSListSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n    \n        manager.log_info() # Always log the ArcticURIs",
+        "code": "class AWSListSymbols:\n    def peakmem_list_symbols(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.list_symbols()\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSListSymbols.library_type, num_syms)\n        self.test_counter = 1\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        self.lib._nvs.version_store._clear_symbol_list_keys() # clear cache\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        policy = self.get_population_policy()\n        for number_symbols in AWSListSymbols.params:\n            start = time.time()\n            policy.set_parameters(num_rows* number_symbols)\n            populate_library_if_missing(manager, policy, AWSListSymbols.library_type, number_symbols)\n            self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n        manager.log_info() # Always log the ArcticURIs",
         "name": "real_list_operations.AWSListSymbols.peakmem_list_symbols",
         "param_names": [
             "num_syms"
@@ -2011,14 +2011,14 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "real_list_operations:40",
+        "setup_cache_key": "real_list_operations:44",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "a4d8b0449c70ccd23fd80965c3ef411160f80ea331f3d54f46db4987f4a28cd1"
+        "version": "a0ee13831e3d50eeabaaa3da76d7d7a946ea5a6acdb9839bfd7800cbaff54b5a"
     },
     "real_list_operations.AWSListSymbols.time_has_symbol_nonexisting": {
-        "code": "class AWSListSymbols:\n    def time_has_symbol_nonexisting(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.has_symbol(\"250_sym\")\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        self.lib._nvs.version_store._clear_symbol_list_keys() # clear cache\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        policy = self.get_population_policy()\n        for number_symbols in AWSListSymbols.params:\n            policy.set_parameters([AWSListSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n    \n        manager.log_info() # Always log the ArcticURIs",
+        "code": "class AWSListSymbols:\n    def time_has_symbol_nonexisting(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.has_symbol(\"250_sym\")\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSListSymbols.library_type, num_syms)\n        self.test_counter = 1\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        self.lib._nvs.version_store._clear_symbol_list_keys() # clear cache\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        policy = self.get_population_policy()\n        for number_symbols in AWSListSymbols.params:\n            start = time.time()\n            policy.set_parameters(num_rows* number_symbols)\n            populate_library_if_missing(manager, policy, AWSListSymbols.library_type, number_symbols)\n            self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n        manager.log_info() # Always log the ArcticURIs",
         "min_run_count": 1,
         "name": "real_list_operations.AWSListSymbols.time_has_symbol_nonexisting",
         "number": 1,
@@ -2034,15 +2034,15 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:40",
+        "setup_cache_key": "real_list_operations:44",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "db978597c8aeaf5294153974b49c41533df3301170eee5c881964ec7ef06aa74",
+        "version": "dddda111b5b7e61f60b7d3ddd129c4066b156942a625a1a3c8699998bcbbc538",
         "warmup_time": 0
     },
     "real_list_operations.AWSListSymbols.time_list_symbols": {
-        "code": "class AWSListSymbols:\n    def time_list_symbols(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.list_symbols()\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        self.lib._nvs.version_store._clear_symbol_list_keys() # clear cache\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        policy = self.get_population_policy()\n        for number_symbols in AWSListSymbols.params:\n            policy.set_parameters([AWSListSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n    \n        manager.log_info() # Always log the ArcticURIs",
+        "code": "class AWSListSymbols:\n    def time_list_symbols(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.list_symbols()\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSListSymbols.library_type, num_syms)\n        self.test_counter = 1\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        self.lib._nvs.version_store._clear_symbol_list_keys() # clear cache\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        policy = self.get_population_policy()\n        for number_symbols in AWSListSymbols.params:\n            start = time.time()\n            policy.set_parameters(num_rows* number_symbols)\n            populate_library_if_missing(manager, policy, AWSListSymbols.library_type, number_symbols)\n            self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n        manager.log_info() # Always log the ArcticURIs",
         "min_run_count": 1,
         "name": "real_list_operations.AWSListSymbols.time_list_symbols",
         "number": 1,
@@ -2058,15 +2058,15 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:40",
+        "setup_cache_key": "real_list_operations:44",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "f5089dc5618949b5fc335ec79a3fc54a6a7a9d902a0e85b50b3070f0b071e1c6",
+        "version": "8f5e893a8aa5e5f0874d0d1ce489674b8decbea4ba2d81a9d884a0b735eb7987",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.peakmem_list_snapshots": {
-        "code": "class AWSVersionSymbols:\n    def peakmem_list_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def peakmem_list_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n            self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "name": "real_list_operations.AWSVersionSymbols.peakmem_list_snapshots",
         "param_names": [
             "num_syms"
@@ -2077,14 +2077,14 @@
                 "50"
             ]
         ],
-        "setup_cache_key": "real_list_operations:105",
+        "setup_cache_key": "real_list_operations:114",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "caeda92d5b3cab11f5aa0f56566f8eac68e80358cc29f759bdbd532a34bb2fd0"
+        "version": "6a6acffcbd1bf4ce3592bf8b8df0db00460c1d324646d802c0a0c7e76b9369f2"
     },
     "real_list_operations.AWSVersionSymbols.peakmem_list_snapshots_without_metadata": {
-        "code": "class AWSVersionSymbols:\n    def peakmem_list_snapshots_without_metadata(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots(load_metadata=False)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def peakmem_list_snapshots_without_metadata(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots(load_metadata=False)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n            self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "name": "real_list_operations.AWSVersionSymbols.peakmem_list_snapshots_without_metadata",
         "param_names": [
             "num_syms"
@@ -2095,14 +2095,14 @@
                 "50"
             ]
         ],
-        "setup_cache_key": "real_list_operations:105",
+        "setup_cache_key": "real_list_operations:114",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "02c61b6a7f11f1fa7851a35a6ce4d82158d18596d736a3222470973539c09fba"
+        "version": "72040b26734283f1af6c46181241a6dfbf0bfcaa93dc67d91f20b65e80cd9c42"
     },
     "real_list_operations.AWSVersionSymbols.peakmem_list_versions": {
-        "code": "class AWSVersionSymbols:\n    def peakmem_list_versions(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def peakmem_list_versions(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n            self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "name": "real_list_operations.AWSVersionSymbols.peakmem_list_versions",
         "param_names": [
             "num_syms"
@@ -2113,14 +2113,14 @@
                 "50"
             ]
         ],
-        "setup_cache_key": "real_list_operations:105",
+        "setup_cache_key": "real_list_operations:114",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "3d5cf36d82bb6d02e764a07c8ed2ccc95d6c8dbaddaa94c14568af2e7c2199c1"
+        "version": "5e29af4911fa0ab966e93bd130b777f7c66cd3d1910904faf8997a9198135d50"
     },
     "real_list_operations.AWSVersionSymbols.time_list_snapshots": {
-        "code": "class AWSVersionSymbols:\n    def time_list_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def time_list_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n            self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "min_run_count": 1,
         "name": "real_list_operations.AWSVersionSymbols.time_list_snapshots",
         "number": 3,
@@ -2136,15 +2136,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:105",
+        "setup_cache_key": "real_list_operations:114",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "78e5aa4a90eb370039ae809e7c046107267e16e1bc35c9a4f4b3dea9aa50c937",
+        "version": "7e3d5a2f9db141abd0b6b66066d300a9d3615c24e5852ce10cb428896beb9eb5",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.time_list_snapshots_without_metadata": {
-        "code": "class AWSVersionSymbols:\n    def time_list_snapshots_without_metadata(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots(load_metadata=False)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def time_list_snapshots_without_metadata(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots(load_metadata=False)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n            self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "min_run_count": 1,
         "name": "real_list_operations.AWSVersionSymbols.time_list_snapshots_without_metadata",
         "number": 3,
@@ -2160,15 +2160,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:105",
+        "setup_cache_key": "real_list_operations:114",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "a15719c4fec06e506591a793b5d2d2fc1ab1569df8e39226736f4868fed3f359",
+        "version": "9bc1c971e5d6ae35a7d7da2e5f8bc1fe5005529096f441b78e3241842e1615a9",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.time_list_versions": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def time_list_versions(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n            self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "min_run_count": 1,
         "name": "real_list_operations.AWSVersionSymbols.time_list_versions",
         "number": 3,
@@ -2184,15 +2184,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:105",
+        "setup_cache_key": "real_list_operations:114",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "4780217bff43eb0866b666b51b9169e874b53d56f80b40191c4d87d7f036ff64",
+        "version": "6d5eeadd7cd63b7fa744285e88a59e7e34ed00dc2bd08b2717b4d73ce5e10d2f",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.time_list_versions_latest_only": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions_latest_only(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(latest_only=True)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def time_list_versions_latest_only(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(latest_only=True)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n            self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "min_run_count": 1,
         "name": "real_list_operations.AWSVersionSymbols.time_list_versions_latest_only",
         "number": 3,
@@ -2208,15 +2208,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:105",
+        "setup_cache_key": "real_list_operations:114",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "a6b5c728af76d00e272a8f47bc413324f20d80b96c35047acf12d9d2f79c2440",
+        "version": "0ebb2753f5df94a2fde27d58230464c8afda23a9e0ecb8cf2e5e73e9bc0aef01",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.time_list_versions_latest_only_and_skip_snapshots": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions_latest_only_and_skip_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(latest_only=True, skip_snapshots=True)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def time_list_versions_latest_only_and_skip_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(latest_only=True, skip_snapshots=True)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n            self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "min_run_count": 1,
         "name": "real_list_operations.AWSVersionSymbols.time_list_versions_latest_only_and_skip_snapshots",
         "number": 3,
@@ -2232,15 +2232,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:105",
+        "setup_cache_key": "real_list_operations:114",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "2ea38591bce4b6965ac66adc384aac3876e3f108c1bbd65d487d69ece7e22c32",
+        "version": "ce5f8f984c7763553be75820e754131354e44268ebf31ef9a3e4aab8e2b86eea",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.time_list_versions_skip_snapshots": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions_skip_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(skip_snapshots=True)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def time_list_versions_skip_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(skip_snapshots=True)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n            self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "min_run_count": 1,
         "name": "real_list_operations.AWSVersionSymbols.time_list_versions_skip_snapshots",
         "number": 3,
@@ -2256,15 +2256,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:105",
+        "setup_cache_key": "real_list_operations:114",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "9d9734b4dc0acc24ef74b7d8913b5b9387c2bcac874733eec983dfcbad7164c3",
+        "version": "5bb489fd54dae3d8f0ccd19de16519923274543c0119b585e7fde6b83d518b6e",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.time_list_versions_snapshot": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions_snapshot(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(snapshot=last_snapshot_names_dict[num_syms])\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            policy.set_parameters([AWSVersionSymbols.number_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, LibraryType.PERSISTENT, number_symbols)\n            lib = self.get_library_manager().get_library(LibraryType.PERSISTENT, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
+        "code": "class AWSVersionSymbols:\n    def time_list_versions_snapshot(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(snapshot=last_snapshot_names_dict[num_syms])\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        assert num_syms == len(self.lib.list_symbols()), \"The library contains expected number of symbols\"\n        assert expected_num_versions - 1 <= len(self.lib.list_versions()), \"There are sufficient versions\"\n        assert expected_num_versions - 1 <= len(self.lib.list_snapshots()), \"There are sufficient snapshots\"\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols)\n            populate_library_if_missing(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n            self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n        manager.log_info() # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "min_run_count": 1,
         "name": "real_list_operations.AWSVersionSymbols.time_list_versions_snapshot",
         "number": 3,
@@ -2280,11 +2280,11 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:105",
+        "setup_cache_key": "real_list_operations:114",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "b64b791a1725d84a4f026bc5d12abe027858ff68fc6453ad1c0698012770246d",
+        "version": "e362041e527de87af70d0c6217215cbcfe663a4e828fbf3848921982475a4f0b",
         "warmup_time": 0
     },
     "real_modification_functions.AWS30kColsWideDFLargeAppendTests.time_append_large": {
@@ -2611,7 +2611,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "real_query_builder:62",
+        "setup_cache_key": "real_query_builder:64",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2629,7 +2629,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "real_query_builder:62",
+        "setup_cache_key": "real_query_builder:64",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2647,7 +2647,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "real_query_builder:62",
+        "setup_cache_key": "real_query_builder:64",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2665,7 +2665,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "real_query_builder:62",
+        "setup_cache_key": "real_query_builder:64",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2683,7 +2683,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "real_query_builder:62",
+        "setup_cache_key": "real_query_builder:64",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2701,7 +2701,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "real_query_builder:62",
+        "setup_cache_key": "real_query_builder:64",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2719,7 +2719,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "real_query_builder:62",
+        "setup_cache_key": "real_query_builder:64",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2742,7 +2742,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_query_builder:62",
+        "setup_cache_key": "real_query_builder:64",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2766,7 +2766,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_query_builder:62",
+        "setup_cache_key": "real_query_builder:64",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2790,7 +2790,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_query_builder:62",
+        "setup_cache_key": "real_query_builder:64",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2814,7 +2814,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_query_builder:62",
+        "setup_cache_key": "real_query_builder:64",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2838,7 +2838,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_query_builder:62",
+        "setup_cache_key": "real_query_builder:64",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2862,7 +2862,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_query_builder:62",
+        "setup_cache_key": "real_query_builder:64",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2886,7 +2886,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_query_builder:62",
+        "setup_cache_key": "real_query_builder:64",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2905,7 +2905,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:73",
+        "setup_cache_key": "real_read_write:75",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2923,7 +2923,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:73",
+        "setup_cache_key": "real_read_write:75",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2941,7 +2941,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:73",
+        "setup_cache_key": "real_read_write:75",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2959,7 +2959,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:73",
+        "setup_cache_key": "real_read_write:75",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2977,7 +2977,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:73",
+        "setup_cache_key": "real_read_write:75",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2995,7 +2995,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:73",
+        "setup_cache_key": "real_read_write:75",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3018,7 +3018,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:73",
+        "setup_cache_key": "real_read_write:75",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3042,7 +3042,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:73",
+        "setup_cache_key": "real_read_write:75",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3066,7 +3066,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:73",
+        "setup_cache_key": "real_read_write:75",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3090,7 +3090,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:73",
+        "setup_cache_key": "real_read_write:75",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3114,7 +3114,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:73",
+        "setup_cache_key": "real_read_write:75",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3138,7 +3138,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:73",
+        "setup_cache_key": "real_read_write:75",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3157,7 +3157,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:193",
+        "setup_cache_key": "real_read_write:197",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3175,7 +3175,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:193",
+        "setup_cache_key": "real_read_write:197",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3193,7 +3193,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:193",
+        "setup_cache_key": "real_read_write:197",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3211,7 +3211,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:193",
+        "setup_cache_key": "real_read_write:197",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3229,7 +3229,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:193",
+        "setup_cache_key": "real_read_write:197",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3247,7 +3247,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:193",
+        "setup_cache_key": "real_read_write:197",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3270,7 +3270,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:193",
+        "setup_cache_key": "real_read_write:197",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3294,7 +3294,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:193",
+        "setup_cache_key": "real_read_write:197",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3318,7 +3318,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:193",
+        "setup_cache_key": "real_read_write:197",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3342,7 +3342,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:193",
+        "setup_cache_key": "real_read_write:197",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3366,7 +3366,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:193",
+        "setup_cache_key": "real_read_write:197",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3390,7 +3390,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:193",
+        "setup_cache_key": "real_read_write:197",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",

@@ -42,6 +42,8 @@ class AWSQueryBuilderFunctions:
 
     timeout = 1200
 
+    # NOTE: Change of parameters will trigger failure as original library must also be deleted manually.
+    #       Therefore if you plan changes to those numbers make sure to delete old library manually 
     params = PARAMS_QUERY_BUILDER
     param_names = ["num_rows"]
 

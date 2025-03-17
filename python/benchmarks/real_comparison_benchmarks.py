@@ -44,6 +44,8 @@ class RealComparisonBenchmarks:
     LIB_NAME = "COMPARISON"
     URL = "lmdb://compare"
     SYMBOL = "dataframe"
+    # NOTE: Change of parameters will trigger failure as original library must also be deleted manually.
+    #       Therefore if you plan changes to those numbers make sure to delete old library manually 
     NUMBER_ROWS = 2_000_000 #100_000
 
     params = [NO_OPERATION, CREATE_DATAFRAME, PANDAS_PARQUET, ARCTICDB_LMDB, ARCTICDB_AMAZON_S3]

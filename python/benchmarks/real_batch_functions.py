@@ -29,6 +29,8 @@ class AWSBatchBasicFunctions(AsvBase):
 
     timeout = 1200
 
+    # NOTE: Change of parameters will trigger failure as original library must also be deleted manually.
+    #       Therefore if you plan changes to those numbers make sure to delete old library manually 
     params = [500, 1000], [25_000, 50_000] #[[5, 10], [250, 500]]
     param_names = ["num_symbols", "num_rows"]
 

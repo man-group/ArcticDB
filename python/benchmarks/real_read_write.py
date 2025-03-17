@@ -56,6 +56,8 @@ class AWSReadWrite(AsvBase):
     timeout = 1200
 
     param_names = ["num_rows"]
+    # NOTE: Change of parameters will trigger failure as original library must also be deleted manually.
+    #       Therefore if you plan changes to those numbers make sure to delete old library manually 
     params = [1_000_000, 2_000_000]
 
     library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="READ_WRITE")
@@ -178,6 +180,8 @@ class AWSWideDataFrameTests(AWSReadWrite):
                                      library_options=LibraryOptions(rows_per_segment=1000, columns_per_segment=1000))
 
     param_names = ["num_cols"]
+    # NOTE: Change of parameters will trigger failure as original library must also be deleted manually.
+    #       Therefore if you plan changes to those numbers make sure to delete old library manually 
     params = [15000, 30000]
 
     number_rows= 3000
