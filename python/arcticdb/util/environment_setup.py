@@ -426,13 +426,13 @@ class LibraryPopulationPolicy:
         fixed_part = self.symbol_fixed_str if optional_fixed_str is None else optional_fixed_str
         return f"symbol_{fixed_part}_{index}"
 
-    def __log(self, message):
+    def log(self, message):
         if self.logger is not None:
             self.logger.info(message)
     
     def populate_library(self, lib: Library):
         assert lib is not None
-        self.__log(f"Populating library {lib}")
+        self.log(f"Populating library {lib}")
         start_time = time.time()
         df_generator = self.df_generator
         meta = None if not self.with_metadata else self._generate_metadata()
@@ -450,7 +450,7 @@ class LibraryPopulationPolicy:
                 df = df_generator.get_dataframe(number_rows=param_value, number_columns=self.number_columns)
             else:
                 df = df_generator.get_dataframe(number_rows=self.number_rows, number_columns=param_value)
-            self.__log(f"Dataframe generated [{df.shape}]")
+            self.log(f"Dataframe generated [{df.shape}]")
 
             for ver in range(versions):
                 lib.write(symbol=symbol, data=df, metadata=meta)
@@ -460,7 +460,7 @@ class LibraryPopulationPolicy:
                     lib.snapshot(snapshot_name, metadata=meta)
                 
             index += 1
-        self.__log(f"Population completed for: {time.time() - start_time}")
+        self.log(f"Population completed for: {time.time() - start_time}")
 
     def _get_versions_list(self, number_symbols: int) -> List[np.int64]:
         if self.versions_max == 1:
@@ -483,7 +483,7 @@ def populate_library_if_missing(manager: LibraryManager, policy: LibraryPopulati
     if not manager.has_library(lib_type, lib_name_suffix):
         populate_library(manager=manager, policy=policy, lib_type=lib_type, lib_name_suffix=lib_name_suffix)
     else:
-        policy.logger.info(f"Existing library has been found {name}. Will be reused")      
+        policy.log(f"Existing library has been found {name}. Will be reused")      
 
 
 def populate_library(manager: LibraryManager, policy: LibraryPopulationPolicy, lib_type: LibraryType, lib_name_suffix: str = ""):
