@@ -134,10 +134,11 @@ std::string get_runtime_arcticdb_call(const std::string& default_arcticdb_call){
 
     // Extract last 1 or 2 frames based on list size
     std::string func_name = default_arcticdb_call;
-    for (size_t i = std::min(py::len(stack_summary), size_t(2)); i > 0 ; i--) 
+    for (size_t i = py::len(stack_summary); i > 0; i--) 
     {
-        py::object relevant_frame = stack_summary.attr("__getitem__")(py::len(stack_summary) - i);
+        py::object relevant_frame = stack_summary.attr("__getitem__")(i - 1);
         std::string filename = py::cast<std::string>(relevant_frame.attr("filename"));
+        // get top-most arcticdb API being called in the stack
         if (filename.find("arcticdb/version_store/_store.py") != std::string::npos || filename.rfind("arcticdb/version_store/library.py") != std::string::npos) {
             func_name = py::cast<std::string>(relevant_frame.attr("name"));
         }

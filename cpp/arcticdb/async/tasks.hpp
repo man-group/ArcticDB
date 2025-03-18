@@ -422,6 +422,7 @@ struct DecodeSegmentTask : BaseTask {
         auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment with key {}",
                              variant_key_view(key_seg.variant_key()));
+        QUERY_STATS_ADD_GROUP(key_type, variant_key_type(key_seg.variant_key()))
 
         return {key_seg.variant_key(), decode_segment(*key_seg.segment_ptr())};
     }

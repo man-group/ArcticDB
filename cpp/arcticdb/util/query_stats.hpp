@@ -73,6 +73,7 @@
 #include <array>
 
 #include <arcticdb/entity/key.hpp>
+#include <arcticdb/entity/variant_key.hpp>
 
 namespace arcticdb::util::query_stats {
 enum class GroupName : size_t {
@@ -148,12 +149,16 @@ private:
 
 std::string format_group_value(GroupName col_value, auto&& value) {
     constexpr bool is_value_key_type = std::is_same_v<std::remove_cv_t<std::remove_reference_t<decltype(value)>>, arcticdb::entity::KeyType>;
+    constexpr bool is_value_key = std::convertible_to<decltype(value), entity::VariantKey>;
     check(
-        col_value != util::query_stats::GroupName::key_type || is_value_key_type, 
+        col_value != util::query_stats::GroupName::key_type || is_value_key_type || is_value_key, 
         "key type query stats needs to have key_type value"
     );
     if constexpr (is_value_key_type) {
-        return arcticdb::entity::get_key_description(value);
+        return entity::get_key_description(value);
+    }
+    else if constexpr (is_value_key) {
+        return entity::get_key_description(variant_key_type(value));
     }
     else {
         return std::forward<decltype(value)>(value);
@@ -171,7 +176,8 @@ std::string format_group_value(GroupName col_value, auto&& value) {
             log_time, \
             arcticdb::util::query_stats::GroupName::col_name, \
             format_group_value(arcticdb::util::query_stats::GroupName::col_name, value)); \
-    }
+    } \
+    ARCTICDB_DEBUG(log::version(), "QUERY_STATS_ADD_GROUP_IMPL {} {} {}", arcticdb::util::query_stats::QueryStats::instance().is_enabled(), #col_name, #value);
 #define QUERY_STATS_ADD_GROUP(col_name, value) QUERY_STATS_ADD_GROUP_IMPL(false, col_name, value)
 #define QUERY_STATS_ADD_GROUP_WITH_TIME(col_name, value) QUERY_STATS_ADD_GROUP_IMPL(true, col_name, value)
 

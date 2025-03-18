@@ -171,9 +171,9 @@ KeySegmentPair do_read_impl(
 	    KeyDecoder&& key_decoder,
         ReadKeyOpts opts) {
     ARCTICDB_SAMPLE(S3StorageRead, 0)
-    QUERY_STATS_ADD_GROUP(storage_ops, "GetObject")
     auto key_type = variant_key_type(variant_key);
-    QUERY_STATS_ADD_GROUP_WITH_TIME(key_type, key_type)
+    QUERY_STATS_ADD_GROUP(key_type, key_type)
+    QUERY_STATS_ADD_GROUP_WITH_TIME(storage_ops, "GetObject")
     auto key_type_dir = key_type_folder(root_folder, key_type);
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
     auto get_object_result = s3_client.get_object(s3_object_name, bucket_name);
@@ -446,8 +446,8 @@ bool do_iterate_type_impl(
 
     auto continuation_token = std::optional<std::string>();
     do {
-        QUERY_STATS_ADD_GROUP(storage_ops, "ListObjectsV2")
-        QUERY_STATS_ADD_GROUP_WITH_TIME(key_type, key_type)
+        QUERY_STATS_ADD_GROUP(key_type, key_type)
+        QUERY_STATS_ADD_GROUP_WITH_TIME(storage_ops, "ListObjectsV2")
         auto list_objects_result = s3_client.list_objects(key_prefix, bucket_name, continuation_token);
         if (list_objects_result.is_success()) {
             auto& output = list_objects_result.get_output();
@@ -494,9 +494,9 @@ bool do_key_exists_impl(
     const S3ClientInterface& s3_client,
     KeyBucketizer&& b
 ) {
-    QUERY_STATS_ADD_GROUP(storage_ops, "HeadObject")
     auto key_type = variant_key_type(key);
-    QUERY_STATS_ADD_GROUP_WITH_TIME(key_type, key_type)
+    QUERY_STATS_ADD_GROUP(key_type, key_type)
+    QUERY_STATS_ADD_GROUP_WITH_TIME(storage_ops, "HeadObject")
     auto key_type_dir = key_type_folder(root_folder, key_type);
     auto s3_object_name = object_path(b.bucketize(key_type_dir, key), key);
 
