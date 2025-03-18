@@ -50,27 +50,30 @@ from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibrar
 def test_library_creation_deletion(arctic_client, lib_name):
     ac = arctic_client
     ac.create_library(lib_name)
-    with pytest.raises(ValueError):
-        ac.create_library(lib_name)
+    try:
+        with pytest.raises(ValueError):
+            ac.create_library(lib_name)
 
-    assert lib_name in ac.list_libraries()
-    assert ac.has_library(lib_name)
-    assert lib_name in ac
-    if "mongo" in arctic_client.get_uri():
-        # The mongo fixture uses PrefixingLibraryAdapterDecorator which leaks in this one case
-        assert ac[lib_name].name.endswith(lib_name)
-    else:
-        assert ac[lib_name].name == lib_name
+        assert lib_name in ac.list_libraries()
+        assert ac.has_library(lib_name)
+        assert lib_name in ac
+        if "mongo" in arctic_client.get_uri():
+            # The mongo fixture uses PrefixingLibraryAdapterDecorator which leaks in this one case
+            assert ac[lib_name].name.endswith(lib_name)
+        else:
+            assert ac[lib_name].name == lib_name
 
-    ac.delete_library(lib_name)
-    # Want this to be silent.
-    ac.delete_library("library_that_does_not_exist")
+        ac.delete_library(lib_name)
+        # Want this to be silent.
+        ac.delete_library("library_that_does_not_exist")
 
-    assert lib_name not in ac.list_libraries()
-    with pytest.raises(LibraryNotFound):
-        _lib = ac[lib_name]
-    assert not ac.has_library(lib_name)
-    assert lib_name not in ac
+        assert lib_name not in ac.list_libraries()
+        with pytest.raises(LibraryNotFound):
+            _lib = ac[lib_name]
+        assert not ac.has_library(lib_name)
+        assert lib_name not in ac
+    finally:
+        ac.delete_library(lib_name)
 
 
 def test_get_library(arctic_client, lib_name):
@@ -271,62 +274,62 @@ def test_modify_options_background_deletion(lmdb_storage, lib_name):
 
 def test_create_library_with_invalid_name(arctic_client_v1, lib_name):
     ac = arctic_client_v1
+    try:
+        # These should succeed because the names are valid
+        valid_names = [lib_name, "lib-with-dash", "lib.with.dot", "lib123"]
+        # These should fail because the names are invalid
+        invalid_names = [chr(0), "lib>", "lib<", "lib*", "/lib", "lib...lib", lib_name * 1000]
+        # This name should fail on mongo, and succeed on other storages
+        if "mongo" in ac.get_uri():
+            invalid_names += ["lib/with/slash"]
+        else:
+            valid_names += ["lib/with/slash"]
 
-    # These should succeed because the names are valid
-    valid_names = [lib_name, "lib-with-dash", "lib.with.dot", "lib123"]
-    # These should fail because the names are invalid
-    invalid_names = [chr(0), "lib>", "lib<", "lib*", "/lib", "lib...lib", lib_name * 1000]
-    # This name should fail on mongo, and succeed on other storages
-    if "mongo" in ac.get_uri():
-        invalid_names += ["lib/with/slash"]
-    else:
-        valid_names += ["lib/with/slash"]
-
-    for lib_name in valid_names:
-        ac.create_library(lib_name)
-
-    for lib_name in invalid_names:
-        with pytest.raises(UserInputException):
+        for lib_name in valid_names:
             ac.create_library(lib_name)
 
-    # Verify that library list is not corrupted
-    all_libraries = set(ac.list_libraries())
-    assert all(lib_name in all_libraries for lib_name in valid_names)
+        for lib_name in invalid_names:
+            with pytest.raises(UserInputException):
+                ac.create_library(lib_name)
 
-    for lib_name in valid_names:
-        ac.delete_library(lib_name)
+        # Verify that library list is not corrupted
+        all_libraries = set(ac.list_libraries())
+        assert all(lib_name in all_libraries for lib_name in valid_names)
+    finally:
+        for lib_name in valid_names:
+            ac.delete_library(lib_name)
 
 
 def test_do_not_persist_s3_details(s3_storage):
     """We apply an in-memory overlay for these instead. In particular we should absolutely not persist credentials
     in the storage."""
-
     if SSL_TEST_SUPPORTED:
         assert s3_storage.arctic_uri.startswith("s3s://")
     ac = Arctic(s3_storage.arctic_uri)
-    lib = ac.create_library("test")
-    lib.write("sym", pd.DataFrame())
+    try:
+        lib = ac.create_library("test")
+        lib.write("sym", pd.DataFrame())
 
-    config = ac._library_manager.get_library_config("test")
-    s3_storage = get_s3_storage_config(config)
-    assert s3_storage.bucket_name == ""
-    assert s3_storage.credential_name == ""
-    assert s3_storage.credential_key == ""
-    assert s3_storage.endpoint == ""
-    assert s3_storage.max_connections == 0
-    assert s3_storage.connect_timeout == 0
-    assert s3_storage.request_timeout == 0
-    assert not s3_storage.ssl
-    assert s3_storage.prefix.startswith("test")
-    assert s3_storage.region == ""
-    assert not s3_storage.use_virtual_addressing
-    # HTTS is persisted on purpose to support backwards compatibility
-    if SSL_TEST_SUPPORTED:
-        assert s3_storage.https
-    else:
-        assert not s3_storage.https
-
-    ac.delete_library("test")
+        config = ac._library_manager.get_library_config("test")
+        s3_storage = get_s3_storage_config(config)
+        assert s3_storage.bucket_name == ""
+        assert s3_storage.credential_name == ""
+        assert s3_storage.credential_key == ""
+        assert s3_storage.endpoint == ""
+        assert s3_storage.max_connections == 0
+        assert s3_storage.connect_timeout == 0
+        assert s3_storage.request_timeout == 0
+        assert not s3_storage.ssl
+        assert s3_storage.prefix.startswith("test")
+        assert s3_storage.region == ""
+        assert not s3_storage.use_virtual_addressing
+        # HTTS is persisted on purpose to support backwards compatibility
+        if SSL_TEST_SUPPORTED:
+            assert s3_storage.https
+        else:
+            assert not s3_storage.https
+    finally:
+        ac.delete_library("test")
 
 
 def test_library_options(arctic_client, lib_name):
@@ -370,20 +373,21 @@ def test_separation_between_libraries(arctic_client_v1, lib_name):
     ac = arctic_client_v1
     lib_name_1 = f"{lib_name}_1"
     lib_name_2 = f"{lib_name}_2"
+    try:
+        ac.create_library(lib_name_1)
+        ac.create_library(lib_name_2)
 
-    ac.create_library(lib_name_1)
-    ac.create_library(lib_name_2)
+        assert lib_name_1 in set(ac.list_libraries())
+        assert lib_name_2 in set(ac.list_libraries())
 
-    assert lib_name_1 in set(ac.list_libraries())
-    assert lib_name_2 in set(ac.list_libraries())
+        ac[lib_name_1].write("test_1", pd.DataFrame())
+        ac[lib_name_2].write("test_2", pd.DataFrame())
+        assert ac[lib_name_1].list_symbols() == ["test_1"]
+        assert ac[lib_name_2].list_symbols() == ["test_2"]
 
-    ac[lib_name_1].write("test_1", pd.DataFrame())
-    ac[lib_name_2].write("test_2", pd.DataFrame())
-    assert ac[lib_name_1].list_symbols() == ["test_1"]
-    assert ac[lib_name_2].list_symbols() == ["test_2"]
-
-    ac.delete_library(lib_name_1)
-    ac.delete_library(lib_name_2)
+    finally:
+        ac.delete_library(lib_name_1)
+        ac.delete_library(lib_name_2)
 
 
 def add_path_prefix(storage_fixture, prefix):
@@ -422,25 +426,27 @@ def test_separation_between_libraries_with_prefixes(fixture, request):
     mars_uri = add_path_prefix(storage_fixture, "/planet/mars")
     ac_mars = Arctic(mars_uri)
 
-    assert ac_mars.list_libraries() == []
-    ac_mercury.create_library("pytest_test_lib")
-    ac_mercury.create_library("pytest_test_lib_2")
-    ac_mars.create_library("pytest_test_lib")
-    ac_mars.create_library("pytest_test_lib_2")
-    assert ac_mercury.list_libraries() == ["pytest_test_lib", "pytest_test_lib_2"]
-    assert ac_mars.list_libraries() == ["pytest_test_lib", "pytest_test_lib_2"]
+    try:
+        assert ac_mars.list_libraries() == []
+        ac_mercury.create_library("pytest_test_lib")
+        ac_mercury.create_library("pytest_test_lib_2")
+        ac_mars.create_library("pytest_test_lib")
+        ac_mars.create_library("pytest_test_lib_2")
+        assert ac_mercury.list_libraries() == ["pytest_test_lib", "pytest_test_lib_2"]
+        assert ac_mars.list_libraries() == ["pytest_test_lib", "pytest_test_lib_2"]
 
-    ac_mercury["pytest_test_lib"].write("test_1", pd.DataFrame())
-    ac_mars["pytest_test_lib"].write("test_2", pd.DataFrame())
+        ac_mercury["pytest_test_lib"].write("test_1", pd.DataFrame())
+        ac_mars["pytest_test_lib"].write("test_2", pd.DataFrame())
 
-    assert ac_mercury["pytest_test_lib"].list_symbols() == ["test_1"]
-    assert ac_mars["pytest_test_lib"].list_symbols() == ["test_2"]
+        assert ac_mercury["pytest_test_lib"].list_symbols() == ["test_1"]
+        assert ac_mars["pytest_test_lib"].list_symbols() == ["test_2"]
 
-    ac_mercury.delete_library("pytest_test_lib")
-    ac_mercury.delete_library("pytest_test_lib_2")
+    finally:
+        ac_mercury.delete_library("pytest_test_lib")
+        ac_mercury.delete_library("pytest_test_lib_2")
 
-    ac_mars.delete_library("pytest_test_lib")
-    ac_mars.delete_library("pytest_test_lib_2")
+        ac_mars.delete_library("pytest_test_lib")
+        ac_mars.delete_library("pytest_test_lib_2")
 
 
 @pytest.mark.parametrize("fixture", ["s3_storage", pytest.param("azurite_storage", marks=AZURE_TESTS_MARK)])
@@ -449,26 +455,27 @@ def test_library_management_path_prefix(fixture, request, lib_name):
     uri = add_path_prefix(storage_fixture, "hello/world")
     ac = Arctic(uri)
 
-    ac.create_library(lib_name)
+    try:
+        ac.create_library(lib_name)
 
-    ac[lib_name].write("test_1", pd.DataFrame())
-    ac[lib_name].write("test_2", pd.DataFrame())
+        ac[lib_name].write("test_1", pd.DataFrame())
+        ac[lib_name].write("test_2", pd.DataFrame())
 
-    assert sorted(ac[lib_name].list_symbols()) == ["test_1", "test_2"]
+        assert sorted(ac[lib_name].list_symbols()) == ["test_1", "test_2"]
 
-    ac[lib_name].snapshot("test_snapshot")
-    assert ac[lib_name].list_snapshots() == {"test_snapshot": None}
+        ac[lib_name].snapshot("test_snapshot")
+        assert ac[lib_name].list_snapshots() == {"test_snapshot": None}
 
-    keys = list(storage_fixture.iter_underlying_object_names())
-    print(keys)
-    # filter out the keys that are not related to the library
-    keys = [k for k in keys if "test_library_management_path_p" in k]
-    print(keys)
-    assert all(k.startswith("hello/world") for k in keys)
-    assert any(k.startswith("hello/world/_arctic_cfg") for k in keys)
-    assert any(k.startswith("hello/world/test_library_management_path_p") for k in keys)
-
-    ac.delete_library(lib_name)
+        keys = list(storage_fixture.iter_underlying_object_names())
+        print(keys)
+        # filter out the keys that are not related to the library
+        keys = [k for k in keys if "test_library_management_path_p" in k]
+        print(keys)
+        assert all(k.startswith("hello/world") for k in keys)
+        assert any(k.startswith("hello/world/_arctic_cfg") for k in keys)
+        assert any(k.startswith("hello/world/test_library_management_path_p") for k in keys)
+    finally:    
+        ac.delete_library(lib_name)
 
     assert lib_name not in ac.list_libraries()
     with pytest.raises(LibraryNotFound):

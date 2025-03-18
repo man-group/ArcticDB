@@ -70,12 +70,14 @@ def test_parallel_reads(local_object_version_store):
 def test_parallel_reads_arctic(storage_name, request, lib_name):
     storage = request.getfixturevalue(storage_name)
     ac = Arctic(storage.arctic_uri)
-    lib = ac.create_library(lib_name)
-    symbols = [f"{i}" for i in range(1)]
-    for s in symbols:
-        lib.write(s, df("test1"))
-    p = Pool(10)
-    p.map(_read_and_assert_symbol, [(lib, s, idx) for idx, s in enumerate(symbols)])
-    p.close()
-    p.join()
-    ac.delete_library(lib_name)
+    try:
+        lib = ac.create_library(lib_name)
+        symbols = [f"{i}" for i in range(1)]
+        for s in symbols:
+            lib.write(s, df("test1"))
+        p = Pool(10)
+        p.map(_read_and_assert_symbol, [(lib, s, idx) for idx, s in enumerate(symbols)])
+        p.close()
+        p.join()
+    finally:
+        ac.delete_library(lib_name)

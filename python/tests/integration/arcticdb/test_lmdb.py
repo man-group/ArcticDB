@@ -43,18 +43,23 @@ def test_library_deletion(tmp_path: Path):
     # See Github issue #517
     # Given
     ac = Arctic(f"lmdb://{tmp_path}/lmdb_instance")
-    path = tmp_path / "lmdb_instance" / "test_library_deletion"
-    ac.create_library("test_library_deletion")
-    assert path.exists()
+    try:
+        path = tmp_path / "lmdb_instance" / "test_library_deletion"
+        ac.create_library("test_library_deletion")
+        assert path.exists()
 
-    ac.create_library("test_library_deletion2")
+        ac.create_library("test_library_deletion2")
 
-    # When
-    ac.delete_library("test_library_deletion")
+        # When
+        ac.delete_library("test_library_deletion")
 
-    # Then
-    assert not path.exists()
-    assert ac.list_libraries() == ["test_library_deletion2"]
+        # Then
+        assert not path.exists()
+        assert ac.list_libraries() == ["test_library_deletion2"]
+    finally:
+        # Make sure that we clean up the library even if the test fails
+        for lib in ac.list_libraries():
+            ac.delete_library(lib)
 
 
 def test_library_deletion_leave_non_lmdb_files_alone(tmp_path: Path):
@@ -62,22 +67,27 @@ def test_library_deletion_leave_non_lmdb_files_alone(tmp_path: Path):
     # Given
     ac = Arctic(f"lmdb://{tmp_path}/lmdb_instance")
     path = tmp_path / "lmdb_instance" / "test_lib"
-    ac.create_library("test_lib")
-    assert path.exists()
-    with open(os.path.join(path, "another"), "w") as f:
-        f.write("blah")
-    (path / "dir").mkdir()
+    try:
+        ac.create_library("test_lib")
+        assert path.exists()
+        with open(os.path.join(path, "another"), "w") as f:
+            f.write("blah")
+        (path / "dir").mkdir()
 
-    ac.create_library("test_lib2")
+        ac.create_library("test_lib2")
 
-    # When
-    ac.delete_library("test_lib")
+        # When
+        ac.delete_library("test_lib")
 
-    # Then
-    assert path.exists()
-    files = set(os.listdir(path))
-    assert files == {"dir", "another"}
-    assert ac.list_libraries() == ["test_lib2"]
+        # Then
+        assert path.exists()
+        files = set(os.listdir(path))
+        assert files == {"dir", "another"}
+        assert ac.list_libraries() == ["test_lib2"]
+    finally:
+        # Make sure that we clean up the library even if the test fails
+        for lib in ac.list_libraries():
+            ac.delete_library(lib)
 
 
 def test_lmdb(lmdb_storage):
@@ -147,12 +157,13 @@ def test_lmdb_mapsize(tmp_path, lib_name):
     ac = Arctic(f"lmdb://{tmp_path}?map_size=1MB")
 
     # When
-    lib = ac[lib_name]
-    df = get_wide_dataframe(size=1_000)
-    lib.write("sym", df)
-
-    # Then - operations succeed as usual
-    ac.delete_library(lib_name)
+    try:
+        lib = ac[lib_name]
+        df = get_wide_dataframe(size=1_000)
+        lib.write("sym", df)
+    finally:
+        # Then - operations succeed as usual
+        ac.delete_library(lib_name)
 
 
 def test_lmdb_mapsize_write(version_store_factory):
@@ -246,8 +257,10 @@ def test_warnings_library(lmdb_storage, get_stderr, lib_name):
 def test_arctic_instances_across_same_lmdb_multiprocessing(tmp_path):
     """Should not warn when across multiple processes."""
     ac = Arctic(f"lmdb://{tmp_path}")
-    ac.create_library("test")
-    ac["test"].write("a", pd.DataFrame())
-    with mp.Pool(5) as p:
-        p.starmap(create_arctic_instance, [(tmp_path, i) for i in range(20)])
-    ac.delete_library("test")
+    try:
+        ac.create_library("test")
+        ac["test"].write("a", pd.DataFrame())
+        with mp.Pool(5) as p:
+            p.starmap(create_arctic_instance, [(tmp_path, i) for i in range(20)])
+    finally:
+        ac.delete_library("test")

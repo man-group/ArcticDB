@@ -116,10 +116,11 @@ def test_s3_verification(
     monkeypatch.setattr("ssl.get_default_verify_paths", lambda: default_setting)
     uri = edit_connection_string(storage.arctic_uri, "&", storage, ssl_setting, client_cert_file, client_cert_dir)
     ac = Arctic(uri)
-    lib = ac.create_library(lib_name)
-    lib.write("sym", pd.DataFrame())
-
-    ac.delete_library(lib_name)
+    try:
+        lib = ac.create_library(lib_name)
+        lib.write("sym", pd.DataFrame())
+    finally:
+        ac.delete_library(lib_name)
 
 
 @SSL_TESTS_MARK
@@ -136,28 +137,36 @@ def test_s3_no_ssl_verification(
     monkeypatch.setattr("ssl.get_default_verify_paths", lambda: default_setting)
     uri = edit_connection_string(storage.arctic_uri, "&", storage, ssl_setting, client_cert_file, client_cert_dir)
     ac = Arctic(uri)
-    lib = ac.create_library(lib_name)
-    lib.write("sym", pd.DataFrame())
-
-    ac.delete_library(lib_name)
+    try:
+        lib = ac.create_library(lib_name)
+        lib.write("sym", pd.DataFrame())
+    finally:
+        ac.delete_library(lib_name)
 
 
 @REAL_S3_TESTS_MARK
 def test_s3_sts_auth(lib_name, real_s3_sts_storage):
     ac = Arctic(real_s3_sts_storage.arctic_uri)
-    ac.delete_library(lib_name)  # make sure we delete any previously existing library
-    lib = ac.create_library(lib_name)
-    df = pd.DataFrame({"a": [1, 2, 3]})
-    lib.write("sym", df)
-    assert_frame_equal(lib.read("sym").data, df)
-    lib = ac.get_library(lib_name)
-    assert_frame_equal(lib.read("sym").data, df)
+    try:
+        ac.delete_library(lib_name)  # make sure we delete any previously existing library
+        lib = ac.create_library(lib_name)
+        df = pd.DataFrame({"a": [1, 2, 3]})
+        lib.write("sym", df)
+        assert_frame_equal(lib.read("sym").data, df)
+        lib = ac.get_library(lib_name)
+        assert_frame_equal(lib.read("sym").data, df)
+    except Exception as e:
+        print(e)
+        ac.delete_library(lib_name)
+        raise e
 
     # Reload for testing a different codepath
-    ac = Arctic(real_s3_sts_storage.arctic_uri)
-    lib = ac.get_library(lib_name)
-    assert_frame_equal(lib.read("sym").data, df)
-    ac.delete_library(lib_name)
+    try:
+        ac = Arctic(real_s3_sts_storage.arctic_uri)
+        lib = ac.get_library(lib_name)
+        assert_frame_equal(lib.read("sym").data, df)
+    finally:
+        ac.delete_library(lib_name)
 
 
 @SLOW_TESTS_MARK
@@ -182,29 +191,31 @@ def test_s3_sts_expiry_check(lib_name, real_s3_sts_storage):
 
     ac = Arctic(real_s3_sts_storage.arctic_uri)
     ac.delete_library(library)  # make sure we delete any previously existing library
-    lib = ac.create_library(library)
-    df = pd.DataFrame({"a": [1, 2, 3]})
-    lib.write(symbol, df)
+    try:
+        lib = ac.create_library(library)
+        df = pd.DataFrame({"a": [1, 2, 3]})
+        lib.write(symbol, df)
 
-    now = datetime.now()
-    complete_at = now + timedelta(minutes=min_exp_time_min + 5)
-    logger.info(f"Test will complete at {complete_at}")
+        now = datetime.now()
+        complete_at = now + timedelta(minutes=min_exp_time_min + 5)
+        logger.info(f"Test will complete at {complete_at}")
 
-    data: pd.DataFrame = lib.read(symbol).data
-    assert_frame_equal(df, data)
-    while datetime.now() < complete_at:
         data: pd.DataFrame = lib.read(symbol).data
         assert_frame_equal(df, data)
-        logger.info(f"sleeping 15 sec")
-        time.sleep(15)
-        logger.info(f"Time remaining: {complete_at - datetime.now()}")
-        logger.info(f"Should complete at: {complete_at}")
+        while datetime.now() < complete_at:
+            data: pd.DataFrame = lib.read(symbol).data
+            assert_frame_equal(df, data)
+            logger.info(f"sleeping 15 sec")
+            time.sleep(15)
+            logger.info(f"Time remaining: {complete_at - datetime.now()}")
+            logger.info(f"Should complete at: {complete_at}")
 
-    data: pd.DataFrame = lib.read(symbol).data
-    assert_frame_equal(df, data)
-    logger.info("Connection did not expire")
-    logger.info(f"Library to remove: {library}")
-    ac.delete_library(library)
+        data: pd.DataFrame = lib.read(symbol).data
+        assert_frame_equal(df, data)
+        logger.info("Connection did not expire")
+        logger.info(f"Library to remove: {library}")
+    finally:
+        ac.delete_library(library)
 
 
 @REAL_S3_TESTS_MARK
@@ -226,9 +237,11 @@ def test_azurite_no_ssl_verification(monkeypatch, azurite_storage, client_cert_f
     monkeypatch.setattr("ssl.get_default_verify_paths", lambda: default_setting)
     uri = edit_connection_string(storage.arctic_uri, ";", storage, None, client_cert_file, client_cert_dir)
     ac = Arctic(uri)
-    lib = ac.create_library(lib_name)
-    lib.write("sym", pd.DataFrame())
-    ac.delete_library(lib_name)
+    try:
+        lib = ac.create_library(lib_name)
+        lib.write("sym", pd.DataFrame())
+    finally:
+        ac.delete_library(lib_name)
 
 
 @AZURE_TESTS_MARK
@@ -243,9 +256,11 @@ def test_azurite_ssl_verification(azurite_ssl_storage, monkeypatch, client_cert_
     monkeypatch.setattr("ssl.get_default_verify_paths", lambda: default_setting)
     uri = edit_connection_string(storage.arctic_uri, ";", storage, None, client_cert_file, client_cert_dir)
     ac = Arctic(uri)
-    lib = ac.create_library(lib_name)
-    lib.write("sym", pd.DataFrame())
-    ac.delete_library(lib_name)
+    try:
+        lib = ac.create_library(lib_name)
+        lib.write("sym", pd.DataFrame())
+    finally:
+        ac.delete_library(lib_name)
 
 
 def test_basic_metadata(lmdb_version_store):
@@ -1078,7 +1093,7 @@ def test_get_description_multiindex(lmdb_library, names):
 def test_get_description_date_range_tz(arctic_library, tz):
     lib = arctic_library
     sym = "test_get_description_date_range_tz"
-    index = index = pd.date_range(pd.Timestamp(0), periods=10, tz=tz)
+    index = pd.date_range(pd.Timestamp(0), periods=10, tz=tz)
     df = pd.DataFrame(data={"col1": np.arange(10)}, index=index)
     lib.write(sym, df)
     start_ts, end_ts = lib.get_description(sym).date_range

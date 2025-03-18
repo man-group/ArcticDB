@@ -16,18 +16,20 @@ def test_create_library_with_all_chars(arctic_client_v1, prefix, suffix):
     names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != "\\"]
 
     created_libraries = set()
-    for name in names:
-        try:
-            ac.create_library(name)
-            created_libraries.add(name)
-        # We should only fail with UserInputException (indicating that name validation failed)
-        except UserInputException:
-            pass
+    try:
+        for name in names:
+            try:
+                ac.create_library(name)
+                created_libraries.add(name)
+            # We should only fail with UserInputException (indicating that name validation failed)
+            except UserInputException:
+                pass
 
-    result = set(ac.list_libraries())
-    assert all(name in result for name in created_libraries)
-    for lib in created_libraries:
-        ac.delete_library(lib)
+        result = set(ac.list_libraries())
+        assert all(name in result for name in created_libraries)
+    finally:
+        for lib in created_libraries:
+            ac.delete_library(lib)
 
 
 @SLOW_TESTS_MARK

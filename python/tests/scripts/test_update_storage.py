@@ -34,35 +34,37 @@ def _get_azure_storage_config(cfg):
 @SKIP_CONDA_MARK  # issue with fixture cleanup
 def test_upgrade_script_dryrun_s3(s3_storage: S3Bucket, lib_name):
     ac = s3_storage.create_arctic()
-    create_library_config(ac, lib_name)
+    try:
+        create_library_config(ac, lib_name)
 
-    # When
-    run(uri=s3_storage.arctic_uri, run=False)
+        # When
+        run(uri=s3_storage.arctic_uri, run=False)
 
-    # Then
-    config = ac._library_manager.get_library_config(lib_name)
-    storage_config = get_s3_storage_config(config)
-    assert storage_config.bucket_name == s3_storage.bucket
-    assert storage_config.credential_name == s3_storage.key.id
-    assert storage_config.credential_key == s3_storage.key.secret
-
-    ac.delete_library(lib_name)
+        # Then
+        config = ac._library_manager.get_library_config(lib_name)
+        storage_config = get_s3_storage_config(config)
+        assert storage_config.bucket_name == s3_storage.bucket
+        assert storage_config.credential_name == s3_storage.key.id
+        assert storage_config.credential_key == s3_storage.key.secret
+    finally:
+        ac.delete_library(lib_name)
 
 
 @SKIP_CONDA_MARK  # issue with fixture cleanup
 def test_upgrade_script_s3(s3_storage: S3Bucket, lib_name):
     ac = s3_storage.create_arctic()
-    create_library_config(ac, lib_name)
+    try:
+        create_library_config(ac, lib_name)
 
-    run(uri=s3_storage.arctic_uri, run=True)
+        run(uri=s3_storage.arctic_uri, run=True)
 
-    config = ac._library_manager.get_library_config(lib_name)
-    storage_config = get_s3_storage_config(config)
-    assert storage_config.bucket_name == ""
-    assert storage_config.credential_name == ""
-    assert storage_config.credential_key == ""
-
-    ac.delete_library(lib_name)
+        config = ac._library_manager.get_library_config(lib_name)
+        storage_config = get_s3_storage_config(config)
+        assert storage_config.bucket_name == ""
+        assert storage_config.credential_name == ""
+        assert storage_config.credential_key == ""
+    finally:
+        ac.delete_library(lib_name)
 
 
 @pytest.mark.parametrize("default_credential_provider", ["1", "true"])  # true for testing backwards compatibility
@@ -89,22 +91,23 @@ def test_upgrade_script_s3_rbac_ok(s3_clean_bucket: S3Bucket, monkeypatch, defau
     s3_clean_bucket.arctic_uri = uri
 
     ac = s3_clean_bucket.create_arctic()  # create_arctic() does proper clean up
-    create_library_config(ac, lib_name)  # Note this avoids the override so _RBAC_ is actually written to storage
-    ac[lib_name].write_pickle("x", 123)
+    try:
+        create_library_config(ac, lib_name)  # Note this avoids the override so _RBAC_ is actually written to storage
+        ac[lib_name].write_pickle("x", 123)
 
-    run(uri=uri, run=True)
+        run(uri=uri, run=True)
 
-    ac = Arctic(uri)
-    config = ac._library_manager.get_library_config(lib_name)
-    s3_clean_bucket = get_s3_storage_config(config)
-    assert s3_clean_bucket.bucket_name == s3_clean_bucket.bucket_name
-    assert s3_clean_bucket.credential_name == USE_AWS_CRED_PROVIDERS_TOKEN
-    assert s3_clean_bucket.credential_key == USE_AWS_CRED_PROVIDERS_TOKEN
+        ac = Arctic(uri)
+        config = ac._library_manager.get_library_config(lib_name)
+        s3_clean_bucket = get_s3_storage_config(config)
+        assert s3_clean_bucket.bucket_name == s3_clean_bucket.bucket_name
+        assert s3_clean_bucket.credential_name == USE_AWS_CRED_PROVIDERS_TOKEN
+        assert s3_clean_bucket.credential_key == USE_AWS_CRED_PROVIDERS_TOKEN
 
-    lib = ac[lib_name]
-    assert lib.read("x").data == 123
-
-    ac.delete_library(lib_name)
+        lib = ac[lib_name]
+        assert lib.read("x").data == 123
+    finally:
+        ac.delete_library(lib_name)
 
 
 @AZURE_TESTS_MARK

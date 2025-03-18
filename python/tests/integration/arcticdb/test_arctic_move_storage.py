@@ -92,22 +92,23 @@ def test_move_lmdb_library_map_size_reduction(tmp_path: Path):
     # Then - read with new tiny map size
     # Current data should still be readable, expect modifications to fail
     ac = Arctic(f"lmdb://{dest}?map_size=1KB")
-    assert ac.list_libraries() == ["lib"]
-    lib = ac["lib"]
-    assert set(lib.list_symbols()) == {"sym", "another_sym"}
-    assert_frame_equal(df, lib.read("sym").data)
+    try:
+        assert ac.list_libraries() == ["lib"]
+        lib = ac["lib"]
+        assert set(lib.list_symbols()) == {"sym", "another_sym"}
+        assert_frame_equal(df, lib.read("sym").data)
 
-    with pytest.raises(LmdbMapFullError) as e:
-        lib.write("another_sym", df)
+        with pytest.raises(LmdbMapFullError) as e:
+            lib.write("another_sym", df)
 
-    assert "MDB_MAP_FULL" in str(e.value)
-    assert "E5003" in str(e.value)
-    assert "-30792" in str(e.value)
+        assert "MDB_MAP_FULL" in str(e.value)
+        assert "E5003" in str(e.value)
+        assert "-30792" in str(e.value)
 
-    # stuff should still be readable despite the error
-    assert_frame_equal(df, lib.read("sym").data)
-
-    ac.delete_library("lib")
+        # stuff should still be readable despite the error
+        assert_frame_equal(df, lib.read("sym").data)
+    finally:
+        ac.delete_library("lib")
 
 
 def test_move_lmdb_library_map_size_increase(tmp_path: Path):
