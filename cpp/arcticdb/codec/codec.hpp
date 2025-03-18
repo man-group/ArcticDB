@@ -51,7 +51,7 @@ SizeResult max_compressed_size_dispatch(
     const SegmentInMemory& in_mem_seg,
     const BlockCodecImpl& codec_opts,
     EncodingVersion encoding_version,
-    std::vector<EncodingScanResultsSet>& encodings);
+    std::vector<EncodingScanResultSet>& encodings);
 
 EncodedFieldCollection decode_encoded_fields(
     const SegmentHeader& hdr,

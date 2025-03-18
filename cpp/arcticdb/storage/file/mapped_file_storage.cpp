@@ -17,6 +17,7 @@
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
+#include <arcticdb/codec/scanner.hpp>
 
 namespace arcticdb::storage::file {
 
@@ -41,10 +42,16 @@ void MappedFileStorage::init() {
     if (config_.bytes() > 0) {
         ARCTICDB_DEBUG(log::storage(), "Creating new mapped file storage at path {}", config_.path());
         multi_segment_header_.initalize(StreamId{NumericId{0}}, config_.items_count());
+
+        std::vector<EncodingScanResultSet> encodings;
+        if(codec_.codec_type() == Codec::ADAPTIVE)
+            encodings = get_encodings(multi_segment_header_.segment());
+
         auto data_size = config_.bytes() + max_compressed_size_dispatch(multi_segment_header_.segment(),
             codec_,
-            EncodingVersion{
-            static_cast<uint16_t>(config_.encoding_version())}).max_compressed_bytes_;
+            EncodingVersion{static_cast<uint16_t>(config_.encoding_version())},
+            encodings).max_compressed_bytes_;
+
         StreamId id = config_.has_str_id() ? StreamId{} : NumericId{};
         data_size += entity::max_key_size(id, index_descriptor_from_proto(config_.index()));
         file_.create_file(config_.path(), data_size);

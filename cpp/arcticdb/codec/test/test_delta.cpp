@@ -9,6 +9,23 @@
 
 namespace arcticdb {
 
+struct ColumnDataWrapper {
+    ColumnDataWrapper(ChunkedBuffer&& buffer, TypeDescriptor type, size_t row_count) :
+        buffer_(std::move(buffer)),
+        data_(&buffer_, nullptr, type, nullptr, nullptr, row_count) {
+    }
+
+    ChunkedBuffer buffer_;
+    ColumnData data_;
+};
+
+template <typename T>
+ColumnDataWrapper from_vector(const std::vector<T>& data, TypeDescriptor type) {
+    ChunkedBuffer buffer;
+    buffer.add_external_block(reinterpret_cast<const uint8_t*>(data.data()), data.size() * sizeof(T), 0);
+    return {std::move(buffer), type, data.size()};
+}
+
 class CompressionTest : public ::testing::Test {
 protected:
     std::mt19937 rng{42};
@@ -38,15 +55,15 @@ protected:
     }
 
     template<typename T>
-    void verify_roundtrip(const std::vector<T>& input) {
+    void verify_roundtrip(const std::vector<T>& input, TypeDescriptor type) {
         DeltaCompressor<T> compressor;
         DeltaDecompressor<T> decompressor{};
-
-        size_t compressed_size = compressor.scan(input.data(), input.size());
+        auto wrapper = from_vector(input, type);
+        size_t compressed_size = compressor.scan(wrapper.data_, input.size());
         std::vector<T> compressed(compressed_size);
 
         std::vector<T> output(input.size());
-        compressor.compress(input.data(), compressed.data(), compressed_size);
+        compressor.compress(wrapper.data_, compressed.data(), compressed_size);
 
         decompressor.init(compressed.data());
         ASSERT_EQ(decompressor.num_rows(), input.size());
@@ -57,81 +74,81 @@ protected:
 
 TEST_F(CompressionTest, SingleFullBlock) {
     auto input = generate_data<uint16_t>(1024, 0, 1);
-    verify_roundtrip(input);
+    verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
 TEST_F(CompressionTest, SinglePartialBlock) {
     auto input = generate_data<uint16_t>(500, 0, 1);
-    verify_roundtrip(input);
+    verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
 TEST_F(CompressionTest, SmallPartialBlock) {
     auto input = generate_data<uint16_t>(10, 0, 1);
-    verify_roundtrip(input);
+    verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
 TEST_F(CompressionTest, ThreeFullBlocks) {
     auto input = generate_data<uint16_t>(1024 * 3, 0, 1);
-    verify_roundtrip(input);
+    verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
 TEST_F(CompressionTest, BlocksPlusRemainder) {
     auto input = generate_data<uint16_t>(1024 * 2 + 500, 0, 1);
-    verify_roundtrip(input);
+    verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
 TEST_F(CompressionTest, SmallSizes) {
     for (size_t size : {1, 2, 3, 63, 64, 65}) {
         SCOPED_TRACE("Testing size: " + std::to_string(size));
         auto input = generate_data<uint16_t>(size, 0, 1);
-        verify_roundtrip(input);
+        verify_roundtrip(input, make_scalar_type(DataType::UINT16));
     }
 }
 
 TEST_F(CompressionTest, DifferentTypes) {
     {
         auto input = generate_data<uint8_t>(4000, 0, 1);
-        verify_roundtrip(input);
+        verify_roundtrip(input, make_scalar_type(DataType::UINT16));
     }
 
     {
         auto input = generate_data<uint16_t>(4000, 0, 1);
-        verify_roundtrip(input);
+        verify_roundtrip(input, make_scalar_type(DataType::UINT16));
     }
 
     {
         auto input = generate_data<uint32_t>(4000, 0, 1);
-        verify_roundtrip(input);
+        verify_roundtrip(input, make_scalar_type(DataType::UINT16));
     }
 
     {
         auto input = generate_data<uint64_t>(4000, 0, 1);
-        verify_roundtrip(input);
+        verify_roundtrip(input, make_scalar_type(DataType::UINT16));
     }
 }
 
 TEST_F(CompressionTest, SmallRange) {
     auto input = generate_data<uint64_t>(2000, 0, 1);
-    verify_roundtrip(input);
+    verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
 TEST_F(CompressionTest, DifferentRanges) {
     // Small deltas
     {
         auto input = generate_data<uint64_t>(2000, 0, 1);
-        verify_roundtrip(input);
+        verify_roundtrip(input, make_scalar_type(DataType::UINT16));
     }
 
     // Medium deltas
     {
         auto input = generate_data<uint64_t>(2000, 0, 100);
-        verify_roundtrip(input);
+        verify_roundtrip(input, make_scalar_type(DataType::UINT16));
     }
 
     // Large deltas
     {
         auto input = generate_data<uint64_t>(2000, 0, 4000);
-        verify_roundtrip(input);
+        verify_roundtrip(input, make_scalar_type(DataType::UINT16));
     }
 }
 
@@ -139,17 +156,18 @@ TEST_F(CompressionTest, MonotonicSequences) {
     std::vector<uint16_t> input(2000);
 
     std::iota(input.begin(), input.end(), 0);
-    verify_roundtrip(input);
+    verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
 TEST_F(CompressionTest, SizeEstimation) {
     auto input = generate_data<uint16_t>(2000, 0, 1);
 
     DeltaCompressor<uint16_t> compressor;
-    size_t estimated_size = compressor.scan(input.data(), input.size());
+    auto wrapper = from_vector(input, make_scalar_type(DataType::UINT16));
+    size_t estimated_size = compressor.scan(wrapper.data_, input.size());
 
     std::vector<uint16_t> compressed(estimated_size);
-    auto compressed_size = compressor.compress(input.data(), compressed.data(), estimated_size);
+    auto compressed_size = compressor.compress(wrapper.data_, compressed.data(), estimated_size);
     ASSERT_EQ(compressed_size, estimated_size);
 
     DeltaDecompressor<uint16_t> decompressor{};
@@ -162,10 +180,11 @@ TEST_F(CompressionTest, SizeEstimationPartial) {
     auto input = generate_data<uint16_t>(500, 0, 1);
 
     DeltaCompressor<uint16_t> compressor;
-    size_t estimated_size = compressor.scan(input.data(), input.size());
+    auto wrapper = from_vector(input, make_scalar_type(DataType::UINT16));
+    size_t estimated_size = compressor.scan(wrapper.data_, input.size());
 
     std::vector<uint16_t> compressed(estimated_size);
-    auto compressed_size = compressor.compress(input.data(), compressed.data(), estimated_size);
+    auto compressed_size = compressor.compress(wrapper.data_, compressed.data(), estimated_size);
     ASSERT_EQ(compressed_size, estimated_size);
 
     DeltaDecompressor<uint16_t> decompressor{};
@@ -193,9 +212,9 @@ TEST(DeltaCompressionStressTest, CompressDecompressSeparate) {
     const size_t iterations = 1000;
 
     auto input = generate_compressible_data<T>(numRows);
-
+    auto wrapper = from_vector(input, make_scalar_type(DataType::UINT32));
     DeltaCompressor<T> scanner;
-    size_t reqSize = scanner.scan(input.data(), numRows);
+    size_t reqSize = scanner.scan(wrapper.data_, numRows);
     std::vector<T> compressed(reqSize + 128, 0);
     std::vector<T> decompressed(numRows, 0);
 
@@ -203,8 +222,8 @@ TEST(DeltaCompressionStressTest, CompressDecompressSeparate) {
     volatile size_t total_comp_size = 0;
     for (size_t i = 0; i < iterations; i++) {
         DeltaCompressor<T> compressor;
-        auto estimated_size = compressor.scan(input.data(), input.size());
-        size_t comp_size = compressor.compress(input.data(), compressed.data(), estimated_size);
+        auto estimated_size = compressor.scan(wrapper.data_, input.size());
+        size_t comp_size = compressor.compress(wrapper.data_, compressed.data(), estimated_size);
         total_comp_size += comp_size;
     }
     auto end_compress = std::chrono::high_resolution_clock::now();

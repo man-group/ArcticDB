@@ -23,6 +23,7 @@
 #include <arcticdb/stream/piloted_clock.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
+#include <arcticdb/codec/scanner.hpp>
 
 namespace arcticdb {
 
@@ -33,7 +34,11 @@ size_t max_data_size(
     auto max_file_size = 0UL;
     for(const auto& item : items) {
         const auto& [pk, seg, slice] = item;
-        max_file_size += max_compressed_size_dispatch(seg, codec_opts, encoding_version).max_compressed_bytes_;
+        std::vector<EncodingScanResultSet> encodings;
+        if(codec_opts.codec_type() == Codec::ADAPTIVE)
+            encodings = get_encodings(seg);
+
+        max_file_size += max_compressed_size_dispatch(seg, codec_opts, encoding_version, encodings).max_compressed_bytes_;
     }
     return max_file_size;
 }
@@ -44,13 +49,12 @@ struct FileFooter {
 };
 
 void write_dataframe_to_file_internal(
-    const StreamId &stream_id,
-    const std::shared_ptr<pipelines::InputTensorFrame> &frame,
-    const std::string& path,
-    const WriteOptions &options,
-    const BlockCodecImpl& block_codec,
-    EncodingVersion encoding_version
-) {
+        const StreamId &stream_id,
+        const std::shared_ptr<pipelines::InputTensorFrame> &frame,
+        const std::string& path,
+        const WriteOptions &options,
+        const BlockCodecImpl& block_codec,
+        EncodingVersion encoding_version) {
     ARCTICDB_SAMPLE(WriteDataFrameToFile, 0)
     py::gil_scoped_release release_gil;
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_dataframe_to_file");

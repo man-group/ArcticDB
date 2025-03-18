@@ -33,7 +33,7 @@ SizeResult max_compressed_size_dispatch(
     const SegmentInMemory& in_mem_seg,
     const BlockCodecImpl& codec_opts,
     EncodingVersion encoding_version,
-    std::vector<EncodingScanResultsSet>& encodings) {
+    std::vector<EncodingScanResultSet>& encodings) {
     if(encoding_version == EncodingVersion::V2) {
         return max_compressed_size_v2(in_mem_seg, codec_opts, encodings);
     } else {

@@ -12,7 +12,7 @@ namespace arcticdb {
 
 #define BITPACK_ROW(n) {                                                     \
     constexpr std::size_t row = (n);                                         \
-    std::size_t idx = index(row, lane);                                      \
+    std::size_t idx = fastlanes_index(row, lane);                                      \
     T src = kernel(in, idx, lane);                                           \
     src &= Parent::mask;                                                     \
     if constexpr (row == 0) {                                                \
@@ -194,7 +194,7 @@ struct BitPackFused : public BitPackHelper<T, bit_width> {
     } else {                                                                                    \
         tmp = (src >> shift) & mask;                                                            \
     }                                                                                           \
-    size_t idx = index(row, lane);                                                              \
+    size_t idx = fastlanes_index(row, lane);                                                              \
     kernel(out, idx, tmp, lane);                                                                \
 }
 

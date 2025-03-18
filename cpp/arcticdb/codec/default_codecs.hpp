@@ -8,6 +8,7 @@
 #pragma once
 
 #include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/codec/encoded_field.hpp>
 
 namespace arcticdb::codec {
 

@@ -100,14 +100,18 @@ struct Delta {
     }
 
     static EncodingScanResult max_compressed_size(FieldStatsImpl, DataType data_type, size_t num_rows, ColumnData data) {
-        return make_scalar_type(data_type).visit_tag([data, num_rows] (auto tag) {
+        return make_scalar_type(data_type).visit_tag([data, num_rows] (auto tag) -> EncodingScanResult {
             using T = decltype(tag)::DataTypeTag::raw_type;
-            DeltaCompressor<T> compressor;
-            const auto original_size = num_rows * sizeof(T);
-            size_t bytes = compressor.scan(data, num_rows);
-            auto result = create_scan_result(EncodingType::DELTA, bytes, speed_factor(), original_size, false);
-            result.data_ = compressor.data();
-            return result;
+            if constexpr(std::is_integral_v<T> && !std::is_same_v<T, bool>) {
+                DeltaCompressor<T> compressor;
+                const auto original_size = num_rows * sizeof(T);
+                size_t bytes = compressor.scan(data, num_rows);
+                auto result = create_scan_result(EncodingType::DELTA, bytes, speed_factor(), original_size, false);
+                result.data_ = compressor.data();
+                return result;
+            } else {
+                util::raise_rte("Request to scan non-integral type in delta encoder");
+            }
         });
     }
 

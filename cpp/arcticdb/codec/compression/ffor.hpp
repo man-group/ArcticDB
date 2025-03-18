@@ -77,6 +77,7 @@ size_t compress_remainder(const T* input, size_t count, T* output, size_t bit_wi
         scalar_pack(delta, bit_width, bit_pos, current_word, data_out);
     }
 
+    //TODO is this needed?
     if (bit_pos > 0) {
         *data_out++ = current_word;
     }
@@ -106,20 +107,33 @@ size_t decompress_remainder(const T* input, T* output) {
 }
 
 template <typename T>
-std::pair<T, size_t> reference_and_bitwidth(const T* __restrict in, size_t count) {
-    //TODO use vector min_max
-    T reference = in[0];
-    for (size_t i = 1; i < count; ++i) {
-        reference = std::min(reference, in[i]);
+std::pair<T, size_t> reference_and_bitwidth(ColumnData data) {
+    if(data.has_field_stats()) {
+        auto stats = data.field_stats();
+        auto min = stats.get_min<T>();
+        auto max = stats.get_max<T>();
+        auto max_delta = max - min;
+        auto bits_needed = std::bit_width(static_cast<std::make_unsigned_t<T>>(max_delta));
+        return {min, bits_needed};
     }
 
-    T max_delta = 0;
-    for (size_t i = 0; i < count; ++i) {
-        max_delta = std::max(max_delta, in[i] - reference);
-    }
+    return data.type().visit_tag([&data] (auto tdt) -> std::pair<T, size_t> {
+        using TDT = decltype(tdt);
 
-    size_t bits_needed = std::bit_width(static_cast<std::make_unsigned_t<T>>(max_delta));
-    return {reference, bits_needed};
+        auto i = data.cbegin<TDT, IteratorType::REGULAR>();
+        T reference = *i;
+        for(; i != data.cend<TDT, IteratorType::REGULAR>(); ++i) {
+            reference = std::min<T>(reference, *i);
+        }
+
+        T max_delta = 0;
+        for(auto j = data.cbegin<TDT, IteratorType::REGULAR>(); j != data.cend<TDT, IteratorType::REGULAR>(); ++j) {
+            max_delta = std::max(max_delta, *j - reference);
+        }
+
+        size_t bits_needed = std::bit_width(static_cast<std::make_unsigned_t<T>>(max_delta));
+        return {reference, bits_needed};
+    });
 }
 
 template <typename T>
@@ -128,7 +142,7 @@ struct FForCompressor {
         if (count == 0)
             return 0;
 
-        const auto [reference, bits_needed] = reference_and_bitwidth(in, count);
+        const auto [reference, bits_needed] = reference_and_bitwidth<T>(data);
         ARCTICDB_DEBUG(log::codec(), "FFOR bitpacking requires {} bits", bits_needed);
 
         auto *header [[maybe_unused]] = new(out) FForHeader<T>{
@@ -144,7 +158,7 @@ struct FForCompressor {
 
         FForCompressKernel<T> kernel(reference);
         if(data.num_blocks() == 1) {
-            auto in = data.buffer().ptr_cast<T>(0);
+            auto in = data.buffer().ptr_cast<T>(0, num_full_blocks * sizeof(T));
             for (size_t block = 0; block < num_full_blocks; ++block) {
                 compressed_size += dispatch_bitwidth_fused<T, BitPackFused>(
                     in + block * BLOCK_SIZE,
@@ -173,8 +187,8 @@ struct FForCompressor {
         size_t remaining = count % 1024;
         ARCTICDB_DEBUG(log::codec(), "Compressing {} remainder values", remaining);
         if (remaining > 0) {
-            DynamicRangeRandomAccessAdaptor<T> adaptor{data, remaining};
-            const T *remaining_in = in + num_full_blocks * 1024;
+            DynamicRangeRandomAccessAdaptor<T> adaptor{data};
+            auto remaining_in = adaptor.at(num_full_blocks * BLOCK_SIZE, remaining);
             T *remaining_out = out_ptr + compressed_size - header_size_in_t<FForHeader<T>, T>();
 
             compressed_size += compress_remainder(

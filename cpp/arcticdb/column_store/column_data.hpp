@@ -323,7 +323,7 @@ public:
 
     template<typename TDT, IteratorType iterator_type=IteratorType::REGULAR, IteratorDensity iterator_density=IteratorDensity::DENSE>
     ColumnDataIterator<TDT, iterator_type, iterator_density, true> cbegin() {
-        return ColumnDataIterator<TDT, iterator_type, iterator_density, true>(this);
+        return ColumnDataIterator<TDT, iterator_type, iterator_density, true>(const_cast<ColumnData*>(this));
     }
 
     template<typename TDT, IteratorType iterator_type=IteratorType::REGULAR, IteratorDensity iterator_density=IteratorDensity::DENSE>
@@ -423,6 +423,10 @@ public:
 
     [[nodiscard]] const FieldStatsImpl& field_stats() const {
         return *statistics_;
+    }
+
+    [[nodiscard]] bool has_field_stats() const {
+        return statistics_ != nullptr;
     }
 
     [[nodiscard]] size_t row_count() const {

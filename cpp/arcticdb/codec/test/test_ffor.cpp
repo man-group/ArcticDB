@@ -6,19 +6,37 @@
 
 namespace arcticdb {
 
+struct ColumnDataWrapper {
+    ColumnDataWrapper(ChunkedBuffer&& buffer, TypeDescriptor type, size_t row_count) :
+        buffer_(std::move(buffer)),
+        data_(&buffer_, nullptr, type, nullptr, nullptr, row_count) {
+    }
+
+    ChunkedBuffer buffer_;
+    ColumnData data_;
+};
+
+template <typename T>
+ColumnDataWrapper from_vector(const std::vector<T>& data, TypeDescriptor type) {
+    ChunkedBuffer buffer;
+    buffer.add_external_block(reinterpret_cast<const uint8_t*>(data.data()), data.size() * sizeof(T), 0);
+    return {std::move(buffer), type, data.size()};
+}
+
 class FForCodecTest : public ::testing::Test {
 protected:
     static constexpr size_t values_per_block = 1024;
 
     template<typename T>
-    void verify_roundtrip(const std::vector<T>& original) {
+    void verify_roundtrip(const std::vector<T>& original, TypeDescriptor type) {
         ASSERT_FALSE(original.empty());
 
         std::vector<T> compressed(original.size() + header_size_in_t<FForHeader<T>, T>());
         std::vector<T> decompressed(original.size());
+        auto wrapper = from_vector(original, type);
 
         size_t compressed_size = FForCompressor<T>::compress(
-            original.data(),
+            wrapper.data_,
             compressed.data(),
             original.size()
         );
@@ -51,19 +69,19 @@ protected:
 TEST_F(FForCodecTest, SingleBlock) {
     std::vector<uint32_t> data(values_per_block);
     std::iota(data.begin(), data.end(), 1000);
-    verify_roundtrip(data);
+    verify_roundtrip(data, make_scalar_type(DataType::UINT32));
 }
 
 TEST_F(FForCodecTest, MultipleCompleteBlocks) {
     std::vector<uint32_t> data(values_per_block * 4);
     std::iota(data.begin(), data.end(), 1000);
-    verify_roundtrip(data);
+    verify_roundtrip(data, make_scalar_type(DataType::UINT32));
 }
 
 TEST_F(FForCodecTest, BlocksWithRemainder) {
     std::vector<uint32_t> data(values_per_block * 3 + values_per_block/2);
     std::iota(data.begin(), data.end(), 1000);
-    verify_roundtrip(data);
+    verify_roundtrip(data, make_scalar_type(DataType::UINT32));
 }
 
 TEST_F(FForCodecTest, SmallRange) {
@@ -75,7 +93,7 @@ TEST_F(FForCodecTest, SmallRange) {
         i = dist(rng);
 
     std::sort(data.begin(), data.end());
-    verify_roundtrip(data);
+    verify_roundtrip(data, make_scalar_type(DataType::UINT32));
 }
 
 TEST_F(FForCodecTest, LargeRange) {
@@ -87,20 +105,20 @@ TEST_F(FForCodecTest, LargeRange) {
         i = dist(rng);
 
     std::sort(data.begin(), data.end());
-    verify_roundtrip(data);
+    verify_roundtrip(data, make_scalar_type(DataType::UINT32));
 }
 
 TEST_F(FForCodecTest, DifferentTypes) {
     {
         std::vector<uint32_t> data(values_per_block * 2);
         std::iota(data.begin(), data.end(), 1000U);
-        verify_roundtrip(data);
+        verify_roundtrip(data, make_scalar_type(DataType::UINT32));
     }
 
     {
         std::vector<uint64_t> data(1024/64 * 2);  // Adjust for larger type
         std::iota(data.begin(), data.end(), 1000ULL);
-        verify_roundtrip(data);
+        verify_roundtrip(data, make_scalar_type(DataType::UINT64));
     }
 }
 
@@ -109,27 +127,27 @@ TEST_F(FForCodecTest, EdgeCases) {
     {
         std::vector<uint32_t> data(values_per_block);
         std::iota(data.begin(), data.end(), 0);
-        verify_roundtrip(data);
+        verify_roundtrip(data, make_scalar_type(DataType::UINT32));
     }
 
     // Test with just over one block
     {
         std::vector<uint32_t> data(values_per_block + 1);
         std::iota(data.begin(), data.end(), 0);
-        verify_roundtrip(data);
+        verify_roundtrip(data, make_scalar_type(DataType::UINT32));
     }
 
     // Test constant values
     {
         std::vector<uint32_t> data(values_per_block * 2, 42);
-        verify_roundtrip(data);
+        verify_roundtrip(data, make_scalar_type(DataType::UINT32));
     }
 
     // Test minimum range (all same value except one)
     {
         std::vector<uint32_t> data(values_per_block * 2, 42);
         data.back() = 43;  // One different value
-        verify_roundtrip(data);
+        verify_roundtrip(data, make_scalar_type(DataType::UINT32));
     }
 }
 
@@ -141,7 +159,7 @@ TEST_F(FForCodecTest, RangePatterns) {
             data[i] = 1 << (i % 10);  // Use modulo to prevent overflow
         }
         std::sort(data.begin(), data.end());
-        verify_roundtrip(data);
+        verify_roundtrip(data, make_scalar_type(DataType::UINT32));
     }
 
     // Logarithmic
@@ -150,7 +168,7 @@ TEST_F(FForCodecTest, RangePatterns) {
         for (size_t i = 0; i < data.size(); ++i) {
             data[i] = static_cast<uint32_t>(std::log2(i + 2) * 1000);
         }
-        verify_roundtrip(data);
+        verify_roundtrip(data, make_scalar_type(DataType::UINT32));
     }
 
     // Normal distribution
@@ -163,7 +181,7 @@ TEST_F(FForCodecTest, RangePatterns) {
             i = static_cast<uint32_t>(dist(rng));
 
         std::sort(data.begin(), data.end());
-        verify_roundtrip(data);
+        verify_roundtrip(data, make_scalar_type(DataType::UINT32));
     }
 }
 
@@ -207,7 +225,7 @@ TEST_F(FForCodecTest, StressTest) {
 
         std::sort(data.begin(), data.end());
         SCOPED_TRACE("Test iteration " + std::to_string(test));
-        verify_roundtrip(data);
+        verify_roundtrip(data, make_scalar_type(DataType::UINT32));
     }
 }
 
@@ -221,10 +239,12 @@ TEST(FFORStressTest, CompressDecompressSeparate) {
     }
     std::vector<T> compressed(num_rows * 2, 0);
     std::vector<T> decompressed(num_rows, 0);
+    auto wrapper = from_vector(input, make_scalar_type(DataType::UINT32));
+
     auto start_compress = std::chrono::high_resolution_clock::now();
     size_t total_comp_size = 0;
     for (size_t iter = 0; iter < iterations; iter++) {
-        size_t compressed_size = FForCompressor<T>::compress(input.data(), compressed.data(), num_rows);
+        size_t compressed_size = FForCompressor<T>::compress(wrapper.data_, compressed.data(), num_rows);
         total_comp_size += compressed_size;
     }
     auto end_compress = std::chrono::high_resolution_clock::now();

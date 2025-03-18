@@ -13,6 +13,7 @@
 #include <arcticdb/codec/segment_identifier.hpp>
 #include <arcticdb/codec/adaptive.hpp>
 #include <arcticdb/codec/scanner.hpp>
+#include <arcticdb/codec/compression/encoding_scan_result.hpp>
 
 namespace arcticdb {
 void add_bitmagic_compressed_size(
@@ -280,10 +281,17 @@ static void calc_stream_descriptor_fields_size(
     }
 }
 
+void scan_adaptive_encodings(
+        const SegmentInMemory& in_mem_seg,
+        std::vector<EncodingScanResultSet>& encoding_results,
+        SizeResult& size_result) {
+    resolve_adaptive_encodings_size(in_mem_seg, encoding_results, size_result);
+}
+
 [[nodiscard]] SizeResult max_compressed_size_v2(
         const SegmentInMemory& in_mem_seg,
         const BlockCodecImpl& default_codec_opts,
-        std::vector<EncodingScanResult> adaptive_encodings) {
+        std::vector<EncodingScanResultSet>& adaptive_encodings) {
     ARCTICDB_SAMPLE(GetSegmentCompressedSize, 0)
     SizeResult result{};
     auto non_data_codec_opts = codec::default_lz4_codec();
@@ -298,7 +306,7 @@ static void calc_stream_descriptor_fields_size(
     if(in_mem_seg.row_count() > 0) {
         result.max_compressed_bytes_ += sizeof(ColumnMagic) * in_mem_seg.descriptor().field_count();
         if(!adaptive_encodings.empty())
-            log::version().info("oops");
+            scan_adaptive_encodings(in_mem_seg, adaptive_encodings, result);
         else
             calc_columns_size<EncodingPolicyV2>(in_mem_seg, default_codec_opts, result);
 
@@ -326,30 +334,6 @@ static void encode_encoded_fields(
     ARCTICDB_DEBUG(log::codec(), "Encoded encoded blocks to position {}", pos);
 }
 
-SizeResult resolve_adaptive_encodings_size(const SegmentInMemory& seg, std::vector<EncodingScanResultSet>& encodings) {
-    util::check(encodings.size() == seg.num_columns(), "Expected equality of encoding scan results to columns: {} != {}", encodings.size(), seg.num_columns());
-    for (std::size_t column_index = 0; column_index < seg.num_columns(); ++column_index) {
-        auto& results = encodings[column_index];
-        for(auto i = 0UL; i < results.size(); ++i) {
-            if(results[i].is_deterministic_) {
-                results.select(i);
-                break;
-            }
-
-
-        }
-
-    }
-}
-
-std::vector<EncodingScanResultSet> get_encodings(const SegmentInMemory& seg) {
-    std::vector<EncodingScanResultSet> output;
-    output.reserve(seg.num_columns());
-    for (std::size_t column_index = 0; column_index < seg.num_columns(); ++column_index)
-        output.emplace_back(predicted_optimal_encodings(seg.column(column_index).data()));
-
-    return output;
-}
 
 [[nodiscard]] Segment encode_v2(
         SegmentInMemory&& s,
@@ -365,7 +349,7 @@ std::vector<EncodingScanResultSet> get_encodings(const SegmentInMemory& seg) {
 
     SegmentHeader segment_header{EncodingVersion::V2};
     segment_header.set_compacted(in_mem_seg.compacted());
-    std::vector<EncodingScanResultsSet> encodings;
+    std::vector<EncodingScanResultSet> encodings;
     if(codec_opts.codec_type() == Codec::ADAPTIVE)
         encodings = get_encodings(in_mem_seg);
 

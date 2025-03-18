@@ -13,13 +13,14 @@ struct EncodingScanResult {
     EncodingScanResult() = default;
 
     EncodingScanResult(
-        size_t cost,
-        size_t estimated_size,
-        EncodingType type,
-        bool is_deterministic
-    ) :
+            size_t cost,
+            size_t estimated_size,
+            size_t original_size,
+            EncodingType type,
+            bool is_deterministic) :
         cost_(cost),
         estimated_size_(estimated_size),
+        original_size_(original_size),
         type_(type),
         is_deterministic_(is_deterministic) {
     }
@@ -27,12 +28,12 @@ struct EncodingScanResult {
     ARCTICDB_MOVE_COPY_DEFAULT(EncodingScanResult)
 
     size_t cost_ = std::numeric_limits<size_t>::max();
-    size_t estimated_size_ = 0;
-    EncodingType type_;
+    size_t estimated_size_ = 0UL;
+    size_t original_size_ = 0UL;
+    EncodingType type_ = EncodingType::PLAIN;
     bool is_deterministic_ = false;
-    EncoderData data_;
+    EncoderData data_ = EncoderData{};
 };
-
 
 size_t calculate_score(size_t speed_factor, size_t estimated_size, size_t original_size, size_t weight) {
     weight = std::max(100UL, weight);
@@ -42,17 +43,17 @@ size_t calculate_score(size_t speed_factor, size_t estimated_size, size_t origin
 }
 
 // The below function can be used to compute a weighting for the size vs speed in
-// compression. Currently we use a default weighting of 17, which means that for
+// compression. Currently, we use a default weighting of 17, which means that for
 // an encoding with a speed factor of 10 (10 microseconds per 100k rows) and another
 // encoding with a speed factor of 20, the slower encoding will be chosen when the
 // estimated size of the faster encoding is > 1.5x that of the slower encoding.
-size_t compute_size_weight(double ratio, size_t baseline_size_ratio = 100) {
-    double denominator = baseline_size_ratio * (ratio - 1.0) + 10.0;
+[[maybe_unused]] size_t compute_size_weight(double ratio, size_t baseline_size_ratio = 100) {
+    double denominator = static_cast<double>(baseline_size_ratio) * (ratio - 1.0) + 10.0;
     if (denominator <= 0.0)
         return 100;
 
     double computed_weight = 1000.0 / denominator;
-    size_t weight = static_cast<size_t>(std::round(computed_weight));
+    auto weight = static_cast<size_t>(std::round(computed_weight));
 
     return std::min(weight, 100UL);
 }
@@ -65,7 +66,53 @@ EncodingScanResult create_scan_result(
         bool is_deterministic) {
     static size_t weight = ConfigsMap::instance()->get_int("Scanner.SizeWeighting", 17);
     auto score = calculate_score(speed, estimated_size, original_size, weight);
-    return EncodingScanResult(score, estimated_size, encoding_type, is_deterministic);
+    return EncodingScanResult(score, estimated_size, original_size, encoding_type, is_deterministic);
 }
 
-}
+constexpr size_t MAX_ENCODINGS = 3;
+
+struct EncodingScanResultSet {
+    std::array<EncodingScanResult, MAX_ENCODINGS> results_;
+    size_t members_ = 0UL;
+
+    void try_emplace(EncodingScanResult result) {
+        if (members_ < MAX_ENCODINGS) {
+            results_[members_++] = result;
+        } else {
+            size_t max_pos = 0;
+            for (auto i = 1UL; i < members_; ++i) {
+                if (results_[i].cost_ > results_[max_pos].cost_)
+                    max_pos = i;
+            }
+            if (result.cost_ < results_[max_pos].cost_)
+                results_[max_pos] = result;
+        }
+    }
+
+    [[nodiscard]] size_t size() const {
+        return members_;
+    }
+
+    const EncodingScanResult& operator[](size_t pos) const {
+        return results_[pos];
+    }
+
+    EncodingScanResult& operator[](size_t pos) {
+        return results_[pos];
+    }
+
+    void select(size_t offset) {
+        util::check(offset < members_, "Out-of-bounds offset given to EncodingScanResultSet: {}", offset);
+        if(offset != 0)
+            std::swap(results_[0], results_[offset]);
+
+        members_ = 1;
+    }
+
+    void finalize() {
+        std::sort(std::begin(results_), std::begin(results_) + members_, [] (const auto& l, const auto & r) {
+            return l.cost_ < r.cost_;
+        });
+    }
+};
+} // namespace arcticdb

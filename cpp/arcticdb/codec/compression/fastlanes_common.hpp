@@ -98,14 +98,14 @@ constexpr size_t transposed_index(size_t index) {
     return (lane * 64) + (FL_ORDER[order] * 8) + row;
 }
 
-constexpr size_t index(size_t row, size_t lane) {
+constexpr size_t fastlanes_index(size_t row, size_t lane) {
     const auto o = row / 8;
     const auto s = row % 8;
     return (FL_ORDER[o] * 16) + (s * 128) + lane;
 }
 
-static_assert(index(1, 0) == 128);
-static_assert(index(0, 1) == 1);
+static_assert(fastlanes_index(1, 0) == 128);
+static_assert(fastlanes_index(0, 1) == 1);
 
 template<typename HeaderType, typename T>
 static constexpr size_t header_size_in_t() {

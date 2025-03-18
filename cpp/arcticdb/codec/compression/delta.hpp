@@ -150,7 +150,7 @@ constexpr size_t full_header_size() {
     return (sizeof(DeltaHeader<T>) + sizeof(T) - 1) / sizeof(T);
 }
 
-template<typename T>
+template<typename T>//, std::enable_if_t<std::is_integral_v<DataType>, int> = 0>
 class DeltaCompressor : public DeltaCompressData {
     using Header = DeltaHeader<T>;
     using h = Helper<T>;
@@ -206,7 +206,7 @@ public:
             total_size += full_header_size<T>();
             ARCTICDB_DEBUG(log::codec(), "Total size including header: {}", total_size);
 
-            auto max_delta = std::numeric_limits<T>::lowest();
+            T max_delta = std::numeric_limits<T>::lowest();
             if(input.num_blocks() == 1) {
                 auto ptr = input.buffer().data();
                 auto current = *ptr;
@@ -220,14 +220,14 @@ public:
                 auto current = *input.buffer().data();
                 for(auto i = 0UL; i < full_blocks_; ++i) {
                     auto ptr = adaptor.next();
-                    for (auto j = 0; j < BLOCK_SIZE; ++j) {
+                    for (auto j = 0UL; j < BLOCK_SIZE; ++j) {
                         const T delta = ptr[i] - current;
                         current = ptr[i];
                         max_delta = std::max(delta, max_delta);
                     }
                 }
             }
-            simd_bit_width_ = std::bit_width<T>(max_delta);
+            simd_bit_width_ = std::bit_width(static_cast<std::make_unsigned_t<T>>(max_delta));
             util::check(simd_bit_width_ > 0, "Got zero maximum bit_width, value is constant!");
             total_size += full_blocks_ * calculate_block_size<T>(simd_bit_width_);
         } else {
@@ -246,7 +246,7 @@ public:
                 max_delta = std::max(max_delta, delta);
                 prev = remainder_ptr[i];
             }
-            remainder_bit_width_ = max_delta == 0 ? 1 : std::bit_width(max_delta);
+            remainder_bit_width_ = max_delta == 0 ? 1 : std::bit_width(static_cast<std::make_unsigned_t<T>>(max_delta));
             total_size += calc_remainder_size<T>(remainder_, remainder_bit_width_);
         }
         ARCTICDB_DEBUG(log::codec(), "Total size including remainder: {}", total_size);
@@ -280,7 +280,7 @@ public:
             std::array<T, BLOCK_SIZE> transposed;
             ARCTICDB_DEBUG(log::codec(), "Writing full blocks at offset {}", output_offset);
             if(data.num_blocks() == 1) {
-                auto input = data.buffer().ptr_cast<T>(0);
+                auto input = data.buffer().ptr_cast<T>(0, full_blocks_ * BLOCK_SIZE);
                 for (size_t block = 0UL; block < full_blocks_; block++) {
                     const auto input_offset = block * BLOCK_SIZE;
                     block_compress(input + input_offset, output_offset, transposed, output);
@@ -289,7 +289,7 @@ public:
                 ContiguousRangeForwardAdaptor<T, BLOCK_SIZE> adaptor(data);
                 for(auto i = 0; i < full_blocks_; ++i) {
                     auto input = adaptor.next();
-                    block_compress(input, input, output_offset, transposed, output);
+                    block_compress(input, output_offset, transposed, output);
                 }
             }
         } else {
