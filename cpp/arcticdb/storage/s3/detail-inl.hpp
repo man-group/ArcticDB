@@ -525,7 +525,7 @@ ObjectSizes do_calculate_sizes_for_type_impl(
     do {
         auto list_objects_result = s3_client.list_objects(path_info.key_prefix_, bucket_name, continuation_token);
         if (list_objects_result.is_success()) {
-            auto& output = list_objects_result.get_output();
+            const auto& output = list_objects_result.get_output();
 
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
 

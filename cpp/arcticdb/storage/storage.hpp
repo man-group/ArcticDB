@@ -137,7 +137,7 @@ public:
           visitor(std::move(k));
           return false; // keep applying the visitor no matter what
         };
-      do_iterate_type_until_match(key_type, predicate_visitor, prefix);
+        do_iterate_type_until_match(key_type, predicate_visitor, prefix);
     }
 
     [[nodiscard]] virtual bool supports_object_size_calculation() const {
@@ -259,9 +259,9 @@ template<> struct formatter<ObjectSizes> {
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const ObjectSizes &srv, FormatContext &ctx) const {
+    auto format(const ObjectSizes &sizes, FormatContext &ctx) const {
         return fmt::format_to(ctx.out(), "ObjectSizes key_type[{}] count[{}] compressed_size_bytes[{}]",
-                              srv.key_type_, srv.count_, srv.compressed_size_bytes_);
+                              sizes.key_type_, sizes.count_, sizes.compressed_size_bytes_);
     }
 };
 }

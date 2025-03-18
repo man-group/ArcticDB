@@ -1,8 +1,11 @@
 from multiprocessing import Queue, Process
 
 import pytest
-from arcticdb.util.test import sample_dataframe
+from arcticdb import LibraryOptions
+from arcticdb.encoding_version import EncodingVersion
+from arcticdb.util.test import sample_dataframe, config_context_multi
 from arcticdb_ext.storage import KeyType
+import arcticdb_ext.cpp_async as adb_async
 
 
 def test_symbol_sizes(basic_store):
@@ -105,6 +108,79 @@ def test_scan_object_sizes(arctic_client, lib_name):
     assert 500 < res[KeyType.VERSION_REF][1] < 1500
 
 
+@pytest.mark.parametrize("storage, encoding_version_, num_io_threads, num_cpu_threads", [
+    ("s3", EncodingVersion.V1, 1, 1),
+    ("s3", EncodingVersion.V1, 10, 1),
+    ("s3", EncodingVersion.V1, 1, 10),
+])
+def test_scan_object_sizes_threading(request, storage, encoding_version_, lib_name, num_io_threads, num_cpu_threads):
+    """Some stress testing for scan_object_sizes, particularly against deadlocks. Use a small segment size so that
+    there is some work to be done in parallel."""
+    storage_fixture = request.getfixturevalue(storage + "_storage")
+    arctic_client = storage_fixture.create_arctic(encoding_version=encoding_version_)
+    try:
+        with config_context_multi({"VersionStore.NumIOThreads": num_io_threads, "VersionStore.NumCPUThreads": num_cpu_threads}):
+            adb_async.reinit_task_scheduler()
+            if num_io_threads:
+                assert adb_async.io_thread_count() == num_io_threads
+            if num_cpu_threads:
+                assert adb_async.cpu_thread_count() == num_cpu_threads
+
+            lib = arctic_client.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=5))
+            basic_store = lib._nvs
+
+            df = sample_dataframe(100)
+            basic_store.write("sym", df)
+            basic_store.write("sym", df)
+
+            sizes = basic_store.version_store.scan_object_sizes()
+
+            res = dict()
+            for s in sizes:
+                res[s.key_type] = (s.count, s.compressed_size_bytes)
+
+            assert KeyType.VERSION in res
+            assert KeyType.TABLE_INDEX in res
+            assert KeyType.TABLE_DATA in res
+            assert KeyType.VERSION_REF in res
+    finally:
+        adb_async.reinit_task_scheduler()
+
+
+@pytest.mark.parametrize("storage, encoding_version_, num_io_threads, num_cpu_threads", [
+    ("s3", EncodingVersion.V1, 1, 1),
+    ("s3", EncodingVersion.V1, 10, 1),
+    ("s3", EncodingVersion.V1, 1, 10),
+])
+def test_scan_object_sizes_by_stream_threading(request, storage, encoding_version_, lib_name, num_io_threads, num_cpu_threads):
+    """Some stress testing for scan_object_sizes, particularly against deadlocks. Use a small segment size so that
+    there is some work to be done in parallel."""
+    storage_fixture = request.getfixturevalue(storage + "_storage")
+    arctic_client = storage_fixture.create_arctic(encoding_version=encoding_version_)
+    try:
+        with config_context_multi({"VersionStore.NumIOThreads": num_io_threads, "VersionStore.NumCPUThreads": num_cpu_threads}):
+            adb_async.reinit_task_scheduler()
+            if num_io_threads:
+                assert adb_async.io_thread_count() == num_io_threads
+            if num_cpu_threads:
+                assert adb_async.cpu_thread_count() == num_cpu_threads
+
+            lib = arctic_client.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=5))
+            basic_store = lib._nvs
+
+            df = sample_dataframe(100)
+            basic_store.write("sym", df)
+            basic_store.write("sym", df)
+
+            sizes = basic_store.version_store.scan_object_sizes_by_stream()
+
+            assert sizes["sym"][KeyType.VERSION].compressed_size < 2000
+            assert sizes["sym"][KeyType.TABLE_INDEX].compressed_size < 5000
+            assert sizes["sym"][KeyType.TABLE_DATA].compressed_size < 50_000
+    finally:
+        adb_async.reinit_task_scheduler()
+
+
 @pytest.fixture
 def reader_store(basic_store):
     return basic_store
@@ -141,7 +217,7 @@ def test_symbol_sizes_concurrent(reader_store, writer_store):
     try:
         reader.start()
         writer.start()
-        reader.join(1)
+        reader.join(2)
         writer.join(0.001)
     finally:
         writer.terminate()

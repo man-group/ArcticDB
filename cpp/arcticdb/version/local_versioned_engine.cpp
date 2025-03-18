@@ -1708,8 +1708,7 @@ std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes() {
         sizes.push_back(store->get_object_sizes(key_type, ""));
     });
 
-    folly::QueuedImmediateExecutor inline_executor;
-    return folly::collect(sizes_futs).via(&inline_executor).get();
+    return folly::collect(sizes_futs).via(&async::cpu_executor()).get();
 }
 
 std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> LocalVersionedEngine::scan_object_sizes_by_stream() {

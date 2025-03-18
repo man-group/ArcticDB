@@ -188,7 +188,12 @@ public:
         }
     }
 
-    ObjectSizes get_object_sizes(KeyType key_type, const std::string& prefix) {
+    ObjectSizes get_object_sizes(KeyType key_type, const std::string& prefix, bool primary_only = true) {
+        if (primary_only) {
+            auto storage_sizes = primary().get_object_sizes(key_type, prefix);
+            return {key_type, storage_sizes.count_, storage_sizes.compressed_size_bytes_};
+        }
+
         ObjectSizes res{key_type, 0, 0};
         for (const auto& storage : storages_) {
             auto storage_sizes = storage->get_object_sizes(key_type, prefix);

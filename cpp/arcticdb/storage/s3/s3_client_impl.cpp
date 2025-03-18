@@ -305,8 +305,7 @@ S3Result<ListObjectsOutput> S3ClientImpl::list_objects(
         s3_object_sizes.emplace_back(s3_object.GetSize());
     }
 
-    ListObjectsOutput output = {s3_object_names, s3_object_sizes, next_continuation_token};
-    return {output};
+    return {ListObjectsOutput{std::move(s3_object_names), std::move(s3_object_sizes), next_continuation_token}};
 }
 
 }
