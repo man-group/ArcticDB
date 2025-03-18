@@ -40,10 +40,10 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
 
-      - name: Install Conda environment from environment_unix.yml
+      - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v2.0.0
         with:
-          environment-file: environment_unix.yml
+          environment-file: environment-dev.yml
           init-shell: >-
             bash
           cache-environment: true
@@ -124,10 +124,10 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
 
-      - name: Install Conda environment from environment_unix.yml
+      - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v2.0.0
         with:
-          environment-file: environment_unix.yml
+          environment-file: environment-dev.yml
           environment-name: arcticdb
           init-shell: >-
             bash
@@ -175,3 +175,65 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
 
+  windows:
+    runs-on: windows-latest
+    env:
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+    steps:
+      - uses: actions/checkout@v3.3.0
+        # DONT use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
+
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v1.1.0
+        id: cpu-cores
+
+      - name: Install Conda environment from environment-dev.yml
+        uses: mamba-org/setup-micromamba@v2.0.0
+        with:
+          environment-file: environment-dev.yml
+          init-shell: >-
+            cmd
+          cache-environment: true
+          post-cleanup: 'all'
+
+      - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
+        shell: cmd {0}
+        run: |
+          # Protocol buffers compilation require not using build isolation.
+          python -m pip install --no-build-isolation --no-deps -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
+          ARCTICDB_BUILD_CPP_TESTS: 1
+          ARCTIC_CMAKE_PRESET: windows-conda-release-build
+
+      - name: Build C++ Tests
+        shell: cmd {0}
+        run: |
+          cd cpp\out\windows-conda-release-build
+          msbuild arcticdb_rapidcheck_tests.vcxproj /p:Configuration=Release /p:Platform=x64 /m
+          msbuild test_unit_arcticdb.vcxproj /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Run C++ Tests
+        shell: cmd {0}
+        run: |
+          cd cpp\out\windows-conda-release-build
+          ctest -C Release -T test
+
+      - name: Install npm
+        uses: actions/setup-node@v3.3.0
+        with:
+          node-version: '16'
+
+      - name: Install azurite
+        shell: cmd {0}
+        run: |
+          npm install -g azurite
+
+      - name: Test with pytest
+        shell: cmd {0}
+        run: |
+          cd python
+          set ARCTICDB_RAND_SEED=%RANDOM%
+          python -m pytest --timeout=3600
