@@ -17,6 +17,7 @@
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/codec/compression/transpose.hpp>
+#include <arcticdb/codec/compression/contiguous_range_adaptor.hpp>
 
 
 namespace arcticdb {
@@ -194,7 +195,7 @@ private:
     }
 
 public:
-    size_t scan(const T* input, size_t rows) {
+    size_t scan(const ColumnData input, size_t rows) {
         full_blocks_ = calculate_full_blocks(rows);
         compressed_rows_ = rows;
         remainder_ = compressed_rows_ % BLOCK_SIZE;
@@ -206,13 +207,27 @@ public:
             ARCTICDB_DEBUG(log::codec(), "Total size including header: {}", total_size);
 
             auto max_delta = std::numeric_limits<T>::lowest();
-            auto current = input[0];
-            for(auto i = 1UL; i < full_blocks_ * BLOCK_SIZE; ++i) {
-                const T delta = input[i] - current;
-                current = input[i];
-                max_delta = std::max(delta, max_delta);
+            if(input.num_blocks() == 1) {
+                auto ptr = input.buffer().data();
+                auto current = *ptr;
+                for (auto i = 1UL; i < full_blocks_ * BLOCK_SIZE; ++i) {
+                    const T delta = ptr[i] - current;
+                    current = ptr[i];
+                    max_delta = std::max(delta, max_delta);
+                }
+            } else {
+                ContiguousRangeForwardAdaptor<T, BLOCK_SIZE> adaptor(input);
+                auto current = *input.buffer().data();
+                for(auto i = 0UL; i < full_blocks_; ++i) {
+                    auto ptr = adaptor.next();
+                    for (auto j = 0; j < BLOCK_SIZE; ++j) {
+                        const T delta = ptr[i] - current;
+                        current = ptr[i];
+                        max_delta = std::max(delta, max_delta);
+                    }
+                }
             }
-            simd_bit_width_ = std::bit_width(max_delta);
+            simd_bit_width_ = std::bit_width<T>(max_delta);
             util::check(simd_bit_width_ > 0, "Got zero maximum bit_width, value is constant!");
             total_size += full_blocks_ * calculate_block_size<T>(simd_bit_width_);
         } else {
@@ -221,7 +236,8 @@ public:
 
         ARCTICDB_DEBUG(log::codec(), "Total size including full blocks: {}", total_size);
         if (remainder_ > 0) {
-            const T* remainder_ptr = input + remainder_offset();
+            DynamicRangeRandomAccessAdaptor<T> adaptor{input};
+            const T* remainder_ptr = adaptor.at(remainder_offset(), remainder_);
             T prev = remainder_ptr[0];
             T max_delta = 0;
 
@@ -237,7 +253,25 @@ public:
         return total_size;
     }
 
-    size_t compress(const T* input, T* output, size_t output_size) {
+    size_t block_compress(
+            const T* input,
+            size_t& output_offset,
+            std::array<T, BLOCK_SIZE>& transposed,
+            T* output) {
+        DeltaCompressKernel<T> compress_kernel(input);
+        copy_input_to_initial_values(input);
+        memcpy(output + output_offset, initial_values_.data(), sizeof(initial_values_));
+        transpose(input, transposed.data());
+        output_offset += initial_values_size<T>();
+        output_offset += dispatch_bitwidth_fused<T, BitPackFused>(
+            transposed.data(),
+            output + output_offset,
+            simd_bit_width_,
+            compress_kernel
+        );
+    }
+
+    size_t compress(ColumnData data, T* output, size_t output_size) {
         size_t output_offset = 0;
         util::check(simd_bit_width_ < h::num_bits, "Bit width is {}, no compression possible", h::num_bits);
 
@@ -245,19 +279,18 @@ public:
             output_offset += create_full_header(output);
             std::array<T, BLOCK_SIZE> transposed;
             ARCTICDB_DEBUG(log::codec(), "Writing full blocks at offset {}", output_offset);
-            for (size_t block = 0UL; block < full_blocks_; block++) {
-                const auto input_offset = block * BLOCK_SIZE;
-                DeltaCompressKernel<T> compress_kernel(input + input_offset);
-                copy_input_to_initial_values(input + input_offset);
-                memcpy(output + output_offset, initial_values_.data(), sizeof(initial_values_));
-                transpose(input + input_offset, transposed.data());
-                output_offset += initial_values_size<T>();
-                output_offset += dispatch_bitwidth_fused<T, BitPackFused>(
-                    transposed.data(),
-                    output + output_offset,
-                    simd_bit_width_,
-                    compress_kernel
-                );
+            if(data.num_blocks() == 1) {
+                auto input = data.buffer().ptr_cast<T>(0);
+                for (size_t block = 0UL; block < full_blocks_; block++) {
+                    const auto input_offset = block * BLOCK_SIZE;
+                    block_compress(input + input_offset, output_offset, transposed, output);
+                }
+            } else {
+                ContiguousRangeForwardAdaptor<T, BLOCK_SIZE> adaptor(data);
+                for(auto i = 0; i < full_blocks_; ++i) {
+                    auto input = adaptor.next();
+                    block_compress(input, input, output_offset, transposed, output);
+                }
             }
         } else {
             output_offset += create_size_only_header(output);
@@ -265,10 +298,11 @@ public:
 
         ARCTICDB_DEBUG(log::codec(), "Writing remainder at {}", output_offset);
         if (remainder_ > 0) {
-            const auto offset = remainder_offset();
-            ARCTICDB_DEBUG(log::codec(), "Remainder offset: {} ({}), first value {}", offset, output_offset, input[offset]);
+            DynamicRangeRandomAccessAdaptor<T> adaptor{data};
+            const T* remainder_ptr = adaptor.at(remainder_offset(), remainder_);
+            ARCTICDB_DEBUG(log::codec(), "Remainder offset: {} ({}), first value {}", remainder_offset(), output_offset, remainder_ptr);
             output_offset += compress_remainder(
-                input + offset,
+                remainder_ptr,
                 remainder_,
                 output + output_offset,
                 remainder_bit_width_

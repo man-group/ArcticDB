@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include <arcticdb/codec/compression/encoder_data.hpp>
+#include <arcticdb/util/configs_map.hpp>
 
 namespace arcticdb {
 
@@ -33,8 +34,35 @@ struct EncodingScanResult {
 };
 
 
+size_t calculate_score(size_t speed_factor, size_t estimated_size, size_t original_size, size_t weight) {
+    weight = std::max(100UL, weight);
+    size_t size_ratio = (estimated_size * 100) / original_size;
+    size_t score = (weight * size_ratio + (100 - weight) * speed_factor) / 100;
+    return score;
+}
 
-EncodingScanResult create_scan_result(EncodingType encoding_type, size_t estimated_size, size_t speed, size_t original_size, bool is_deterministic) {
+// The below function can be used to compute a weighting for the size vs speed in
+// compression. Currently we use a default weighting of 17, which means that for
+// an encoding with a speed factor of 10 (10 microseconds per 100k rows) and another
+// encoding with a speed factor of 20, the slower encoding will be chosen when the
+// estimated size of the faster encoding is > 1.5x that of the slower encoding.
+size_t compute_size_weight(double ratio, size_t baseline_size_ratio = 100) {
+    double denominator = baseline_size_ratio * (ratio - 1.0) + 10.0;
+    if (denominator <= 0.0)
+        return 100;
+
+    double computed_weight = 1000.0 / denominator;
+    size_t weight = static_cast<size_t>(std::round(computed_weight));
+
+    return std::min(weight, 100UL);
+}
+
+EncodingScanResult create_scan_result(
+        EncodingType encoding_type,
+        size_t estimated_size,
+        size_t speed,
+        size_t original_size,
+        bool is_deterministic) {
     static size_t weight = ConfigsMap::instance()->get_int("Scanner.SizeWeighting", 17);
     auto score = calculate_score(speed, estimated_size, original_size, weight);
     return EncodingScanResult(score, estimated_size, encoding_type, is_deterministic);

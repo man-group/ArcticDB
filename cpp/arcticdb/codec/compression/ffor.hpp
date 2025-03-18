@@ -8,7 +8,9 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/codec/compression/bitpack_fused.hpp>
 #include <arcticdb/util/preprocess.hpp>
-#include "util/magic_num.hpp"
+#include <arcticdb/util/magic_num.hpp>
+#include <arcticdb/codec/compression/contiguous_range_adaptor.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 
 namespace arcticdb {
 
@@ -122,7 +124,7 @@ std::pair<T, size_t> reference_and_bitwidth(const T* __restrict in, size_t count
 
 template <typename T>
 struct FForCompressor {
-    static size_t compress(const T *__restrict in, T *__restrict out, size_t count) {
+    static size_t compress(ColumnData data, T *__restrict out, size_t count) {
         if (count == 0)
             return 0;
 
@@ -141,14 +143,27 @@ struct FForCompressor {
         size_t compressed_size = sizeof(FForHeader<T>) / sizeof(T);
 
         FForCompressKernel<T> kernel(reference);
-
-        for (size_t block = 0; block < num_full_blocks; ++block) {
-            compressed_size += dispatch_bitwidth_fused<T, BitPackFused>(
-                in + block * 1024,
-                out_ptr + compressed_size - header_size_in_t<FForHeader<T>, T>(),
-                bits_needed,
-                kernel
-            );
+        if(data.num_blocks() == 1) {
+            auto in = data.buffer().ptr_cast<T>(0);
+            for (size_t block = 0; block < num_full_blocks; ++block) {
+                compressed_size += dispatch_bitwidth_fused<T, BitPackFused>(
+                    in + block * BLOCK_SIZE,
+                    out_ptr + compressed_size - header_size_in_t<FForHeader<T>, T>(),
+                    bits_needed,
+                    kernel
+                );
+            }
+        } else {
+            ContiguousRangeForwardAdaptor<T, BLOCK_SIZE> adaptor{data};
+            for (size_t block = 0; block < num_full_blocks; ++block) {
+                auto in = adaptor.next();
+                compressed_size += dispatch_bitwidth_fused<T, BitPackFused>(
+                    in,
+                    out_ptr + compressed_size - header_size_in_t<FForHeader<T>, T>(),
+                    bits_needed,
+                    kernel
+                );
+            }
         }
         ARCTICDB_DEBUG(log::codec(),
                        "Encoded {} full blocks to {} bytes",
@@ -158,6 +173,7 @@ struct FForCompressor {
         size_t remaining = count % 1024;
         ARCTICDB_DEBUG(log::codec(), "Compressing {} remainder values", remaining);
         if (remaining > 0) {
+            DynamicRangeRandomAccessAdaptor<T> adaptor{data, remaining};
             const T *remaining_in = in + num_full_blocks * 1024;
             T *remaining_out = out_ptr + compressed_size - header_size_in_t<FForHeader<T>, T>();
 

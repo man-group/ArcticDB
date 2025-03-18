@@ -6,6 +6,7 @@
 
 #include <arcticdb/codec/compression/fastlanes_common.hpp>
 #include "frequency.hpp"
+#include <arcticdb/codec/compression/contiguous_range_adaptor.hpp>
 
 namespace arcticdb {
 template<typename T>
@@ -36,7 +37,7 @@ CompressionSample<T> analyze_block(
 template<typename T, typename BitsCalculator>
 CompressionEstimate<T> estimate_compression(
     FieldStatsImpl field_stats,
-    const T* data,
+    ColumnData data,
     size_t row_count,
     BitsCalculator&& calc_bits,
     size_t num_samples = 10) {
@@ -58,11 +59,13 @@ CompressionEstimate<T> estimate_compression(
     double total_ratio = 0.0;
     size_t max_bits_needed = 0;
 
+    ContiguousRangeRandomAccessAdaptor<T, values_per_block> adaptor{data};
     for (size_t i = 0; i < samples_to_take; ++i) {
         size_t block_start = i * block_stride * values_per_block;
+        auto ptr = adaptor.at(block_start);
         auto sample = analyze_block(
             field_stats,
-            data + block_start,
+            ptr,
             values_per_block,
             calc_bits);
 
@@ -129,7 +132,7 @@ struct FForEstimator {
 
         T max_delta = 0;
         for (size_t i = 0; i < block_size; ++i) {
-            max_delta = std::max(max_delta, data[i] - reference);
+            max_delta = std::max<T>(max_delta, data[i] - reference);
         }
 
         return std::bit_width(static_cast<std::make_unsigned_t<T>>(max_delta));

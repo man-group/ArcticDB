@@ -15,6 +15,7 @@
 #include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/codec/encode_common.hpp>
 #include <arcticdb/codec/segment_identifier.hpp>
+#include <arcticdb/codec/compression/encoding_scan_result.hpp>
 
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <arcticdb/codec/encode_common.hpp>
@@ -31,9 +32,10 @@ constexpr TypeDescriptor metadata_type_desc() {
 SizeResult max_compressed_size_dispatch(
     const SegmentInMemory& in_mem_seg,
     const BlockCodecImpl& codec_opts,
-    EncodingVersion encoding_version) {
+    EncodingVersion encoding_version,
+    std::vector<EncodingScanResultsSet>& encodings) {
     if(encoding_version == EncodingVersion::V2) {
-        return max_compressed_size_v2(in_mem_seg, codec_opts);
+        return max_compressed_size_v2(in_mem_seg, codec_opts, encodings);
     } else {
         return max_compressed_size_v1(in_mem_seg, codec_opts);
     }

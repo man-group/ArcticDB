@@ -50,7 +50,8 @@ void decode_v2(const Segment& segment,
 SizeResult max_compressed_size_dispatch(
     const SegmentInMemory& in_mem_seg,
     const BlockCodecImpl& codec_opts,
-    EncodingVersion encoding_version);
+    EncodingVersion encoding_version,
+    std::vector<EncodingScanResultsSet>& encodings);
 
 EncodedFieldCollection decode_encoded_fields(
     const SegmentHeader& hdr,

@@ -15,11 +15,11 @@ concept Encoder = requires(
         FieldStatsImpl field_stats,
         DataType data_type,
         size_t sample_count,
-        const uint8_t* data,
+        ColumnData data,
         size_t row_count) {
     { T::is_viable(field_stats, data_type, sample_count) } -> std::same_as<bool>;
     { T::deterministic_size(field_stats, data_type, row_count) } -> std::same_as<std::optional<size_t>>;
-    { T::max_compressed_size(field_stats, data_type, row_count) } -> std::same_as<EncodingScanResult>;
+    { T::max_compressed_size(field_stats, data_type, row_count, data) } -> std::same_as<EncodingScanResult>;
     { T::estimated_size(field_stats, data_type, data, row_count) } -> std::same_as<size_t>;
     { T::speed_factor() } -> std::same_as<size_t>;
 };
@@ -53,23 +53,29 @@ struct Ffor {
         });
     }
 
-    static EncodingScanResult max_compressed_size(FieldStatsImpl field_stats, DataType data_type, size_t num_rows) {
-        return *deterministic_size(field_stats, data_type, num_rows);
+    static EncodingScanResult max_compressed_size(FieldStatsImpl field_stats, DataType data_type, size_t num_rows, ColumnData) {
+        return create_scan_result(
+            EncodingType::FFOR,
+            *deterministic_size(field_stats, data_type, num_rows),
+            speed_factor(),
+            num_rows * get_type_size(data_type),
+            true);
+
     }
 
     static size_t estimated_size(
         FieldStatsImpl field_stats,
         DataType data_type,
-        const uint8_t* data,
+        ColumnData data,
         size_t row_count) {
          return TypeDescriptor{data_type, Dimension::Dim0}.visit_tag([field_stats, data, row_count] (auto tag) -> size_t {
              using TagType = typename decltype(tag)::DataTypeTag;
              if constexpr (is_integer_type(TagType::data_type)) {
                  using RawType = typename TagType::raw_type;
 
-                 auto estimate = estimate_compression(
+                 auto estimate = estimate_compression<RawType>(
                      field_stats,
-                     reinterpret_cast<const RawType *>(data),
+                     data,
                      row_count,
                      FForEstimator<RawType>{},
                      NUM_SAMPLES);
@@ -93,14 +99,13 @@ struct Delta {
         return std::nullopt;
     }
 
-    static EncodingScanResult max_compressed_size(FieldStatsImpl field_stats, DataType data_type, size_t num_rows, ColumnData data) {
-        make_scalar_type(data_type).visit_tag([data, num_rows] (auto tag) {
+    static EncodingScanResult max_compressed_size(FieldStatsImpl, DataType data_type, size_t num_rows, ColumnData data) {
+        return make_scalar_type(data_type).visit_tag([data, num_rows] (auto tag) {
             using T = decltype(tag)::DataTypeTag::raw_type;
             DeltaCompressor<T> compressor;
-            // TODO multi-block
             const auto original_size = num_rows * sizeof(T);
-            size_t bytes = compressor.scan(data.buffer().ptr_cast<T>(0, original_size), num_rows);
-            auto result = make_scan_result(EncodingType::DELTA, bytes, speed_factor, original_size());
+            size_t bytes = compressor.scan(data, num_rows);
+            auto result = create_scan_result(EncodingType::DELTA, bytes, speed_factor(), original_size, false);
             result.data_ = compressor.data();
             return result;
         });
@@ -120,9 +125,9 @@ struct Delta {
             if constexpr (is_integer_type(TagType::data_type)) {
                 using RawType = typename TagType::raw_type;
 
-                auto estimate = estimate_compression(
+                auto estimate = estimate_compression<RawType>(
                     field_stats,
-                    reinterpret_cast<const RawType *>(data),
+                    data,
                     row_count,
                     DeltaEstimator<RawType>{},
                     NUM_SAMPLES);
@@ -146,8 +151,8 @@ struct Frequency {
         return std::nullopt;
     }
 
-    static EncodingScanResult max_compressed_size(FieldStatsImpl field_stats, DataType data_type, size_t num_rows) {
-
+    static EncodingScanResult max_compressed_size(FieldStatsImpl , DataType , size_t , ColumnData ) {
+        return {};
     }
 
     static size_t speed_factor() {
@@ -156,16 +161,16 @@ struct Frequency {
     static size_t estimated_size(
         FieldStatsImpl field_stats,
         DataType data_type,
-        const uint8_t* data,
+        ColumnData data,
         size_t row_count) {
         return TypeDescriptor{data_type, Dimension::Dim0}.visit_tag([field_stats, data, row_count] (auto tag) -> size_t {
             using TagType = typename decltype(tag)::DataTypeTag;
             if constexpr (is_integer_type(TagType::data_type)) {
                 using RawType = typename TagType::raw_type;
 
-                auto estimate = estimate_compression(
+                auto estimate = estimate_compression<RawType>(
                     field_stats,
-                    reinterpret_cast<const RawType *>(data),
+                    data,
                     row_count,
                     DeltaEstimator<RawType>{},
                     NUM_SAMPLES);
@@ -191,13 +196,18 @@ struct Constant {
     static size_t estimated_size(
         FieldStatsImpl,
         DataType,
-        const uint8_t*,
+        ColumnData,
         size_t) {
         util::raise_rte("Unexpected estimating request in constant encoding");
     }
 
-    static EncodingScanResult max_compressed_size(FieldStatsImpl field_stats, DataType data_type, size_t num_rows) {
-        return *deterministic_size(field_stats, data_type, num_rows)
+    static EncodingScanResult max_compressed_size(FieldStatsImpl field_stats, DataType data_type, size_t num_rows, ColumnData) {
+        return create_scan_result(
+            EncodingType::CONSTANT,
+            *deterministic_size(field_stats, data_type, num_rows),
+            speed_factor(),
+            num_rows * get_type_size(data_type),
+            true);
     }
 
     static std::optional<size_t> deterministic_size(FieldStatsImpl, DataType data_type, size_t) {
@@ -233,14 +243,19 @@ struct BitPack {
         });
     }
 
-    static EncodingScanResult max_compressed_size(FieldStatsImpl field_stats, DataType data_type, size_t num_rows) {
-        return *deterministic_size(field_stats, data_type, num_rows);
+    static EncodingScanResult max_compressed_size(FieldStatsImpl field_stats, DataType data_type, size_t num_rows, ColumnData) {
+       return create_scan_result(
+            EncodingType::BITPACK,
+            *deterministic_size(field_stats, data_type, num_rows),
+            speed_factor(),
+            num_rows * get_type_size(data_type),
+            true);
     }
 
     static size_t estimated_size(
         FieldStatsImpl,
         DataType,
-        const uint8_t*,
+        ColumnData,
         size_t) {
         util::raise_rte("Unexpected estimating request in bitpack encoding");
     }
@@ -257,12 +272,12 @@ struct Alp {
     static size_t speed_factor() {
         return 20;
     }
-    static size_t estimated_size(FieldStatsImpl, DataType, const uint8_t*, size_t) {
+    static size_t estimated_size(FieldStatsImpl, DataType, ColumnData, size_t) {
         return 12;
     }
 
-    static EncodingScanResult max_compressed_size(FieldStatsImpl field_stats, DataType data_type, size_t num_rows) {
-        return 8;
+    static EncodingScanResult max_compressed_size(FieldStatsImpl , DataType , size_t , ColumnData) {
+        return {};
     }
 
 
@@ -313,7 +328,7 @@ inline size_t estimated_size(
         EncodingType encoding_type,
         FieldStatsImpl field_stats,
         DataType data_type,
-        const uint8_t* data,
+        ColumnData data,
         size_t row_count) {
     return dispatch_encoding(encoding_type, [&field_stats, data_type, data, row_count](auto &&encoder) {
         return encoder.estimated_size(field_stats, data_type, data, row_count);
@@ -326,13 +341,14 @@ inline size_t speed_factor(EncodingType encoding_type) {
     });
 }
 
-inline std::optional<size_t> max_compressed_size(
+inline EncodingScanResult max_compressed_size(
     EncodingType encoding_type,
     FieldStatsImpl field_stats,
     DataType data_type,
-    size_t row_count) {
-    return dispatch_encoding(encoding_type, [&field_stats, data_type, row_count](auto &&encoder) {
-        return encoder.max_compressed_size(field_stats, data_type, row_count);
+    size_t row_count,
+    ColumnData data) {
+    return dispatch_encoding(encoding_type, [&field_stats, data_type, row_count, data](auto &&encoder) {
+        return encoder.max_compressed_size(field_stats, data_type, row_count, data);
     });
 }
 
