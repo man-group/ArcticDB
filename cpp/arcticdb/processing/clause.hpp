@@ -787,7 +787,7 @@ struct ConcatClause {
     std::shared_ptr<ComponentManager> component_manager_;
     JoinType join_type_;
 
-    ConcatClause(JoinType join_type);
+    explicit ConcatClause(JoinType join_type);
 
     ARCTICDB_MOVE_COPY_DEFAULT(ConcatClause)
 

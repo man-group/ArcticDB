@@ -1381,7 +1381,120 @@ std::vector<EntityId> ConcatClause::process(std::vector<EntityId>&& entity_ids) 
     return std::move(entity_ids);
 }
 
+// TODO: Move somewhere else
+// Verifies that all of the index information specified in the input schemas are compatible with each other, and that
+// the requisite fields are present in the StreamDescriptors if necessary
+std::pair<IndexDescriptorImpl, arcticdb::proto::descriptors::NormalizationMetadata> generate_index_schema(
+        const std::vector<OutputSchema>& input_schemas) {
+    util::check<ErrorCode::E_ASSERTION_FAILURE>(!input_schemas.empty(), "Cannot join empty list of schemas");
+    std::optional<bool> has_multi_index;
+    std::optional<std::string> name;
+    std::optional<bool> is_int;
+    std::optional<std::string> tz;
+    std::optional<bool> is_physically_stored;
+    std::optional<int> field_count;
+    std::optional<int> start;
+    std::optional<int> step;
+    for (const auto& schema: input_schemas) {
+        const auto& common = schema.norm_metadata_.df().common();
+        if (!has_multi_index.has_value()) {
+            has_multi_index = common.has_multi_index();
+        } else {
+            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    schema.norm_metadata_.df().common().has_multi_index() == has_multi_index,
+                    "Mismatching norm metadata in schema join");
+        }
+        if (has_multi_index) {
+            const auto& index = common.multi_index();
+            if (!name.has_value()) {
+                name = index.name();
+                is_int = index.is_int();
+            } else {
+                if ((index.name() != *name) || (index.is_int() != *is_int)) {
+                    name = "";
+                    is_int = false;
+                }
+            }
+            if (!tz.has_value()) {
+                tz = index.tz();
+            } else {
+                if (index.tz() != *tz) {
+                    tz = "";
+                }
+            }
+            if (!field_count.has_value()) {
+                field_count = index.field_count();
+            } else {
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        index.field_count() == *field_count,
+                        "Mismatching norm metadata in schema join");
+            }
+        } else {
+            const auto& index = common.index();
+            if (!name.has_value()) {
+                name = index.name();
+                is_int = index.is_int();
+            } else {
+                if ((index.name() != *name) || (index.is_int() != *is_int)) {
+                    name = "";
+                    is_int = false;
+                }
+            }
+            if (!tz.has_value()) {
+                tz = index.tz();
+            } else {
+                if (index.tz() != *tz) {
+                    tz = "";
+                }
+            }
+            if (!is_physically_stored.has_value()) {
+                is_physically_stored = index.is_physically_stored();
+            } else {
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        index.is_physically_stored() == *is_physically_stored,
+                        "Mismatching norm metadata in schema join");
+            }
+            if (!start.has_value()) {
+                start = index.start();
+                step = index.step();
+            } else {
+
+            }
+        }
+    }
+}
+
 OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& output_schemas) const {
+    // Norm meta ensure:
+    // All have PandasIndex OR PandasMultiIndex
+    // If PandasIndex:
+    //  - name - if all the same maintain, otherwise empty string
+    //  - is_int - means name is a string representation of an integer, so fold into name logic
+    //  - tz - same as name
+    //  - is_physically stored must all be the same
+    //  - RangeIndex
+    //    - start==0/step==1 - maintain
+    //    - All steps the same, use start from first schema and maintain step
+    //    - Otherwise, log warning, pick  set start==0/step==1
+    // PandasMultiIndex same, minus is_physically stored, plus field_count matching
+
+    // StreamDescriptor index ensure:
+    //  - Type is the same (empty matches anything)
+    //  - Field count is the same
+
+    // Indexing ensure:
+    //  - norm meta version and stream descriptor version semantically match
+    //  - (check that this the case for all of the modify_schema methods on single-symbol clauses)
+    //  - all descriptors have requisite index columns
+
+    // Inner join:
+    //  - Create map from column name to type for first input schema
+    //  - Iterate remaining schema, reducing key set for any column names not in each schema
+    //  - For columns being retained, identify common type
+
+    // Outer join:
+    //  - As above, but step 2 is union rather than intersection
+
     // TODO: Implement this properly for inner/outer options
     // For now, just check they are all the same
     const auto& reference_schema = output_schemas.front();
