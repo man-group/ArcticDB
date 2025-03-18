@@ -1264,17 +1264,17 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
         util::check(!clauses_ptr->empty(), "Cannot join with no joining clause provided");
         std::vector<OutputSchema> output_schemas;
         std::vector<std::vector<EntityId>> entity_ids;
-        std::vector<VersionedItem> res_versioned_items;
-        std::vector<arcticdb::proto::descriptors::UserDefinedMetadata> res_metadatas;
+        auto res_versioned_items = std::make_shared<std::vector<VersionedItem>>();
+        auto res_metadatas = std::make_shared<std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>();
         output_schemas.reserve(symbol_processing_results.size());
         entity_ids.reserve(symbol_processing_results.size());
-        res_versioned_items.reserve(symbol_processing_results.size());
-        res_metadatas.reserve(symbol_processing_results.size());
+        res_versioned_items->reserve(symbol_processing_results.size());
+        res_metadatas->reserve(symbol_processing_results.size());
         for (const auto& symbol_processing_result: symbol_processing_results) {
             output_schemas.emplace_back(std::move(symbol_processing_result.output_schema_));
             entity_ids.emplace_back(std::move(symbol_processing_result.entity_ids_));
-            res_versioned_items.emplace_back(std::move(symbol_processing_result.versioned_item_));
-            res_metadatas.emplace_back(std::move(symbol_processing_result.metadata_));
+            res_versioned_items->emplace_back(std::move(symbol_processing_result.versioned_item_));
+            res_metadatas->emplace_back(std::move(symbol_processing_result.metadata_));
         }
         auto output_schema = clauses_ptr->front()->join_schemas(std::move(output_schemas));
         pipeline_context->set_descriptor(output_schema.stream_descriptor());
@@ -1285,11 +1285,11 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
                     return collect_segments(std::move(proc));
                 }).thenValueInline([store=store(), &handler_data, pipeline_context](std::vector<SliceAndKey>&& slice_and_keys) mutable {
             return prepare_output_frame(std::move(slice_and_keys), pipeline_context, store, ReadOptions{}, handler_data);
-        }).thenValueInline([&handler_data, pipeline_context, &res_versioned_items, &res_metadatas](SegmentInMemory&& frame) mutable {
+        }).thenValueInline([&handler_data, pipeline_context, res_versioned_items, res_metadatas](SegmentInMemory&& frame) mutable {
             return reduce_and_fix_columns(pipeline_context, frame, ReadOptions{}, handler_data)
-                    .thenValue([pipeline_context, frame, &res_versioned_items, &res_metadatas](auto&&) mutable {
-                        return MultiSymbolReadOutput{std::move(res_versioned_items),
-                                                     std::move(res_metadatas),
+                    .thenValue([pipeline_context, frame, res_versioned_items, res_metadatas](auto&&) mutable {
+                        return MultiSymbolReadOutput{std::move(*res_versioned_items),
+                                                     std::move(*res_metadatas),
                                                      {frame, timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}}};
                     });
         });

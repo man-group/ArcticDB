@@ -2175,6 +2175,7 @@ folly::Future<SymbolProcessingResult> read_entity_ids_for_version(
         pipeline_context->stream_id_ = std::get<StreamId>(version_info);
     } else {
         pipeline_context->stream_id_ = std::get<VersionedItem>(version_info).key_.id();
+        res_versioned_item = std::get<VersionedItem>(version_info);
         read_indexed_keys_to_pipeline(store, pipeline_context, std::get<VersionedItem>(version_info), *read_query, read_options);
     }
 
@@ -2211,10 +2212,10 @@ folly::Future<SymbolProcessingResult> read_entity_ids_for_version(
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
 
     return std::move(do_process(store, read_query, read_options, pipeline_context, component_manager))
-    .thenValueInline([res_versioned_item, pipeline_context, output_stream_descriptor](auto&& entity_ids) {
+    .thenValueInline([res_versioned_item = std::move(res_versioned_item), pipeline_context, output_schema = std::move(output_schema)](auto&& entity_ids) mutable {
         return SymbolProcessingResult{std::move(res_versioned_item),
                                       std::move(*pipeline_context->user_meta_),
-                                      {std::move(output_stream_descriptor), std::move(*pipeline_context->norm_meta_)},
+                                      std::move(output_schema),
                                       std::move(entity_ids)};
     });
 }
