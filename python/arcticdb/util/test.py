@@ -709,7 +709,8 @@ def distinct_timestamps(lib: NativeVersionStore):
 def random_seed_context():
     seed = os.getenv("ARCTICDB_RAND_SEED")
     state = random.getstate()
-    random.seed(int(seed) if seed is not None else state)
+    if seed is not None:
+        random.seed(int(seed))
     try:
         yield
     finally:
