@@ -39,7 +39,8 @@ bool index_names_match(
 
 bool columns_match(
     const StreamDescriptor& df_in_store_descriptor,
-    const StreamDescriptor& new_df_descriptor
+    const StreamDescriptor& new_df_descriptor,
+    const bool convert_int_to_float=false
 );
 
 void fix_descriptor_mismatch_or_throw(
