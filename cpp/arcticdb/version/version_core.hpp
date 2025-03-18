@@ -261,7 +261,6 @@ struct Error {
 };
 
 using CheckOutcome = std::variant<Error, std::monostate>;
-using StaticSchemaCompactionChecks = folly::Function<CheckOutcome(const StreamDescriptor&, const StreamDescriptor&)>;
 using CompactionWrittenKeys = std::vector<VariantKey>;
 using CompactionResult = std::variant<CompactionWrittenKeys, Error>;
 
@@ -271,6 +270,18 @@ bool is_segment_unsorted(const SegmentInMemory& segment);
 
 size_t n_segments_live_during_compaction();
 
+CheckOutcome check_schema_matches_incomplete(
+    const StreamDescriptor& stream_descriptor_incomplete,
+    const StreamDescriptor& pipeline_context,
+    const bool convert_int_to_float=false
+);
+
+struct CompactionOptions {
+    bool convert_int_to_float{false};
+    bool validate_index{true};
+    bool perform_schema_checks{true};
+};
+
 template <typename IndexType, typename SchemaType, typename SegmentationPolicy, typename DensityPolicy, typename IteratorType>
 [[nodiscard]] CompactionResult do_compact(
     IteratorType to_compact_start,
@@ -278,10 +289,8 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
     const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
     std::vector<pipelines::FrameSlice>& slices,
     const std::shared_ptr<Store>& store,
-    bool convert_int_to_float,
     std::optional<size_t> segment_size,
-    bool validate_index,
-    StaticSchemaCompactionChecks&& checks) {
+    const CompactionOptions& options) {
     CompactionResult result;
     auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
 
@@ -327,25 +336,27 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
             return Error{throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>, fmt::format("Index names in segment {} and pipeline context {} do not match", segment.descriptor(), pipeline_context->descriptor())};
         }
 
-        if(validate_index && is_segment_unsorted(segment)) {
+        if(options.validate_index && is_segment_unsorted(segment)) {
             auto written_keys = folly::collect(write_futures).get();
             remove_written_keys(store.get(), std::move(written_keys));
             return Error{throw_error<ErrorCode::E_UNSORTED_DATA>, "Cannot compact unordered segment"};
         }
 
         if constexpr (std::is_same_v<SchemaType, FixedSchema>) {
-            CheckOutcome outcome = checks(segment.descriptor(), pipeline_context->descriptor());
-            if (std::holds_alternative<Error>(outcome)) {
-                auto written_keys = folly::collect(write_futures).get();
-                remove_written_keys(store.get(), std::move(written_keys));
-                return std::get<Error>(std::move(outcome));
+            if (options.perform_schema_checks) {
+                CheckOutcome outcome = check_schema_matches_incomplete(segment.descriptor(), pipeline_context->descriptor(), options.convert_int_to_float);
+                if (std::holds_alternative<Error>(outcome)) {
+                    auto written_keys = folly::collect(write_futures).get();
+                    remove_written_keys(store.get(), std::move(written_keys));
+                    return std::get<Error>(std::move(outcome));
+                }
             }
         }
 
         aggregator.add_segment(
             std::move(sk.segment(store)),
             sk.slice(),
-            convert_int_to_float
+            options.convert_int_to_float
         );
         sk.unset_segment();
     }
@@ -353,8 +364,6 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
     aggregator.commit();
     return folly::collect(std::move(write_futures)).get();
 }
-
-CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const StreamDescriptor& pipeline_context);
 
 }
 

@@ -28,8 +28,11 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
+#include <ranges>
 
 namespace arcticdb::version_store {
+
+namespace ranges = std::ranges;
 
 void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, const ReadOptions& read_options) {
 
@@ -1077,7 +1080,7 @@ bool read_incompletes_to_pipeline(
     // Picking an empty segment when there are non-empty ones will impact the index type and column namings.
     // If all segments are empty we will proceed as if were appending/writing and empty dataframe.
     debug::check<ErrorCode::E_ASSERTION_FAILURE>(!incomplete_segments.empty(), "Incomplete segments must be non-empty");
-    const auto first_non_empty_seg = std::find_if(incomplete_segments.begin(), incomplete_segments.end(), [&](auto& slice){
+    const auto first_non_empty_seg = ranges::find_if(incomplete_segments, [&](auto& slice){
         auto res = slice.segment(store).row_count() > 0;
         ARCTICDB_DEBUG(log::version(), "Testing for non-empty seg {} res={}", slice.key(), res);
         return res;
@@ -1126,7 +1129,7 @@ bool read_incompletes_to_pipeline(
     if (dynamic_schema) {
         ARCTICDB_DEBUG(log::version(), "read_incompletes_to_pipeline: Dynamic schema");
         pipeline_context->staged_descriptor_ =
-            merge_descriptors(seg.descriptor(), incomplete_segments, read_query.columns);
+            merge_descriptors(seg.descriptor(), incomplete_segments, read_query.columns, std::nullopt, convert_int_to_float);
         if (pipeline_context->desc_) {
             const std::array staged_fields_ptr = {pipeline_context->staged_descriptor_->fields_ptr()};
             pipeline_context->desc_ =
@@ -1145,7 +1148,7 @@ bool read_incompletes_to_pipeline(
                        first_incomplete_seg.index_descriptor());
         if (pipeline_context->desc_) {
             schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                columns_match(staged_desc, *pipeline_context->desc_),
+                columns_match(*pipeline_context->desc_, staged_desc, convert_int_to_float),
                 "When static schema is used the staged stream descriptor {} must equal the stream descriptor on storage {}",
                 staged_desc,
                 *pipeline_context->desc_
@@ -1861,17 +1864,19 @@ VersionedItem compact_incomplete_impl(
         using SchemaType = std::remove_reference_t<decltype(schema)>;
         using ColumnPolicyType = std::remove_reference_t<decltype(column_policy)>;
         constexpr bool validate_index_sorted = IndexType::type() == IndexDescriptorImpl::Type::TIMESTAMP;
-
+        const CompactionOptions compaction_options {
+            .convert_int_to_float = options.convert_int_to_float_,
+            .validate_index = validate_index_sorted,
+            .perform_schema_checks = true
+        };
         CompactionResult result = do_compact<IndexType, SchemaType, RowCountSegmentPolicy, ColumnPolicyType>(
                 pipeline_context->incompletes_begin(),
                 pipeline_context->end(),
                 pipeline_context,
                 slices,
                 store,
-                options.convert_int_to_float_,
                 write_options.segment_row_size,
-                validate_index_sorted,
-                check_schema_matches_incomplete);
+                compaction_options);
         if constexpr(std::is_same_v<IndexType, TimeseriesIndex>) {
             pipeline_context->desc_->set_sorted(deduce_sorted(previous_sorted_value.value_or(SortedValue::ASCENDING), SortedValue::ASCENDING));
         }
@@ -1973,10 +1978,10 @@ VersionedItem defragment_symbol_data_impl(
         auto segments = read_and_process(store, pre_defragmentation_info.pipeline_context, pre_defragmentation_info.read_query, defragmentation_read_options_generator(options)).get();
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
-
-        StaticSchemaCompactionChecks checks = [](const StreamDescriptor&, const StreamDescriptor&) {
-            // No defrag specific checks yet
-            return std::monostate{};
+        static constexpr CompactionOptions compaction_options = {
+            .convert_int_to_float = false,
+            .validate_index = false,
+            .perform_schema_checks = false
         };
 
         return do_compact<IndexType, SchemaType, RowCountSegmentPolicy, DenseColumnPolicy>(
@@ -1985,10 +1990,8 @@ VersionedItem defragment_symbol_data_impl(
             pre_defragmentation_info.pipeline_context,
             slices,
             store,
-            false,
             segment_size,
-            false,
-            std::move(checks));
+            compaction_options);
     });
 
     return util::variant_match(std::move(result),
@@ -2107,7 +2110,11 @@ bool is_segment_unsorted(const SegmentInMemory& segment) {
     return segment.descriptor().sorted() == SortedValue::DESCENDING || segment.descriptor().sorted() == SortedValue::UNSORTED;
 }
 
-CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const StreamDescriptor& pipeline_desc) {
+CheckOutcome check_schema_matches_incomplete(
+    const StreamDescriptor& stream_descriptor_incomplete,
+    const StreamDescriptor& pipeline_desc,
+    const bool convert_int_to_float
+) {
     // We need to check that the index names match regardless of the dynamic schema setting
     if(!index_names_match(stream_descriptor_incomplete, pipeline_desc)) {
         return Error{
@@ -2119,7 +2126,7 @@ CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_desc
                         pipeline_desc)
         };
     }
-    if (!columns_match(stream_descriptor_incomplete, pipeline_desc)) {
+    if (!columns_match(pipeline_desc, stream_descriptor_incomplete, convert_int_to_float)) {
         return Error{
             throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
             fmt::format("{} When static schema is used all staged segments must have the same column and column types."
