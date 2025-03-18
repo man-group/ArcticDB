@@ -235,12 +235,6 @@ public:
            });
     }
 
-    folly::Future<storage::KeySegmentPair> read_compressed(
-            const entity::VariantKey& key,
-            storage::ReadKeyOpts opts) override {
-        return folly::makeFutureWith([&]() { return read_compressed_sync(key, opts); });
-    }
-
     storage::KeySegmentPair read_compressed_sync(
             const entity::VariantKey& key,
             storage::ReadKeyOpts) override {

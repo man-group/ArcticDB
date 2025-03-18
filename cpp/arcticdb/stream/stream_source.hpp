@@ -31,10 +31,6 @@ struct StreamSource {
         storage::ReadKeyOpts opts = storage::ReadKeyOpts{})
         = 0;
 
-    virtual folly::Future<storage::KeySegmentPair> read_compressed(
-        const entity::VariantKey &key,
-        storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) = 0;
-
     virtual storage::KeySegmentPair read_compressed_sync(
             const entity::VariantKey& key,
             storage::ReadKeyOpts opts = storage::ReadKeyOpts{}

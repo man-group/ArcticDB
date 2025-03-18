@@ -269,14 +269,6 @@ struct ReadCompressedTask : BaseTask {
     }
 };
 
-struct PassThroughTask : BaseTask {
-    PassThroughTask() = default;
-
-   storage::KeySegmentPair operator()(storage::KeySegmentPair &&ks) const {
-        return ks;
-    }
-};
-
 template <typename ClockType>
 struct CopyCompressedTask : BaseTask {
     entity::VariantKey source_key_;

@@ -238,12 +238,6 @@ std::pair<entity::VariantKey, SegmentInMemory> read_sync(const entity::VariantKe
     return DecodeSegmentTask{}(read_sync_dispatch(key, library_, opts));
 }
 
-folly::Future<storage::KeySegmentPair> read_compressed(
-        const entity::VariantKey &key,
-        storage::ReadKeyOpts opts) override {
-    return read_and_continue(key, library_, opts, PassThroughTask{});
-}
-
 storage::KeySegmentPair read_compressed_sync(const entity::VariantKey& key, storage::ReadKeyOpts opts) override {
         return read_sync_dispatch(key, library_, opts);
 }
