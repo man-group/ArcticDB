@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import time
 import pandas as pd
-from arcticdb.util.environment_setup import LibraryManager, LibraryPopulationPolicy, LibraryType, Storage, populate_library
+from arcticdb.util.environment_setup import TestLibraryManager, LibraryPopulationPolicy, LibraryType, Storage, populate_library
 from arcticdb.util.utils import TimestampNumber
 from arcticdb.version_store.library import Library, ReadRequest, WritePayload
 from benchmarks.common import AsvBase
@@ -34,13 +34,13 @@ class AWSBatchBasicFunctions(AsvBase):
     params = [500, 1000], [25_000, 50_000] #[[5, 10], [250, 500]]
     param_names = ["num_symbols", "num_rows"]
 
-    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="BASIC_BATCH")
+    library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="BASIC_BATCH")
 
     number_columns = 10
     initial_timestamp = pd.Timestamp("10-11-1978")
     freq = 's'
 
-    def get_library_manager(self) -> LibraryManager:
+    def get_library_manager(self) -> TestLibraryManager:
         return AWSBatchBasicFunctions.library_manager
     
     def get_population_policy(self) -> LibraryPopulationPolicy:

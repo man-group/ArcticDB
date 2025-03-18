@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 
 import os
-from arcticdb.util.environment_setup import LibraryManager, LibraryType, Storage
+from arcticdb.util.environment_setup import TestLibraryManager, LibraryType, Storage
 from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
 from arcticdb.version_store.library import StagedDataFinalizeMethod
 from benchmarks.common import AsvBase
@@ -32,9 +32,9 @@ class AWSFinalizeStagedData(AsvBase):
     params = [500, 1000] # Test data [10, 20]
     param_names = ["num_chunks"]
 
-    library_manager = LibraryManager(Storage.AMAZON, "FINALIZE")
+    library_manager = TestLibraryManager(Storage.AMAZON, "FINALIZE")
 
-    def get_library_manager(self) -> LibraryManager:
+    def get_library_manager(self) -> TestLibraryManager:
         return AWSFinalizeStagedData.library_manager
     
     def get_population_policy(self):
@@ -48,7 +48,7 @@ class AWSFinalizeStagedData(AsvBase):
         assert AWSFinalizeStagedData.warmup_time == 0
 
         manager = self.get_library_manager()
-        manager.clear_all_modifiable_libs()
+        manager.clear_all_benchmark_libs()
         manager.log_info()
 
         df_cache = CachedDFGenerator(500000, [5])

@@ -10,7 +10,7 @@ import os
 from typing import List
 import pandas as pd
 from arcticdb.options import LibraryOptions
-from arcticdb.util.environment_setup import LibraryManager, LibraryType, SequentialDataframesGenerator, Storage
+from arcticdb.util.environment_setup import TestLibraryManager, LibraryType, SequentialDataframesGenerator, Storage
 from arcticdb.util.utils import TimestampNumber
 from arcticdb.version_store.library import Library
 from benchmarks.common import AsvBase
@@ -51,11 +51,11 @@ class AWSLargeAppendTests(AsvBase):
     params = [500_000, 1_000_000] # [1000, 1500] # for test purposes
     param_names = ["num_rows"]
 
-    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="APPEND_LARGE")
+    library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="APPEND_LARGE")
 
     number_columns = 30
 
-    def get_library_manager(self) -> LibraryManager:
+    def get_library_manager(self) -> TestLibraryManager:
         return AWSLargeAppendTests.library_manager
     
     def get_population_policy(self):
@@ -92,7 +92,7 @@ class AWSLargeAppendTests(AsvBase):
             self.initialize_update_dataframes(num_rows=num_rows, num_cols=num_cols, cached_results=cache, 
                                               generator=generator)
     
-        self.get_library_manager().clear_all_modifiable_libs()
+        self.get_library_manager().clear_all_benchmark_libs()
 
         self.get_library_manager().log_info()
 
@@ -194,7 +194,7 @@ class AWS30kColsWideDFLargeAppendTests(AWSLargeAppendTests):
     params = [2_500, 5_000] #[100, 150] for test purposes
     param_names = ["num_rows"]
 
-    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="APPEND_LARGE_WIDE")
+    library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="APPEND_LARGE_WIDE")
 
     number_columns = 3_000
 
@@ -226,14 +226,14 @@ class AWSDeleteTestsFewLarge(AsvBase):
     params = [500_000, 1_000_000] # [100, 150] # for test purposes
     param_names = ["num_rows"]
 
-    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="BASIC_DELETE_NEW", 
+    library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="BASIC_DELETE_NEW", 
                                      library_options=LibraryOptions(rows_per_segment=1000,columns_per_segment=1000))
 
     number_columns = 10
 
     number_appends_to_symbol = 3 
 
-    def get_library_manager(self) -> LibraryManager:
+    def get_library_manager(self) -> TestLibraryManager:
         return AWSLargeAppendTests.library_manager
     
     def get_population_policy(self):
@@ -258,7 +258,7 @@ class AWSDeleteTestsFewLarge(AsvBase):
             cache.write_and_append_dict[num_rows] = df_list
     
         manager = self.get_library_manager()
-        manager.clear_all_modifiable_libs()
+        manager.clear_all_benchmark_libs()
         manager.log_info()
 
         return cache

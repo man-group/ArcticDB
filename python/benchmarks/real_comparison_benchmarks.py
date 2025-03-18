@@ -51,12 +51,12 @@ class RealComparisonBenchmarks:
     params = [NO_OPERATION, CREATE_DATAFRAME, PANDAS_PARQUET, ARCTICDB_LMDB, ARCTICDB_AMAZON_S3]
     param_names = ["backend_type"]
 
-    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="COMPARISON")
+    library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="COMPARISON")
     
     def get_logger(self) -> Logger:
         return get_console_logger(self)
 
-    def get_library_manager(self) -> LibraryManager:
+    def get_library_manager(self) -> TestLibraryManager:
         return RealComparisonBenchmarks.library_manager
     
     def get_population_policy(self) -> LibraryPopulationPolicy:
@@ -82,7 +82,7 @@ class RealComparisonBenchmarks:
         lib.write(symbol=symbol, data=df)
         
         # Prepare persistent library if does not exist
-        manager.clear_all_modifiable_libs()
+        manager.clear_all_benchmark_libs()
         if not manager.has_library(LibraryType.PERSISTENT):
             s3_lib = manager.get_library(LibraryType.PERSISTENT)
             s3_lib.write(symbol, df) 

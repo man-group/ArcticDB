@@ -66,6 +66,13 @@ class StorageSpace(Enum):
     """
     Defines the type of storage space.
     Will be used as prefixes to separate shared storage 
+
+    In the bucket this class defined through prefixes 2 shared spaces:
+     - persistent
+     - test
+    
+    then for each client machine there will be separate space for temporary
+    modifiable libraries, and the prefix will be machine id (see how it is produced below)
     """
     PERSISTENT = "PERMANENT_LIBRARIES"
     MODIFIABLE = "MODIFIABLE_LIBRARIES"
@@ -73,6 +80,7 @@ class StorageSpace(Enum):
 
 
 class LibraryType(Enum):
+    # READ_ONLY or READ_WRITE
     PERSISTENT = "PERMANENT"
     MODIFIABLE = "MODIFIABLE"
 
@@ -82,6 +90,9 @@ class StorageSetup:
     Defined special one time setup for real storages.
     Place here what is needed for proper initialization
     of each storage
+
+    For shared storages 
+
     '''
     _instance = None
     _aws_default_factory: BaseS3StorageFixtureFactory = None
@@ -100,7 +111,8 @@ class StorageSetup:
             cls._aws_default_factory.default_bucket = AWS_S3_DEFAULT_BUCKET
             cls._aws_default_factory.clean_bucket_on_fixture_exit = False
    
-    def get_machine_id():
+    @classmethod
+    def get_machine_id(cls):
         """
         Returns machine id, or id specified through environments variable (for github)
         """
@@ -123,8 +135,7 @@ class StorageSetup:
         if storage_space == StorageSpace.PERSISTENT:
             prefix = create_prefix(StorageSpace.PERSISTENT.value, add_to_prefix)
         elif storage_space == StorageSpace.MODIFIABLE:
-            assert is_valid_string(add_to_prefix), "Empty string prefix for modifiable library is not supported!"
-            prefix = create_prefix(StorageSpace.MODIFIABLE.value, add_to_prefix)
+            prefix = create_prefix(cls.get_machine_id(), add_to_prefix)
         else:
             prefix = create_prefix(StorageSpace.TEST.value, add_to_prefix)   
 
@@ -168,7 +179,7 @@ class StorageSetup:
         return arctic_url
 
 
-class LibraryManager:
+class TestLibraryManager:
 
     def __init__(self, storage: Storage, name_benchmark: str, library_options: LibraryOptions = None) :
         """
@@ -185,7 +196,7 @@ class LibraryManager:
     def log_info(self):
         logger = get_console_logger()
         if len(self._ac_cache) < 2:
-            self._get_arctic_client() # Forces uri generation
+            self._get_arctic_client_persistent() # Forces uri generation
             self._get_arctic_client_modifiable() # Forces uri generation
         mes = f"{self} arcticdb URI information for this test: \n"
         for key in self._ac_cache.keys():
@@ -194,28 +205,31 @@ class LibraryManager:
 
     # Currently we're using the same arctic client for both persistant and modifiable libraries.
     # We might decide that we want different arctic clients (e.g. different buckets) but probably not needed for now.
-    def _get_arctic_client(self) -> Arctic:
+    def _get_arctic_client_persistent(self) -> Arctic:
         lib_type = StorageSpace.PERSISTENT
         if self._test_mode == True:
             lib_type = StorageSpace.TEST
-        return self.__get_arctic_client_internal(lib_type, None, 
+        return self.__get_arctic_client_internal(lib_type, 
                                                   confirm_persistent_storage_need = True)
 
     def _get_arctic_client_modifiable(self) -> Arctic:
-        add_to_prefix = f"{self.name_benchmark}/{StorageSetup.get_machine_id()}"
-        return self.__get_arctic_client_internal(StorageSpace.MODIFIABLE, add_to_prefix, 
+        return self.__get_arctic_client_internal(StorageSpace.MODIFIABLE, 
                                                   confirm_persistent_storage_need = False)
 
-    def __get_arctic_client_internal(self, storage_space: StorageSpace, add_to_prefix: str, 
-                                      confirm_persistent_storage_need: bool = False) -> Arctic:
-        arctic_url = StorageSetup.get_arctic_uri(self.storage, storage_space, add_to_prefix,confirm_persistent_storage_need)
+    def __get_arctic_client_internal(self, storage_space: StorageSpace, 
+                                     confirm_persistent_storage_need: bool = False) -> Arctic:
+        arctic_url = StorageSetup.get_arctic_uri(self.storage, storage_space, None, confirm_persistent_storage_need)
         ac =  self._ac_cache.get(arctic_url, None)
         if ac is None:
             ac = Arctic(arctic_url)    
         self._ac_cache[arctic_url] = ac
         return ac    
+    
+    def set_test_mode(self) -> 'TestLibraryManager':
+        self._test_mode = True
+        return self
 
-    def get_library_name(self, library_type: LibraryType, lib_name_suffix):
+    def get_library_name(self, library_type: LibraryType, lib_name_suffix: str = ""):
         if library_type == LibraryType.PERSISTENT:
             return f"{library_type.value}_{self.name_benchmark}_{lib_name_suffix}"
         if library_type == LibraryType.MODIFIABLE:
@@ -225,7 +239,7 @@ class LibraryManager:
     def get_library(self, library_type : LibraryType, lib_name_suffix : str = "") -> Library:
         lib_name = self.get_library_name(library_type, lib_name_suffix)
         if library_type == LibraryType.PERSISTENT:
-           return self._get_arctic_client().get_library(lib_name, create_if_missing=True)
+           return self._get_arctic_client_persistent().get_library(lib_name, create_if_missing=True)
         elif library_type == LibraryType.MODIFIABLE:
            return self._get_arctic_client_modifiable().get_library(lib_name, create_if_missing=True, 
                                                         library_options= self.library_options)
@@ -235,7 +249,7 @@ class LibraryManager:
     def has_library(self, library_type : LibraryType, lib_name_suffix : str = "") -> Library:
         lib_name = self.get_library_name(library_type, lib_name_suffix)
         if library_type == LibraryType.PERSISTENT:
-           return self._get_arctic_client().has_library(lib_name)
+           return self._get_arctic_client_persistent().has_library(lib_name)
         elif library_type == LibraryType.MODIFIABLE:
            return self._get_arctic_client_modifiable().has_library(lib_name)        
         else:
@@ -245,25 +259,40 @@ class LibraryManager:
         ac = self._get_arctic_client_modifiable()
         lib_names = set(ac.list_libraries())
         to_deletes = [lib_name for lib_name in lib_names 
-                      if f"_{os.getpid()}_" in lib_name]
+                      if (f"_{os.getpid()}_" in lib_name) and (f"_{self.name_benchmark}_" in lib_name)]
         for to_delete in to_deletes:
             ac.delete_library(to_delete)
 
-    def clear_all_modifiable_libs(self):
+    def clear_all_benchmark_libs(self):
+        """
+        Clears only libraries for this benchmark
+        """
         ac = self._get_arctic_client_modifiable()
         lib_names = set(ac.list_libraries())
         for to_delete in lib_names:
-            ac.delete_library(to_delete)
+            if self.name_benchmark in to_delete:
+                ac.delete_library(to_delete)
 
     @classmethod
-    def clear_all_test_libs(cls, storage_type: Storage):
-        lm = LibraryManager(storage_type, "not needed")
-        lm._test_mode = True
-        ac = lm._get_arctic_client()
+    def remove_all_modifiable_libs_for_machine(cls, storage_type: Storage):
+        lm = TestLibraryManager(storage_type, "not needed")
+        ac = lm._get_arctic_client_modifiable()
+        assert StorageSetup.get_machine_id() in ac.get_uri(), "Machine storage space confirmed"
+        lib_names = set(ac.list_libraries())
+        for to_delete in lib_names:
+            ac.delete_library(to_delete)
+        assert len(ac.list_libraries()) == 0, "All machine libraries deleted"
+            
+    @classmethod
+    def remove_all_test_libs(cls, storage_type: Storage):
+        # The following call makes persistent library test library
+        lm = TestLibraryManager(storage_type, "not needed").set_test_mode() 
+        ac = lm._get_arctic_client_persistent()
+        assert StorageSpace.TEST.value in ac.get_uri(), "In test mode confirmed"
         lib_names = set(ac.list_libraries())
         for to_delete in lib_names:
             ac.delete_library(to_delete)            
-
+        assert len(ac.list_libraries()) == 0, "All test libraries deleted"
 
 
 # It is quite clear what is this responsible for: only dataframe generation
@@ -477,7 +506,7 @@ class LibraryPopulationPolicy:
         return DFGenerator.generate_random_dataframe(rows=3, cols=10).to_dict()                 
 
 
-def populate_library_if_missing(manager: LibraryManager, policy: LibraryPopulationPolicy, lib_type: LibraryType, lib_name_suffix: str = ""):
+def populate_library_if_missing(manager: TestLibraryManager, policy: LibraryPopulationPolicy, lib_type: LibraryType, lib_name_suffix: str = ""):
     assert manager is not None
     name = manager.get_library_name(lib_type, lib_name_suffix)
     if not manager.has_library(lib_type, lib_name_suffix):
@@ -486,7 +515,7 @@ def populate_library_if_missing(manager: LibraryManager, policy: LibraryPopulati
         policy.log(f"Existing library has been found {name}. Will be reused")      
 
 
-def populate_library(manager: LibraryManager, policy: LibraryPopulationPolicy, lib_type: LibraryType, lib_name_suffix: str = ""):
+def populate_library(manager: TestLibraryManager, policy: LibraryPopulationPolicy, lib_type: LibraryType, lib_name_suffix: str = ""):
     assert manager is not None
     lib = manager.get_library(lib_type, lib_name_suffix)
     policy.populate_library(lib)
@@ -537,3 +566,76 @@ class SequentialDataframesGenerator:
         last = self.get_first_and_last_timestamp(sequence_df_list)[1]
         next = TimestampNumber.from_timestamp(last, freq) + 1
         return next
+
+class TestsForTestLibraryManager:
+
+    @classmethod
+    def test_test_mode(cls):
+        """
+        Examines workflow of operations when test mode is set.
+        In that mode all persistent space storage requests are executed
+        in the test space, protecting persistent space from damage
+        """
+        symbol = "symbol"
+        storage = Storage.AMAZON
+        logger = get_console_logger()
+        tlm = TestLibraryManager(storage, "TEST_TEST_MODE").set_test_mode()
+        df = DFGenerator(10).add_int_col("int").generate_dataframe()
+        TestLibraryManager.remove_all_test_libs(storage)
+        TestLibraryManager.remove_all_modifiable_libs_for_machine(storage)
+        ac = tlm._get_arctic_client_persistent()
+        assert StorageSpace.TEST.value in ac.get_uri()
+        logger.info(f"Arctic uri: {ac.get_uri()}")
+        assert len(ac.list_libraries()) == 0
+        lib = tlm.get_library(LibraryType.PERSISTENT) # This is actually going to be test lib
+        lib.write(symbol, df)
+        assert symbol in lib.list_symbols()
+        # This is going to be modifiable lib.
+        assert len(tlm._get_arctic_client_modifiable().list_libraries()) == 0
+
+
+    @classmethod
+    def test_modifiable_access(cls):
+        """
+        Examines operations for modifiable workflow. When storage operation 
+        is requested there it is executed in special space unique for each machine/github runner
+        This space hosts the libraries created for all benchmarks and all process on that that machine
+        Part of name of each library is the name of benchmark and process that created it.
+        There are 2 operations to clear such libraries - to clear all libraries for
+        certain benchmark and to clear all libraries for certain benchmark and process
+        """
+        symbol = "symbol"
+        storage = Storage.AMAZON
+        logger = get_console_logger()
+        tlm = TestLibraryManager(storage, "TEST_MODIFIABLE_ACCESS").set_test_mode()
+        df = DFGenerator(10).add_int_col("int").generate_dataframe()
+
+        def create_lib(suffix : str = "") -> Library:
+            lib = tlm.get_library(LibraryType.MODIFIABLE, suffix) # This is actually going to be test lib
+            lib.write(symbol, df)
+            return (lib, tlm.get_library_name(LibraryType.MODIFIABLE, suffix))
+
+        ac = tlm._get_arctic_client_modifiable()
+        assert StorageSetup.get_machine_id() in ac.get_uri()
+        logger.info(f"Arctic uri: {ac.get_uri()}")
+        logger.info(f"Modifiable libraries {tlm._get_arctic_client_modifiable().list_libraries()}")
+        TestLibraryManager.remove_all_test_libs(storage)
+        TestLibraryManager.remove_all_modifiable_libs_for_machine(storage)
+        assert len(ac.list_libraries()) == 0, "No modifiable libs"
+        lib, lib_name = create_lib()
+        assert symbol in lib.list_symbols(), "Symbol created"
+        assert lib_name in ac.list_libraries(), "Library name found among others in modifiable space"
+        assert lib_name not in tlm._get_arctic_client_persistent().list_libraries(), "Library name not in persistent space"
+        TestLibraryManager.remove_all_modifiable_libs_for_machine(storage)
+        assert lib_name not in ac.list_libraries(), "Library name not anymore in modifiable space"
+        lib, lib_name = create_lib("2")
+        assert lib_name in ac.list_libraries(), "Library name found among others in modifiable space"
+        tlm.clear_all_benchmark_libs()
+        assert lib_name not in tlm._get_arctic_client_persistent().list_libraries(), "Library name not in persistent space"
+        assert lib_name not in ac.list_libraries(), "Library name not anymore in modifiable space"
+        lib, lib_name = create_lib("3")
+        assert lib_name in ac.list_libraries(), "Library name found among others in modifiable space"
+        tlm.clear_all_modifiable_libs_from_this_process()
+        assert lib_name not in tlm._get_arctic_client_persistent().list_libraries(), "Library name not in persistent space"
+        assert lib_name not in ac.list_libraries(), "Library name not anymore in modifiable space"
+

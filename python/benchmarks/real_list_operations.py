@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import time
-from arcticdb.util.environment_setup import LibraryManager, LibraryPopulationPolicy, LibraryType, Storage, populate_library, populate_library_if_missing
+from arcticdb.util.environment_setup import TestLibraryManager, LibraryPopulationPolicy, LibraryType, Storage, populate_library, populate_library_if_missing
 from benchmarks.common import AsvBase
 
 
@@ -21,7 +21,7 @@ class AWSListSymbols(AsvBase):
 
     timeout = 1200
     
-    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="LIST_SYMBOLS")
+    library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="LIST_SYMBOLS")
     library_type = LibraryType.PERSISTENT
 
     # NOTE: Change of parameters will trigger failure as original library must also be deleted manually.
@@ -32,7 +32,7 @@ class AWSListSymbols(AsvBase):
     number_columns = 2
     number_rows = 2
 
-    def get_library_manager(self) -> LibraryManager:
+    def get_library_manager(self) -> TestLibraryManager:
         return AWSListSymbols.library_manager
     
     def get_population_policy(self) -> LibraryPopulationPolicy:
@@ -90,7 +90,7 @@ class AWSVersionSymbols(AsvBase):
 
     timeout = 1200
 
-    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="LIST_SYMBOLS")
+    library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="LIST_SYMBOLS")
     library_type = LibraryType.PERSISTENT
 
     # NOTE: Change of parameters will trigger failure as original library must also be deleted manually.
@@ -103,7 +103,7 @@ class AWSVersionSymbols(AsvBase):
 
     mean_number_versions_per_symbol = 5
 
-    def get_library_manager(self) -> LibraryManager:
+    def get_library_manager(self) -> TestLibraryManager:
         return AWSVersionSymbols.library_manager
     
     def get_population_policy(self) -> LibraryPopulationPolicy:

@@ -16,7 +16,7 @@ import os
 import bz2
 import urllib.request
 
-from arcticdb.util.environment_setup import LibraryManager, LibraryPopulationPolicy, get_console_logger
+from arcticdb.util.environment_setup import TestLibraryManager, LibraryPopulationPolicy, get_console_logger
 
 ## You can now define SLOW ASV tests
 ## To run those tests also you have to set following OS variable
@@ -241,7 +241,7 @@ class AsvBase(ABC):
         return get_console_logger(self)    
     
     @abstractmethod
-    def get_library_manager(self) -> LibraryManager:
+    def get_library_manager(self) -> TestLibraryManager:
         pass
     
     @abstractmethod

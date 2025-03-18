@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 from logging import Logger
 import pandas as pd
-from arcticdb.util.environment_setup import DataFrameGenerator, LibraryManager, LibraryPopulationPolicy, LibraryType, Storage, get_console_logger, populate_library_if_missing
+from arcticdb.util.environment_setup import DataFrameGenerator, TestLibraryManager, LibraryPopulationPolicy, LibraryType, Storage, get_console_logger, populate_library_if_missing
 from arcticdb.version_store.library import Library
 from arcticdb.version_store.processing import QueryBuilder
 
@@ -48,13 +48,13 @@ class AWSQueryBuilderFunctions:
     param_names = ["num_rows"]
 
 
-    library_manager = LibraryManager(storage=Storage.AMAZON, name_benchmark="QUERY_BUILDER")
+    library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="QUERY_BUILDER")
 
 
     def get_logger(self) -> Logger:
         return get_console_logger(self)
 
-    def get_library_manager(self) -> LibraryManager:
+    def get_library_manager(self) -> TestLibraryManager:
         return AWSQueryBuilderFunctions.library_manager
     
     def get_population_policy(self) -> LibraryPopulationPolicy:
