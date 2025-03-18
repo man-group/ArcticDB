@@ -82,6 +82,8 @@ dependencies:
   - trustme
   - entt
   - psutil
-  - memray 
-  - pytest-memray
-
+  # Use memray and pytest-memray only on Linux and MacOS
+  - sel(linux): memray
+  - sel(linux): pytest-memray
+  - sel(osx): memray
+  - sel(osx): pytest-memray
