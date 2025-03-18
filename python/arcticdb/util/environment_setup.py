@@ -275,6 +275,10 @@ class TestLibraryManager:
 
     @classmethod
     def remove_all_modifiable_libs_for_machine(cls, storage_type: Storage):
+        """
+        MOTE: Potentially dangerous operation, invoke only when no other
+              test processes run on the shared storage
+        """
         lm = TestLibraryManager(storage_type, "not needed")
         ac = lm._get_arctic_client_modifiable()
         assert StorageSetup.get_machine_id() in ac.get_uri(), "Machine storage space confirmed"
@@ -285,6 +289,10 @@ class TestLibraryManager:
             
     @classmethod
     def remove_all_test_libs(cls, storage_type: Storage):
+        """
+        MOTE: Potentially dangerous operation, invoke only when no other
+              test processes run on the shared storage
+        """
         # The following call makes persistent library test library
         lm = TestLibraryManager(storage_type, "not needed").set_test_mode() 
         ac = lm._get_arctic_client_persistent()
@@ -626,14 +634,22 @@ class TestsForTestLibraryManager:
         assert symbol in lib.list_symbols(), "Symbol created"
         assert lib_name in ac.list_libraries(), "Library name found among others in modifiable space"
         assert lib_name not in tlm._get_arctic_client_persistent().list_libraries(), "Library name not in persistent space"
+        # Following operation is unsafe as it creates another client
+        # Thus `tlm` object library manager will be out of sync. Therefore all new libraries that will create
+        # will be real new libraries
         TestLibraryManager.remove_all_modifiable_libs_for_machine(storage)
         assert lib_name not in ac.list_libraries(), "Library name not anymore in modifiable space"
+        # We could not create library with same suffix, because another client has deleted 
+        # the original and LibraryManager in original connection is not notified for that
+        # so we create library with different suffix
         lib, lib_name = create_lib("2")
         assert lib_name in ac.list_libraries(), "Library name found among others in modifiable space"
         tlm.clear_all_benchmark_libs()
         assert lib_name not in tlm._get_arctic_client_persistent().list_libraries(), "Library name not in persistent space"
         assert lib_name not in ac.list_libraries(), "Library name not anymore in modifiable space"
-        lib, lib_name = create_lib("3")
+        # The creation of library with same suffix is now possible as client connections are cached
+        # for `tlm` object
+        lib, lib_name = create_lib("2") 
         assert lib_name in ac.list_libraries(), "Library name found among others in modifiable space"
         tlm.clear_all_modifiable_libs_from_this_process()
         assert lib_name not in tlm._get_arctic_client_persistent().list_libraries(), "Library name not in persistent space"
