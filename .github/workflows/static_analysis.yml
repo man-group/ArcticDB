@@ -72,6 +72,7 @@
             polaris_reports_sarif_groupSCAIssues: true
             polaris_upload_sarif_report: true
             polaris_prComment_severities: "high,critical,medium,low"
+            polaris_branch_parent_name: "master"
 
         - name: Upload .bridge artifact
           uses: actions/upload-artifact@v4
