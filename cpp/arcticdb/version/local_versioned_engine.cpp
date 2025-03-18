@@ -1277,6 +1277,9 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
             res_metadatas->emplace_back(std::move(symbol_processing_result.metadata_));
         }
         auto output_schema = clauses_ptr->front()->join_schemas(std::move(output_schemas));
+        for (const auto& clause: *clauses_ptr) {
+            output_schema = clause->modify_schema(std::move(output_schema));
+        }
         pipeline_context->set_descriptor(output_schema.stream_descriptor());
         pipeline_context->norm_meta_ = std::make_shared<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(output_schema.norm_metadata_));
         return schedule_remaining_iterations(std::move(entity_ids), clauses_ptr, true)
