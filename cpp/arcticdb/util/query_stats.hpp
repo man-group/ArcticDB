@@ -75,7 +75,9 @@
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 
-namespace arcticdb::util::query_stats {
+namespace arcticdb{
+    class SegmentInMemory;
+namespace util::query_stats {
 enum class GroupName : size_t {
     arcticdb_call = 0,
     key_type = 1,
@@ -148,7 +150,7 @@ private:
 };
 
 std::string format_group_value(GroupName col_value, auto&& value) {
-    constexpr bool is_value_key_type = std::is_same_v<std::remove_cv_t<std::remove_reference_t<decltype(value)>>, arcticdb::entity::KeyType>;
+    constexpr bool is_value_key_type = std::is_same_v<std::remove_cv_t<std::remove_reference_t<decltype(value)>>, entity::KeyType>;
     constexpr bool is_value_key = std::convertible_to<decltype(value), entity::VariantKey>;
     check(
         col_value != util::query_stats::GroupName::key_type || is_value_key_type || is_value_key, 
@@ -165,6 +167,8 @@ std::string format_group_value(GroupName col_value, auto&& value) {
     }
 }
 
+void add_logical_keys(const entity::KeyType physical_key_type, const SegmentInMemory& segment);
+}
 }
 
 #define STATS_GROUP_VAR_NAME(x) query_stats_info##x
@@ -188,3 +192,8 @@ std::string format_group_value(GroupName col_value, auto&& value) {
         stats[static_cast<size_t>(arcticdb::util::query_stats::StatsName::col_name)] += value; \
     }
 
+
+#define QUERT_STATS_ADD_LOGICAL_KEYS(physical_key, segment) \
+    if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
+        arcticdb::util::query_stats::add_logical_keys(physical_key, segment); \
+    }

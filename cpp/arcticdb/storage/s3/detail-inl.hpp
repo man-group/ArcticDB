@@ -134,6 +134,8 @@ void do_write_impl(
     ARCTICDB_SAMPLE(S3StorageWrite, 0)
 
     auto key_type_dir = key_type_folder(root_folder, key_seg.key_type());
+    QUERY_STATS_ADD_GROUP(key_type, key_seg.key_type())
+    QUERY_STATS_ADD_GROUP_WITH_TIME(storage_ops, "PutObject")
     ARCTICDB_TRACE(log::storage(), "S3 key_type_folder is {}", key_type_dir);
 
     ARCTICDB_SUBSAMPLE(S3StorageWriteValues, 0)

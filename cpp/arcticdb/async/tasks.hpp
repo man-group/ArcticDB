@@ -93,6 +93,7 @@ struct EncodeAtomTask : BaseTask {
     storage::KeySegmentPair encode() {
         ARCTICDB_DEBUG(log::codec(), "Encoding object with partial key {}", partial_key_);
         ARCTICDB_DEBUG_THROW(5)
+        QUERT_STATS_ADD_LOGICAL_KEYS(partial_key_.key_type, segment_);
         auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
         auto content_hash = get_segment_hash(enc_seg);
 
@@ -125,6 +126,7 @@ struct EncodeSegmentTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeSegmentTask)
 
     storage::KeySegmentPair encode() {
+        QUERT_STATS_ADD_LOGICAL_KEYS(variant_key_type(key_), segment_);
         auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
         return {std::move(key_), std::move(enc_seg)};
     }
@@ -422,9 +424,12 @@ struct DecodeSegmentTask : BaseTask {
         auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment with key {}",
                              variant_key_view(key_seg.variant_key()));
-        QUERY_STATS_ADD_GROUP(key_type, variant_key_type(key_seg.variant_key()))
 
-        return {key_seg.variant_key(), decode_segment(*key_seg.segment_ptr())};
+        auto segment = decode_segment(*key_seg.segment_ptr());
+        
+        QUERT_STATS_ADD_LOGICAL_KEYS(variant_key_type(key_seg.variant_key()), segment);
+
+        return {key_seg.variant_key(), std::move(segment)};
     }
 };
 

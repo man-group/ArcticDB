@@ -76,8 +76,6 @@ inline std::optional<AtomKey> read_segment_with_keys(
 
     for (; row < ssize_t(seg.row_count()); ++row) {
         auto key = read_key_row(seg, row);
-        QUERY_STATS_ADD_GROUP(key_type, key)
-        QUERY_STATS_ADD(count, 1)
         ARCTICDB_TRACE(log::version(), "Reading key {}", key);
 
         if (is_index_key_type(key.type())) {

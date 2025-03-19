@@ -608,7 +608,6 @@ VersionedItem PythonVersionStore::write_versioned_dataframe(
     bool sparsify_floats,
     bool validate_index) {
     ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
-    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "write_versioned_dataframe");
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types());
     auto versioned_item = write_versioned_dataframe_internal(stream_id, frame, prune_previous_versions, sparsify_floats, validate_index);
 

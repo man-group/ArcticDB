@@ -9,6 +9,8 @@
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/log/log.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/stream/stream_utils.hpp>
 
 #include <pybind11/pybind11.h>
 
@@ -178,6 +180,24 @@ StatsGroup::~StatsGroup() {
     query_stats_instance.set_level(prev_level_);
     if (!async::is_folly_thread && query_stats_instance.current_level() == query_stats_instance.root_level()) {
         query_stats_instance.merge_levels();
+    }
+}
+
+void add_logical_keys(const entity::KeyType physical_key_type, const SegmentInMemory& segment){
+    if (physical_key_type == entity::KeyType::TABLE_INDEX ||
+        physical_key_type == entity::KeyType::VERSION_REF ||
+        physical_key_type == entity::KeyType::VERSION ||
+        physical_key_type == entity::KeyType::APPEND_REF ||
+        physical_key_type == entity::KeyType::MULTI_KEY ||
+        physical_key_type == entity::KeyType::SNAPSHOT_REF ||
+        physical_key_type == entity::KeyType::SNAPSHOT ||
+        physical_key_type == entity::KeyType::SNAPSHOT_TOMBSTONE ||
+        physical_key_type == entity::KeyType::BLOCK_VERSION_REF) {
+        StatsGroup physical_key_group(false, GroupName::key_type, format_group_value(GroupName::key_type, physical_key_type));
+        for (size_t i = 0; i < segment.row_count(); ++i) {
+            StatsGroup logical_key_group(false, GroupName::key_type, format_group_value(GroupName::key_type, stream::read_key_row(segment, i)));
+            QueryStats::instance().current_level()->stats_[static_cast<size_t>(StatsName::count)] += 1;
+        }
     }
 }
 }

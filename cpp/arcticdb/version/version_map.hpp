@@ -168,7 +168,6 @@ public:
             do {
                 ARCTICDB_DEBUG(log::version(), "Loading version key {}", next_key.value());
                 auto [key, seg] = store->read_sync(next_key.value());
-                QUERY_STATS_ADD_GROUP(key_type, key)
                 next_key = read_segment_with_keys(seg, entry, load_progress);
                 set_latest_version(entry, latest_version);
             } while (next_key
