@@ -74,9 +74,9 @@ class Library {
         return storages_->supports_object_size_calculation();
     }
 
-    ObjectSizes get_object_sizes(KeyType type, const std::string& prefix) {
-        ARCTICDB_SAMPLE(GetObjectSizes, 0)
-        return storages_->get_object_sizes(type, prefix);
+    void visit_object_sizes(KeyType type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
+        ARCTICDB_SAMPLE(VisitObjectSizes, 0)
+        storages_->visit_object_sizes(type, prefix, visitor);
     }
 
     /**
