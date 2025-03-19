@@ -50,7 +50,7 @@ class S3Storage : public Storage, AsyncStorage {
         return this;
     }
 
-    bool supports_object_size_calculation() const final override;
+    bool supports_object_size_calculation() const final;
 
   protected:
     void do_write(KeySegmentPair& key_seg) final;

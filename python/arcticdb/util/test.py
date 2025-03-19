@@ -817,9 +817,11 @@ def generic_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
     assert_frame_equal(expected, received, check_dtype=False)
 
 
-def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
+def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict, agg_dtypes=None):
     expected = df.groupby(grouping_column).agg(None, **aggs_dict)
     expected = expected.reindex(columns=sorted(expected.columns))
+    if agg_dtypes is not None:
+        expected = expected.astype(agg_dtypes)
     q = QueryBuilder().groupby(grouping_column).agg(aggs_dict)
     received = lib.read(symbol, query_builder=q).data
     received = received.reindex(columns=sorted(received.columns))
