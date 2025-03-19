@@ -64,7 +64,6 @@ class StorageFixture(_SaferContextManager):
     def __init__(self):
         super().__init__()
         self.libs_from_factory: Dict[str, NativeVersionStore] = {}
-        self.libs_names_from_arctic: List[str] = []
 
     def __str__(self):
         return f"{type(self).__name__}[{self.arctic_uri}]"
@@ -72,7 +71,6 @@ class StorageFixture(_SaferContextManager):
     def create_arctic(self, **extras):
         """Similar to `Arctic(self.arctic_uri)` but also keeps track of the libraries created"""
         out = Arctic(self.arctic_uri, **extras)
-        out._created_lib_names = self.libs_names_from_arctic
         return out
 
     @abstractmethod
