@@ -110,6 +110,10 @@ class S3Bucket(StorageFixture):
             # client_cert_dir is skipped on purpose; It will be tested manually in other tests
 
     def __exit__(self, exc_type, exc_value, traceback):
+        if self.factory.use_mock_storage_for_testing:
+            # If we're using mock storage for testing, we don't need to clean up the bucket
+            # because it's not actually created
+            return
         if self.factory.clean_bucket_on_fixture_exit:
             self.factory.cleanup_bucket(self)
 
@@ -631,10 +635,6 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self.use_raw_prefix = use_raw_prefix
         self.use_mock_storage_for_testing = use_mock_storage_for_testing
         self.use_internal_client_wrapper_for_testing = use_internal_client_wrapper_for_testing
-        # This is needed because we might have multiple factories in the same test
-        # and we need to make sure the bucket names are unique
-        # set the unique_id to the current UNIX timestamp to avoid conflicts
-        self.unique_id = str(int(time.time()))
 
     def _start_server(self):
         port = self.port = get_ephemeral_port(2)
@@ -724,7 +724,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self._enforcing_permissions = enforcing
 
     def create_fixture(self) -> S3Bucket:
-        bucket = f"test_bucket_{self.unique_id}_{self._bucket_id}"
+        bucket = f"test_default_s3_bucket_{self._bucket_id}"
         self._s3_admin.create_bucket(Bucket=bucket)
         self._bucket_id += 1
         if self.bucket_versioning:
@@ -736,6 +736,10 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
 
     def cleanup_bucket(self, b: S3Bucket):
         self._live_buckets.remove(b)
+        if self.use_mock_storage_for_testing:
+            # If we're using mock storage for testing, we don't need to clean up the bucket
+            # because it's not actually created
+            return
         if len(self._live_buckets):
             b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
             try:
@@ -758,7 +762,7 @@ _PermissionCapableFactory = MotoS3StorageFixtureFactory
 
 class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
     def create_fixture(self) -> NfsS3Bucket:
-        bucket = f"test_bucket_{self.unique_id}_{self._bucket_id}"
+        bucket = f"test_nfs_backed_s3_bucket_{self._bucket_id}"
         self._s3_admin.create_bucket(Bucket=bucket)
         self._bucket_id += 1
         out = NfsS3Bucket(self, bucket)
@@ -800,7 +804,7 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
         wait_for_server_to_come_up(self.endpoint, "moto", self._p)
 
     def create_fixture(self) -> GcpS3Bucket:
-        bucket = f"test_bucket_{self.unique_id}_{self._bucket_id}"
+        bucket = f"test_gcp_s3_bucket_{self._bucket_id}"
         self._s3_admin.create_bucket(Bucket=bucket)
         self._bucket_id += 1
         out = GcpS3Bucket(self, bucket)

@@ -269,12 +269,12 @@ def s3_bucket_versioning_storage() -> Generator[S3Bucket, None, None]:
             res = s3_admin.list_object_versions(Bucket=bucket)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def mock_s3_storage_with_error_simulation_factory():
     return mock_s3_with_error_simulation()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def mock_s3_storage_with_error_simulation(mock_s3_storage_with_error_simulation_factory):
     with mock_s3_storage_with_error_simulation_factory.create_fixture() as f:
         yield f
