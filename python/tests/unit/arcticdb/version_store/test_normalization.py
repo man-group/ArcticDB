@@ -858,3 +858,144 @@ def test_throws_correct_exceptions(returns_expected, method_to_test, lmdb_versio
     args = [MagicMock()] * non_default_arg_count
     with pytest.raises(expected):
         method_to_test(*args)
+
+
+def test_numpy_none_slice(lmdb_version_store):
+    lib = lmdb_version_store
+    
+    dat = np.array([1.0, 2.0, 3.0, 4.0])
+    idx = pd.DatetimeIndex(["2020-01-01"], name="date")
+    columns_names = ["A", "B", "C", "D"]
+    
+    # This is a view, not a copy
+    # it transposes the array, so the shape is (4,) instead of (1,4)
+    sl = dat[None, :]
+    df = pd.DataFrame(sl, index=idx, columns=columns_names)
+    
+    lib.write("df_none_slice", df)
+    
+    result = lib.read("df_none_slice").data
+    pd.testing.assert_frame_equal(result, df)
+
+
+def test_numpy_newaxis_slice(lmdb_version_store):
+    lib = lmdb_version_store
+    
+    dat = np.array([1.0, 2.0, 3.0, 4.0])
+    idx = pd.DatetimeIndex(["2020-01-01"], name="date")
+    columns_names = ["A", "B", "C", "D"]
+
+    # This is a view, not a copy
+    # it transposes the array, so the shape is (4,) instead of (1,4)
+    sl = dat[np.newaxis, :]
+    df = pd.DataFrame(sl, index=idx, columns=columns_names)
+    
+    lib.write("df_none_slice", df)
+    
+    result = lib.read("df_none_slice").data
+    pd.testing.assert_frame_equal(result, df)
+
+
+def test_view_with_reshape(lmdb_version_store):
+    lib = lmdb_version_store
+
+    dat = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    reshaped = dat.reshape(2, 3)  # Creates a view with different strides
+    idx = pd.DatetimeIndex(["2020-01-01", "2020-01-02"], name="date")
+    columns_names = ["A", "B", "C"]
+    df = pd.DataFrame(reshaped, index=idx, columns=columns_names)
+    
+    lib.write("df_reshaped", df)
+    
+    result = lib.read("df_reshaped").data
+    pd.testing.assert_frame_equal(result, df)
+
+
+def test_view_with_transpose(lmdb_version_store):
+    lib = lmdb_version_store
+
+    original = np.array([[1, 2, 3], [4, 5, 6]])
+    transposed = original.T  # Shape changes from (2,3) to (3,2)
+    idx = pd.DatetimeIndex(["2020-01-01", "2020-01-02", "2020-01-03"], name="date")
+    columns_names = ["A", "B"]
+    
+    df = pd.DataFrame(transposed, index=idx, columns=columns_names)
+    
+    lib.write("df_transposed", df)
+    
+    result = lib.read("df_transposed").data
+    pd.testing.assert_frame_equal(result, df)
+
+def test_view_with_fancy_indexing(lmdb_version_store):
+    lib = lmdb_version_store
+
+    original = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+    
+    indices = np.array([0, 2])
+    view = original[indices]  # Selects rows 0 and 2
+    
+    idx = pd.DatetimeIndex(["2020-01-01", "2020-01-02"], name="date")
+    columns_names = ["A", "B", "C", "D"]
+    
+    df = pd.DataFrame(view, index=idx, columns=columns_names)
+    
+    lib.write("df_fancy_idx", df)
+    
+    result = lib.read("df_fancy_idx").data
+    pd.testing.assert_frame_equal(result, df)
+
+
+def test_view_with_boolean_masking(lmdb_version_store):
+    lib = lmdb_version_store
+
+    original = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+    
+    mask = np.array([True, False, True])
+    view = original[mask]  # Selects rows 0 and 2
+    
+    idx = pd.DatetimeIndex(["2020-01-01", "2020-01-02"], name="date")
+    columns_names = ["A", "B", "C", "D"]
+    
+    df = pd.DataFrame(view, index=idx, columns=columns_names)
+    
+    lib.write("df_bool_mask", df)
+    
+    result = lib.read("df_bool_mask").data
+    pd.testing.assert_frame_equal(result, df)
+
+
+def test_view_with_slice(lmdb_version_store):
+    lib = lmdb_version_store
+
+    # Create a 2D array
+    original = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+    view = original[0:2, 1:3]  # Select rows 0-1 and columns 1-2
+    idx = pd.DatetimeIndex(["2020-01-01", "2020-01-02"], name="date")
+    columns_names = ["B", "C"]
+    
+    df = pd.DataFrame(view, index=idx, columns=columns_names)
+    
+    lib.write("df_slice", df)
+    
+    result = lib.read("df_slice").data
+    pd.testing.assert_frame_equal(result, df)
+
+
+def test_empty_dimension(lmdb_version_store):
+    lib = lmdb_version_store
+    
+    # 0 rows, 3 columns
+    zero_dim_array = np.zeros((0, 3))
+    columns_names = ["A", "B", "C"]
+    
+    # Empty index
+    # N.B. Make sure not to pass a name to the index
+    # as we don't keep names for empty indices
+    # and pandas does
+    idx = pd.DatetimeIndex([])
+    df = pd.DataFrame(zero_dim_array, index=idx, columns=columns_names)
+    
+    lib.write("df_zero_dim", df)
+    
+    result = lib.read("df_zero_dim").data
+    pd.testing.assert_frame_equal(result, df)
