@@ -307,13 +307,12 @@ jobs:
         uses: mamba-org/setup-micromamba@v2.0.4
         with:
           environment-file: environment-dev.yml
-          init-shell: >-
-            cmd
+          init-shell: bash cmd.exe
           cache-environment: true
           post-cleanup: 'all'
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
-        shell: cmd {0}
+        shell: bash -elo pipefail {0}
         run: |
           # Protocol buffers compilation require not using build isolation.
           python -m pip install --no-build-isolation --no-deps -v -e .
@@ -323,14 +322,14 @@ jobs:
           ARCTIC_CMAKE_PRESET: windows-conda-release-build
 
       - name: Build C++ Tests
-        shell: cmd {0}
+        shell: bash -elo pipefail {0}
         run: |
           cd cpp\out\windows-conda-release-build
           msbuild arcticdb_rapidcheck_tests.vcxproj /p:Configuration=Release /p:Platform=x64 /m
           msbuild test_unit_arcticdb.vcxproj /p:Configuration=Release /p:Platform=x64 /m
 
       - name: Run C++ Tests
-        shell: cmd {0}
+        shell: bash -elo pipefail {0}
         run: |
           cd cpp\out\windows-conda-release-build
           ctest -C Release -T test
@@ -341,12 +340,12 @@ jobs:
           node-version: '16'
 
       - name: Install azurite
-        shell: cmd {0}
+        shell: bash -elo pipefail {0}
         run: |
           npm install -g azurite
 
       - name: Test with pytest
-        shell: cmd {0}
+        shell: bash -elo pipefail {0}
         run: |
           cd python
           set ARCTICDB_RAND_SEED=%RANDOM%
