@@ -1456,7 +1456,7 @@ NormalizationMetadata generate_norm_meta(const std::vector<NormalizationMetadata
                     common.has_multi_index() == has_multi_index,
                     "Mismatching norm metadata in schema join");
         }
-        if (has_multi_index) {
+        if (*has_multi_index) {
             const auto& index = common.multi_index();
             if (!name.has_value()) {
                 name = index.name();
