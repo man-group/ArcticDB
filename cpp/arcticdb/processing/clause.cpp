@@ -1403,7 +1403,7 @@ split_schemas(std::vector<OutputSchema>&& schemas) {
 
 IndexDescriptorImpl generate_index_descriptor(const std::vector<IndexDescriptorImpl>& index_descs) {
     // Ensure:
-    //  - Type is the same (empty matches anything)
+    //  - Type is the same
     //  - Field count is the same
     std::optional<IndexDescriptor::Type> index_type;
     std::optional<uint32_t> index_desc_field_count;
@@ -1412,7 +1412,7 @@ IndexDescriptorImpl generate_index_descriptor(const std::vector<IndexDescriptorI
             index_type = index_desc.type();
         } else {
             schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                    index_desc.type() == IndexDescriptor::Type::EMPTY || index_desc.type() == *index_type,
+                    index_desc.type() == *index_type,
                     "Mismatching IndexDescriptor in schema join");
         }
         if (!index_desc_field_count.has_value()) {

@@ -781,6 +781,10 @@ enum class JoinType: uint8_t {
     INNER
 };
 
+IndexDescriptorImpl generate_index_descriptor(const std::vector<IndexDescriptorImpl>& index_descs);
+arcticdb::proto::descriptors::NormalizationMetadata generate_norm_meta(
+        const std::vector<arcticdb::proto::descriptors::NormalizationMetadata>& norm_metas);
+
 struct ConcatClause {
 
     ClauseInfo clause_info_;
