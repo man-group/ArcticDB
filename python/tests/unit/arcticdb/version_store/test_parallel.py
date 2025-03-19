@@ -113,44 +113,48 @@ def test_remove_incomplete(basic_store):
 @pytest.mark.parametrize("num_segments_live_during_compaction, num_io_threads, num_cpu_threads", [
     (1, 1, 1),
     (10, 1, 1),
+    (1, 10, 1),
     (None, None, None)
 ])
 def test_parallel_write(basic_store_tiny_segment, num_segments_live_during_compaction, num_io_threads, num_cpu_threads):
-    with config_context_multi({"VersionStore.NumSegmentsLiveDuringCompaction": num_segments_live_during_compaction,
-                               "VersionStore.NumIOThreads": num_io_threads,
-                               "VersionStore.NumCPUThreads": num_cpu_threads}):
+    try:
+        with config_context_multi({"VersionStore.NumSegmentsLiveDuringCompaction": num_segments_live_during_compaction,
+                                   "VersionStore.NumIOThreads": num_io_threads,
+                                   "VersionStore.NumCPUThreads": num_cpu_threads}):
+            adb_async.reinit_task_scheduler()
+            if num_io_threads:
+                assert adb_async.io_thread_count() == num_io_threads
+            if num_cpu_threads:
+                assert adb_async.cpu_thread_count() == num_cpu_threads
+
+            store = basic_store_tiny_segment
+            sym = "parallel"
+            store.remove_incomplete(sym)
+
+            num_rows = 1111
+            dtidx = pd.date_range("1970-01-01", periods=num_rows)
+            test = pd.DataFrame(
+                {
+                    "uint8": random_integers(num_rows, np.uint8),
+                    "uint32": random_integers(num_rows, np.uint32),
+                },
+                index=dtidx,
+            )
+            chunk_size = 100
+            list_df = [test[i : i + chunk_size] for i in range(0, test.shape[0], chunk_size)]
+            random.shuffle(list_df)
+
+            for df in list_df:
+                store.write(sym, df, parallel=True)
+
+            user_meta = {"thing": 7}
+            store.compact_incomplete(sym, False, False, metadata=user_meta)
+            vit = store.read(sym)
+            assert_frame_equal(test, vit.data)
+            assert vit.metadata["thing"] == 7
+            assert len(get_append_keys(store, sym)) == 0
+    finally:
         adb_async.reinit_task_scheduler()
-        if num_io_threads:
-            assert adb_async.io_thread_count() == num_io_threads
-        if num_cpu_threads:
-            assert adb_async.cpu_thread_count() == num_cpu_threads
-
-        store = basic_store_tiny_segment
-        sym = "parallel"
-        store.remove_incomplete(sym)
-
-        num_rows = 1111
-        dtidx = pd.date_range("1970-01-01", periods=num_rows)
-        test = pd.DataFrame(
-            {
-                "uint8": random_integers(num_rows, np.uint8),
-                "uint32": random_integers(num_rows, np.uint32),
-            },
-            index=dtidx,
-        )
-        chunk_size = 100
-        list_df = [test[i : i + chunk_size] for i in range(0, test.shape[0], chunk_size)]
-        random.shuffle(list_df)
-
-        for df in list_df:
-            store.write(sym, df, parallel=True)
-
-        user_meta = {"thing": 7}
-        store.compact_incomplete(sym, False, False, metadata=user_meta)
-        vit = store.read(sym)
-        assert_frame_equal(test, vit.data)
-        assert vit.metadata["thing"] == 7
-        assert len(get_append_keys(store, sym)) == 0
 
 
 @pytest.mark.parametrize("index, expect_ordered", [
