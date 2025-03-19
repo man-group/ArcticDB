@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import os
-from typing import List
+from typing import Dict, List
 import pandas as pd
 from arcticdb.options import LibraryOptions
 from arcticdb.util.environment_setup import TestLibraryManager, LibraryType, SequentialDataframesGenerator, Storage
@@ -20,7 +20,7 @@ from benchmarks.common import AsvBase
 
 WIDE_DATAFRAME_NUM_COLS = 30_000
 
-class LargeAppendDataModifyCache:
+class CacheForModifiableTests:
     """
     Stores pre-generated information for `AWSLargeAppendDataModify` test
     dictionary with keys that are for parameter values
@@ -28,7 +28,6 @@ class LargeAppendDataModifyCache:
 
     def __init__(self, ):
         self.write_and_append_dict = {}
-        self.update_full_dict = {}
         self.update_full_dict = {}
         self.update_half_dict = {}
         self.update_upsert_dict = {}
@@ -78,8 +77,8 @@ class AWSLargeAppendTests(AsvBase):
         # update and append tests. We want exact specified `number` of times to be executed between
         assert warmup_time == 0, "warm up must be 0"
 
-        num_sequential_dataframes = num_sequential_dataframes + 1
-        cache = LargeAppendDataModifyCache()
+        num_sequential_dataframes += 1
+        cache = CacheForModifiableTests()
         generator = SequentialDataframesGenerator()
 
         initial_timestamp, freq = self.get_index_info()
@@ -98,50 +97,44 @@ class AWSLargeAppendTests(AsvBase):
 
         return cache
     
-    def initialize_update_dataframes(self, num_rows: int, num_cols: int, cached_results: LargeAppendDataModifyCache, 
-                                     generator: SequentialDataframesGenerator):
-        
+    def initialize_update_dataframes(self, num_rows: int, num_cols: int, cached_results: CacheForModifiableTests, 
+                                 generator: SequentialDataframesGenerator):
         logger = self.get_logger()
         initial_timestamp, freq = self.get_index_info()
         timestamp_number = TimestampNumber.from_timestamp(initial_timestamp, freq)
-        end_timestamp_number = timestamp_number + num_rows
-        logger.info(f"Frame START-LAST Timestamps {timestamp_number} == {end_timestamp_number}")
+        
+        def log_time_range(update_dict: Dict, update_type: str):
+            time_range = generator.get_first_and_last_timestamp([update_dict[num_rows]])
+            logger.info(f"Time range {update_type.upper()} update {time_range}")
 
-        # calculate update dataframes
-        # update same size same date range start-end
-        cached_results.update_full_dict[num_rows] = generator.df_generator.get_dataframe(number_rows=num_rows, 
-                        number_columns=num_cols, start_timestamp=initial_timestamp, freq=freq)
-        time_range = generator.get_first_and_last_timestamp([cached_results.update_full_dict[num_rows]])
-        logger.info(f"Time range FULL update { time_range }")
+        def generate_and_log(update_dict: Dict, update_type: str, number_rows: int, start_ts: pd.Timestamp):
+            df = generator.df_generator.get_dataframe(number_rows=number_rows, number_columns=num_cols, start_timestamp=start_ts, freq=freq)
+            update_dict[num_rows] = df
+            log_time_range(update_dict, update_type)
 
-        # update 2nd half of initial date range
-        half = (num_rows // 2) 
-        timestamp_number.inc(half - 3) 
-        cached_results.update_half_dict[num_rows] = generator.df_generator.get_dataframe(number_rows=half, 
-                        number_columns=num_cols, start_timestamp=timestamp_number.to_timestamp(), freq=freq)
-        time_range = generator.get_first_and_last_timestamp([cached_results.update_half_dict[num_rows]])
-        logger.info(f"Time range HALF update { time_range }")
+        logger.info(f"Frame START-LAST Timestamps {timestamp_number} == {timestamp_number + num_rows}")
 
-        # update from the half with same size dataframe (end period is outside initial bounds)
-        cached_results.update_upsert_dict[num_rows] = generator.df_generator.get_dataframe(number_rows=num_rows, 
-                        number_columns=num_cols, start_timestamp=timestamp_number.to_timestamp(), freq=freq)
-        time_range = generator.get_first_and_last_timestamp([cached_results.update_upsert_dict[num_rows]])
-        logger.info(f"Time range UPSERT update { time_range }")
+        # Full update
+        generate_and_log(cached_results.update_full_dict,'update_full_dict', num_rows, initial_timestamp)
 
-        # update one line at the end
-        timestamp_number.inc(half) 
-        cached_results.update_single_dict[num_rows] = generator.df_generator.get_dataframe(number_rows=1, 
-                        number_columns=num_cols, start_timestamp=timestamp_number.to_timestamp(), freq=freq)
-        time_range = generator.get_first_and_last_timestamp([cached_results.update_single_dict[num_rows]])
-        logger.info(f"Time range SINGLE update { time_range }")
+        # Half update
+        half = num_rows // 2
+        timestamp_number.inc(half - 3)
+        generate_and_log(cached_results.update_half_dict, 'update_half_dict', half, timestamp_number.to_timestamp())
 
-        next_timestamp =  generator.get_next_timestamp_number(cached_results.write_and_append_dict[num_rows], freq)
-        cached_results.append_single_dict[num_rows] = generator.df_generator.get_dataframe(number_rows=1, 
-                        number_columns=num_cols, start_timestamp=next_timestamp.to_timestamp(), freq=freq)
-        time_range = generator.get_first_and_last_timestamp([cached_results.append_single_dict[num_rows]])
-        logger.info(f"Time range SINGLE append { time_range }")
-            
-    def setup(self, cache: LargeAppendDataModifyCache, num_rows):
+        # Upsert update
+        generate_and_log(cached_results.update_upsert_dict, 'update_upsert_dict', num_rows,
+                          timestamp_number.to_timestamp())
+
+        # Single update
+        timestamp_number.inc(half)
+        generate_and_log(cached_results.update_single_dict, 'update_single_dict', 1, timestamp_number.to_timestamp())
+
+        # Single append
+        next_timestamp = generator.get_next_timestamp_number(cached_results.write_and_append_dict[num_rows], freq)
+        generate_and_log(cached_results.append_single_dict, 'append_single_dict', 1, next_timestamp.to_timestamp())
+
+    def setup(self, cache: CacheForModifiableTests, num_rows):
         manager = self.get_library_manager()
         self.cache = cache
         writes_list = self.cache.write_and_append_dict[num_rows]
@@ -246,7 +239,7 @@ class AWSDeleteTestsFewLarge(AsvBase):
         assert AWSDeleteTestsFewLarge.number == 1, "delete works only once per setup=teardown"
 
         num_sequential_dataframes = AWSDeleteTestsFewLarge.number_appends_to_symbol + 1 # for initial dataframe
-        cache = LargeAppendDataModifyCache()
+        cache = CacheForModifiableTests()
 
         generator = SequentialDataframesGenerator()
 
@@ -263,7 +256,7 @@ class AWSDeleteTestsFewLarge(AsvBase):
 
         return cache
     
-    def setup(self, cache: LargeAppendDataModifyCache, num_rows):
+    def setup(self, cache: CacheForModifiableTests, num_rows):
         manager = self.get_library_manager()
         writes_list = cache.write_and_append_dict[num_rows]
 
