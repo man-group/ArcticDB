@@ -193,8 +193,7 @@ jobs:
         uses: mamba-org/setup-micromamba@v2.0.0
         with:
           environment-file: environment-dev.yml
-          init-shell: >-
-            cmd
+          init-shell: bash cmd.exe
           cache-environment: true
           post-cleanup: 'all'
 
