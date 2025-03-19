@@ -64,6 +64,7 @@ class StorageFixture(_SaferContextManager):
     def __init__(self):
         super().__init__()
         self.libs_from_factory: Dict[str, NativeVersionStore] = {}
+        self.libs_names_from_arctic: List[str] = []
 
     def __str__(self):
         return f"{type(self).__name__}[{self.arctic_uri}]"
@@ -71,6 +72,7 @@ class StorageFixture(_SaferContextManager):
     def create_arctic(self, **extras):
         """Similar to `Arctic(self.arctic_uri)` but also keeps track of the libraries created"""
         out = Arctic(self.arctic_uri, **extras)
+        out._created_lib_names = self.libs_names_from_arctic
         return out
 
     @abstractmethod
@@ -130,11 +132,16 @@ class StorageFixture(_SaferContextManager):
         self.libs_from_factory.clear()
 
         arctic = self.create_arctic()
+        libs = set(self.libs_names_from_arctic[:])
+        with handle_cleanup_exception(self, arctic, consequence=failure_consequence):
+            # There are some tests that add libraries without using the factory directly (e.g. test_move_storage)
+            # so make sure that we capture all of the libraries
+            for lib in arctic.list_libraries():
+                libs.add(lib)
 
-        for lib in arctic.list_libraries():
+        for lib in libs:
             with handle_cleanup_exception(self, lib, consequence=failure_consequence):
                 arctic.delete_library(lib)
-
 
     def set_permission(self, *, read: bool, write: bool):
         """Makes the connection to the storage have the given permissions. If unsupported, call ``pytest.skip()``.

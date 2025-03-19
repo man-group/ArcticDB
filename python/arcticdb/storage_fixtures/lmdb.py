@@ -32,6 +32,7 @@ class LmdbStorageFixture(StorageFixture):
 
     def create_arctic(self, **extras):
         out = super().create_arctic(**extras)
+        out._accessed_libs = self.libs_instances_from_arctic
         self.arctic_instances.append(out)
         return out
 

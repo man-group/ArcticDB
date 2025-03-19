@@ -80,15 +80,20 @@ def test_simple_flow(basic_store_no_symbol_list, symbol):
     assert basic_store_no_symbol_list.list_symbols() == basic_store_no_symbol_list.list_versions() == []
 
 
-@pytest.mark.parametrize("special_char", list("$@=;/:+ ,?\\{^}%`[]\"'~#|!-_.()"))
-def test_special_chars(object_version_store, special_char):
+def test_special_chars(object_version_store):
     """Test chars with special URI encoding under RFC 3986"""
+    errors = []
     # we are doing manual iteration due to a limitation that should be fixed by issue #1053
-    sym = f"prefix{special_char}postfix"
-    df = sample_dataframe()
-    object_version_store.write(sym, df)
-    vitem = object_version_store.read(sym)
-    assert_equal(vitem.data, df)
+    for special_char in list("$@=;/:+ ,?\\{^}%`[]\"'~#|!-_.()"):
+        try:
+            sym = f"prefix{special_char}postfix"
+            df = sample_dataframe()
+            object_version_store.write(sym, df)
+            vitem = object_version_store.read(sym)
+            assert_equal(vitem.data, df)
+        except AssertionError as e:
+            errors.append(f"Failed for character {special_char}: {str(e)}")
+    assert not errors, "errors occurred:\n" + "\n".join(errors)
 
 
 @pytest.mark.parametrize("breaking_char", [chr(0), "\0", "*", "<", ">"])
