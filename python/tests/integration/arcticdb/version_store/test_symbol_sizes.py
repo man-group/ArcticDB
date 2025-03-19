@@ -30,6 +30,39 @@ def test_symbol_sizes(basic_store):
     assert sizes["sym_0"][KeyType.TABLE_DATA].compressed_size < 15000
 
 
+def test_symbol_sizes_for_stream(basic_store):
+    sym_names = []
+    for i in range(5):
+        df = sample_dataframe(100, i)
+        sym = "sym_{}".format(i)
+        sym_names.append(sym)
+        basic_store.write(sym, df)
+
+    last_data_size = -1
+    for s in sym_names:
+        sizes = basic_store.version_store.scan_object_sizes_for_stream(s)
+        res = dict()
+        for size in sizes:
+            res[size.key_type] = (size.count, size.compressed_size_bytes)
+
+        assert res[KeyType.VERSION][0] == 1
+        assert res[KeyType.VERSION][1] < 1000
+        assert res[KeyType.TABLE_INDEX][1] < 5000
+        last_data_size = res[KeyType.TABLE_DATA][1]
+        assert last_data_size < 15000
+
+    # Write a symbol 10 times bigger than the ones above. Check that the size of its data key is plausible: roughly
+    # 10x larger than those of the smaller writes.
+    big_sym = "big_sym"
+    df = sample_dataframe(1000, 4)
+    basic_store.write(big_sym, df)
+    sizes = basic_store.version_store.scan_object_sizes_for_stream(big_sym)
+    big_data_sizes = [s.compressed_size_bytes for s in sizes if s.key_type == KeyType.TABLE_DATA]
+    assert len(big_data_sizes) == 1
+    big_data_size = big_data_sizes[0]
+    assert 0.9 * 10 * last_data_size < big_data_size < 1.1 * 10 * last_data_size
+
+
 def test_symbol_sizes_big(basic_store):
     """
     Manual testing lines up well:

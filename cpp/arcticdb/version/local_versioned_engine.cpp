@@ -1701,14 +1701,27 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
     return -1;
 }
 
+// Some key types are historical or very specialized, so restrict to these in size calculations to avoid extra listing
+// operations
+static constexpr std::array<KeyType, 9> TYPES_FOR_SIZE_CALCULATION = {
+    KeyType::VERSION_REF,
+    KeyType::VERSION,
+    KeyType::TABLE_INDEX,
+    KeyType::TABLE_DATA,
+    KeyType::APPEND_DATA,
+    KeyType::SNAPSHOT_REF,
+    KeyType::LOG,
+    KeyType::LOG_COMPACTED,
+    KeyType::SYMBOL_LIST,
+};
+
 std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes() {
     using ObjectSizes = storage::ObjectSizes;
-    // TODO aseaton can I go back to these not being shared_ptrs?
     std::vector<folly::Future<std::shared_ptr<ObjectSizes>>> sizes_futs;
-    // TODO aseaton restrict to just the interesting key types
-    foreach_key_type([&store=store(), &sizes_futs](KeyType key_type) {
-        sizes_futs.push_back(store->get_object_sizes(key_type, std::nullopt));
-    });
+
+    for (const auto& key_type : TYPES_FOR_SIZE_CALCULATION) {
+        sizes_futs.push_back(store()->get_object_sizes(key_type, std::nullopt));
+    }
 
     auto ptrs = folly::collect(sizes_futs).via(&async::cpu_executor()).get();
     std::vector<storage::ObjectSizes> res;
@@ -1721,9 +1734,10 @@ std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes() {
 std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes_for_stream(const StreamId& stream_id) {
     using ObjectSizes = storage::ObjectSizes;
     std::vector<folly::Future<std::shared_ptr<ObjectSizes>>> sizes_futs;
-    foreach_key_type([&store=store(), &sizes_futs, &stream_id](KeyType key_type) {
-        sizes_futs.push_back(store->get_object_sizes(key_type, stream_id));
-    });
+
+    for (const auto& key_type : TYPES_FOR_SIZE_CALCULATION) {
+        sizes_futs.push_back(store()->get_object_sizes(key_type, stream_id));
+    }
 
     auto ptrs = folly::collect(sizes_futs).via(&async::cpu_executor()).get();
     std::vector<storage::ObjectSizes> res;

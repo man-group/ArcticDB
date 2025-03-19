@@ -694,12 +694,17 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
               &PythonVersionStore::scan_object_sizes,
               py::call_guard<SingleThreadMutexHolder>(),
               "Scan the compressed sizes of all objects in the library. Sizes are in bytes. Returns a dict "
-              "{KeyType: KeySizesInfo}")
+              "{KeyType: KeySizesInfo}") // TODO aseaton are these references to KeySizesInfo actually right?
         .def("scan_object_sizes_by_stream",
              &PythonVersionStore::scan_object_sizes_by_stream,
              py::call_guard<SingleThreadMutexHolder>(),
              "Scan the compressed sizes of all objects in the library, grouped by stream ID and KeyType. Sizes are in bytes. "
              "Returns a dict {symbol_id: {KeyType: KeySizesInfo}}")
+        .def("scan_object_sizes_for_stream",
+             &PythonVersionStore::scan_object_sizes_for_stream,
+             py::call_guard<SingleThreadMutexHolder>(),
+             "Scan the compressed sizes of the given symbol. Sizes are in bytes. Returns a dict {KeyType: KeySizesInfo}"
+             )
         .def("find_version",
              &PythonVersionStore::get_version_to_read,
              py::call_guard<SingleThreadMutexHolder>(), "Check if a specific stream has been written to previously")
