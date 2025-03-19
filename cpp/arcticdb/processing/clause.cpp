@@ -1382,26 +1382,78 @@ std::vector<EntityId> ConcatClause::process(std::vector<EntityId>&& entity_ids) 
 }
 
 // TODO: Move somewhere else
-// Verifies that all of the index information specified in the input schemas are compatible with each other, and that
-// the requisite fields are present in the StreamDescriptors if necessary
-std::pair<IndexDescriptorImpl, arcticdb::proto::descriptors::NormalizationMetadata> generate_index_schema(
-        const std::vector<OutputSchema>& input_schemas) {
-    util::check<ErrorCode::E_ASSERTION_FAILURE>(!input_schemas.empty(), "Cannot join empty list of schemas");
+using namespace arcticdb::proto::descriptors;
+
+std::tuple<std::vector<IndexDescriptorImpl>, std::vector<NormalizationMetadata>, std::vector<std::shared_ptr<FieldCollection>>>
+split_schemas(std::vector<OutputSchema>&& schemas) {
+    std::vector<IndexDescriptorImpl> index_descs;
+    std::vector<NormalizationMetadata> norm_metas;
+    std::vector<std::shared_ptr<FieldCollection>> field_collections;
+    index_descs.reserve(schemas.size());
+    norm_metas.reserve(schemas.size());
+    field_collections.reserve(schemas.size());
+    std::for_each(schemas.begin(), schemas.end(), [&](OutputSchema& schema) {
+        index_descs.emplace_back(schema.stream_descriptor().index());
+        norm_metas.emplace_back(std::move(schema.norm_metadata_));
+        field_collections.emplace_back(schema.stream_descriptor().fields_ptr());
+    });
+
+    return {std::move(index_descs), std::move(norm_metas), std::move(field_collections)};
+}
+
+IndexDescriptorImpl generate_index_descriptor(const std::vector<IndexDescriptorImpl>& index_descs) {
+    // Ensure:
+    //  - Type is the same (empty matches anything)
+    //  - Field count is the same
+    std::optional<IndexDescriptor::Type> index_type;
+    std::optional<uint32_t> index_desc_field_count;
+    for (const auto& index_desc: index_descs) {
+        if (!index_type.has_value()) {
+            index_type = index_desc.type();
+        } else {
+            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                    index_desc.type() == IndexDescriptor::Type::EMPTY || index_desc.type() == *index_type,
+                    "Mismatching IndexDescriptor in schema join");
+        }
+        if (!index_desc_field_count.has_value()) {
+            index_desc_field_count = index_desc.field_count();
+        } else {
+            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                    index_desc.field_count() == *index_desc_field_count,
+                    "Mismatching IndexDescriptor in schema join");
+        }
+    }
+    return {*index_desc_field_count, *index_type};
+}
+
+NormalizationMetadata generate_norm_meta(const std::vector<NormalizationMetadata>& norm_metas) {
+    // Ensure:
+    // All have PandasIndex OR PandasMultiIndex
+    // If PandasIndex:
+    //  - name - if all the same maintain, otherwise empty string
+    //  - is_int - means name is a string representation of an integer, so fold into name logic
+    //  - tz - same as name
+    //  - is_physically stored must all be the same
+    //  - RangeIndex
+    //    - start==0/step==1 - maintain
+    //    - All steps the same, use start from first schema and maintain step
+    //    - Otherwise, log warning, set start==0/step==1
+    // PandasMultiIndex same, minus is_physically stored, plus field_count matching
     std::optional<bool> has_multi_index;
     std::optional<std::string> name;
     std::optional<bool> is_int;
     std::optional<std::string> tz;
     std::optional<bool> is_physically_stored;
-    std::optional<int> field_count;
+    std::optional<uint32_t> field_count;
     std::optional<int> start;
     std::optional<int> step;
-    for (const auto& schema: input_schemas) {
-        const auto& common = schema.norm_metadata_.df().common();
+    for (const auto& norm_meta: norm_metas) {
+        const auto& common = norm_meta.df().common();
         if (!has_multi_index.has_value()) {
             has_multi_index = common.has_multi_index();
         } else {
-            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                    schema.norm_metadata_.df().common().has_multi_index() == has_multi_index,
+            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                    common.has_multi_index() == has_multi_index,
                     "Mismatching norm metadata in schema join");
         }
         if (has_multi_index) {
@@ -1425,7 +1477,7 @@ std::pair<IndexDescriptorImpl, arcticdb::proto::descriptors::NormalizationMetada
             if (!field_count.has_value()) {
                 field_count = index.field_count();
             } else {
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                         index.field_count() == *field_count,
                         "Mismatching norm metadata in schema join");
             }
@@ -1450,7 +1502,7 @@ std::pair<IndexDescriptorImpl, arcticdb::proto::descriptors::NormalizationMetada
             if (!is_physically_stored.has_value()) {
                 is_physically_stored = index.is_physically_stored();
             } else {
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                         index.is_physically_stored() == *is_physically_stored,
                         "Mismatching norm metadata in schema join");
             }
@@ -1458,34 +1510,49 @@ std::pair<IndexDescriptorImpl, arcticdb::proto::descriptors::NormalizationMetada
                 start = index.start();
                 step = index.step();
             } else {
-
+                if (index.step() != *step) {
+                    log::version().warn("Mismatching RangeIndexes being combined, setting to start=0, step=1");
+                    start = 0;
+                    step = 1;
+                }
             }
         }
     }
+    NormalizationMetadata norm_meta;
+    if (*has_multi_index) {
+        auto* index = norm_meta.mutable_df()->mutable_common()->mutable_multi_index();
+        index->set_name(*name);
+        index->set_is_int(*is_int);
+        index->set_tz(*tz);
+        index->set_field_count(*field_count);
+    } else {
+        auto* index = norm_meta.mutable_df()->mutable_common()->mutable_index();
+        index->set_name(*name);
+        index->set_is_int(*is_int);
+        index->set_tz(*tz);
+        index->set_is_physically_stored(*is_physically_stored);
+        index->set_start(*start);
+        index->set_step(*step);
+    }
+    return norm_meta;
 }
 
 OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& output_schemas) const {
-    // Norm meta ensure:
-    // All have PandasIndex OR PandasMultiIndex
-    // If PandasIndex:
-    //  - name - if all the same maintain, otherwise empty string
-    //  - is_int - means name is a string representation of an integer, so fold into name logic
-    //  - tz - same as name
-    //  - is_physically stored must all be the same
-    //  - RangeIndex
-    //    - start==0/step==1 - maintain
-    //    - All steps the same, use start from first schema and maintain step
-    //    - Otherwise, log warning, pick  set start==0/step==1
-    // PandasMultiIndex same, minus is_physically stored, plus field_count matching
+    util::check(!output_schemas.empty(), "Cannot join empty list of schemas");
+    // Decompose output_schemas vector into vectors of IndexDescriptorImpl, NormalizationMetadata, and FieldCollection
+    ARCTICDB_UNUSED auto [index_descs, norm_metas, field_collections] = split_schemas(std::move(output_schemas));
+    ARCTICDB_UNUSED auto index_desc = generate_index_descriptor(index_descs);
+    ARCTICDB_UNUSED auto norm_meta = generate_norm_meta(norm_metas);
+    if (norm_meta.df().common().has_multi_index()) {
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                norm_meta.df().common().multi_index().field_count() == index_desc.field_count(),
+                "Mismatching index field counts in schema join");
+    } else {
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                index_desc.field_count() <= 1,
+                "Mismatching index field counts in schema join");
+    }
 
-    // StreamDescriptor index ensure:
-    //  - Type is the same (empty matches anything)
-    //  - Field count is the same
-
-    // Indexing ensure:
-    //  - norm meta version and stream descriptor version semantically match
-    //  - (check that this the case for all of the modify_schema methods on single-symbol clauses)
-    //  - all descriptors have requisite index columns
 
     // Inner join:
     //  - Create map from column name to type for first input schema
