@@ -190,7 +190,7 @@ jobs:
         id: cpu-cores
 
       - name: Install Conda environment from environment-dev.yml
-        uses: mamba-org/setup-micromamba@v2.0.0
+        uses: mamba-org/setup-micromamba@v2.0.4
         with:
           environment-file: environment-dev.yml
           init-shell: bash cmd.exe
