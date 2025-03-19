@@ -71,7 +71,7 @@ class S3Storage : public Storage, AsyncStorage {
 
     void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) override;
 
-    ObjectSizes do_get_object_sizes(KeyType key_type, const std::string& prefix) override final;
+    void do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) final;
 
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
 

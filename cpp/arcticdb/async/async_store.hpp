@@ -222,28 +222,49 @@ void iterate_type(
     library_->iterate_type(type, func, prefix);
 }
 
-folly::Future<storage::ObjectSizes> get_object_sizes(KeyType type, const std::string& prefix) override {
+folly::Future<folly::Unit> visit_object_sizes(
+    KeyType type, const std::optional<StreamId>& stream_id_opt, storage::ObjectSizesVisitor visitor) override {
+    std::string prefix;
+    std::optional<std::function<bool(const VariantKey&)>> match_stream_id = std::nullopt;
+    if (stream_id_opt) {
+        auto stream_id = *stream_id_opt;
+        prefix = std::holds_alternative<StringId>(stream_id) ? std::get<StringId>(stream_id) : std::string();
+        match_stream_id = [stream_id](const VariantKey& k) { return variant_key_id(k) == stream_id; };
+    }
+
     if (library_->supports_object_size_calculation()) {
         // The library has native support for some kind of clever size calculation, so let it take over
-        return async::submit_io_task(ObjectSizesTask{type, prefix, library_});
+        return async::submit_io_task(VisitObjectSizesTask{type, prefix, std::move(visitor), library_});
     }
 
     // No native support for a clever size calculation, so just read keys and sum their sizes
-    auto counter = std::make_shared<std::atomic_uint64_t>(0);
-    auto bytes = std::make_shared<std::atomic_uint64_t>(0);
     KeySizeCalculators key_size_calculators;
-    iterate_type(type, [&key_size_calculators, &counter, &bytes](const VariantKey&& k) {
-        key_size_calculators.emplace_back(std::forward<const VariantKey>(k), [counter, bytes] (auto&& ks) {
-            counter->fetch_add(1);
-            auto key_seg = std::forward<decltype(ks)>(ks);
-            auto compressed_size = key_seg.segment().size();
-            bytes->fetch_add(compressed_size);
+    iterate_type(type, [&key_size_calculators, &match_stream_id, &visitor](const VariantKey&& k) {
+        key_size_calculators.emplace_back(std::forward<const VariantKey>(k), [visitor, match_stream_id] (auto&& key_seg) {
+            if (!match_stream_id || match_stream_id.value()(key_seg.variant_key())) {
+                auto compressed_size = key_seg.segment().size();
+                visitor(key_seg.variant_key(), compressed_size);
+            }
             return key_seg.variant_key();
         });
     }, prefix);
 
     read_ignoring_key_not_found(std::move(key_size_calculators));
-    return folly::makeFuture(storage::ObjectSizes{type, *counter, *bytes});
+    return folly::makeFuture();
+}
+
+folly::Future<std::shared_ptr<storage::ObjectSizes>> get_object_sizes(KeyType type, const std::optional<StreamId>& stream_id_opt) override {
+    auto counter = std::make_shared<std::atomic_uint64_t>(0);
+    auto bytes = std::make_shared<std::atomic_uint64_t>(0);
+    storage::ObjectSizesVisitor visitor = [counter, bytes](const VariantKey&, storage::CompressedSize size) {
+        counter->fetch_add(1);
+        bytes->fetch_add(size);
+    };
+
+    return visit_object_sizes(type, stream_id_opt, std::move(visitor))
+    .thenValueInline([counter, bytes, type](folly::Unit&&) {
+        return std::make_shared<storage::ObjectSizes>(type, *counter, *bytes);
+    });
 }
 
 bool scan_for_matching_key(

@@ -108,12 +108,13 @@ bool S3Storage::do_iterate_type_until_match(KeyType key_type, const IterateTypeP
     return detail::do_iterate_type_impl(key_type, visitor, root_folder_, bucket_name_, client(), FlatBucketizer{}, prefix_handler, prefix);
 }
 
-ObjectSizes S3Storage::do_get_object_sizes(KeyType key_type, const std::string& prefix) {
+void S3Storage::do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
     auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType) {
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };
 
-    return detail::do_calculate_sizes_for_type_impl(key_type, root_folder_, bucket_name_, client(), FlatBucketizer{}, prefix_handler, prefix);
+    detail::do_visit_object_sizes_for_type_impl(key_type, root_folder_, bucket_name_, client(), FlatBucketizer{},
+                                                prefix_handler, prefix, visitor);
 }
 
 bool S3Storage::do_key_exists(const VariantKey& key) {
