@@ -396,6 +396,12 @@ def test_resample_multiindex(lmdb_version_store_v1, tz, named_levels):
     q = QueryBuilder()
     q = q.resample(freq).agg(aggs)
     received = lib.read(sym, query_builder=q).data
+    print("\nInitial")
+    print(lib.read(sym).data)
+    print("\nExpected")
+    print(expected)
+    print("\nReceived")
+    print(received)
     assert_frame_equal(expected, received, check_dtype=False)
 
 

@@ -578,10 +578,10 @@ class QueryBuilder:
                 aggregations[k] = (v[0], v[1].lower())
 
         if isinstance(self.clauses[-1], _GroupByClause):
-            self.clauses = self.clauses + [_AggregationClause(self.clauses[-1].grouping_column, aggregations)]
+            self.clauses = self.clauses + [_AggregationClause(self.clauses[-1].grouping_column, list(aggregations.items()))]
             self._python_clauses = self._python_clauses + [PythonAggregationClause(aggregations)]
         else:
-            self.clauses[-1].set_aggregations(aggregations)
+            self.clauses[-1].set_aggregations(list(aggregations.items()))
             self._python_clauses[-1].aggregations = aggregations
         return self
 
@@ -950,14 +950,14 @@ class QueryBuilder:
             elif isinstance(python_clause, PythonGroupByClause):
                 self.clauses = self.clauses + [_GroupByClause(python_clause.name)]
             elif isinstance(python_clause, PythonAggregationClause):
-                self.clauses = self.clauses + [_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations)]
+                self.clauses = self.clauses + [_AggregationClause(self.clauses[-1].grouping_column, list(python_clause.aggregations.items()))]
             elif isinstance(python_clause, PythonResampleClause):
                 if python_clause.closed == _ResampleBoundary.LEFT:
                     self.clauses = self.clauses + [_ResampleClauseLeftClosed(python_clause.rule, python_clause.label, python_clause.offset, python_clause.origin)]
                 else:
                     self.clauses = self.clauses + [_ResampleClauseRightClosed(python_clause.rule, python_clause.label, python_clause.offset, python_clause.origin)]
                 if python_clause.aggregations is not None:
-                    self.clauses[-1].set_aggregations(python_clause.aggregations)
+                    self.clauses[-1].set_aggregations(list(python_clause.aggregations.items()))
             elif isinstance(python_clause, PythonRowRangeClause):
                 if python_clause.start is not None and python_clause.end is not None:
                     self.clauses = self.clauses + [_RowRangeClause(python_clause.start, python_clause.end)]

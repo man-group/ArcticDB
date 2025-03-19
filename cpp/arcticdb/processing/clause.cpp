@@ -98,16 +98,23 @@ struct SegmentWrapper {
     }
 };
 
-void check_column_presence(OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns, std::string_view clause_name) {
-    const auto& column_types = output_schema.column_types();
-    for (const auto& input_column: required_columns) {
-        schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
-                column_types.contains(input_column),
-                "{}Clause requires column '{}' to exist in input data",
-                clause_name,
-                input_column
-        );
+static auto first_missing_column(OutputSchema &output_schema, const std::unordered_set<std::string>& required_columns) {
+    const auto &column_types = output_schema.column_types();
+    for (auto input_column_it = required_columns.begin(); input_column_it != required_columns.end(); ++input_column_it) {
+        if (!column_types.contains(*input_column_it) && !column_types.contains(stream::mangled_name(*input_column_it))) {
+            return input_column_it;
+        }
     }
+    return required_columns.end();
+}
+
+void check_column_presence(OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns, std::string_view clause_name) {
+    const auto first_missing = first_missing_column(output_schema, required_columns);
+    schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(first_missing == required_columns.end(),
+            "{}Clause requires column '{}' to exist in input data",
+            clause_name,
+            *first_missing
+    );
 }
 
 void check_is_timeseries(const StreamDescriptor& stream_descriptor, std::string_view clause_name) {
@@ -156,7 +163,9 @@ std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) 
 }
 
 OutputSchema FilterClause::modify_schema(OutputSchema&& output_schema) const {
-    check_column_presence(output_schema, *clause_info_.input_columns_, "Filter");
+    if (first_missing_column(output_schema, *clause_info_.input_columns_) != clause_info_.input_columns_->end()) {
+        return output_schema;
+    }
     auto root_expr = expression_context_->expression_nodes_.get_value(expression_context_->root_node_name_.value);
     std::variant<BitSetTag, DataType> return_type = root_expr->compute(*expression_context_, output_schema.column_types());
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<BitSetTag>(return_type), "FilterClause AST would produce a column, not a bitset");

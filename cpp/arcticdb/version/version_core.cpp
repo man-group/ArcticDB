@@ -28,8 +28,11 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
+#include <ranges>
 
 namespace arcticdb::version_store {
+
+namespace ranges = std::ranges;
 
 void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, const ReadOptions& read_options) {
 
@@ -882,6 +885,26 @@ std::vector<folly::Future<pipelines::SegmentAndSlice>> generate_segment_and_slic
     return add_schema_check(pipeline_context, std::move(segment_and_slice_futures), std::move(incomplete_bitset), processing_config);
 }
 
+OutputSchema create_initial_output_schema(const PipelineContext& pipeline_context) {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(pipeline_context.norm_meta_,
+                                                    "Normalization metadata should not be missing during read_and_process");
+    if (pipeline_context.overall_column_bitset_) {
+        const StreamDescriptor& desc = pipeline_context.descriptor();
+        FieldCollection fields_to_use;
+        auto overall_fields_it = pipeline_context.overall_column_bitset_->first();
+        const auto overall_fields_end = pipeline_context.overall_column_bitset_->end();
+        while (overall_fields_it != overall_fields_end) {
+            fields_to_use.add(desc.field(*overall_fields_it).ref());
+            ++overall_fields_it;
+        }
+        return OutputSchema{
+            StreamDescriptor{desc.data_ptr(), std::make_shared<FieldCollection>(std::move(fields_to_use))},
+            *pipeline_context.norm_meta_
+        };
+    }
+    return OutputSchema{std::move(pipeline_context.descriptor()), *pipeline_context.norm_meta_};
+}
+
 /*
  * Processes the slices in the given pipeline_context.
  *
@@ -927,13 +950,24 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
                                     std::shared_ptr<RowRange>,
                                     std::shared_ptr<ColRange>>(*component_manager, processed_entity_ids);
 
-        if (std::any_of(read_query->clauses_.begin(),
-                        read_query->clauses_.end(),
-                        [](const std::shared_ptr<Clause>& clause) {
-                            return clause->clause_info().modifies_output_descriptor_;
-                        })) {
-            set_output_descriptors(proc, read_query->clauses_, pipeline_context);
+        //if (ranges::any_of(read_query->clauses_,
+        //                        [](const std::shared_ptr<Clause>& clause) {
+        //                            return clause->clause_info().modifies_output_descriptor_;
+        //                        })) {
+        //    set_output_descriptors(proc, read_query->clauses_, pipeline_context);
+        //}
+        //std::cout<<fmt::format("{}", pipeline_context->descriptor())<<'\n';
+
+        OutputSchema schema = create_initial_output_schema(*pipeline_context);
+        std::cout<<fmt::format("{}", schema.stream_descriptor())<<'\n';
+        for (const std::shared_ptr<Clause>& clause : read_query->clauses_) {
+            schema = clause->modify_schema(std::move(schema));
         }
+
+        auto&& [descriptor, norm_meta] = schema.release();
+        pipeline_context->set_descriptor(std::move(descriptor));
+        pipeline_context->norm_meta_ = std::make_shared<proto::descriptors::NormalizationMetadata>(std::move(norm_meta));
+
         return collect_segments(std::move(proc));
     });
 }
@@ -946,7 +980,7 @@ void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDes
 
         std::vector<std::string> index_columns_to_add;
         for(const auto& index_column : index_columns) {
-            if(std::find(std::begin(*read_query.columns), std::end(*read_query.columns), index_column) == std::end(*read_query.columns))
+            if(ranges::find(*read_query.columns, index_column) == std::end(*read_query.columns))
                 index_columns_to_add.emplace_back(index_column);
         }
         read_query.columns->insert(std::begin(*read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add));
@@ -1880,7 +1914,7 @@ VersionedItem compact_incomplete_impl(
     });
 
     return util::variant_match(std::move(result),
-                        [&slices, &pipeline_context, &store, &user_meta](CompactionWrittenKeys& written_keys) -> VersionedItem {
+                        [&slices, &pipeline_context, &store, &user_meta](CompactionWrittenKeys&& written_keys) -> VersionedItem {
                             auto vit = collate_and_write(
                                 store,
                                 pipeline_context,
@@ -1890,7 +1924,7 @@ VersionedItem compact_incomplete_impl(
                                 user_meta);
                             return vit;
                         },
-                        [](Error& error) -> VersionedItem {
+                        [](Error&& error) -> VersionedItem {
                             error.throw_error();
                             return VersionedItem{}; // unreachable
                         }
@@ -1992,7 +2026,7 @@ VersionedItem defragment_symbol_data_impl(
     });
 
     return util::variant_match(std::move(result),
-                               [&slices, &pre_defragmentation_info, &store](CompactionWrittenKeys& written_keys) -> VersionedItem {
+                               [&slices, &pre_defragmentation_info, &store](CompactionWrittenKeys&& written_keys) -> VersionedItem {
                                 return collate_and_write(
                                         store,
                                         pre_defragmentation_info.pipeline_context,
@@ -2001,7 +2035,7 @@ VersionedItem defragment_symbol_data_impl(
                                         pre_defragmentation_info.append_after.value(),
                                         std::nullopt);
                                },
-                               [](Error& error) -> VersionedItem {
+                               [](Error&& error) -> VersionedItem {
                                    error.throw_error();
                                    return VersionedItem{}; // unreachable
                                }

@@ -274,7 +274,7 @@ struct StreamDescriptor {
 };
 
 struct OutputSchema {
-    arcticdb::proto::descriptors::NormalizationMetadata norm_metadata_;
+    proto::descriptors::NormalizationMetadata norm_metadata_;
 
     OutputSchema(StreamDescriptor stream_descriptor,
                  arcticdb::proto::descriptors::NormalizationMetadata norm_metadata):
@@ -304,6 +304,11 @@ struct OutputSchema {
     void add_field(std::string_view name, DataType data_type) {
         stream_descriptor_.add_scalar_field(data_type, name);
         column_types().emplace(name, data_type);
+    }
+
+    std::pair<StreamDescriptor, proto::descriptors::NormalizationMetadata> release() {
+        column_types_.reset();
+        return std::pair{std::move(stream_descriptor_), std::move(norm_metadata_)};
     }
 
 private:

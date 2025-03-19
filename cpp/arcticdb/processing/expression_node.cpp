@@ -14,6 +14,8 @@
 #include <arcticdb/processing/operation_dispatch_binary.hpp>
 #include <arcticdb/processing/operation_dispatch_unary.hpp>
 
+#include "stream/index.hpp"
+
 namespace arcticdb {
 
 [[nodiscard]] std::optional<std::string_view> ColumnWithStrings::string_at_offset(entity::position_t offset, bool strip_fixed_width_trailing_nulls) const {
@@ -106,11 +108,6 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         std::holds_alternative<DataType>(left_type),
                         "Unexpected bitset input to {}", operation_type_);
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                        is_floating_point_type(std::get<DataType>(left_type)) || is_sequence_type(std::get<DataType>(left_type)) ||
-                        is_time_type(std::get<DataType>(left_type)),
-                        "Unexpected data type {} input to {}",
-                        std::get<DataType>(left_type), operation_type_);
                 break;
             case OperationType::IDENTITY:
             case OperationType::NOT:
@@ -233,6 +230,9 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
             child,
             [&column_types] (const ColumnName& column_name) -> std::variant<BitSetTag, DataType> {
                 auto it = column_types.find(column_name.value);
+                if (it == column_types.end()) {
+                    it = column_types.find(stream::mangled_name(column_name.value));
+                }
                 schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(it != column_types.end(),
                                                                 "Clause requires column '{}' to exist in input data"
                         ,column_name.value);

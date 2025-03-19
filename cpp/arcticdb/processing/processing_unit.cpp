@@ -51,10 +51,9 @@ VariantData ProcessingUnit::get(const VariantNode &name) {
         [&](const ColumnName &column_name) {
         for (const auto& segment: *segments_) {
             segment->init_column_map();
-            if (auto opt_idx = segment->column_index_with_name_demangling(column_name.value)) {
+            if (const auto opt_idx = segment->column_index_with_name_demangling(column_name.value)) {
                 return VariantData(ColumnWithStrings(
-                        segment->column_ptr(
-                        position_t(position_t(*opt_idx))),
+                        segment->column_ptr(static_cast<position_t>(*opt_idx)),
                         segment->string_pool_ptr(),
                         column_name.value));
             }
