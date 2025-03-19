@@ -162,6 +162,7 @@ struct EncodeRefTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeRefTask)
 
     [[nodiscard]] storage::KeySegmentPair encode() {
+        QUERT_STATS_ADD_LOGICAL_KEYS(key_type_, segment_);
         auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
         auto k = RefKey{id_, key_type_};
         return {std::move(k), std::move(enc_seg)};

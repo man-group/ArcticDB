@@ -35,14 +35,9 @@ void write_snapshot_entry(
     // on read time.
     std::sort(keys.begin(), keys.end(), [](const AtomKey &l, const AtomKey &r) {return l.id() < r.id(); });
 
-    { // For the RAII of nextline
-        QUERY_STATS_ADD_GROUP(key_type, entity::KeyType::SNAPSHOT_REF)
-        for (const auto &key: keys) {
-            ARCTICDB_DEBUG(log::snapshot(), "Adding key {}", key);
-            QUERY_STATS_ADD_GROUP(key_type, key)
-            QUERY_STATS_ADD(count, 1)
-            snapshot_agg.add_key(key);
-        }
+    for (const auto &key: keys) {
+        ARCTICDB_DEBUG(log::snapshot(), "Adding key {}", key);
+        snapshot_agg.add_key(key);
     }
     // Serialize and store the python metadata in the journal entry for snapshot.
     if (!user_meta.is_none()) {
