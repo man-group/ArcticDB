@@ -91,8 +91,7 @@ class StorageSetup:
     Place here what is needed for proper initialization
     of each storage
 
-    For shared storages 
-
+    Abstracts storage space allocation from how user access it
     '''
     _instance = None
     _aws_default_factory: BaseS3StorageFixtureFactory = None
@@ -180,6 +179,33 @@ class StorageSetup:
 
 
 class TestLibraryManager:
+    """
+    This class provides thin isolation of tests from storage and from arctic. 
+    This provides following benefits:
+
+     - Any changes in the structure of how things are stored would not reflect the test case.
+     - New types of storages can be added quickly and without impact for the test
+     - Same tests can quickly be executed against new types of storages, or just experiment
+       with new storages by simply changing storage type
+     - A test ca be executed in test mode through `set_test_more` until it reaches production
+       state. then simply removing this from the test makes it production. That isolates well
+       production data from test data
+
+    The class provides very limited set of functions which are more than enough to make any 
+    end 2 end tests with ASV or other frameworks. The only thing it discourages is use of
+    Arctic directly. That is with single goal to protect shared storage from unintentional damage.
+    All work should be done through `get_library` function. There are methods for setting library options,
+    and additional `has_library` method that would eliminate the need of direct use of Arctic object
+
+    As there could be very few cases that could require use of Arctic object directly, such protected 
+    methods do exist, but their use makes any test potentially either unsafe or one that should be 
+    handled with extra care
+
+    The class provides additional 2 class methods which should be handled with care. As they create 
+    always new connection any concurrent modifications with them and running tests would most
+    probably end with errors. 
+
+    """
 
     def __init__(self, storage: Storage, name_benchmark: str, library_options: LibraryOptions = None) :
         """
@@ -189,7 +215,6 @@ class TestLibraryManager:
         self.library_options: LibraryOptions = library_options
         self.name_benchmark: str = name_benchmark
         self._test_mode = False
-        self._uris_cache: List[str] = []
         self._ac_cache = {}
         StorageSetup()
 
@@ -576,6 +601,10 @@ class SequentialDataframesGenerator:
         return next
 
 class TestsForTestLibraryManager:
+    """
+    This class contains tests for the framework. All changes to the framework
+    should be done with running those tests at the end
+    """
 
     @classmethod
     def test_test_mode(cls):
