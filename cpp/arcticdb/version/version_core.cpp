@@ -623,7 +623,7 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
     auto slice_added = std::make_shared<std::vector<bool>>(num_segments, false);
     auto futures = std::make_shared<std::vector<folly::Future<std::vector<EntityId>>>>();
 
-    for (auto&& entity_ids: entities_by_work_unit) {
+    for (auto& entity_ids: entities_by_work_unit) {
         std::vector<folly::Future<pipelines::SegmentAndSlice>> local_futs;
         local_futs.reserve(entity_ids.size());
         for (auto id: entity_ids) {
@@ -779,9 +779,7 @@ void set_output_descriptors(
         for (const auto& segment: *proc.segments_) {
             fields.push_back(segment->descriptor().fields_ptr());
         }
-        new_stream_descriptor = merge_descriptors(*new_stream_descriptor,
-                                                  fields,
-                                                  std::vector<std::string>{});
+        new_stream_descriptor = merge_descriptors(*new_stream_descriptor, fields, std::vector<std::string>{});
     }
     if (new_stream_descriptor.has_value()) {
         // Finding and erasing fields from the FieldCollection contained in StreamDescriptor is O(n) in number of fields
@@ -901,6 +899,26 @@ std::vector<folly::Future<pipelines::SegmentAndSlice>> generate_segment_and_slic
     return add_schema_check(pipeline_context, std::move(segment_and_slice_futures), std::move(incomplete_bitset), processing_config);
 }
 
+OutputSchema create_initial_output_schema(const PipelineContext& pipeline_context) {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(pipeline_context.norm_meta_,
+                                                    "Normalization metadata should not be missing during read_and_process");
+    if (pipeline_context.overall_column_bitset_) {
+        const StreamDescriptor& desc = pipeline_context.descriptor();
+        FieldCollection fields_to_use;
+        auto overall_fields_it = pipeline_context.overall_column_bitset_->first();
+        const auto overall_fields_end = pipeline_context.overall_column_bitset_->end();
+        while (overall_fields_it != overall_fields_end) {
+            fields_to_use.add(desc.field(*overall_fields_it).ref());
+            ++overall_fields_it;
+        }
+        return OutputSchema{
+            StreamDescriptor{desc.data_ptr(), std::make_shared<FieldCollection>(std::move(fields_to_use))},
+            *pipeline_context.norm_meta_
+        };
+    }
+    return OutputSchema{std::move(pipeline_context.descriptor()), *pipeline_context.norm_meta_};
+}
+
 folly::Future<std::vector<EntityId>> read_and_schedule_processing(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<PipelineContext>& pipeline_context,
@@ -951,25 +969,29 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
  * Where possible (generally, when there is no column slicing), clauses are processed in the same folly thread as the
  * decompression without context switching to try and optimise cache access.
  */
-folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
-        const std::shared_ptr<Store>& store,
-        const std::shared_ptr<PipelineContext>& pipeline_context,
-        const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options
+folly::Future<std::vector<SliceAndKey> > read_process_and_collect(
+    const std::shared_ptr<Store> &store,
+    const std::shared_ptr<PipelineContext> &pipeline_context,
+    const std::shared_ptr<ReadQuery> &read_query,
+    const ReadOptions &read_options
 ) {
     auto component_manager = std::make_shared<ComponentManager>();
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
-            .thenValue([component_manager, read_query, pipeline_context](std::vector<EntityId>&& processed_entity_ids) {
+            .thenValue([component_manager, read_query, pipeline_context](std::vector<EntityId> &&processed_entity_ids) {
                 auto proc = gather_entities<std::shared_ptr<SegmentInMemory>,
-                        std::shared_ptr<RowRange>,
-                        std::shared_ptr<ColRange>>(*component_manager, processed_entity_ids);
-
-                if (std::ranges::any_of(read_query->clauses_,
-                                        [](const std::shared_ptr<Clause>& clause) {
-                                            return clause->clause_info().modifies_output_descriptor_;
-                                        })) {
-                    set_output_descriptors(proc, read_query->clauses_, pipeline_context);
+                    std::shared_ptr<RowRange>,
+                    std::shared_ptr<ColRange> >(*component_manager, processed_entity_ids);
+                OutputSchema schema = create_initial_output_schema(*pipeline_context);
+                if (pipeline_context->rows_ > 0) {
+                    for (const std::shared_ptr<Clause> &clause: read_query->clauses_) {
+                        schema = clause->modify_schema(std::move(schema));
+                    }
                 }
+                auto &&[descriptor, norm_meta, default_values] = schema.release();
+                pipeline_context->set_descriptor(std::forward<StreamDescriptor>(descriptor));
+                pipeline_context->norm_meta_ = std::make_shared<proto::descriptors::NormalizationMetadata>(
+                    std::forward<proto::descriptors::NormalizationMetadata>(norm_meta));
+                pipeline_context->default_values_ = std::forward<decltype(default_values)>(default_values);
                 return collect_segments(std::move(proc));
             });
 }
@@ -1275,7 +1297,8 @@ void copy_frame_data_to_buffer(
         const RowRange& row_range,
         DecodePathData shared_data,
         std::any& handler_data,
-        OutputFormat output_format) {
+        OutputFormat output_format,
+        IntToFloatConversion int_to_float_conversion) {
     const auto num_rows = row_range.diff();
     if (num_rows == 0) {
         return;
@@ -1294,14 +1317,14 @@ void copy_frame_data_to_buffer(
                                                 src_column.type(), dst_column.type(), destination.field(target_index).name());
     if(auto handler = get_type_handler(output_format, src_column.type(), dst_column.type()); handler) {
         const auto type_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
-        ColumnMapping mapping{src_column.type(), dst_column.type(), destination.field(target_index), type_size, num_rows, row_range.first, offset, total_size, target_index};
+        const ColumnMapping mapping{src_column.type(), dst_column.type(), destination.field(target_index), type_size, num_rows, row_range.first, offset, total_size, target_index};
         handler->convert_type(src_column, dst_column, mapping, shared_data, handler_data, source.string_pool_ptr());
     } else if (is_empty_type(src_column.type().data_type())) {
         dst_column.type().visit_tag([&](auto dst_desc_tag) {
             util::default_initialize<decltype(dst_desc_tag)>(dst_ptr, num_rows * dst_rawtype_size);
         });
     // Do not use src_column.is_sparse() here, as that misses columns that are dense, but have fewer than num_rows values
-    } else if (src_column.opt_sparse_map().has_value() && is_valid_type_promotion_to_target(src_column.type(), dst_column.type())) {
+    } else if (src_column.opt_sparse_map().has_value() && is_valid_type_promotion_to_target(src_column.type(), dst_column.type(), int_to_float_conversion)) {
         details::visit_type(dst_column.type().data_type(), [&](auto dst_tag) {
             using dst_type_info = ScalarTypeInfo<decltype(dst_tag)>;
             util::default_initialize<typename dst_type_info::TDT>(dst_ptr, num_rows * dst_rawtype_size);
@@ -1317,13 +1340,13 @@ void copy_frame_data_to_buffer(
         details::visit_type(src_column.type().data_type() ,[&src_data, &dst_ptr] (auto src_desc_tag) {
             using SourceTDT = ScalarTagType<decltype(src_desc_tag)>;
             using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
-            while (auto block = src_data.template next<SourceTDT>()) {
+            while (auto block = src_data.next<SourceTDT>()) {
                 const auto row_count = block->row_count();
                 memcpy(dst_ptr, block->data(), row_count * sizeof(SourceType));
                 dst_ptr += row_count * sizeof(SourceType);
             }
         });
-    } else if (is_valid_type_promotion_to_target(src_column.type(), dst_column.type())) {
+    } else if (is_valid_type_promotion_to_target(src_column.type(), dst_column.type(), int_to_float_conversion)) {
         details::visit_type(dst_column.type().data_type() ,[&src_data, &dst_ptr, &src_column, &type_promotion_error_msg] (auto dest_desc_tag) {
             using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
             auto typed_dst_ptr = reinterpret_cast<DestinationType *>(dst_ptr);
@@ -1352,6 +1375,7 @@ struct CopyToBufferTask : async::BaseTask {
     DecodePathData shared_data_;
     std::any& handler_data_;
     OutputFormat output_format_;
+    IntToFloatConversion int_to_float_conversion_;
 
     CopyToBufferTask(
             SegmentInMemory&& source_segment,
@@ -1360,14 +1384,16 @@ struct CopyToBufferTask : async::BaseTask {
             uint32_t required_fields_count,
             DecodePathData shared_data,
             std::any& handler_data,
-            OutputFormat output_format) :
+            OutputFormat output_format,
+            IntToFloatConversion int_to_float_conversion) :
             source_segment_(std::move(source_segment)),
         target_segment_(std::move(target_segment)),
         frame_slice_(std::move(frame_slice)),
         required_fields_count_(required_fields_count),
         shared_data_(std::move(shared_data)),
         handler_data_(handler_data),
-        output_format_(output_format){
+        output_format_(output_format),
+        int_to_float_conversion_(int_to_float_conversion){
     }
 
     folly::Unit operator()() {
@@ -1380,7 +1406,7 @@ struct CopyToBufferTask : async::BaseTask {
             if (required_fields_count_ >= first_col && idx < required_fields_count_ - first_col) {
                 // This is a required column in the output. The name in source_segment_ may not match that in target_segment_
                 // e.g. If 2 timeseries are joined that had differently named indexes
-                copy_frame_data_to_buffer(target_segment_, idx + first_col, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
+                copy_frame_data_to_buffer(target_segment_, idx + first_col, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_, int_to_float_conversion_);
             } else {
                 // All other columns use names to match the source with the destination
                 const auto& field = fields.at(idx);
@@ -1388,7 +1414,7 @@ struct CopyToBufferTask : async::BaseTask {
                 auto frame_loc_opt = target_segment_.column_index(field_name);
                 if (!frame_loc_opt)
                     continue;
-                copy_frame_data_to_buffer(target_segment_, *frame_loc_opt, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
+                copy_frame_data_to_buffer(target_segment_, *frame_loc_opt, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_, int_to_float_conversion_);
             }
         }
         return folly::Unit{};
@@ -1400,7 +1426,8 @@ folly::Future<folly::Unit> copy_segments_to_frame(
         const std::shared_ptr<PipelineContext>& pipeline_context,
         SegmentInMemory frame,
         std::any& handler_data,
-        OutputFormat output_format) {
+        OutputFormat output_format,
+        IntToFloatConversion int_to_float_conversion) {
     auto required_fields_count = pipelines::index::required_fields_count(pipeline_context->descriptor(),
                                                                      *pipeline_context->norm_meta_);
     std::vector<folly::Future<folly::Unit>> copy_tasks;
@@ -1416,7 +1443,8 @@ folly::Future<folly::Unit> copy_segments_to_frame(
                 required_fields_count,
                 shared_data,
                 handler_data,
-                output_format}));
+                output_format,
+                int_to_float_conversion}));
     }
     return folly::collect(copy_tasks).via(&async::cpu_executor()).unit();
 }
@@ -1426,7 +1454,8 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         const std::shared_ptr<PipelineContext>& pipeline_context,
         const std::shared_ptr<Store>& store,
         const ReadOptions& read_options,
-        std::any& handler_data) {
+        std::any& handler_data,
+        IntToFloatConversion int_to_float_conversion) {
     pipeline_context->clear_vectors();
     pipeline_context->slice_and_keys_ = std::move(items);
     adjust_slice_ranges(pipeline_context);
@@ -1441,7 +1470,8 @@ folly::Future<SegmentInMemory> prepare_output_frame(
 
     const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
     auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
-    return copy_segments_to_frame(store, pipeline_context, frame, handler_data, read_options.output_format()).thenValue([frame](auto&&){ return frame; });
+    return copy_segments_to_frame(store, pipeline_context, frame, handler_data, read_options.output_format(), int_to_float_conversion).
+            thenValueInline([frame=std::move(frame)](auto &&) { return frame; });
 }
 
 AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key) {
@@ -1604,7 +1634,7 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
         util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
         return read_process_and_collect(store, pipeline_context, read_query, read_options)
         .thenValue([store, pipeline_context, &read_options, &handler_data](std::vector<SliceAndKey>&& segs) {
-            return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
+            return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data, IntToFloatConversion::PERMISSIVE);
         });
     } else {
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)

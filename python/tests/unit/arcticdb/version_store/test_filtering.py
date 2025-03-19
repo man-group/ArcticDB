@@ -624,8 +624,11 @@ def test_filter_column_slicing_different_segments(lmdb_version_store_tiny_segmen
     q = q[q["c"] == 22]
     pandas_query = "c == 22"
     expected = df.query(pandas_query).loc[:, ["a"]]
+    print("\n")
+    print(expected)
     received = lib.read(symbol, columns=["a"], query_builder=q).data
     assert np.array_equal(expected, received)
+
     # Filter on column c (in second column slice), and display all columns
     q = QueryBuilder()
     q = q[q["c"] == 22]

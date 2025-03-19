@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <cstdint>
 #include <variant>
 #include <memory>
 #include <type_traits>

@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/output_format.hpp>
 #include <arcticdb/util/optional_defaults.hpp>
 

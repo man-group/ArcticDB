@@ -7,10 +7,8 @@
 
 #pragma once
 
-#include <arcticdb/entity/key.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/entity/types.hpp>
@@ -19,20 +17,14 @@
 #include <arcticdb/processing/aggregation_interface.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/processing/sorted_aggregation.hpp>
-#include <arcticdb/processing/grouper.hpp>
 #include <arcticdb/stream/aggregator.hpp>
-#include <arcticdb/util/movable_priority_queue.hpp>
-#include <arcticdb/pipeline/index_utils.hpp>
 
 #include <folly/Poly.h>
-#include <folly/futures/Future.h>
 
 #include <vector>
-#include <unordered_map>
 #include <string>
 #include <variant>
 #include <memory>
-#include <atomic>
 
 namespace arcticdb {
 
@@ -196,7 +188,7 @@ struct ProjectClause {
     explicit ProjectClause(std::unordered_set<std::string> input_columns,
                            std::string output_column,
                            ExpressionContext expression_context) :
-            output_column_(output_column),
+            output_column_(std::move(output_column)),
             expression_context_(std::make_shared<ExpressionContext>(std::move(expression_context))) {
         clause_info_.input_columns_ = std::move(input_columns);
         clause_info_.modifies_output_descriptor_ = true;
@@ -340,7 +332,7 @@ struct AggregationClause {
     AggregationClause(const std::string& grouping_column,
                       const std::vector<NamedAggregator>& aggregations);
 
-    [[noreturn]] std::vector<std::vector<size_t>> structure_for_processing(ARCTICDB_UNUSED std::vector<RangesAndKey>&) {
+    [[noreturn]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>&) {
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>("AggregationClause should never be first in the pipeline");
     }
 
@@ -645,7 +637,7 @@ struct ColumnStatsGenerationClause {
     }
 
     OutputSchema modify_schema(ARCTICDB_UNUSED OutputSchema&& output_schema) const {
-        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("ColumnStatsGenerationClause::modify_schema should never be called");
+        return OutputSchema{};
     }
 
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const {

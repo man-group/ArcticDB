@@ -8,7 +8,6 @@
 #pragma once
 #include<optional>
 #include <fmt/format.h>
-#include<arcticdb/entity/descriptors.hpp>
 #include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
@@ -17,18 +16,30 @@ namespace entity {
     struct TypeDescriptor;
 }
 
+/// Defines which static casts from int to float are permitted in is_valid_type_promotion_to_target
+enum class IntToFloatConversion {
+    /// Avoids lossy casting from int to float and tries to make sure that the integer can be represented exactly using
+    /// the specified float, (u)int8, (u)int16 can be represented exactly using float 32, (u)int32 can be represented
+    /// exactly via float64. Note this still allows casting (u)int64 to flaot64 even though it's a lossy cast.
+    STRICT,
+    /// Allow all type casts from int to float regardless of the byte size of the int and float type
+    PERMISSIVE
+};
+
 /// Two types are trivially compatible if their byte representation is exactly the same i.e. you can memcpy
 /// n elements of left type from one buffer to n elements of type right in another buffer and get the same result
 [[nodiscard]] bool trivially_compatible_types(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right);
 
 [[nodiscard]] bool is_valid_type_promotion_to_target(
     const entity::TypeDescriptor& source,
-    const entity::TypeDescriptor& target
+    const entity::TypeDescriptor& target,
+    IntToFloatConversion int_to_to_float_conversion = IntToFloatConversion::STRICT
 );
 
 [[nodiscard]] std::optional<entity::TypeDescriptor> has_valid_common_type(
     const entity::TypeDescriptor& left,
-    const entity::TypeDescriptor& right
+    const entity::TypeDescriptor& right,
+    IntToFloatConversion int_to_to_float_conversion = IntToFloatConversion::STRICT
 );
 
 [[nodiscard]] std::optional<entity::TypeDescriptor> promotable_type(

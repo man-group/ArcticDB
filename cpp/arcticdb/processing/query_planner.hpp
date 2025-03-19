@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <arcticdb/processing/clause.hpp>
+#include <arcticdb/processing/grouper.hpp>
 
 namespace arcticdb {
 

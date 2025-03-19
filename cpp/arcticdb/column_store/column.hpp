@@ -20,12 +20,10 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/sparse_utils.hpp>
 
-#include <folly/container/Enumerate.h>
 // Compilation fails on Mac if cstdio is not included prior to folly/Function.h due to a missing definition of memalign in folly/Memory.h
 #ifdef __APPLE__
 #include <cstdio>
 #endif
-#include <folly/Function.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 
@@ -453,7 +451,7 @@ public:
 
     void mark_absent_rows(size_t num_rows);
 
-    void default_initialize_rows(size_t start_pos, size_t num_rows, bool ensure_alloc);
+    void default_initialize_rows(size_t start_pos, size_t num_rows, bool ensure_alloc, VariantRawValue default_value = {});
 
     void set_row_data(size_t row_id);
 
@@ -730,19 +728,15 @@ public:
         size_t end_row
     );
 
-    template <
-            typename input_tdt,
-            typename functor>
+    template <typename input_tdt, typename functor>
     requires std::is_invocable_r_v<void, functor, typename input_tdt::DataTypeTag::raw_type>
     static void for_each(const Column& input_column, functor&& f) {
         auto input_data = input_column.data();
         std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), std::forward<functor>(f));
     }
 
-    template <
-            typename input_tdt,
-            typename functor>
-    requires std::is_invocable_r_v<void, functor, typename ColumnData::Enumeration<typename input_tdt::DataTypeTag::raw_type>>
+    template <typename input_tdt, typename functor>
+    requires std::is_invocable_r_v<void, functor, ColumnData::Enumeration<typename input_tdt::DataTypeTag::raw_type>>
     static void for_each_enumerated(const Column& input_column, functor&& f) {
         auto input_data = input_column.data();
         if (input_column.is_sparse()) {
@@ -754,10 +748,7 @@ public:
         }
     }
 
-    template <
-            typename input_tdt,
-            typename output_tdt,
-            typename functor>
+    template <typename input_tdt, typename output_tdt, typename functor>
     requires std::is_invocable_r_v<typename output_tdt::DataTypeTag::raw_type, functor, typename input_tdt::DataTypeTag::raw_type>
     static void transform(const Column& input_column, Column& output_column, functor&& f) {
         auto input_data = input_column.data();
@@ -839,9 +830,7 @@ public:
         }
     }
 
-    template <
-            typename input_tdt,
-            std::predicate<typename input_tdt::DataTypeTag::raw_type> functor>
+    template <typename input_tdt, std::predicate<typename input_tdt::DataTypeTag::raw_type> functor>
     static void transform(const Column& input_column,
                           util::BitSet& output_bitset,
                           bool sparse_missing_value_output,

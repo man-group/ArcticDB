@@ -19,6 +19,8 @@
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/util/test/random_throw.hpp>
 #include <ankerl/unordered_dense.h>
+#include <arcticdb/util/movable_priority_queue.hpp>
+
 #include <ranges>
 
 namespace arcticdb {
@@ -96,16 +98,23 @@ struct SegmentWrapper {
     }
 };
 
-void check_column_presence(OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns, std::string_view clause_name) {
-    const auto& column_types = output_schema.column_types();
-    for (const auto& input_column: required_columns) {
-        schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
-                column_types.contains(input_column),
-                "{}Clause requires column '{}' to exist in input data",
-                clause_name,
-                input_column
-        );
+static auto first_missing_column(OutputSchema &output_schema, const std::unordered_set<std::string>& required_columns) {
+    const auto &column_types = output_schema.column_types();
+    for (auto input_column_it = required_columns.begin(); input_column_it != required_columns.end(); ++input_column_it) {
+        if (!column_types.contains(*input_column_it) && !column_types.contains(stream::mangled_name(*input_column_it))) {
+            return input_column_it;
+        }
     }
+    return required_columns.end();
+}
+
+void check_column_presence(OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns, std::string_view clause_name) {
+    const auto first_missing = first_missing_column(output_schema, required_columns);
+    schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(first_missing == required_columns.end(),
+            "{}Clause requires column '{}' to exist in input data",
+            clause_name,
+            *first_missing
+    );
 }
 
 void check_is_timeseries(const StreamDescriptor& stream_descriptor, std::string_view clause_name) {
@@ -154,7 +163,9 @@ std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) 
 }
 
 OutputSchema FilterClause::modify_schema(OutputSchema&& output_schema) const {
-    check_column_presence(output_schema, *clause_info_.input_columns_, "Filter");
+    if (first_missing_column(output_schema, *clause_info_.input_columns_) != clause_info_.input_columns_->end()) {
+        return output_schema;
+    }
     auto root_expr = expression_context_->expression_nodes_.get_value(expression_context_->root_node_name_.value);
     std::variant<BitSetTag, DataType> return_type = root_expr->compute(*expression_context_, output_schema.column_types());
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<BitSetTag>(return_type), "FilterClause AST would produce a column, not a bitset");
@@ -296,7 +307,7 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
 
 std::vector<std::vector<EntityId>> AggregationClause::structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
     schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
-            std::any_of(entity_ids_vec.cbegin(), entity_ids_vec.cend(), [](const std::vector<EntityId>& entity_ids) {
+            ranges::any_of(std::as_const(entity_ids_vec), [](const std::vector<EntityId>& entity_ids) {
                 return !entity_ids.empty();
             }),
             "Grouping column {} does not exist or is empty", grouping_column_
@@ -334,25 +345,24 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
     auto row_slices = split_by_row_slice(std::move(proc));
 
     // Sort procs following row range descending order, as we are going to iterate through them backwards
-    std::sort(std::begin(row_slices), std::end(row_slices),
-              [](const auto& left, const auto& right) {
-                  return left.row_ranges_->at(0)->start() > right.row_ranges_->at(0)->start();
-    });
+    ranges::sort(row_slices,
+                 [](const auto& left, const auto& right) {
+                     return left.row_ranges_->at(0)->start() > right.row_ranges_->at(0)->start();
+                 });
 
-    std::vector<GroupingAggregatorData> aggregators_data;
+
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
             !aggregators_.empty(),
             "AggregationClause::process does not make sense with no aggregators");
-    for (const auto &agg: aggregators_){
-        aggregators_data.emplace_back(agg.get_aggregator_data());
-    }
-
+    std::vector<GroupingAggregatorData> aggregators_data;
+    aggregators_data.reserve(aggregators_.size());
+    ranges::transform(aggregators_, std::back_inserter(aggregators_data), [&](const auto& agg) {return agg.get_aggregator_data();});
     // Work out the common type between the processing units for the columns being aggregated
     for (auto& row_slice: row_slices) {
         for (auto agg_data: folly::enumerate(aggregators_data)) {
             // Check that segments row ranges are the same
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                std::all_of(row_slice.row_ranges_->begin(), row_slice.row_ranges_->end(), [&] (const auto& row_range) {return row_range->start() == row_slice.row_ranges_->at(0)->start();}),
+                ranges::all_of(*row_slice.row_ranges_, [&] (const auto& row_range) {return row_range->start() == row_slice.row_ranges_->at(0)->start();}),
                 "Expected all data segments in one processing unit to have the same row ranges");
 
             auto input_column_name = aggregators_.at(agg_data.index).get_input_column_name();
@@ -411,24 +421,17 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
                                 typename col_type_info::RawType val;
                                 if constexpr (is_sequence_type(col_type_info::data_type)) {
                                     auto offset = enumerating_it.value();
-                                    if (auto it = offset_to_group.find(offset); it !=
-                                                                                offset_to_group.end()) {
+                                    if (auto it = offset_to_group.find(offset); it != offset_to_group.end()) {
                                         val = it->second;
                                     } else {
-                                        std::optional<std::string_view> str = col.string_at_offset(
-                                                offset);
+                                        std::optional<std::string_view> str = col.string_at_offset(offset);
                                         if (str.has_value()) {
                                             val = string_pool->get(*str, true).offset();
                                         } else {
                                             val = offset;
                                         }
                                         typename col_type_info::RawType val_copy(val);
-                                        offset_to_group.insert(
-                                                std::make_pair<typename col_type_info::RawType, size_t>(
-                                                        std::forward<typename col_type_info::RawType>(
-                                                                offset),
-                                                        std::forward<typename col_type_info::RawType>(
-                                                                val_copy)));
+                                        offset_to_group.emplace(offset, val_copy);
                                     }
                                 } else {
                                     val = enumerating_it.value();
@@ -436,23 +439,16 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
 
                                 if (is_sparse) {
                                     constexpr size_t missing_value_group_id = 0;
-                                    for (auto j = previous_value_index;
-                                         j != enumerating_it.idx(); ++j) {
+                                    for (auto j = previous_value_index; j != enumerating_it.idx(); ++j) {
                                         *row_to_group_ptr++ = missing_value_group_id;
                                     }
                                     previous_value_index = enumerating_it.idx() + 1;
                                 }
 
-                                if (auto it = hash_to_group->find(val); it ==
-                                                                        hash_to_group->end()) {
+                                if (auto it = hash_to_group->find(val); it == hash_to_group->end()) {
                                     *row_to_group_ptr++ = next_group_id;
                                     auto group_id = next_group_id++;
-                                    hash_to_group->insert(
-                                            std::make_pair<typename col_type_info::RawType, size_t>(
-                                                    std::forward<typename col_type_info::RawType>(
-                                                            val),
-                                                    std::forward<typename col_type_info::RawType>(
-                                                            group_id)));
+                                    hash_to_group->emplace(val, group_id);
                                 } else {
                                     *row_to_group_ptr++ = it->second;
                                 }
@@ -462,8 +458,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
                     num_unique = next_group_id;
                     util::check(num_unique != 0, "Got zero unique values");
                     for (auto agg_data: folly::enumerate(aggregators_data)) {
-                        auto input_column_name = aggregators_.at(
-                                agg_data.index).get_input_column_name();
+                        auto input_column_name = aggregators_.at(agg_data.index).get_input_column_name();
                         auto input_column = row_slice.get(input_column_name);
                         std::optional<ColumnWithStrings> opt_input_column;
                         if (std::holds_alternative<ColumnWithStrings>(input_column)) {
@@ -473,7 +468,9 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
                                 opt_input_column.emplace(std::move(column_with_strings));
                             }
                         }
-                        agg_data->aggregate(opt_input_column, row_to_group, num_unique);
+                        if (opt_input_column) {
+                            agg_data->aggregate(opt_input_column, row_to_group, num_unique);
+                        }
                     }
                 });
         } else {
@@ -492,16 +489,16 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
         auto hashes = grouping_map.get<typename col_type_info::RawType>();
         std::vector<std::pair<typename col_type_info::RawType, size_t>> elements;
         for (const auto &hash : *hashes)
-            elements.emplace_back(std::make_pair(hash.first, hash.second));
+            elements.emplace_back(hash.first, hash.second);
 
-        std::sort(std::begin(elements),
-                  std::end(elements),
-                  [](const std::pair<typename col_type_info::RawType, size_t> &l, const std::pair<typename col_type_info::RawType, size_t> &r) {
-                      return l.second < r.second;
-                  });
+        ranges::sort(elements,
+                     [](const std::pair<typename col_type_info::RawType, size_t> &l,
+                        const std::pair<typename col_type_info::RawType, size_t> &r) {
+                         return l.second < r.second;
+                     });
 
         auto column_data = index_col->data();
-        std::transform(elements.cbegin(), elements.cend(), column_data.begin<typename col_type_info::TDT>(), [](const auto& element) {
+        ranges::transform(elements, column_data.begin<typename col_type_info::TDT>(), [](const auto& element) {
             return element.first;
         });
     });
@@ -513,11 +510,13 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
 
     seg.set_string_pool(string_pool);
     seg.set_row_id(num_unique - 1);
+
     return push_entities(*component_manager_, ProcessingUnit(std::move(seg)));
 }
 
 OutputSchema AggregationClause::modify_schema(OutputSchema&& output_schema) const {
     check_column_presence(output_schema, *clause_info_.input_columns_, "Aggregation");
+    output_schema.clear_default_values();
     const auto& input_stream_desc = output_schema.stream_descriptor();
     StreamDescriptor stream_desc(input_stream_desc.id());
     stream_desc.add_field(input_stream_desc.field(*input_stream_desc.find_field(grouping_column_)));
@@ -529,8 +528,17 @@ OutputSchema AggregationClause::modify_schema(OutputSchema&& output_schema) cons
         const auto& input_column_type = input_stream_desc.field(*input_stream_desc.find_field(input_column_name)).type().data_type();
         auto agg_data = agg.get_aggregator_data();
         agg_data.add_data_type(input_column_type);
-        const auto& output_column_type = agg_data.get_output_data_type();
+        const auto& output_column_type = [&]() {
+            if (processing_config_.dynamic_schema_ && (agg.get_aggregation_type() == AggregationType::MIN || agg.get_aggregation_type() == AggregationType::MAX)) {
+                return DataType::FLOAT64;
+            }
+            return agg_data.get_output_data_type();
+        }();
         stream_desc.add_scalar_field(output_column_type, output_column_name);
+        const VariantRawValue& default_value = agg_data.get_default_value(processing_config_.dynamic_schema_);
+        if (!std::holds_alternative<std::monostate>(default_value)) {
+            output_schema.set_default_value_for_column(output_column_name, default_value);
+        }
     }
 
     output_schema.set_stream_descriptor(std::move(stream_desc));

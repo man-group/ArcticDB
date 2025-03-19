@@ -8,6 +8,7 @@
 #pragma once
 
 #include <folly/Poly.h>
+#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb{
 
@@ -24,10 +25,13 @@ struct IGroupingAggregatorData {
         [[nodiscard]] SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values) {
             return folly::poly_call<3>(*this, output_column_name, dynamic_schema, unique_values);
         }
+        [[nodiscard]] VariantRawValue get_default_value(bool dynamic_schema) {
+            return folly::poly_call<4>(*this, dynamic_schema);
+        }
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::add_data_type, &T::get_output_data_type, &T::aggregate, &T::finalize>;
+    using Members = folly::PolyMembers<&T::add_data_type, &T::get_output_data_type, &T::aggregate, &T::finalize, &T::get_default_value>;
 };
 
 using GroupingAggregatorData = folly::Poly<IGroupingAggregatorData>;
@@ -38,10 +42,11 @@ struct IGroupingAggregator {
         [[nodiscard]] ColumnName get_input_column_name() const { return folly::poly_call<0>(*this); };
         [[nodiscard]] ColumnName get_output_column_name() const { return folly::poly_call<1>(*this); };
         [[nodiscard]] GroupingAggregatorData get_aggregator_data() const { return folly::poly_call<2>(*this); }
+        [[nodiscard]] AggregationType get_aggregation_type() const { return folly::poly_call<3>(*this); }
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::get_input_column_name, &T::get_output_column_name, &T::get_aggregator_data>;
+    using Members = folly::PolyMembers<&T::get_input_column_name, &T::get_output_column_name, &T::get_aggregator_data, &T::get_aggregation_type>;
 };
 
 using GroupingAggregator = folly::Poly<IGroupingAggregator>;

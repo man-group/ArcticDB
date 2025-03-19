@@ -70,7 +70,7 @@ inline void expand_dense_buffer_using_bitmap(const util::BitMagic &bv, const uin
 }
 
 template <typename TagType>
-inline void default_initialize(uint8_t* data, size_t bytes) {
+void default_initialize(uint8_t* data, size_t bytes) {
     using RawType = typename TagType::DataTypeTag::raw_type;
     const auto num_rows ARCTICDB_UNUSED = bytes / sizeof(RawType);
     constexpr auto data_type = TagType::DataTypeTag::data_type;
@@ -87,7 +87,7 @@ inline void default_initialize(uint8_t* data, size_t bytes) {
 }
 
 template <typename TagType>
-inline void default_initialize(ChunkedBuffer& buffer, size_t offset, size_t bytes, DecodePathData shared_data, std::any& handler_data) {
+void default_initialize(ChunkedBuffer& buffer, size_t offset, size_t bytes, DecodePathData shared_data, std::any& handler_data) {
     using RawType = typename TagType::DataTypeTag::raw_type;
     const auto num_rows ARCTICDB_UNUSED = bytes / sizeof(RawType);
     constexpr auto type = static_cast<TypeDescriptor>(TagType{});

@@ -18,6 +18,7 @@
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/stream/incompletes.hpp>
+#include <arcticdb/entity/protobuf_mappings.hpp>
 #include <cstdlib>
 
 namespace arcticdb::toolbox::apy {

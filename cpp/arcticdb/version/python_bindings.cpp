@@ -137,8 +137,8 @@ void declare_resample_clause(py::module& version) {
             }))
             .def_property_readonly("rule", &ResampleClause<closed_boundary>::rule)
             .def("set_aggregations", [](ResampleClause<closed_boundary>& self,
-                                        const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregations) {
-                self.set_aggregations(python_util::named_aggregators_from_dict(aggregations));
+                                        std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregations) {
+                self.set_aggregations(python_util::named_aggregators_from_dict(std::move(aggregations)));
             })
             .def("__str__", &ResampleClause<closed_boundary>::to_string);
 }
@@ -385,8 +385,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     py::class_<AggregationClause, std::shared_ptr<AggregationClause>>(version, "AggregationClause")
             .def(py::init([](
                     const std::string& grouping_colum,
-                    const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregations) {
-                return AggregationClause(grouping_colum, python_util::named_aggregators_from_dict(aggregations));
+                    std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregations) {
+                return AggregationClause(grouping_colum, python_util::named_aggregators_from_dict(std::move(aggregations)));
             }))
             .def("__str__", &AggregationClause::to_string);
 

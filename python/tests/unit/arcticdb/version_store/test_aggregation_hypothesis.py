@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import pandas as pd
 from hypothesis import assume, given, settings
 import pytest
+import numpy as np
 
 from arcticdb.util.test import generic_named_aggregation_test
 from arcticdb.util.hypothesis import (
@@ -90,6 +91,14 @@ def test_aggregation_strings(lmdb_version_store_v1, df):
 # DYNAMIC SCHEMA TESTS FROM HERE #
 ##################################
 
+def largest_numeric_type(dtype):
+    if pd.api.types.is_float_dtype(dtype):
+        return np.float64
+    elif pd.api.types.is_signed_integer_dtype(dtype):
+        return np.int64
+    elif pd.api.types.is_unsigned_integer_dtype(dtype):
+        return np.uint64
+    return dtype
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
@@ -113,7 +122,17 @@ def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     ]
     for slice in slices:
         lib.append(symbol, slice)
-
+    required_types = {
+        "mean": np.float64,
+        "sum": largest_numeric_type(df.dtypes["agg_column"]),
+        "count": np.uint64,
+        # Min and Max are only temporary set to float to keep API the API. See:
+        # https://github.com/man-group/ArcticDB/blob/67d2bbe530f96a0aa5412f479e123da480ba2d99/cpp/arcticdb/processing/unsorted_aggregation.cpp#L319
+        # The output type must be the largest common type of all segments. If it's an integer, the default is 0. With
+        # Arrow, it'll be Arrow's missing value.
+        "min": float,
+        "max": float,
+    }
     generic_named_aggregation_test(
         lib,
         symbol,
@@ -128,7 +147,8 @@ def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, df):
             # Uncomment when un-feature flagged
             # "first": ("agg_column", "first"),
             # "last": ("agg_column", "last"),
-        }
+        },
+        agg_dtypes=required_types
     )
 
 
