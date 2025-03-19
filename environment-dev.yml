@@ -53,7 +53,11 @@ dependencies:
   - libiconv
   - aws-c-s3
   # Build dependencies for tests
-  - libarrow==18.0.0
+  # Use libarrow==18.0.0 only on Linux and MacOS (resolution problem on Windows)
+  # TODO: Remove this when the issue is resolved
+  - sel(linux): libarrow==18.0.0
+  - sel(osx): libarrow==18.0.0
+  - sel(win): libarrow
   # Python dependences
   # Python 3.13+ is not yet supported
   - python <3.13
@@ -76,13 +80,16 @@ dependencies:
   # Python dependencies (for tests only)
   - azure-storage-blob
   - azure-identity
-  - pyarrow
   - asv
   - pymongo
   - pytest
   - trustme
   - entt
   - psutil
+  # Use pyarrow only on Linux and MacOS (resolution problem on Windows)
+  # TODO: Remove this when the issue is resolved
+  - sel(linux): pyarrow
+  - sel(osx): pyarrow
   # Use memray and pytest-memray only on Linux and MacOS
   - sel(linux): memray
   - sel(linux): pytest-memray
