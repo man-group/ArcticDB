@@ -132,12 +132,7 @@ class StorageFixture(_SaferContextManager):
         self.libs_from_factory.clear()
 
         arctic = self.create_arctic()
-        libs = set(self.libs_names_from_arctic[:])
-        with handle_cleanup_exception(self, arctic, consequence=failure_consequence):
-            # There are some tests that add libraries without using the factory directly (e.g. test_move_storage)
-            # so make sure that we capture all of the libraries
-            for lib in arctic.list_libraries():
-                libs.add(lib)
+        libs = arctic.list_libraries()
 
         for lib in libs:
             with handle_cleanup_exception(self, lib, consequence=failure_consequence):
