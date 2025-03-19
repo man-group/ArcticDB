@@ -197,6 +197,16 @@ void NfsBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts)
     s3::detail::do_remove_impl(std::span(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
+static std::string prefix_handler(const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor&, KeyType key_type) {
+    std::string new_prefix;
+    if(!prefix.empty()) {
+        uint32_t id = get_id_bucket(encode_item<StreamId, StringId, NumericId>(StringId{prefix}, is_ref_key_class(key_type)));
+        new_prefix = fmt::format("{:03}", id);
+    }
+
+    return !prefix.empty() ? fmt::format("{}/{}", key_type_dir, new_prefix) : key_type_dir;
+}
+
 bool NfsBackedStorage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix) {
     const IterateTypePredicate func = [&v = visitor, prefix=prefix] (VariantKey&& k) {
         auto key = unencode_object_id(k);
@@ -207,22 +217,20 @@ bool NfsBackedStorage::do_iterate_type_until_match(KeyType key_type, const Itera
         }
     };
 
-    auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor&, KeyType key_type) {
-        std::string new_prefix;
-        if(!prefix.empty()) {
-            uint32_t id = get_id_bucket(encode_item<StreamId, StringId, NumericId>(StringId{prefix}, is_ref_key_class(key_type)));
-            new_prefix = fmt::format("{:03}", id);
-        }
-
-        return !prefix.empty() ? fmt::format("{}/{}", key_type_dir, new_prefix) : key_type_dir;
-    };
-
     return s3::detail::do_iterate_type_impl(key_type, func, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, prefix_handler, prefix);
 }
 
 bool NfsBackedStorage::do_key_exists(const VariantKey& key) {
     auto encoded_key = encode_object_id(key);
     return s3::detail::do_key_exists_impl(encoded_key, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
+}
+
+bool NfsBackedStorage::supports_object_size_calculation() const {
+    return true;
+}
+
+ObjectSizes NfsBackedStorage::do_get_object_sizes(KeyType key_type, const std::string& prefix) {
+    return s3::detail::do_calculate_sizes_for_type_impl(key_type, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, prefix_handler, prefix);
 }
 
 } //namespace arcticdb::storage::nfs_backed

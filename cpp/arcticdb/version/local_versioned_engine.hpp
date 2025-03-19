@@ -373,7 +373,7 @@ public:
         const StreamId& stream_id, 
         const WriteOptions& write_options);
 
-    std::unordered_map<KeyType, KeySizesInfo> scan_object_sizes();
+    std::vector<storage::ObjectSizes> scan_object_sizes();
 
     std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> scan_object_sizes_by_stream();
 

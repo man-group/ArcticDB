@@ -10,6 +10,7 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>
+#include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/async/batch_read_args.hpp>
 #include <arcticdb/processing/clause.hpp>
 
@@ -45,15 +46,21 @@ struct StreamSource {
         const entity::IterateTypeVisitor& func,
         const std::string &prefix = std::string{}) = 0;
 
+    [[nodiscard]] virtual folly::Future<storage::ObjectSizes> get_object_sizes(
+        KeyType type,
+        const std::string& prefix
+    ) = 0;
+
     virtual bool scan_for_matching_key(
         KeyType key_type, const IterateTypePredicate& predicate) = 0;
 
     [[nodiscard]] virtual folly::Future<bool> key_exists(const entity::VariantKey &key) = 0;
-    virtual bool key_exists_sync(const entity::VariantKey &key) = 0;
-    virtual bool supports_prefix_matching() const = 0;
-    virtual bool fast_delete() = 0;
+    [[nodiscard]] virtual bool key_exists_sync(const entity::VariantKey &key) = 0;
+    [[nodiscard]] virtual bool supports_prefix_matching() const = 0;
+    [[nodiscard]] virtual bool fast_delete() = 0;
 
     using ReadContinuation = folly::Function<VariantKey(storage::KeySegmentPair &&)>;
+    using KeySizeCalculators = std::vector<std::pair<VariantKey, ReadContinuation>>;
 
     virtual std::vector<folly::Future<VariantKey>> batch_read_compressed(
         std::vector<std::pair<entity::VariantKey, ReadContinuation>> &&ks,
@@ -78,6 +85,22 @@ struct StreamSource {
     virtual folly::Future<std::pair<VariantKey, TimeseriesDescriptor>>
         read_timeseries_descriptor(const entity::VariantKey& key,
                                    storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) = 0;
+
+    virtual void read_ignoring_key_not_found(KeySizeCalculators&& calculators) {
+        if (calculators.empty()) {
+            return;
+        }
+
+        std::vector<folly::Future<folly::Unit>> res;
+        for (auto&& fut : batch_read_compressed(std::move(calculators), BatchReadArgs{})) {
+            // Ignore some exceptions, someone might be deleting while we scan
+            res.push_back(std::move(fut)
+                              .thenValue([](auto&&) {return folly::Unit{};})
+                              .thenError(folly::tag_t<storage::KeyNotFoundException>{}, [](auto&&) { return folly::Unit{}; }));
+        }
+
+        folly::collect(res).get();
+    }
 };
 
 } // namespace arcticdb::stream

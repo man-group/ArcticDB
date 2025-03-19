@@ -299,12 +299,13 @@ S3Result<ListObjectsOutput> S3ClientImpl::list_objects(
         next_continuation_token = {result.GetNextContinuationToken()};
 
     auto s3_object_names = std::vector<std::string>();
+    auto s3_object_sizes = std::vector<uint64_t>();
     for (const auto &s3_object: result.GetContents()) {
         s3_object_names.emplace_back(s3_object.GetKey());
+        s3_object_sizes.emplace_back(s3_object.GetSize());
     }
 
-    ListObjectsOutput output = {s3_object_names, next_continuation_token};
-    return {output};
+    return {ListObjectsOutput{std::move(s3_object_names), std::move(s3_object_sizes), next_continuation_token}};
 }
 
 }

@@ -405,23 +405,30 @@ void do_update_impl(
     do_write_impl(std::move(kvs), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer));
 }
 
-inline auto default_prefix_handler() {
+inline PrefixHandler default_prefix_handler() {
     return [](const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType) {
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };
 }
 
-template<class KeyBucketizer, class PrefixHandler>
-bool do_iterate_type_impl(
-    KeyType key_type,
-    const IterateTypePredicate& visitor,
+struct PathInfo {
+    PathInfo(std::string prefix, std::string key_type_dir, size_t path_to_key_size) :
+        key_prefix_(std::move(prefix)), key_type_dir_(std::move(key_type_dir)), path_to_key_size_(path_to_key_size) {
+
+    }
+
+    std::string key_prefix_;
+    std::string key_type_dir_;
+    size_t path_to_key_size_;
+};
+
+template<class KeyBucketizer>
+PathInfo calculate_path_info(
     const std::string& root_folder,
-    const std::string& bucket_name,
-    const S3ClientInterface& s3_client,
-    KeyBucketizer&& bucketizer,
-    PrefixHandler&& prefix_handler = default_prefix_handler(),
-    const std::string& prefix = std::string{}) {
-    ARCTICDB_SAMPLE(S3StorageIterateType, 0)
+    KeyType key_type,
+    const PrefixHandler& prefix_handler,
+    const std::string& prefix,
+    KeyBucketizer&& bucketizer) {
     auto key_type_dir = key_type_folder(root_folder, key_type);
     const auto path_to_key_size = key_type_dir.size() + 1 + bucketizer.bucketize_length(key_type);
     // if prefix is empty, add / to avoid matching both 'log' and 'logc' when key_type_dir is {root_folder}/log
@@ -438,19 +445,36 @@ bool do_iterate_type_impl(
                                                             : IndexDescriptorImpl::Type::TIMESTAMP,
                                  FormatType::TOKENIZED);
     auto key_prefix = prefix_handler(prefix, key_type_dir, key_descriptor, key_type);
-    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Searching for objects in bucket {} with prefix {}", bucket_name,
-                           key_prefix);
+
+    return {key_prefix, key_type_dir, path_to_key_size};
+}
+
+template<class KeyBucketizer>
+bool do_iterate_type_impl(
+    KeyType key_type,
+    const IterateTypePredicate& visitor,
+    const std::string& root_folder,
+    const std::string& bucket_name,
+    const S3ClientInterface& s3_client,
+    KeyBucketizer&& bucketizer,
+    const PrefixHandler& prefix_handler = default_prefix_handler(),
+    const std::string& prefix = std::string{}) {
+    ARCTICDB_SAMPLE(S3StorageIterateType, 0)
+
+    auto path_info = calculate_path_info(root_folder, key_type, prefix_handler, prefix, std::move(bucketizer));
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Iterating over objects in bucket {} with prefix {}", bucket_name,
+                           path_info.key_prefix_);
 
     auto continuation_token = std::optional<std::string>();
     do {
-        auto list_objects_result = s3_client.list_objects(key_prefix, bucket_name, continuation_token);
+        auto list_objects_result = s3_client.list_objects(path_info.key_prefix_, bucket_name, continuation_token);
         if (list_objects_result.is_success()) {
             auto& output = list_objects_result.get_output();
 
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
 
             for (auto& s3_object_name : output.s3_object_names) {
-                auto key = s3_object_name.substr(path_to_key_size);
+                auto key = s3_object_name.substr(path_info.path_to_key_size_);
                 ARCTICDB_TRACE(log::version(), "Got object_list: {}, key: {}", s3_object_name, key);
                 auto k = variant_key_from_bytes(
                     reinterpret_cast<uint8_t *>(key.data()),
@@ -474,11 +498,53 @@ bool do_iterate_type_impl(
                                 error.GetMessage().c_str());
             // We don't raise on expected errors like NoSuchKey because we want to return an empty list
             // instead of raising.
-            raise_if_unexpected_error(error, key_prefix);
+            raise_if_unexpected_error(error, path_info.key_prefix_);
             return false;
         }
     } while (continuation_token.has_value());
     return false;
+}
+
+template<class KeyBucketizer>
+ObjectSizes do_calculate_sizes_for_type_impl(
+    KeyType key_type,
+    const std::string& root_folder,
+    const std::string& bucket_name,
+    const S3ClientInterface& s3_client,
+    KeyBucketizer&& bucketizer,
+    const PrefixHandler& prefix_handler = default_prefix_handler(),
+    const std::string& prefix = std::string{}) {
+    ARCTICDB_SAMPLE(S3StorageCalculateSizesForType, 0)
+
+    auto path_info = calculate_path_info(root_folder, key_type, prefix_handler, prefix, std::move(bucketizer));
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Calculating sizes for objects in bucket {} with prefix {}", bucket_name,
+                           path_info.key_prefix_);
+
+    auto continuation_token = std::optional<std::string>();
+    ObjectSizes res{key_type};
+    do {
+        auto list_objects_result = s3_client.list_objects(path_info.key_prefix_, bucket_name, continuation_token);
+        if (list_objects_result.is_success()) {
+            const auto& output = list_objects_result.get_output();
+
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
+
+            for (auto& s3_object_size : output.s3_object_sizes) {
+                res.count_ += 1;
+                res.compressed_size_bytes_ += s3_object_size;
+            }
+            continuation_token = output.next_continuation_token;
+        } else {
+            const auto& error = list_objects_result.get_error();
+            log::storage().warn("Failed to iterate key type with key '{}' {}: {}",
+                                key_type,
+                                error.GetExceptionName().c_str(),
+                                error.GetMessage().c_str());
+            raise_if_unexpected_error(error, path_info.key_prefix_);
+        }
+    } while (continuation_token.has_value());
+
+    return res;
 }
 
 template<class KeyBucketizer>
