@@ -9,6 +9,9 @@ As of the Change Date specified in that file, in accordance with the Business So
 import copy
 import datetime
 import io
+import sys
+if sys.version_info >= (3, 9):
+    import zoneinfo
 from datetime import timedelta
 import math
 
@@ -326,7 +329,7 @@ def _to_tz_timestamp(dt):
         second=dt.second,
         microsecond=dt.microsecond,
     ).value
-    tz = dt.tzinfo.zone if dt.tzinfo is not None else None
+    tz = _ensure_str_timezone(get_timezone(dt.tzinfo)) if dt.tzinfo is not None else None
     return [ts, tz]
 
 
@@ -400,14 +403,21 @@ def _normalize_single_index(
         return [str(name) for name in index_names], ix_vals
 
 
-def _ensure_str_timezone(index_tz):
-    if isinstance(index_tz, datetime.tzinfo) and check_is_utc_if_newer_pandas(index_tz):
+def _ensure_str_timezone(tz):
+    if sys.version_info >= (3, 9):
+        if isinstance(tz, zoneinfo.ZoneInfo):
+            # Pandas also special cases zoneinfo. It always just returns it as is instead of converting to string.
+            # Since we also want to support zoneinfo timezones and we want old arcticdb clients to read them,
+            # we convert them to a string (similarly to pytz timezones).
+            return str(tz)
+
+    if isinstance(tz, datetime.tzinfo) and check_is_utc_if_newer_pandas(tz):
         # Pandas started to treat UTC as a special case and give back the tzinfo object for it. We coerce it back to
         # a str to avoid special cases for it further along our pipeline. The breaking change was:
         # https://github.com/jbrockmendel/pandas/commit/94ce05d1bcc3c99e992c48cc99d0fd2726f43102#diff-3dba9e959e6ad7c394f0662a0e6477593fca446a6924437701ecff82b0b20b55
         return "UTC"
-    else:
-        return index_tz
+
+    return tz
 
 
 def _denormalize_single_index(item, norm_meta):
@@ -1019,7 +1029,7 @@ class MsgPackNormalizer(Normalizer):
 
     def _custom_pack(self, obj):
         if isinstance(obj, pd.Timestamp):
-            tz = obj.tz.zone if obj.tz is not None else None
+            tz = _ensure_str_timezone(get_timezone(obj.tz)) if obj.tz is not None else None
             return ExtType(MsgPackSerialization.PD_TIMESTAMP, packb([obj.value, tz]))
 
         if isinstance(obj, datetime.datetime):
@@ -1036,6 +1046,9 @@ class MsgPackNormalizer(Normalizer):
     def _ext_hook(self, code, data):
         if code == MsgPackSerialization.PD_TIMESTAMP:
             data = unpackb(data, raw=False)
+            # TODO: Pandas by default interprets the `tz` string argument as `pytz`.
+            # We should instead use `ZoneInfo` but this will be an API break.
+            # See discussion here: https://github.com/pandas-dev/pandas/issues/34916#issuecomment-1595154742
             return pd.Timestamp(data[0], tz=data[1]) if data[1] is not None else pd.Timestamp(data[0])
 
         if code == MsgPackSerialization.PY_DATETIME:
