@@ -375,6 +375,8 @@ public:
 
     std::vector<storage::ObjectSizes> scan_object_sizes();
 
+    std::vector<storage::ObjectSizes> scan_object_sizes_for_stream(const StreamId& stream_id);
+
     std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> scan_object_sizes_by_stream();
 
     std::shared_ptr<Store>& _test_get_store() { return store_; }

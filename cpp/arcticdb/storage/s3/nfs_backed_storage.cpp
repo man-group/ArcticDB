@@ -229,8 +229,9 @@ bool NfsBackedStorage::supports_object_size_calculation() const {
     return true;
 }
 
-ObjectSizes NfsBackedStorage::do_get_object_sizes(KeyType key_type, const std::string& prefix) {
-    return s3::detail::do_calculate_sizes_for_type_impl(key_type, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, prefix_handler, prefix);
+void NfsBackedStorage::do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
+    s3::detail::do_visit_object_sizes_for_type_impl(
+        key_type, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, prefix_handler, prefix, std::move(visitor));
 }
 
 } //namespace arcticdb::storage::nfs_backed

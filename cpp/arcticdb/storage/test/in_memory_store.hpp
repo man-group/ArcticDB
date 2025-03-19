@@ -326,7 +326,7 @@ public:
         }
     }
 
-    [[nodiscard]] folly::Future<storage::ObjectSizes> get_object_sizes(KeyType, const std::string&) override {
+    [[nodiscard]] folly::Future<std::shared_ptr<storage::ObjectSizes>> get_object_sizes(KeyType, const std::string&) override {
         util::raise_rte("get_object_sizes not implemented for InMemoryStore");
     }
 

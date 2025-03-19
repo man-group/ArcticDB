@@ -1703,12 +1703,34 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
 
 std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes() {
     using ObjectSizes = storage::ObjectSizes;
-    std::vector<folly::Future<ObjectSizes>> sizes_futs;
-    foreach_key_type([&store=store(), &sizes=sizes_futs](KeyType key_type) {
-        sizes.push_back(store->get_object_sizes(key_type, ""));
+    // TODO aseaton can I go back to these not being shared_ptrs?
+    std::vector<folly::Future<std::shared_ptr<ObjectSizes>>> sizes_futs;
+    // TODO aseaton restrict to just the interesting key types
+    foreach_key_type([&store=store(), &sizes_futs](KeyType key_type) {
+        sizes_futs.push_back(store->get_object_sizes(key_type, std::nullopt));
     });
 
-    return folly::collect(sizes_futs).via(&async::cpu_executor()).get();
+    auto ptrs = folly::collect(sizes_futs).via(&async::cpu_executor()).get();
+    std::vector<storage::ObjectSizes> res;
+    for (const auto& p : ptrs) {
+        res.emplace_back(p->key_type_, p->count_, p->compressed_size_bytes_);
+    }
+    return res;
+}
+
+std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes_for_stream(const StreamId& stream_id) {
+    using ObjectSizes = storage::ObjectSizes;
+    std::vector<folly::Future<std::shared_ptr<ObjectSizes>>> sizes_futs;
+    foreach_key_type([&store=store(), &sizes_futs, &stream_id](KeyType key_type) {
+        sizes_futs.push_back(store->get_object_sizes(key_type, stream_id));
+    });
+
+    auto ptrs = folly::collect(sizes_futs).via(&async::cpu_executor()).get();
+    std::vector<storage::ObjectSizes> res;
+    for (const auto& p : ptrs) {
+        res.emplace_back(p->key_type_, p->count_, p->compressed_size_bytes_);
+    }
+    return res;
 }
 
 std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> LocalVersionedEngine::scan_object_sizes_by_stream() {
