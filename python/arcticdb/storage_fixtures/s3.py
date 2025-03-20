@@ -25,6 +25,7 @@ from typing import Optional, Any, Type
 
 import werkzeug
 from moto.moto_server.werkzeug_app import DomainDispatcherApplication, create_backend_app
+import botocore.exceptions
 
 from .api import *
 from .utils import (
@@ -202,12 +203,11 @@ class NfsS3Bucket(S3Bucket):
 
 
 class GcpS3Bucket(S3Bucket):
-
     def __init__(
-            self,
-            factory: "BaseS3StorageFixtureFactory",
-            bucket: str,
-            native_config: Optional[NativeVariantStorage] = None,
+        self,
+        factory: "BaseS3StorageFixtureFactory",
+        bucket: str,
+        native_config: Optional[NativeVariantStorage] = None,
     ):
         super().__init__(factory, bucket, native_config=native_config)
         self.arctic_uri = self.arctic_uri.replace("s3", "gcpxml", 1)
@@ -257,7 +257,10 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
 
     def cleanup_bucket(self, b: S3Bucket):
         # When dealing with a potentially shared bucket, we only clear our the libs we know about:
-        b.slow_cleanup(failure_consequence="We will be charged unless we manually delete it. ")
+        if not self.use_mock_storage_for_testing:
+            # We are not writing to buckets in this case
+            # and if we try to delete the bucket, it will fail
+            b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
 
 
 def real_s3_from_environment_variables(
@@ -527,8 +530,8 @@ class HostDispatcherApplication(DomainDispatcherApplication):
         with self.lock:
             # Mock ec2 imds responses for testing
             if path_info in (
-                    "/latest/dynamic/instance-identity/document",
-                    b"/latest/dynamic/instance-identity/document",
+                "/latest/dynamic/instance-identity/document",
+                b"/latest/dynamic/instance-identity/document",
             ):
                 start_response("200 OK", [("Content-Type", "text/plain")])
                 return [b"Something to prove imds is reachable"]
@@ -563,11 +566,11 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
         if environ["REQUEST_METHOD"] == "POST" and environ["QUERY_STRING"] == "delete":
             response_body = (
                 b'<?xml version="1.0" encoding="UTF-8"?>'
-                b'<Error>'
-                    b'<Code>NotImplemented</Code>'
-                    b'<Message>A header or query you provided requested a function that is not implemented.</Message>'
-                    b'<Details>POST ?delete is not implemented for objects.</Details>'
-                b'</Error>'
+                b"<Error>"
+                b"<Code>NotImplemented</Code>"
+                b"<Message>A header or query you provided requested a function that is not implemented.</Message>"
+                b"<Details>POST ?delete is not implemented for objects.</Details>"
+                b"</Error>"
             )
             start_response(
                 "501 Not Implemented", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
@@ -631,9 +634,18 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self.use_raw_prefix = use_raw_prefix
         self.use_mock_storage_for_testing = use_mock_storage_for_testing
         self.use_internal_client_wrapper_for_testing = use_internal_client_wrapper_for_testing
-        # This is needed because we might have multiple factories in the same test
+        # This is needed because we might have multiple factory instances in the same test run
         # and we need to make sure the bucket names are unique
-        self.unique_id = "".join(random.choices(string.ascii_letters + string.digits, k=5))
+        # set the unique_id to the current UNIX timestamp to avoid conflicts
+        self.unique_id = str(int(time.time()))
+
+    def bucket_name(self, bucket_type="s3"):
+        # We need to increment the bucket_id for each new bucket
+        self._bucket_id += 1
+        # We need the unique_id because we have tests that are creating the factory directly
+        # and not using the fixtures
+        # so this guarantees a unique bucket name
+        return f"test_{bucket_type}_bucket_{self.unique_id}_{self._bucket_id}"
 
     def _start_server(self):
         port = self.port = get_ephemeral_port(2)
@@ -723,9 +735,8 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self._enforcing_permissions = enforcing
 
     def create_fixture(self) -> S3Bucket:
-        bucket = f"test_bucket_{self.unique_id}_{self._bucket_id}"
+        bucket = self.bucket_name("s3")
         self._s3_admin.create_bucket(Bucket=bucket)
-        self._bucket_id += 1
         if self.bucket_versioning:
             self._s3_admin.put_bucket_versioning(Bucket=bucket, VersioningConfiguration={"Status": "Enabled"})
 
@@ -736,8 +747,18 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     def cleanup_bucket(self, b: S3Bucket):
         self._live_buckets.remove(b)
         if len(self._live_buckets):
-            b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
-            self._s3_admin.delete_bucket(Bucket=b.bucket)
+            if not self.use_mock_storage_for_testing:
+                # We are not writing to buckets in this case
+                # and if we try to delete the bucket, it will fail
+                b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
+            try:
+                self._s3_admin.delete_bucket(Bucket=b.bucket)
+            except botocore.exceptions.ClientError as e:
+                # There is a problem with xdist on Windows 3.7
+                # where we try to clean up the bucket but it's already gone
+                is_win_37 = platform.system() == "Windows" and sys.version_info[:2] == (3, 7)
+                if e.response["Error"]["Code"] != "NoSuchBucket" and not is_win_37:
+                    raise e
         else:
             requests.post(
                 self._iam_endpoint + "/moto-api/reset", verify=False
@@ -750,9 +771,8 @@ _PermissionCapableFactory = MotoS3StorageFixtureFactory
 
 class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
     def create_fixture(self) -> NfsS3Bucket:
-        bucket = f"test_bucket_{self._bucket_id}"
+        bucket = self.bucket_name("nfs")
         self._s3_admin.create_bucket(Bucket=bucket)
-        self._bucket_id += 1
         out = NfsS3Bucket(self, bucket)
         self._live_buckets.append(out)
         return out
@@ -766,7 +786,7 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
         self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
 
         self.ssl = (
-                self.http_protocol == "https"
+            self.http_protocol == "https"
         )  # In real world, using https protocol doesn't necessarily mean ssl will be verified
         if self.ssl_test_support:
             self.ca, self.key_file, self.cert_file, self.client_cert_file = get_ca_cert_for_testing(self.working_dir)
@@ -792,9 +812,8 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
         wait_for_server_to_come_up(self.endpoint, "moto", self._p)
 
     def create_fixture(self) -> GcpS3Bucket:
-        bucket = f"test_bucket_{self._bucket_id}"
+        bucket = self.bucket_name("gcp")
         self._s3_admin.create_bucket(Bucket=bucket)
-        self._bucket_id += 1
         out = GcpS3Bucket(self, bucket)
         self._live_buckets.append(out)
         return out

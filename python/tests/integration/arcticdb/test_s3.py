@@ -72,15 +72,15 @@ def test_s3_running_on_aws_fast_check(lib_name, s3_storage_factory, run_on_aws):
         assert lib_tool.inspect_env_variable("AWS_EC2_METADATA_DISABLED") == "true"
 
 
-def test_nfs_backed_s3_storage(lib_name, nfs_backed_s3_storage):
+def test_nfs_backed_s3_storage(lib_name, nfs_clean_bucket):
     # Given
-    lib = nfs_backed_s3_storage.create_version_store_factory(lib_name)()
+    lib = nfs_clean_bucket.create_version_store_factory(lib_name)()
 
     # When
     lib.write("s", data=create_df())
 
     # Then - should be written in "bucketized" structure
-    bucket = nfs_backed_s3_storage.get_boto_bucket()
+    bucket = nfs_clean_bucket.get_boto_bucket()
     objects = bucket.objects.all()
 
     # Expect one or two repetitions of 3 digit "buckets" in the object names
@@ -134,7 +134,7 @@ def test_racing_list_and_delete_nfs(nfs_backed_s3_storage, lib_name):
     assert exceptions_in_reader.empty()
 
 
-@pytest.fixture(scope="function", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
+@pytest.fixture(scope="session", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
 def s3_storage_dots_in_path(request):
     prefix = "some_path/.thing_with_a_dot/even.more.dots/end"
 
@@ -198,15 +198,10 @@ def test_prefix():
     return "test_bucket_prefix"
 
 
-@pytest.fixture(scope="function",
-                params=[MotoNfsBackedS3StorageFixtureFactory,
-                        MotoS3StorageFixtureFactory])
+@pytest.fixture(scope="function", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
 def storage_bucket(test_prefix, request):
     with request.param(
-            use_ssl=False,
-            ssl_test_support=False,
-            bucket_versioning=False,
-            default_prefix=test_prefix
+        use_ssl=False, ssl_test_support=False, bucket_versioning=False, default_prefix=test_prefix
     ) as factory:
         with factory.create_fixture() as bucket:
             yield bucket
@@ -227,4 +222,3 @@ def test_library_get_key_path(lib_name, storage_bucket, test_prefix):
             assert path.startswith(test_prefix)
 
     assert keys_count > 0
-

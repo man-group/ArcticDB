@@ -54,7 +54,7 @@ from .util.mark import (
     REAL_S3_TESTS_MARK,
     SSL_TEST_SUPPORTED,
     VENV_COMPAT_TESTS_MARK,
-    PANDAS_2_COMPAT_TESTS_MARK
+    PANDAS_2_COMPAT_TESTS_MARK,
 )
 from arcticdb.storage_fixtures.utils import safer_rmtree
 from packaging.version import Version
@@ -122,7 +122,14 @@ def pytest_generate_tests(metafunc):
 
 # endregion
 # region ======================================= Storage Fixtures =======================================
-@pytest.fixture
+@pytest.fixture(scope="session")
+def lmdb_shared_storage(tmp_path_factory) -> Generator[LmdbStorageFixture, None, None]:
+    tmp_path = tmp_path_factory.mktemp("lmdb")
+    with LmdbStorageFixture(tmp_path) as f:
+        yield f
+
+
+@pytest.fixture(scope="function")
 def lmdb_storage(tmp_path) -> Generator[LmdbStorageFixture, None, None]:
     with LmdbStorageFixture(tmp_path) as f:
         yield f
@@ -130,12 +137,12 @@ def lmdb_storage(tmp_path) -> Generator[LmdbStorageFixture, None, None]:
 
 @pytest.fixture
 def lmdb_library(lmdb_storage, lib_name) -> Generator[Library, None, None]:
-    return lmdb_storage.create_arctic().create_library(lib_name)
+    yield lmdb_storage.create_arctic().create_library(lib_name)
 
 
 @pytest.fixture
-def lmdb_library_dynamic_schema(lmdb_storage, lib_name) -> Library:
-    return lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(dynamic_schema=True))
+def lmdb_library_dynamic_schema(lmdb_storage, lib_name) -> Generator[Library, None, None]:
+    yield lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(dynamic_schema=True))
 
 
 @pytest.fixture(
@@ -158,7 +165,7 @@ def s3_storage_factory() -> Generator[MotoS3StorageFixtureFactory, None, None]:
 @pytest.fixture(scope="session")
 def gcp_storage_factory() -> Generator[MotoGcpS3StorageFixtureFactory, None, None]:
     with MotoGcpS3StorageFixtureFactory(
-            use_ssl=SSL_TEST_SUPPORTED, ssl_test_support=SSL_TEST_SUPPORTED, bucket_versioning=False
+        use_ssl=SSL_TEST_SUPPORTED, ssl_test_support=SSL_TEST_SUPPORTED, bucket_versioning=False
     ) as f:
         yield f
 
@@ -188,63 +195,86 @@ def s3_ssl_disabled_storage_factory() -> Generator[MotoS3StorageFixtureFactory, 
 
 
 @pytest.fixture(scope="session")
-def s3_bucket_versioning_storage_factory() -> Generator[MotoS3StorageFixtureFactory, None, None]:
-    with MotoS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=True) as f:
-        yield f
-
-
-@pytest.fixture(scope="session")
 def nfs_backed_s3_storage_factory() -> Generator[MotoNfsBackedS3StorageFixtureFactory, None, None]:
     with MotoNfsBackedS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=False) as f:
         yield f
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def s3_storage(s3_storage_factory) -> Generator[S3Bucket, None, None]:
     with s3_storage_factory.create_fixture() as f:
         yield f
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
+def s3_clean_bucket(s3_storage_factory) -> Generator[S3Bucket, None, None]:
+    with s3_storage_factory.create_fixture() as f:
+        yield f
+
+
+@pytest.fixture(scope="function")
+def azurite_clean_bucket(azurite_storage_factory) -> Generator[S3Bucket, None, None]:
+    with azurite_storage_factory.create_fixture() as f:
+        yield f
+
+
+@pytest.fixture(scope="function")
+def nfs_clean_bucket(nfs_backed_s3_storage_factory) -> Generator[NfsS3Bucket, None, None]:
+    with nfs_backed_s3_storage_factory.create_fixture() as f:
+        yield f
+
+
+@pytest.fixture(scope="session")
 def gcp_storage(gcp_storage_factory) -> Generator[S3Bucket, None, None]:
     with gcp_storage_factory.create_fixture() as f:
         yield f
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def nfs_backed_s3_storage(nfs_backed_s3_storage_factory) -> Generator[NfsS3Bucket, None, None]:
     with nfs_backed_s3_storage_factory.create_fixture() as f:
         yield f
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def s3_no_ssl_storage(s3_no_ssl_storage_factory) -> Generator[S3Bucket, None, None]:
     with s3_no_ssl_storage_factory.create_fixture() as f:
         yield f
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def s3_ssl_disabled_storage(s3_ssl_disabled_storage_factory) -> Generator[S3Bucket, None, None]:
     with s3_ssl_disabled_storage_factory.create_fixture() as f:
         yield f
 
 
 # s3 storage is picked just for its versioning capabilities for verifying arcticdb atomicity
-@pytest.fixture
-def s3_bucket_versioning_storage(s3_bucket_versioning_storage_factory) -> Generator[S3Bucket, None, None]:
-    with s3_bucket_versioning_storage_factory.create_fixture() as f:
-        s3_admin = f.factory._s3_admin
-        bucket = f.bucket
-        assert s3_admin.get_bucket_versioning(Bucket=bucket)["Status"] == "Enabled"
-        yield f
+# This fixture is made at function scope on purpose
+# otherwise there are problems with the moto server and the bucket versioning
+@pytest.fixture(scope="function")
+def s3_bucket_versioning_storage() -> Generator[S3Bucket, None, None]:
+    with MotoS3StorageFixtureFactory(
+        use_ssl=False, ssl_test_support=False, bucket_versioning=True
+    ) as bucket_versioning_storage:
+        with bucket_versioning_storage.create_fixture() as f:
+            s3_admin = f.factory._s3_admin
+            bucket = f.bucket
+            assert s3_admin.get_bucket_versioning(Bucket=bucket)["Status"] == "Enabled"
+            yield f
+
+            # The test exectues too fast for the simulator to cleanup the version objects
+            # So we need to manually delete them
+            boto_bucket = f.get_boto_bucket()
+            boto_bucket.object_versions.delete()
+            res = s3_admin.list_object_versions(Bucket=bucket)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def mock_s3_storage_with_error_simulation_factory():
     return mock_s3_with_error_simulation()
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def mock_s3_storage_with_error_simulation(mock_s3_storage_with_error_simulation_factory):
     with mock_s3_storage_with_error_simulation_factory.create_fixture() as f:
         yield f
@@ -271,13 +301,13 @@ def real_s3_storage_without_clean_up(real_s3_shared_path_storage_factory) -> S3B
     return real_s3_shared_path_storage_factory.create_fixture()
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def real_s3_storage(real_s3_storage_factory) -> Generator[S3Bucket, None, None]:
     with real_s3_storage_factory.create_fixture() as f:
         yield f
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def real_s3_library(real_s3_storage, lib_name) -> Library:
     return real_s3_storage.create_arctic().create_library(lib_name)
 
@@ -332,7 +362,7 @@ def real_s3_sts_storage_factory(monkeypatch_session) -> Generator[BaseS3StorageF
             safer_rmtree(None, working_dir)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def real_s3_sts_storage(real_s3_sts_storage_factory) -> Generator[S3Bucket, None, None]:
     with real_s3_sts_storage_factory.create_fixture() as f:
         yield f
@@ -345,7 +375,7 @@ def azurite_storage_factory() -> Generator[AzuriteStorageFixtureFactory, None, N
         yield f
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def azurite_storage(azurite_storage_factory: AzuriteStorageFixtureFactory) -> Generator[AzureContainer, None, None]:
     with azurite_storage_factory.create_fixture() as f:
         yield f
@@ -357,7 +387,7 @@ def azurite_ssl_storage_factory() -> Generator[AzuriteStorageFixtureFactory, Non
         yield f
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def azurite_ssl_storage(
     azurite_ssl_storage_factory: AzuriteStorageFixtureFactory,
 ) -> Generator[AzureContainer, None, None]:
@@ -371,13 +401,13 @@ def mongo_server():
         yield s
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def mongo_storage(mongo_server):
     with mongo_server.create_fixture() as f:
         yield f
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def mem_storage() -> Generator[InMemoryStorageFixture, None, None]:
     with InMemoryStorageFixture() as f:
         yield f
@@ -401,7 +431,25 @@ def mem_storage() -> Generator[InMemoryStorageFixture, None, None]:
 def arctic_client(request, encoding_version) -> Arctic:
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
     ac = storage_fixture.create_arctic(encoding_version=encoding_version)
-    assert not ac.list_libraries()
+    return ac
+
+
+@pytest.fixture(
+    scope="function",
+    params=[
+        "s3",
+        "nfs_backed_s3",
+        "gcp",
+        "lmdb",
+        "mem",
+        pytest.param("azurite", marks=AZURE_TESTS_MARK),
+        pytest.param("mongo", marks=MONGO_TESTS_MARK),
+        pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
+    ],
+)
+def arctic_client_v1(request) -> Arctic:
+    storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
+    ac = storage_fixture.create_arctic(encoding_version=EncodingVersion.V1)
     return ac
 
 
@@ -418,7 +466,6 @@ def arctic_client(request, encoding_version) -> Arctic:
 def arctic_client_no_lmdb(request, encoding_version) -> Arctic:
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
     ac = storage_fixture.create_arctic(encoding_version=encoding_version)
-    assert not ac.list_libraries()
     return ac
 
 
@@ -429,18 +476,32 @@ def arctic_client_no_lmdb(request, encoding_version) -> Arctic:
 def arctic_client_lmdb(request, encoding_version) -> Arctic:
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
     ac = storage_fixture.create_arctic(encoding_version=encoding_version)
-    assert not ac.list_libraries()
     return ac
 
 
 @pytest.fixture
 def arctic_library(arctic_client, lib_name) -> Library:
-    return arctic_client.create_library(lib_name)
+    yield arctic_client.create_library(lib_name)
+    arctic_client.delete_library(lib_name)
+
+
+@pytest.fixture
+def arctic_library_dynamic(arctic_client, lib_name) -> Library:
+    lib_opts = LibraryOptions(dynamic_schema=True)
+    yield arctic_client.create_library(lib_name, library_options=lib_opts)
+    arctic_client.delete_library(lib_name)
+
+
+@pytest.fixture
+def arctic_library_v1(arctic_client_v1, lib_name) -> Library:
+    yield arctic_client_v1.create_library(lib_name)
+    arctic_client_v1.delete_library(lib_name)
 
 
 @pytest.fixture
 def arctic_library_lmdb(arctic_client_lmdb, lib_name) -> Library:
-    return arctic_client_lmdb.create_library(lib_name)
+    yield arctic_client_lmdb.create_library(lib_name)
+    arctic_client_lmdb.delete_library(lib_name)
 
 
 @pytest.fixture(
@@ -454,7 +515,6 @@ def arctic_library_lmdb(arctic_client_lmdb, lib_name) -> Library:
 def basic_arctic_client(request, encoding_version) -> Arctic:
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
     ac = storage_fixture.create_arctic(encoding_version=encoding_version)
-    assert not ac.list_libraries()
     return ac
 
 
@@ -463,7 +523,6 @@ def arctic_client_lmdb_map_size_100gb(lmdb_storage) -> Arctic:
     storage_fixture: LmdbStorageFixture = lmdb_storage
     storage_fixture.arctic_uri = storage_fixture.arctic_uri + "?map_size=100GB"
     ac = storage_fixture.create_arctic(encoding_version=EncodingVersion.V2)
-    assert not ac.list_libraries()
     return ac
 
 
@@ -1096,47 +1155,45 @@ def lmdb_or_in_memory_version_store_tiny_segment(request):
 
 
 @pytest.fixture(
-    # scope="session",
+    scope="session",
     params=[
         pytest.param("1.6.2", marks=VENV_COMPAT_TESTS_MARK),
         pytest.param("4.5.1", marks=VENV_COMPAT_TESTS_MARK),
         pytest.param("5.0.0", marks=VENV_COMPAT_TESTS_MARK),
     ],  # TODO: Extend this list with other old versions
 )
-def old_venv(request, tmp_path):
+def old_venv(request, tmp_path_factory):
     version = request.param
-    path = os.path.join("venvs", tmp_path, version)
-    test_dir = os.path.dirname(os.path.abspath(__file__))
-    compat_dir = os.path.join(test_dir, "compat")
-    requirements_file = os.path.join(compat_dir, f"requirements-{version}.txt")
-    with Venv(path, requirements_file, version) as old_venv:
+
+    venvs_dir = tmp_path_factory.mktemp("venvs")
+    venv_dir = venvs_dir / version
+    requirements_file = os.path.join(os.path.dirname(__file__), "compat", f"requirements-{version}.txt")
+
+    with Venv(venv_dir, requirements_file, version) as old_venv:
         yield old_venv
 
 
-@pytest.fixture(
-    params=[
-        pytest.param("tmp_path", marks=PANDAS_2_COMPAT_TESTS_MARK)
-    ]
-)
+@pytest.fixture(scope="session", params=[pytest.param("tmp_path_factory", marks=PANDAS_2_COMPAT_TESTS_MARK)])
 def pandas_v1_venv(request):
     """A venv with Pandas v1 installed (and an old ArcticDB version). To help test compat across Pandas versions."""
     version = "1.6.2"
-    tmp_path = request.getfixturevalue(request.param)
-    path = os.path.join("venvs", tmp_path, version)
-    test_dir = os.path.dirname(os.path.abspath(__file__))
-    compat_dir = os.path.join(test_dir, "compat")
-    requirements_file = os.path.join(compat_dir, f"requirements-{version}.txt")
-    with Venv(path, requirements_file, version) as old_venv:
+    tmp_path_factory = request.getfixturevalue("tmp_path_factory")
+    venvs_dir = tmp_path_factory.mktemp("venvs")
+    venv_dir = venvs_dir / version
+    requirements_file = os.path.join(os.path.dirname(__file__), "compat", f"requirements-{version}.txt")
+
+    with Venv(venv_dir, requirements_file, version) as old_venv:
         yield old_venv
 
 
 @pytest.fixture(
+    scope="session",
     params=[
-        "lmdb",
+        "lmdb_shared",
         "s3_ssl_disabled",
         pytest.param("azurite", marks=AZURE_TESTS_MARK),
         pytest.param("mongo", marks=MONGO_TESTS_MARK),
-    ]
+    ],
 )
 def arctic_uri(request):
     """
@@ -1151,16 +1208,14 @@ def arctic_uri(request):
         return storage_fixture.arctic_uri
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def old_venv_and_arctic_uri(old_venv, arctic_uri):
     if arctic_uri.startswith("mongo") and "1.6.2" in old_venv.version:
         pytest.skip("Mongo storage backend is not supported in 1.6.2")
 
     if arctic_uri.startswith("lmdb") and Version(old_venv.version) < Version("5.0.0"):
-        pytest.skip(
-            "LMDB storage backed has a bug in versions before 5.0.0 which leads to flaky segfaults"
-        )
+        pytest.skip("LMDB storage backed has a bug in versions before 5.0.0 which leads to flaky segfaults")
 
     yield old_venv, arctic_uri
 
-    old_venv.create_arctic(arctic_uri).cleanup() 
+    old_venv.create_arctic(arctic_uri).cleanup()

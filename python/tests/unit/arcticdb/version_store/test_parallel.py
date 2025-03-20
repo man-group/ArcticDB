@@ -23,7 +23,7 @@ from arcticdb.util.test import (
     random_strings_of_length,
     random_integers,
     random_floats,
-    random_dates
+    random_dates,
 )
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.library import Library
@@ -79,9 +79,7 @@ def test_remove_incomplete(basic_store):
     sym1 = "test_remove_incomplete_1"
     sym2 = "test_remove_incomplete_2"
     num_chunks = 10
-    df1 = pd.DataFrame(
-        {"col": np.arange(10)}, index=pd.date_range("2000-01-01", periods=num_chunks)
-    )
+    df1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2000-01-01", periods=num_chunks))
     df2 = pd.DataFrame(
         {"col": np.arange(100, 110)},
         index=pd.date_range("2001-01-01", periods=num_chunks),
@@ -157,13 +155,16 @@ def test_parallel_write(basic_store_tiny_segment, num_segments_live_during_compa
         adb_async.reinit_task_scheduler()
 
 
-@pytest.mark.parametrize("index, expect_ordered", [
-    (pd.date_range(datetime.datetime(2000, 1, 1), periods=10, freq="s"), True),
-    (np.arange(10), False),
-    ([chr(ord('a') + i) for i in range(10)], False)
-])
+@pytest.mark.parametrize(
+    "index, expect_ordered",
+    [
+        (pd.date_range(datetime.datetime(2000, 1, 1), periods=10, freq="s"), True),
+        (np.arange(10), False),
+        ([chr(ord("a") + i) for i in range(10)], False),
+    ],
+)
 def test_parallel_write_chunking(lmdb_version_store_tiny_segment, index, expect_ordered):
-    lib = lmdb_version_store_tiny_segment # row size 2 column size 2
+    lib = lmdb_version_store_tiny_segment  # row size 2 column size 2
     lib_tool = lib.library_tool()
     sym = "sym"
     df = util.test.sample_dataframe(size=10)
@@ -184,23 +185,27 @@ def test_parallel_write_chunking(lmdb_version_store_tiny_segment, index, expect_
 
 
 def test_parallel_write_chunking_dynamic(lmdb_version_store_tiny_segment_dynamic):
-    lib = lmdb_version_store_tiny_segment_dynamic # row size 2 column size 2
+    lib = lmdb_version_store_tiny_segment_dynamic  # row size 2 column size 2
     lib_tool = lib.library_tool()
     sym = "sym"
 
-    df1 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-01", periods=7, freq="H"),
-        "col1": np.arange(1, 8, dtype=np.uint8),
-        "col2": [f"a{i:02d}" for i in range(1, 8)],
-        "col3": np.arange(1, 8, dtype=np.int32)
-    }).set_index("timestamp")
+    df1 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-01", periods=7, freq="H"),
+            "col1": np.arange(1, 8, dtype=np.uint8),
+            "col2": [f"a{i:02d}" for i in range(1, 8)],
+            "col3": np.arange(1, 8, dtype=np.int32),
+        }
+    ).set_index("timestamp")
 
-    df2 = pd.DataFrame({
-        "timestamp": pd.date_range("2023-01-04", periods=7, freq="H"),
-        "col1": np.arange(8, 15, dtype=np.int32),
-        "col2": [f"b{i:02d}" for i in range(8, 15)],
-        "col3": np.arange(8, 15, dtype=np.uint16)
-    }).set_index("timestamp")
+    df2 = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2023-01-04", periods=7, freq="H"),
+            "col1": np.arange(8, 15, dtype=np.int32),
+            "col2": [f"b{i:02d}" for i in range(8, 15)],
+            "col3": np.arange(8, 15, dtype=np.uint16),
+        }
+    ).set_index("timestamp")
 
     lib.write(sym, df1, parallel=True)
     lib.write(sym, df2, parallel=True)
@@ -244,9 +249,7 @@ def test_floats_to_nans(lmdb_version_store_dynamic_schema):
 
     for _ in range(num_days):
         cols = random.sample(columns, 4)
-        index = pd.Index(
-            [dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)]
-        )
+        index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
         vals = {c: random_floats(num_rows_per_day) for c in cols}
         new_df = pd.DataFrame(data=vals, index=index)
 
@@ -258,9 +261,7 @@ def test_floats_to_nans(lmdb_version_store_dynamic_schema):
     for d in dataframes:
         lmdb_version_store_dynamic_schema.write(symbol, d, parallel=True)
 
-    lmdb_version_store_dynamic_schema.version_store.compact_incomplete(
-        symbol, False, False
-    )
+    lmdb_version_store_dynamic_schema.version_store.compact_incomplete(symbol, False, False)
     vit = lmdb_version_store_dynamic_schema.read(symbol)
     df.sort_index(axis=1, inplace=True)
     result = vit.data
@@ -268,17 +269,26 @@ def test_floats_to_nans(lmdb_version_store_dynamic_schema):
     assert_frame_equal(vit.data, df)
 
 
-@pytest.mark.parametrize("num_segments_live_during_compaction, num_io_threads, num_cpu_threads", [
-    (1, 1, 1),
-    (10, 1, 1),
-    (None, None, None)
-])
+@pytest.mark.parametrize(
+    "num_segments_live_during_compaction, num_io_threads, num_cpu_threads", [(1, 1, 1), (10, 1, 1), (None, None, None)]
+)
 @pytest.mark.parametrize("prune_previous_versions", (True, False))
-def test_parallel_write_sort_merge(basic_store_tiny_segment, prune_previous_versions, num_segments_live_during_compaction, num_io_threads, num_cpu_threads):
-    with config_context_multi({"VersionStore.NumSegmentsLiveDuringCompaction": num_segments_live_during_compaction,
-                               "VersionStore.NumIOThreads": num_io_threads,
-                               "VersionStore.NumCPUThreads": num_cpu_threads}):
-        lib = Library("test_lib", basic_store_tiny_segment)
+def test_parallel_write_sort_merge(
+    basic_store_tiny_segment,
+    lib_name,
+    prune_previous_versions,
+    num_segments_live_during_compaction,
+    num_io_threads,
+    num_cpu_threads,
+):
+    with config_context_multi(
+        {
+            "VersionStore.NumSegmentsLiveDuringCompaction": num_segments_live_during_compaction,
+            "VersionStore.NumIOThreads": num_io_threads,
+            "VersionStore.NumCPUThreads": num_cpu_threads,
+        }
+    ):
+        lib = Library(lib_name, basic_store_tiny_segment)
 
         num_rows_per_day = 10
         num_days = 10
@@ -291,9 +301,7 @@ def test_parallel_write_sort_merge(basic_store_tiny_segment, prune_previous_vers
         df = pd.DataFrame()
 
         for _ in range(num_days):
-            index = pd.Index(
-                [dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)]
-            )
+            index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
             vals = {c: random_floats(num_rows_per_day) for c in cols}
             new_df = pd.DataFrame(data=vals, index=index)
 
@@ -305,18 +313,14 @@ def test_parallel_write_sort_merge(basic_store_tiny_segment, prune_previous_vers
         lib.write(symbol, dataframes[0])
         for d in dataframes:
             lib.write(symbol, d, staged=True)
-        lib.sort_and_finalize_staged_data(
-            symbol, prune_previous_versions=prune_previous_versions
-        )
+        lib.sort_and_finalize_staged_data(symbol, prune_previous_versions=prune_previous_versions)
         vit = lib.read(symbol)
         df.sort_index(axis=1, inplace=True)
         result = vit.data
         result.sort_index(axis=1, inplace=True)
         assert_frame_equal(vit.data, df)
         if prune_previous_versions:
-            assert 0 not in [
-                version["version"] for version in lib._nvs.list_versions(symbol)
-            ]
+            assert 0 not in [version["version"] for version in lib._nvs.list_versions(symbol)]
         else:
             assert_frame_equal(lib.read(symbol, as_of=0).data, dataframes[0])
 
@@ -335,9 +339,7 @@ def test_sort_merge_append(basic_store_dynamic_schema, prune_previous_versions):
     df = pd.DataFrame()
     for _ in range(num_days):
         cols = random.sample(columns, 4)
-        index = pd.Index(
-            [dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)]
-        )
+        index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
         vals = {c: random_floats(num_rows_per_day) for c in cols}
         new_df = pd.DataFrame(data=vals, index=index)
         dataframes.append(new_df)
@@ -361,9 +363,7 @@ def test_sort_merge_append(basic_store_dynamic_schema, prune_previous_versions):
     for d in dataframes:
         lib.write(symbol, d, parallel=True)
 
-    lib.version_store.sort_merge(
-        symbol, None, True, prune_previous_versions=prune_previous_versions
-    )
+    lib.version_store.sort_merge(symbol, None, True, prune_previous_versions=prune_previous_versions)
     vit = lib.read(symbol)
     df.sort_index(axis=1, inplace=True)
     result = vit.data
@@ -396,9 +396,7 @@ def test_datetimes_to_nats(lmdb_version_store_dynamic_schema):
 
     for _ in range(num_days):
         cols = random.sample(columns, 4)
-        index = pd.Index(
-            [dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)]
-        )
+        index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
         vals = {c: random_dates(num_rows_per_day) for c in cols}
         new_df = pd.DataFrame(data=vals, index=index)
         dataframes.append(new_df)
@@ -409,9 +407,7 @@ def test_datetimes_to_nats(lmdb_version_store_dynamic_schema):
     for d in dataframes:
         lmdb_version_store_dynamic_schema.write(symbol, d, parallel=True)
 
-    lmdb_version_store_dynamic_schema.version_store.compact_incomplete(
-        symbol, False, True
-    )
+    lmdb_version_store_dynamic_schema.version_store.compact_incomplete(symbol, False, True)
     vit = lmdb_version_store_dynamic_schema.read(symbol)
     df.sort_index(axis=1, inplace=True)
     result = vit.data
@@ -430,18 +426,12 @@ def test_datetimes_to_nats(lmdb_version_store_dynamic_schema):
 @pytest.mark.parametrize("append", (True, False))
 @pytest.mark.parametrize("arg", (True, False, None))
 @pytest.mark.parametrize("lib_config", (True, False))
-def test_compact_incomplete_prune_previous(
-    lib_config, arg, append, version_store_factory
-):
+def test_compact_incomplete_prune_previous(lib_config, arg, append, version_store_factory):
     lib = version_store_factory(prune_previous_version=lib_config)
     lib.write("sym", pd.DataFrame({"col": [3]}, index=pd.DatetimeIndex([0])))
-    lib.append(
-        "sym", pd.DataFrame({"col": [4]}, index=pd.DatetimeIndex([1])), incomplete=True
-    )
+    lib.append("sym", pd.DataFrame({"col": [4]}, index=pd.DatetimeIndex([1])), incomplete=True)
 
-    lib.compact_incomplete(
-        "sym", append, convert_int_to_float=False, prune_previous_version=arg
-    )
+    lib.compact_incomplete("sym", append, convert_int_to_float=False, prune_previous_version=arg)
     assert lib.read_metadata("sym").version == 1
 
     should_prune = lib_config if arg is None else arg
@@ -451,23 +441,15 @@ def test_compact_incomplete_prune_previous(
 def test_compact_incomplete_sets_sortedness(lmdb_version_store):
     lib = lmdb_version_store
     sym = "test_compact_incomplete_sets_sortedness"
-    df_0 = pd.DataFrame(
-        {"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]
-    )
-    df_1 = pd.DataFrame(
-        {"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")]
-    )
+    df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
     lib.write(sym, df_1, parallel=True)
     lib.write(sym, df_0, parallel=True)
     lib.compact_incomplete(sym, False, False)
     assert lib.get_info(sym)["sorted"] == "ASCENDING"
 
-    df_2 = pd.DataFrame(
-        {"col": [5, 6]}, index=[pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-06")]
-    )
-    df_3 = pd.DataFrame(
-        {"col": [7, 8]}, index=[pd.Timestamp("2024-01-07"), pd.Timestamp("2024-01-08")]
-    )
+    df_2 = pd.DataFrame({"col": [5, 6]}, index=[pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-06")])
+    df_3 = pd.DataFrame({"col": [7, 8]}, index=[pd.Timestamp("2024-01-07"), pd.Timestamp("2024-01-08")])
     lib.append(sym, df_3, incomplete=True)
     lib.append(sym, df_2, incomplete=True)
     lib.compact_incomplete(sym, True, False)
@@ -476,9 +458,7 @@ def test_compact_incomplete_sets_sortedness(lmdb_version_store):
 
 @pytest.mark.parametrize("append", (True, False))
 @pytest.mark.parametrize("validate_index", (True, False, None))
-def test_parallel_sortedness_checks_unsorted_data(
-    lmdb_version_store, append, validate_index
-):
+def test_parallel_sortedness_checks_unsorted_data(lmdb_version_store, append, validate_index):
     lib = lmdb_version_store
     sym = "test_parallel_sortedness_checks_unsorted_data"
     if append:
@@ -487,9 +467,7 @@ def test_parallel_sortedness_checks_unsorted_data(
             index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")],
         )
         lib.write(sym, df_0)
-    df_1 = pd.DataFrame(
-        {"col": [3, 4]}, index=[pd.Timestamp("2024-01-04"), pd.Timestamp("2024-01-03")]
-    )
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-04"), pd.Timestamp("2024-01-03")])
     if validate_index:
         with pytest.raises(SortingException):
             if append:
@@ -512,9 +490,7 @@ def test_parallel_sortedness_checks_unsorted_data(
 
 @pytest.mark.parametrize("append", (True, False))
 @pytest.mark.parametrize("validate_index", (True, False, None))
-def test_parallel_sortedness_checks_sorted_data(
-    lmdb_version_store, append, validate_index
-):
+def test_parallel_sortedness_checks_sorted_data(lmdb_version_store, append, validate_index):
     lib = lmdb_version_store
     sym = "test_parallel_sortedness_checks_unsorted_data"
     if append:
@@ -523,12 +499,8 @@ def test_parallel_sortedness_checks_sorted_data(
             index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")],
         )
         lib.write(sym, df_0)
-    df_1 = pd.DataFrame(
-        {"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")]
-    )
-    df_2 = pd.DataFrame(
-        {"col": [5, 6]}, index=[pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-06")]
-    )
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
+    df_2 = pd.DataFrame({"col": [5, 6]}, index=[pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-06")])
     if append:
         lib.append(sym, df_1, incomplete=True, validate_index=validate_index)
         lib.append(sym, df_2, incomplete=True, validate_index=validate_index)
@@ -562,17 +534,9 @@ def test_parallel_non_timestamp_index(lmdb_version_store, append):
 
     read_df = lib.read(sym).data
     if append:
-        expected_df = (
-            pd.concat([df_0, df_1, df_2])
-            if read_df["col"].iloc[-1] == 6
-            else pd.concat([df_0, df_2, df_1])
-        )
+        expected_df = pd.concat([df_0, df_1, df_2]) if read_df["col"].iloc[-1] == 6 else pd.concat([df_0, df_2, df_1])
     else:
-        expected_df = (
-            pd.concat([df_1, df_2])
-            if read_df["col"].iloc[-1] == 6
-            else pd.concat([df_2, df_1])
-        )
+        expected_df = pd.concat([df_1, df_2]) if read_df["col"].iloc[-1] == 6 else pd.concat([df_2, df_1])
     assert_frame_equal(expected_df, read_df)
 
 
@@ -586,12 +550,8 @@ def test_parallel_all_same_index_values(lmdb_version_store, append):
             index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01")],
         )
         lib.write(sym, df_0)
-    df_1 = pd.DataFrame(
-        {"col": [3, 4]}, index=[pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02")]
-    )
-    df_2 = pd.DataFrame(
-        {"col": [5, 6]}, index=[pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02")]
-    )
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02")])
+    df_2 = pd.DataFrame({"col": [5, 6]}, index=[pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02")])
     if append:
         lib.append(sym, df_2, incomplete=True)
         lib.append(sym, df_1, incomplete=True)
@@ -602,18 +562,10 @@ def test_parallel_all_same_index_values(lmdb_version_store, append):
     received = lib.read(sym).data
     # Index values in incompletes all the same, so order of values in col could be [3, 4, 5, 6] or [5, 6, 3, 4]
     if append:
-        expected = (
-            pd.concat([df_0, df_1, df_2])
-            if received["col"][2] == 3
-            else pd.concat([df_0, df_2, df_1])
-        )
+        expected = pd.concat([df_0, df_1, df_2]) if received["col"][2] == 3 else pd.concat([df_0, df_2, df_1])
         assert_frame_equal(expected, received)
     else:
-        expected = (
-            pd.concat([df_1, df_2])
-            if received["col"][0] == 3
-            else pd.concat([df_2, df_1])
-        )
+        expected = pd.concat([df_1, df_2]) if received["col"][0] == 3 else pd.concat([df_2, df_1])
         assert_frame_equal(expected, received)
     assert lib.get_info(sym)["sorted"] == "ASCENDING"
 
@@ -632,9 +584,7 @@ def test_parallel_overlapping_incomplete_segments(
             index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")],
         )
         lib.write(sym, df_0)
-    df_1 = pd.DataFrame(
-        {"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")]
-    )
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
     df_2 = pd.DataFrame(
         {"col": [5, 6]},
         index=[pd.Timestamp("2024-01-03T12"), pd.Timestamp("2024-01-05")],
@@ -670,13 +620,9 @@ def test_parallel_overlapping_incomplete_segments(
 def test_parallel_append_exactly_matches_existing(lmdb_version_store):
     lib = lmdb_version_store
     sym = "test_parallel_append_exactly_matches_existing"
-    df_0 = pd.DataFrame(
-        {"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]
-    )
+    df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
     lib.write(sym, df_0)
-    df_1 = pd.DataFrame(
-        {"col": [3, 4]}, index=[pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")]
-    )
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")])
     lib.append(sym, df_1, incomplete=True)
     lib.compact_incomplete(sym, True, False)
     expected = pd.concat([df_0, df_1])
@@ -699,12 +645,8 @@ def test_parallel_all_incomplete_segments_same_index(
             index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")],
         )
         lib.write(sym, df_0)
-    df_1 = pd.DataFrame(
-        {"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")]
-    )
-    df_2 = pd.DataFrame(
-        {"col": [5, 6]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")]
-    )
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
+    df_2 = pd.DataFrame({"col": [5, 6]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
     if append:
         lib.append(sym, df_2, incomplete=True)
         lib.append(sym, df_1, incomplete=True)
@@ -731,26 +673,18 @@ def test_parallel_all_incomplete_segments_same_index(
         received = lib.read(sym).data
         # Order is arbitrary if all index values are the same
         if received["col"].iloc[-1] == 6:
-            expected = (
-                pd.concat([df_0, df_1, df_2]) if append else pd.concat([df_1, df_2])
-            )
+            expected = pd.concat([df_0, df_1, df_2]) if append else pd.concat([df_1, df_2])
         else:
-            expected = (
-                pd.concat([df_0, df_2, df_1]) if append else pd.concat([df_2, df_1])
-            )
+            expected = pd.concat([df_0, df_2, df_1]) if append else pd.concat([df_2, df_1])
         assert_frame_equal(received, expected)
 
 
 @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
 @pytest.mark.parametrize("validate_index", (True, False, None))
-def test_parallel_append_overlapping_with_existing(
-    lmdb_version_store, validate_index, delete_staged_data_on_failure
-):
+def test_parallel_append_overlapping_with_existing(lmdb_version_store, validate_index, delete_staged_data_on_failure):
     lib = lmdb_version_store
     sym = "test_parallel_append_overlapping_with_existing"
-    df_0 = pd.DataFrame(
-        {"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]
-    )
+    df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
     lib.write(sym, df_0)
     df_1 = pd.DataFrame(
         {"col": [3, 4]},
@@ -797,9 +731,7 @@ def test_parallel_append_existing_data_unsorted(
     )
     lib.write(sym, df_0)
     assert lib.get_info(sym)["sorted"] == sortedness
-    df_1 = pd.DataFrame(
-        {"col": [3, 4]}, index=[pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-06")]
-    )
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-06")])
     lib.append(sym, df_1, incomplete=True)
     if validate_index:
         with pytest.raises(SortingException):
@@ -848,11 +780,7 @@ def test_parallel_write_static_schema_type_changing(
         index=pd.date_range("2024-01-01", periods=rows_per_incomplete),
     )
     df_1 = pd.DataFrame(
-        {
-            "col": np.arange(
-                rows_per_incomplete, 2 * rows_per_incomplete, dtype=np.uint16
-            )
-        },
+        {"col": np.arange(rows_per_incomplete, 2 * rows_per_incomplete, dtype=np.uint16)},
         index=pd.date_range("2024-01-03", periods=rows_per_incomplete),
     )
     lib.write(sym, df_0, parallel=True)
@@ -869,9 +797,7 @@ def test_parallel_write_static_schema_type_changing(
 
 
 @pytest.mark.parametrize("rows_per_incomplete", (1, 2))
-def test_parallel_write_dynamic_schema_type_changing(
-    lmdb_version_store_tiny_segment_dynamic, rows_per_incomplete
-):
+def test_parallel_write_dynamic_schema_type_changing(lmdb_version_store_tiny_segment_dynamic, rows_per_incomplete):
     lib = lmdb_version_store_tiny_segment_dynamic
     sym = "test_parallel_write_dynamic_schema_type_changing"
     df_0 = pd.DataFrame(
@@ -879,11 +805,7 @@ def test_parallel_write_dynamic_schema_type_changing(
         index=pd.date_range("2024-01-01", periods=rows_per_incomplete),
     )
     df_1 = pd.DataFrame(
-        {
-            "col": np.arange(
-                rows_per_incomplete, 2 * rows_per_incomplete, dtype=np.uint16
-            )
-        },
+        {"col": np.arange(rows_per_incomplete, 2 * rows_per_incomplete, dtype=np.uint16)},
         index=pd.date_range("2024-01-02", periods=rows_per_incomplete),
     )
     lib.write(sym, df_0, parallel=True)
@@ -918,11 +840,7 @@ def test_parallel_write_static_schema_type_changing_cleans_up_data_keys(
         index=pd.date_range("2024-01-03", periods=rows_per_incomplete),
     )
     df_2 = pd.DataFrame(
-        {
-            "col": np.arange(
-                rows_per_incomplete, 2 * rows_per_incomplete, dtype=np.uint16
-            )
-        },
+        {"col": np.arange(rows_per_incomplete, 2 * rows_per_incomplete, dtype=np.uint16)},
         index=pd.date_range("2024-01-05", periods=rows_per_incomplete),
     )
     lib.write(sym, df_1, parallel=True)
@@ -943,14 +861,10 @@ def test_parallel_write_static_schema_type_changing_cleans_up_data_keys(
 
 
 @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
-def test_parallel_write_static_schema_missing_column(
-    lmdb_version_store_tiny_segment, delete_staged_data_on_failure
-):
+def test_parallel_write_static_schema_missing_column(lmdb_version_store_tiny_segment, delete_staged_data_on_failure):
     lib = lmdb_version_store_tiny_segment
     sym = "test_parallel_write_static_schema_missing_column"
-    df_0 = pd.DataFrame(
-        {"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1)
-    )
+    df_0 = pd.DataFrame({"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1))
     df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
     lib.write(sym, df_0, parallel=True)
     lib.write(sym, df_1, parallel=True)
@@ -970,9 +884,7 @@ def test_parallel_write_dynamic_schema_missing_column(
 ):
     lib = lmdb_version_store_tiny_segment_dynamic
     sym = "test_parallel_write_dynamic_schema_missing_column"
-    df_0 = pd.DataFrame(
-        {"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1)
-    )
+    df_0 = pd.DataFrame({"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1))
     df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
     lib.write(sym, df_0, parallel=True)
     lib.write(sym, df_1, parallel=True)
@@ -987,9 +899,7 @@ def test_parallel_append_dynamic_schema_missing_column(
 ):
     lib = lmdb_version_store_tiny_segment_dynamic
     sym = "test_parallel_append_dynamic_schema_missing_column"
-    df_0 = pd.DataFrame(
-        {"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1)
-    )
+    df_0 = pd.DataFrame({"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1))
     df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
     lib.write(sym, df_0)
     lib.append(sym, df_1, incomplete=True)
@@ -1006,9 +916,7 @@ def test_parallel_dynamic_schema_named_index(
 ):
     lib = lmdb_version_store_tiny_segment_dynamic
     sym = "test_parallel_append_dynamic_schema_named_index"
-    df_0 = pd.DataFrame(
-        {"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1)
-    )
+    df_0 = pd.DataFrame({"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1))
     df_0.index.name = "date"
     df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
     if append:
@@ -1034,19 +942,13 @@ def test_parallel_dynamic_schema_named_index(
 
 @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
 class TestFinalizeStagedDataStaticSchemaMismatch:
-    def test_append_throws_with_missmatched_column_set(
-        self, lmdb_version_store_v1, delete_staged_data_on_failure
-    ):
+    def test_append_throws_with_missmatched_column_set(self, lmdb_version_store_v1, delete_staged_data_on_failure):
         lib = lmdb_version_store_v1
 
-        initial_df = pd.DataFrame(
-            {"col_0": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])
-        )
+        initial_df = pd.DataFrame({"col_0": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
         lib.write("sym", initial_df)
 
-        appended_df = pd.DataFrame(
-            {"col_1": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])
-        )
+        appended_df = pd.DataFrame({"col_1": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
         lib.write("sym", appended_df, parallel=True)
         with pytest.raises(SchemaException) as exception_info:
             lib.compact_incomplete(
@@ -1059,9 +961,7 @@ class TestFinalizeStagedDataStaticSchemaMismatch:
         expected_key_count = 0 if delete_staged_data_on_failure else 1
         assert len(get_append_keys(lib, "sym")) == expected_key_count
 
-    def test_append_throws_column_subset(
-        self, lmdb_version_store_v1, delete_staged_data_on_failure
-    ):
+    def test_append_throws_column_subset(self, lmdb_version_store_v1, delete_staged_data_on_failure):
         lib = lmdb_version_store_v1
 
         df1 = pd.DataFrame(
@@ -1069,9 +969,7 @@ class TestFinalizeStagedDataStaticSchemaMismatch:
             index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")]),
         )
         lib.write("sym", df1)
-        df2 = pd.DataFrame(
-            {"b": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")])
-        )
+        df2 = pd.DataFrame({"b": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]))
         lib.write("sym", df2, parallel=True)
         with pytest.raises(SchemaException) as exception_info:
             lib.compact_incomplete(
@@ -1085,9 +983,7 @@ class TestFinalizeStagedDataStaticSchemaMismatch:
         expected_key_count = 0 if delete_staged_data_on_failure else 1
         assert len(get_append_keys(lib, "sym")) == expected_key_count
 
-    def test_append_throws_on_incompatible_dtype(
-        self, lmdb_version_store_v1, delete_staged_data_on_failure
-    ):
+    def test_append_throws_on_incompatible_dtype(self, lmdb_version_store_v1, delete_staged_data_on_failure):
         lib = lmdb_version_store_v1
 
         initial_df = pd.DataFrame(
@@ -1096,9 +992,7 @@ class TestFinalizeStagedDataStaticSchemaMismatch:
         )
         lib.write("sym", initial_df)
 
-        appended_df = pd.DataFrame(
-            {"col_0": ["asd"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])
-        )
+        appended_df = pd.DataFrame({"col_0": ["asd"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
         lib.write("sym", appended_df, parallel=True)
         with pytest.raises(SchemaException) as exception_info:
             lib.compact_incomplete(
@@ -1112,22 +1006,16 @@ class TestFinalizeStagedDataStaticSchemaMismatch:
         expected_key_count = 0 if delete_staged_data_on_failure else 1
         assert len(get_append_keys(lib, "sym")) == expected_key_count
 
-    def test_type_mismatch_in_staged_segments_throws(
-        self, lmdb_version_store_v1, delete_staged_data_on_failure
-    ):
+    def test_type_mismatch_in_staged_segments_throws(self, lmdb_version_store_v1, delete_staged_data_on_failure):
         lib = lmdb_version_store_v1
         lib.write(
             "sym",
-            pd.DataFrame(
-                {"col": [1]}, index=pd.DatetimeIndex([np.datetime64("2023-01-01")])
-            ),
+            pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64("2023-01-01")])),
             parallel=True,
         )
         lib.write(
             "sym",
-            pd.DataFrame(
-                {"col": ["a"]}, index=pd.DatetimeIndex([np.datetime64("2023-01-02")])
-            ),
+            pd.DataFrame({"col": ["a"]}, index=pd.DatetimeIndex([np.datetime64("2023-01-02")])),
             parallel=True,
         )
         with pytest.raises(Exception) as exception_info:
@@ -1141,9 +1029,7 @@ class TestFinalizeStagedDataStaticSchemaMismatch:
         expected_key_count = 0 if delete_staged_data_on_failure else 2
         assert len(get_append_keys(lib, "sym")) == expected_key_count
 
-    def test_types_cant_be_promoted(
-        self, lmdb_version_store_v1, delete_staged_data_on_failure
-    ):
+    def test_types_cant_be_promoted(self, lmdb_version_store_v1, delete_staged_data_on_failure):
         lib = lmdb_version_store_v1
         lib.write(
             "sym",
@@ -1173,9 +1059,7 @@ class TestFinalizeStagedDataStaticSchemaMismatch:
         expected_key_count = 0 if delete_staged_data_on_failure else 1
         assert len(get_append_keys(lib, "sym")) == expected_key_count
 
-    def test_appending_reordered_column_set_throws(
-        self, lmdb_version_store_v1, delete_staged_data_on_failure
-    ):
+    def test_appending_reordered_column_set_throws(self, lmdb_version_store_v1, delete_staged_data_on_failure):
         lib = lmdb_version_store_v1
 
         lib.write(
@@ -1208,9 +1092,7 @@ class TestFinalizeStagedDataStaticSchemaMismatch:
         assert len(get_append_keys(lib, "sym")) == expected_key_count
 
     @pytest.mark.parametrize("mode", [True, False])
-    def test_staged_segments_can_be_reordered(
-        self, lmdb_version_store_v1, mode, delete_staged_data_on_failure
-    ):
+    def test_staged_segments_can_be_reordered(self, lmdb_version_store_v1, mode, delete_staged_data_on_failure):
         lib = lmdb_version_store_v1
         df1 = pd.DataFrame(
             {"col_0": [1], "col_1": ["test"], "col_2": [1.2]},
@@ -1240,22 +1122,16 @@ class TestFinalizeStagedDataStaticSchemaMismatch:
 # finalize_method True -> append, finalize_method False -> write
 @pytest.mark.parametrize("finalize_method", (True, False))
 class TestFinalizeWithEmptySegments:
-    def test_staged_segment_is_only_empty_dfs(
-        self, lmdb_version_store_v1, finalize_method
-    ):
+    def test_staged_segment_is_only_empty_dfs(self, lmdb_version_store_v1, finalize_method):
         lib = lmdb_version_store_v1
         lib.write("sym", pd.DataFrame([]), parallel=True)
         lib.write("sym", pd.DataFrame([]), parallel=True)
         lib.write("sym", pd.DataFrame(), parallel=True)
         lib.compact_incomplete("sym", finalize_method, False)
-        assert_frame_equal(
-            lib.read("sym").data, pd.DataFrame([], index=pd.DatetimeIndex([]))
-        )
+        assert_frame_equal(lib.read("sym").data, pd.DataFrame([], index=pd.DatetimeIndex([])))
 
     @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
-    def test_staged_segment_has_empty_df(
-        self, lmdb_version_store_v1, finalize_method, delete_staged_data_on_failure
-    ):
+    def test_staged_segment_has_empty_df(self, lmdb_version_store_v1, finalize_method, delete_staged_data_on_failure):
         lib = lmdb_version_store_v1
         index = pd.DatetimeIndex(
             [
@@ -1266,9 +1142,7 @@ class TestFinalizeWithEmptySegments:
         )
         df1 = pd.DataFrame({"col": [1, 2, 3]}, index=index)
         df2 = pd.DataFrame({})
-        df3 = pd.DataFrame(
-            {"col": [4]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 5)])
-        )
+        df3 = pd.DataFrame({"col": [4]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 5)]))
         lib.write("sym", df1, parallel=True)
         lib.write("sym", df2, parallel=True)
         lib.write("sym", df3, parallel=True)
@@ -1293,9 +1167,7 @@ class TestFinalizeWithEmptySegments:
 class TestSlicing:
     def test_append_long_segment(self, lmdb_version_store_tiny_segment):
         lib = lmdb_version_store_tiny_segment
-        df_0 = pd.DataFrame(
-            {"col_0": [1, 2, 3]}, index=pd.date_range("2024-01-01", "2024-01-03")
-        )
+        df_0 = pd.DataFrame({"col_0": [1, 2, 3]}, index=pd.date_range("2024-01-01", "2024-01-03"))
         lib.write("sym", df_0)
 
         index = pd.date_range("2024-01-05", "2024-01-15")
@@ -1313,13 +1185,9 @@ class TestSlicing:
         lib.compact_incomplete("sym", False, False)
         assert_frame_equal(lib.read("sym").data, df)
 
-    def test_write_several_segments_triggering_slicing(
-        self, lmdb_version_store_tiny_segment
-    ):
+    def test_write_several_segments_triggering_slicing(self, lmdb_version_store_tiny_segment):
         lib = lmdb_version_store_tiny_segment
-        combined_staged_index = pd.date_range(
-            pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 15)
-        )
+        combined_staged_index = pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 15))
         staged_values = range(0, len(combined_staged_index))
         for value, date in zip(staged_values, combined_staged_index):
             df = pd.DataFrame({"a": [value]}, index=pd.DatetimeIndex([date]))
@@ -1328,26 +1196,20 @@ class TestSlicing:
         expected = pd.DataFrame({"a": staged_values}, index=combined_staged_index)
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_append_several_segments_trigger_slicing(
-        self, lmdb_version_store_tiny_segment
-    ):
+    def test_append_several_segments_trigger_slicing(self, lmdb_version_store_tiny_segment):
         lib = lmdb_version_store_tiny_segment
         df_0 = pd.DataFrame(
             {"a": [1, 2, 3]},
             index=pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3)),
         )
         lib.write("sym", df_0)
-        combined_staged_index = pd.date_range(
-            pd.Timestamp(2024, 1, 5), pd.Timestamp(2024, 1, 20)
-        )
+        combined_staged_index = pd.date_range(pd.Timestamp(2024, 1, 5), pd.Timestamp(2024, 1, 20))
         staged_values = range(0, len(combined_staged_index))
         for value, date in zip(staged_values, combined_staged_index):
             df = pd.DataFrame({"a": [value]}, index=pd.DatetimeIndex([date]))
             lib.write("sym", df, parallel=True)
         lib.compact_incomplete("sym", True, False)
-        expected = pd.concat(
-            [df_0, pd.DataFrame({"a": staged_values}, index=combined_staged_index)]
-        )
+        expected = pd.concat([df_0, pd.DataFrame({"a": staged_values}, index=combined_staged_index)])
         assert_frame_equal(lib.read("sym").data, expected)
 
     @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
@@ -1423,9 +1285,7 @@ class TestSlicing:
         expected_key_count = 0 if delete_staged_data_on_failure else 1
         assert len(get_append_keys(lib, "sym")) == expected_key_count
 
-    def test_writing_wide_segment_over_sliced_data(
-        self, lmdb_version_store_tiny_segment
-    ):
+    def test_writing_wide_segment_over_sliced_data(self, lmdb_version_store_tiny_segment):
         lib = lmdb_version_store_tiny_segment
         df_0 = pd.DataFrame(
             {f"col_{i}": [i] for i in range(0, 10)},
@@ -1449,15 +1309,15 @@ def test_chunks_overlap(lmdb_storage, lib_name):
 
     b:test:0:0xdfde242de44bdf38@1739968386409923711[0,1001]
     b:test:0:0x95750a82cfa088df@1739968386410180283[1000,1001]
-    
+
     When - We finalize the staged segments
-    
+
     Then - We should succeed even though the segments seem to overlap by 1ns because the end time in the key is 1
     greater than the last index value in the segment
     """
     lib: Library = lmdb_storage.create_arctic().create_library(
-        lib_name,
-        library_options=LibraryOptions(rows_per_segment=2))
+        lib_name, library_options=LibraryOptions(rows_per_segment=2)
+    )
 
     idx = [
         pd.Timestamp(0),
@@ -1489,8 +1349,8 @@ def test_chunks_overlap_1ns(lmdb_storage, lib_name):
     Then - We should raise a validation error
     """
     lib: Library = lmdb_storage.create_arctic().create_library(
-        lib_name,
-        library_options=LibraryOptions(rows_per_segment=2))
+        lib_name, library_options=LibraryOptions(rows_per_segment=2)
+    )
 
     idx = [pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]
     first = pd.DataFrame({"a": len(idx)}, index=idx)
@@ -1512,8 +1372,8 @@ def test_chunks_match_at_ends(lmdb_storage, lib_name):
     Then - Should be OK to finalize
     """
     lib: Library = lmdb_storage.create_arctic().create_library(
-        lib_name,
-        library_options=LibraryOptions(rows_per_segment=2))
+        lib_name, library_options=LibraryOptions(rows_per_segment=2)
+    )
 
     first_idx = [pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]
     first = pd.DataFrame({"a": np.arange(3)}, index=first_idx)
@@ -1544,12 +1404,13 @@ def test_chunks_the_same(lmdb_storage, lib_name, n_runs):
     b:test:0:h3@1739968588832621000[1000,1001]
 
     When - We finalize the staged segments
-    
-    Then - We should succeed even though the segments are covering a duplicated index value
+
+    Then - We should succeed even though the segments seem to be identical, since they are just covering a duplicated
+    index value
     """
     lib: Library = lmdb_storage.create_arctic().create_library(
-        lib_name,
-        library_options=LibraryOptions(rows_per_segment=2))
+        lib_name, library_options=LibraryOptions(rows_per_segment=2)
+    )
 
     idx = [
         pd.Timestamp(1000),
