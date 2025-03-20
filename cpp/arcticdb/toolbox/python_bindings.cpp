@@ -173,7 +173,7 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
         return QueryStats::instance().current_level(); 
     });
     query_stats_module.def("root_levels", []() { 
-        return QueryStats::instance().root_levels(); 
+        return QueryStats::instance(async::TaskScheduler::instance()).root_levels(); 
     });
     query_stats_module.def("is_root_level_set", []() { 
         return QueryStats::instance().is_root_level_set(); 

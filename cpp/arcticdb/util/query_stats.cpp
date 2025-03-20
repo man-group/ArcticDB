@@ -96,8 +96,8 @@ std::shared_ptr<GroupingLevel> QueryStats::root_level() {
     return thread_local_var_->root_level_;
 }
 
-const std::vector<std::shared_ptr<GroupingLevel>>& QueryStats::root_levels() const{
-    check(!async::TaskScheduler::instance()->tasks_pending(), "Folly tasks are still running");
+const std::vector<std::shared_ptr<GroupingLevel>>& QueryStats::root_levels(async::TaskScheduler* const instance) const{
+    check(!instance->tasks_pending(), "Folly tasks are still running");
     return root_levels_;
 }
 

@@ -231,7 +231,8 @@ TEST(Async, StatsQueryDemo) {
     std::thread t1(work), t2(work); // mimic multithreading at python level
     t1.join();
     t2.join();
-    ASSERT_EQ(instance.root_levels().size(), 2); // Each pseudo-python thread will create one root level
+    // ASSERT_FALSE(sched.tasks_pending());
+    ASSERT_EQ(instance.root_levels(&sched).size(), 2); // Each pseudo-python thread will create one root level
 }
 
 using IndexSegmentReader = int;

@@ -77,6 +77,11 @@
 
 namespace arcticdb{
     class SegmentInMemory;
+
+namespace async {
+    class TaskScheduler;
+};
+
 namespace util::query_stats {
 enum class GroupName : size_t {
     arcticdb_call = 0,
@@ -116,7 +121,7 @@ class QueryStats {
 public:
     std::shared_ptr<GroupingLevel> current_level();
     std::shared_ptr<GroupingLevel> root_level();
-    const std::vector<std::shared_ptr<GroupingLevel>>& root_levels() const;
+    const std::vector<std::shared_ptr<GroupingLevel>>& root_levels(async::TaskScheduler* const instance) const;
     bool is_root_level_set() const;
     void create_child_level(std::shared_ptr<ThreadLocalQueryStatsVar>&& parent_thread_local_var);
     void set_level(std::shared_ptr<GroupingLevel> &level);
