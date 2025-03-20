@@ -94,6 +94,8 @@ if(WIN32)
         /DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /wd4244 /wd4267
         "$<$<CONFIG:Debug>:/Od;/MTd>"
         "$<$<CONFIG:Release>:/MT;/Ox>"
+        # Conda builds use dynamic runtime
+        "$<$<BOOL:${ARCTICDB_USING_CONDA}>:/MD>"
     )
     if(${ARCTICDB_MSVC_OMIT_RUNTIME_CHECKS})
         message(STATUS "Removing MSVC runtime checks")
