@@ -141,7 +141,12 @@ private:
 // function-local object so the additional info will be removed from the stack when the info object gets detroyed
 class StatsGroup {
 public:
-    StatsGroup(bool log_time, GroupName col, const std::string& default_value);
+    StatsGroup(
+        bool log_time, 
+        GroupName col, 
+        const std::string& default_value, 
+        std::chrono::time_point<std::chrono::high_resolution_clock> start = std::chrono::high_resolution_clock::now()
+    );
     ~StatsGroup();
 private:
     std::shared_ptr<GroupingLevel> prev_level_;
@@ -173,17 +178,19 @@ void add_logical_keys(const entity::KeyType physical_key_type, const SegmentInMe
 
 #define STATS_GROUP_VAR_NAME(x) query_stats_info##x
 
-#define QUERY_STATS_ADD_GROUP_IMPL(log_time, col_name, value) \
+#define QUERY_STATS_ADD_GROUP_IMPL(log_time, col_name, value, ...) \
     std::optional<arcticdb::util::query_stats::StatsGroup> STATS_GROUP_VAR_NAME(col_name); \
     if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
         STATS_GROUP_VAR_NAME(col_name).emplace( \
             log_time, \
             arcticdb::util::query_stats::GroupName::col_name, \
-            format_group_value(arcticdb::util::query_stats::GroupName::col_name, value)); \
+            format_group_value(arcticdb::util::query_stats::GroupName::col_name, value) \
+            __VA_ARGS__); \
     } \
     ARCTICDB_DEBUG(log::version(), "QUERY_STATS_ADD_GROUP_IMPL {} {} {}", arcticdb::util::query_stats::QueryStats::instance().is_enabled(), #col_name, #value);
 #define QUERY_STATS_ADD_GROUP(col_name, value) QUERY_STATS_ADD_GROUP_IMPL(false, col_name, value)
 #define QUERY_STATS_ADD_GROUP_WITH_TIME(col_name, value) QUERY_STATS_ADD_GROUP_IMPL(true, col_name, value)
+#define QUERY_STATS_ADD_GROUP_WITH_TIME_MANUAL_START(col_name, value, start) QUERY_STATS_ADD_GROUP_IMPL(true, col_name, value, , start)
 
 #define QUERY_STATS_ADD(col_name, value) \
     if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \

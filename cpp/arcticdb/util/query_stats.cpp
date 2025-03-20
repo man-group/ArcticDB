@@ -148,9 +148,13 @@ std::string get_runtime_arcticdb_call(const std::string& default_arcticdb_call){
     return func_name;
 }
 
-StatsGroup::StatsGroup(bool log_time, GroupName col, const std::string& default_value) : 
+StatsGroup::StatsGroup(
+            bool log_time, 
+            GroupName col, 
+            const std::string& default_value, 
+            std::chrono::time_point<std::chrono::high_resolution_clock> start) : 
         prev_level_(QueryStats::instance().current_level()),
-        start_(std::chrono::high_resolution_clock::now()),
+        start_(start),
         log_time_(log_time) {
     check(async::is_folly_thread || 
         prev_level_ != QueryStats::instance().root_level() || 
