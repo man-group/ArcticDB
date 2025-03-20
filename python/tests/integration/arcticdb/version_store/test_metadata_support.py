@@ -5,8 +5,15 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import sys
+
 import numpy as np
 import pandas as pd
+import datetime
+if sys.version_info >= (3, 9):
+    import zoneinfo
+import pytz
+
 from arcticdb_ext import set_config_string, unset_config_string
 from pandas import DataFrame, Timestamp
 import pytest
@@ -15,6 +22,8 @@ from arcticdb.version_store import NativeVersionStore, VersionedItem
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.util.test import assert_frame_equal, distinct_timestamps
+
+from tests.util.mark import ZONE_INFO_MARK
 
 
 # In the following lines, the naming convention is
@@ -283,3 +292,37 @@ def test_rv_contains_metadata_batch_write_metadata(lmdb_version_store_v1):
     vits = lib.batch_write_metadata([sym_0, sym_1], [metadata_0, metadata_1])
     assert vits[0].metadata == metadata_0
     assert vits[1].metadata == metadata_1
+
+
+@ZONE_INFO_MARK
+def test_metadata_timestamp_with_tz(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "sym"
+    df = timestamp_indexed_df()
+    # We need to normalize all of these timezoned timestamps correctly and produce the correct result
+    metadata_to_write = [
+        pd.Timestamp(2025, 1, 1, tz=pytz.utc),
+        pd.Timestamp(2025, 1, 1, tz=datetime.timezone.utc),
+        pd.Timestamp(2025, 1, 1, tz=zoneinfo.ZoneInfo("UTC")),
+        datetime.datetime(2025, 1, 1, tzinfo=pytz.utc),
+        datetime.datetime(2025, 1, 1, tzinfo=datetime.timezone.utc),
+        datetime.datetime(2025, 1, 1, tzinfo=zoneinfo.ZoneInfo("UTC")),
+    ]
+    # We convert all of the above to `pytz`
+    expected_metadata = pd.Timestamp(2025, 1, 1, tz=pytz.utc)
+    for metadata in metadata_to_write:
+        lib.write(sym, df, metadata)
+        assert lib.read(sym).metadata == expected_metadata
+
+    # And test a few other timezones
+    for zone_name in ["America/Los_Angeles", "Europe/London", "Asia/Tokyo", "Pacific/Kiritimati"]:
+        metadata_to_write = [
+            pd.Timestamp(2025, 1, 1, tz=pytz.timezone(zone_name)),
+            pd.Timestamp(2025, 1, 1, tz=zoneinfo.ZoneInfo(zone_name)),
+            datetime.datetime(2025, 1, 1, tzinfo=pytz.timezone(zone_name)),
+            datetime.datetime(2025, 1, 1, tzinfo=zoneinfo.ZoneInfo(zone_name)),
+        ]
+        expected_metadata = metadata_to_write[0]
+        for metadata in metadata_to_write:
+            lib.write(sym, df, metadata)
+            assert lib.read(sym).metadata == expected_metadata
