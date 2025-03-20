@@ -936,7 +936,10 @@ endif()
 if(${TEST})
     unset(Python_USE_STATIC_LIBS)
     find_package(Python 3 COMPONENTS Interpreter Development REQUIRED)
-    find_package(Arrow REQUIRED)
+    if (NOT (ARCTICDB_USING_CONDA AND WIN32))
+        # Skip on Windows for now
+        find_package(Arrow REQUIRED)
+    endif()
     find_package(rapidcheck REQUIRED)
     find_package(benchmark REQUIRED)
 
@@ -1162,9 +1165,12 @@ if(${TEST})
                 COMPONENT Tests)
 
     if(ARCTICDB_USING_CONDA)
-        set(RAPIDCHECK_PRIVATE_LIBRARIES
-            ${AWSSDK_LINK_LIBRARIES}
-            Arrow::arrow_shared)
+        if(NOT WIN32)
+            # Skip on Windows for now
+            set(RAPIDCHECK_PRIVATE_LIBRARIES
+                ${AWSSDK_LINK_LIBRARIES}
+                Arrow::arrow_shared)
+        endif()
     else()
         set(RAPIDCHECK_PRIVATE_LIBRARIES
             ${AWSSDK_LINK_LIBRARIES}
