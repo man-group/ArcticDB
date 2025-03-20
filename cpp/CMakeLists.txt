@@ -75,6 +75,12 @@ if(ARCTICDB_SANITIZER_FLAGS)
     message(STATUS "Building ArcticDB with sanitizers. Compiler flags: ${ARCTICDB_SANITIZER_FLAGS}")
 endif()
 
+if(${ARCTICDB_USING_CONDA})
+    # Required to be able to include headers from glog since glog 0.7
+    # See: https://github.com/google/glog/pull/1030
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGLOG_USE_GLOG_EXPORT")
+endif()
+
 if(WIN32)
     add_compile_definitions(
         NOGDI WIN32_LEAN_AND_MEAN HAVE_SNPRINTF NOMINMAX
@@ -97,9 +103,7 @@ if(WIN32)
     endif()
 else()
     if(${ARCTICDB_USING_CONDA})
-        # Required to be able to include headers from glog since glog 0.7
-        # See: https://github.com/google/glog/pull/1030
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra -DGLOG_USE_GLOG_EXPORT")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
     else()
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
     endif()
