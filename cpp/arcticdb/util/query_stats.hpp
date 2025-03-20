@@ -108,6 +108,7 @@ struct ThreadLocalQueryStatsVar {
     std::vector<ChildLevel> child_levels_;
     std::shared_ptr<GroupingLevel> root_level_ = nullptr;
     std::shared_ptr<GroupingLevel> current_level_ = nullptr;
+    std::shared_ptr<ThreadLocalQueryStatsVar> parent_thread_local_var_ = nullptr;
 };
 
 
@@ -117,8 +118,7 @@ public:
     std::shared_ptr<GroupingLevel> root_level();
     const std::vector<std::shared_ptr<GroupingLevel>>& root_levels() const;
     bool is_root_level_set() const;
-    void create_child_level(ThreadLocalQueryStatsVar& parent_thread_local_var);
-    void set_root_level(std::shared_ptr<GroupingLevel> &level);
+    void create_child_level(std::shared_ptr<ThreadLocalQueryStatsVar> parent_thread_local_var);
     void set_level(std::shared_ptr<GroupingLevel> &level);
     void reset_stats();
     static QueryStats& instance();
@@ -129,7 +129,7 @@ public:
     QueryStats(const QueryStats&) = delete;
     QueryStats() = default;
 
-    thread_local inline static ThreadLocalQueryStatsVar thread_local_var_;
+    thread_local inline static std::shared_ptr<ThreadLocalQueryStatsVar> thread_local_var_ = std::make_shared<ThreadLocalQueryStatsVar>();
 private:
     bool is_enabled_ = false;
     std::mutex root_level_mutex_; 
@@ -173,6 +173,8 @@ std::string format_group_value(GroupName col_value, auto&& value) {
 }
 
 void add_logical_keys(const entity::KeyType physical_key_type, const SegmentInMemory& segment);
+
+std::shared_ptr<ThreadLocalQueryStatsVar> get_root_thread_local_var();
 }
 }
 
@@ -200,7 +202,7 @@ void add_logical_keys(const entity::KeyType physical_key_type, const SegmentInMe
     }
 
 
-#define QUERT_STATS_ADD_LOGICAL_KEYS(physical_key, segment) \
+#define QUERY_STATS_ADD_LOGICAL_KEYS(physical_key, segment) \
     if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
         arcticdb::util::query_stats::add_logical_keys(physical_key, segment); \
     }

@@ -1,6 +1,8 @@
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import config_context
 
+import pandas as pd
+
 def verify_list_symbool_stats(count):
     stats = qs.get_query_stats()
     """
@@ -95,10 +97,34 @@ def test_query_stats_snapshot(s3_version_store_v1, clear_query_stats):
 
 def test_query_stats_read(s3_version_store_v1, clear_query_stats):
     s3_version_store_v1.write("a", 1)
-    # import time
-    # time.sleep(5)
-    qs.enable()
     with config_context("VersionMap.ReloadInterval", 0):
         s3_version_store_v1.read("a")
+        qs.enable()
+        s3_version_store_v1.snapshot("abc")
+        # s3_version_store_v1.read("a", as_of="abc")
+    import json
+    print(json.dumps(qs.get_query_stats(), indent=4))
+
+
+def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
+    # s3_version_store_v1.write("a", 1)
+    qs.enable()
+    s3_version_store_v1.write("a", 1)
+    # meta1 = {"meta1" : 1, "arr" : [1, 2, 4]}
+    # s3_version_store_v1.write_metadata("a", meta1)
+    import json
+    print(json.dumps(qs.get_query_stats(), indent=4))
+
+
+def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
+    lib_tool = s3_version_store_v1.library_tool()
+    sym1 = "test_symbol1"
+    sym2 = "test_symbol2"
+    df0 = pd.DataFrame({"col_0": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_0": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
+
+    qs.enable()
+    s3_version_store_v1.batch_write([sym1, sym2], [df0, df0])
+
     import json
     print(json.dumps(qs.get_query_stats(), indent=4))
