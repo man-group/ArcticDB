@@ -207,6 +207,19 @@ jobs:
           ARCTICDB_BUILD_CPP_TESTS: 1
           ARCTIC_CMAKE_PRESET: windows-cl-conda-release
 
+      - name: Build C++ Tests
+        shell: bash -elo pipefail {0}
+        run: |
+          cd cpp\out\windows-cl-conda-release
+          msbuild arcticdb_rapidcheck_tests.vcxproj /p:Configuration=Release /p:Platform=x64 /m
+          msbuild test_unit_arcticdb.vcxproj /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Run C++ Tests
+        shell: bash -elo pipefail {0}
+        run: |
+          cd cpp\out\windows-cl-conda-release
+          ctest -C Release -T test
+
       - name: Install npm
         uses: actions/setup-node@v3.3.0
         with:
