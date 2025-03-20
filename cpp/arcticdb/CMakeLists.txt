@@ -1,4 +1,4 @@
-option(TEST "Build all tests." ON)
+option(TEST "Build all tests." OFF)
 option(BUILD_WITH_REMOTERY "Build ArcticDB with Remotery (used for performance analysis)" OFF)
 option(SSL_LINK "Link against SSL libraries." ON)
 option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring linked library symbols are not exported. Shrinks binary size." ON)
@@ -907,8 +907,8 @@ if(${TEST})
     if (NOT (ARCTICDB_USING_CONDA AND WIN32))
         # Skip on Windows for now
         find_package(Arrow REQUIRED)
+        find_package(rapidcheck REQUIRED)
     endif()
-    find_package(rapidcheck REQUIRED)
     find_package(benchmark REQUIRED)
 
     python_utils_dump_vars_if_enabled("Python for test compilation")
