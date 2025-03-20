@@ -96,23 +96,16 @@ def test_get_num_rows_pickled(lmdb_version_store):
 @pytest.mark.parametrize(
     "input_mode, expected_append",
     [
-        ("WRITE", False),
-        ("APPEND", True),
+        ("write", False),
+        ("append", True),
         (None, False),
         (StagedDataFinalizeMethod.APPEND, True),
         (StagedDataFinalizeMethod.WRITE, False),
-        ([], None),
-        {"write", None},
-    ],
+    ]
 )
 def test_finalize_staged_data(arctic_library_lmdb, input_mode, expected_append):
     symbol = "sym"
     arctic_library_lmdb._nvs = MagicMock()
-
-    if expected_append is None:
-        with pytest.raises(ArcticInvalidApiUsageException):
-            arctic_library_lmdb.finalize_staged_data(symbol, input_mode)
-        return
 
     arctic_library_lmdb.finalize_staged_data(symbol, input_mode)
 
@@ -126,3 +119,10 @@ def test_finalize_staged_data(arctic_library_lmdb, input_mode, expected_append):
 
     arctic_library_lmdb._nvs.compact_incomplete.assert_called_once_with(symbol, append=expected_append, **default_args)
 
+
+@pytest.mark.parametrize("input_mode", ["wRite", "something", 3])
+def test_finalize_staged_data_incorrect_args(arctic_library_lmdb, input_mode):
+    symbol = "sym"
+    arctic_library_lmdb._nvs = MagicMock()
+    with pytest.raises(ArcticInvalidApiUsageException):
+        arctic_library_lmdb.finalize_staged_data(symbol, input_mode)

@@ -1291,7 +1291,7 @@ class Library:
         Finalizes staged data, making it available for reads. All staged segments must be ordered and non-overlapping.
         ``finalize_staged_data`` is less time-consuming than ``sort_and_finalize_staged_data``.
 
-        If ``mode`` is ``StagedDataFinalizeMethod.APPEND`` or ``APPEND`` the index of the first row of the new segment must be equal to or greater
+        If ``mode`` is ``StagedDataFinalizeMethod.APPEND`` or ``append`` the index of the first row of the new segment must be equal to or greater
         than the index of the last row in the existing data.
 
         If ``Static Schema`` is used all staged block must have matching schema (same column names, same dtype, same column ordering)
@@ -1312,7 +1312,7 @@ class Library:
 
         mode : Union[`StagedDataFinalizeMethod`, str], default=StagedDataFinalizeMethod.WRITE
             Finalize mode. Valid options are StagedDataFinalizeMethod.WRITE or StagedDataFinalizeMethod.APPEND. Write collects the staged data and writes them to a
-            new version. Append collects the staged data and appends them to the latest version. Also accepts "WRITE" and "APPEND".
+            new version. Append collects the staged data and appends them to the latest version. Also accepts "write" and "append".
         prune_previous_versions: bool, default=False
             Removes previous (non-snapshotted) versions from the database.
         metadata : Any, default=None
@@ -1383,12 +1383,12 @@ class Library:
         2024-01-03    3
         2024-01-04    4
         """
-        if not (mode is None or isinstance(mode, StagedDataFinalizeMethod) or mode == "WRITE" or mode == "APPEND"):
-            raise ArcticInvalidApiUsageException("mode must be a StagedDataFinalizeMethod enum or 'WRITE'/'APPEND'")
+        if mode not in [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE, "write", "append", None]:
+            raise ArcticInvalidApiUsageException("mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'")
 
         return self._nvs.compact_incomplete(
             symbol,
-            append=mode == StagedDataFinalizeMethod.APPEND or mode == "APPEND",
+            append=mode == StagedDataFinalizeMethod.APPEND or mode == "append",
             convert_int_to_float=False,
             metadata=metadata,
             prune_previous_version=prune_previous_versions,
