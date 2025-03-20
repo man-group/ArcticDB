@@ -137,4 +137,30 @@ TEST_F(GenerateNormMetaTest, DifferentFieldCount) {
     ASSERT_THROW(generate_norm_meta({multi_index(2, "ts", false, "UTC"), multi_index(3, "ts", false, "UTC")}), SchemaException);
 }
 
-// TODO: RangeIndex handling
+TEST_F(GenerateNormMetaTest, RangeIndexBasic) {
+    auto first = single_index("", false, false, "", 0, 1);
+    auto second = single_index("", false, false, "", 0, 1);
+    auto third = single_index("", false, false, "", 0, 1);
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({first, second, third}), first));
+}
+
+TEST_F(GenerateNormMetaTest, RangeIndexNonDefaultStep) {
+    auto first = single_index("", false, false, "", 10, 2);
+    auto second = single_index("", false, false, "", 5, 2);
+    auto third = single_index("", false, false, "", 12, 2);
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({first, second, third}), first));
+}
+
+TEST_F(GenerateNormMetaTest, RangeIndexNonMatchingStep) {
+    auto a = single_index("", false, false, "", 10, 2);
+    auto b = single_index("", false, false, "", 5, 3);
+    auto c = single_index("", false, false, "", 12, 2);
+    auto expected_result = single_index("", false, false, "", 0, 1);
+    // Order that the steps are seen in should not matter
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({a, b, c}), expected_result));
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({b, c, a}), expected_result));
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({c, a, b}), expected_result));
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({a, c, b}), expected_result));
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({c, b, a}), expected_result));
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({b, a, c}), expected_result));
+}
