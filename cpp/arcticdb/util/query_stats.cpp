@@ -105,8 +105,11 @@ bool QueryStats::is_root_level_set() const {
     return thread_local_var_->root_level_.operator bool();
 }
 
-void QueryStats::create_child_level(std::shared_ptr<ThreadLocalQueryStatsVar> parent_thread_local_var) {
+void QueryStats::create_child_level(std::shared_ptr<ThreadLocalQueryStatsVar>&& parent_thread_local_var) {
     auto child_level = std::make_shared<GroupingLevel>();
+    // Since ExecutorWithStatsInstance::add will be called first, which will pass the root ThreadLocalQueryStatsVar to folly thread
+    // folly thread's one neeeded to be reset here
+    thread_local_var_ = std::make_shared<ThreadLocalQueryStatsVar>(); 
     thread_local_var_->current_level_ = child_level;
     thread_local_var_->root_level_ = child_level;
     thread_local_var_->parent_thread_local_var_ = std::move(parent_thread_local_var);

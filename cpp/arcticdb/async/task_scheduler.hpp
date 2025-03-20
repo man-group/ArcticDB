@@ -248,7 +248,7 @@ class TaskScheduler {
                 );
             }
             auto wrapped_task = [root_thread_local_var = util::query_stats::get_root_thread_local_var(), task = std::move(task)]() mutable{
-                util::query_stats::QueryStats::instance().create_child_level(root_thread_local_var);
+                util::query_stats::QueryStats::instance().create_child_level(std::move(root_thread_local_var));
                 return task();
             };
             return cpu_exec_.addFuture(std::move(wrapped_task));
@@ -273,7 +273,7 @@ class TaskScheduler {
                 );
             }
             auto wrapped_task = [root_thread_local_var = util::query_stats::get_root_thread_local_var(), task = std::move(task)]() mutable{
-                util::query_stats::QueryStats::instance().create_child_level(root_thread_local_var);
+                util::query_stats::QueryStats::instance().create_child_level(std::move(root_thread_local_var));
                 return task();
             };
             return io_exec_.addFuture(std::move(wrapped_task));
