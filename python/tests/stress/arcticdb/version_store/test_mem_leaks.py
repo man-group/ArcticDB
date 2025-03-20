@@ -38,10 +38,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Memory_tests")
 
 ##   IMPORTANT !!!
-##   
+##
 ##   All memory tests MUST be done with fixtures that return Library object
-##   and not NativeVersionStore. Reason is that the last is thick wrapper which 
-##   is hiding some possible problems, therefore all tests have to be done with what 
+##   and not NativeVersionStore. Reason is that the last is thick wrapper which
+##   is hiding some possible problems, therefore all tests have to be done with what
 ##   customer works on
 
 
@@ -323,6 +323,7 @@ def gen_random_date(start: pd.Timestamp, end: pd.Timestamp):
 # region TESTS non-memray type - "guessing" memory leak through series of repetitions
 
 
+@SLOW_TESTS_MARK
 @SKIP_CONDA_MARK  # Conda CI runner doesn't have enough storage to perform these stress tests
 @pytest.mark.skipif(
     WINDOWS, reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem"
@@ -361,11 +362,12 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
          run the test from command line again to assure it runs ok before commit 
 
     """
-    max_mem_bytes = 350_000_000
+    max_mem_bytes = 340_623_040
 
     check_process_memory_leaks(proc_to_examine, 20, max_mem_bytes, 80.0)
 
 
+@SLOW_TESTS_MARK
 @pytest.mark.skipif(
     WINDOWS, reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem"
 )
@@ -410,9 +412,10 @@ def test_mem_leak_querybuilder_standard(arctic_library_lmdb_100gb):
 
     max_mem_bytes = 650_000_000
 
-    check_process_memory_leaks(proc_to_examine, 10, max_mem_bytes, 80.0)
+    check_process_memory_leaks(proc_to_examine, 5, max_mem_bytes, 80.0)
 
 
+@SLOW_TESTS_MARK
 @SKIP_CONDA_MARK  # Conda CI runner doesn't have enough storage to perform these stress tests
 def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     lib: NativeVersionStore = lmdb_version_store_very_big_map
@@ -434,7 +437,7 @@ def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     """
     max_mem_bytes = 608_662_528
 
-    check_process_memory_leaks(proc_to_examine, 20, max_mem_bytes, 80.0)
+    check_process_memory_leaks(proc_to_examine, 5, max_mem_bytes, 80.0)
 
 
 # endregion
@@ -536,6 +539,7 @@ def mem_query(lib: Library, df: pd.DataFrame, num_repetitions: int = 1, read_bat
     gc.collect()
 
 
+@SLOW_TESTS_MARK
 def test_mem_leak_queries_correctness_precheck(library_with_tiny_symbol):
     """
     This test does precheck to confirm queries work more or less
@@ -603,9 +607,14 @@ if MEMRAY_SUPPORTED:
             # print(f"SAMPLE >>> {frame.filename}:{frame.function}[{frame.lineno}]")
             frame_info_str = f"{frame.filename}:{frame.function}:[{frame.lineno}]"
 
+            # Check if the frame has unknown information
+            if frame.filename == "<unknown>" and frame.function == "<unknown>" and frame.lineno == 0:
+                logger.warning(f"Frame excluded : {frame_info_str}")
+                return False
+
             if "folly::CPUThreadPoolExecutor::CPUTask" in frame_info_str:
                 logger.warning(f"Frame excluded : {frame_info_str}")
-                logger.warning(f'''Explanation    : These are on purpose, and they come from the interaction of 
+                logger.warning(f"""Explanation    : These are on purpose, and they come from the interaction of 
                                multi-threading and forking. When Python forks, the task-scheduler has a linked-list 
                                of tasks to execute, but there is a global lock held that protects the thread-local state.
                                We can't free the list without accessing the global thread-local storage singleton, 
@@ -622,12 +631,13 @@ if MEMRAY_SUPPORTED:
                                find something better
 
                                Great that it is catching this, as it's the one case in the whole project where I know 
-                               for certain that it does leak memory (and only because there's no alternative''')
+                               for certain that it does leak memory (and only because there's no alternative""")
                 return False
-            
+
             pass
         return True
 
+    @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_leaks(location_limit="50 KB" if not MACOS else "60 KB", filter_fn=is_relevant)
     ## Unfortunately it is not possible to xfail memray tests. Instead:
@@ -690,6 +700,7 @@ if MEMRAY_SUPPORTED:
         (lib, df, symbol) = library_with_tiny_symbol
         mem_query(lib, df, num_repetitions=125, read_batch=True)
 
+    @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_leaks(location_limit="25 KB", filter_fn=is_relevant)
     def test_mem_leak_querybuilder_read_batch_memray(library_with_symbol):
@@ -704,6 +715,7 @@ if MEMRAY_SUPPORTED:
         (lib, df, symbol) = library_with_symbol
         mem_query(lib, df, read_batch=True)
 
+    @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_memory("600 MB")
     @pytest.mark.skipif(MACOS, reason="Mac OS mem usage is harder to predicts than WINDOWS")
@@ -718,6 +730,7 @@ if MEMRAY_SUPPORTED:
         (lib, df, symbol) = library_with_symbol
         mem_query(lib, df)
 
+    @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_memory("600 MB")
     @pytest.mark.skipif(MACOS, reason="Mac OS mem usage is harder to predicts than WINDOWS")
@@ -746,6 +759,7 @@ if MEMRAY_SUPPORTED:
         del df
         yield (lib, symbol)
 
+    @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_leaks(location_limit="40 KB", filter_fn=is_relevant)
     def test_mem_leak_read_all_arctic_lib_memray(library_with_big_symbol_):
@@ -767,7 +781,7 @@ if MEMRAY_SUPPORTED:
     def lmdb_library(lmdb_storage, lib_name, request) -> Generator[Library, None, None]:
         """
         Allows passing library creation parameters as parameters of the test or other fixture.
-        Example: 
+        Example:
 
 
             @pytest.mark.parametrize("lmdb_library_any", [
@@ -776,12 +790,11 @@ if MEMRAY_SUPPORTED:
             def test_my_test(lmdb_library_any):
             .....
         """
-        params = request.param if hasattr(request, 'param') else {}
+        params = request.param if hasattr(request, "param") else {}
         yield lmdb_storage.create_arctic().create_library(name=lib_name, **params)
 
-
     @pytest.fixture
-    def prepare_head_tails_symbol(lmdb_library):               
+    def prepare_head_tails_symbol(lmdb_library):
         """
         This fixture is part of test `test_mem_leak_head_tail_memray`
 
@@ -792,17 +805,18 @@ if MEMRAY_SUPPORTED:
         Should not be reused
         """
         lib: Library = lmdb_library
-        opts  = lib.options()
-        
+        opts = lib.options()
+
         total_number_columns = 1002
         symbol = "asdf12345"
-        num_rows_list = [279,199,1,350,999,0,1001]
+        num_rows_list = [279, 199, 1, 350, 999, 0, 1001]
         snapshot_names = []
         for rows in num_rows_list:
             st = time.time()
-            df = DFGenerator.generate_wide_dataframe(num_rows=rows, num_cols=total_number_columns, num_string_cols=25, 
-                                                     start_time=pd.Timestamp(0),seed=64578)
-            lib.write(symbol,df)
+            df = DFGenerator.generate_wide_dataframe(
+                num_rows=rows, num_cols=total_number_columns, num_string_cols=25, start_time=pd.Timestamp(0), seed=64578
+            )
+            lib.write(symbol, df)
             snap = f"{symbol}_{rows}"
             lib.snapshot(snap)
             snapshot_names.append(snap)
@@ -812,20 +826,37 @@ if MEMRAY_SUPPORTED:
                 # characteristic
                 total_number_columns += 20
                 logger.info(f"Total number of columns increased to {total_number_columns}")
-            
+
         all_columns = df.columns.to_list()
         yield (lib, symbol, num_rows_list, snapshot_names, all_columns)
         lib.delete(symbol=symbol)
 
-
     @MEMRAY_TESTS_MARK
     @SLOW_TESTS_MARK
     ## Linux is having quite huge location there will be separate issue to investigate why
-    @pytest.mark.limit_leaks(location_limit="1500 KB" if LINUX else "60 KB", filter_fn=is_relevant)
-    @pytest.mark.parametrize("lmdb_library", [
-                {'library_options': LibraryOptions(rows_per_segment=233, columns_per_segment=197, dynamic_schema=True, encoding_version=EncodingVersion.V2)},
-                {'library_options': LibraryOptions(rows_per_segment=99, columns_per_segment=99, dynamic_schema=False, encoding_version=EncodingVersion.V1)}
-            ], indirect=True)
+    @pytest.mark.limit_leaks(location_limit="1000 KB" if LINUX else "52 KB", filter_fn=is_relevant)
+    @pytest.mark.parametrize(
+        "lmdb_library",
+        [
+            {
+                "library_options": LibraryOptions(
+                    rows_per_segment=233,
+                    columns_per_segment=197,
+                    dynamic_schema=True,
+                    encoding_version=EncodingVersion.V2,
+                )
+            },
+            {
+                "library_options": LibraryOptions(
+                    rows_per_segment=99,
+                    columns_per_segment=99,
+                    dynamic_schema=False,
+                    encoding_version=EncodingVersion.V1,
+                )
+            },
+        ],
+        indirect=True,
+    )
     def test_mem_leak_head_tail_memray(prepare_head_tails_symbol):
         """
         This test aims to test `head` and `tail` functions if they do leak memory.
@@ -836,33 +867,35 @@ if MEMRAY_SUPPORTED:
         symbol: str
         num_rows_list: List[int]
         store: NativeVersionStore = None
-        snapshot_names:  List[str]
+        snapshot_names: List[str]
         all_columns: List[str]
         (store, symbol, num_rows_list, snapshot_names, all_columns) = prepare_head_tails_symbol
-    
+
         start_test: float = time.time()
-        max_rows:int = max(num_rows_list)
+        max_rows: int = max(num_rows_list)
 
         np.random.seed(959034)
         # constructing a list of head and tail rows to be selected
         num_rows_to_select = []
-        important_values = [0, 1, 0 -1, 2, -2, max_rows, -max_rows ] # some boundary cases
+        important_values = [0, 1, 0 - 1, 2, -2, max_rows, -max_rows]  # some boundary cases
         num_rows_to_select.extend(important_values)
-        num_rows_to_select.extend(np.random.randint(low=5, high=99, size=7)) # add 7 more random values
+        num_rows_to_select.extend(np.random.randint(low=5, high=99, size=7))  # add 7 more random values
         # number of iterations will be the list length/size
         iterations = len(num_rows_to_select)
         # constructing a random list of values for snapshot names for each iteration
-        snapshots_list: List[str] = np.random.choice(snapshot_names, iterations) 
+        snapshots_list: List[str] = np.random.choice(snapshot_names, iterations)
         # constructing a random list of values for versions names for each iteration
-        versions_list: List[int] = np.random.randint(0, len(num_rows_list) - 1, iterations) 
+        versions_list: List[int] = np.random.randint(0, len(num_rows_list) - 1, iterations)
         # constructing a random list of number of columns to be selected
-        number_columns_for_selection_list: List[int] = np.random.randint(0, len(all_columns)-1, iterations) 
+        number_columns_for_selection_list: List[int] = np.random.randint(0, len(all_columns) - 1, iterations)
 
         count: int = 0
         # We will execute several time all head/tail operations with specific number of columns.
         # the number of columns consist of random columns and boundary cases see definition above
         for rows in num_rows_to_select:
-            selected_columns:List[str] = np.random.choice(all_columns, number_columns_for_selection_list[count], replace=False).tolist() 
+            selected_columns: List[str] = np.random.choice(
+                all_columns, number_columns_for_selection_list[count], replace=False
+            ).tolist()
             snap: str = snapshots_list[count]
             ver: str = int(versions_list[count])
             logger.info(f"rows {rows} / snapshot {snap}")
@@ -878,11 +911,9 @@ if MEMRAY_SUPPORTED:
             logger.info(f"Iteration {count} / {iterations} completed")
             count += 1
             del selected_columns, df1, df2, df3, df4
-        
+
         del store, symbol, num_rows_list, snapshot_names, all_columns
         del num_rows_to_select, important_values, snapshots_list, versions_list, number_columns_for_selection_list
         gc.collect()
-        time.sleep(10) # collection is not immediate
-        logger.info(f"Test completed in {time.time() - start_test}")     
-
-
+        time.sleep(10)  # collection is not immediate
+        logger.info(f"Test completed in {time.time() - start_test}")

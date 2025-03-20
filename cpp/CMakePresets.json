@@ -63,7 +63,6 @@
       "generator": "Ninja",
       "environment": { "cmakepreset_expected_host_system": "Windows" },
       "cacheVariables": {
-        "ARCTICDB_USE_PCH": "ON",
         "VCPKG_OVERLAY_TRIPLETS": "custom-triplets",
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-msvc"
       }
