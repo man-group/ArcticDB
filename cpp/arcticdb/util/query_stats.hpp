@@ -118,7 +118,7 @@ public:
     std::shared_ptr<GroupingLevel> root_level();
     const std::vector<std::shared_ptr<GroupingLevel>>& root_levels() const;
     bool is_root_level_set() const;
-    void create_child_level(std::shared_ptr<ThreadLocalQueryStatsVar> parent_thread_local_var);
+    void create_child_level(std::shared_ptr<ThreadLocalQueryStatsVar>&& parent_thread_local_var);
     void set_level(std::shared_ptr<GroupingLevel> &level);
     void reset_stats();
     static QueryStats& instance();
