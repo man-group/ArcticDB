@@ -5,6 +5,7 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/entity/python_bindings.hpp>
 #include <arcticdb/async/python_bindings.hpp>
 #include <arcticdb/codec/python_bindings.hpp>
 #include <arcticdb/column_store/python_bindings.hpp>
@@ -288,15 +289,15 @@ void register_metrics(py::module && m){
     auto prometheus = m.def_submodule("prometheus");
     py::class_<arcticdb::PrometheusInstance, std::shared_ptr<arcticdb::PrometheusInstance>>(prometheus, "Instance");
 
+    py::enum_<arcticdb::MetricsConfig::Model>(prometheus, "MetricsConfigModel")
+        .value("NO_INIT", arcticdb::MetricsConfig::Model::NO_INIT)
+        .value("PUSH", arcticdb::MetricsConfig::Model::PUSH)
+        .value("PULL", arcticdb::MetricsConfig::Model::PULL)
+        .export_values();
+
     py::class_<arcticdb::MetricsConfig, std::shared_ptr<arcticdb::MetricsConfig>>(prometheus, "MetricsConfig")
     .def(py::init<const std::string&, const std::string&, const std::string&, const std::string&, const std::string&, const arcticdb::MetricsConfig::Model>());
 
-    py::enum_<arcticdb::MetricsConfig::Model>(prometheus, "MetricsConfigModel")
-            .value("NO_INIT", arcticdb::MetricsConfig::Model::NO_INIT)
-            .value("PUSH", arcticdb::MetricsConfig::Model::PUSH)
-            .value("PULL", arcticdb::MetricsConfig::Model::PULL)
-            .export_values()
-    ;
 }
 
 /// Register handling of non-trivial types. For more information @see arcticdb::TypeHandlerRegistry and
@@ -335,15 +336,24 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     register_error_code_ecosystem(exceptions, base_exception);
 
     arcticdb::async::register_bindings(m);
-    arcticdb::codec::register_bindings(m);
-    arcticdb::column_store::register_bindings(m);
-
     auto storage_submodule = m.def_submodule("storage", "Segment storage implementation apis");
     auto no_data_found_exception = py::register_exception<arcticdb::storage::NoDataFoundException>(
             storage_submodule, "NoDataFoundException", base_exception.ptr());
     arcticdb::storage::apy::register_bindings(storage_submodule, base_exception);
 
+    // depends on SortedValue
+    arcticdb::entity::register_bindings(m);
+    // column_store bindings depend on,
+    //   - entity for TypeDescriptor
+    arcticdb::column_store::register_bindings(m); 
+    // stream bindings depends on ,
+    //   - column_store for Column & StringPool
+    //   - version SortedValue??
     arcticdb::stream::register_bindings(m);
+    // codex bindings depend on,
+    //   - column_store for ColumnData
+    //   - entity for TypeDescriptor
+    arcticdb::codec::register_bindings(m); 
     arcticdb::toolbox::apy::register_bindings(m, base_exception);
 
     m.def("get_version_string", &arcticdb::get_arcticdb_version_string);

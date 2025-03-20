@@ -84,4 +84,4 @@ dependencies:
   - psutil
   - memray 
   - pytest-memray
-
+  - pybind11-stubgen
