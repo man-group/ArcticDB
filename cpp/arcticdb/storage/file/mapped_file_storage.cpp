@@ -43,7 +43,7 @@ void MappedFileStorage::init() {
         ARCTICDB_DEBUG(log::storage(), "Creating new mapped file storage at path {}", config_.path());
         multi_segment_header_.initalize(StreamId{NumericId{0}}, config_.items_count());
 
-        std::vector<EncodingScanResultSet> encodings;
+        SegmentScanResults encodings;
         if(codec_.codec_type() == Codec::ADAPTIVE)
             encodings = get_encodings(multi_segment_header_.segment());
 

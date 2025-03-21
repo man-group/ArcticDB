@@ -11,7 +11,7 @@ namespace arcticdb {
 template <typename T, size_t size>
 struct ContiguousRangeForwardAdaptor {
     ColumnData column_data_;
-    const std::vector<MemBlock*>& blocks_;
+    const ChunkedBuffer::BlockVectorType& blocks_;
     std::optional<MemBlock*> block_;
     size_t block_pos_ = 0;
     size_t block_num_ = 0;

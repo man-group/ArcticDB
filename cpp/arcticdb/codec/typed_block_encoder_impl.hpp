@@ -97,7 +97,8 @@ struct TypedBlockEncoderImpl {
                 typed_block,
                 out,
                 pos,
-                shapes_encoded_block);
+                shapes_encoded_block,
+                std::nullopt);
         });
     }
 
@@ -115,8 +116,8 @@ private:
         arcticdb::detail::PassthroughEncoderV2<TypedBlock, TD>>;
 
     using AdaptiveEncoder = std::conditional_t<encoder_version == EncodingVersion::V1,
-                                                  arcticdb::detail::AdaptiveEncoderV1<TypedBlock, TD>,
-                                                  arcticdb::detail::AdaptiveEncoder<TypedBlock, TD>>;
+                                                  arcticdb::AdaptiveEncoderV1<TypedBlock, TD>,
+                                                  arcticdb::AdaptiveEncoder<TypedBlock, TD>>;
 
 
     template<typename EncoderT>
@@ -133,8 +134,6 @@ private:
                 return f(EncoderTag<Lz4Encoder>());
             case Codec::PASS :
                 return f(EncoderTag<PassthroughEncoder>());
-            case Codec::ADAPTIVE :
-                return f(EncoderTag<AdaptiveEncoder>());
             default:
                 return f(EncoderTag<PassthroughEncoder>());
         }

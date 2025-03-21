@@ -4,8 +4,53 @@
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/hash.hpp>
+#include <arcticdb/codec/compression/encoding_scan_result.hpp>
+#include <arcticdb/codec/compression/delta.hpp>
+#include <arcticdb/codec/compression/ffor.hpp>
+#include <arcticdb/codec/compression/frequency.hpp>
+#include <arcticdb/codec/compression/bitpack.hpp>
+#include <arcticdb/codec/compression/plain.hpp>
+#include <arcticdb/codec/compression/alp.hpp>
 
-namespace arcticdb::detail {
+namespace arcticdb {
+
+Block block_from_scan_result(const EncodingScanResult& scan_result, bool is_shape) {
+    Block block;
+
+    block.in_bytes_  = static_cast<uint32_t>(scan_result.original_size_);
+    block.out_bytes_ = static_cast<uint32_t>(scan_result.estimated_size_);
+    block.encoder_version_ = 1;
+    block.is_shape_ = is_shape;
+
+    BlockCodecImpl codec;
+    auto adaptive_codec = codec.mutable_adaptive();
+    adaptive_codec->encoding_type_ = scan_result.type_;
+    switch(scan_result.type_) {
+    case EncodingType::PLAIN:
+        break;
+
+    case EncodingType::FFOR: {
+        util::check(std::holds_alternative<FFORCompressData>(scan_result.data_), "Expected FFOR compress data for codec type");
+        const auto &ffor = std::get<FFORCompressData>(scan_result.data_);
+        memcpy(codec.data_.data(), &ffor, sizeof(ffor));
+        break;
+    }
+    case EncodingType::DELTA: {
+        util::check(std::holds_alternative<DeltaCompressData>(scan_result.data_),
+                    "Expected delta compress data for codec type");
+        const auto &delta = std::get<DeltaCompressData>(scan_result.data_);
+        memcpy(codec.data_.data(), &delta, std::min(BlockCodec::DataSize, sizeof(delta)));
+        break;
+    }
+
+    default:
+        codec.type_ = Codec::UNKNOWN;
+        break;
+    }
+
+    block.codec_ = codec;
+    return block;
+}
 
 template<template<typename> class BlockType, class TD>
 struct AdaptiveEncoderV1 {
@@ -36,24 +81,58 @@ struct AdaptiveEncoder {
     }
 
     template <typename EncodedBlockType>
-    static void encode(
-        const Opts&,
+    static void encode_shapes(
         const BlockType<TD> &block,
         Buffer &out,
         std::ptrdiff_t &pos,
-        EncodedBlockType* output_block) {
+        EncodedBlockType& output_block,
+        const EncodingScanResult& result) {
         using namespace arcticdb::entity;
         using CodecHelperType = arcticdb::detail::CodecHelper<TD>;
         using T = typename CodecHelperType::T;
         CodecHelperType helper;
-        const T* d = block.data();
+        const T* data = block.data();
         const size_t data_byte_size = block.nbytes();
         helper.ensure_buffer(out, pos, data_byte_size);
 
         T *t_out = out.ptr_cast<T>(pos, data_byte_size);
-        encode_block(d, data_byte_size, helper.hasher(), t_out, pos, output_block);
-        output_block->set_hash(helper.hasher().digest());
+        encode_block(data, data_byte_size, helper.hasher(), t_out, pos, output_block, result);
+        output_block.set_hash(helper.hasher().digest());
     }
+
+    template <typename EncodedBlockType>
+    static void encode_data(
+            ColumnData column_data,
+            Buffer &out,
+            std::ptrdiff_t &pos,
+            EncodedBlockType& output_block,
+            const EncodingScanResult& result) {
+        using T = TD::DataTypeTag::raw_type;
+        switch(result.type_) {
+        *output_block->mutable_adaptive() = block_from_scan_result(result, false);
+        case EncodingType::DELTA: {
+            pos += DeltaCompressor<T>::compress(column_data, reinterpret_cast<T*>(out.data() + pos), result.estimated_size_);
+        }
+        case EncodingType::FFOR: {
+            pos += FForCompressor<T>::compress(column_data, reinterpret_cast<T*>(out.data() + pos), result.estimated_size_);
+        }
+        case EncodingType::BITPACK: {
+            pos += BitPackCompressor<T>::compress(column_data,  reinterpret_cast<T*>(out.data() + pos), result.estimated_size_);
+        }
+        case EncodingType::ALP: {
+            pos += BitPackCompressor<T>::compress(column_data,  reinterpret_cast<T*>(out.data() + pos), result.estimated_size_);
+        }
+        case EncodingType::PLAIN: {
+            pos += PlainCompressor<T>::compress(column_data,  reinterpret_cast<T*>(out.data() + pos), result.estimated_size_);
+        }
+        case EncodingType::FREQUENCY: {
+            pos += FrequencyCompressor<T>::compress(column_data,  reinterpret_cast<T*>(out.data() + pos), result.estimated_size_);
+        }
+        default:
+            util::raise_rte("Unknown encoding type {}", result.type_);
+        }
+    }
+
 private:
     template<class T, typename EncodedBlockType>
     static void encode_block(
@@ -62,7 +141,8 @@ private:
         HashAccum& hasher,
         T* out,
         std::ptrdiff_t& pos,
-        EncodedBlockType* output_block) {
+        EncodedBlockType* output_block,
+        EncodingScanResult scan_result [[maybe_unused]]) {
         memcpy(out, in, in_byte_size);
         hasher(in, in_byte_size / sizeof(T));
         pos += static_cast<ssize_t>(in_byte_size);
@@ -84,4 +164,4 @@ struct AdaptiveDecoder {
         memcpy(t_out, in, in_bytes);
     }
 };
-} //namespace arcticdb::detail
+} //namespace arcticdb

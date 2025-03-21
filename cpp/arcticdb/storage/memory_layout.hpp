@@ -88,6 +88,8 @@ struct AdaptiveCodec {
     uint16_t padding_ = 0;
 };
 
+static_assert(sizeof(AdaptiveCodec) == encoding_size);
+
 struct BlockCodec {
     Codec type_ = Codec::UNKNOWN;
     constexpr static size_t DataSize = 24;

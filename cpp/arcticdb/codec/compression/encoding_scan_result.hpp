@@ -35,7 +35,7 @@ struct EncodingScanResult {
     EncoderData data_ = EncoderData{};
 };
 
-size_t calculate_score(size_t speed_factor, size_t estimated_size, size_t original_size, size_t weight) {
+inline size_t calculate_score(size_t speed_factor, size_t estimated_size, size_t original_size, size_t weight) {
     weight = std::max(100UL, weight);
     size_t size_ratio = (estimated_size * 100) / original_size;
     size_t score = (weight * size_ratio + (100 - weight) * speed_factor) / 100;
@@ -47,7 +47,7 @@ size_t calculate_score(size_t speed_factor, size_t estimated_size, size_t origin
 // an encoding with a speed factor of 10 (10 microseconds per 100k rows) and another
 // encoding with a speed factor of 20, the slower encoding will be chosen when the
 // estimated size of the faster encoding is > 1.5x that of the slower encoding.
-[[maybe_unused]] size_t compute_size_weight(double ratio, size_t baseline_size_ratio = 100) {
+[[maybe_unused]] inline size_t compute_size_weight(double ratio, size_t baseline_size_ratio = 100) {
     double denominator = static_cast<double>(baseline_size_ratio) * (ratio - 1.0) + 10.0;
     if (denominator <= 0.0)
         return 100;
@@ -58,7 +58,7 @@ size_t calculate_score(size_t speed_factor, size_t estimated_size, size_t origin
     return std::min(weight, 100UL);
 }
 
-EncodingScanResult create_scan_result(
+inline EncodingScanResult create_scan_result(
         EncodingType encoding_type,
         size_t estimated_size,
         size_t speed,
@@ -101,6 +101,11 @@ struct EncodingScanResultSet {
         return results_[pos];
     }
 
+    [[nodiscard]] const EncodingScanResult& first() const {
+        util::check(members_ == 1, "Unexpected number of results: {}", members_);
+        return results_[0];
+    }
+
     void select(size_t offset) {
         util::check(offset < members_, "Out-of-bounds offset given to EncodingScanResultSet: {}", offset);
         if(offset != 0)
@@ -115,4 +120,42 @@ struct EncodingScanResultSet {
         });
     }
 };
+
+struct SegmentScanResults {
+    ankerl::unordered_dense::map<position_t, EncodingScanResultSet> values_;
+    ankerl::unordered_dense::map<position_t, EncodingScanResultSet> shapes_;
+
+    void add_value(position_t column_index, EncodingScanResultSet results) {
+        values_.emplace(column_index, results);
+    }
+
+    EncodingScanResultSet& value(position_t column_index) {
+        auto it = values_.find(column_index);
+        util::check(it != values_.end(), "No scan results found for values at column {}", column_index);
+        return it->second;
+    }
+
+    [[nodiscard]] size_t values_size() const {
+        return values_.size();
+    }
+
+    void reserve_values(size_t size) {
+        values_.reserve(size);
+    }
+
+    void add_shape(position_t column_index, EncodingScanResultSet results) {
+        shapes_.emplace(column_index, results);
+    }
+
+    EncodingScanResultSet& shape(position_t column_index) {
+        auto it = shapes_.find(column_index);
+        util::check(it != shapes_.end(), "No scan results found for values at column {}", column_index);
+        return it->second;
+    }
+
+    [[nodiscard]] bool empty() const {
+        return values_.empty();
+    }
+};
+
 } // namespace arcticdb

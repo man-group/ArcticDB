@@ -209,7 +209,12 @@ void encode_string_pool(
         ARCTICDB_TRACE(log::codec(), "Encoding string pool to position {}", pos);
         auto col = in_mem_seg.string_pool_data();
         auto& encoded_field = segment_header.mutable_string_pool_field(calc_num_blocks<EncodingPolicyType>(col));
-        EncodingPolicyType::ColumnEncoder::encode(codec_opts, col, encoded_field, out_buffer, pos);
+        EncodingPolicyType::ColumnEncoder::encode(codec_opts,
+                                                  col,
+                                                  encoded_field,
+                                                  out_buffer,
+                                                  pos,
+                                                  std::nullopt_t(std::nullopt_t::_Construct::_Token));
         ARCTICDB_TRACE(log::codec(), "Encoded string pool to position {}", pos);
     }
 }
@@ -218,12 +223,12 @@ void encode_string_pool(
     const SegmentInMemory &in_mem_seg,
     const BlockCodecImpl& codec_opts);
 
-struct EncodingScanResultSet;
+struct SegmentScanResults;
 
 [[nodiscard]] SizeResult max_compressed_size_v2(
     const SegmentInMemory &in_mem_seg,
     const BlockCodecImpl& codec_opts,
-    std::vector<EncodingScanResultSet>& adaptive_encodings
+    SegmentScanResults& adaptive_encodings
     );
 
 } //namespace arcticdb

@@ -65,25 +65,37 @@ public:
         ColumnData& column_data,
         EncodedFieldImpl& field,
         Buffer& out,
-        std::ptrdiff_t& pos);
+        std::ptrdiff_t& pos,
+        std::optional<EncodingScanResult> values_result,
+        std::optional<EncodingScanResult> shapes_result);
 
     static std::pair<size_t, size_t> max_compressed_size(
         const BlockCodecImpl& codec_opts,
         ColumnData& column_data);
+
+
+    static EncodedFieldImpl* add_field(
+        const BlockCodecImpl& codec_opts,
+        ColumnData& column_data,
+        EncodedFieldCollection& fields,
+        std::optional<EncodingScanResult> value_result,
+        std::optional<EncodingScanResult> shapes_result);
 
 private:
     static void encode_shapes(
         const ColumnData& column_data,
         EncodedFieldImpl& field,
         Buffer& out,
-        std::ptrdiff_t& pos_in_buffer);
+        std::ptrdiff_t& pos_in_buffer,
+        std::optional<EncodingScanResult> scan_result);
 
     static void encode_blocks(
         const BlockCodecImpl& codec_opts,
         ColumnData& column_data,
         EncodedFieldImpl& field,
         Buffer& out,
-        std::ptrdiff_t& pos);
+        std::ptrdiff_t& pos,
+        std::optional<EncodingScanResult> scan_result);
 };
 
 [[nodiscard]] static TypedBlockData<ShapesBlockTDT> create_shapes_typed_block(const ColumnData& column_data) {
@@ -101,9 +113,11 @@ void ColumnEncoderV2::encode(
         ColumnData& column_data,
         EncodedFieldImpl& field,
         Buffer& out,
-        std::ptrdiff_t& pos) {
-    encode_shapes(column_data, field, out, pos);
-    encode_blocks(codec_opts, column_data, field, out, pos);
+        std::ptrdiff_t& pos,
+        std::optional<EncodingScanResult> values_result,
+        std::optional<EncodingScanResult> shapes_result) {
+    encode_shapes(column_data, field, out, pos, shapes_result);
+    encode_blocks(codec_opts, column_data, field, out, pos, values_result);
     encode_sparse_map(column_data, field, out, pos);
 }
 
@@ -111,15 +125,37 @@ void ColumnEncoderV2::encode_shapes(
         const ColumnData& column_data,
         EncodedFieldImpl& field,
         Buffer& out,
-        std::ptrdiff_t& pos_in_buffer) {
+        std::ptrdiff_t& pos_in_buffer,
+        std::optional<EncodingScanResult> scan_result) {
     // There is no need to store the shapes for a column of empty type as they will be all 0. The type handler will
     // assign 0 for the shape upon reading. There is one edge case - when we have None in the column, as it should not
     // have shape at all (since it's not an array). This is handled by the sparse map.
-    if(column_data.type().dimension() != Dimension::Dim0 && !is_empty_type(column_data.type().data_type())) {
-        TypedBlockData<ShapesBlockTDT> shapes_block = create_shapes_typed_block(column_data);
+    if(column_data.type().dimension() == Dimension::Dim0 || is_empty_type(column_data.type().data_type()))
+        return;
+
+    TypedBlockData<ShapesBlockTDT> shapes_block = create_shapes_typed_block(column_data);
+    if(scan_result) {
+        using AdaptiveShapesEncoder = AdaptiveEncoder<TypedBlockData, ShapesBlockTDT>;
+        AdaptiveShapesEncoder::encode_shapes(shapes_block, out, pos_in_buffer, field.shapes(0), *scan_result);
+    } else {
         using ShapesEncoder = TypedBlockEncoderImpl<TypedBlockData, ShapesBlockTDT, EncodingVersion::V2>;
         ShapesEncoder::encode_shapes(codec::default_shapes_codec(), shapes_block, field, out, pos_in_buffer);
     }
+}
+
+EncodedFieldImpl* ColumnEncoderV2::add_field(
+    const BlockCodecImpl& codec_opts,
+    ColumnData& column_data,
+    EncodedFieldCollection& fields,
+    std::optional<EncodingScanResult> value_result,
+    std::optional<EncodingScanResult> shapes_result) {
+    size_t num_blocks;
+    if(codec_opts.codec_type() == Codec::ADAPTIVE)
+        num_blocks = column_data.type().dimension() == Dimension::Dim0 ? 1 : 2;
+    else
+        num_blocks = column_data.num_blocks();
+
+    return fields.add_field(num_blocks);
 }
 
 void ColumnEncoderV2::encode_blocks(
@@ -127,24 +163,46 @@ void ColumnEncoderV2::encode_blocks(
         ColumnData& column_data,
         EncodedFieldImpl& field,
         Buffer& out,
-        std::ptrdiff_t& pos) {
-    column_data.type().visit_tag([&codec_opts, &column_data, &field, &out, &pos](auto type_desc_tag) {
+        std::ptrdiff_t& pos,
+        std::optional<EncodingScanResult> scan_result) {
+    column_data.type().visit_tag([&codec_opts, &column_data, &field, &out, &pos, &scan_result](auto type_desc_tag) {
         using TDT = decltype(type_desc_tag);
-        using Encoder = TypedBlockEncoderImpl<TypedBlockData, TDT, EncodingVersion::V2>;
         ARCTICDB_TRACE(log::codec(), "Column data has {} blocks", column_data.num_blocks());
-        if(codec_opts.codec_type() == Codec::ADAPTIVE) {
-            // stuff
-        }
-        while (auto block = column_data.next<TDT>()) {
-            if constexpr(must_contain_data(static_cast<TypeDescriptor>(type_desc_tag))) {
-                util::check(block->nbytes() > 0, "Zero-sized block");
-                Encoder::encode_values(codec_opts, *block, field, out, pos);
-            } else {
-                if(block->nbytes() > 0)
+        if(scan_result) {
+              using AdaptiveBlockEncoder = AdaptiveEncoder<TypedBlockData, TDT>;
+                AdaptiveBlockEncoder::encode_data(column_data, out, pos, field.shapes(0), *scan_result);
+        } else {
+            using Encoder = TypedBlockEncoderImpl<TypedBlockData, TDT, EncodingVersion::V2>;
+            while (auto block = column_data.next<TDT>()) {
+                if constexpr (must_contain_data(static_cast<TypeDescriptor>(type_desc_tag))) {
+                    util::check(block->nbytes() > 0, "Zero-sized block");
                     Encoder::encode_values(codec_opts, *block, field, out, pos);
+                } else {
+                    if (block->nbytes() > 0) {
+                        Encoder::encode_values(codec_opts, *block, field, out, pos);
+                    }
+                }
             }
         }
     });
+}
+
+template <typename EncodingPolicyType>
+void encode_string_pool_v2(
+    const SegmentInMemory &in_mem_seg,
+    SegmentHeader &segment_header,
+    const BlockCodecImpl& codec_opts,
+    Buffer &out_buffer,
+    std::ptrdiff_t &pos
+) {
+    if (in_mem_seg.has_string_pool()) {
+        ARCTICDB_TRACE(log::codec(), "Encoding string pool to position {}", pos);
+        auto col = in_mem_seg.string_pool_data();
+        auto& encoded_field = segment_header.mutable_string_pool_field(calc_num_blocks<EncodingPolicyType>(col));
+        // String pool uses default encoding for the time being
+        EncodingPolicyType::ColumnEncoder::encode(codec_opts, col, encoded_field, out_buffer, pos, std::nullopt, std::nullopt);
+        ARCTICDB_TRACE(log::codec(), "Encoded string pool to position {}", pos);
+    }
 }
 
 std::pair<size_t, size_t> ColumnEncoderV2::max_compressed_size(
@@ -189,7 +247,7 @@ static void encode_field_descriptors(
     if(!in_mem_seg.fields().empty()) {
         auto col = in_mem_seg.descriptor().fields().column_data();
         auto &encoded_field = segment_header.mutable_descriptor_field(calc_num_blocks<EncodingPolicyV2>(col));
-        ColumnEncoderV2::encode(codec_opts, col, encoded_field, out_buffer, pos);
+        ColumnEncoderV2::encode(codec_opts, col, encoded_field, out_buffer, pos, std::nullopt, std::nullopt);
         ARCTICDB_TRACE(log::codec(), "Encoded field descriptors to position {}", pos);
     }
 }
@@ -213,17 +271,23 @@ static void encode_index_descriptors(
         auto index_field_data = tsd.fields().column_data();
         auto& index_field = segment_header.mutable_index_descriptor_field(calc_num_blocks<EncodingPolicyV2>(index_field_data));
 
-        ColumnEncoderV2::encode(codec_opts, index_field_data, index_field, out_buffer, pos);
+        ColumnEncoderV2::encode(codec_opts, index_field_data, index_field, out_buffer, pos, std::nullopt, std::nullopt);
         ARCTICDB_TRACE(log::codec(), "Encoded index field descriptors to position {}", pos);
     }
 }
 
-[[nodiscard]] size_t calc_column_blocks_size(const Column& col) {
+[[nodiscard]] size_t num_output_blocks(Codec codec_type, const Column& col) {
+    return codec_type == Codec::ADAPTIVE ? 1 : col.num_blocks();
+}
+
+[[nodiscard]] size_t calc_column_blocks_size(
+        const Column& col,
+        const std::optional<BlockCodecImpl>& codec) {
     size_t bytes = EncodedFieldImpl::Size;
     if(col.type().dimension() != entity::Dimension::Dim0)
         bytes += sizeof(EncodedBlock);
 
-    bytes += sizeof(EncodedBlock) * col.num_blocks();
+    bytes += sizeof(EncodedBlock) * num_output_blocks(codec->codec_type(), col);
     ARCTICDB_TRACE(log::version(), "Encoded block size: {} + shapes({}) + {} * {} = {}",
         EncodedFieldImpl::Size,
         col.type().dimension() != entity::Dimension::Dim0 ? sizeof(EncodedBlock) : 0u,
@@ -234,11 +298,13 @@ static void encode_index_descriptors(
     return bytes;
 }
 
-[[nodiscard]] static size_t encoded_blocks_size(const SegmentInMemory& in_mem_seg) {
+[[nodiscard]] static size_t encoded_blocks_size(
+        const SegmentInMemory& in_mem_seg,
+        const BlockCodecImpl& codec) {
     size_t bytes = 0;
     for (std::size_t c = 0; c < in_mem_seg.num_columns(); ++c) {
         const auto& col = in_mem_seg.column(position_t(c));
-        bytes += calc_column_blocks_size(col);
+        bytes += calc_column_blocks_size(col, codec);
     }
     bytes += sizeof(EncodedBlock);
     return bytes;
@@ -246,11 +312,12 @@ static void encode_index_descriptors(
 
 static void calc_encoded_blocks_size(
         const SegmentInMemory& in_mem_seg,
-        const BlockCodecImpl& codec_opts,
+        const BlockCodecImpl column_codec_opts, // Codec compressing the columns
+        const BlockCodecImpl& meta_codec_opts,  // Codec compressing the encoding blocks buffer
         SizeResult& result) {
-    result.encoded_blocks_bytes_ = static_cast<shape_t>(encoded_blocks_size(in_mem_seg));
+    result.encoded_blocks_bytes_ = static_cast<shape_t>(encoded_blocks_size(in_mem_seg, column_codec_opts));
     result.uncompressed_bytes_ += result.encoded_blocks_bytes_;
-    result.max_compressed_bytes_ += BytesEncoder<EncodingPolicyV2>::max_compressed_size(codec_opts, result.encoded_blocks_bytes_);
+    result.max_compressed_bytes_ += BytesEncoder<EncodingPolicyV2>::max_compressed_size(meta_codec_opts, result.encoded_blocks_bytes_);
 }
 
 static void add_stream_descriptor_data_size(SizeResult& result, const StreamId& stream_id) {
@@ -281,17 +348,10 @@ static void calc_stream_descriptor_fields_size(
     }
 }
 
-void scan_adaptive_encodings(
-        const SegmentInMemory& in_mem_seg,
-        std::vector<EncodingScanResultSet>& encoding_results,
-        SizeResult& size_result) {
-    resolve_adaptive_encodings_size(in_mem_seg, encoding_results, size_result);
-}
-
 [[nodiscard]] SizeResult max_compressed_size_v2(
         const SegmentInMemory& in_mem_seg,
-        const BlockCodecImpl& default_codec_opts,
-        std::vector<EncodingScanResultSet>& adaptive_encodings) {
+        const BlockCodecImpl& column_codec_opts,
+        SegmentScanResults& adaptive_encodings) {
     ARCTICDB_SAMPLE(GetSegmentCompressedSize, 0)
     SizeResult result{};
     auto non_data_codec_opts = codec::default_lz4_codec();
@@ -301,18 +361,21 @@ void scan_adaptive_encodings(
     result.max_compressed_bytes_ += sizeof(IndexMagic);
     calc_stream_descriptor_fields_size(in_mem_seg, non_data_codec_opts, result);
     result.max_compressed_bytes_ += sizeof(EncodedMagic);
-    calc_encoded_blocks_size(in_mem_seg, non_data_codec_opts, result);
+    calc_encoded_blocks_size(in_mem_seg, column_codec_opts, non_data_codec_opts, result);
 
     if(in_mem_seg.row_count() > 0) {
         result.max_compressed_bytes_ += sizeof(ColumnMagic) * in_mem_seg.descriptor().field_count();
-        if(!adaptive_encodings.empty())
-            scan_adaptive_encodings(in_mem_seg, adaptive_encodings, result);
-        else
-            calc_columns_size<EncodingPolicyV2>(in_mem_seg, default_codec_opts, result);
+        if(column_codec_opts.codec_type() == Codec::ADAPTIVE) {
+            util::check(!adaptive_encodings.empty(), "Expected adaptive encodings for codec");
+            resolve_adaptive_encodings_size(in_mem_seg, adaptive_encodings, result);
+        } else {
+            calc_columns_size<EncodingPolicyV2>(in_mem_seg, column_codec_opts, result);
+        }
 
         result.max_compressed_bytes_ += sizeof(StringPoolMagic);
         calc_string_pool_size<EncodingPolicyV2>(in_mem_seg, non_data_codec_opts, result);
     }
+
     ARCTICDB_TRACE(log::codec(), "Max compressed size {}", result.max_compressed_bytes_);
     return result;
 }
@@ -330,10 +393,9 @@ static void encode_encoded_fields(
     Column encoded_fields_column(encoded_fields_type_desc(), Sparsity::NOT_PERMITTED, encoded_fields.release_data());
     auto data = encoded_fields_column.data();
     auto& encoded_field = segment_header.mutable_column_fields(calc_num_blocks<EncodingPolicyV2>(data));
-    ColumnEncoderV2::encode(codec_opts, data, encoded_field, out_buffer, pos);
+    ColumnEncoderV2::encode(codec_opts, data, encoded_field, out_buffer, pos, std::nullopt, std::nullopt);
     ARCTICDB_DEBUG(log::codec(), "Encoded encoded blocks to position {}", pos);
 }
-
 
 [[nodiscard]] Segment encode_v2(
         SegmentInMemory&& s,
@@ -349,12 +411,13 @@ static void encode_encoded_fields(
 
     SegmentHeader segment_header{EncodingVersion::V2};
     segment_header.set_compacted(in_mem_seg.compacted());
-    std::vector<EncodingScanResultSet> encodings;
+
+    SegmentScanResults scan_results;
     if(codec_opts.codec_type() == Codec::ADAPTIVE)
-        encodings = get_encodings(in_mem_seg);
+        scan_results = get_encodings(in_mem_seg);
 
     std::ptrdiff_t pos = 0;
-    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(in_mem_seg, codec_opts, encodings);
+    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(in_mem_seg, codec_opts, scan_results);
     ARCTICDB_TRACE(log::codec(), "Estimated max buffer requirement: {}", max_compressed_size);
     const auto preamble = segment_header.required_bytes(in_mem_seg);
     auto out_buffer = std::make_shared<Buffer>(max_compressed_size + encoded_buffer_size, preamble);
@@ -366,11 +429,13 @@ static void encode_encoded_fields(
 
     write_magic<MetadataMagic>(*out_buffer, pos);
     encode_metadata<EncodingPolicyV2>(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
+
     write_magic<SegmentDescriptorMagic>(*out_buffer, pos);
     write_segment_descriptor(*out_buffer, pos, descriptor.data());
     write_identifier(*out_buffer, pos, descriptor.id());
     write_magic<DescriptorFieldsMagic>(*out_buffer, pos);
     encode_field_descriptors(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
+
     write_magic<IndexMagic>(*out_buffer, pos);
     encode_index_descriptors(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
 
@@ -381,16 +446,18 @@ static void encode_encoded_fields(
         ARCTICDB_TRACE(log::codec(), "Encoding fields");
         for (std::size_t column_index = 0; column_index < in_mem_seg.num_columns(); ++column_index) {
             write_magic<ColumnMagic>(*out_buffer, pos);
-            const auto& column = in_mem_seg.column(column_index);
+            const auto& column = in_mem_seg.column(position_t(column_index));
             auto column_data = column.data();
-            auto* column_field = encoded_fields.add_field(column_data.num_blocks());
+            auto value_scan_result = codec_opts.codec_type() == Codec::ADAPTIVE ? std::make_optional(scan_results.value(position_t(column_index)).first()) : std::nullopt;
+            auto shapes_scan_result = column_data.type().dimension() != Dimension::Dim0 ? std::make_optional(scan_results.shape(column_index).first()) : std::nullopt;
+            auto* column_field = encoder.add_field(codec_opts, column_data, encoded_fields, value_scan_result, shapes_scan_result);
             if(column.has_statistics())
                 column_field->set_statistics(column.get_statistics());
 
             ARCTICDB_TRACE(log::codec(),"Beginning encoding of column {}: ({}) to position {}", column_index, in_mem_seg.descriptor().field(column_index).name(), pos);
 
             if(column_data.num_blocks() > 0) {
-                encoder.encode(codec_opts, column_data, *column_field, *out_buffer, pos);
+                encoder.encode(codec_opts, column_data, *column_field, *out_buffer, pos, value_scan_result, shapes_scan_result);
                 ARCTICDB_TRACE(log::codec(), "Encoded column {}: ({}) to position {}", column_index, in_mem_seg.descriptor().field(column_index).name(), pos);
             } else {
                 util::check(!must_contain_data(column_data.type()), "Column {} of type {} contains no blocks", column_index, column_data.type());
@@ -399,7 +466,7 @@ static void encode_encoded_fields(
             }
         }
         write_magic<StringPoolMagic>(*out_buffer, pos);
-        encode_string_pool<EncodingPolicyV2>(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
+        encode_string_pool_v2<EncodingPolicyV2>(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
         encode_encoded_fields(segment_header, codec_opts, *out_buffer, pos, std::move(encoded_fields));
     } else {
         segment_header.set_footer_offset(pos);

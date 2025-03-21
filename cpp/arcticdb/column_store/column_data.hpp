@@ -323,7 +323,7 @@ public:
 
     template<typename TDT, IteratorType iterator_type=IteratorType::REGULAR, IteratorDensity iterator_density=IteratorDensity::DENSE>
     ColumnDataIterator<TDT, iterator_type, iterator_density, true> cbegin() {
-        return ColumnDataIterator<TDT, iterator_type, iterator_density, true>(const_cast<ColumnData*>(this));
+        return ColumnDataIterator<TDT, iterator_type, iterator_density, true>(this);
     }
 
     template<typename TDT, IteratorType iterator_type=IteratorType::REGULAR, IteratorDensity iterator_density=IteratorDensity::DENSE>

@@ -98,6 +98,7 @@ struct BlockCodecImpl : public BlockCodec {
     template<class CodecType>
     explicit BlockCodecImpl(const CodecType &codec) {
         type_ = CodecType::type;
+        static_assert(sizeof(CodecType) == encoding_size);
         memcpy(data_, &codec, encoding_size);
     }
 };
@@ -320,6 +321,14 @@ struct EncodedFieldImpl : public EncodedField {
         else
             return blocks()[(n * 2) + 1];
     }
+
+   /* [[nodiscard]] EncodedBlock& shapes(size_t n) {
+        return const_cast<EncodedBlock&>(const_cast<const EncodedFieldImpl*>(this)->shapes(n));
+    }
+
+    [[nodiscard]] EncodedBlock& values(size_t n) {
+        return const_cast<EncodedBlock&>(const_cast<const EncodedFieldImpl*>(this)->values(n));
+    }*/
 
     [[nodiscard]] EncodedBlockCollection shapes() const {
         return {*this, true};

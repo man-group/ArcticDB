@@ -34,7 +34,7 @@ size_t max_data_size(
     auto max_file_size = 0UL;
     for(const auto& item : items) {
         const auto& [pk, seg, slice] = item;
-        std::vector<EncodingScanResultSet> encodings;
+        SegmentScanResults encodings;
         if(codec_opts.codec_type() == Codec::ADAPTIVE)
             encodings = get_encodings(seg);
 

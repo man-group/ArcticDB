@@ -543,7 +543,7 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-        util/buffer_holder.cpp codec/compression/encoders.hpp codec/compression/estimators.hpp codec/compression/bitpack_fused.hpp codec/compression/rle.hpp codec/compression/bitpack_fused.hpp codec/compression/transpose.hpp codec/encoding_scheme_picker.hpp codec/compression/encoder_data.hpp codec/compression/compressor.hpp codec/compression/encoding_scan_result.hpp codec/compression/contiguous_range_adaptor.hpp)
+        util/buffer_holder.cpp codec/compression/encoders.hpp codec/compression/estimators.hpp codec/compression/bitpack_fused.hpp codec/compression/rle.hpp codec/compression/bitpack_fused.hpp codec/compression/transpose.hpp codec/encoding_scheme_picker.hpp codec/compression/encoder_data.hpp codec/compression/compressor.hpp codec/compression/encoding_scan_result.hpp codec/compression/contiguous_range_adaptor.hpp codec/compression/bitpack.hpp codec/compression/plain.hpp codec/compression/alp.hpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -1008,7 +1008,7 @@ if(${TEST})
             version/test/version_map_model.hpp
             python/python_handlers.cpp
             storage/test/common.hpp
-            version/test/test_sort_index.cpp codec/test/test_delta.cpp codec/test/test_rle.cpp codec/test/test_estimators.cpp codec/test/test_lz4.cpp codec/test/test_fastlanes.cpp codec/test/test_adaptive_codec.cpp codec/test/test_scanner.cpp codec/test/test_range_adaptor.cpp)
+            version/test/test_sort_index.cpp codec/test/test_delta.cpp codec/test/test_rle.cpp codec/test/test_estimators.cpp codec/test/test_lz4.cpp codec/test/test_fastlanes.cpp codec/test/test_adaptive_codec.cpp codec/test/test_scanner.cpp codec/test/test_range_adaptor.cpp codec/test/test_bitpack_compress.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

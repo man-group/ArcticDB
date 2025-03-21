@@ -119,16 +119,19 @@ std::pair<T, size_t> reference_and_bitwidth(ColumnData data) {
 
     return data.type().visit_tag([&data] (auto tdt) -> std::pair<T, size_t> {
         using TDT = decltype(tdt);
+        using RawType = TDT::DataTypeTag::raw_type;
 
         auto i = data.cbegin<TDT, IteratorType::REGULAR>();
         T reference = *i;
         for(; i != data.cend<TDT, IteratorType::REGULAR>(); ++i) {
             reference = std::min<T>(reference, *i);
         }
+        data.reset();
 
         T max_delta = 0;
-        for(auto j = data.cbegin<TDT, IteratorType::REGULAR>(); j != data.cend<TDT, IteratorType::REGULAR>(); ++j) {
-            max_delta = std::max(max_delta, *j - reference);
+        auto j = data.cbegin<TDT, IteratorType::REGULAR>();
+        for (; j != data.cend<TDT, IteratorType::REGULAR>(); ++j) {
+            max_delta = std::max<RawType>(max_delta, *j - reference);
         }
 
         size_t bits_needed = std::bit_width(static_cast<std::make_unsigned_t<T>>(max_delta));
@@ -157,7 +160,7 @@ struct FForCompressor {
         size_t compressed_size = sizeof(FForHeader<T>) / sizeof(T);
 
         FForCompressKernel<T> kernel(reference);
-        if(data.num_blocks() == 1) {
+        if (data.num_blocks() == 1) {
             auto in = data.buffer().ptr_cast<T>(0, num_full_blocks * sizeof(T));
             for (size_t block = 0; block < num_full_blocks; ++block) {
                 compressed_size += dispatch_bitwidth_fused<T, BitPackFused>(
@@ -205,7 +208,10 @@ struct FForCompressor {
 
         return compressed_size;
     }
+};
 
+template <typename T>
+struct FForDecompressor {
     static size_t decompress(const T *__restrict in, T *__restrict out) {
         static constexpr size_t BLOCK_SIZE = 1024;
         const auto *header = reinterpret_cast<const FForHeader<T> *>(in);

@@ -12,6 +12,8 @@
 
 namespace arcticdb {
 
+static constexpr int TOO_SMALL_TO_COMPRESS = 32;
+
 class EncodingsList {
     uint64_t data_;
 
@@ -57,11 +59,17 @@ constexpr EncodingsList FloatEncodings {
 constexpr EncodingsList StringEncodings {
     EncodingType::CONSTANT,
     EncodingType::DELTA,
-    EncodingType::FREQUENCY
+    EncodingType::FREQUENCY,
+    EncodingType::FFOR
     //EncodingType::RLE
 };
 
-EncodingsList possible_encodings(DataType data_type) {
+constexpr EncodingsList ShapesEncodings {
+    EncodingType::CONSTANT,
+    EncodingType::FFOR
+};
+
+inline EncodingsList possible_encodings(DataType data_type) {
     if(is_sequence_type(data_type)) {
         return StringEncodings;
     } else if(is_integer_type(data_type) || is_time_type(data_type)) {
@@ -73,7 +81,7 @@ EncodingsList possible_encodings(DataType data_type) {
     }
 }
 
-EncodingsList viable_encodings(
+inline EncodingsList viable_encodings(
         EncodingsList input,
         FieldStatsImpl field_stats,
         DataType data_type,
@@ -87,7 +95,7 @@ EncodingsList viable_encodings(
     return output;
 }
 
-EncodingScanResultSet predicted_optimal_encodings(ColumnData column_data) {
+inline EncodingScanResultSet predicted_optimal_encodings(ColumnData column_data) {
     const auto data_type = column_data.type().data_type();
     const auto field_stats = column_data.field_stats();
     const auto row_count = column_data.row_count();
@@ -128,15 +136,51 @@ EncodingScanResultSet predicted_optimal_encodings(ColumnData column_data) {
 
 // For the time being an acceptable result is just one that achieves some degree of compression, however this could be
 // made more sophisticated if multiple results were to be evaluated together (see below)
-bool is_acceptable_result(const EncodingScanResult& result) {
+inline bool is_acceptable_result(const EncodingScanResult& result) {
     return result.estimated_size_ < result.original_size_;
 }
 
-void resolve_adaptive_encodings_size(const SegmentInMemory& seg, std::vector<EncodingScanResultSet>& column_encodings, SizeResult& result) {
-    util::check(column_encodings.size() == seg.num_columns(), "Expected equality of encoding scan results to columns: {} != {}", column_encodings.size(), seg.num_columns());
+inline EncodingScanResult plain_result(size_t bytes) {
+    EncodingScanResult result;
+    result.original_size_ = bytes;
+    result.estimated_size_ = bytes;
+    result.is_deterministic_ = true;
+    result.type_ = EncodingType::PLAIN;
+    return result;
+}
+
+inline EncodingScanResult shape_encoding(const ColumnData& col) {
+    const auto& shapes = *col.shapes();
+    if(shapes.bytes() <= TOO_SMALL_TO_COMPRESS) {
+       return plain_result(shapes.bytes());
+    } else {
+        const auto num_shapes = shapes.bytes() / sizeof(shape_t);
+        auto shape_ptr = shapes.ptr_cast<shape_t>(0, shapes.bytes());
+        auto [min, max] = std::minmax_element(shape_ptr, shape_ptr + num_shapes); 
+        FieldStatsImpl stats{*min, *max, static_cast<uint32_t>(num_shapes), UniqueCountType::PRECISE, SortedValue::UNKNOWN};
+        if(Ffor::is_viable(stats, DataType::INT64, num_shapes))
+            return Ffor::max_compressed_size(stats, DataType::INT64, num_shapes, col);
+        else
+            return plain_result(shapes.bytes());
+    }
+        
+}
+
+inline void resolve_adaptive_encodings_size(const SegmentInMemory& seg, SegmentScanResults& column_encodings, SizeResult& result) {
+    util::check(column_encodings.values_size() == seg.num_columns(), "Expected equality of encoding scan results to columns: {} != {}", column_encodings.values_size(), seg.num_columns());
     bool found_encoding = false;
-    for (std::size_t column_index = 0; column_index < seg.num_columns(); ++column_index) {
-        auto& encoding = column_encodings[column_index];        // We could potentially keep an array of results that on a full scan were worse than the partial scan predicted, but
+    for (position_t column_index = 0; column_index < position_t(seg.num_columns()); ++column_index) {
+        const auto& column = seg.column(column_index);
+        if(column.type().dimension() != Dimension::Dim0) {
+            EncodingScanResultSet shape_set;
+            shape_set.try_emplace(shape_encoding(column.data()));
+            result.max_compressed_bytes_ += shape_set[0].estimated_size_;
+            result.uncompressed_bytes_ += shape_set[0].original_size_;
+            column_encodings.add_shape(column_index, shape_set);
+        }
+
+        auto& encoding = column_encodings.value(column_index);
+        // We could potentially keep an array of results that on a full scan were worse than the partial scan predicted, but
         // might still be better than subsequent trials, then compare them all together at the end
         for(auto i = 0UL; i < encoding.size(); ++i) {
             if(encoding[i].is_deterministic_) {
@@ -147,7 +191,6 @@ void resolve_adaptive_encodings_size(const SegmentInMemory& seg, std::vector<Enc
                 break;
             }
 
-            const auto& column = seg.column(column_index);
             auto scanned_result = max_compressed_size(encoding[i].type_, column.get_statistics(), column.type().data_type(), column.row_count(), column.data());
             if(is_acceptable_result(scanned_result)) {
                 encoding.select(i);
@@ -165,13 +208,14 @@ void resolve_adaptive_encodings_size(const SegmentInMemory& seg, std::vector<Enc
     }
 }
 
-std::vector<EncodingScanResultSet> get_encodings(const SegmentInMemory& seg) {
-    std::vector<EncodingScanResultSet> output;
-    output.reserve(seg.num_columns());
+inline SegmentScanResults get_encodings(const SegmentInMemory& seg) {
+    SegmentScanResults output;
+    output.reserve_values(seg.num_columns());
     for (std::size_t column_index = 0; column_index < seg.num_columns(); ++column_index)
-        output.emplace_back(predicted_optimal_encodings(seg.column(position_t(column_index)).data()));
+        output.add_value(column_index, predicted_optimal_encodings(seg.column(position_t(column_index)).data()));
 
     return output;
 }
+
 
 } // namespace arcticdb

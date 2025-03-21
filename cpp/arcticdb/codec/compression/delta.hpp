@@ -208,7 +208,7 @@ public:
 
             T max_delta = std::numeric_limits<T>::lowest();
             if(input.num_blocks() == 1) {
-                auto ptr = input.buffer().data();
+                auto ptr = reinterpret_cast<const T*>(input.buffer().data());
                 auto current = *ptr;
                 for (auto i = 1UL; i < full_blocks_ * BLOCK_SIZE; ++i) {
                     const T delta = ptr[i] - current;
@@ -253,7 +253,7 @@ public:
         return total_size;
     }
 
-    size_t block_compress(
+    void block_compress(
             const T* input,
             size_t& output_offset,
             std::array<T, BLOCK_SIZE>& transposed,
@@ -287,7 +287,7 @@ public:
                 }
             } else {
                 ContiguousRangeForwardAdaptor<T, BLOCK_SIZE> adaptor(data);
-                for(auto i = 0; i < full_blocks_; ++i) {
+                for(auto i = 0UL; i < full_blocks_; ++i) {
                     auto input = adaptor.next();
                     block_compress(input, output_offset, transposed, output);
                 }
@@ -300,7 +300,7 @@ public:
         if (remainder_ > 0) {
             DynamicRangeRandomAccessAdaptor<T> adaptor{data};
             const T* remainder_ptr = adaptor.at(remainder_offset(), remainder_);
-            ARCTICDB_DEBUG(log::codec(), "Remainder offset: {} ({}), first value {}", remainder_offset(), output_offset, remainder_ptr);
+            ARCTICDB_DEBUG(log::codec(), "Remainder offset: {} ({}), first value {}", remainder_offset(), output_offset, *remainder_ptr);
             output_offset += compress_remainder(
                 remainder_ptr,
                 remainder_,
