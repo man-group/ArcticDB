@@ -65,6 +65,22 @@ def real_s3_credentials(shared_path: bool = True):
     return endpoint, bucket, region, access_key, secret_key, path_prefix, clear
 
 
+def real_gcp_credentials(shared_path: bool = True):
+    endpoint = os.getenv("ARCTICDB_REAL_GCP_ENDPOINT")
+    bucket = os.getenv("ARCTICDB_REAL_GCP_BUCKET")
+    region = os.getenv("ARCTICDB_REAL_GCP_REGION")
+    access_key = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
+    secret_key = os.getenv("ARCTICDB_REAL_GCP_SECRET_KEY")
+    if shared_path:
+        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
+    else:
+        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX")
+
+    clear = str(os.getenv("ARCTICDB_REAL_GCP_CLEAR")).lower() in ("true", "1")
+
+    return endpoint, bucket, region, access_key, secret_key, path_prefix, clear
+
+
 def get_real_s3_uri(shared_path: bool = True):
     # TODO: Remove this when the latest version that we support
     # contains the s3 fixture code as defined here:

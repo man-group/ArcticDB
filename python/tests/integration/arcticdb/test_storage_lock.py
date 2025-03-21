@@ -32,6 +32,7 @@ def slow_increment_task(real_s3_storage_factory, lib_name, symbol, sleep_time):
 
 @pytest.mark.parametrize("num_processes,max_sleep", [(100, 1), (5, 20)])
 @REAL_S3_TESTS_MARK
+@pytest.mark.storage
 def test_many_increments(real_s3_storage_factory, lib_name, num_processes, max_sleep):
     fixture = real_s3_storage_factory.create_fixture()
     lib = fixture.create_arctic().create_library(lib_name)

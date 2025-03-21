@@ -145,6 +145,8 @@ def test_s3_no_ssl_verification(
 
 
 @REAL_S3_TESTS_MARK
+@pytest.mark.storage
+@pytest.mark.authentication
 def test_s3_sts_auth(lib_name, real_s3_sts_storage):
     ac = Arctic(real_s3_sts_storage.arctic_uri)
     try:
@@ -171,6 +173,7 @@ def test_s3_sts_auth(lib_name, real_s3_sts_storage):
 
 @SLOW_TESTS_MARK
 @REAL_S3_TESTS_MARK
+@pytest.mark.storage
 def test_s3_sts_expiry_check(lib_name, real_s3_sts_storage):
     """
     The test will obtain token at minimum expiration time of 15 minutes.
@@ -219,6 +222,7 @@ def test_s3_sts_expiry_check(lib_name, real_s3_sts_storage):
 
 
 @REAL_S3_TESTS_MARK
+@pytest.mark.storage
 def test_s3_sts_auth_store(real_s3_sts_version_store):
     lib = real_s3_sts_version_store
     df = pd.DataFrame({"a": [1, 2, 3]})
