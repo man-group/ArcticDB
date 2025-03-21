@@ -14,6 +14,11 @@ project(arcticdb VERSION 0.0.1)
 
 enable_testing()
 
+# debug: Use verbose mode for build systems.
+# This is used to able to see the commands executed by make
+# or ninja, or msbuild and diagnose issues.
+set(CMAKE_VERBOSE_MAKEFILE ON CACHE BOOL "ON" FORCE)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(ARCTICDB_MSVC_OMIT_RUNTIME_CHECKS OFF CACHE BOOL "")
 set(ARCTICDB_USE_PCH OFF CACHE BOOL "Whether to use precompiled headers")
