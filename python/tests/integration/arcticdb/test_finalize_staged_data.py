@@ -415,6 +415,31 @@ def test_finalize_staged_data_long_scenario(basic_arctic_library):
     cachedParts.verify_finalized_data(lib,symbol)
 
 
+@pytest.mark.parametrize("mode" , [StagedDataFinalizeMethod.WRITE, "write", None])
+def test_finalize_staged_data_mode_write(basic_arctic_library, mode):
+    lib = basic_arctic_library
+    symbol = "symbol"
+    df_initial = sample_dataframe('2020-1-1', [1,2,3], [4, 5, 6])
+    df_staged = sample_dataframe('2020-1-4', [7, 8, 9])
+    lib.write(symbol, df_initial)
+    lib.write(symbol, df_staged, staged=True)
+    assert_frame_equal(lib.read(symbol).data, df_initial)
+
+    lib.finalize_staged_data(symbol="symbol", mode=mode)
+    assert_frame_equal(lib.read(symbol).data, df_staged)
 
 
+@pytest.mark.parametrize("mode" , [StagedDataFinalizeMethod.APPEND, "append"])
+def test_finalize_staged_data_mode_append(basic_arctic_library, mode):
+    lib = basic_arctic_library
+    symbol = "symbol"
+    df_initial = sample_dataframe('2020-1-1', [1,2,3], [4, 5, 6])
+    df_staged = sample_dataframe('2020-1-4', [7, 8, 9], [10, 11, 12])
+    lib.write(symbol, df_initial)
+    lib.write(symbol, df_staged, staged=True)
+    assert_frame_equal(lib.read(symbol).data, df_initial)
+
+    lib.finalize_staged_data(symbol="symbol", mode=mode)
+    expected = pd.concat([df_initial, df_staged])
+    assert_frame_equal(lib.read(symbol).data, expected)
 
