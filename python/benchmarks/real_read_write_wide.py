@@ -12,7 +12,7 @@ from typing import List, Union
 import numpy as np
 import pandas as pd
 from arcticdb.options import LibraryOptions
-from arcticdb.util.environment_setup import GeneralSetupLibraryWithSymbols, Storage
+from arcticdb.util.environment_setup import SetupSingleLibrary, Storage
 
 
 class AWSWideDataFrameTests:
@@ -36,7 +36,7 @@ class AWSWideDataFrameTests:
 
     timeout = 1200
 
-    SETUP_CLASS = (GeneralSetupLibraryWithSymbols(storage=Storage.AMAZON,
+    SETUP_CLASS = (SetupSingleLibrary(storage=Storage.AMAZON,
                                                   # Define UNIQUE STRING for persistent libraries names 
                                                   # as well as name of unique storage prefix
                                                   prefix="WIDE_TESTS", 
@@ -69,7 +69,7 @@ class AWSWideDataFrameTests:
         `repeat` as 1
         '''
         ## Construct back from arctic url the object
-        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)
+        self.storage = SetupSingleLibrary.from_storage_info(storage_info)
         sym = self.storage.get_symbol_name(num_rows, num_cols)
         self.to_write_df = self.storage.get_library().read(symbol=sym).data
         ##
@@ -77,6 +77,9 @@ class AWSWideDataFrameTests:
         ## will protect ASV processes from writing on one and same symbol
         ## this way each one is going to have its unique library
         self.write_library = self.storage.get_modifiable_library(os.getpid())
+
+    def tear_down(self):
+         self.storage.remove_all_modifiable_libraries()
 
     def time_read_wide(self, storage_info, num_rows, num_cols):
         sym = self.storage.get_symbol_name(num_rows, num_cols)
