@@ -8,10 +8,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 import time
 
 from pandas import Timestamp
+from unittest.mock import MagicMock
 import pytest
 
 from arcticdb.exceptions import NoSuchVersionException, NoDataFoundException
 from arcticdb.util.test import distinct_timestamps
+from arcticdb.version_store.library import StagedDataFinalizeMethod, ArcticInvalidApiUsageException
 
 
 def test_read_descriptor(lmdb_version_store, one_col_df):
@@ -89,3 +91,38 @@ def test_get_num_rows_pickled(lmdb_version_store):
     symbol = "test_get_num_rows_pickled"
     lmdb_version_store.write(symbol, 1)
     assert lmdb_version_store.get_num_rows(symbol) is None
+
+
+@pytest.mark.parametrize(
+    "input_mode, expected_append",
+    [
+        ("write", False),
+        ("append", True),
+        (None, False),
+        (StagedDataFinalizeMethod.APPEND, True),
+        (StagedDataFinalizeMethod.WRITE, False),
+    ]
+)
+def test_finalize_staged_data(arctic_library_lmdb, input_mode, expected_append):
+    symbol = "sym"
+    arctic_library_lmdb._nvs = MagicMock()
+
+    arctic_library_lmdb.finalize_staged_data(symbol, input_mode)
+
+    default_args = {
+        "convert_int_to_float": False,
+        "metadata": None,
+        "prune_previous_version": False,
+        "validate_index": True,
+        "delete_staged_data_on_failure": False,
+    }
+
+    arctic_library_lmdb._nvs.compact_incomplete.assert_called_once_with(symbol, append=expected_append, **default_args)
+
+
+@pytest.mark.parametrize("input_mode", ["wRite", "something", 3])
+def test_finalize_staged_data_incorrect_args(arctic_library_lmdb, input_mode):
+    symbol = "sym"
+    arctic_library_lmdb._nvs = MagicMock()
+    with pytest.raises(ArcticInvalidApiUsageException):
+        arctic_library_lmdb.finalize_staged_data(symbol, input_mode)
