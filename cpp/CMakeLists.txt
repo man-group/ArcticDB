@@ -89,6 +89,14 @@ if(WIN32)
         "$<$<CONFIG:Debug>:DEBUG_BUILD>"
     )
 
+    if(${ARCTICDB_USING_CONDA})
+        # lmdbxx requires __cplusplus to be set for C++11 or later.
+        # See: https://github.com/drycpp/lmdbxx/blob/0b43ca87d8cfabba392dfe884eb1edb83874de02/lmdb%2B%2B.h#L17-L21
+        # /Zc:__cplusplus is needed to get the correct __cplusplus macro value
+        # See: https://developercommunity.visualstudio.com/t/msvc-incorrectly-defines-cplusplus/139261#T-N223868
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:__cplusplus /std:c++20")
+    endif()
+
     # We always generate the debug info on Windows since those are not in the final .dll.
     # sccache needs the /Z7 format, but the linker will still produce .pdb files.
     # Guide to MSVC compilation warnings https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warnings-c4000-through-c4199?view=msvc-170
