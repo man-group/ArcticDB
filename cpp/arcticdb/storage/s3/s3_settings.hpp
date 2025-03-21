@@ -323,7 +323,7 @@ struct formatter<arcticdb::storage::s3::AWSAuthMethod> {
                 desc = "STS_PROFILE_CREDENTIALS_PROVIDER";
                 break;
         }
-        return format_to(ctx.out(), "AWSAuthMethod {}", desc);
+        return fmt::format_to(ctx.out(), "AWSAuthMethod {}", desc);
     }
 };
 
@@ -335,7 +335,7 @@ struct formatter<arcticdb::storage::s3::S3Settings> {
 
     template<typename FormatContext>
     auto format(const arcticdb::storage::s3::S3Settings& settings, FormatContext &ctx) const {
-        return format_to(ctx.out(), "S3Settings endpoint={}, bucket={}, prefix={}, https={}, ssl={}, ca_cert_dir={}, "
+        return fmt::format_to(ctx.out(), "S3Settings endpoint={}, bucket={}, prefix={}, https={}, ssl={}, ca_cert_dir={}, "
                                     "ca_cert_path={}, aws_auth={}, aws_profile={}",
                                     settings.endpoint(), settings.bucket_name(), settings.prefix(), settings.https(),
                                     settings.ssl(), settings.ca_cert_dir(), settings.ca_cert_path(), settings.aws_auth(),
@@ -351,7 +351,7 @@ struct formatter<arcticdb::storage::s3::GCPXMLSettings> {
 
     template<typename FormatContext>
     auto format(const arcticdb::storage::s3::GCPXMLSettings& settings, FormatContext &ctx) const {
-        return format_to(ctx.out(), "GCPXMLSettings endpoint={}, bucket={}, prefix={}, https={}, ssl={}, ca_cert_dir={}, "
+        return fmt::format_to(ctx.out(), "GCPXMLSettings endpoint={}, bucket={}, prefix={}, https={}, ssl={}, ca_cert_dir={}, "
                                     "ca_cert_path={}, aws_auth={}",
                          settings.endpoint(), settings.bucket(), settings.prefix(), settings.https(),
                          settings.ssl(), settings.ca_cert_dir(), settings.ca_cert_path(), settings.aws_auth());
