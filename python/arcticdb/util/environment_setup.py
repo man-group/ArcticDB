@@ -22,7 +22,7 @@ from arcticdb.version_store.library import Library
 
 ## Amazon s3 storage bucket dedicated for ASV performance tests
 AWS_S3_DEFAULT_BUCKET = 'arcticdb-asv-real-storage'
-
+GCP_S3_DEFAULT_BUCKET = 'arcticdb-asv-real-storage'
 
 class GitHubSanitizingHandler(logging.StreamHandler):
     """
@@ -81,6 +81,7 @@ def get_console_logger(bencmhark_cls: Union[str, Any] = None):
 class Storage(Enum):
     AMAZON = 1
     LMDB = 2
+    GOOGLE = 3
 
 
 class StorageSpace(Enum):
@@ -130,6 +131,11 @@ class StorageSetup:
             cls._aws_default_factory.default_prefix = None
             cls._aws_default_factory.default_bucket = AWS_S3_DEFAULT_BUCKET
             cls._aws_default_factory.clean_bucket_on_fixture_exit = False
+
+            # GCP initialization (quick&dirty)
+            cls._gcp_secret = os.getenv("ARCTICDB_REAL_GCP_SECRET_KEY")
+            cls._gcp_access = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
+            cls._gcp_bucket = GCP_S3_DEFAULT_BUCKET
    
     @classmethod
     def get_machine_id(cls):
@@ -179,7 +185,22 @@ class StorageSetup:
         return cls._aws_default_factory.create_fixture().arctic_uri
 
     @classmethod
-    def _get_lmdb_arctic_uri(cls, storage_space: StorageSpace, add_to_prefix: str = None, confirm_persistent_storage_need: bool = False) -> str:
+    def _get_gcpxml_arctic_uri(cls, storage_space: StorageSpace, add_to_prefix: str = None, 
+                               confirm_persistent_storage_need: bool = False) -> str:
+        """
+        Constructs correct AWS s3 URI for accessing specified type of storage space
+        For test storage space pass storage_space None
+        """
+        StorageSetup._check_persistance_access_asked(storage_space, confirm_persistent_storage_need)
+        prefix = StorageSetup._create_prefix(storage_space, add_to_prefix)
+        s = cls._gcp_secret
+        a = cls._gcp_access
+        return f"gcpxml://storage.googleapis.com:{cls._gcp_bucket}?access={a}&secret={s}&path_prefix={prefix}"
+
+
+    @classmethod
+    def _get_lmdb_arctic_uri(cls, storage_space: StorageSpace, add_to_prefix: str = None,
+                              confirm_persistent_storage_need: bool = False) -> str:
         """
         Constructs correct LMDB URI for accessing specified type of storage space
         For test storage space pass lib_type None
@@ -189,11 +210,17 @@ class StorageSetup:
         return f"lmdb://{tempfile.gettempdir()}/benchmarks_{prefix}" 
 
     @classmethod
-    def get_arctic_uri(cls, storage: Storage, storage_space: StorageSpace, add_to_prefix: str = None, confirm_persistent_storage_need: bool = False) -> str:
+    def get_arctic_uri(cls, storage: Storage, storage_space: StorageSpace, add_to_prefix: str = None, 
+                       confirm_persistent_storage_need: bool = False) -> str:
         if storage == Storage.AMAZON:
-            arctic_url = StorageSetup._get_aws_s3_arctic_uri(storage_space, add_to_prefix, confirm_persistent_storage_need)
+            arctic_url = StorageSetup._get_aws_s3_arctic_uri(storage_space, add_to_prefix, 
+                                                             confirm_persistent_storage_need)
         elif storage == Storage.LMDB:
-            arctic_url = StorageSetup._get_lmdb_arctic_uri(storage_space, add_to_prefix, confirm_persistent_storage_need)
+            arctic_url = StorageSetup._get_lmdb_arctic_uri(storage_space, add_to_prefix, 
+                                                           confirm_persistent_storage_need)
+        elif storage == Storage.GOOGLE:
+            arctic_url = StorageSetup._get_gcpxml_arctic_uri(storage_space, add_to_prefix, 
+                                                           confirm_persistent_storage_need)
         else:
             raise Exception("Unsupported storage type :", storage)
         return arctic_url
