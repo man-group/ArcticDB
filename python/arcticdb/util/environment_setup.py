@@ -23,6 +23,27 @@ from arcticdb.version_store.library import Library
 ## Amazon s3 storage bucket dedicated for ASV performance tests
 AWS_S3_DEFAULT_BUCKET = 'arcticdb-asv-real-storage'
 
+
+class GitHubSanitizingHandler(logging.StreamHandler):
+    """
+    The handler sanitizes messages only when execution is in GitHub
+    """
+
+    def emit(self, record: logging.LogRecord):
+        # Sanitize the message here
+        record.msg = self.sanitize_message(record.msg)
+        super().emit(record)
+
+    @staticmethod
+    def sanitize_message(message: str) -> str:
+        if (os.getenv("GITHUB_ACTIONS") == "true") and isinstance(message, str):
+            # Use regex to find and replace sensitive access keys
+            sanitized_message = re.sub(r'(secret=)[^\s&]+', r'\1***', message)
+            sanitized_message = re.sub(r'(access=)[^\s&]+', r'\1***', sanitized_message)
+            return sanitized_message
+        return message
+
+
 loggers:Dict[str, logging.Logger] = {}
 
 def get_console_logger(bencmhark_cls: Union[str, Any] = None):
@@ -48,7 +69,7 @@ def get_console_logger(bencmhark_cls: Union[str, Any] = None):
         return logger
     logger = logging.getLogger(name)    
     logger.setLevel(logLevel)
-    console_handler = logging.StreamHandler()
+    console_handler = GitHubSanitizingHandler()
     console_handler.setLevel(logLevel)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     console_handler.setFormatter(formatter)
