@@ -8,7 +8,6 @@
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/pb_util.hpp>
-#include <folly/gen/Base.h>
 
 #ifdef _WIN32
 #    include <Winsock.h> // for gethostname
@@ -53,7 +52,7 @@ namespace arcticdb {
             }
             return;
         }
-        
+
         cfg_ = config;
 
         if (cfg_.model_ == MetricsConfig::Model::PUSH) {
