@@ -60,7 +60,7 @@
     {
       "name": "windows",
       "hidden": true,
-      "generator": "Ninja",
+      "generator": "Visual Studio 17 2022",
       "environment": { "cmakepreset_expected_host_system": "Windows" },
       "cacheVariables": {
         "VCPKG_OVERLAY_TRIPLETS": "custom-triplets",
@@ -86,7 +86,11 @@
     },
     {
       "name": "windows-cl-conda-debug",
-      "inherits": ["common_conda", "windows"]
+      "inherits": ["common_conda", "windows"],
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl"
+      }
     },
 
     {

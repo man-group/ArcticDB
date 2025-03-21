@@ -14,8 +14,11 @@ project(arcticdb VERSION 0.0.1)
 
 enable_testing()
 
+# Temporary debug
+set(CMAKE_VERBOSE_MAKEFILE ON CACHE BOOL "ON" FORCE)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(ARCTICDB_MSVC_OMIT_RUNTIME_CHECKS OFF CACHE BOOL "")
+set(ARCTICDB_MSVC_OMIT_RUNTIME_CHECKS ON CACHE BOOL "")
 set(ARCTICDB_USE_PCH OFF CACHE BOOL "Whether to use precompiled headers")
 option(
     ARCTICDB_USING_CONDA
@@ -74,11 +77,25 @@ if(ARCTICDB_SANITIZER_FLAGS)
     message(STATUS "Building ArcticDB with sanitizers. Compiler flags: ${ARCTICDB_SANITIZER_FLAGS}")
 endif()
 
+if(${ARCTICDB_USING_CONDA})
+    # Required to be able to include headers from glog since glog 0.7
+    # See: https://github.com/google/glog/pull/1030
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGLOG_USE_GLOG_EXPORT")
+endif()
+
 if(WIN32)
     add_compile_definitions(
         NOGDI WIN32_LEAN_AND_MEAN HAVE_SNPRINTF NOMINMAX
         "$<$<CONFIG:Debug>:DEBUG_BUILD>"
     )
+
+    if(${ARCTICDB_USING_CONDA})
+        # lmdbxx requires __cplusplus to be set for C++11 or later.
+        # See: https://github.com/drycpp/lmdbxx/blob/0b43ca87d8cfabba392dfe884eb1edb83874de02/lmdb%2B%2B.h#L17-L21
+        # /Zc:__cplusplus is needed to get the correct __cplusplus macro value
+        # See: https://developercommunity.visualstudio.com/t/msvc-incorrectly-defines-cplusplus/139261#T-N223868
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:__cplusplus /std:c++20")
+    endif()
 
     # We always generate the debug info on Windows since those are not in the final .dll.
     # sccache needs the /Z7 format, but the linker will still produce .pdb files.
@@ -87,6 +104,8 @@ if(WIN32)
         /DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /wd4244 /wd4267
         "$<$<CONFIG:Debug>:/Od;/MTd>"
         "$<$<CONFIG:Release>:/MT;/Ox>"
+        # Conda builds use dynamic runtime
+        "$<$<BOOL:${ARCTICDB_USING_CONDA}>:/MD>"
     )
     if(${ARCTICDB_MSVC_OMIT_RUNTIME_CHECKS})
         message(STATUS "Removing MSVC runtime checks")
@@ -96,9 +115,7 @@ if(WIN32)
     endif()
 else()
     if(${ARCTICDB_USING_CONDA})
-        # Required to be able to include headers from glog since glog 0.7
-        # See: https://github.com/google/glog/pull/1030
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra -DGLOG_USE_GLOG_EXPORT")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
     else()
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
     endif()
