@@ -42,7 +42,7 @@ from arcticdb.storage_fixtures.s3 import (
 )
 from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
-from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod
+from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod, S3Settings as NativeS3Settings
 from arcticdb_ext import set_config_int
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
@@ -176,8 +176,7 @@ def wrapped_s3_storage_factory() -> Generator[MotoS3StorageFixtureFactory, None,
         use_ssl=False,
         ssl_test_support=False,
         bucket_versioning=False,
-        use_internal_client_wrapper_for_testing=True,
-        native_config=NativeVariantStorage(),
+        native_config=NativeVariantStorage(NativeS3Settings(AWSAuthMethod.DISABLED, "", True)), # True: use_internal_client_wrapper_for_testing
     ) as f:
         yield f
 
