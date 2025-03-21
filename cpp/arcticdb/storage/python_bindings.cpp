@@ -245,6 +245,8 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
             }
         ))
         .def("update", &NativeVariantStorage::update)
+        .def("as_s3_settings", &NativeVariantStorage::as_s3_settings)
+        .def("as_gcpxml_settings", &NativeVariantStorage::as_gcpxml_settings)
         .def("__repr__", &NativeVariantStorage::to_string);
 
     py::implicitly_convertible<NativeVariantStorage::VariantStorageConfig, NativeVariantStorage>();

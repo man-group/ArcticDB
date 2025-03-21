@@ -302,3 +302,61 @@ public:
 };
 
 }
+
+namespace fmt {
+template<>
+struct formatter<arcticdb::storage::s3::AWSAuthMethod> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::storage::s3::AWSAuthMethod& method, FormatContext &ctx) const {
+        std::string desc;
+        switch(method) {
+            case arcticdb::storage::s3::AWSAuthMethod::DISABLED:
+                desc = "DISABLED";
+                break;
+            case arcticdb::storage::s3::AWSAuthMethod::DEFAULT_CREDENTIALS_PROVIDER_CHAIN:
+                desc = "DEFAULT_CREDENTIALS_PROVIDER_CHAIN";
+                break;
+            case arcticdb::storage::s3::AWSAuthMethod::STS_PROFILE_CREDENTIALS_PROVIDER:
+                desc = "STS_PROFILE_CREDENTIALS_PROVIDER";
+                break;
+        }
+        return fmt::format_to(ctx.out(), "AWSAuthMethod {}", desc);
+    }
+};
+
+template<>
+struct formatter<arcticdb::storage::s3::S3Settings> {
+
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::storage::s3::S3Settings& settings, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "S3Settings endpoint={}, bucket={}, prefix={}, https={}, ssl={}, ca_cert_dir={}, "
+                                    "ca_cert_path={}, aws_auth={}, aws_profile={}",
+                                    settings.endpoint(), settings.bucket_name(), settings.prefix(), settings.https(),
+                                    settings.ssl(), settings.ca_cert_dir(), settings.ca_cert_path(), settings.aws_auth(),
+                                    settings.aws_profile());
+    }
+};
+
+template<>
+struct formatter<arcticdb::storage::s3::GCPXMLSettings> {
+
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::storage::s3::GCPXMLSettings& settings, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "GCPXMLSettings endpoint={}, bucket={}, prefix={}, https={}, ssl={}, ca_cert_dir={}, "
+                                    "ca_cert_path={}, aws_auth={}",
+                         settings.endpoint(), settings.bucket(), settings.prefix(), settings.https(),
+                         settings.ssl(), settings.ca_cert_dir(), settings.ca_cert_path(), settings.aws_auth());
+    }
+};
+
+
+}
