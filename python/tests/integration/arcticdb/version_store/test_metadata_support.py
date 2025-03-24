@@ -295,34 +295,27 @@ def test_rv_contains_metadata_batch_write_metadata(lmdb_version_store_v1):
 
 
 @ZONE_INFO_MARK
-def test_metadata_timestamp_with_tz(lmdb_version_store_v1):
+@pytest.mark.parametrize("zone_type", ["pytz", "zoneinfo"])
+@pytest.mark.parametrize("zone_name", ["UTC", "America/Los_Angeles", "Europe/London", "Asia/Tokyo", "Pacific/Kiritimati"])
+def test_metadata_timestamp_with_tz(lmdb_version_store_v1, zone_type, zone_name):
     lib = lmdb_version_store_v1
     sym = "sym"
     df = timestamp_indexed_df()
-    # We need to normalize all of these timezoned timestamps correctly and produce the correct result
-    metadata_to_write = [
-        pd.Timestamp(2025, 1, 1, tz=pytz.utc),
-        pd.Timestamp(2025, 1, 1, tz=datetime.timezone.utc),
-        pd.Timestamp(2025, 1, 1, tz=zoneinfo.ZoneInfo("UTC")),
-        datetime.datetime(2025, 1, 1, tzinfo=pytz.utc),
-        datetime.datetime(2025, 1, 1, tzinfo=datetime.timezone.utc),
-        datetime.datetime(2025, 1, 1, tzinfo=zoneinfo.ZoneInfo("UTC")),
-    ]
-    # We convert all of the above to `pytz`
-    expected_metadata = pd.Timestamp(2025, 1, 1, tz=pytz.utc)
-    for metadata in metadata_to_write:
-        lib.write(sym, df, metadata)
-        assert lib.read(sym).metadata == expected_metadata
+    if zone_type == "pytz":
+        zone_to_write = pytz.timezone(zone_name)
+    elif zone_type == "zoneinfo":
+        zone_to_write = zoneinfo.ZoneInfo(zone_name)
+    else:
+        raise ValueError("Unknown timezone type")
+    # We need to normalize all timezoned timestamps to a pd.Timestamp with pytz
+    expected_metadata = pd.Timestamp(2025, 1, 1, tz=pytz.timezone(zone_name))
 
-    # And test a few other timezones
-    for zone_name in ["America/Los_Angeles", "Europe/London", "Asia/Tokyo", "Pacific/Kiritimati"]:
-        metadata_to_write = [
-            pd.Timestamp(2025, 1, 1, tz=pytz.timezone(zone_name)),
-            pd.Timestamp(2025, 1, 1, tz=zoneinfo.ZoneInfo(zone_name)),
-            datetime.datetime(2025, 1, 1, tzinfo=pytz.timezone(zone_name)),
-            datetime.datetime(2025, 1, 1, tzinfo=zoneinfo.ZoneInfo(zone_name)),
-        ]
-        expected_metadata = metadata_to_write[0]
-        for metadata in metadata_to_write:
-            lib.write(sym, df, metadata)
-            assert lib.read(sym).metadata == expected_metadata
+    # pd.Timestamp
+    metadata_to_write = pd.Timestamp(2025, 1, 1, tz=zone_to_write)
+    lib.write(sym, df, metadata_to_write)
+    assert lib.read(sym).metadata == expected_metadata
+
+    # datetime.datetime
+    metadata_to_write = datetime.datetime(2025, 1, 1, tzinfo=zone_to_write)
+    lib.write(sym, df, metadata_to_write)
+    assert lib.read(sym).metadata == expected_metadata
