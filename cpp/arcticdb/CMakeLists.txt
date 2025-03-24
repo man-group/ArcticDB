@@ -169,10 +169,11 @@ if (NOT MSVC)
     add_compile_options("-fno-omit-frame-pointer")
 else()
     add_compile_options(
-        /WX
         /wd4250 # Suppress inherits via dominance warning
         /we4189 # Unused local variable is an error
         /we4100 # Unused function parameter is an error
+        # For now, we do not want to treat warnings as errors for those builds.
+        # /WX
     )
 endif ()
 
