@@ -86,7 +86,19 @@
     },
     {
       "name": "windows-cl-conda-debug",
-      "inherits": ["common_conda", "windows"]
+      "inherits": ["common_conda", "windows"],
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl"
+      }
     },
 
     {
