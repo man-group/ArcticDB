@@ -713,7 +713,7 @@ endif()
 if(${ARCTICDB_USING_CONDA})
 
     list (APPEND arcticdb_core_libraries
-        pcre
+        ${PCRE_LIBRARIES}
         msgpack-c
         ${LMDB_LIBRARIES}
     )
