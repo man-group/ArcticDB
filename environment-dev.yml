@@ -3,6 +3,7 @@ channels:
   - conda-forge
 dependencies:
   # Build tools
+  - sel(win): ninja
   - cxx-compiler
   - c-compiler
   - cmake
