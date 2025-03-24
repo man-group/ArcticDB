@@ -791,6 +791,7 @@ IndexDescriptorImpl generate_index_descriptor(const std::vector<IndexDescriptorI
 arcticdb::proto::descriptors::NormalizationMetadata generate_norm_meta(
         const std::vector<arcticdb::proto::descriptors::NormalizationMetadata>& norm_metas);
 FieldCollection inner_join(const std::vector<Columns>& columns_to_join);
+FieldCollection outer_join(const std::vector<Columns>& columns_to_join);
 
 struct ConcatClause {
 

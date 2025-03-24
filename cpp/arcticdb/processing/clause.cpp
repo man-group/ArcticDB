@@ -1548,17 +1548,18 @@ FieldCollection inner_join(const std::vector<Columns>& columns_to_join) {
             // columns_to_keep was initialised from the first element, so don't need to re-check
             first_element = false;
         } else {
+            // Iterate through the columns we are currently planning to keep
             for (auto columns_to_keep_it = columns_to_keep.begin(); columns_to_keep_it != columns_to_keep.end();) {
                 const auto& column_name = columns_to_keep_it->first;
-                // TODO: Use it != end to avoid rehashing below
-                if (columns.column_types.contains(column_name)) {
+                if (auto it = columns.column_types.find(column_name); it != columns.column_types.end()) {
+                    // Current set of columns under consideration contains column_name, so ensure types are compatible
+                    // and if necessary modify the columns_to_keep value to a type capable of representing all
                     auto& current_data_type = columns_to_keep_it->second;
-                    // TODO: Use TypeDescriptors everywhere
-                    auto opt_common_type = has_valid_common_type(make_scalar_type(current_data_type), make_scalar_type(columns.column_types.at(column_name)));
+                    auto opt_common_type = has_valid_common_type(make_scalar_type(current_data_type), make_scalar_type(it->second));
                     if (opt_common_type.has_value()) {
                         current_data_type = opt_common_type->data_type();
                     } else {
-                        schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>("No common type between {} and {} when joining schemas", current_data_type, column_name);
+                        schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>("No common type between {} and {} when joining schemas", current_data_type, it->second);
                     }
                     ++columns_to_keep_it;
                 } else {
@@ -1568,11 +1569,58 @@ FieldCollection inner_join(const std::vector<Columns>& columns_to_join) {
         }
     }
     FieldCollection res;
+    // All the columns we are retaining were in every schema. Just use the order from the first schema
     for (const auto& field: *columns_to_join.front().fields) {
         std::string column_name(field.name());
-        if (columns_to_keep.contains(column_name)) {
-            res.add_field(make_scalar_type(columns_to_keep.at(column_name)), column_name);
+        if (auto it = columns_to_keep.find(column_name); it != columns_to_keep.end()) {
+            res.add_field(make_scalar_type(it->second), column_name);
         }
+    }
+    return res;
+}
+
+FieldCollection outer_join(const std::vector<Columns>& columns_to_join) {
+    if (columns_to_join.empty()) {
+        return {};
+    }
+    // Start with the columns in the first element, and add in anything that is present in all other elements
+    ankerl::unordered_dense::map<std::string, DataType> columns_to_keep(columns_to_join.front().column_types);
+    // Maintain the order that columns appeared in through the schemas
+    std::vector<std::string> column_names_to_keep;
+    for (const auto& field: *columns_to_join.front().fields) {
+        column_names_to_keep.emplace_back(field.name());
+    }
+    bool first_element{true};
+    for (const auto& columns: columns_to_join) {
+        if (first_element) {
+            // columns_to_keep was initialised from the first element, so don't need to re-check
+            first_element = false;
+        } else {
+            // Iterate through the columns of this element
+            for (const auto& [column_name, data_type]: columns.column_types) {
+                if (auto columns_to_keep_it = columns_to_keep.find(column_name); columns_to_keep_it != columns_to_keep.end()) {
+                    // Current set of columns under consideration contains column_name, so ensure types are compatible
+                    // and if necessary modify the columns_to_keep value to a type capable of representing all
+                    auto& current_data_type = columns_to_keep_it->second;
+                    auto opt_common_type = has_valid_common_type(make_scalar_type(current_data_type), make_scalar_type(data_type));
+                    if (opt_common_type.has_value()) {
+                        current_data_type = opt_common_type->data_type();
+                    } else {
+                        schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>("No common type between {} and {} when joining schemas", current_data_type, data_type);
+                    }
+                } else {
+                    // This column is new, add it in
+                    auto [_, inserted] = columns_to_keep.emplace(column_name, data_type);
+                    util::check(inserted, "Adding same column name to map twice in outer_join");
+                    column_names_to_keep.emplace_back(column_name);
+                }
+            }
+
+        }
+    }
+    FieldCollection res;
+    for (const auto& column_name: column_names_to_keep) {
+        res.add_field(make_scalar_type(columns_to_keep.at(column_name)), column_name);
     }
     return res;
 }
