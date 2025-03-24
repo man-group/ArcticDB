@@ -1,11 +1,15 @@
+import sys
 import pytest
+import pytz
+if sys.version_info >= (3, 9):
+    import zoneinfo
 from packaging import version
 import pandas as pd
 import numpy as np
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.options import ModifiableEnterpriseLibraryOption
 from arcticdb.toolbox.library_tool import LibraryTool
-from tests.util.mark import ARCTICDB_USING_CONDA
+from tests.util.mark import ARCTICDB_USING_CONDA, ZONE_INFO_MARK
 from arcticdb_ext.tools import StorageMover
 
 from arcticdb.util.venv import CurrentVersion
@@ -185,6 +189,62 @@ lib.snapshot("old_snap", metadata={"old_key": "old_value"})
         snaps = curr.lib.list_snapshots()
         meta = snaps["old_snap"]
         assert meta == {"old_key": "old_value"}
+
+
+@ZONE_INFO_MARK
+@pytest.mark.parametrize("zone_name", ["UTC", "America/New_York"])
+def test_compat_timestamp_metadata(old_venv_and_arctic_uri, lib_name, zone_name):
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+
+    old_ac = old_venv.create_arctic(arctic_uri)
+    old_lib = old_ac.create_library(lib_name)
+
+    sym = "sym"
+    df = pd.DataFrame({"col": [1]})
+    timestamp_no_tz = pd.Timestamp(2025, 1, 1)
+    timestamp_pytz = pd.Timestamp(2025, 1, 1, tz=pytz.timezone(zone_name))
+    timestamp_zoneinfo = pd.Timestamp(2025, 1, 1, tz=zoneinfo.ZoneInfo(zone_name))
+
+    # Write two versions with old arctic:
+    # v0 - no timezone
+    # v1 - pytz
+    old_lib.execute([
+        f"""
+import pytz
+timestamp_no_tz = pd.Timestamp(year=2025, month=1, day=1)
+timestamp_pytz = pd.Timestamp(year=2025, month=1, day=1, tz=pytz.timezone({repr(zone_name)}))
+lib.write({repr(sym)}, df, metadata=timestamp_no_tz)
+lib.write_metadata({repr(sym)}, timestamp_pytz)
+assert lib.read_metadata({repr(sym)}, as_of=0).metadata == timestamp_no_tz
+assert lib.read_metadata({repr(sym)}, as_of=1).metadata == timestamp_pytz
+        """
+    ], dfs={"df": df})
+
+    # Write 3 more versions with current arctic:
+    # v2 - no timezone
+    # v3 - pytz
+    # v4 - zoneinfo
+    with CurrentVersion(arctic_uri, lib_name) as curr:
+        lib = curr.lib
+        assert lib.read_metadata(sym, as_of=0).metadata == timestamp_no_tz
+        assert lib.read_metadata(sym, as_of=1).metadata == timestamp_pytz
+        lib.write_metadata(sym, timestamp_no_tz) # v2
+        lib.write_metadata(sym, timestamp_pytz) # v3
+        lib.write_metadata(sym, timestamp_zoneinfo) # v4
+        assert lib.read_metadata(sym, as_of=2).metadata == timestamp_no_tz
+        assert lib.read_metadata(sym, as_of=3).metadata == timestamp_pytz
+        assert lib.read_metadata(sym, as_of=4).metadata == timestamp_pytz
+
+    old_lib.execute([
+        f"""
+import pytz
+timestamp_no_tz = pd.Timestamp(year=2025, month=1, day=1)
+timestamp_pytz = pd.Timestamp(year=2025, month=1, day=1, tz=pytz.timezone({repr(zone_name)}))
+assert lib.read_metadata({repr(sym)}, as_of=2).metadata == timestamp_no_tz
+assert lib.read_metadata({repr(sym)}, as_of=3).metadata == timestamp_pytz
+assert lib.read_metadata({repr(sym)}, as_of=4).metadata == timestamp_pytz
+        """
+    ])
 
 
 def test_compat_read_incomplete(old_venv_and_arctic_uri, lib_name):

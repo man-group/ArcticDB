@@ -12,11 +12,14 @@ import itertools
 import sys
 from collections import namedtuple
 from unittest.mock import patch, MagicMock
+
 import numpy as np
 import pandas as pd
 import dateutil as du
 import pytest
 import pytz
+if sys.version_info >= (3, 9):
+    import zoneinfo
 from numpy.testing import assert_equal, assert_array_equal
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 
@@ -49,7 +52,7 @@ from arcticdb.util.test import (
 from arcticdb.util._versions import IS_PANDAS_ZERO, IS_PANDAS_TWO
 from arcticdb.exceptions import ArcticNativeException
 
-from tests.util.mark import param_dict
+from tests.util.mark import param_dict, ZONE_INFO_MARK
 
 params = {
     "simple_dict": {"a": "1", "b": 2, "c": 3.0, "d": True},
@@ -238,19 +241,35 @@ def test_empty_df():
     assert_frame_equal(d, D)
 
 
+timezone_params = [
+    "UTC",
+    "Europe/Amsterdam",
+    pytz.UTC,
+    pytz.timezone("Europe/Amsterdam"),
+    du.tz.gettz("UTC"),
+]
+if sys.version_info > (3, 9):
+    timezone_params += [
+        zoneinfo.ZoneInfo("UTC"),
+        zoneinfo.ZoneInfo("Pacific/Kiritimati"),
+        zoneinfo.ZoneInfo("America/Los_Angeles"),
+    ]
 # See test_get_description_date_range_tz in test_arctic.py for the V2 API equivalent
-@pytest.mark.parametrize(
-    "tz", ["UTC", "Europe/Amsterdam", pytz.UTC, pytz.timezone("Europe/Amsterdam"), du.tz.gettz("UTC")]
-)
+@pytest.mark.parametrize("tz", timezone_params)
 def test_write_tz(lmdb_version_store, sym, tz):
     assert tz is not None
-    index = index=pd.date_range(pd.Timestamp(0), periods=10, tz=tz)
+    index = pd.date_range(pd.Timestamp(0), periods=10, tz=tz)
     df = pd.DataFrame(data={"col1": np.arange(10)}, index=index)
     lmdb_version_store.write(sym, df)
     result = lmdb_version_store.read(sym).data
-    assert_frame_equal(df, result)
     df_tz = df.index.tzinfo
     assert str(df_tz) == str(tz)
+    expected_df = df
+    if sys.version_info >= (3, 9):
+        if isinstance(tz, zoneinfo.ZoneInfo):
+            # We convert all timezones to pytz, so we expect to convert to a pytz timezone.
+            expected_df.index = expected_df.index.tz_convert(pytz.timezone(str(tz)))
+    assert_frame_equal(expected_df, result)
     if tz == du.tz.gettz("UTC") and sys.version_info < (3, 7):
         pytest.skip("Timezone files don't seem to have ever worked properly on Python 3.6")
     start_ts, end_ts = lmdb_version_store.get_timerange_for_symbol(sym)
