@@ -1383,7 +1383,7 @@ class Library:
         2024-01-03    3
         2024-01-04    4
         """
-        if mode not in [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE, "write", "append", None]:
+        if mode not in [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE, "write", "append"] and mode is not None:
             raise ArcticInvalidApiUsageException("mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'")
 
         return self._nvs.compact_incomplete(
