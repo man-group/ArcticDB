@@ -296,11 +296,6 @@ def get_s3_proto(
             "use_internal_client_wrapper_for_testing can only be set if native_cfg is provided"
         )
 
-    if native_cfg:
-        aws_auth = AWSAuthMethod.DISABLED if aws_auth is None else aws_auth
-        aws_profile = "" if aws_profile is None else aws_profile
-        native_cfg.update(NativeS3Settings(aws_auth, aws_profile, use_internal_client_wrapper_for_testing))
-
     sid, storage = get_storage_for_lib_name(s3.prefix, env)
     storage.config.Pack(s3, type_url_prefix="cxx.arctic.org")
     return sid
