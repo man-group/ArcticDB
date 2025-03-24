@@ -19,7 +19,7 @@
 #define ARCTICDB_UNLIKELY(condition) __builtin_expect(condition, 0)
 
 #else
-#define ARCTICDB_UNUSED [[maybe_unused]]
+#define ARCTICDB_UNUSED
 #define ARCTICDB_UNREACHABLE __assume(0);
 #define ARCTICDB_VISIBILITY_HIDDEN
 #define ARCTICDB_VISIBILITY_DEFAULT
