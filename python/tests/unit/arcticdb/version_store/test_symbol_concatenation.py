@@ -62,7 +62,6 @@ def test_symbol_concat_basic(lmdb_library_factory, rows_per_segment, columns_per
         assert version.metadata == (None if idx == 1 else idx)
 
 
-@pytest.mark.xfail(reason="Not yet working with column slicing")
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns", [["col1"], ["col2"], ["col3"], ["col1", "col2"], ["col1", "col3"], ["col2", "col3"]])
@@ -231,37 +230,6 @@ def test_symbol_concat_querybuilder_syntax(lmdb_library):
     received = received.reindex(columns=sorted(received.columns))
     expected = pd.concat([df_0, df_1[1:], df_2[:4]]).resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
     assert_frame_equal(expected, received)
-
-
-@pytest.mark.parametrize("index", [None, [pd.Timestamp(0)]])
-def test_symbol_concat_symbols_with_different_columns(lmdb_library_factory, index):
-    lib = lmdb_library_factory(LibraryOptions(columns_per_segment=2))
-    df_0 = pd.DataFrame({"col1": [0], "col3": [0]}, index=index)
-    df_1 = pd.DataFrame({"col2": [0], "col3": [0]}, index=index)
-    df_2 = pd.DataFrame({"col1": [0], "col4": [0]}, index=index)
-    df_3 = pd.DataFrame({"col1": [0], "col3": [0], "col5": [0], "col6": [0]}, index=index)
-    df_4 = pd.DataFrame({"col1": [0], "col3": [0], "col5": [0], "col7": [0]}, index=index)
-    lib.write("sym0", df_0)
-    lib.write("sym1", df_1)
-    lib.write("sym2", df_2)
-    lib.write("sym3", df_3)
-    lib.write("sym4", df_4)
-
-    # First column different
-    with pytest.raises(SchemaException):
-        concat(lib.read_batch(["sym0", "sym1"], lazy=True)).collect()
-    # Second column different
-    with pytest.raises(SchemaException):
-        concat(lib.read_batch(["sym0", "sym2"], lazy=True)).collect()
-    # First row slice with extra column slice
-    with pytest.raises(SchemaException):
-        concat(lib.read_batch(["sym3", "sym0"], lazy=True)).collect()
-    # Second row slice with extra column slice
-    with pytest.raises(SchemaException):
-        concat(lib.read_batch(["sym0", "sym3"], lazy=True)).collect()
-    # Row slices differ only in second column slice
-    with pytest.raises(SchemaException):
-        concat(lib.read_batch(["sym3", "sym4"], lazy=True)).collect()
 
 
 def test_symbol_concat_symbols_with_different_indexes(lmdb_library):

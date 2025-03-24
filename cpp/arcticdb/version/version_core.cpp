@@ -1451,7 +1451,7 @@ folly::Future<SegmentInMemory> prepare_output_frame(
 	std::sort(std::begin(pipeline_context->slice_and_keys_), std::end(pipeline_context->slice_and_keys_), [] (const auto& left, const auto& right) {
 		return std::tie(left.slice_.row_range, left.slice_.col_range) < std::tie(right.slice_.row_range, right.slice_.col_range);
 	});
-    adjust_slice_rowcounts(pipeline_context);
+    adjust_slice_ranges(pipeline_context);
     const auto dynamic_schema = opt_false(read_options.dynamic_schema());
     mark_index_slices(pipeline_context, dynamic_schema, pipeline_context->bucketize_dynamic_);
     pipeline_context->ensure_vectors();

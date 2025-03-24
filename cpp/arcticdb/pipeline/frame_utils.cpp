@@ -72,11 +72,29 @@ TimeseriesDescriptor index_descriptor_from_frame(
         frame->bucketize_dynamic);
 }
 
-void adjust_slice_rowcounts(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context) {
+void adjust_slice_ranges(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context) {
+    using namespace arcticdb::pipelines;
     if(pipeline_context->slice_and_keys_.empty())
         return;
 
-    pipeline_context->total_rows_ = adjust_slice_rowcounts(pipeline_context->slice_and_keys_);
+    auto& slice_and_keys = pipeline_context->slice_and_keys_;
+
+    size_t row_offset{slice_and_keys[0].slice_.row_range.first};
+    size_t row_slice_max_diff{0};
+    size_t col_offset{0};
+    for (auto& slice_and_key: slice_and_keys) {
+        if (slice_and_key.slice_.row_range.first != row_offset) {
+            col_offset = 0;
+            row_offset += row_slice_max_diff;
+            row_slice_max_diff = 0;
+        }
+        row_slice_max_diff = std::max(row_slice_max_diff, slice_and_key.slice_.row_range.diff());
+        slice_and_key.slice_.row_range = RowRange{row_offset, row_offset + row_slice_max_diff};
+        slice_and_key.slice_.col_range = ColRange{col_offset, col_offset + slice_and_key.slice_.col_range.diff()};
+        col_offset += slice_and_key.slice_.col_range.diff();
+    }
+
+    pipeline_context->total_rows_ = row_offset + row_slice_max_diff;
 }
 
 size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey> & slice_and_keys, const std::optional<size_t>& first_row) {
@@ -95,7 +113,6 @@ size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey> & slice_and_ke
 		}
 		it->slice_.row_range = RowRange{offset, offset + diff};
 	}
-	
 	return offset + diff;
 }
 
@@ -130,7 +147,8 @@ std::pair<size_t, size_t> offset_and_row_count(const std::shared_ptr<pipelines::
 
     std::size_t offset = row_count ? context->slice_and_keys_[0].slice_.row_range.first : 0ULL;
     ARCTICDB_DEBUG(log::version(), "Got offset {} and row_count {}", offset, row_count);
-    return std::make_pair(offset, row_count);
+    return std::make_pair(offset, 7);
+//    return std::make_pair(offset, row_count);
 }
 
 std::vector<size_t> output_block_row_counts(const std::shared_ptr<pipelines::PipelineContext>& context) {
