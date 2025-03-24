@@ -52,6 +52,8 @@ jobs:
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         shell: bash -l {0}
         run: |
+          # Make sure to remove any existing vcpkg directory
+          rm -Rf cpp/vcpkg
           # Protocol buffers compilation require not using build isolation.
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
