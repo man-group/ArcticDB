@@ -147,8 +147,7 @@ std::pair<size_t, size_t> offset_and_row_count(const std::shared_ptr<pipelines::
 
     std::size_t offset = row_count ? context->slice_and_keys_[0].slice_.row_range.first : 0ULL;
     ARCTICDB_DEBUG(log::version(), "Got offset {} and row_count {}", offset, row_count);
-    return std::make_pair(offset, 7);
-//    return std::make_pair(offset, row_count);
+    return std::make_pair(offset, row_count);
 }
 
 std::vector<size_t> output_block_row_counts(const std::shared_ptr<pipelines::PipelineContext>& context) {
