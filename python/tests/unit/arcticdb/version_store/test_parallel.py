@@ -70,42 +70,92 @@ def test_staging_doesnt_write_append_ref(lmdb_version_store_v1):
     assert not len(lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, sym))
 
 
-def test_remove_incomplete(basic_store):
-    lib = basic_store
-    lib_tool = lib.library_tool()
-    assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
-    assert lib.list_symbols_with_incomplete_data() == []
+@pytest.mark.parametrize("batch", (True, False))
+@pytest.mark.parametrize("batch_size", (1000, 7))
+def test_remove_incomplete(arctic_library_v1, batch, batch_size, lib_name):
+    lib = arctic_library_v1._nvs
+    with config_context_multi({"Storage.DeleteBatchSize": batch_size, "S3Storage.DeleteBatchSize": 2 * batch_size}):
+        lib_tool = lib.library_tool()
+        assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
+        assert lib.list_symbols_with_incomplete_data() == []
 
-    sym1 = "test_remove_incomplete_1"
-    sym2 = "test_remove_incomplete_2"
-    num_chunks = 10
-    df1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2000-01-01", periods=num_chunks))
-    df2 = pd.DataFrame(
-        {"col": np.arange(100, 110)},
-        index=pd.date_range("2001-01-01", periods=num_chunks),
-    )
-    for idx in range(num_chunks):
-        lib.write(sym1, df1.iloc[idx : idx + 1, :], parallel=True)
-        lib.write(sym2, df2.iloc[idx : idx + 1, :], parallel=True)
+        if batch:
+            def remove(sym):
+                lib._remove_incompletes([sym])
+        else:
+            def remove(sym):
+                lib.remove_incomplete(sym)
 
-    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym1)) == num_chunks
-    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym2)) == num_chunks
-    assert sorted(lib.list_symbols_with_incomplete_data()) == [sym1, sym2]
+        sym1 = "test_remove_incomplete_1"
+        sym2 = "test_remove_incomplete_2"
+        num_chunks = 10
+        df1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2000-01-01", periods=num_chunks))
+        df2 = pd.DataFrame(
+            {"col": np.arange(100, 110)},
+            index=pd.date_range("2001-01-01", periods=num_chunks),
+        )
+        for idx in range(num_chunks):
+            lib.write(sym1, df1.iloc[idx : idx + 1, :], parallel=True)
+            lib.write(sym2, df2.iloc[idx : idx + 1, :], parallel=True)
 
-    lib.remove_incomplete(sym1)
-    assert lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym1) == []
-    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym2)) == num_chunks
-    assert lib.list_symbols_with_incomplete_data() == [sym2]
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym1)) == num_chunks
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym2)) == num_chunks
+        assert sorted(lib.list_symbols_with_incomplete_data()) == [sym1, sym2]
 
-    lib.remove_incomplete(sym2)
-    assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
-    assert lib.list_symbols_with_incomplete_data() == []
+        remove(sym1)
+        assert lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym1) == []
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym2)) == num_chunks
+        assert lib.list_symbols_with_incomplete_data() == [sym2]
 
-    # Removing incompletes from a symbol that doesn't exist, or a symbol with no incompletes, is a no-op
-    lib.remove_incomplete("non-existent-symbol")
-    sym3 = "test_remove_incomplete_3"
-    lib.write(sym3, df1)
-    lib.remove_incomplete(sym3)
+        remove(sym2)
+        assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
+        assert lib.list_symbols_with_incomplete_data() == []
+
+        # Removing incompletes from a symbol that doesn't exist, or a symbol with no incompletes, is a no-op
+        remove("non-existent-symbol")
+        sym3 = "test_remove_incomplete_3"
+        lib.write(sym3, df1)
+        remove(sym3)
+
+
+@pytest.mark.parametrize("batch_size", (1000, 7))
+def test_remove_incompletes(basic_store, batch_size):
+    with config_context_multi({"Storage.DeleteBatchSize": batch_size, "S3Storage.DeleteBatchSize": 2 * batch_size}):
+        lib = basic_store
+        lib_tool = lib.library_tool()
+        assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
+        assert lib.list_symbols_with_incomplete_data() == []
+
+        n_symbols = 20
+        n_to_delete = 9
+        syms = [f"sym_{i}" for i in range(n_symbols)]
+        other_syms = [f"other_prefix_{i}" for i in range(n_symbols)]
+        to_delete = list(np.random.choice(syms, n_to_delete))
+
+        num_chunks = 10
+        df = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2000-01-01", periods=num_chunks))
+        for s in syms + other_syms:
+            for idx in range(num_chunks):
+                lib.write(s, df.iloc[idx : idx + 1, :], parallel=True)
+
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, "sym_0")) == num_chunks
+        assert sorted(lib.list_symbols_with_incomplete_data()) == sorted(syms + other_syms)
+
+        lib._remove_incompletes(to_delete)
+        for s in to_delete:
+            assert lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, s) == []
+
+        survivors = set(syms + other_syms) - set(to_delete)
+        for s in survivors:
+            assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, s)) == num_chunks
+        assert sorted(lib.list_symbols_with_incomplete_data()) == sorted(list(survivors))
+
+        with pytest.raises(UserInputException, match="E_NO_STAGED_SEGMENTS"):
+            lib.compact_incomplete(to_delete[0], append=False, convert_int_to_float=False)
+
+        to_finalize = survivors.pop()
+        lib.compact_incomplete(to_finalize, append=False, convert_int_to_float=False)
+        assert_frame_equal(lib.read(to_finalize).data, df)
 
 
 @pytest.mark.parametrize("num_segments_live_during_compaction, num_io_threads, num_cpu_threads", [

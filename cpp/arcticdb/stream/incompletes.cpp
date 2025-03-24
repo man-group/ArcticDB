@@ -463,6 +463,13 @@ void remove_incomplete_segments(
     delete_keys_of_type_for_stream(store, stream_id, KeyType::APPEND_DATA);
 }
 
+void remove_incomplete_segments(
+    const std::shared_ptr<Store>& store, const std::unordered_set<StreamId>& sids, const std::string& common_prefix
+) {
+    auto match_stream_id =  [&sids](const VariantKey & k){ return sids.find(variant_key_id(k)) != sids.end(); };
+    delete_keys_of_type_if(store, match_stream_id, KeyType::APPEND_DATA, common_prefix);
+}
+
 std::vector<AppendMapEntry> load_via_list(
         const std::shared_ptr<Store>& store,
         const StreamId& stream_id,

@@ -2059,6 +2059,26 @@ class NativeVersionStore:
         """
         self.version_store.remove_incomplete(symbol)
 
+    def _remove_incompletes(self, symbols: List[str]):
+        """
+        Removes staged data for several symbols.
+
+        Does not raise if a symbol has no staged data.
+
+        In the worst case this can list over all the staged data in your library, so if you are only touching a small
+        subset of the staged data in your library, it may be better to use the remove_incomplete method above.
+
+        This is a private function for now and its API is not stable.
+
+        Parameters
+        ----------
+        symbols : List[str]
+            Symbols to remove staged data for.
+        """
+        symbols_set = set(symbols)
+        common_prefix = os.path.commonprefix(symbols)
+        self.version_store.remove_incompletes(symbols_set, common_prefix)
+
     def compact_incomplete(
         self,
         symbol: str,

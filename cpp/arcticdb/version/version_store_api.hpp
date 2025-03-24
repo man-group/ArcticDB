@@ -253,7 +253,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::optional<bool>& skip_snapshots);
 
     // Batch methods
-    std::vector<std::variant<VersionedItem, DataError>> batch_write(
+    std::vector<VersionedItemOrError> batch_write(
         const std::vector<StreamId> &stream_ids,
         const std::vector<py::tuple> &items,
         const std::vector<py::object> &norms,
@@ -262,13 +262,13 @@ class PythonVersionStore : public LocalVersionedEngine {
         bool validate_index,
         bool throw_on_error);
 
-    std::vector<std::variant<VersionedItem, DataError>> batch_write_metadata(
+    std::vector<VersionedItemOrError> batch_write_metadata(
         const std::vector<StreamId>& stream_ids,
         const std::vector<py::object>& user_meta,
         bool prune_previous_versions,
         bool throw_on_error);
 
-    std::vector<std::variant<VersionedItem, DataError>> batch_append(
+    std::vector<VersionedItemOrError> batch_append(
         const std::vector<StreamId> &stream_ids,
         const std::vector<py::tuple> &items,
         const std::vector<py::object> &norms,
@@ -288,7 +288,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
         const ReadOptions& read_options);
 
-    std::vector<std::variant<VersionedItem, DataError>> batch_update(
+    std::vector<VersionedItemOrError> batch_update(
         const std::vector<StreamId>& stream_ids,
         const std::vector<py::tuple>& items,
         const std::vector<py::object>& norms,
