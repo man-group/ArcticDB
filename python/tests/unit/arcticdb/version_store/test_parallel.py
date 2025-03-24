@@ -70,6 +70,7 @@ def test_staging_doesnt_write_append_ref(lmdb_version_store_v1):
     assert not len(lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, sym))
 
 
+@pytest.mark.storage
 def test_remove_incomplete(basic_store):
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -114,6 +115,7 @@ def test_remove_incomplete(basic_store):
     (1, 10, 1),
     (None, None, None)
 ])
+@pytest.mark.storage
 def test_parallel_write(basic_store_tiny_segment, num_segments_live_during_compaction, num_io_threads, num_cpu_threads):
     try:
         with config_context_multi({"VersionStore.NumSegmentsLiveDuringCompaction": num_segments_live_during_compaction,
@@ -273,6 +275,7 @@ def test_floats_to_nans(lmdb_version_store_dynamic_schema):
     "num_segments_live_during_compaction, num_io_threads, num_cpu_threads", [(1, 1, 1), (10, 1, 1), (None, None, None)]
 )
 @pytest.mark.parametrize("prune_previous_versions", (True, False))
+@pytest.mark.storage
 def test_parallel_write_sort_merge(
     basic_store_tiny_segment,
     lib_name,
@@ -326,6 +329,7 @@ def test_parallel_write_sort_merge(
 
 
 @pytest.mark.parametrize("prune_previous_versions", [True, False])
+@pytest.mark.storage
 def test_sort_merge_append(basic_store_dynamic_schema, prune_previous_versions):
     lib = basic_store_dynamic_schema
     num_rows_per_day = 10

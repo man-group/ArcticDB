@@ -124,6 +124,7 @@ def concat_all_arrays(*arrays):
 
 @pytest.mark.skip(reason="Problem with named indexes Monday#7941575430")
 @pytest.mark.parametrize("new_version" , [True, False])
+@pytest.mark.storage
 def test_finalize_empty_dataframe(basic_arctic_library, new_version):
     """
         Primary goal of the test is to finalize with staged empty array that has
@@ -378,6 +379,7 @@ def test_finalize_with_upcast_type_new_columns(lmdb_library_dynamic_schema):
     verify_dataframe_column(df=result, row_name="NUMBER2", max_type=last_type_c, expected_array_of_column_values=arr_all_c)
 
 
+@pytest.mark.storage
 def test_finalize_staged_data_long_scenario(basic_arctic_library):
     """
         The purpose of of the test is to assure all staged segments along with their data

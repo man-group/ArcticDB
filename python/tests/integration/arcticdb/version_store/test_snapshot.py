@@ -30,6 +30,7 @@ from tests.util.storage_test import get_s3_storage_config
 from arcticdb_ext.storage import KeyType
 
 
+@pytest.mark.storage
 def test_basic_snapshot_flow(basic_store):
     original_data = [1, 2, 3]
     basic_store.write("a", original_data)
@@ -41,6 +42,7 @@ def test_basic_snapshot_flow(basic_store):
     assert "snap_1" not in basic_store.list_snapshots()
 
 
+@pytest.mark.storage
 def test_re_snapshot_with_same_name(basic_store):
     original_data = [1, 2, 3]
     basic_store.write("a", original_data)
@@ -66,6 +68,7 @@ def test_read_old_snapshot_data(object_version_store):
     assert object_version_store.read("c").data == modified_data
 
 
+@pytest.mark.storage
 def test_snapshot_metadata(object_version_store):
     original_data = [1, 2, 3]
     metadata = {"metadata": "Because why not?"}
@@ -79,6 +82,7 @@ def test_snapshot_metadata(object_version_store):
     assert metadata_for_snap == metadata
 
 
+@pytest.mark.storage
 def test_snapshots_skip_symbol(object_version_store):
     original_data = [1, 2, 3]
     object_version_store.write("f", original_data)
@@ -89,6 +93,7 @@ def test_snapshots_skip_symbol(object_version_store):
         object_version_store.read("f", as_of="snap_5")
 
 
+@pytest.mark.storage
 def test_snapshot_explicit_versions(basic_store):
     lib = basic_store
     original_data = [1, 2, 3]
@@ -105,6 +110,7 @@ def test_snapshot_explicit_versions(basic_store):
     assert lib.read("j", as_of="snap_8").data == modified_data
 
 
+@pytest.mark.storage
 def test_list_symbols_with_snaps(object_version_store):
     original_data = [1, 2, 3]
 
@@ -118,6 +124,7 @@ def test_list_symbols_with_snaps(object_version_store):
     assert "s3" in object_version_store.list_symbols()
 
 
+@pytest.mark.storage
 def test_list_versions(object_version_store):
     lib = object_version_store
     original_data = [1, 2, 3]
@@ -134,6 +141,7 @@ def test_list_versions(object_version_store):
     assert sorted([v["version"] for v in all_versions if v["symbol"] == "t1" and not v["deleted"]]) == sorted([0, 1])
 
 
+@pytest.mark.storage
 def test_snapshots_with_deletes(basic_store):
     original_data = [1, 2, 3]
     v1_data = [1, 2, 3, 4]
@@ -167,6 +175,7 @@ def test_snapshots_with_deletes(basic_store):
     assert basic_store.read("sym3", as_of="sym3_snap").data == original_data
 
 
+@pytest.mark.storage
 def test_delete_symbol_without_snapshot(basic_store):
     original_data = [1, 2, 3]
     v1_data = [1, 2, 3, 4]
@@ -187,6 +196,7 @@ def test_delete_symbol_without_snapshot(basic_store):
     assert not basic_store.has_symbol("sym1")
 
 
+@pytest.mark.storage
 def test_write_to_symbol_in_snapshot_only(basic_store):
     original_data = [1, 2, 3]
     v1_data = [1, 2, 3, 4]
@@ -202,6 +212,7 @@ def test_write_to_symbol_in_snapshot_only(basic_store):
     assert basic_store.read("weird", as_of="store_sym_old").data == original_data
 
 
+@pytest.mark.storage
 def test_read_after_delete_with_snap(basic_store):
     data = np.random.randint(0, 10000, 1024 * 1024).reshape(1024, 1024)
     sym = "2003_australia1"
@@ -218,6 +229,7 @@ def test_read_after_delete_with_snap(basic_store):
         basic_store.read("random")
 
 
+@pytest.mark.storage
 def test_snapshot_with_versions_dict(basic_store):
     original_data = [1, 2, 3]
     basic_store.write("a", original_data)
@@ -231,6 +243,7 @@ def test_snapshot_with_versions_dict(basic_store):
     assert basic_store.read("b", as_of="snap_all").data == original_data
 
 
+@pytest.mark.storage
 def test_has_symbol_with_snapshot(basic_store):
     basic_store.write("a1", 1)
     basic_store.write("a3", 3)
@@ -243,6 +256,7 @@ def test_has_symbol_with_snapshot(basic_store):
     assert basic_store.read("a1", as_of="snap").data == 1
 
 
+@pytest.mark.storage
 def test_pruned_symbol_in_symbol_read_version(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("a", 1)
@@ -287,6 +301,7 @@ def test_read_symbol_with_ts_in_snapshot(store, request, sym):
     assert lib.read(sym, as_of=third_write_timestamps.after).version == 2
 
 
+@pytest.mark.storage
 def test_add_to_snapshot_simple(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -303,6 +318,7 @@ def test_add_to_snapshot_simple(basic_store_tombstone_and_pruning):
     assert lib.read("s3", as_of="snap").data == 3
 
 
+@pytest.mark.storage
 def test_add_to_snapshot_missing_snap(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -313,6 +329,7 @@ def test_add_to_snapshot_missing_snap(basic_store_tombstone_and_pruning):
         lib.add_to_snapshot("snap", ["s3"])
 
 
+@pytest.mark.storage
 def test_add_to_snapshot_specific_version(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -331,6 +348,7 @@ def test_add_to_snapshot_specific_version(basic_store_tombstone_and_pruning):
     assert lib.read("s3", as_of="snap").data == 3
 
 
+@pytest.mark.storage
 def test_add_to_snapshot_replace(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -348,6 +366,7 @@ def test_add_to_snapshot_replace(basic_store_tombstone_and_pruning):
     assert lib.read("s3", as_of="snap").data == 3
 
 
+@pytest.mark.storage
 def test_add_to_snapshot_replace_specific(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -370,6 +389,7 @@ def test_add_to_snapshot_replace_specific(basic_store_tombstone_and_pruning):
     assert lib.read("s3", as_of="saved").data == 1
 
 
+@pytest.mark.storage
 def test_add_to_snapshot_multiple(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -392,6 +412,7 @@ def test_add_to_snapshot_multiple(basic_store_tombstone_and_pruning):
     assert lib.read("s4", as_of="snap").data == 4
 
 
+@pytest.mark.storage
 def test_remove_from_snapshot(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -411,6 +432,7 @@ def test_remove_from_snapshot(basic_store_tombstone_and_pruning):
     assert lib.read("s3", as_of="saved").data == 3
 
 
+@pytest.mark.storage
 def test_remove_from_snapshot_missing_snap(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -421,6 +443,7 @@ def test_remove_from_snapshot_missing_snap(basic_store_tombstone_and_pruning):
         lib.remove_from_snapshot("snap", ["s3"], [0])
 
 
+@pytest.mark.storage
 def test_remove_from_snapshot_multiple(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -441,6 +464,7 @@ def test_remove_from_snapshot_multiple(basic_store_tombstone_and_pruning):
     assert lib.read("s2", as_of="saved").data == 2
 
 
+@pytest.mark.storage
 def test_snapshot_not_accept_tombstoned_key(basic_store_delayed_deletes_v1, sym):
     lib = basic_store_delayed_deletes_v1
     ver = lib.write(sym, 1).version
@@ -449,6 +473,7 @@ def test_snapshot_not_accept_tombstoned_key(basic_store_delayed_deletes_v1, sym)
         lib.snapshot("s", versions={sym: ver})
 
 
+@pytest.mark.storage
 def test_snapshot_partially_valid_version_map(basic_store_delayed_deletes_v1):
     lib = basic_store_delayed_deletes_v1
     symA = "A"
@@ -468,6 +493,7 @@ def test_snapshot_partially_valid_version_map(basic_store_delayed_deletes_v1):
     assert lib.read(symB, as_of="s").data == 3
 
 
+@pytest.mark.storage
 def test_snapshot_tombstoned_but_referenced_in_other_snapshot_version(basic_store_delayed_deletes_v1):
     lib = basic_store_delayed_deletes_v1
     symA = "A"
@@ -508,6 +534,7 @@ def test_add_to_snapshot_atomicity(s3_bucket_versioning_storage, lib_name):
     assert_0_delete_marker(lib, storage)
 
 
+@pytest.mark.storage
 def test_delete_snapshot_basic_flow(basic_store):
     lib = basic_store
     symbol = "sym1"
@@ -542,6 +569,7 @@ def test_delete_snapshot_basic_flow(basic_store):
     assert_frame_equal(df_combined, lib.read(symbol).data)
 
 
+@pytest.mark.storage
 def test_delete_snapshot_basic_flow_with_delete_last_version(basic_store):
     lib = basic_store
     symbol = "sym1"
@@ -585,6 +613,7 @@ def test_delete_snapshot_basic_flow_with_delete_last_version(basic_store):
         data = lib.read(symbol, as_of=snap2).data
 
 
+@pytest.mark.storage
 def test_delete_snapshot_basic_flow_with_delete_prev_version(basic_store):
     lib = basic_store
     symbol = "sym1"
@@ -625,6 +654,7 @@ def test_delete_snapshot_basic_flow_with_delete_prev_version(basic_store):
     reason="""ArcticDB#1863 or other bug. The fail is in the line lib.
                    read(symbol1).data after deleting snapshot 1, read operation throws exception"""
 )
+@pytest.mark.storage
 def test_delete_snapshot_complex_flow_with_delete_multible_symbols(basic_store_tiny_segment_dynamic):
     lib = basic_store_tiny_segment_dynamic
 
@@ -701,6 +731,7 @@ def test_delete_snapshot_complex_flow_with_delete_multible_symbols(basic_store_t
     assert [ver["deleted"] for ver in lib.list_versions(symbol3)] == [False, False]
 
 
+@pytest.mark.storage
 def test_delete_snapshot_multiple_edge_case(basic_store):
     """
     Purpose of test is to examine snapshoting 3 symbols with minimum
@@ -806,6 +837,7 @@ def test_delete_snapshot_multiple_edge_case(basic_store):
     assert_frame_equal(df_1, lib.read(symbol1).data)
 
 
+@pytest.mark.storage
 def test_delete_snapshot_on_updated_and_appended_dataframe(basic_store_tiny_segment):
     lib = basic_store_tiny_segment
     df_1 = create_df_index_datetime(10, 3, 10)

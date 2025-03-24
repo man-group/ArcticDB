@@ -41,6 +41,7 @@ def assert_vit_equals_except_data(left, right):
     assert left.timestamp == right.timestamp
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
+@pytest.mark.storage
 def test_recursively_written_data(basic_store, read):
     samples = [
         {"a": np.arange(5), "b": np.arange(8)},  # dict of np arrays
@@ -69,6 +70,7 @@ def test_recursively_written_data(basic_store, read):
 
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
+@pytest.mark.storage
 def test_recursively_written_data_with_metadata(basic_store, read):
     samples = [
         {"a": np.arange(5), "b": np.arange(8)},  # dict of np arrays
@@ -89,6 +91,7 @@ def test_recursively_written_data_with_metadata(basic_store, read):
 
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
+@pytest.mark.storage
 def test_recursively_written_data_with_nones(basic_store, read):
     sample = {"a": np.arange(5), "b": np.arange(8), "c": None}
     recursive_sym = "sym_recursive"
@@ -108,6 +111,7 @@ def test_recursively_written_data_with_nones(basic_store, read):
 
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
+@pytest.mark.storage
 def test_recursive_nested_data(basic_store, read):
     sym = "test_recursive_nested_data"
     sample_data = {"a": {"b": {"c": {"d": np.arange(24)}}}}
@@ -124,6 +128,7 @@ def test_recursive_nested_data(basic_store, read):
     assert read_vit.symbol == sym
     assert_vit_equals_except_data(read_vit, write_vit)
 
+@pytest.mark.storage
 def test_recursive_normalizer_with_custom_class():
     list_like_obj = AlmostAList([1, 2, 3])
     fl = Flattener()
@@ -134,6 +139,7 @@ def test_recursive_normalizer_with_custom_class():
     fl = Flattener()
     assert fl.is_normalizable_to_nested_structure(list_like_obj)
 
+@pytest.mark.storage
 def test_nested_custom_types(basic_store):
     data = AlmostAList([1, 2, 3, AlmostAList([5, np.arange(6)])])
     fl = Flattener()
@@ -149,6 +155,7 @@ def test_nested_custom_types(basic_store):
     assert_vit_equals_except_data(write_vit, read_vit)
     assert basic_store.get_info(sym)["type"] != "pickled"
 
+@pytest.mark.storage
 def test_data_directly_msgpackable(basic_store):
     data = {"a": [1, 2, 3], "b": {"c": 5}}
     fl = Flattener()
@@ -163,6 +170,7 @@ def test_data_directly_msgpackable(basic_store):
 
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
+@pytest.mark.storage
 def test_really_large_symbol_for_recursive_data(basic_store, read):
     sym = "s" * 100
     data = {"a" * 100: {"b" * 100: {"c" * 1000: {"d": np.arange(5)}}}}

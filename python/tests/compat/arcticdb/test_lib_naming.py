@@ -8,6 +8,7 @@ from tests.util.mark import SLOW_TESTS_MARK
 @SLOW_TESTS_MARK
 @pytest.mark.parametrize("prefix", ["", "prefix"])
 @pytest.mark.parametrize("suffix", ["", "suffix"])
+@pytest.mark.storage
 def test_create_library_with_all_chars(arctic_client_v1, prefix, suffix):
     ac = arctic_client_v1
     if sys.platform == "win32" and "lmdb" in ac.get_uri():
@@ -35,6 +36,7 @@ def test_create_library_with_all_chars(arctic_client_v1, prefix, suffix):
 @SLOW_TESTS_MARK
 @pytest.mark.parametrize("prefix", ["", "prefix"])
 @pytest.mark.parametrize("suffix", ["", "suffix"])
+@pytest.mark.storage
 def test_symbol_names_with_all_chars(object_version_store, prefix, suffix):
     # Create symbol names with each character (except '\' because Azure replaces it with '/' in some cases)
     names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != "\\"]

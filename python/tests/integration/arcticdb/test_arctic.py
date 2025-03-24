@@ -276,6 +276,7 @@ def test_basic_metadata(lmdb_version_store):
     assert vit.metadata == metadata
 
 
+@pytest.mark.storage
 def test_sorted_roundtrip(arctic_library):
     lib = arctic_library
 
@@ -286,6 +287,7 @@ def test_sorted_roundtrip(arctic_library):
     assert desc.sorted == "ASCENDING"
 
 
+@pytest.mark.storage
 def test_basic_write_read_update_and_append(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
@@ -329,6 +331,7 @@ def test_basic_write_read_update_and_append(arctic_library):
     assert read_metadata.version == 1
 
 
+@pytest.mark.storage
 def test_write_metadata_with_none(arctic_library):
     lib = arctic_library
     symbol = "symbol"
@@ -349,6 +352,7 @@ def test_write_metadata_with_none(arctic_library):
 
 
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND))
+@pytest.mark.storage
 def test_staged_data(arctic_library, finalize_method):
     lib = arctic_library
     sym_with_metadata = "sym_with_metadata"
@@ -397,6 +401,7 @@ def test_staged_data(arctic_library, finalize_method):
 
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
 @pytest.mark.parametrize("validate_index", (True, False, None))
+@pytest.mark.storage
 def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_method, validate_index):
     lib = arctic_library
     sym = "test_parallel_writes_and_appends_index_validation"
@@ -426,6 +431,7 @@ def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_m
 
 
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
+@pytest.mark.storage
 def test_finalize_without_adding_segments(arctic_library, finalize_method):
     lib = arctic_library
     with pytest.raises(UserInputException) as exception_info:
@@ -433,6 +439,7 @@ def test_finalize_without_adding_segments(arctic_library, finalize_method):
 
 
 class TestAppendStagedData:
+    @pytest.mark.storage
     def test_appended_df_interleaves_with_storage(self, arctic_library):
         lib = arctic_library
         initial_df = pd.DataFrame(
@@ -446,6 +453,7 @@ class TestAppendStagedData:
             lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         assert "append" in str(exception_info.value)
 
+    @pytest.mark.storage
     def test_appended_df_start_same_as_df_end(self, arctic_library):
         lib = arctic_library
         df = pd.DataFrame(
@@ -470,6 +478,7 @@ class TestAppendStagedData:
         assert_frame_equal(lib.read("sym").data, expected_df)
 
 
+@pytest.mark.storage
 def test_snapshots_and_deletes(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
@@ -492,6 +501,7 @@ def test_snapshots_and_deletes(arctic_library):
     assert lib.list_symbols() == ["my_symbol2"]
 
 
+@pytest.mark.storage
 def test_list_snapshots_no_metadata(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"a": [1, 2, 3]})
@@ -512,6 +522,7 @@ def test_list_snapshots_no_metadata(arctic_library):
     assert set(snaps_list) == {snap1, snap2}
 
 
+@pytest.mark.storage
 def test_delete_non_existent_snapshot(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
@@ -520,6 +531,7 @@ def test_delete_non_existent_snapshot(arctic_library):
         lib.delete_snapshot("test")
 
 
+@pytest.mark.storage
 def test_prune_previous_versions(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
@@ -532,6 +544,7 @@ def test_prune_previous_versions(arctic_library):
     assert lib["symbol"].metadata == {"tres": "interessant"}
 
 
+@pytest.mark.storage
 def test_do_not_prune_previous_versions_by_default(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
@@ -543,6 +556,7 @@ def test_do_not_prune_previous_versions_by_default(arctic_library):
     assert len(lib.list_versions("symbol")) == 5
 
 
+@pytest.mark.storage
 def test_delete_version(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
@@ -554,6 +568,7 @@ def test_delete_version(arctic_library):
     assert lib["symbol"].metadata == {"very": "interesting"}
 
 
+@pytest.mark.storage
 def test_list_versions_write_append_update(arctic_library):
     lib = arctic_library
     # Note: can only update timeseries dataframes
@@ -570,6 +585,7 @@ def test_list_versions_write_append_update(arctic_library):
     assert len(lib.list_versions("symbol")) == 3
 
 
+@pytest.mark.storage
 def test_list_versions_latest_only(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
@@ -579,6 +595,7 @@ def test_list_versions_latest_only(arctic_library):
     assert len(lib.list_versions("symbol", latest_only=True)) == 1
 
 
+@pytest.mark.storage
 def test_non_existent_list_versions_latest_only(arctic_library):
     lib = arctic_library
     assert len(lib.list_versions("symbol", latest_only=True)) == 0
@@ -588,6 +605,7 @@ def test_non_existent_list_versions_latest_only(arctic_library):
     assert len(lib.list_versions("symbol2", latest_only=True)) == 0
 
 
+@pytest.mark.storage
 def test_delete_version_with_snapshot(arctic_library):
     lib = arctic_library
     sym = "test_delete_version_with_snapshot"
@@ -602,6 +620,7 @@ def test_delete_version_with_snapshot(arctic_library):
                 getattr(lib, method)(sym, as_of=as_of)
 
 
+@pytest.mark.storage
 def test_list_versions_with_snapshot(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
@@ -620,6 +639,7 @@ def test_list_versions_with_snapshot(arctic_library):
     assert versions["symbol", 1].date > versions["symbol", 0].date
 
 
+@pytest.mark.storage
 def test_list_versions_without_snapshot(arctic_library):
     lib = arctic_library
     lib.write("symbol", pd.DataFrame())
@@ -630,6 +650,7 @@ def test_list_versions_without_snapshot(arctic_library):
     assert versions["symbol", 0].snapshots == []
 
 
+@pytest.mark.storage
 def test_delete_version_that_does_not_exist(arctic_library):
     lib = arctic_library
 
@@ -643,6 +664,7 @@ def test_delete_version_that_does_not_exist(arctic_library):
         lib.delete("symbol", versions=1)
 
 
+@pytest.mark.storage
 def test_delete_date_range(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"column": [5, 6, 7, 8]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
@@ -712,6 +734,7 @@ class A:
         return self.id == other.id
 
 
+@pytest.mark.storage
 def test_write_object_with_pickle_mode(arctic_library):
     """Writing in pickle mode should succeed when the user uses the dedicated method."""
     lib = arctic_library
@@ -719,6 +742,7 @@ def test_write_object_with_pickle_mode(arctic_library):
     assert lib["test_1"].data.id == "id_1"
 
 
+@pytest.mark.storage
 def test_write_object_without_pickle_mode(arctic_library):
     """Writing outside of pickle mode should fail when the user does not use the dedicated method."""
     lib = arctic_library
@@ -726,6 +750,7 @@ def test_write_object_without_pickle_mode(arctic_library):
         lib.write("test_1", A("id_1"))
 
 
+@pytest.mark.storage
 def test_write_list_without_pickle_mode(arctic_library):
     """Writing outside of pickle mode should fail when the user does not use the dedicated method."""
     lib = arctic_library
@@ -733,6 +758,7 @@ def test_write_list_without_pickle_mode(arctic_library):
         lib.write("test_1", [1, 2, 3])
 
 
+@pytest.mark.storage
 def test_write_non_native_frame_with_pickle_mode(arctic_library):
     """Writing with pickle mode should work when the user calls the dedicated method."""
     lib = arctic_library
@@ -742,6 +768,7 @@ def test_write_non_native_frame_with_pickle_mode(arctic_library):
     assert_frame_equal(loaded, df[["col1"]])
 
 
+@pytest.mark.storage
 def test_write_non_native_frame_without_pickle_mode(arctic_library):
     """Writing outside of pickle mode should fail when the user does not use the dedicated method."""
     lib = arctic_library
@@ -750,6 +777,7 @@ def test_write_non_native_frame_without_pickle_mode(arctic_library):
         lib.write("test_1", df)
 
 
+@pytest.mark.storage
 def test_write_with_unpacking(arctic_library):
     """Check the syntactic sugar that lets us unpack WritePayload in `write` calls using *."""
     lib = arctic_library
@@ -770,6 +798,7 @@ def test_write_with_unpacking(arctic_library):
     assert symbol_2_loaded.metadata == "great_metadata"
 
 
+@pytest.mark.storage
 def test_prune_previous_versions_with_write(arctic_library):
     lib = arctic_library
     # When
@@ -794,6 +823,7 @@ def test_prune_previous_versions_with_write(arctic_library):
     assert v3.empty
 
 
+@pytest.mark.storage
 def test_append_documented_example(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"column": [1, 2, 3]}, index=pd.date_range(start="1/1/2018", end="1/3/2018"))
@@ -811,6 +841,7 @@ def test_append_documented_example(arctic_library):
     assert_frame_equal(lib.read("symbol", as_of=0).data, df)
 
 
+@pytest.mark.storage
 def test_append_prune_previous_versions(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"column": [1, 2, 3]}, index=pd.date_range(start="1/1/2018", end="1/3/2018"))
@@ -826,6 +857,7 @@ def test_append_prune_previous_versions(arctic_library):
     assert ("symbol", 1) in symbols
 
 
+@pytest.mark.storage
 def test_update_documented_example(arctic_library):
     """Test the example given on the `update` docstring."""
     lib = arctic_library
@@ -850,6 +882,7 @@ def test_update_documented_example(arctic_library):
     assert_frame_equal(lib.read("symbol", as_of=0).data, df)
 
 
+@pytest.mark.storage
 def test_update_prune_previous_versions(arctic_library):
     """Test that updating and pruning previous versions does indeed clear previous versions."""
     lib = arctic_library
@@ -868,6 +901,7 @@ def test_update_prune_previous_versions(arctic_library):
     assert ("symbol", 1) in symbols
 
 
+@pytest.mark.storage
 def test_update_with_daterange(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
@@ -881,6 +915,7 @@ def test_update_with_daterange(arctic_library):
     assert_frame_equal(result, update_df)
 
 
+@pytest.mark.storage
 def test_update_with_daterange_no_width(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
@@ -896,6 +931,7 @@ def test_update_with_daterange_no_width(arctic_library):
     )
 
 
+@pytest.mark.storage
 def test_update_with_daterange_multi_index(arctic_library):
     lib = arctic_library
     # Given
@@ -944,6 +980,7 @@ def test_update_with_daterange_multi_index(arctic_library):
     assert_frame_equal(result, pd.DataFrame({"column": [1, 100, 200, 300, 6]}, index=expected_index))
 
 
+@pytest.mark.storage
 def test_update_with_daterange_multi_index_no_width(arctic_library):
     lib = arctic_library
 
@@ -977,6 +1014,7 @@ def test_update_with_daterange_multi_index_no_width(arctic_library):
     assert_frame_equal(result, pd.DataFrame({"column": [1, 100, 200, 4, 5]}, index=index))
 
 
+@pytest.mark.storage
 def test_update_with_daterange_restrictive(arctic_library):
     """Here the update_df cover more dates than date_range. We should only touch data that lies within date_range."""
     lib = arctic_library
@@ -995,6 +1033,7 @@ def test_update_with_daterange_restrictive(arctic_library):
     assert_frame_equal(expected, result)
 
 
+@pytest.mark.storage
 def test_update_with_upsert(arctic_library):
     lib = arctic_library
     with pytest.raises(Exception):
@@ -1019,6 +1058,7 @@ def test_read_with_read_request_form(arctic_library):
     assert_frame_equal(result.data, pd.DataFrame({"A": [1, 2]}))
 
 
+@pytest.mark.storage
 def test_has_symbol(arctic_library):
     lib = arctic_library
     lib.write("symbol", pd.DataFrame())
@@ -1032,6 +1072,7 @@ def test_has_symbol(arctic_library):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="SKIP_WIN Numpy strings not supported yet")
+@pytest.mark.storage
 def test_numpy_string(arctic_library):
     arctic_library.write("symbol", np.array(["ab", "cd", "efg"]))
     res = arctic_library.read("symbol").data
@@ -1039,11 +1080,13 @@ def test_numpy_string(arctic_library):
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="SKIP_WIN Numpy strings not supported yet")
+@pytest.mark.storage
 def test_numpy_string_fails_on_windows(arctic_library):
     with pytest.raises(ArcticDbNotYetImplemented):
         arctic_library.write("symbol", np.array(["ab", "cd", "efg"]))
 
 
+@pytest.mark.storage
 def test_get_description(arctic_library):
     lib = arctic_library
 
@@ -1094,6 +1137,7 @@ def test_get_description_multiindex(lmdb_library, names):
 
 # See test_write_tz in test_normalization.py for the V1 API equivalent
 @pytest.mark.parametrize("tz", ["UTC", "Europe/Amsterdam"])
+@pytest.mark.storage
 def test_get_description_date_range_tz(arctic_library, tz):
     lib = arctic_library
     sym = "test_get_description_date_range_tz"
@@ -1107,6 +1151,7 @@ def test_get_description_date_range_tz(arctic_library, tz):
     assert end_ts == index[-1]
 
 
+@pytest.mark.storage
 def test_tail(arctic_library):
     lib = arctic_library
 
@@ -1138,6 +1183,7 @@ def test_tail(arctic_library):
     )
 
 
+@pytest.mark.storage
 def test_dedup(arctic_client, lib_name):
     ac = arctic_client
     errors = []
@@ -1156,6 +1202,7 @@ def test_dedup(arctic_client, lib_name):
     assert not errors, "errors occurred:\n" + "\n".join(errors)
 
 
+@pytest.mark.storage
 def test_segment_slicing(arctic_client, lib_name):
     ac = arctic_client
     rows_per_segment = 5
@@ -1262,6 +1309,7 @@ def test_mongo_connection_string_format(connection_string):
 
 
 # See test of same name in test_normalization.py for V1 API equivalent
+@pytest.mark.storage
 def test_norm_failure_error_message(arctic_library):
     lib = arctic_library
     sym = "test_norm_failure_error_message"
