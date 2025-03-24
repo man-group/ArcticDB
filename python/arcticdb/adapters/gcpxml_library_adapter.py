@@ -217,3 +217,7 @@ class GCPXMLLibraryAdapter(ArcticLibraryAdapter):
             env_name="local",
             with_prefix=with_prefix,
         )
+
+    @property
+    def path_prefix(self):
+        return self._path_prefix

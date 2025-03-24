@@ -48,7 +48,7 @@ class ParsedQuery:
     access: Optional[str] = None
     secret: Optional[str] = None
     aws_auth: Optional[AWSAuthMethod] = AWSAuthMethod.DISABLED
-    aws_profile: Optional[str] = None
+    aws_profile: str = ""
 
     path_prefix: Optional[str] = None
 
@@ -111,7 +111,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         super().__init__(uri, self._encoding_version)
 
     def native_config(self):
-        return NativeVariantStorage(NativeS3Settings(AWSAuthMethod.DISABLED, "", False))
+        return NativeVariantStorage(NativeS3Settings(self._query_params.aws_auth, self._query_params.aws_profile, False))
 
     def __repr__(self):
         return "S3(endpoint=%s, bucket=%s)" % (self._endpoint, self._bucket)
@@ -163,7 +163,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         if query and query.startswith("?"):
             query = query.strip("?")
         elif not query:
-            return ParsedQuery(aws_auth="default")
+            return ParsedQuery()
 
         parsed_query = re.split("[;&]", query)
         parsed_query = {t.split("=", 1)[0]: t.split("=", 1)[1] for t in parsed_query}
