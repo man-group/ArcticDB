@@ -1381,24 +1381,23 @@ std::vector<EntityId> ConcatClause::process(std::vector<EntityId>&& entity_ids) 
     return std::move(entity_ids);
 }
 
-// TODO: Move somewhere else
+// TODO: Move all this somewhere else
 using namespace arcticdb::proto::descriptors;
 
-std::tuple<std::vector<IndexDescriptorImpl>, std::vector<NormalizationMetadata>, std::vector<std::shared_ptr<FieldCollection>>>
+std::tuple<std::vector<IndexDescriptorImpl>, std::vector<NormalizationMetadata>, std::vector<Columns>>
 split_schemas(std::vector<OutputSchema>&& schemas) {
     std::vector<IndexDescriptorImpl> index_descs;
     std::vector<NormalizationMetadata> norm_metas;
-    std::vector<std::shared_ptr<FieldCollection>> field_collections;
+    std::vector<Columns> columns;
     index_descs.reserve(schemas.size());
     norm_metas.reserve(schemas.size());
-    field_collections.reserve(schemas.size());
+    columns.reserve(schemas.size());
     std::for_each(schemas.begin(), schemas.end(), [&](OutputSchema& schema) {
         index_descs.emplace_back(schema.stream_descriptor().index());
         norm_metas.emplace_back(std::move(schema.norm_metadata_));
-        field_collections.emplace_back(schema.stream_descriptor().fields_ptr());
+        columns.emplace_back(schema.stream_descriptor().fields_ptr(), std::move(schema.column_types()));
     });
-
-    return {std::move(index_descs), std::move(norm_metas), std::move(field_collections)};
+    return {std::move(index_descs), std::move(norm_metas), std::move(columns)};
 }
 
 IndexDescriptorImpl generate_index_descriptor(const std::vector<IndexDescriptorImpl>& index_descs) {
@@ -1537,10 +1536,51 @@ NormalizationMetadata generate_norm_meta(const std::vector<NormalizationMetadata
     return norm_meta;
 }
 
+FieldCollection inner_join(const std::vector<Columns>& columns_to_join) {
+    if (columns_to_join.empty()) {
+        return {};
+    }
+    // Start with the columns in the first element, and remove anything that isn't present in all other elements
+    ankerl::unordered_dense::map<std::string, DataType> columns_to_keep(columns_to_join.front().column_types);
+    bool first_element{true};
+    for (const auto& columns: columns_to_join) {
+        if (first_element) {
+            // columns_to_keep was initialised from the first element, so don't need to re-check
+            first_element = false;
+        } else {
+            for (auto columns_to_keep_it = columns_to_keep.begin(); columns_to_keep_it != columns_to_keep.end();) {
+                const auto& column_name = columns_to_keep_it->first;
+                // TODO: Use it != end to avoid rehashing below
+                if (columns.column_types.contains(column_name)) {
+                    auto& current_data_type = columns_to_keep_it->second;
+                    // TODO: Use TypeDescriptors everywhere
+                    auto opt_common_type = has_valid_common_type(make_scalar_type(current_data_type), make_scalar_type(columns.column_types.at(column_name)));
+                    if (opt_common_type.has_value()) {
+                        current_data_type = opt_common_type->data_type();
+                    } else {
+                        schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>("No common type between {} and {} when joining schemas", current_data_type, column_name);
+                    }
+                    ++columns_to_keep_it;
+                } else {
+                    columns_to_keep_it = columns_to_keep.erase(columns_to_keep_it);
+                }
+            }
+        }
+    }
+    FieldCollection res;
+    for (const auto& field: *columns_to_join.front().fields) {
+        std::string column_name(field.name());
+        if (columns_to_keep.contains(column_name)) {
+            res.add_field(make_scalar_type(columns_to_keep.at(column_name)), column_name);
+        }
+    }
+    return res;
+}
+
 OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& output_schemas) const {
     util::check(!output_schemas.empty(), "Cannot join empty list of schemas");
     // Decompose output_schemas vector into vectors of IndexDescriptorImpl, NormalizationMetadata, and FieldCollection
-    ARCTICDB_UNUSED auto [index_descs, norm_metas, field_collections] = split_schemas(std::move(output_schemas));
+    ARCTICDB_UNUSED auto [index_descs, norm_metas, columns] = split_schemas(std::move(output_schemas));
     ARCTICDB_UNUSED auto index_desc = generate_index_descriptor(index_descs);
     ARCTICDB_UNUSED auto norm_meta = generate_norm_meta(norm_metas);
     if (norm_meta.df().common().has_multi_index()) {

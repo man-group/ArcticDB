@@ -776,14 +776,21 @@ struct DateRangeClause {
     [[nodiscard]] std::string to_string() const;
 };
 
+// TODO: Move all this somewhere else
 enum class JoinType: uint8_t {
     OUTER,
     INNER
 };
 
+struct Columns {
+    std::shared_ptr<FieldCollection> fields;
+    ankerl::unordered_dense::map<std::string, DataType> column_types;
+};
+
 IndexDescriptorImpl generate_index_descriptor(const std::vector<IndexDescriptorImpl>& index_descs);
 arcticdb::proto::descriptors::NormalizationMetadata generate_norm_meta(
         const std::vector<arcticdb::proto::descriptors::NormalizationMetadata>& norm_metas);
+FieldCollection inner_join(const std::vector<Columns>& columns_to_join);
 
 struct ConcatClause {
 
