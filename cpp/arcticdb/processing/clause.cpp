@@ -1431,16 +1431,18 @@ NormalizationMetadata generate_norm_meta(const std::vector<NormalizationMetadata
     // If PandasIndex:
     //  - name - if all the same maintain, otherwise empty string
     //  - is_int - means name is a string representation of an integer, so fold into name logic
+    //  - fake_name - true if any are true
     //  - tz - same as name
     //  - is_physically stored must all be the same
     //  - RangeIndex
     //    - start==0/step==1 - maintain
     //    - All steps the same, use start from first schema and maintain step
     //    - Otherwise, log warning, set start==0/step==1
-    // PandasMultiIndex same, minus is_physically stored, plus field_count matching
+    // PandasMultiIndex same, minus is_physically stored and fake_name, plus field_count matching
     std::optional<bool> has_multi_index;
     std::optional<std::string> name;
     std::optional<bool> is_int;
+    std::optional<bool> fake_name;
     std::optional<std::string> tz;
     std::optional<bool> is_physically_stored;
     std::optional<uint32_t> field_count;
@@ -1485,10 +1487,12 @@ NormalizationMetadata generate_norm_meta(const std::vector<NormalizationMetadata
             if (!name.has_value()) {
                 name = index.name();
                 is_int = index.is_int();
+                fake_name = index.fake_name();
             } else {
-                if ((index.name() != *name) || (index.is_int() != *is_int)) {
+                if ((index.name() != *name) || (index.is_int() != *is_int) || index.fake_name() || *fake_name) {
                     name = "";
                     is_int = false;
+                    fake_name = true;
                 }
             }
             if (!tz.has_value()) {
@@ -1528,6 +1532,7 @@ NormalizationMetadata generate_norm_meta(const std::vector<NormalizationMetadata
         auto* index = norm_meta.mutable_df()->mutable_common()->mutable_index();
         index->set_name(*name);
         index->set_is_int(*is_int);
+        index->set_fake_name(*fake_name);
         index->set_tz(*tz);
         index->set_is_physically_stored(*is_physically_stored);
         index->set_start(*start);
@@ -1627,10 +1632,10 @@ FieldCollection outer_join(const std::vector<Columns>& columns_to_join) {
 
 OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& output_schemas) const {
     util::check(!output_schemas.empty(), "Cannot join empty list of schemas");
-    // Decompose output_schemas vector into vectors of IndexDescriptorImpl, NormalizationMetadata, and FieldCollection
-    ARCTICDB_UNUSED auto [index_descs, norm_metas, columns] = split_schemas(std::move(output_schemas));
-    ARCTICDB_UNUSED auto index_desc = generate_index_descriptor(index_descs);
-    ARCTICDB_UNUSED auto norm_meta = generate_norm_meta(norm_metas);
+    // Decompose output_schemas vector into vectors of IndexDescriptorImpl, NormalizationMetadata, and Columns
+    auto [index_descs, norm_metas, columns] = split_schemas(std::move(output_schemas));
+    auto index_desc = generate_index_descriptor(index_descs);
+    auto norm_meta = generate_norm_meta(norm_metas);
     if (norm_meta.df().common().has_multi_index()) {
         schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                 norm_meta.df().common().multi_index().field_count() == index_desc.field_count(),
@@ -1640,30 +1645,9 @@ OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& output_schem
                 index_desc.field_count() <= 1,
                 "Mismatching index field counts in schema join");
     }
-
-
-    // Inner join:
-    //  - Create map from column name to type for first input schema
-    //  - Iterate remaining schema, reducing key set for any column names not in each schema
-    //  - For columns being retained, identify common type
-
-    // Outer join:
-    //  - As above, but step 2 is union rather than intersection
-
-    // TODO: Implement this properly for inner/outer options
-    // For now, just check they are all the same
-    const auto& reference_schema = output_schemas.front();
-    for (const auto& schema: output_schemas) {
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                reference_schema.stream_descriptor() == schema.stream_descriptor(),
-                "Mismatching fields in multi-symbol join"
-                );
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                google::protobuf::util::MessageDifferencer::Equals(reference_schema.norm_metadata_, schema.norm_metadata_),
-                "Mismatching normalization metadata in multi-symbol join"
-        );
-    }
-    return reference_schema;
+    auto fields = join_type_ == JoinType::INNER ? inner_join(columns) : outer_join(columns);
+    StreamDescriptor stream_desc{StreamId{}, index_desc, std::make_shared<FieldCollection>(std::move(fields))};
+    return {std::move(stream_desc), std::move(norm_meta)};
 }
 
 std::string ConcatClause::to_string() const {

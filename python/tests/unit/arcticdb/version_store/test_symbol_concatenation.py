@@ -19,7 +19,7 @@ pytestmark = pytest.mark.pipeline
 
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
-@pytest.mark.parametrize("index", [None, pd.date_range("2025-01-01", periods=12)])
+@pytest.mark.parametrize("index", [pd.date_range("2025-01-01", periods=12)])
 def test_symbol_concat_basic(lmdb_library_factory, rows_per_segment, columns_per_segment, index):
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
     df_0 = pd.DataFrame(

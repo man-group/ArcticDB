@@ -51,6 +51,7 @@ protected:
     NormalizationMetadata single_index(
             const std::string& name = "",
             bool is_int = false,
+            bool fake_name = false,
             bool is_physically_stored = true,
             const std::string& tz = "",
             int start = 0,
@@ -61,6 +62,7 @@ protected:
         index->set_is_physically_stored(is_physically_stored);
         index->set_name(name);
         index->set_is_int(is_int);
+        index->set_fake_name(fake_name);
         index->set_tz(tz);
         index->set_start(start);
         index->set_step(step);
@@ -84,14 +86,14 @@ protected:
 };
 
 TEST_F(GenerateNormMetaTest, SingleNormMeta) {
-    auto single = single_index("ts", false, true, "UTC");
+    auto single = single_index("ts", false, false, true, "UTC");
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({single}), single));
     auto multi = multi_index(2, "ts", false, "UTC");
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({multi}), multi));
 }
 
 TEST_F(GenerateNormMetaTest, IdenticalNormMetas) {
-    auto single = single_index("ts", false, true, "UTC");
+    auto single = single_index("ts", false, false, true, "UTC");
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({single, single}), single));
     auto multi = multi_index(2, "ts", false, "UTC");
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({multi, multi}), multi));
@@ -99,14 +101,19 @@ TEST_F(GenerateNormMetaTest, IdenticalNormMetas) {
 
 TEST_F(GenerateNormMetaTest, DifferentNames) {
     // Different index names (either in the name or is_int fields) should lead to an empty string index name
-    auto str_1 = single_index("1", false, true, "UTC");
-    auto str_2 = single_index("2", false, true, "UTC");
-    auto int_1 = single_index("1", true, true, "UTC");
-    auto int_2 = single_index("2", true, true, "UTC");
-    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, str_2}), single_index("", false, true, "UTC")));
-    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({int_1, int_2}), single_index("", false, true, "UTC")));
-    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, int_1}), single_index("", false, true, "UTC")));
-    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({int_1, str_1}), single_index("", false, true, "UTC")));
+    // If fake_name is true for any index the output must also have this as true
+    auto str_1 = single_index("1", false, false, true, "UTC");
+    auto str_2 = single_index("2", false, false, true, "UTC");
+    auto int_1 = single_index("1", true, false, true, "UTC");
+    auto int_2 = single_index("2", true, false, true, "UTC");
+    auto fake_name =single_index("", false, true, true, "UTC");
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, str_2}), single_index("", false, true, true, "UTC")));
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({int_1, int_2}), single_index("", false, true, true, "UTC")));
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, int_1}), single_index("", false, true, true, "UTC")));
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({int_1, str_1}), single_index("", false, true, true, "UTC")));
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, fake_name}), single_index("", false, true, true, "UTC")));
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({fake_name, int_1}), single_index("", false, true, true, "UTC")));
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, fake_name, int_1}), single_index("", false, true, true, "UTC")));
     str_1 = multi_index(2, "1", false, "UTC");
     str_2 = multi_index(2, "2", false, "UTC");
     int_1 = multi_index(2, "1", true, "UTC");
@@ -119,10 +126,10 @@ TEST_F(GenerateNormMetaTest, DifferentNames) {
 
 TEST_F(GenerateNormMetaTest, DifferentTimezones) {
     // Different index timezones should lead to an empty string index timezone
-    auto single_utc = single_index("ts", false, true, "UTC");
-    auto single_est = single_index("ts", false, true, "EST");
-    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({single_utc, single_est}), single_index("ts", false, true, "")));
-    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({single_est, single_utc}), single_index("ts", false, true, "")));
+    auto single_utc = single_index("ts", false, false, true, "UTC");
+    auto single_est = single_index("ts", false, false, true, "EST");
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({single_utc, single_est}), single_index("ts", false, false, true, "")));
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({single_est, single_utc}), single_index("ts", false, false, true, "")));
     auto multi_utc = multi_index(2, "ts", false, "UTC");
     auto multi_est = multi_index(2, "ts", false, "EST");
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({multi_utc, multi_est}), multi_index(2, "ts", false, "")));
@@ -130,7 +137,7 @@ TEST_F(GenerateNormMetaTest, DifferentTimezones) {
 }
 
 TEST_F(GenerateNormMetaTest, DifferentIsPhysicallyStored) {
-    ASSERT_THROW(generate_norm_meta({single_index("ts"), single_index("ts", false, false)}), SchemaException);
+    ASSERT_THROW(generate_norm_meta({single_index("ts"), single_index("ts", false, false, false)}), SchemaException);
 }
 
 TEST_F(GenerateNormMetaTest, DifferentFieldCount) {
@@ -138,24 +145,24 @@ TEST_F(GenerateNormMetaTest, DifferentFieldCount) {
 }
 
 TEST_F(GenerateNormMetaTest, RangeIndexBasic) {
-    auto first = single_index("", false, false, "", 0, 1);
-    auto second = single_index("", false, false, "", 0, 1);
-    auto third = single_index("", false, false, "", 0, 1);
+    auto first = single_index("", false, true, false, "", 0, 1);
+    auto second = single_index("", false, true, false, "", 0, 1);
+    auto third = single_index("", false, true, false, "", 0, 1);
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({first, second, third}), first));
 }
 
 TEST_F(GenerateNormMetaTest, RangeIndexNonDefaultStep) {
-    auto first = single_index("", false, false, "", 10, 2);
-    auto second = single_index("", false, false, "", 5, 2);
-    auto third = single_index("", false, false, "", 12, 2);
+    auto first = single_index("", false, true, false, "", 10, 2);
+    auto second = single_index("", false, true, false, "", 5, 2);
+    auto third = single_index("", false, true, false, "", 12, 2);
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({first, second, third}), first));
 }
 
 TEST_F(GenerateNormMetaTest, RangeIndexNonMatchingStep) {
-    auto a = single_index("", false, false, "", 10, 2);
-    auto b = single_index("", false, false, "", 5, 3);
-    auto c = single_index("", false, false, "", 12, 2);
-    auto expected_result = single_index("", false, false, "", 0, 1);
+    auto a = single_index("", false, true, false, "", 10, 2);
+    auto b = single_index("", false, true, false, "", 5, 3);
+    auto c = single_index("", false, true, false, "", 12, 2);
+    auto expected_result = single_index("", false, true,  false, "", 0, 1);
     // Order that the steps are seen in should not matter
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({a, b, c}), expected_result));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({b, c, a}), expected_result));
