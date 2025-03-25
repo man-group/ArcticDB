@@ -210,30 +210,34 @@ class GcpS3Bucket(S3Bucket):
         bucket: str,
         native_config: Optional[NativeVariantStorage] = None,
     ):
-        StorageFixture.__init__(self)
-        self.factory = factory
-        self.bucket = bucket
-        self.native_config = native_config
+        if any(sub in factory.endpoint for sub in ["http:", "https:"])  :
+            super().__init__(factory, bucket, native_config=native_config)
+            self.arctic_uri = self.arctic_uri.replace("s3", "gcpxml", 1)
+        else: 
+            StorageFixture.__init__(self)
+            self.factory = factory
+            self.bucket = bucket
+            self.native_config = native_config
 
-        host, port = re.match(r"(?:gcpxml://)?([^:/]+)(?::(\d+))?", factory.endpoint).groups()
-        self.arctic_uri = f"gcpxml://{host}:{self.bucket}?"
+            host, port = re.match(r"(?:gcpxml://)?([^:/]+)(?::(\d+))?", factory.endpoint).groups()
+            self.arctic_uri = f"gcpxml://{host}:{self.bucket}?"
 
-        self.key = factory.default_key
+            self.key = factory.default_key
 
-        if factory.aws_auth == None or factory.aws_auth == AWSAuthMethod.DISABLED:
-            self.arctic_uri += f"access={self.key.id}&secret={self.key.secret}"
-        else:
-            self.arctic_uri += "aws_auth=default"
-        if port:
-            self.arctic_uri += f"&port={port}"
-        if factory.default_prefix:
-            self.arctic_uri += f"&path_prefix={factory.default_prefix}"
-        if factory.ssl:
-            self.arctic_uri += "&ssl=True"
-        if platform.system() == "Linux":
-            if factory.client_cert_file:
-                self.arctic_uri += f"&CA_cert_path={self.factory.client_cert_file}"
-            # client_cert_dir is skipped on purpose; It will be tested manually in other tests
+            if factory.aws_auth == None or factory.aws_auth == AWSAuthMethod.DISABLED:
+                self.arctic_uri += f"access={self.key.id}&secret={self.key.secret}"
+            else:
+                self.arctic_uri += "aws_auth=default"
+            if port:
+                self.arctic_uri += f"&port={port}"
+            if factory.default_prefix:
+                self.arctic_uri += f"&path_prefix={factory.default_prefix}"
+            if factory.ssl:
+                self.arctic_uri += "&ssl=True"
+            if platform.system() == "Linux":
+                if factory.client_cert_file:
+                    self.arctic_uri += f"&CA_cert_path={self.factory.client_cert_file}"
+                # client_cert_dir is skipped on purpose; It will be tested manually in other tests
 
     def create_test_cfg(self, lib_name: str) -> EnvironmentConfigsMap:
         cfg = EnvironmentConfigsMap()
@@ -249,7 +253,6 @@ class GcpS3Bucket(S3Bucket):
             with_prefix=with_prefix
         )  # client_cert_dir is skipped on purpose; It will be tested manually in other tests
         return cfg, self.native_config
-
 
 
 class BaseS3StorageFixtureFactory(StorageFixtureFactory):
