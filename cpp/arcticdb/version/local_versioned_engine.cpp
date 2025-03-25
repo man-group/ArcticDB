@@ -1733,23 +1733,32 @@ std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes() {
     auto ptrs = folly::collect(sizes_futs).via(&async::cpu_executor()).get();
     std::vector<storage::ObjectSizes> res;
     for (const auto& p : ptrs) {
-        res.emplace_back(p->key_type_, p->count_, p->compressed_size_bytes_);
+        res.emplace_back(p->key_type_, p->count_, p->compressed_size_);
     }
     return res;
 }
 
+static constexpr std::array<KeyType, 5> TYPES_FOR_SIZE_BY_STREAM_CALCULATION = {
+    KeyType::VERSION_REF,
+    KeyType::VERSION,
+    KeyType::TABLE_INDEX,
+    KeyType::TABLE_DATA,
+    KeyType::APPEND_DATA,
+};
+
 std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes_for_stream(const StreamId& stream_id) {
     using ObjectSizes = storage::ObjectSizes;
     std::vector<folly::Future<std::shared_ptr<ObjectSizes>>> sizes_futs;
+    sizes_futs.reserve(TYPES_FOR_SIZE_BY_STREAM_CALCULATION.size());
 
-    for (const auto& key_type : TYPES_FOR_SIZE_CALCULATION) {
+    for (const auto& key_type : TYPES_FOR_SIZE_BY_STREAM_CALCULATION) {
         sizes_futs.push_back(store()->get_object_sizes(key_type, stream_id));
     }
 
     auto ptrs = folly::collect(sizes_futs).via(&async::cpu_executor()).get();
     std::vector<storage::ObjectSizes> res;
     for (const auto& p : ptrs) {
-        res.emplace_back(p->key_type_, p->count_, p->compressed_size_bytes_);
+        res.emplace_back(p->key_type_, p->count_, p->compressed_size_);
     }
     return res;
 }
@@ -1759,8 +1768,8 @@ std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> LocalVer
     std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> sizes;
 
     std::vector<folly::Future<folly::Unit>> futs;
-    futs.reserve(TYPES_FOR_SIZE_CALCULATION.size());
-    for (const auto& key_type : TYPES_FOR_SIZE_CALCULATION) {
+    futs.reserve(TYPES_FOR_SIZE_BY_STREAM_CALCULATION.size());
+    for (const auto& key_type : TYPES_FOR_SIZE_BY_STREAM_CALCULATION) {
         futs.push_back(store()->visit_object_sizes(key_type, std::nullopt, [&mutex, &sizes, key_type](const VariantKey& k, storage::CompressedSize size){
             auto stream_id = variant_key_id(k);
             std::lock_guard lock{mutex};
@@ -1770,7 +1779,17 @@ std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> LocalVer
         }));
     }
 
-    folly::collectAll(futs).get();
+    folly::collect(futs).get();
+
+    // Make sure we always return all the key types in the output even if some are absent for a given stream
+    // No synchronisation needed on sizes as all the async work is now complete
+    for (auto& [_, map] : sizes) {
+        for (const auto& key_type : TYPES_FOR_SIZE_BY_STREAM_CALCULATION) {
+            if (!map.contains(key_type)) {
+                map[key_type] = KeySizesInfo{};
+            }
+        }
+    }
 
     return sizes;
 }

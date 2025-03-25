@@ -46,7 +46,7 @@ def test_symbol_sizes_for_stream(arctic_library):
         sizes = nvs.version_store.scan_object_sizes_for_stream(s)
         res = dict()
         for size in sizes:
-            res[size.key_type] = (size.count, size.compressed_size_bytes)
+            res[size.key_type] = (size.count, size.compressed_size)
 
         assert res[KeyType.VERSION][0] == 1
         assert res[KeyType.VERSION][1] < 1000
@@ -60,7 +60,7 @@ def test_symbol_sizes_for_stream(arctic_library):
     df = sample_dataframe(1000, 4)
     nvs.write(big_sym, df)
     sizes = nvs.version_store.scan_object_sizes_for_stream(big_sym)
-    big_data_sizes = [s.compressed_size_bytes for s in sizes if s.key_type == KeyType.TABLE_DATA]
+    big_data_sizes = [s.compressed_size for s in sizes if s.key_type == KeyType.TABLE_DATA]
     assert len(big_data_sizes) == 1
     big_data_size = big_data_sizes[0]
     assert 0.8 * 10 * last_data_size < big_data_size < 1.2 * 10 * last_data_size
@@ -126,7 +126,7 @@ def test_scan_object_sizes(arctic_client, lib_name):
 
     res = dict()
     for s in sizes:
-        res[s.key_type] = (s.count, s.compressed_size_bytes)
+        res[s.key_type] = (s.count, s.compressed_size)
 
     assert KeyType.VERSION in res
     assert KeyType.TABLE_INDEX in res
@@ -172,7 +172,7 @@ def test_scan_object_sizes_threading(request, storage, encoding_version_, lib_na
 
             res = dict()
             for s in sizes:
-                res[s.key_type] = (s.count, s.compressed_size_bytes)
+                res[s.key_type] = (s.count, s.compressed_size)
 
             assert KeyType.VERSION in res
             assert KeyType.TABLE_INDEX in res
@@ -261,7 +261,9 @@ def test_symbol_sizes_concurrent(reader_store, writer_store):
     assert exceptions_in_reader.empty()
 
 
-def test_symbol_sizes_matches_boto(s3_storage, lib_name):
+@pytest.mark.parametrize("store", ["s3_storage", "nfs_backed_s3_storage"])
+def test_symbol_sizes_matches_boto(request, store, lib_name):
+    s3_storage = request.getfixturevalue(store)
     lib = s3_storage.create_version_store_factory(lib_name)()
     df = sample_dataframe(100, 0)
     lib.write("s", df)
@@ -272,13 +274,31 @@ def test_symbol_sizes_matches_boto(s3_storage, lib_name):
     assert key_types == {KeyType.TABLE_DATA, KeyType.TABLE_INDEX, KeyType.VERSION, KeyType.VERSION_REF, KeyType.APPEND_DATA,
                          KeyType.SNAPSHOT_REF, KeyType.LOG, KeyType.LOG_COMPACTED, KeyType.SYMBOL_LIST}
 
-    as_dict = dict()
-    for s in sizes:
-        as_dict[s.key_type] = s.compressed_size_bytes
-
-    data_size = as_dict[KeyType.TABLE_DATA]
-
+    data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
     bucket = s3_storage.get_boto_bucket()
     data_keys = [o for o in bucket.objects.all() if "test_symbol_sizes_matches_boto" in o.key and "/tdata/" in o.key]
     assert len(data_keys) == 1
-    assert data_keys[0].size == data_size
+    assert len(data_keys) == data_size.count
+    assert data_keys[0].size == data_size.compressed_size
+
+
+def test_symbol_sizes_matches_azurite(azurite_storage, lib_name):
+    factory = azurite_storage.create_version_store_factory(lib_name)
+    df = sample_dataframe(100, 0)
+    lib = factory()
+    lib.write("s", df)
+
+    blobs = azurite_storage.client.list_blobs()
+    total_size = 0
+    total_count = 0
+    for blob in blobs:
+        if blob.container == azurite_storage.container and "/tdata" in blob.name:
+            total_size += blob.size
+            total_count += 1
+
+    sizes = lib.version_store.scan_object_sizes()
+
+    data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
+    assert total_count == 1
+    assert data_size.count == total_count
+    assert data_size.compressed_size == total_size
