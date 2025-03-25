@@ -23,8 +23,8 @@ using CompressedSize = uint64_t;
 using ObjectSizesVisitor = std::function<void(const VariantKey&, CompressedSize)>;
 
 struct ObjectSizes {
-    ObjectSizes(KeyType key_type, uint64_t count, CompressedSize compressed_size_bytes) :
-        key_type_(key_type), count_(count), compressed_size_bytes_(compressed_size_bytes) {
+    ObjectSizes(KeyType key_type, uint64_t count, CompressedSize compressed_size) :
+        key_type_(key_type), count_(count), compressed_size_(compressed_size) {
 
     }
 
@@ -33,14 +33,14 @@ struct ObjectSizes {
     }
 
     ObjectSizes(const ObjectSizes& other) noexcept : key_type_(other.key_type_), count_(other.count_.load()),
-        compressed_size_bytes_(other.compressed_size_bytes_.load()) {
+                                                     compressed_size_(other.compressed_size_.load()) {
     }
 
     ObjectSizes& operator=(const ObjectSizes& that) noexcept {
         if (this != &that) {
             key_type_ = that.key_type_;
             count_ = that.count_.load();
-            compressed_size_bytes_ = that.compressed_size_bytes_.load();
+            compressed_size_ = that.compressed_size_.load();
         }
 
         return *this;
@@ -48,7 +48,7 @@ struct ObjectSizes {
 
     KeyType key_type_;
     std::atomic_uint64_t count_;
-    std::atomic_uint64_t compressed_size_bytes_;
+    std::atomic_uint64_t compressed_size_;
 };
 
 enum class SupportsAtomicWrites {
@@ -278,8 +278,8 @@ template<> struct formatter<ObjectSizes> {
 
     template<typename FormatContext>
     auto format(const ObjectSizes &sizes, FormatContext &ctx) const {
-        return fmt::format_to(ctx.out(), "ObjectSizes key_type[{}] count[{}] compressed_size_bytes[{}]",
-                              sizes.key_type_, sizes.count_, sizes.compressed_size_bytes_);
+        return fmt::format_to(ctx.out(), "ObjectSizes key_type[{}] count[{}] compressed_size[{}]",
+                              sizes.key_type_, sizes.count_, sizes.compressed_size_);
     }
 };
 }
