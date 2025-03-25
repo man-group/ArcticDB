@@ -460,12 +460,14 @@ def filter_out_unwanted_mark(request, current_param):
       @pytest.mark.only_<fixture_param_name>
     """
     only_marks = [mark for mark in request.node.iter_markers() if mark.name.startswith("only_")]
-    found = False
-    for only_mark in only_marks:
-        if only_mark.name == f"only_{current_param}":
-            found = True
-    if not found:
-        pytest.skip(f"Skipping {current_param} parameter due to custom test mark.")
+    if only_marks: 
+        # Only when defined at least one only_ mark evaluate what should stay
+        found = False
+        for only_mark in only_marks:
+            if only_mark.name == f"only_{current_param}":
+                found = True
+        if not found:
+            pytest.skip(f"Skipping {current_param} parameter due to custom test mark.")
 
 @pytest.fixture(
     scope="function",
