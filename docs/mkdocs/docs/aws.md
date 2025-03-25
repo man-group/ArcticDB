@@ -319,13 +319,16 @@ Workaround for STS Authentication with AWS C++ SDK on Certain Linux Distribution
 
 #### Cause:
 
-Due to a known [issue](https://github.com/aws/aws-sdk-cpp/issues/2920) in the AWS C++ SDK, users relying on STS authentication are required to disable [S3Storage.VerifySSL](https://docs.arcticdb.io/latest/runtime_config/#s3storageverifyssl) on the following operating systems:
+A known [issue](https://github.com/aws/aws-sdk-cpp/issues/2920) in the AWS C++ SDK
 
-- **RHEL distributions with custom CA certificates**
-- **Other Linux distributions**
+#### Affected users
+- **Use STS authentication, and**
+- **Use below opearting systems**
+  - **RHEL distributions with custom CA certificates**
+  - **Other Linux distributions**
 
 #### Workaround
-To resolve this issue, you can create symbolic links for the CA certificate in use to the required `/etc/pki/tls/certs` directory. Below is an example of how to do this for the default CA certificate on Ubuntu:
+You need to create symbolic links for the CA certificate in use to the required `/etc/pki/tls/certs` directory. Below is an example of how to do this for the default CA certificate on Ubuntu:
 
 ```bash
 ln -s /usr/lib/ssl/cert.pem /etc/pki
