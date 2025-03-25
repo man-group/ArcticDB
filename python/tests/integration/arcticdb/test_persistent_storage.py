@@ -1,7 +1,8 @@
 import pytest
 import os
+from arcticdb.storage_fixtures.api import StorageFixture
 from arcticdb.util.test import assert_frame_equal
-from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED, REAL_S3_TESTS_MARK
+from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED, REAL_GCP_TESTS_MARK, REAL_S3_TESTS_MARK
 from tests.util.storage_test import (
     get_seed_libraries,
     generate_pseudo_random_dataframe,
@@ -17,12 +18,14 @@ else:
     LIBRARIES = []
 
 
-@pytest.fixture(params=[pytest.param("REAL_S3", marks=REAL_S3_TESTS_MARK)])
+@pytest.fixture(params=[pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
+                        pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK)])
 # Only test with encoding version 0 (a.k.a.) for now
 # because there is a problem when older versions try to read configs with a written encoding version
 # def shared_persistent_arctic_client(real_s3_storage_without_clean_up, encoding_version):
-def shared_persistent_arctic_client(real_s3_storage_without_clean_up):
-    return real_s3_storage_without_clean_up.create_arctic()
+def shared_persistent_arctic_client(request):
+    storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage_without_clean_up")
+    return storage_fixture.create_arctic()
 
 
 # TODO: Add a check if the real storage tests are enabled
