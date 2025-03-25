@@ -9,6 +9,7 @@
 
 #include <cstddef> // for std::size_t
 #include <variant>
+#include <tuple>
 
 namespace arcticdb::util {
 
