@@ -88,6 +88,9 @@ if(WIN32)
     add_compile_definitions(
         NOGDI WIN32_LEAN_AND_MEAN HAVE_SNPRINTF NOMINMAX
         "$<$<CONFIG:Debug>:DEBUG_BUILD>"
+        # Required to link against protobuf.dll
+        # See: https://github.com/protocolbuffers/protobuf/blob/384fabf35a9b5d1f1502edaf9a139b1f51551a01/cmake/README.md?plain=1#L296-L319
+        "$<$<BOOL:${ARCTICDB_USING_CONDA}>:PROTOBUF_USE_DLLS>"
     )
 
     # We always generate the debug info on Windows since those are not in the final .dll.
