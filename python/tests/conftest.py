@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import enum
-from typing import Callable, Generator
+from typing import Callable, Generator, Union
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.version_store.library import Library
 import hypothesis
@@ -303,6 +303,14 @@ def real_gcp_storage_factory() -> BaseGCPStorageFixtureFactory:
         shared_path=False,
         additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
     )
+
+
+@pytest.fixture(scope="session",
+                params=[pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
+                        pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK)])
+def real_storage_factory(request) -> Union[BaseGCPStorageFixtureFactory, BaseGCPStorageFixtureFactory]:
+    storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage_factory")
+    return storage_fixture
 
 
 @pytest.fixture(scope="session")
@@ -821,6 +829,7 @@ def version_store_and_real_s3_basic_store_factory(request):
         pytest.param("version_store_factory", marks=LMDB_TESTS_MARK),
         pytest.param("in_memory_store_factory",marks=MEM_TESTS_MARK),
         pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
+        pytest.param("real_gcp_store_factory", marks=REAL_GCP_TESTS_MARK),
     ]
 )
 def basic_store_factory(request) -> Callable[..., NativeVersionStore]:

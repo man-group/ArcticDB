@@ -51,9 +51,11 @@ def test_real_s3_storage_write(shared_persistent_arctic_client):
     write_persistent_library(lib, latest=True)
 
 
-@pytest.fixture(params=[pytest.param("REAL_S3", marks=REAL_S3_TESTS_MARK)])
-def persistent_arctic_client(real_s3_storage, encoding_version):
-    return real_s3_storage.create_arctic(encoding_version=encoding_version)
+@pytest.fixture(params=[pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
+                        pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK)])
+def persistent_arctic_client(request, encoding_version):
+    storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
+    return storage_fixture.create_arctic(encoding_version=encoding_version)
 
 
 @pytest.mark.parametrize("num_rows", [1_000_000])
