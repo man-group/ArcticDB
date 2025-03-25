@@ -519,7 +519,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     py::class_<storage::ObjectSizes>(version, "ObjectSizes")
         .def_readonly("key_type", &storage::ObjectSizes::key_type_)
         .def_property_readonly("count", [](storage::ObjectSizes& self) {return self.count_.load();})
-        .def_property_readonly("compressed_size_bytes", [](storage::ObjectSizes& self) {return self.compressed_size_bytes_.load();})
+        .def_property_readonly("compressed_size", [](storage::ObjectSizes& self) {return self.compressed_size_.load();})
         .def("__repr__", [](storage::ObjectSizes object_sizes) {return fmt::format("{}", object_sizes);})
         .doc() = "Count of keys and their uncompressed sizes in bytes for a given key type";
 
