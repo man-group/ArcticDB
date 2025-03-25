@@ -313,10 +313,13 @@ jobs:
           post-cleanup: 'all'
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
-        shell: bash -elo pipefail {0}
+        shell: cmd /C call {0}
         run: |
-          # Protocol buffers compilation require not using build isolation.
-          python -m pip install --no-build-isolation --no-deps -v -e .
+          set CMAKE_GENERATOR_PLATFORM=
+          set CMAKE_GENERATOR_TOOLSET=
+          cd cpp
+          cmake -DTEST=off --preset windows-cl-conda-release
+          cmake --build --preset windows-cl-conda-release
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
