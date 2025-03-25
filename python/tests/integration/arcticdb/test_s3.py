@@ -43,7 +43,7 @@ def test_s3_storage_failures(mock_s3_store_with_error_simulation):
     result_df = lib.read(symbol_success).data
     assert_frame_equal(result_df, df)
 
-    with pytest.raises(StorageException, match="Unexpected network error: S3Error#99"):
+    with pytest.raises(StorageException, match="Network error: S3Error#99"):
         lib.write(symbol_fail_write, df)
 
     with pytest.raises(StorageException, match="Unexpected error: S3Error#17"):
@@ -171,15 +171,15 @@ def test_wrapped_s3_storage(lib_name, wrapped_s3_storage_bucket):
     test_bucket_name = wrapped_s3_storage_bucket.bucket
 
     with config_context("S3ClientTestWrapper.EnableFailures", 1):
-        with pytest.raises(NoDataFoundException, match="Unexpected network error: S3Error#99"):
+        with pytest.raises(NoDataFoundException, match="Network error: S3Error#99"):
             lib.read("s")
 
         with config_context_string("S3ClientTestWrapper.FailureBucket", test_bucket_name):
-            with pytest.raises(StorageException, match="Unexpected network error: S3Error#99"):
+            with pytest.raises(StorageException, match="Network error: S3Error#99"):
                 lib.write("s", data=create_df())
 
         with config_context_string("S3ClientTestWrapper.FailureBucket", f"{test_bucket_name},non_existent_bucket"):
-            with pytest.raises(StorageException, match="Unexpected network error: S3Error#99"):
+            with pytest.raises(StorageException, match="Network error: S3Error#99"):
                 lib.write("s", data=create_df())
 
         # There should be no failures
