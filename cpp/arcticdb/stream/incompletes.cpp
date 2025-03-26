@@ -466,7 +466,7 @@ void remove_incomplete_segments(
 void remove_incomplete_segments(
     const std::shared_ptr<Store>& store, const std::unordered_set<StreamId>& sids, const std::string& common_prefix
 ) {
-    auto match_stream_id =  [&sids](const VariantKey & k){ return sids.find(variant_key_id(k)) != sids.end(); };
+    auto match_stream_id =  [&sids](const VariantKey & k){ return sids.contains(variant_key_id(k)); };
     delete_keys_of_type_if(store, match_stream_id, KeyType::APPEND_DATA, common_prefix);
 }
 

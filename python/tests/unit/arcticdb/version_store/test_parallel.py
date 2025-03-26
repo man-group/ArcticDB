@@ -16,7 +16,7 @@ import pytest
 from arcticdb.exceptions import (
     SortingException,
     SchemaException,
-    UserInputException,
+    UserInputException, ArcticDbNotYetImplemented,
 )
 from arcticdb.util.test import (
     assert_frame_equal,
@@ -74,6 +74,11 @@ def test_staging_doesnt_write_append_ref(lmdb_version_store_v1):
 @pytest.mark.parametrize("batch_size", (1000, 7))
 def test_remove_incomplete(arctic_library_v1, batch, batch_size, lib_name):
     lib = arctic_library_v1._nvs
+    if lib.get_backing_store() == "mongo_storage":
+        with pytest.raises(ArcticDbNotYetImplemented):
+            arctic_library_v1._dev_tools.remove_incompletes(["sym"])
+        return # remove_incompletes not implemented on Mongo 8784267430
+
     with config_context_multi({"Storage.DeleteBatchSize": batch_size, "S3Storage.DeleteBatchSize": 2 * batch_size}):
         lib_tool = lib.library_tool()
         assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
@@ -81,7 +86,7 @@ def test_remove_incomplete(arctic_library_v1, batch, batch_size, lib_name):
 
         if batch:
             def remove(sym):
-                lib._remove_incompletes([sym])
+                arctic_library_v1._dev_tools.remove_incompletes([sym])
         else:
             def remove(sym):
                 lib.remove_incomplete(sym)
@@ -119,12 +124,17 @@ def test_remove_incomplete(arctic_library_v1, batch, batch_size, lib_name):
 
 
 @pytest.mark.parametrize("batch_size", (1000, 7))
-def test_remove_incompletes(basic_store, batch_size):
+def test_remove_incompletes(arctic_library_v1, batch_size):
+    if arctic_library_v1._nvs.get_backing_store() == "mongo_storage":
+        with pytest.raises(ArcticDbNotYetImplemented):
+            arctic_library_v1._dev_tools.remove_incompletes(["sym"])
+        return # remove_incompletes not implemented on Mongo 8784267430
+
     with config_context_multi({"Storage.DeleteBatchSize": batch_size, "S3Storage.DeleteBatchSize": 2 * batch_size}):
-        lib = basic_store
-        lib_tool = lib.library_tool()
+        lib = arctic_library_v1
+        lib_tool = lib._dev_tools.library_tool()
         assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
-        assert lib.list_symbols_with_incomplete_data() == []
+        assert lib.get_staged_symbols() == []
 
         n_symbols = 20
         n_to_delete = 9
@@ -136,26 +146,46 @@ def test_remove_incompletes(basic_store, batch_size):
         df = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2000-01-01", periods=num_chunks))
         for s in syms + other_syms:
             for idx in range(num_chunks):
-                lib.write(s, df.iloc[idx : idx + 1, :], parallel=True)
+                lib.write(s, df.iloc[idx : idx + 1, :], staged=True)
 
         assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, "sym_0")) == num_chunks
-        assert sorted(lib.list_symbols_with_incomplete_data()) == sorted(syms + other_syms)
+        assert sorted(lib.get_staged_symbols()) == sorted(syms + other_syms)
 
-        lib._remove_incompletes(to_delete)
+        lib._dev_tools.remove_incompletes(to_delete)
         for s in to_delete:
             assert lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, s) == []
 
         survivors = set(syms + other_syms) - set(to_delete)
         for s in survivors:
             assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, s)) == num_chunks
-        assert sorted(lib.list_symbols_with_incomplete_data()) == sorted(list(survivors))
+        assert sorted(lib.get_staged_symbols()) == sorted(list(survivors))
 
         with pytest.raises(UserInputException, match="E_NO_STAGED_SEGMENTS"):
-            lib.compact_incomplete(to_delete[0], append=False, convert_int_to_float=False)
+            lib.finalize_staged_data(to_delete[0])
 
         to_finalize = survivors.pop()
-        lib.compact_incomplete(to_finalize, append=False, convert_int_to_float=False)
+        lib.finalize_staged_data(to_finalize)
         assert_frame_equal(lib.read(to_finalize).data, df)
+
+
+def test_remove_incompletes_no_common_prefix(basic_store):
+    lib = Library("desc", basic_store)
+    lib_tool = lib._dev_tools.library_tool()
+    assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
+    assert lib.get_staged_symbols() == []
+
+    df = pd.DataFrame({"a": [1]})
+    df.index = [pd.Timestamp(0)]
+    lib.write("sym", df, staged=True)
+    lib.write("tzm", df, staged=True)
+    lib.write("uan", df, staged=True)
+
+    assert len(lib_tool.find_keys(KeyType.APPEND_DATA)) == 3
+    assert sorted(lib.get_staged_symbols()) == ["sym", "tzm", "uan"]
+
+    lib._dev_tools.remove_incompletes(["sym", "uan"])
+    assert len(lib_tool.find_keys(KeyType.APPEND_DATA)) == 1
+    assert sorted(lib.get_staged_symbols()) == ["tzm"]
 
 
 @pytest.mark.parametrize("num_segments_live_during_compaction, num_io_threads, num_cpu_threads", [
