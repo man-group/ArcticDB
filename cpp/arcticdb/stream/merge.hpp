@@ -90,7 +90,9 @@ void do_merge(
                             const TypeDescriptor& final_type = agg.descriptor().field(field_name_to_index.find(name)->second).type();
                             details::visit_type(final_type.data_type(), [&](auto merged_descriptor_type) {
                                 using merged_type_info = ScalarTypeInfo<decltype(merged_descriptor_type)>;
-                                using row_type_info = ScalarTypeInfo<typename decltype(row_field_descriptor_tag)::DataTypeTag>;
+                                using RowFieldDescriptorTagType = typename std::decay_t<decltype(row_field_descriptor_tag)>;
+                                using RowFieldDescriptorTagDataType = typename RowFieldDescriptorTagType::DataTypeTag;
+                                using row_type_info = ScalarTypeInfo<RowFieldDescriptorTagDataType>;
                                 // At this point all staged descriptors were merged using merge_descritpros and it
                                 // ensured that all staged descriptors are either the same or are convertible to the
                                 // stream descriptor in the aggregator.
