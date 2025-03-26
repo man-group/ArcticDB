@@ -230,7 +230,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
 
     version.def("write_dataframe_to_file", &write_dataframe_to_file);
     version.def("read_dataframe_from_file",
-        [] (StreamId sid, const std::string(path), std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options){
+        [] (StreamId sid, std::string path, std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options){
             return adapt_read_df(read_dataframe_from_file(sid, path, read_query, read_options));
         });
 
