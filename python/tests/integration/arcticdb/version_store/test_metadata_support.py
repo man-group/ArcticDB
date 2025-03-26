@@ -5,8 +5,15 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import sys
+
 import numpy as np
 import pandas as pd
+import datetime
+if sys.version_info >= (3, 9):
+    import zoneinfo
+import pytz
+
 from arcticdb_ext import set_config_string, unset_config_string
 from pandas import DataFrame, Timestamp
 import pytest
@@ -15,6 +22,8 @@ from arcticdb.version_store import NativeVersionStore, VersionedItem
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.util.test import assert_frame_equal, distinct_timestamps
+
+from tests.util.mark import ZONE_INFO_MARK
 
 
 # In the following lines, the naming convention is
@@ -293,3 +302,30 @@ def test_rv_contains_metadata_batch_write_metadata(lmdb_version_store_v1):
     vits = lib.batch_write_metadata([sym_0, sym_1], [metadata_0, metadata_1])
     assert vits[0].metadata == metadata_0
     assert vits[1].metadata == metadata_1
+
+
+@ZONE_INFO_MARK
+@pytest.mark.parametrize("zone_type", ["pytz", "zoneinfo"])
+@pytest.mark.parametrize("zone_name", ["UTC", "America/Los_Angeles", "Europe/London", "Asia/Tokyo", "Pacific/Kiritimati"])
+def test_metadata_timestamp_with_tz(lmdb_version_store_v1, zone_type, zone_name):
+    lib = lmdb_version_store_v1
+    sym = "sym"
+    df = timestamp_indexed_df()
+    if zone_type == "pytz":
+        zone_to_write = pytz.timezone(zone_name)
+    elif zone_type == "zoneinfo":
+        zone_to_write = zoneinfo.ZoneInfo(zone_name)
+    else:
+        raise ValueError("Unknown timezone type")
+    # We need to normalize all timezoned timestamps to a pd.Timestamp with pytz
+    expected_metadata = pd.Timestamp(2025, 1, 1, tz=pytz.timezone(zone_name))
+
+    # pd.Timestamp
+    metadata_to_write = pd.Timestamp(2025, 1, 1, tz=zone_to_write)
+    lib.write(sym, df, metadata_to_write)
+    assert lib.read(sym).metadata == expected_metadata
+
+    # datetime.datetime
+    metadata_to_write = datetime.datetime(2025, 1, 1, tzinfo=zone_to_write)
+    lib.write(sym, df, metadata_to_write)
+    assert lib.read(sym).metadata == expected_metadata

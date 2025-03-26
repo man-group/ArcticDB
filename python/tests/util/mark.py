@@ -115,6 +115,10 @@ MEMRAY_TESTS_MARK = pytest.mark.skipif(
     not MEMRAY_SUPPORTED, reason="MEMRAY supports linux and macos and python 3.8 and above"
 )
 
+ZONE_INFO_MARK = pytest.mark.skipif(
+    sys.version_info < (3, 9),
+    reason="zoneinfo module was introduced in Python 3.9")
+
 SSL_TESTS_MARK = pytest.mark.skipif(
     not SSL_TEST_SUPPORTED,
     reason="When SSL tests are enabled",

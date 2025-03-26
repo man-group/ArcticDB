@@ -86,13 +86,23 @@ public:
     }
 
     std::string to_string() {
-        return util::variant_match(config_, [](std::monostate) {
+        return util::variant_match(config_, [](std::monostate) -> std::string {
             return "empty";
-        }, [](s3::S3Settings) {
-            return "s3";
-        }, [](s3::GCPXMLSettings) {
-            return "gcpxml";
+        }, [](s3::S3Settings s3) {
+            return fmt::format("{}", s3);
+        }, [](s3::GCPXMLSettings gcpxml) {
+            return fmt::format("{}", gcpxml);
         });
+    }
+
+    s3::S3Settings as_s3_settings() {
+        util::check(std::holds_alternative<s3::S3Settings>(config_), "Expected s3 settings but was {}", to_string());
+        return std::get<s3::S3Settings>(config_);
+    }
+
+    s3::GCPXMLSettings as_gcpxml_settings() {
+        util::check(std::holds_alternative<s3::GCPXMLSettings>(config_), "Expected gcpxml settings but was {}", to_string());
+        return std::get<s3::GCPXMLSettings>(config_);
     }
 
 private:

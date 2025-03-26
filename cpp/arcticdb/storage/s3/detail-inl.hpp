@@ -93,17 +93,12 @@ inline bool is_not_found_error(const Aws::S3::S3Errors& error) {
         }
     }
 
-    if (err.ShouldRetry()) {
-        raise<ErrorCode::E_S3_RETRYABLE>(fmt::format("Retry-able error: {}",
-                                                     error_message_suffix));
-    }
-
     // We create a more detailed error explanation in case of NETWORK_CONNECTION errors to remedy #880.
     if (type == Aws::S3::S3Errors::NETWORK_CONNECTION) {
-        error_message = fmt::format("Unexpected network error: {} "
-                                    "This could be due to a connectivity issue or too many open Arctic instances. "
-                                    "Having more than one open Arctic instance is not advised, you should reuse them. "
-                                    "If you absolutely need many open Arctic instances, consider increasing `ulimit -n`.",
+        error_message = fmt::format("Network error: {} "
+                                    "This could be due to a connectivity issue or exhausted file descriptors. "
+                                    "Having more than one open Arctic instance will use multiple file descriptors, you should reuse Arctic instances. "
+                                    "If you need many file descriptors, consider increasing `ulimit -n`.",
                                     error_message_suffix);
     } else {
         error_message = fmt::format("Unexpected error: {}",
@@ -111,6 +106,10 @@ inline bool is_not_found_error(const Aws::S3::S3Errors& error) {
     }
 
     log::storage().error(error_message);
+    if (err.ShouldRetry()) {
+        raise<ErrorCode::E_S3_RETRYABLE>(fmt::format("Retry-able error: {}",
+                                                     error_message));
+    }
     raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(error_message);
 }
 
