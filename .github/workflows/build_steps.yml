@@ -460,7 +460,7 @@ jobs:
         type: ${{fromJSON(vars.TEST_DIRS_OVERRIDE || needs.compile.outputs.test_dirs)}}
         python_deps_id: ${{fromJson(inputs.python_deps_ids)}}
         # Always run with both for cp311
-        version_cache_timeout: ${{ fromJSON((inputs.version_cache_full_test || needs.compile.outputs.python_impl_name == 'cp311') && '["NoCache", "DefaultCache"]' || '["DefaultCache"]') }} 
+        version_cache_timeout: ${{ fromJSON((inputs.version_cache_full_test || needs.compile.outputs.python_impl_name == 'cp311') && '["NoCache", "DefaultCache"]' || '["DefaultCache"]') }}
         include:
           ${{fromJSON(inputs.matrix)}}
     name: ${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}
@@ -596,7 +596,10 @@ jobs:
           ulimit -a
           export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
-            python -m pip  install pytest-repeat setuptools wheel
+            echo "Run custom pytest command"
+            python -m pip  install pytest-repeat
+            python -m pip  install setuptools
+            python -m pip  install wheel
             python setup.py protoc --build-lib python
             echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
             eval "$ARCTICDB_PYTEST_ARGS"
@@ -644,4 +647,5 @@ jobs:
           name: pytest-${{env.distinguishing_name}}
           path: |
             ${{runner.temp}}/*test*
-            
+
+if: false

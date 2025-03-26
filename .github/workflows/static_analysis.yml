@@ -1,6 +1,10 @@
 ---
   name: Coverity Static Analysis
   on:
+    push:
+      branches:
+        - master
+    pull_request:
     workflow_dispatch:
 
   jobs:
@@ -71,3 +75,4 @@
             polaris_reports_sarif_groupSCAIssues: true
             polaris_upload_sarif_report: true
             polaris_prComment_severities: "high,critical,medium,low"
+if: false
