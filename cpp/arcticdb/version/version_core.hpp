@@ -196,10 +196,6 @@ VersionedItem sort_merge_impl(
     const WriteOptions& write_options,
     std::shared_ptr<PipelineContext>& pipeline_context);
 
-void modify_descriptor(
-    const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
-    const ReadOptions& read_options);
-
 void read_indexed_keys_to_pipeline(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<PipelineContext>& pipeline_context,

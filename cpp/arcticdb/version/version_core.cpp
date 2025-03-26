@@ -34,7 +34,15 @@ namespace arcticdb::version_store {
 
 namespace ranges = std::ranges;
 
-void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, const ReadOptions& read_options) {
+struct ReadIncompletesFlags {
+    bool convert_int_to_float{false};
+    bool via_iteration{false};
+    bool sparsify{false};
+    bool dynamic_schema{false};
+    bool has_active_version{true};
+};    
+
+static void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, const ReadOptions& read_options) {
 
     if (opt_false(read_options.force_strings_to_object()) || opt_false(read_options.force_strings_to_fixed()))
         pipeline_context->orig_desc_ = pipeline_context->desc_;
@@ -949,7 +957,7 @@ void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDes
 
         std::vector<std::string> index_columns_to_add;
         for(const auto& index_column : index_columns) {
-            if(std::find(std::begin(*read_query.columns), std::end(*read_query.columns), index_column) == std::end(*read_query.columns))
+            if(ranges::find(*read_query.columns, index_column) == std::end(*read_query.columns))
                 index_columns_to_add.emplace_back(index_column);
         }
         read_query.columns->insert(std::begin(*read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add));
@@ -969,27 +977,29 @@ FrameAndDescriptor read_index_impl(
     return read_segment_impl(store, version.key_);
 }
 
-std::optional<pipelines::index::IndexSegmentReader> get_index_segment_reader(
-    const std::shared_ptr<Store>& store,
+std::optional<index::IndexSegmentReader> get_index_segment_reader(
+    Store& store,
     const std::shared_ptr<PipelineContext>& pipeline_context,
     const VersionedItem& version_info) {
-    std::pair<entity::VariantKey, SegmentInMemory> index_key_seg;
-    try {
-        index_key_seg = store->read_sync(version_info.key_);
-    } catch (const std::exception& ex) {
-        ARCTICDB_DEBUG(log::version(), "Key not found from versioned item {}: {}", version_info.key_, ex.what());
-        throw storage::NoDataFoundException(fmt::format("When trying to read version {} of symbol `{}`, failed to read key {}: {}",
-                                                        version_info.version(),
-                                                        version_info.symbol(),
-                                                        version_info.key_,
-                                                        ex.what()));
-    }
+    std::pair<VariantKey, SegmentInMemory> index_key_seg = [&]() {
+        try {
+            return store.read_sync(version_info.key_);
+        } catch (const std::exception &ex) {
+            ARCTICDB_DEBUG(log::version(), "Key not found from versioned item {}: {}", version_info.key_, ex.what());
+            throw storage::NoDataFoundException(fmt::format(
+                "When trying to read version {} of symbol `{}`, failed to read key {}: {}",
+                version_info.version(),
+                version_info.symbol(),
+                version_info.key_,
+                ex.what()));
+        }
+    }();
 
     if (variant_key_type(index_key_seg.first) == KeyType::MULTI_KEY) {
-        pipeline_context->multi_key_ = index_key_seg.second;
+        pipeline_context->multi_key_ = std::move(index_key_seg.second);
         return std::nullopt;
     }
-    return std::make_optional<pipelines::index::IndexSegmentReader>(std::move(index_key_seg.second));
+    return std::make_optional<index::IndexSegmentReader>(std::move(index_key_seg.second));
 }
 
 void check_can_read_index_only_if_required(
@@ -1021,7 +1031,7 @@ void read_indexed_keys_to_pipeline(
         const VersionedItem& version_info,
         ReadQuery& read_query,
         const ReadOptions& read_options) {
-    auto maybe_reader = get_index_segment_reader(store, pipeline_context, version_info);
+    auto maybe_reader = get_index_segment_reader(*store, pipeline_context, version_info);
     if(!maybe_reader)
         return;
 
@@ -1033,10 +1043,10 @@ void read_indexed_keys_to_pipeline(
 
     const auto& tsd = index_segment_reader.tsd();
     read_query.convert_to_positive_row_filter(static_cast<int64_t>(tsd.total_rows()));
-    bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
+    const bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     pipeline_context->desc_ = tsd.as_stream_descriptor();
 
-    bool dynamic_schema = opt_false(read_options.dynamic_schema());
+    const bool dynamic_schema = opt_false(read_options.dynamic_schema());
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
         read_query,
         pipeline_context,
@@ -1053,22 +1063,19 @@ void read_indexed_keys_to_pipeline(
 }
 
 // Returns true if there are staged segments
-bool read_incompletes_to_pipeline(
+static bool read_incompletes_to_pipeline(
     const std::shared_ptr<Store>& store,
     std::shared_ptr<PipelineContext>& pipeline_context,
     const ReadQuery& read_query,
     const ReadOptions& read_options,
-    bool convert_int_to_float,
-    bool via_iteration,
-    bool sparsify,
-    bool dynamic_schema) {
+    const ReadIncompletesFlags flags) {
 
     auto incomplete_segments = get_incomplete(
         store,
         pipeline_context->stream_id_,
         read_query.row_filter,
         pipeline_context->last_row(),
-        via_iteration,
+        flags.via_iteration,
         false);
 
     ARCTICDB_DEBUG(log::version(), "Symbol {}: Found {} incomplete segments", pipeline_context->stream_id_, incomplete_segments.size());
@@ -1092,24 +1099,24 @@ bool read_incompletes_to_pipeline(
     // Mark the start point of the incompletes, so we know that there is no column slicing after this point
     pipeline_context->incompletes_after_ = pipeline_context->slice_and_keys_.size();
 
-    if(pipeline_context->slice_and_keys_.empty()) {
+    if(!flags.has_active_version) {
         // If there are only incompletes we need to do the following (typically done when reading the index key):
         // - add the index columns to query
         // - in case of static schema: populate the descriptor and column_bitset
         add_index_columns_to_query(read_query, seg.index_descriptor());
-        if (!dynamic_schema) {
+        if (!flags.dynamic_schema) {
             pipeline_context->desc_ = seg.descriptor();
             get_column_bitset_in_context(
                 read_query,
                 pipeline_context);
         }
     }
-    pipeline_context->slice_and_keys_.insert(std::end(pipeline_context->slice_and_keys_), incomplete_segments.begin(), incomplete_segments.end());
+    ranges::copy(incomplete_segments, std::back_inserter(pipeline_context->slice_and_keys_));
 
     if (!pipeline_context->norm_meta_) {
         pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>();
         pipeline_context->norm_meta_->CopyFrom(seg.index_descriptor().proto().normalization());
-        ensure_timeseries_norm_meta(*pipeline_context->norm_meta_, pipeline_context->stream_id_, sparsify);
+        ensure_timeseries_norm_meta(*pipeline_context->norm_meta_, pipeline_context->stream_id_, flags.sparsify);
     }
 
     const StreamDescriptor &staged_desc = incomplete_segments[0].segment(store).descriptor();
@@ -1126,10 +1133,10 @@ bool read_incompletes_to_pipeline(
         );
     }
 
-    if (dynamic_schema) {
+    if (flags.dynamic_schema) {
         ARCTICDB_DEBUG(log::version(), "read_incompletes_to_pipeline: Dynamic schema");
         pipeline_context->staged_descriptor_ =
-            merge_descriptors(seg.descriptor(), incomplete_segments, read_query.columns, std::nullopt, convert_int_to_float);
+            merge_descriptors(seg.descriptor(), incomplete_segments, read_query.columns, std::nullopt, flags.convert_int_to_float);
         if (pipeline_context->desc_) {
             const std::array staged_fields_ptr = {pipeline_context->staged_descriptor_->fields_ptr()};
             pipeline_context->desc_ =
@@ -1148,7 +1155,7 @@ bool read_incompletes_to_pipeline(
                        first_incomplete_seg.index_descriptor());
         if (pipeline_context->desc_) {
             schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                columns_match(*pipeline_context->desc_, staged_desc, convert_int_to_float),
+                columns_match(*pipeline_context->desc_, staged_desc, flags.convert_int_to_float),
                 "When static schema is used the staged stream descriptor {} must equal the stream descriptor on storage {}",
                 staged_desc,
                 *pipeline_context->desc_
@@ -1159,7 +1166,7 @@ bool read_incompletes_to_pipeline(
     }
 
     modify_descriptor(pipeline_context, read_options);
-    if (convert_int_to_float) {
+    if (flags.convert_int_to_float) {
         stream::convert_descriptor_types(*pipeline_context->staged_descriptor_);
     }
 
@@ -1696,7 +1703,7 @@ VersionedItem sort_merge_impl(
     std::optional<SortedValue> previous_sorted_value;
     if(options.append_ && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), *read_query, ReadOptions{});
-        if (!write_options.dynamic_schema) {
+        if (!write_options.dynamic_schema && !pipeline_context->slice_and_keys_.empty()) {
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 pipeline_context->slice_and_keys_.front().slice().columns() == pipeline_context->slice_and_keys_.back().slice().columns(),
                 "Appending using sort and finalize is not supported when existing data being appended to is column sliced."
@@ -1706,15 +1713,19 @@ VersionedItem sort_merge_impl(
     }
     const auto num_versioned_rows = pipeline_context->total_rows_;
 
+    const ReadIncompletesFlags read_incomplete_flags{
+        .convert_int_to_float = options.convert_int_to_float_,
+        .via_iteration = options.via_iteration_,
+        .sparsify = options.sparsify_,
+        .dynamic_schema = write_options.dynamic_schema,
+        .has_active_version = update_info.previous_index_key_.has_value()
+    };
     const bool has_incomplete_segments = read_incompletes_to_pipeline(
         store,
         pipeline_context,
         *read_query,
         ReadOptions{},
-        options.convert_int_to_float_,
-        options.via_iteration_,
-        options.sparsify_,
-        write_options.dynamic_schema
+        read_incomplete_flags
     );
     user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
         has_incomplete_segments,
@@ -1821,7 +1832,7 @@ VersionedItem compact_incomplete_impl(
 
     if(options.append_ && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, read_options);
-        if (!write_options.dynamic_schema) {
+        if (!write_options.dynamic_schema && !pipeline_context->slice_and_keys_.empty()) {
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 pipeline_context->slice_and_keys_.front().slice().columns() == pipeline_context->slice_and_keys_.back().slice().columns(),
                 "Appending using sort and finalize is not supported when existing data being appended to is column sliced."
@@ -1829,16 +1840,19 @@ VersionedItem compact_incomplete_impl(
         }
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
-
+    const ReadIncompletesFlags read_incomplete_flags{
+        .convert_int_to_float = options.convert_int_to_float_,
+        .via_iteration = options.via_iteration_,
+        .sparsify = options.sparsify_,
+        .dynamic_schema = write_options.dynamic_schema,
+        .has_active_version = update_info.previous_index_key_.has_value()
+    };
     const bool has_incomplete_segments = read_incompletes_to_pipeline(
         store,
         pipeline_context,
         read_query,
         ReadOptions{},
-        options.convert_int_to_float_,
-        options.via_iteration_,
-        options.sparsify_,
-        write_options.dynamic_schema
+        read_incomplete_flags
     );
     user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
         has_incomplete_segments,
@@ -1869,7 +1883,7 @@ VersionedItem compact_incomplete_impl(
             .validate_index = validate_index_sorted,
             .perform_schema_checks = true
         };
-        CompactionResult result = do_compact<IndexType, SchemaType, RowCountSegmentPolicy, ColumnPolicyType>(
+        CompactionResult compaction_result = do_compact<IndexType, SchemaType, RowCountSegmentPolicy, ColumnPolicyType>(
                 pipeline_context->incompletes_begin(),
                 pipeline_context->end(),
                 pipeline_context,
@@ -1881,7 +1895,7 @@ VersionedItem compact_incomplete_impl(
             pipeline_context->desc_->set_sorted(deduce_sorted(previous_sorted_value.value_or(SortedValue::ASCENDING), SortedValue::ASCENDING));
         }
 
-        return result;
+        return compaction_result;
     });
 
     return util::variant_match(std::move(result),
@@ -2034,7 +2048,8 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
     auto pipeline_context = std::make_shared<PipelineContext>();
     VersionedItem res_versioned_item;
 
-    if(std::holds_alternative<StreamId>(version_info)) {
+    const bool has_active_version = std::holds_alternative<VersionedItem>(version_info);
+    if(!has_active_version) {
         pipeline_context->stream_id_ = std::get<StreamId>(version_info);
         // This isn't ideal. It would be better if the version() and timestamp() methods on the C++ VersionedItem class
         // returned optionals, but this change would bubble up to the Python VersionedItem class defined in _store.py.
@@ -2060,8 +2075,13 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
         util::check(std::holds_alternative<IndexRange>(read_query->row_filter), "Streaming read requires date range filter");
         const auto& query_range = std::get<IndexRange>(read_query->row_filter);
         const auto existing_range = pipeline_context->index_range();
-        if(!existing_range.specified_ || query_range.end_ > existing_range.end_)
-            read_incompletes_to_pipeline(store, pipeline_context, *read_query, read_options, false, false, false,  opt_false(read_options.dynamic_schema()));
+        if(!existing_range.specified_ || query_range.end_ > existing_range.end_) {
+            const ReadIncompletesFlags read_incompletes_flags {
+                .dynamic_schema=opt_false(read_options.dynamic_schema()),
+                .has_active_version = has_active_version
+            };
+            read_incompletes_to_pipeline(store, pipeline_context, *read_query, read_options, read_incompletes_flags);
+        }
     }
 
     if(std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {
