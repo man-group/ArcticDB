@@ -436,17 +436,17 @@ class LibraryPopulationPolicy:
     It is possible to also configure through methods snapshots and versions to be created and metadata to be set to them or not
 
     Example A:
-        LibraryPopulationPolicy([10,20], some_logger).set_columns(5)
+        LibraryPopulationPolicy(some_logger).set_parameters([10,20], 5)
         This configures generation of 2 symbols with 10 and 20 rows. The number of rows can later be used to get symbol name.
         Note that this defined that all symbols will have fixed number of columns = 5
 
     Example B:
-        LibraryPopulationPolicy([10,20], some_logger).use_parameters_are_columns().set_rows(3) - 
+        LibraryPopulationPolicy(some_logger).set_parameters(3, [10,20]) - 
         This configures generation of 2 symbols with 10 and 20 columns. The number columns can later be used to get symbol name.
         Note that this defined that all symbols will have fixed number of rows = 3
 
     Example C: Populating library with many identical symbols
-        LibraryPopulationPolicy([10] * 10, some_logger).use_auto_increment_index().set_columns(30) - 
+        LibraryPopulationPolicy(some_logger).use_auto_increment_index().set_parameters([10] * 10, 30) - 
         This configures generation of 10 symbols with 10 rows each. Also instructs that the symbol names will be constructed 
         with auto incrementing index - you can access each symbol using its index 0-9
     """
