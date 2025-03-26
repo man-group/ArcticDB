@@ -170,11 +170,18 @@ if (NOT MSVC)
 else()
     add_compile_options(
         /wd4250 # Suppress inherits via dominance warning
-        /we4189 # Unused local variable is an error
         /we4100 # Unused function parameter is an error
         # For now, we do not want to treat warnings as errors for those builds.
         # /WX
     )
+    if(NOT ${ARCTICDB_USING_CONDA})
+        # Some of the warnings are due to the protobuf library,
+        # observed for the conda-forge builds.
+        # See: https://github.com/protocolbuffers/protobuf/pull/20840
+        add_compile_options(
+            /we4189 # Unused local variable is an error
+        )
+    endif()
 endif ()
 
 ## Core library without python bindings ##
