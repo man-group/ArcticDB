@@ -17,11 +17,12 @@ from arcticdb.util.test import assert_frame_equal
 pytestmark = pytest.mark.pipeline
 
 
+@pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("index", [None, pd.date_range("2025-01-01", periods=12)])
-def test_symbol_concat_basic(lmdb_library_factory, rows_per_segment, columns_per_segment, index):
-    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+def test_symbol_concat_basic(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, index):
+    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(3, dtype=np.int64),
@@ -62,11 +63,45 @@ def test_symbol_concat_basic(lmdb_library_factory, rows_per_segment, columns_per
         assert version.metadata == (None if idx == 1 else idx)
 
 
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+@pytest.mark.parametrize("columns_per_segment", [2, 100_000])
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_different_column_sets(lmdb_library_factory, dynamic_schema, columns_per_segment, join):
+    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, columns_per_segment=columns_per_segment))
+    # Use floats so that our backfilling and Pandas' match
+    df_0 = pd.DataFrame(
+        {
+            "col1": np.arange(5, dtype=np.float64),
+            "col2": np.arange(5, dtype=np.float64),
+            "col3": np.arange(5, dtype=np.float64),
+            "col4": np.arange(5, dtype=np.float64),
+            "col5": np.arange(5, dtype=np.float64),
+        }
+    )
+    df_1 = pd.DataFrame(
+        {
+            "col7": np.arange(5, dtype=np.float64),
+            "col5": np.arange(5, dtype=np.float64),
+            "col3": np.arange(5, dtype=np.float64),
+            "col1": np.arange(5, dtype=np.float64),
+            "col6": np.arange(5, dtype=np.float64),
+        }
+    )
+    lib.write("sym0", df_0)
+    lib.write("sym1", df_1)
+
+    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join=join).collect().data
+    expected = pd.concat([df_0, df_1], join=join)
+    expected.index = pd.RangeIndex(len(expected))
+    assert_frame_equal(expected, received)
+
+
+@pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns", [["col1"], ["col2"], ["col3"], ["col1", "col2"], ["col1", "col3"], ["col2", "col3"]])
-def test_symbol_concat_column_slicing(lmdb_library_factory, rows_per_segment, columns_per_segment, columns):
-    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+def test_symbol_concat_column_slicing(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, columns):
+    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(3, dtype=np.int64),
@@ -94,10 +129,11 @@ def test_symbol_concat_column_slicing(lmdb_library_factory, rows_per_segment, co
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
-def test_symbol_concat_multiindex(lmdb_library_factory, rows_per_segment, columns_per_segment):
-    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+def test_symbol_concat_multiindex(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment):
+    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
     df = pd.DataFrame(
         {
             "col1": np.arange(12, dtype=np.int64),
@@ -142,10 +178,11 @@ def test_symbol_concat_with_date_range(lmdb_library):
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
-def test_symbol_concat_complex(lmdb_library_factory, rows_per_segment, columns_per_segment):
-    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+def test_symbol_concat_complex(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment):
+    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
     df_0 = pd.DataFrame(
         {
         "col1": np.arange(3, dtype=np.int64),
