@@ -1,7 +1,8 @@
 import pytest
 import os
+from arcticdb.storage_fixtures.api import StorageFixture
 from arcticdb.util.test import assert_frame_equal
-from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED, REAL_S3_TESTS_MARK
+from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED, REAL_GCP_TESTS_MARK, REAL_S3_TESTS_MARK
 from tests.util.storage_test import (
     get_seed_libraries,
     generate_pseudo_random_dataframe,
@@ -17,17 +18,20 @@ else:
     LIBRARIES = []
 
 
-@pytest.fixture(params=[pytest.param("REAL_S3", marks=REAL_S3_TESTS_MARK)])
+@pytest.fixture(params=[pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
+                        pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK)])
 # Only test with encoding version 0 (a.k.a.) for now
 # because there is a problem when older versions try to read configs with a written encoding version
 # def shared_persistent_arctic_client(real_s3_storage_without_clean_up, encoding_version):
-def shared_persistent_arctic_client(real_s3_storage_without_clean_up):
-    return real_s3_storage_without_clean_up.create_arctic()
+def shared_persistent_arctic_client(request):
+    storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage_without_clean_up")
+    return storage_fixture.create_arctic()
 
 
 # TODO: Add a check if the real storage tests are enabled
 @pytest.mark.parametrize("library", LIBRARIES)
 @REAL_S3_TESTS_MARK
+@pytest.mark.storage
 def test_real_s3_storage_read(shared_persistent_arctic_client, library):
     ac = shared_persistent_arctic_client
     lib = ac[library]
@@ -35,6 +39,7 @@ def test_real_s3_storage_read(shared_persistent_arctic_client, library):
 
 
 @REAL_S3_TESTS_MARK
+@pytest.mark.storage
 def test_real_s3_storage_write(shared_persistent_arctic_client):
     strategy_branch = os.getenv("ARCTICDB_PERSISTENT_STORAGE_STRATEGY_BRANCH")
     library_to_write_to = f"test_{strategy_branch}"
@@ -46,12 +51,15 @@ def test_real_s3_storage_write(shared_persistent_arctic_client):
     write_persistent_library(lib, latest=True)
 
 
-@pytest.fixture(params=[pytest.param("REAL_S3", marks=REAL_S3_TESTS_MARK)])
-def persistent_arctic_client(real_s3_storage, encoding_version):
-    return real_s3_storage.create_arctic(encoding_version=encoding_version)
+@pytest.fixture(params=[pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
+                        pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK)])
+def persistent_arctic_client(request, encoding_version):
+    storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
+    return storage_fixture.create_arctic(encoding_version=encoding_version)
 
 
 @pytest.mark.parametrize("num_rows", [1_000_000])
+@pytest.mark.storage
 def test_persistent_storage_read_write_large_data_ascending(persistent_arctic_client, num_rows):
     ac = persistent_arctic_client
     ac.create_library("test_persistent_storage_read_write_large_data_ascending")
@@ -65,6 +73,7 @@ def test_persistent_storage_read_write_large_data_ascending(persistent_arctic_cl
 
 
 @pytest.mark.parametrize("num_rows", [100_000_000])
+@pytest.mark.storage
 def test_persistent_storage_read_write_large_data_random(persistent_arctic_client, num_rows):
     ac = persistent_arctic_client
     ac.create_library("test_persistent_storage_read_write_large_data_random")
@@ -78,6 +87,7 @@ def test_persistent_storage_read_write_large_data_random(persistent_arctic_clien
 
 
 @pytest.mark.parametrize("num_syms", [1_000])
+@pytest.mark.storage
 def test_persistent_storage_read_write_many_syms(persistent_arctic_client, num_syms, three_col_df):
     # For now, this tests only the breadth (e.g. number of symbols)
     # We have another test, that tests with "deeper" data frames

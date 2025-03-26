@@ -46,6 +46,7 @@ def generate_mixed_dataframe(num_rows: int, seed=0):
     return result
 
 
+@pytest.mark.storage
 def test_read_batch_2tables_7reads_different_slices(arctic_library):
     """
         Test aims to check if combined read of couple of DF, with several 
@@ -136,6 +137,7 @@ def test_read_batch_2tables_7reads_different_slices(arctic_library):
     assert_frame_equal(df2_0_allfilters, batch[7].data)
 
 @pytest.mark.xfail(reason = "ArcticDB#1970")
+@pytest.mark.storage
 def test_read_batch_query_with_and(arctic_library):
     """
         A very small test to isolate the problem with usage of "and" 
@@ -160,6 +162,7 @@ def test_read_batch_query_with_and(arctic_library):
     assert batch[0].symbol == symbol
     assert isinstance(batch[0], DataError)
 
+@pytest.mark.storage
 def test_read_batch_metadata_on_different_version(arctic_library):
     """
         Here we test if read of metadata over several different states of DB with
@@ -223,6 +226,8 @@ def test_read_batch_metadata_on_different_version(arctic_library):
     assert_frame_equal_rebuild_index_first(df_till1, batch[3].data)
     assert_frame_equal_rebuild_index_first(df_all, batch[2].data)
 
+
+@pytest.mark.storage
 def test_read_batch_multiple_symbols_all_types_data_query_metadata(arctic_library):
     """
         This test aims to combine usage of metadata along with query builder applied in 
@@ -316,6 +321,8 @@ def test_read_batch_multiple_symbols_all_types_data_query_metadata(arctic_librar
         assert dfqapplied.shape[0] == batch[7].data.shape[0]
         assert dfqapplied.columns.to_list() == batch[7].data.columns.to_list()
 
+
+@pytest.mark.storage
 def test_read_batch_multiple_wrong_things_at_once(arctic_library):
     """
         Check that many types of errors cannot prevent exraction of many other
@@ -364,7 +371,9 @@ def test_read_batch_multiple_wrong_things_at_once(arctic_library):
     df = df1_0.query(qdf)
     assert_frame_equal_rebuild_index_first(df, batch[5].data)
 
+
 @pytest.mark.xfail(reason = "ArcticDB#2004")
+@pytest.mark.storage
 def test_read_batch_query_and_columns_returned_order(arctic_library):
     '''
         Column order is expected to match the 'columns' attribute lits
@@ -387,7 +396,9 @@ def test_read_batch_query_and_columns_returned_order(arctic_library):
     df_filtered = q(df)[columns]
     assert_frame_equal_rebuild_index_first(df_filtered, batch[0].data)
 
+
 @pytest.mark.xfail(reason = "ArcticDB#2005")
+@pytest.mark.storage
 def test_read_batch_query_and_columns_wrong_column_names_passed(arctic_library):
     '''
         Allong with existing column names if we pass non exising names of 
@@ -410,6 +421,8 @@ def test_read_batch_query_and_columns_wrong_column_names_passed(arctic_library):
 
     assert isinstance(batch[0], DataError)    
 
+
+@pytest.mark.storage
 def test_read_batch_query_and_columns(arctic_library):
 
     def q1(q):

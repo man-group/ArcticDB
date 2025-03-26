@@ -26,6 +26,7 @@ def check_no_keys(library):
         assert len(lib_tool.find_keys(key_type)) == 0
 
 
+@pytest.mark.storage
 def test_stress_delete(object_store_factory):
     store_factory = object_store_factory
     lib1 = store_factory(name=f"delete_me_{datetime.utcnow().isoformat()}")

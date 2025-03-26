@@ -47,6 +47,7 @@ from tests.util.storage_test import get_s3_storage_config
 from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
 
 
+@pytest.mark.storage
 def test_library_creation_deletion(arctic_client, lib_name):
     ac = arctic_client
     ac.create_library(lib_name)
@@ -76,6 +77,7 @@ def test_library_creation_deletion(arctic_client, lib_name):
         ac.delete_library(lib_name)
 
 
+@pytest.mark.storage
 def test_get_library(arctic_client, lib_name):
     ac = arctic_client
     # Throws if library doesn't exist
@@ -272,6 +274,7 @@ def test_modify_options_background_deletion(lmdb_storage, lib_name):
     assert len(lt.find_keys(KeyType.TABLE_DATA))
 
 
+@pytest.mark.storage
 def test_create_library_with_invalid_name(arctic_client_v1, lib_name):
     ac = arctic_client_v1
     try:
@@ -332,6 +335,7 @@ def test_do_not_persist_s3_details(s3_storage):
         ac.delete_library("test")
 
 
+@pytest.mark.storage
 def test_library_options(arctic_client, lib_name):
     ac = arctic_client
     ac.create_library(f"{lib_name}_default_options")
@@ -366,6 +370,7 @@ def test_library_options(arctic_client, lib_name):
     assert lib._nvs._lib_cfg.lib_desc.version.encoding_version == EncodingVersion.V2
 
 
+@pytest.mark.storage
 def test_separation_between_libraries(arctic_client_v1, lib_name):
     # This fails for mem-backed without the library caching implemented in
     # issue #520 then re-implemented in issue #889

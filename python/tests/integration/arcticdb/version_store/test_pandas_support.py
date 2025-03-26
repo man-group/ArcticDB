@@ -19,6 +19,7 @@ from arcticdb.util.test import assert_frame_equal
 # test_rt_df stands for roundtrip dataframe (implicitly pandas given file name)
 
 
+@pytest.mark.storage
 def test_rt_df_with_datetimeindex_with_timezone(basic_store):
     df = DataFrame(
         data=["A", "BC", "DEF"],
@@ -34,6 +35,7 @@ def test_rt_df_with_datetimeindex_with_timezone(basic_store):
     assert_frame_equal(df, saved_df, check_names=False)
 
 
+@pytest.mark.storage
 def test_rt_df_range_index_with_name(basic_store):
     df = DataFrame(data=["A", "B", "D"])
     df.index.name = "xxx"
@@ -46,6 +48,7 @@ def test_rt_df_range_index_with_name(basic_store):
 
 @pytest.mark.parametrize("has_index", [True, False])
 @pytest.mark.parametrize("N", [1, 5, 10])
+@pytest.mark.storage
 def test_rt_df_small_col_dtidx(basic_store, N, has_index):
     rnd = RandomState(0x42)
 
@@ -79,6 +82,7 @@ def create_params():
     return params
 
 
+@pytest.mark.storage
 @pytest.mark.parametrize("symbol, item", create_params())
 def test_rt_df(basic_store, symbol, item):
     basic_store.write("xxx", item.copy())
@@ -86,6 +90,7 @@ def test_rt_df(basic_store, symbol, item):
     assert_frame_equal(item, df2)
 
 
+@pytest.mark.storage
 def test_empty_df(basic_store):
     item = pd.DataFrame()
     basic_store.write("xxx", item)
@@ -93,6 +98,7 @@ def test_empty_df(basic_store):
     assert df2.empty
 
 
+@pytest.mark.storage
 def test_df_datetime_multi_index_with_timezones(object_and_mem_and_lmdb_version_store):
     zone = "America/Chicago"
     df = DataFrame(

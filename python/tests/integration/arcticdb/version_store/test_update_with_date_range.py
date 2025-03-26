@@ -21,6 +21,7 @@ from arcticdb.version_store._custom_normalizers import (
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
 
 
+@pytest.mark.storage
 def test_update_date_range_dataframe(basic_store):
     """Restrictive update - when date_range is specified ensure that we only touch values in that range."""
     # given
@@ -104,6 +105,7 @@ def basic_store_custom_norm(basic_store_factory):
 
 
 @pytest.mark.parametrize("with_timezone_attr,timezone_", [(True, None), (True, timezone.utc), (False, None)])
+@pytest.mark.storage
 def test_update_date_range_non_pandas_dataframe(basic_store_custom_norm, with_timezone_attr, timezone_):
     """Check that updates with a daterange work for a simple non-Pandas timeseries.
 
@@ -137,6 +139,7 @@ def test_update_date_range_non_pandas_dataframe(basic_store_custom_norm, with_ti
 
 
 @pytest.mark.parametrize("with_timezone_attr,timezone_", [(True, None), (True, timezone.utc), (False, None)])
+@pytest.mark.storage
 def test_append_date_range_non_pandas_dataframe(basic_store_custom_norm, with_timezone_attr, timezone_):
     """Check that updates with a daterange work for a simple non-Pandas timeseries.
 
@@ -169,6 +172,7 @@ def test_append_date_range_non_pandas_dataframe(basic_store_custom_norm, with_ti
     np.testing.assert_array_equal(result["a"].values, pd.concat([df, update_df])["a"].values)
 
 
+@pytest.mark.storage
 def test_update_date_range_dataframe_multiindex(basic_store):
     """Similar to the test_update_date_range_dataframe, but with a multiindex."""
     # given
