@@ -4,6 +4,7 @@ from datetime import timedelta
 from enum import Enum
 import inspect
 import logging
+import multiprocessing
 import os
 import socket
 import tempfile
@@ -677,7 +678,6 @@ class TestsForTestLibraryManager:
         # This is going to be modifiable lib.
         assert len(tlm._get_arctic_client_modifiable().list_libraries()) == 0
 
-
     @classmethod
     def test_modifiable_access(cls):
         """
@@ -775,3 +775,62 @@ class TestsForTestLibraryManager:
 
         TestLibraryManager.remove_all_test_libs(storage)
         assert len(tlm._get_arctic_client_persistent().list_libraries()) == 0
+
+    @classmethod
+    def test_multiprocessing(cls):
+        """
+        Do all process clear their modifiable storage space and do they 
+        clear only their data not other's?
+        """
+
+        num_processes = 7
+        storage = Storage.AMAZON
+        logger = get_console_logger()
+        benchmark_name = "MULTIPROCESSING"
+
+        df =  DFGenerator.generate_random_dataframe(10, 10)
+
+        def worker_process():
+
+            def string_list_has_number(strings, number):
+                target = str(number)  
+                for s in strings:
+                    if target in s:  
+                        return True
+                return False
+
+            symbol = "s"
+            tlm = TestLibraryManager(storage, benchmark_name)
+            lib = tlm.get_library(LibraryType.MODIFIABLE)
+            lib.write(symbol, df)
+            logger.info(f"Process [{os.getppid()}] written at library: {lib}")
+            assert string_list_has_number(tlm._get_arctic_client_modifiable().list_libraries(),
+                                          os.getpid()), "There is a library with that pid"
+            tlm.clear_all_modifiable_libs_from_this_process()
+            assert not string_list_has_number(tlm._get_arctic_client_modifiable().list_libraries(),
+                                          os.getpid()), "There is NO library with that pid"
+
+        tlm = TestLibraryManager(storage, benchmark_name)
+        ac = tlm._get_arctic_client_modifiable()
+        for lib in ac.list_libraries():
+            logger.info(f"Library delete: {lib}")
+            ac.delete_library(lib)
+
+        processes = []
+        manager = multiprocessing.Manager()
+        result_list = manager.list()
+
+        for _ in range(num_processes):
+            process = multiprocessing.Process(target=worker_process)
+            processes.append(process)
+            process.start()
+
+        for process in processes:
+            process.join()
+
+        for process in processes:
+            assert process.exitcode == 0, f"Process failed with exit code {process.exitcode}"                
+        
+        assert len(ac.list_libraries()) == 0, "All libraries from child processes deleted"
+
+        print("All processes completed successfully:", list(result_list))        
