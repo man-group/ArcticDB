@@ -616,7 +616,7 @@ class _PandasNormalizer(Normalizer):
             index_norm = pd_norm.index
             index_norm.is_physically_stored = not isinstance(index, RangeIndex) and not empty_df
             is_categorical = len(df.select_dtypes(include="category").columns) > 0
-            index = DatetimeIndex([]) if IS_PANDAS_TWO and empty_df and not is_categorical else index
+            index = DatetimeIndex([], name=index.name) if IS_PANDAS_TWO and empty_df and not is_categorical else index
 
         return _normalize_single_index(
             index, list(index.names), index_norm, dynamic_strings, string_max_len, empty_types=empty_types

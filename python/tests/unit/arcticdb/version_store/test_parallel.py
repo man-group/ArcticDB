@@ -1661,3 +1661,44 @@ class TestConvertIntToFloat:
         lib.compact_incomplete(sym, append=append, convert_int_to_float=True)
         expected = pd.DataFrame({"a": np.array([1, 2, 3], dtype=np.float64)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
         assert_frame_equal(lib.read(sym).data, expected, check_dtype=True)
+
+class TestEmptyDataFrames:
+    def test_append_to_empty(self, lmdb_version_store_v1):
+        lib = lmdb_version_store_v1
+        symbol = "symbol"
+        lib.write(symbol, pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([])))
+        df = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
+        lib.write(symbol, df, parallel=True)
+        lib.compact_incomplete(symbol, append=True, convert_int_to_float=False)
+        assert_frame_equal(lib.read(symbol).data, df)
+
+    @pytest.mark.parametrize("version_store", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
+    def test_appending_to_empty_with_differing_index_name_fails(self, version_store, request):
+        lib = request.getfixturevalue(version_store)
+        symbol = "symbol"
+        empty = pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([], name="my_initial_index"))
+        lib.write(symbol, empty)
+        df = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)], name="my_new_index"))
+        lib.write(symbol, df, parallel=True)
+        with pytest.raises(SchemaException) as exception_info:
+            lib.compact_incomplete(symbol, append=True, convert_int_to_float=False)
+        assert "index" in str(exception_info.value)
+        assert "my_initial_index" in str(exception_info.value)
+        assert "my_new_index" in str(exception_info.value)
+
+    @pytest.mark.parametrize(
+        "to_append",
+        [
+            pd.DataFrame({"wrong_col": [1]}, pd.DatetimeIndex([pd.Timestamp(0)])),
+            pd.DataFrame({"a": [1], "wrong_col": [2]}, pd.DatetimeIndex([pd.Timestamp(0)]))
+        ]
+    )
+    def test_appending_to_empty_with_differing_columns_fails(self, lmdb_version_store_v1, request, to_append):
+        lib = lmdb_version_store_v1
+        symbol = "symbol"
+        empty = pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([]))
+        lib.write(symbol, empty)
+        lib.write(symbol, to_append, parallel=True)
+        with pytest.raises(SchemaException) as exception_info:
+            lib.compact_incomplete(symbol, append=True, convert_int_to_float=False)
+        assert "wrong_col" in str(exception_info.value)
