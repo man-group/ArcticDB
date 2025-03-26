@@ -4,12 +4,15 @@ import pytest
 import logging
 import re
 
+from tests.util.mark import REAL_GCP_TESTS_MARK, REAL_S3_TESTS_MARK
 from tests.util.storage_test import real_gcp_credentials, real_s3_credentials
 
 
 class GitHubSanitizingHandler(logging.StreamHandler):
     """
     The handler sanitizes messages only when execution is in GitHub
+
+    Enhancements should be mode as early as possible
     """
 
     def emit(self, record: logging.LogRecord):
@@ -35,17 +38,20 @@ class GitHubSanitizingException(Exception):
 
 
 def get_logger(logger_name):
+    """
+    This logger is sanitizing logger, which can handle masking secrets.
+    Should be extended when needed and used wherever it is needed
+    """
     logger = logging.getLogger(logger_name)
     logger.setLevel(logging.DEBUG)
     handler = GitHubSanitizingHandler()
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)    
-
+    return logger
 
 s3_enpoint, s3_bucket, s3_region, s3_access_key, s3_secret_key, s3_prefix, s3_clear = real_s3_credentials(shared_path=False)
 gcp_enpoint, gcp_bucket, gcp_region, gcp_access_key, gcp_secret_key, gcp_prefix, gcp_clear = real_gcp_credentials(shared_path=False)
-
 
 access_mark = "*access*"
 secret_mark = "*secret*"
@@ -82,6 +88,7 @@ def execute_uri_test(uri:str, expected: str, access: str, secret: str):
     (f"s3s://s3.{s3_region}.amazonaws.com:{s3_bucket}?access={access_mark}", "AccessDenied: Access Denied for object"),
     (f"s3://s3.{s3_region}.amazonaws.com:{s3_bucket}?secret={secret_mark}", "E_PERMISSION Permission error"),
 ])
+@REAL_S3_TESTS_MARK
 @pytest.mark.storage
 @pytest.mark.authentication
 def test_arcticdb_s3_uri(uri:str, expected: str):
@@ -102,6 +109,7 @@ def test_arcticdb_s3_uri(uri:str, expected: str):
 ])
 @pytest.mark.storage
 @pytest.mark.authentication
+@REAL_GCP_TESTS_MARK
 def test_arcticdb_gcpxml_uri(uri:str, expected: str):
     execute_uri_test(uri, expected, gcp_access_key, gcp_secret_key)
 

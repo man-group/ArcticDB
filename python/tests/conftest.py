@@ -475,7 +475,13 @@ def filter_out_unwanted_mark(request, current_param):
             if only_mark.name == f"only_{current_param}":
                 found = True
         if not found:
-            pytest.skip(f"Skipping {current_param} parameter due to custom test mark.")
+            pytest.skip(reason = f"Skipping {current_param} parameter due to custom test mark.")
+
+    skip_fixture_value_mark = request.node.get_closest_marker("skip_fixture_value")
+    if skip_fixture_value_mark:
+            values_to_skip = skip_fixture_value_mark.args[0]
+            if current_param in values_to_skip:
+                pytest.skip(reason = f"Skipping fixture value: {request.param} as per 'skip_fixture_value' mark")
 
 @pytest.fixture(
     scope="function",
