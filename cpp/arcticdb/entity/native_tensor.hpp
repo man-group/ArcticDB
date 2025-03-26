@@ -107,7 +107,7 @@ struct NativeTensor {
     }
 
     [[nodiscard]] auto nbytes() const { return nbytes_; }
-    [[nodiscard]] auto ndim() const { return ndim_; }
+    [[nodiscard]] int ndim() const { return ndim_; }
     [[nodiscard]] auto strides(size_t pos) const { return strides_[pos]; }
     [[nodiscard]] const auto* strides() const { return strides_.data(); };
     [[nodiscard]] auto shape(size_t pos) const { return shapes_[pos]; }
@@ -245,14 +245,14 @@ private:
         if (tensor.extent(0) == 0) {
             // For empty tensors, we can't perform the normal bounds check
             // Just ensure we're not trying to access beyond the first element
-            util::check(slice_num == 0, 
-                "Cannot put slice pointer at position {} in an empty tensor", 
+            util::check(slice_num == 0,
+                "Cannot put slice pointer at position {} in an empty tensor",
                 slice_num);
         } else {
             util::check(ptr < static_cast<const uint8_t*>(tensor.ptr) + std::abs(tensor.extent(0)),
                 "Tensor overflow, cannot put slice pointer at byte {} in a tensor of {} bytes",
                 slice_num * stride_offset, tensor.extent(0));
-        }  
+        }
     }
 };
 template<typename T>
