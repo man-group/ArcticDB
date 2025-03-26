@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import time
 import pandas as pd
 from arcticdb.util.environment_setup import TestLibraryManager, LibraryPopulationPolicy, LibraryType, Storage, populate_library
-from arcticdb.util.utils import TimestampNumber
+from arcticdb.util.utils import DataRangeUtils, TimestampNumber
 from arcticdb.version_store.library import Library, ReadRequest, WritePayload
 from benchmarks.common import AsvBase
 
@@ -31,7 +31,7 @@ class AWSBatchBasicFunctions(AsvBase):
 
     # NOTE: Change of parameters will trigger failure as original library must also be deleted manually.
     #       Therefore if you plan changes to those numbers make sure to delete old library manually 
-    params = [500, 1000], [25_000, 50_000] #[[5, 10], [250, 500]]
+    params = [[500, 1000], [25_000, 50_000]] #[[5, 10], [250, 500]]
     param_names = ["num_symbols", "num_rows"]
 
     library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="BASIC_BATCH")
@@ -44,8 +44,7 @@ class AWSBatchBasicFunctions(AsvBase):
         return AWSBatchBasicFunctions.library_manager
     
     def get_population_policy(self) -> LibraryPopulationPolicy:
-        lpp = LibraryPopulationPolicy(AWSBatchBasicFunctions.params, None) # Silence logger when too noisy
-        lpp.set_columns(AWSBatchBasicFunctions.number_columns)
+        lpp = LibraryPopulationPolicy(None) # Silence logger when too noisy
         lpp.use_auto_increment_index()
         return lpp
     
@@ -59,7 +58,7 @@ class AWSBatchBasicFunctions(AsvBase):
             if not manager.has_library(LibraryType.PERSISTENT, lib_suffix):
                 start = time.time()
                 for number_rows in number_rows_list:
-                    policy.set_parameters([number_rows] * lib_suffix)
+                    policy.set_parameters([number_rows] * lib_suffix, AWSBatchBasicFunctions.number_columns)
                     # the name of symbols during generation will have now 2 parameters:
                     # the index of symbol + number of rows
                     # that allows generating more than one symbol in a library
@@ -112,12 +111,8 @@ class AWSBatchBasicFunctions(AsvBase):
         """
         df_generator = self.population_policy.df_generator
         freq = df_generator.freq
-        start = TimestampNumber.from_timestamp(df_generator.initial_timestamp, freq)
-        percent_5 = int(num_rows * percents)
-        end_range: TimestampNumber = start + num_rows
-        start_range: TimestampNumber = end_range - percent_5
-        range = (start_range.to_timestamp(), end_range.to_timestamp())
-        return range
+        return DataRangeUtils.get_last_x_percent_date_range(initial_timestamp=df_generator.initial_timestamp,
+                                                            freq=freq, num_rows=num_rows, percents=percents)
     
     def peakmem_read_batch(self, num_symbols, num_rows):
         read_batch_result = self.lib.read_batch(self.read_reqs)

@@ -386,7 +386,8 @@ class ListGenerators:
         info = np.finfo(np.float32)
         _max = info.max
         _min = info.min
-        np.random.seed(seed)
+        if seed is not None:
+            np.random.seed(seed)
         if min_value is None:
             min_value = max(-1e307, -sys.float_info.max, _min)
         if max_value is None:    
@@ -398,9 +399,7 @@ class ListGenerators:
         
     @classmethod
     def generate_random_string_pool(cls, str_length: int, pool_size: int, 
-                                    include_unicode: bool = False, seed = 1) -> List[str]:
-        np.random.seed(seed)
-        random.seed(seed)
+                                    include_unicode: bool = False, seed = 143) -> List[str]:
         unique_values = set()
         while len(unique_values) < pool_size:
             unique_values.add(ListGenerators.random_string(length=str_length, include_unicode=include_unicode,
@@ -409,27 +408,27 @@ class ListGenerators:
 
     @classmethod
     def generate_random_strings(cls, str_size: int, length: int, 
-                                    include_unicode: bool = False, seed = 1) -> List[str]:
-        np.random.seed(seed)
-        random.seed(seed)
+                                    include_unicode: bool = False, seed = 1434) -> List[str]:
         return [ListGenerators.random_string(length=str_size, 
-                                             include_unicode=include_unicode, seed=None) for _ in range(length)]
+                                             include_unicode=include_unicode, seed=seed) for _ in range(length)]
     
     @classmethod
     def generate_random_ints(cls, dtype: ArcticIntType, 
-                            size: int, min_value: int = None, max_value: int = None, seed = 1
+                            size: int, min_value: int = None, max_value: int = None, seed = 21321
                             ) -> List[ArcticIntType]:
-        np.random.seed(seed)
+        if seed is not None:
+            np.random.seed(seed)
         return random_integers(size=size, dtype=dtype, min_value=min_value, max_value=max_value)
     
     @classmethod
-    def generate_random_bools(cls, size: int, seed = 1) -> List[bool]:
-        np.random.seed(seed)
+    def generate_random_bools(cls, size: int, seed = 516) -> List[bool]:
+        if seed is not None:
+            np.random.seed(seed)
         return np.random.choice([True, False], size=size) 
     
     @classmethod
-    def random_string(cls, length: int, include_unicode: bool = False, seed: int = 1):
-        if seed:
+    def random_string(cls, length: int, include_unicode: bool = False, seed: int = 3331):
+        if seed is not None:
             random.seed(seed)
         unicode_symbol = "\u00A0"  # start of latin extensions
         unicode_symbols = "".join([chr(ord(unicode_symbol) + i) for i in range(100)])
@@ -442,7 +441,8 @@ class ListGenerators:
     @classmethod
     def generate_random_list_with_mean(cls, number_elements, specified_mean, value_range=(0, 100), 
                                        dtype: ArcticIntType = np.int64, seed = 345) -> List[int]:
-        np.random.seed(seed)
+        if seed is not None:
+            np.random.seed(seed)
         random_list = np.random.randint(value_range[0], value_range[1], number_elements)
 
         current_mean = np.mean(random_list)
@@ -458,13 +458,16 @@ class DFGenerator:
     Easy generation of DataFrames, via fluent interface
     """
 
-    def __init__(self, size: int, seed = 1):
+    def __init__(self, size: int, seed = 5555):
         self.__seed = seed
         self.__size = size
         self.__data = {}
         self.__types = {}
         self.__df = None
         self.__index = None
+        if self.__seed is not None:
+            np.random.seed(self.__seed)
+            random.seed(self.__seed)
 
     def generate_dataframe(self) -> pd.DataFrame:
         if self.__df is None:
@@ -478,14 +481,14 @@ class DFGenerator:
         return self.__df
 
     def add_int_col(self, name: str, dtype: ArcticIntType = np.int64, min: int = None, max: int = None) -> 'DFGenerator':
-        list = ListGenerators.generate_random_ints(dtype, self.__size, min, max, self.__seed)
+        list = ListGenerators.generate_random_ints(dtype, self.__size, min, max, None)
         self.__data[name] = list
         self.__types[name] = dtype
         return self
     
     def add_float_col(self, name: str, dtype: ArcticFloatType = np.float64, min: float = None, max: float = None, 
                       round_at: int = None ) -> 'DFGenerator':
-        list = ListGenerators.generate_random_floats(dtype, self.__size, min, max, round_at, self.__seed)
+        list = ListGenerators.generate_random_floats(dtype, self.__size, min, max, round_at, None)
         self.__data[name] = list
         self.__types[name] = dtype
         return self
@@ -501,12 +504,12 @@ class DFGenerator:
         if num_unique_values is None:
             list = ListGenerators.generate_random_strings(str_size=str_size, 
                                                           length=self.__size, 
-                                                          include_unicode=include_unicode,seed=self.__seed)
+                                                          include_unicode=include_unicode,seed=None)
         else:
             list = RandomStringPool(str_length=str_size, 
                                     pool_size=num_unique_values,
                                     include_unicode=include_unicode,
-                                    seed=self.__seed
+                                    seed=None
                                     ).get_list(self.__size)
         self.__data[name] = list
         self.__types[name] = str
@@ -522,7 +525,7 @@ class DFGenerator:
         return self
     
     def add_bool_col(self, name: str) -> 'DFGenerator':
-        list = ListGenerators.generate_random_bools(self.__size, self.__seed)
+        list = ListGenerators.generate_random_bools(self.__size, None)
         self.__data[name] = list
         self.__types[name] = bool
         return self
@@ -571,7 +574,8 @@ class DFGenerator:
         To be used to generate large number of same type columns, when generation time is
         critical
         """
-        np.random.seed(seed=seed)
+        if seed is not None:
+            np.random.seed(seed=seed)
         platform_int_info = np.iinfo("int_")
         iinfo = np.iinfo(dtype)
         if min_value is None:
@@ -598,7 +602,8 @@ class DFGenerator:
         info = np.finfo(np.float32)
         _max = info.max
         _min = info.min
-        np.random.seed(seed)
+        if seed is not None:
+            np.random.seed(seed=seed)
         if min_value is None:
             min_value = max(-1e307, -sys.float_info.max, _min)
         if max_value is None:    
@@ -622,7 +627,8 @@ class DFGenerator:
         """
         if string_sizes is None:
             string_sizes =  [10] * num_cols
-        np.random.seed(seed=seed)
+        if seed is not None:
+            np.random.seed(seed=seed)
         data = [[random_string(string_sizes[col]) 
                  for col in range(num_cols)] 
                  for _ in range(num_rows)]
@@ -695,4 +701,16 @@ class DFGenerator:
         return gen.generate_dataframe()        
 
 
-   
+class DataRangeUtils:
+
+    @classmethod
+    def get_last_x_percent_date_range(cls, initial_timestamp: pd.Timestamp, freq: str, num_rows: int, percents: float):
+        """
+        Returns a date range tuple selecting last X% of rows of dataframe
+        pass percents as 0.0-1.0
+        """
+        start = TimestampNumber.from_timestamp(initial_timestamp, freq)
+        percent_5 = int(num_rows * percents)
+        end_range: TimestampNumber = start + num_rows
+        start_range: TimestampNumber = end_range - percent_5
+        return (start_range.to_timestamp(), end_range.to_timestamp())

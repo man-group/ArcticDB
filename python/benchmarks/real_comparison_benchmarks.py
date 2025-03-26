@@ -4,15 +4,16 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+from logging import Logger
 import tempfile
 import time
 from typing import Any, Dict
 from arcticdb import Arctic
 import pandas as pd
+import numpy as np
 
-from arcticdb.util.environment_setup import LibraryType, Storage
+from arcticdb.util.environment_setup import LibraryPopulationPolicy, LibraryType, Storage, TestLibraryManager, get_console_logger
 from arcticdb.util.test import random_string, random_integers, random_dates
-from benchmarks.common import *
 
 
 NO_OPERATION = "no-operation-load"
@@ -48,6 +49,11 @@ class RealComparisonBenchmarks:
     #       Therefore if you plan changes to those numbers make sure to delete old library manually 
     NUMBER_ROWS = 2_000_000 #100_000
 
+    # NO_OPERATION measures class memory allocation. This is the actual memory that
+    # is used by the tools and code that does the measurement. Thus any other measurement
+    # number should be deducted with NO_OPERATION number to receive actual number.
+    # The whole discussion is available at: 
+    # https://github.com/man-group/ArcticDB/wiki/ASV-Benchmarks:-Running,-designing-and-implementing#understanding-and-implementing-peakmem-benchmarks
     params = [NO_OPERATION, CREATE_DATAFRAME, PANDAS_PARQUET, ARCTICDB_LMDB, ARCTICDB_AMAZON_S3]
     param_names = ["backend_type"]
 
@@ -141,7 +147,9 @@ class RealComparisonBenchmarks:
     def peakmem_read_dataframe(self, tpl, btype):
         df, dict = tpl
         if btype == NO_OPERATION:
-            # What is the tool mem load?
+            # measures base memory which need to be deducted from 
+            # any measurements with actual operations
+            # see discussion above 
             return
         if btype == CREATE_DATAFRAME:
             df = pd.DataFrame(dict)
@@ -151,7 +159,6 @@ class RealComparisonBenchmarks:
             self.lib.read(self.SYMBOL)
         elif btype == ARCTICDB_AMAZON_S3:
             self.s3_lib_read.read(self.s3_symbol) 
-            pass
         else: 
             raise Exception(f"Unsupported type: {btype}")
 
@@ -168,7 +175,6 @@ class RealComparisonBenchmarks:
             self.lib.write("symbol", df)
         elif btype == ARCTICDB_AMAZON_S3:
             self.s3_lib_write.write(self.s3_symbol, df)
-            pass
         else: 
             raise Exception(f"Unsupported type: {btype}")
         

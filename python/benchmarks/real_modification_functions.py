@@ -156,7 +156,6 @@ class AWSLargeAppendTests(AsvBase):
         self.lib.update(self.symbol, self.cache.update_half_dict[num_rows])
 
     def time_update_full(self, cache, num_rows):
-        #self.lib.update(self.symbol, self.cache.update_full)
         self.lib.update(self.symbol, self.cache.update_full_dict[num_rows])
 
     def time_update_upsert(self, cache, num_rows):

@@ -12,6 +12,11 @@ from benchmarks.common import AsvBase
 
 
 class AWSListSymbols(AsvBase):
+    """
+    The primary purpose of this test is to measure the complete time 
+    the list_symbol takes to complete on a symbol without a cache.
+    That would be maximum time the user would wait, and we have to track it
+    """
 
     rounds = 1
     number = 1 # invoke X times the test runs between each setup-teardown 
@@ -36,28 +41,30 @@ class AWSListSymbols(AsvBase):
         return AWSListSymbols.library_manager
     
     def get_population_policy(self) -> LibraryPopulationPolicy:
-        lpp = LibraryPopulationPolicy(None, None) # Tone down creation of structure
-        lpp.set_columns(AWSListSymbols.number_columns)
+        lpp = LibraryPopulationPolicy(None) # Tone down logging during creation of structure
+        # parameters will be set on demand during iterations
         lpp.use_auto_increment_index()
         return lpp
 
     def setup_cache(self):
+        assert AWSListSymbols.number == 1, "There must be always one test between setup and tear down"
+        self.get_library_manager().log_info() # Always log the ArcticURIs 
+
+    def setup_library(self):
         num_rows = AWSListSymbols.number_rows
         manager = self.get_library_manager()
-        assert AWSListSymbols.number == 1, "There must be always one test between setup and tear down"
         policy = self.get_population_policy()
         for number_symbols in AWSListSymbols.params:
             start = time.time()
-            policy.set_parameters([num_rows] * number_symbols)
+            policy.set_parameters([num_rows] * number_symbols, AWSListSymbols.number_columns)
             if not manager.has_library(AWSListSymbols.library_type, number_symbols):
                 populate_library(manager, policy, AWSListSymbols.library_type, number_symbols)
                 self.get_logger().info(f"Generated {number_symbols} with {num_rows} each for {time.time()- start}")
             else:
-                self.get_logger().info(f"Library already exists, population skipped")
-        manager.log_info() # Always log the ArcticURIs 
+                self.get_logger().info(f"Library already exists, population skipped")        
     
     def setup(self, num_syms):
-        self.population_policy = self.get_population_policy()
+        self.setup_library()
         self.lib = self.get_library_manager().get_library(AWSListSymbols.library_type, num_syms)
         self.test_counter = 1
         symbols_list = self.lib.list_symbols()
@@ -90,7 +97,7 @@ class AWSVersionSymbols(AsvBase):
 
     timeout = 1200
 
-    library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="LIST_SYMBOLS")
+    library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="LIST_VERSIONS")
     library_type = LibraryType.PERSISTENT
 
     # NOTE: Change of parameters will trigger failure as original library must also be deleted manually.
@@ -107,8 +114,8 @@ class AWSVersionSymbols(AsvBase):
         return AWSVersionSymbols.library_manager
     
     def get_population_policy(self) -> LibraryPopulationPolicy:
-        lpp = LibraryPopulationPolicy(None, None) # Tone down creation of structure
-        lpp.set_columns(AWSVersionSymbols.number_columns)
+        lpp = LibraryPopulationPolicy(None) # Tone down creation of structure
+        # parameters will be set on demand during iterations
         lpp.use_auto_increment_index()
         lpp.generate_versions(versions_max=int(1.5 * AWSVersionSymbols.mean_number_versions_per_symbol), 
                               mean=AWSVersionSymbols.mean_number_versions_per_symbol)
@@ -122,7 +129,7 @@ class AWSVersionSymbols(AsvBase):
         last_snapshot_names_dict = {}
         for number_symbols in AWSVersionSymbols.params:
             start = time.time()
-            policy.set_parameters([num_rows] * number_symbols)
+            policy.set_parameters([num_rows] * number_symbols, AWSVersionSymbols.number_columns)
             if not manager.has_library(AWSListSymbols.library_type, number_symbols):
                 populate_library(manager, policy, AWSVersionSymbols.library_type, number_symbols)
                 self.get_logger().info(f"Generated {number_symbols} with {num_rows} each for {time.time()- start}")

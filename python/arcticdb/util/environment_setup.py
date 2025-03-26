@@ -24,6 +24,7 @@ from arcticdb.version_store.library import Library
 AWS_S3_DEFAULT_BUCKET = 'arcticdb-asv-real-storage'
 GCP_S3_DEFAULT_BUCKET = 'arcticdb-asv-real-storage'
 
+
 class GitHubSanitizingHandler(logging.StreamHandler):
     """
     The handler sanitizes messages only when execution is in GitHub
@@ -45,6 +46,7 @@ class GitHubSanitizingHandler(logging.StreamHandler):
 
 
 loggers:Dict[str, logging.Logger] = {}
+
 
 def get_console_logger(bencmhark_cls: Union[str, Any] = None):
     """
@@ -117,7 +119,6 @@ class StorageSetup:
     '''
     _instance = None
     _aws_default_factory: BaseS3StorageFixtureFactory = None
-    _fixture_cache = {}
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
@@ -188,7 +189,7 @@ class StorageSetup:
     def _get_gcpxml_arctic_uri(cls, storage_space: StorageSpace, add_to_prefix: str = None, 
                                confirm_persistent_storage_need: bool = False) -> str:
         """
-        Constructs correct AWS s3 URI for accessing specified type of storage space
+        Constructs correct GPCXML URI for accessing specified type of storage space
         For test storage space pass storage_space None
         """
         StorageSetup._check_persistance_access_asked(storage_space, confirm_persistent_storage_need)
@@ -279,10 +280,10 @@ class TestLibraryManager:
     # Currently we're using the same arctic client for both persistant and modifiable libraries.
     # We might decide that we want different arctic clients (e.g. different buckets) but probably not needed for now.
     def _get_arctic_client_persistent(self) -> Arctic:
-        lib_type = StorageSpace.PERSISTENT
+        storage_space = StorageSpace.PERSISTENT
         if self._test_mode == True:
-            lib_type = StorageSpace.TEST
-        return self.__get_arctic_client_internal(lib_type, 
+            storage_space = StorageSpace.TEST
+        return self.__get_arctic_client_internal(storage_space, 
                                                   confirm_persistent_storage_need = True)
 
     def _get_arctic_client_modifiable(self) -> Arctic:
@@ -312,6 +313,9 @@ class TestLibraryManager:
     def get_library(self, library_type : LibraryType, lib_name_suffix : str = "") -> Library:
         lib_name = self.get_library_name(library_type, lib_name_suffix)
         if library_type == LibraryType.PERSISTENT:
+           # TODO comment to make the persistent library read only.
+           # It is possible to expose this from the C++ layer and it would make working with them much safer. 
+           # (We would only need to add an overwrite flag for populate_library_if_missing)
            return self._get_arctic_client_persistent().get_library(lib_name, create_if_missing=True)
         elif library_type == LibraryType.MODIFIABLE:
            return self._get_arctic_client_modifiable().get_library(lib_name, create_if_missing=True, 
@@ -329,56 +333,62 @@ class TestLibraryManager:
             raise Exception(f"Unsupported library type: {library_type}")
 
     def clear_all_modifiable_libs_from_this_process(self):
-        ac = self._get_arctic_client_modifiable()
-        lib_names = set(ac.list_libraries())
-        to_deletes = [lib_name for lib_name in lib_names 
-                      if (f"_{os.getpid()}_" in lib_name) and (f"_{self.name_benchmark}_" in lib_name)]
-        for to_delete in to_deletes:
-            ac.delete_library(to_delete)
+        """
+        This method is the one to use primarily in `teardown` methods
+        """
+        self.__clear_all_libs(f"{LibraryType.MODIFIABLE.value}_{self.name_benchmark}_{os.getpid()}_")
 
     def clear_all_benchmark_libs(self):
         """
-        Clears only libraries for this benchmark
+        Clears only libraries for this benchmark.
+        Not advised to use in `teardown`, but very wise for `setup_cache`
         """
+        self.__clear_all_libs()
+
+    def __clear_all_libs(self, name_starts_with: str = None):
         ac = self._get_arctic_client_modifiable()
-        lib_names = set(ac.list_libraries())
-        for to_delete in lib_names:
-            if self.name_benchmark in to_delete:
-                ac.delete_library(to_delete)
+        libs_to_delete = set(ac.list_libraries())
+        if name_starts_with is not None:
+            libs_to_delete = [lib_name for lib_name in libs_to_delete 
+                      if lib_name.startswith(name_starts_with)]
+        for lib_name in libs_to_delete:
+            ac.delete_library(lib_name)
 
     @classmethod
     def remove_all_modifiable_libs_for_machine(cls, storage_type: Storage):
         """
+        Eventually will be used for wiping out scripts after all tests on machine
+
         MOTE: Potentially dangerous operation, invoke only when no other
               test processes run on the shared storage
         """
         lm = TestLibraryManager(storage_type, "not needed")
         ac = lm._get_arctic_client_modifiable()
-        assert StorageSetup.get_machine_id() in ac.get_uri(), "Machine storage space confirmed"
-        lib_names = set(ac.list_libraries())
-        for to_delete in lib_names:
-            ac.delete_library(to_delete)
-        assert len(ac.list_libraries()) == 0, "All machine libraries deleted"
+        cls.__remove_all_test_libs(ac, StorageSetup.get_machine_id())
             
     @classmethod
     def remove_all_test_libs(cls, storage_type: Storage):
         """
+        A scheduled job for wiping out test storage space over weekends is good candidate 
+
         MOTE: Potentially dangerous operation, invoke only when no other
               test processes run on the shared storage
         """
         # The following call makes persistent library test library
         lm = TestLibraryManager(storage_type, "not needed").set_test_mode() 
         ac = lm._get_arctic_client_persistent()
-        assert StorageSpace.TEST.value in ac.get_uri(), "In test mode confirmed"
+        cls.__remove_all_test_libs(ac, StorageSpace.TEST.value)
+
+    @classmethod
+    def __remove_all_test_libs(cls, ac: Arctic, uri_str_to_confirm: str):
+        assert uri_str_to_confirm in ac.get_uri(), f"[{uri_str_to_confirm}] str in test uri"
         lib_names = set(ac.list_libraries())
         for to_delete in lib_names:
-            ac.delete_library(to_delete)            
-        assert len(ac.list_libraries()) == 0, "All test libraries deleted"
+            ac.delete_library(to_delete)  
+            get_console_logger().info(f"Delete library [{to_delete}] from storage space having [{uri_str_to_confirm}]")          
+        assert len(ac.list_libraries()) == 0, f"All libs for storage space [{uri_str_to_confirm}] deleted"        
 
 
-# It is quite clear what is this responsible for: only dataframe generation
-# Using such an abstraction can help us deduplicate the dataframe generation code between the different `EnvironmentSetup`s
-# Note: We use a class instead of a generator function to allow caching of dataframes in the state
 class DataFrameGenerator(ABC):
 
     def __init__(self):
@@ -415,56 +425,58 @@ class VariableSizeDataframe(DataFrameGenerator):
 
 
 class LibraryPopulationPolicy:
+    """
+    By default library population policy uses a list of number of rows per symbol, where numbers would be unique. 
+    It will generate same number of symbols as the length of the list and each symbol will have the same number of 
+    rows as the index of the number.
 
-    def __init__(self, parameters: List[int], logger: logging.Logger, df_generator: DataFrameGenerator = VariableSizeDataframe()):
-        """
-        By default library population policy uses a list of number of rows per symbol, where numbers would be unique. 
-        It will generate same number of symbols as the length of the list and each symbol will have the same number of 
-        rows as the index of the number.
+    It is possible to also define a custom DataFrameGenerator specific for test needs. Default one is generating dataframe 
+    with random data and you can specify any number of columns and rows
 
-        It is possible to also define a custom DataFrameGenerator specific for test needs. Default one is generating dataframe 
-        with random data and you can specify any number of columns and rows
+    It is possible to also configure through methods snapshots and versions to be created and metadata to be set to them or not
 
-        It is possible to also configure through methods snapshots and versions to be created and metadata to be set to them or not
+    Example A:
+        LibraryPopulationPolicy([10,20], some_logger).set_columns(5)
+        This configures generation of 2 symbols with 10 and 20 rows. The number of rows can later be used to get symbol name.
+        Note that this defined that all symbols will have fixed number of columns = 5
 
-        Example A:
-            LibraryPopulationPolicy([10,20], some_logger).set_columns(5)
-            This configures generation of 2 symbols with 10 and 20 rows. The number of rows can later be used to get symbol name.
-            Note that this defined that all symbols will have fixed number of columns = 5
+    Example B:
+        LibraryPopulationPolicy([10,20], some_logger).use_parameters_are_columns().set_rows(3) - 
+        This configures generation of 2 symbols with 10 and 20 columns. The number columns can later be used to get symbol name.
+        Note that this defined that all symbols will have fixed number of rows = 3
 
-        Example B:
-            LibraryPopulationPolicy([10,20], some_logger).use_parameters_are_columns().set_rows(3) - 
-            This configures generation of 2 symbols with 10 and 20 columns. The number columns can later be used to get symbol name.
-            Note that this defined that all symbols will have fixed number of rows = 3
+    Example C: Populating library with many identical symbols
+        LibraryPopulationPolicy([10] * 10, some_logger).use_auto_increment_index().set_columns(30) - 
+        This configures generation of 10 symbols with 10 rows each. Also instructs that the symbol names will be constructed 
+        with auto incrementing index - you can access each symbol using its index 0-9
+    """
 
-        Example C: Populating library with many identical symbols
-            LibraryPopulationPolicy([10] * 10, some_logger).use_auto_increment_index().set_columns(30) - 
-            This configures generation of 10 symbols with 10 rows each. Also instructs that the symbol names will be constructed 
-            with auto incrementing index - you can access each symbol using its index 0-9
-        """
-        self.logger = logger
+    def __init__(self, logger: logging.Logger, df_generator: DataFrameGenerator = VariableSizeDataframe()):
+        self.logger: logging.Logger = logger
         self.df_generator = df_generator
-        self.parameters = parameters
-        # defines if parameters is list of row numbers or column numbers
-        self.parameters_is_number_rows_list = True 
-        self.number_rows = 1
-        self.number_columns = 1
-        self.with_metadata = False
-        self.versions_max = 1
-        self.mean = 1
-        self.with_snapshot = False
-        self.symbol_fixed_str = ""
-        self.index_is_auto_increment = False
+        self.number_rows: Union[int, List[int]] = [10]
+        self.number_columns: Union[int, List[int]] = 10
+        self.with_metadata: bool = False
+        self.versions_max: int = 1
+        self.mean: int = 1
+        self.with_snapshot: bool = False
+        self.symbol_fixed_str: str = ""
+        self.index_is_auto_increment: bool = False
 
-    def set_parameters(self, parameters: List[int]) -> 'LibraryPopulationPolicy':
+    def set_parameters(self, number_rows: Union[int, List[int]], 
+                       number_columns: Union[int, List[int]] = 10) -> 'LibraryPopulationPolicy':
         """
-        Useful for passing different sets of parameters populating many libraries
-        with unique number of symbols
+        Set one of the parameter to a fixed value (rows or cols).
+        The other parameter should be list of the sizes (rows or cols) of each of the symbols
+        that will be created.
+        The number of symbols will be exactly the same as the length of the given list
         """
-        self.parameters = parameters
+        assert isinstance(number_rows, list) ^ isinstance(number_columns, list), "Only one of parameters can be list"
+        self.number_rows = number_rows
+        self.number_columns = number_columns
         return self
 
-    def set_symbol_fixed_str(self, symbol_fixed_str) -> 'LibraryPopulationPolicy':
+    def set_symbol_fixed_str(self, symbol_fixed_str: str) -> 'LibraryPopulationPolicy':
         """
         Whenever you want to use one library and have different policies creating symbols
         in it specify unique meaningful fixed string that will become part of the name
@@ -473,28 +485,7 @@ class LibraryPopulationPolicy:
         self.symbol_fixed_str = symbol_fixed_str
         return self
 
-    def use_parameters_are_columns(self) -> 'LibraryPopulationPolicy':
-        """
-        By default the parameter list is considered as 
-        """
-        self.parameters_is_number_rows_list = False
-        return self
-
-    def set_rows(self, number_rows) -> 'LibraryPopulationPolicy':
-        """
-        Sets number of rows if we are using fixed number of rows
-        """
-        self.number_rows = number_rows
-        return self
-
-    def set_columns(self, number_columns) -> 'LibraryPopulationPolicy':
-        """
-        Sets number of columns if we are using fixed number of columns
-        """
-        self.number_columns = number_columns
-        return self
-    
-    def generate_versions(self, versions_max, mean) -> 'LibraryPopulationPolicy':
+    def generate_versions(self, versions_max: int, mean: int) -> 'LibraryPopulationPolicy':
         """
         For each symbol maximum `versions_max` version and mean value `mean`
         """
@@ -541,14 +532,23 @@ class LibraryPopulationPolicy:
             self.logger.info(message)
     
     def populate_library(self, lib: Library):
+
+        def is_number_rows_list():
+            return isinstance(self.number_rows, list)
+
         assert lib is not None
         self.log(f"Populating library {lib}")
         start_time = time.time()
         df_generator = self.df_generator
         meta = None if not self.with_metadata else self._generate_metadata()
-        versions_list = self._get_versions_list(len(self.parameters))
-        index = 0
-        for param_value in self.parameters:
+        if is_number_rows_list():
+            list_parameter =  self.number_rows
+            fixed_parameter = self.number_columns
+        else:
+            list_parameter =  self.number_columns
+            fixed_parameter = self.number_rows
+        versions_list = self._get_versions_list(len(list_parameter))
+        for index, param_value in enumerate(list_parameter):
             versions = versions_list[index]
             
             if self.index_is_auto_increment:
@@ -556,10 +556,10 @@ class LibraryPopulationPolicy:
             else:
                 symbol = self.get_symbol_name(param_value)
 
-            if self.parameters_is_number_rows_list:
-                df = df_generator.get_dataframe(number_rows=param_value, number_columns=self.number_columns)
+            if is_number_rows_list():
+                df = df_generator.get_dataframe(number_rows=param_value, number_columns=fixed_parameter)
             else:
-                df = df_generator.get_dataframe(number_rows=self.number_rows, number_columns=param_value)
+                df = df_generator.get_dataframe(number_rows=fixed_parameter, number_columns=param_value)
             self.log(f"Dataframe generated [{df.shape}]")
 
             for ver in range(versions):
@@ -569,7 +569,6 @@ class LibraryPopulationPolicy:
                     snapshot_name = f"snap_{symbol}_{ver}"
                     lib.snapshot(snapshot_name, metadata=meta)
                 
-            index += 1
         self.log(f"Population completed for: {time.time() - start_time}")
 
     def _get_versions_list(self, number_symbols: int) -> List[np.int64]:
@@ -732,3 +731,47 @@ class TestsForTestLibraryManager:
         assert lib_name not in tlm._get_arctic_client_persistent().list_libraries(), "Library name not in persistent space"
         assert lib_name not in ac.list_libraries(), "Library name not anymore in modifiable space"
 
+    @classmethod
+    def test_library_populator(cls):
+        storage = Storage.AMAZON
+        logger = get_console_logger()
+        tlm = TestLibraryManager(storage, "Library_populator").set_test_mode()
+        lib_name_suffix = "mylib"
+
+        TestLibraryManager.remove_all_test_libs(storage)
+
+        policy = LibraryPopulationPolicy(None).set_parameters([2, 3], 5)
+        populate_library(tlm, policy, LibraryType.PERSISTENT, lib_name_suffix)
+        lib = tlm.get_library(LibraryType.PERSISTENT, lib_name_suffix)
+        df: pd.DataFrame = lib.read(policy.get_symbol_name(2)).data
+        logger.info(f"{df}")
+        assert df.shape[0] == 2
+        assert df.shape[1] == 5
+        df: pd.DataFrame = lib.read(policy.get_symbol_name(3)).data
+        logger.info(f"{df}")
+        assert df.shape[0] == 3
+        assert df.shape[1] == 5
+
+        policy = LibraryPopulationPolicy(None).set_parameters(10, [6, 7])
+        populate_library(tlm, policy, LibraryType.PERSISTENT, lib_name_suffix)
+        lib = tlm.get_library(LibraryType.PERSISTENT, lib_name_suffix)
+        df: pd.DataFrame = lib.read(policy.get_symbol_name(6)).data
+        logger.info(f"{df}")
+        assert df.shape[0] == 10
+        assert df.shape[1] == 6
+        df: pd.DataFrame = lib.read(policy.get_symbol_name(7)).data
+        logger.info(f"{df}")
+        assert df.shape[0] == 10
+        assert df.shape[1] == 7
+
+        policy = LibraryPopulationPolicy(None).set_parameters([10] * 3, 1).use_auto_increment_index()
+        populate_library(tlm, policy, LibraryType.PERSISTENT, lib_name_suffix)
+        lib = tlm.get_library(LibraryType.PERSISTENT, lib_name_suffix)
+        for i in range(3):
+            df: pd.DataFrame = lib.read(policy.get_symbol_name(i)).data
+            logger.info(f"{df}")
+            assert df.shape[0] == 10
+            assert df.shape[1] == 1
+
+        TestLibraryManager.remove_all_test_libs(storage)
+        assert len(tlm._get_arctic_client_persistent().list_libraries()) == 0

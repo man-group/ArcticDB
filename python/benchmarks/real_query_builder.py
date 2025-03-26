@@ -47,9 +47,7 @@ class AWSQueryBuilderFunctions:
     params = PARAMS_QUERY_BUILDER
     param_names = ["num_rows"]
 
-
     library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="QUERY_BUILDER")
-
 
     def get_logger(self) -> Logger:
         return get_console_logger(self)
@@ -58,7 +56,8 @@ class AWSQueryBuilderFunctions:
         return AWSQueryBuilderFunctions.library_manager
     
     def get_population_policy(self) -> LibraryPopulationPolicy:
-        lpp = LibraryPopulationPolicy(AWSQueryBuilderFunctions.params, self.get_logger(), QueryBuilderGenerator())
+        lpp = LibraryPopulationPolicy(self.get_logger(), QueryBuilderGenerator())
+        lpp.set_parameters(AWSQueryBuilderFunctions.params)
         return lpp
     
     def setup_cache(self):

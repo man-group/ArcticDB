@@ -12,7 +12,7 @@ import pandas as pd
 
 from arcticdb.options import LibraryOptions
 from arcticdb.util.environment_setup import DataFrameGenerator, TestLibraryManager, LibraryPopulationPolicy, LibraryType, Storage, get_console_logger, populate_library_if_missing
-from arcticdb.util.utils import DFGenerator, TimestampNumber
+from arcticdb.util.utils import DFGenerator, DataRangeUtils, TimestampNumber
 from benchmarks.common import AsvBase
 
 
@@ -69,7 +69,7 @@ class AWSReadWrite(AsvBase):
         return AWSReadWrite.library_manager
     
     def get_population_policy(self) -> LibraryPopulationPolicy:
-        lpp = LibraryPopulationPolicy(AWSReadWrite.params, self.get_logger(), AllColumnTypesGenerator())
+        lpp = LibraryPopulationPolicy(self.get_logger(), AllColumnTypesGenerator()).set_parameters(AWSReadWrite.params)
         return lpp
 
     def setup_cache(self):
@@ -106,12 +106,9 @@ class AWSReadWrite(AsvBase):
         """
         df_generator = self.population_policy.df_generator
         freq = df_generator.freq
-        start = TimestampNumber.from_timestamp(df_generator.initial_timestamp, freq)
-        percent_5 = int(num_rows * percents)
-        end_range: TimestampNumber = start + num_rows
-        start_range: TimestampNumber = end_range - percent_5
-        range = (start_range.to_timestamp(), end_range.to_timestamp())
-        return range
+        return DataRangeUtils.get_last_x_percent_date_range(initial_timestamp=df_generator.initial_timestamp,
+                                                            freq=freq, num_rows=num_rows, percents=percents)
+    
     def time_read(self, num_rows):
         self.read_lib.read(self.symbol)
 
@@ -190,8 +187,8 @@ class AWSWideDataFrameTests(AWSReadWrite):
         return AWSWideDataFrameTests.library_manager
     
     def get_population_policy(self) -> LibraryPopulationPolicy:
-        lpp = LibraryPopulationPolicy(AWSWideDataFrameTests.params, self.get_logger())
-        lpp.use_parameters_are_columns().set_rows(AWSWideDataFrameTests.number_rows)
+        lpp = LibraryPopulationPolicy(self.get_logger())
+        lpp.set_parameters(AWSWideDataFrameTests.number_rows, AWSWideDataFrameTests.params)
         return lpp
     
     def setup_cache(self):
