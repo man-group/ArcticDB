@@ -98,11 +98,22 @@ if(WIN32)
     # Guide to MSVC compilation warnings https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warnings-c4000-through-c4199?view=msvc-170
     add_compile_options(
         /DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /wd4244 /wd4267 /MP
-        "$<$<CONFIG:Debug>:/Od;/MTd>"
-        "$<$<CONFIG:Release>:/MT;/Ox>"
-        # Conda builds use dynamic runtime
-        "$<$<BOOL:${ARCTICDB_USING_CONDA}>:/MD>"
     )
+
+    if(${ARCTICDB_USING_CONDA})
+        # Conda builds use dynamic linkage
+        add_compile_options(
+            "$<$<CONFIG:Debug>:/MDd>"
+            "$<$<CONFIG:Release>:/MD;/Ox>"
+        )
+    else()
+        # PyPI builds use static linkage
+        add_compile_options(
+            "$<$<CONFIG:Debug>:/Od;/MTd>"
+            "$<$<CONFIG:Release>:/MT;/Ox>"
+        )
+    endif()
+
     if(${ARCTICDB_MSVC_OMIT_RUNTIME_CHECKS})
         message(STATUS "Removing MSVC runtime checks")
         foreach(flag_var CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_RELWITHDEBINFO)
