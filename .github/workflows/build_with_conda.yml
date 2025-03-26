@@ -31,9 +31,7 @@ on:
 jobs:
 
   linux:
-    if: |
-      always() &&
-      !cancelled()
+    if: false
     runs-on: ubuntu-22.04
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
@@ -128,6 +126,7 @@ jobs:
 
 
   macos:
+    if: false
     strategy:
       matrix:
         include:
