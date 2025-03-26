@@ -44,6 +44,7 @@ jobs:
     with:
       cibuildwheel_ver: "2.21.3"
       force_update: false
+    if: false
 
   run_linting_checks:
     name: Linting checks
@@ -333,3 +334,4 @@ jobs:
     permissions: {contents: write}
     with:
       environment: ${{needs.common_config.outputs.publish_env}}
+if: false
