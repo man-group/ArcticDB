@@ -19,19 +19,36 @@
 
 namespace arcticdb::storage {
 
+using CompressedSize = uint64_t;
+using ObjectSizesVisitor = std::function<void(const VariantKey&, CompressedSize)>;
+
 struct ObjectSizes {
-    ObjectSizes(KeyType key_type, size_t count, size_t compressed_size_bytes) :
-        key_type_(key_type), count_(count), compressed_size_bytes_(compressed_size_bytes) {
+    ObjectSizes(KeyType key_type, uint64_t count, CompressedSize compressed_size) :
+        key_type_(key_type), count_(count), compressed_size_(compressed_size) {
 
     }
 
-    ObjectSizes(KeyType key_type) : ObjectSizes(key_type, 0, 0) {
+    explicit ObjectSizes(KeyType key_type) noexcept : ObjectSizes(key_type, 0, 0) {
 
+    }
+
+    ObjectSizes(const ObjectSizes& other) noexcept : key_type_(other.key_type_), count_(other.count_.load()),
+                                                     compressed_size_(other.compressed_size_.load()) {
+    }
+
+    ObjectSizes& operator=(const ObjectSizes& that) noexcept {
+        if (this != &that) {
+            key_type_ = that.key_type_;
+            count_ = that.count_.load();
+            compressed_size_ = that.compressed_size_.load();
+        }
+
+        return *this;
     }
 
     KeyType key_type_;
-    size_t count_;
-    size_t compressed_size_bytes_;
+    std::atomic_uint64_t count_;
+    std::atomic_uint64_t compressed_size_;
 };
 
 enum class SupportsAtomicWrites {
@@ -145,10 +162,10 @@ public:
         return false;
     }
 
-    [[nodiscard]] ObjectSizes get_object_sizes(KeyType key_type, const std::string& prefix) {
+    void visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
         util::check(supports_object_size_calculation(), "get_object_sizes called on storage {} which does not support "
                                                         "object size calculation", name());
-        return do_get_object_sizes(key_type, prefix);
+        do_visit_object_sizes(key_type, prefix, visitor);
     }
 
     bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) {
@@ -234,9 +251,10 @@ private:
     // the predicate.
     virtual bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string & prefix) = 0;
 
-    [[nodiscard]] virtual ObjectSizes do_get_object_sizes([[maybe_unused]] KeyType key_type, [[maybe_unused]] const std::string& prefix) {
+    virtual void do_visit_object_sizes([[maybe_unused]] KeyType key_type, [[maybe_unused]] const std::string& prefix,
+                                                          [[maybe_unused]] const ObjectSizesVisitor& visitor) {
         // Must be overridden if you want to use this
-        util::raise_rte("do_get_object_sizes called on storage {} that does not support object size calculation {}", name());
+        util::raise_rte("do_visit_object_sizes called on storage {} that does not support object size calculation {}", name());
     }
 
     [[nodiscard]] virtual std::string do_key_path(const VariantKey& key) const = 0;
@@ -260,8 +278,8 @@ template<> struct formatter<ObjectSizes> {
 
     template<typename FormatContext>
     auto format(const ObjectSizes &sizes, FormatContext &ctx) const {
-        return fmt::format_to(ctx.out(), "ObjectSizes key_type[{}] count[{}] compressed_size_bytes[{}]",
-                              sizes.key_type_, sizes.count_, sizes.compressed_size_bytes_);
+        return fmt::format_to(ctx.out(), "ObjectSizes key_type[{}] count[{}] compressed_size[{}]",
+                              sizes.key_type_, sizes.count_, sizes.compressed_size_);
     }
 };
 }
