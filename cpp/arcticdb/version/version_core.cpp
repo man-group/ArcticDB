@@ -39,7 +39,7 @@ struct ReadIncompletesFlags {
     bool via_iteration{false};
     bool sparsify{false};
     bool dynamic_schema{false};
-    bool has_active_version{true};
+    bool has_active_version{false};
 };    
 
 static void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, const ReadOptions& read_options) {
