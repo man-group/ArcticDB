@@ -61,7 +61,6 @@ jobs:
         ARCTICDB_BUILD_DIR TEST_OUTPUT_DIR ARCTICDB_VCPKG_INSTALLED_DIR ARCTICDB_VCPKG_PACKAGES_DIR
         SCCACHE_BUCKET SCCACHE_ENDPOINT AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY SCCACHE_REGION SCCACHE_S3_USE_SSL
       ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
-      ARCTICDB_USING_CLANG: ${{ (matrix.os == 'linux' && inputs.job_type != 'build-python-wheels') && '1' || '0'}}
       python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
