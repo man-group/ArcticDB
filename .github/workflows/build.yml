@@ -20,7 +20,7 @@ on:
         type: choice
         options: ["-", debug, release]
       dev_image_tag:
-        description: Tag of the ArcticDB development image to use for the Linux C++ tests build (default: arcticdb-dev-clang:latest)
+        description: Tag of the ArcticDB development image to use for the Linux C++ tests build
         type: string
         default: arcticdb-dev-clang:latest
       pytest_args:
