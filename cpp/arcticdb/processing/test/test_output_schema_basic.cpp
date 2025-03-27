@@ -59,6 +59,11 @@ TEST(OutputSchema, NonModifyingClauses) {
     output_schema = merge_clause.modify_schema({stream_desc.clone(), norm_meta});
     ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
     ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, norm_meta));
+
+    ConcatClause concat_clause{{}};
+    output_schema = concat_clause.modify_schema({stream_desc.clone(), norm_meta});
+    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+    ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, norm_meta));
 }
 
 TEST(OutputSchema, DateRangeClauseRequiresTimeseries) {

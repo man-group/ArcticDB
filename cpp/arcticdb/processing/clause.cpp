@@ -8,6 +8,8 @@
 #include <vector>
 #include <variant>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
@@ -750,6 +752,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     SegmentInMemory seg;
     RowRange output_row_range(row_slices.front().row_ranges_->at(0)->start(),
                               row_slices.front().row_ranges_->at(0)->start() + output_index_column->row_count());
+    ColRange output_col_range(1, aggregators_.size() + 1);
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, index_column_name), output_index_column);
     seg.descriptor().set_index(IndexDescriptorImpl(1, IndexDescriptor::Type::TIMESTAMP));
     auto& string_pool = seg.string_pool();
@@ -778,7 +781,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
         seg.add_column(scalar_field(aggregated_column->type().data_type(), aggregator.get_output_column_name().value), aggregated_column);
     }
     seg.set_row_data(output_index_column->row_count() - 1);
-    return push_entities(*component_manager_, ProcessingUnit(std::move(seg), std::move(output_row_range)));
+    return push_entities(*component_manager_, ProcessingUnit(std::move(seg), std::move(output_row_range), std::move(output_col_range)));
 }
 
 template<ResampleBoundary closed_boundary>
@@ -1328,6 +1331,384 @@ OutputSchema DateRangeClause::modify_schema(OutputSchema&& output_schema) const 
 
 std::string DateRangeClause::to_string() const {
     return fmt::format("DATE RANGE {} - {}", start_, end_);
+}
+
+ConcatClause::ConcatClause(JoinType join_type) {
+    clause_info_.input_structure_ = ProcessingStructure::MULTI_SYMBOL;
+    clause_info_.multi_symbol_ = true;
+    join_type_ = join_type;
+}
+
+std::vector<std::vector<EntityId>> ConcatClause::structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+    // Similar logic to RowRangeClause::structure_for_processing but as input row ranges come from multiple symbols it is slightly different
+    std::vector<RangesAndEntity> ranges_and_entities;
+    std::vector<std::shared_ptr<RowRange>> new_row_ranges;
+    bool first_range{true};
+    size_t prev_range_end{0};
+    for (const auto& entity_ids: entity_ids_vec) {
+        auto [old_row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
+        // Map from old row ranges WITHIN THIS SYMBOL to new ones
+        std::map<RowRange, RowRange> row_range_mapping;
+        for (const auto& row_range: old_row_ranges) {
+            // Value is same as key initially
+            row_range_mapping.insert({*row_range, *row_range});
+        }
+        for (auto& [old_range, new_range]: row_range_mapping) {
+            if (first_range) {
+                // Make the first row-range start from zero
+                new_range.first = 0;
+                new_range.second = old_range.diff();
+                first_range = false;
+            } else {
+                new_range.first = prev_range_end;
+                new_range.second = new_range.first + old_range.diff();
+            }
+            prev_range_end = new_range.second;
+        }
+
+        for (size_t idx=0; idx<entity_ids.size(); ++idx) {
+            auto new_row_range = std::make_shared<RowRange>(row_range_mapping.at(*old_row_ranges[idx]));
+            ranges_and_entities.emplace_back(entity_ids[idx], new_row_range, col_ranges[idx]);
+            new_row_ranges.emplace_back(std::move(new_row_range));
+        }
+    }
+    component_manager_->replace_entities<std::shared_ptr<RowRange>>(flatten_entities(std::move(entity_ids_vec)), new_row_ranges);
+    auto new_structure_offsets = structure_by_row_slice(ranges_and_entities);
+    return offsets_to_entity_ids(new_structure_offsets, ranges_and_entities);
+}
+
+std::vector<EntityId> ConcatClause::process(std::vector<EntityId>&& entity_ids) const {
+    return std::move(entity_ids);
+}
+
+// TODO: Move all this somewhere else
+using namespace arcticdb::proto::descriptors;
+
+std::tuple<std::vector<IndexDescriptorImpl>, std::vector<NormalizationMetadata>, std::vector<Columns>>
+split_schemas(std::vector<OutputSchema>&& schemas) {
+    std::vector<IndexDescriptorImpl> index_descs;
+    std::vector<NormalizationMetadata> norm_metas;
+    std::vector<Columns> columns;
+    index_descs.reserve(schemas.size());
+    norm_metas.reserve(schemas.size());
+    columns.reserve(schemas.size());
+    std::for_each(schemas.begin(), schemas.end(), [&](OutputSchema& schema) {
+        index_descs.emplace_back(schema.stream_descriptor().index());
+        norm_metas.emplace_back(std::move(schema.norm_metadata_));
+        columns.emplace_back(schema.stream_descriptor().fields_ptr(), std::move(schema.column_types()));
+    });
+    return {std::move(index_descs), std::move(norm_metas), std::move(columns)};
+}
+
+IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& output_schemas) {
+    // Ensure:
+    //  - Type is the same
+    //  - Field count is the same
+    std::optional<IndexDescriptor::Type> index_type;
+    std::optional<uint32_t> index_desc_field_count;
+    for (const auto& schema: output_schemas) {
+        const auto& index_desc = schema.stream_descriptor().index();
+        if (!index_type.has_value()) {
+            index_type = index_desc.type();
+        } else {
+            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                    index_desc.type() == *index_type,
+                    "Mismatching IndexDescriptor in schema join");
+        }
+        if (!index_desc_field_count.has_value()) {
+            index_desc_field_count = index_desc.field_count();
+        } else {
+            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                    index_desc.field_count() == *index_desc_field_count,
+                    "Mismatching IndexDescriptor in schema join");
+        }
+    }
+    return {*index_desc_field_count, *index_type};
+}
+
+NormalizationMetadata generate_norm_meta(const std::vector<NormalizationMetadata>& norm_metas) {
+    // Ensure:
+    // All have PandasIndex OR PandasMultiIndex
+    // If PandasIndex:
+    //  - name - if all the same maintain, otherwise empty string
+    //  - is_int - means name is a string representation of an integer, so fold into name logic
+    //  - fake_name - true if any are true
+    //  - tz - same as name
+    //  - is_physically stored must all be the same
+    //  - RangeIndex
+    //    - start==0/step==1 - maintain
+    //    - All steps the same, use start from first schema and maintain step
+    //    - Otherwise, log warning, set start==0/step==1
+    // PandasMultiIndex same, minus is_physically stored and fake_name, plus field_count matching
+    std::optional<bool> has_multi_index;
+    std::optional<std::string> name;
+    std::optional<bool> is_int;
+    std::optional<bool> fake_name;
+    std::optional<std::string> tz;
+    std::optional<bool> is_physically_stored;
+    std::optional<uint32_t> field_count;
+    std::optional<int> start;
+    std::optional<int> step;
+    for (const auto& norm_meta: norm_metas) {
+        const auto& common = norm_meta.df().common();
+        if (!has_multi_index.has_value()) {
+            has_multi_index = common.has_multi_index();
+        } else {
+            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                    common.has_multi_index() == has_multi_index,
+                    "Mismatching norm metadata in schema join");
+        }
+        if (*has_multi_index) {
+            const auto& index = common.multi_index();
+            if (!name.has_value()) {
+                name = index.name();
+                is_int = index.is_int();
+            } else {
+                if ((index.name() != *name) || (index.is_int() != *is_int)) {
+                    name = "";
+                    is_int = false;
+                }
+            }
+            if (!tz.has_value()) {
+                tz = index.tz();
+            } else {
+                if (index.tz() != *tz) {
+                    tz = "";
+                }
+            }
+            if (!field_count.has_value()) {
+                field_count = index.field_count();
+            } else {
+                schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                        index.field_count() == *field_count,
+                        "Mismatching norm metadata in schema join");
+            }
+        } else {
+            const auto& index = common.index();
+            if (!name.has_value()) {
+                name = index.name();
+                is_int = index.is_int();
+                fake_name = index.fake_name();
+            } else {
+                if ((index.name() != *name) || (index.is_int() != *is_int) || index.fake_name() || *fake_name) {
+                    name = "";
+                    is_int = false;
+                    fake_name = true;
+                }
+            }
+            if (!tz.has_value()) {
+                tz = index.tz();
+            } else {
+                if (index.tz() != *tz) {
+                    tz = "";
+                }
+            }
+            if (!is_physically_stored.has_value()) {
+                is_physically_stored = index.is_physically_stored();
+            } else {
+                schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                        index.is_physically_stored() == *is_physically_stored,
+                        "Mismatching norm metadata in schema join");
+            }
+            if (!start.has_value()) {
+                start = index.start();
+                step = index.step();
+            } else {
+                if (index.step() != *step) {
+                    log::version().warn("Mismatching RangeIndexes being combined, setting to start=0, step=1");
+                    start = 0;
+                    step = 1;
+                }
+            }
+        }
+    }
+    NormalizationMetadata norm_meta;
+    if (*has_multi_index) {
+        auto* index = norm_meta.mutable_df()->mutable_common()->mutable_multi_index();
+        index->set_name(*name);
+        index->set_is_int(*is_int);
+        index->set_tz(*tz);
+        index->set_field_count(*field_count);
+    } else {
+        auto* index = norm_meta.mutable_df()->mutable_common()->mutable_index();
+        index->set_name(*name);
+        index->set_is_int(*is_int);
+        index->set_fake_name(*fake_name);
+        index->set_tz(*tz);
+        index->set_is_physically_stored(*is_physically_stored);
+        index->set_start(*start);
+        index->set_step(*step);
+    }
+    return norm_meta;
+}
+
+FieldCollection inner_join(const std::vector<Columns>& columns_to_join) {
+    if (columns_to_join.empty()) {
+        return {};
+    }
+    // Start with the columns in the first element, and remove anything that isn't present in all other elements
+    ankerl::unordered_dense::map<std::string, DataType> columns_to_keep(columns_to_join.front().column_types);
+    bool first_element{true};
+    for (const auto& columns: columns_to_join) {
+        if (first_element) {
+            // columns_to_keep was initialised from the first element, so don't need to re-check
+            first_element = false;
+        } else {
+            // Iterate through the columns we are currently planning to keep
+            for (auto columns_to_keep_it = columns_to_keep.begin(); columns_to_keep_it != columns_to_keep.end();) {
+                const auto& column_name = columns_to_keep_it->first;
+                if (auto it = columns.column_types.find(column_name); it != columns.column_types.end()) {
+                    // Current set of columns under consideration contains column_name, so ensure types are compatible
+                    // and if necessary modify the columns_to_keep value to a type capable of representing all
+                    auto& current_data_type = columns_to_keep_it->second;
+                    auto opt_common_type = has_valid_common_type(make_scalar_type(current_data_type), make_scalar_type(it->second));
+                    if (opt_common_type.has_value()) {
+                        current_data_type = opt_common_type->data_type();
+                    } else {
+                        schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>("No common type between {} and {} when joining schemas", current_data_type, it->second);
+                    }
+                    ++columns_to_keep_it;
+                } else {
+                    columns_to_keep_it = columns_to_keep.erase(columns_to_keep_it);
+                }
+            }
+        }
+    }
+    FieldCollection res;
+    // All the columns we are retaining were in every schema. Just use the order from the first schema
+    for (const auto& field: *columns_to_join.front().fields) {
+        std::string column_name(field.name());
+        if (auto it = columns_to_keep.find(column_name); it != columns_to_keep.end()) {
+            res.add_field(make_scalar_type(it->second), column_name);
+        }
+    }
+    return res;
+}
+
+FieldCollection outer_join(const std::vector<Columns>& columns_to_join) {
+    if (columns_to_join.empty()) {
+        return {};
+    }
+    // Start with the columns in the first element, and add in anything that is present in all other elements
+    ankerl::unordered_dense::map<std::string, DataType> columns_to_keep(columns_to_join.front().column_types);
+    // Maintain the order that columns appeared in through the schemas
+    std::vector<std::string> column_names_to_keep;
+    for (const auto& field: *columns_to_join.front().fields) {
+        column_names_to_keep.emplace_back(field.name());
+    }
+    bool first_element{true};
+    for (const auto& columns: columns_to_join) {
+        if (first_element) {
+            // columns_to_keep was initialised from the first element, so don't need to re-check
+            first_element = false;
+        } else {
+            // Iterate through the columns of this element
+            for (const auto& [column_name, data_type]: columns.column_types) {
+                if (auto columns_to_keep_it = columns_to_keep.find(column_name); columns_to_keep_it != columns_to_keep.end()) {
+                    // Current set of columns under consideration contains column_name, so ensure types are compatible
+                    // and if necessary modify the columns_to_keep value to a type capable of representing all
+                    auto& current_data_type = columns_to_keep_it->second;
+                    auto opt_common_type = has_valid_common_type(make_scalar_type(current_data_type), make_scalar_type(data_type));
+                    if (opt_common_type.has_value()) {
+                        current_data_type = opt_common_type->data_type();
+                    } else {
+                        schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>("No common type between {} and {} when joining schemas", current_data_type, data_type);
+                    }
+                } else {
+                    // This column is new, add it in
+                    auto [_, inserted] = columns_to_keep.emplace(column_name, data_type);
+                    util::check(inserted, "Adding same column name to map twice in outer_join");
+                    column_names_to_keep.emplace_back(column_name);
+                }
+            }
+
+        }
+    }
+    FieldCollection res;
+    for (const auto& column_name: column_names_to_keep) {
+        res.add_field(make_scalar_type(columns_to_keep.at(column_name)), column_name);
+    }
+    return res;
+}
+
+std::pair<StreamDescriptor, arcticdb::proto::descriptors::NormalizationMetadata> join_indexes(std::vector<OutputSchema>& output_schemas) {
+    ARCTICDB_UNUSED auto index_desc = generate_index_descriptor(output_schemas);
+    StreamDescriptor stream_desc{StreamId{}, index_desc};
+    // Returns a set of indices of index fields where not all the input schema field names matched, which is needed to generate the output norm metadata
+    auto non_matching_name_indices = add_index_fields(stream_desc, output_schemas);
+    return {};
+}
+
+std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schemas) {
+    std::unordered_set<size_t> non_matching_name_indices;
+    auto num_index_fields = stream_desc.index().field_count();
+    if (num_index_fields == 0) {
+        return non_matching_name_indices;
+    }
+    // FieldCollection does not support renaming fields, so use a vector of FieldRef and then turn this into a FieldCollection at the end
+    std::vector<FieldRef> index_fields;
+    bool first_schema{true};
+    for (auto& schema: output_schemas) {
+        const auto& fields = schema.stream_descriptor().fields();
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(fields.size() >= num_index_fields,
+                                                        "Expected at least {} fields for index, but received {}",
+                                                        num_index_fields, fields.size());
+        if (first_schema) {
+            for (size_t idx = 0; idx < num_index_fields; ++idx) {
+                const auto& field = fields.at(idx);
+                index_fields.emplace_back(field.type(), field.name());
+                schema.column_types().erase(std::string(field.name()));
+            }
+            first_schema = false;
+        } else {
+            for (size_t idx = 0; idx < num_index_fields; ++idx) {
+                const auto& field = fields.at(idx);
+                auto& current_type = index_fields.at(idx).type_;
+                auto opt_common_type = has_valid_common_type(current_type, field.type());
+                if (opt_common_type.has_value()) {
+                    current_type = *opt_common_type;
+                } else {
+                    schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>("No common type between {} and {} when joining schemas", current_type, field.type());
+                }
+                schema.column_types().erase(std::string(field.name()));
+                auto& current_name = index_fields.at(idx).name_;
+                if (current_name != field.name()) {
+                    current_name = "";
+                    non_matching_name_indices.emplace(idx);
+                }
+            }
+        }
+    }
+    for (const auto& field: index_fields) {
+        stream_desc.add_field(field);
+    }
+    return non_matching_name_indices;
+}
+
+OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& output_schemas) const {
+    util::check(!output_schemas.empty(), "Cannot join empty list of schemas");
+    auto [stream_desc, norm_meta] = join_indexes(output_schemas);
+
+    // Decompose output_schemas vector into vectors of IndexDescriptorImpl, NormalizationMetadata, and Columns
+//    auto [index_descs, norm_metas, columns] = split_schemas(std::move(output_schemas));
+//    auto index_desc = generate_index_descriptor(index_descs);
+//    auto norm_meta = generate_norm_meta(norm_metas);
+//    if (norm_meta.df().common().has_multi_index()) {
+//        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+//                norm_meta.df().common().multi_index().field_count() == index_desc.field_count(),
+//                "Mismatching index field counts in schema join");
+//    } else {
+//        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+//                index_desc.field_count() <= 1,
+//                "Mismatching index field counts in schema join");
+//    }
+//    auto fields = join_type_ == JoinType::INNER ? inner_join(columns) : outer_join(columns);
+//    StreamDescriptor stream_desc{StreamId{}, index_desc, std::make_shared<FieldCollection>(std::move(fields))};
+    return {std::move(stream_desc), std::move(norm_meta)};
+}
+
+std::string ConcatClause::to_string() const {
+    return "CONCAT";
 }
 
 }
