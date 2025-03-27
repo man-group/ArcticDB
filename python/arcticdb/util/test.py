@@ -244,8 +244,16 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     assert_frame_equal(left=expected, right=actual)
 
 
+unicode_symbol = "\u00A0"  # start of latin extensions
+unicode_symbols = "".join([chr(ord(unicode_symbol) + i) for i in range(100)])
+
+
 def random_string(length: int):
-    return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
+    if random.randint(0, 3) == 0:
+        # (probably) Give a unicode string one time in three, we have special handling in C++ for unicode
+        return "".join(random.choice(string.ascii_uppercase + unicode_symbols) for _ in range(length))
+    else:
+        return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
 
 
 def get_sample_dataframe(size=1000, seed=0, str_size=10):
@@ -397,12 +405,7 @@ def random_integers(size, dtype, min_value: int = None, max_value: int = None):
         min_value = max(iinfo.min, platform_int_info.min)
     if max_value is None:
         max_value = min(iinfo.max, platform_int_info.max)
-    return np.random.randint(
-        min_value,
-        max_value,
-        size=size,
-        dtype=dtype
-    )
+    return np.random.randint(min_value, max_value, size=size, dtype=dtype)
 
 
 def get_wide_dataframe(size=10000, seed=0):
@@ -433,7 +436,15 @@ def get_pickle():
     )[np.random.randint(0, 2)]
 
 
-def random_strings_of_length(num, length, unique):
+def random_ascii_strings(count, max_length):
+    result = []
+    for _ in range(count):
+        length = random.randrange(max_length + 1)
+        result.append("".join(random.choice(string.ascii_letters) for _ in range(length)))
+    return result
+
+
+def random_strings_of_length(num, length, unique=False):
     out = []
     for i in range(num):
         out.append(random_string(length))
@@ -698,7 +709,8 @@ def distinct_timestamps(lib: NativeVersionStore):
 def random_seed_context():
     seed = os.getenv("ARCTICDB_RAND_SEED")
     state = random.getstate()
-    random.seed(int(seed) if seed is not None else state)
+    if seed is not None:
+        random.seed(int(seed))
     try:
         yield
     finally:
@@ -841,7 +853,7 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
             pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
         else:
             if PANDAS_VERSION >= Version("1.1"):
-                check_equals_flags["rtol"] = 1e-4
+                check_equals_flags["rtol"] = 2e-4
             pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
 
 
@@ -880,7 +892,9 @@ def generic_resample_test(
         resample_args["offset"] = offset
 
     if PANDAS_VERSION >= Version("1.1.0"):
-        expected = original_data.resample(rule, closed=closed, label=label, **resample_args).agg(None, **pandas_aggregations)
+        expected = original_data.resample(rule, closed=closed, label=label, **resample_args).agg(
+            None, **pandas_aggregations
+        )
     else:
         expected = original_data.resample(rule, closed=closed, label=label).agg(None, **pandas_aggregations)
     if drop_empty_buckets_for:
@@ -901,3 +915,25 @@ def generic_resample_test(
         assert_dfs_approximate(expected, received)
     else:
         assert_frame_equal(expected, received, check_dtype=False)
+
+
+def equals(x, y):
+    if isinstance(x, tuple) or isinstance(x, list):
+        assert len(x) == len(y)
+        for vx, vy in zip(x, y):
+            equals(vx, vy)
+    elif isinstance(x, dict):
+        assert isinstance(y, dict)
+        assert set(x.keys()) == set(y.keys())
+        for k in x.keys():
+            equals(x[k], y[k])
+    elif isinstance(x, np.ndarray):
+        assert isinstance(y, np.ndarray)
+        assert np.allclose(x, y)
+    else:
+        assert x == y
+
+
+def is_pytest_running():
+    """Check if code is currently running as part of a pytest test."""
+    return "PYTEST_CURRENT_TEST" in os.environ

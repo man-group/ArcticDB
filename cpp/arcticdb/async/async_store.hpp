@@ -223,6 +223,30 @@ void iterate_type(
     library_->iterate_type(type, func, prefix);
 }
 
+folly::Future<storage::ObjectSizes> get_object_sizes(KeyType type, const std::string& prefix) override {
+    if (library_->supports_object_size_calculation()) {
+        // The library has native support for some kind of clever size calculation, so let it take over
+        return async::submit_io_task(ObjectSizesTask{type, prefix, library_});
+    }
+
+    // No native support for a clever size calculation, so just read keys and sum their sizes
+    auto counter = std::make_shared<std::atomic_uint64_t>(0);
+    auto bytes = std::make_shared<std::atomic_uint64_t>(0);
+    KeySizeCalculators key_size_calculators;
+    iterate_type(type, [&key_size_calculators, &counter, &bytes](const VariantKey&& k) {
+        key_size_calculators.emplace_back(std::forward<const VariantKey>(k), [counter, bytes] (auto&& ks) {
+            counter->fetch_add(1);
+            auto key_seg = std::forward<decltype(ks)>(ks);
+            auto compressed_size = key_seg.segment().size();
+            bytes->fetch_add(compressed_size);
+            return key_seg.variant_key();
+        });
+    }, prefix);
+
+    read_ignoring_key_not_found(std::move(key_size_calculators));
+    return folly::makeFuture(storage::ObjectSizes{type, *counter, *bytes});
+}
+
 bool scan_for_matching_key(
     KeyType key_type, const IterateTypePredicate& predicate) override {
     return library_->scan_for_matching_key(key_type, predicate);
@@ -340,14 +364,14 @@ std::vector<RemoveKeyResultType> remove_keys_sync(std::vector<entity::VariantKey
            RemoveBatchTask{std::move(keys), library_, opts}();
 }
 
-folly::Future<std::vector<VariantKey>> batch_read_compressed(
+std::vector<folly::Future<VariantKey>> batch_read_compressed(
         std::vector<std::pair<entity::VariantKey, ReadContinuation>> &&keys_and_continuations,
         const BatchReadArgs &args) override {
     util::check(!keys_and_continuations.empty(), "Unexpected empty keys/continuation vector in batch_read_compressed");
-    return folly::collect(folly::window(std::move(keys_and_continuations), [this] (auto&& key_and_continuation) {
+    return folly::window(std::move(keys_and_continuations), [this] (auto&& key_and_continuation) {
         auto [key, continuation] = std::forward<decltype(key_and_continuation)>(key_and_continuation);
         return read_and_continue(key, library_, storage::ReadKeyOpts{}, std::move(continuation));
-    }, args.batch_size_)).via(&async::io_executor());
+    }, args.batch_size_);
 }
 
 std::vector<folly::Future<pipelines::SegmentAndSlice>> batch_read_uncompressed(

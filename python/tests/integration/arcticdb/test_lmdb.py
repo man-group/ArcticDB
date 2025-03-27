@@ -23,17 +23,17 @@ import arcticdb.adapters.lmdb_library_adapter as la
 from arcticdb.exceptions import LmdbOptionsError
 
 
-def test_batch_read_only_segfault_regression(lmdb_storage):
+def test_batch_read_only_segfault_regression(lmdb_storage, lib_name):
     # See Github issue #520
     # This segfaults with arcticdb==1.5.0
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library("test_lib")
+    lib = ac.create_library(lib_name)
     df = pd.DataFrame({"a": list(range(100))}, index=list(range(100)))
     for i in range(100):
         lib.write(str(i), df, prune_previous_versions=True)
 
     # New Arctic instance is essential to repro the bug
-    fresh_lib = lmdb_storage.create_arctic()["test_lib"]
+    fresh_lib = lmdb_storage.create_arctic()[lib_name]
     vis = fresh_lib.read_batch([str(i) for i in range(100)])  # used to crash
     assert len(vis) == 100
     assert_frame_equal(vis[0].data, df)
@@ -43,18 +43,23 @@ def test_library_deletion(tmp_path: Path):
     # See Github issue #517
     # Given
     ac = Arctic(f"lmdb://{tmp_path}/lmdb_instance")
-    path = tmp_path / "lmdb_instance" / "test_lib"
-    ac.create_library("test_lib")
-    assert path.exists()
+    try:
+        path = tmp_path / "lmdb_instance" / "test_library_deletion"
+        ac.create_library("test_library_deletion")
+        assert path.exists()
 
-    ac.create_library("test_lib2")
+        ac.create_library("test_library_deletion2")
 
-    # When
-    ac.delete_library("test_lib")
+        # When
+        ac.delete_library("test_library_deletion")
 
-    # Then
-    assert not path.exists()
-    assert ac.list_libraries() == ["test_lib2"]
+        # Then
+        assert not path.exists()
+        assert ac.list_libraries() == ["test_library_deletion2"]
+    finally:
+        # Make sure that we clean up the library even if the test fails
+        for lib in ac.list_libraries():
+            ac.delete_library(lib)
 
 
 def test_library_deletion_leave_non_lmdb_files_alone(tmp_path: Path):
@@ -62,22 +67,27 @@ def test_library_deletion_leave_non_lmdb_files_alone(tmp_path: Path):
     # Given
     ac = Arctic(f"lmdb://{tmp_path}/lmdb_instance")
     path = tmp_path / "lmdb_instance" / "test_lib"
-    ac.create_library("test_lib")
-    assert path.exists()
-    with open(os.path.join(path, "another"), "w") as f:
-        f.write("blah")
-    (path / "dir").mkdir()
+    try:
+        ac.create_library("test_lib")
+        assert path.exists()
+        with open(os.path.join(path, "another"), "w") as f:
+            f.write("blah")
+        (path / "dir").mkdir()
 
-    ac.create_library("test_lib2")
+        ac.create_library("test_lib2")
 
-    # When
-    ac.delete_library("test_lib")
+        # When
+        ac.delete_library("test_lib")
 
-    # Then
-    assert path.exists()
-    files = set(os.listdir(path))
-    assert files == {"dir", "another"}
-    assert ac.list_libraries() == ["test_lib2"]
+        # Then
+        assert path.exists()
+        files = set(os.listdir(path))
+        assert files == {"dir", "another"}
+        assert ac.list_libraries() == ["test_lib2"]
+    finally:
+        # Make sure that we clean up the library even if the test fails
+        for lib in ac.list_libraries():
+            ac.delete_library(lib)
 
 
 def test_lmdb(lmdb_storage):
@@ -102,14 +112,16 @@ def test_lmdb_malloc_trim(lmdb_storage):
     lib = ac.create_library("test_lmdb_malloc_trim")
     lib._nvs.trim()
 
+
 @pytest.mark.skipif(sys.platform != "win32", reason="Non Windows platforms have different file path name restrictions")
-@pytest.mark.parametrize("invalid_lib_name", ["lib?1", "lib:1", "lib|1", "lib\"1", "lib.", "lib "])
+@pytest.mark.parametrize("invalid_lib_name", ["lib?1", "lib:1", "lib|1", 'lib"1', "lib.", "lib "])
 def test_invalid_lmdb_lib_name_windows(lmdb_storage, invalid_lib_name):
     ac = lmdb_storage.create_arctic()
     with pytest.raises(UserInputException) as e:
         ac.create_library(invalid_lib_name)
 
     assert ac.list_libraries() == []
+
 
 # Valid names on all platforms
 @pytest.mark.parametrize("valid_lib_name", ["lib#~@,1", "lib{)[.1", "!lib$%^"])
@@ -119,6 +131,7 @@ def test_valid_lib_name(lmdb_storage, valid_lib_name):
 
     assert ac.list_libraries() == [valid_lib_name]
 
+
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows has different file path name restrictions")
 @pytest.mark.parametrize("valid_lib_name", ["lib?1", "lib:1", "lib|1", "lib "])
 def test_valid_lib_name_linux(lmdb_storage, valid_lib_name):
@@ -127,13 +140,14 @@ def test_valid_lib_name_linux(lmdb_storage, valid_lib_name):
 
     assert ac.list_libraries() == [valid_lib_name]
 
-def test_lmdb_mapsize(tmp_path):
+
+def test_lmdb_mapsize(tmp_path, lib_name):
     # Given - tiny map size
     ac = Arctic(f"lmdb://{tmp_path}?map_size=1KB")
 
     # When
     with pytest.raises(LmdbMapFullError) as e:
-        ac.create_library("test")
+        ac.create_library(lib_name)
     # Then - even library creation fails so map size having an effect
     assert "MDB_MAP_FULL" in str(e.value)
     assert "E5003" in str(e.value)
@@ -143,11 +157,13 @@ def test_lmdb_mapsize(tmp_path):
     ac = Arctic(f"lmdb://{tmp_path}?map_size=1MB")
 
     # When
-    lib = ac["test"]
-    df = get_wide_dataframe(size=1_000)
-    lib.write("sym", df)
-
-    # Then - operations succeed as usual
+    try:
+        lib = ac[lib_name]
+        df = get_wide_dataframe(size=1_000)
+        lib.write("sym", df)
+    finally:
+        # Then - operations succeed as usual
+        ac.delete_library(lib_name)
 
 
 def test_lmdb_mapsize_write(version_store_factory):
@@ -188,12 +204,14 @@ def test_map_size_bad_input(options):
 
     assert "Incorrect format for map_size" in str(e.value)
 
+
 def test_delete_library(lmdb_storage):
     ac = lmdb_storage.create_arctic()
     lib = ac.create_library("library")
     ac.delete_library("library")
     with pytest.raises(StorageException) as e:
         lib.write("sym1", pd.DataFrame())
+
 
 @pytest.mark.parametrize("options", ["MAP_SIZE=1GB", "atlas_shape=1GB"])
 def test_lmdb_options_unknown_option(options):
@@ -226,12 +244,12 @@ def test_warnings_arctic_instance(tmp_path, get_stderr):
     assert not re.search(r"W .*LMDB path at.*has already been opened in this process", get_stderr())
 
 
-def test_warnings_library(lmdb_storage, get_stderr):
+def test_warnings_library(lmdb_storage, get_stderr, lib_name):
     """Should not warn - library caching prevents us opening LMDB env twice."""
     ac = lmdb_storage.create_arctic()
-    lib = ac.get_library("lib", create_if_missing=True)
-    lib2 = ac.get_library("lib")
-    lib3 = ac.get_library("lib")
+    lib = ac.get_library(lib_name, create_if_missing=True)
+    lib2 = ac.get_library(lib_name)
+    lib3 = ac.get_library(lib_name)
     assert " W " not in get_stderr()
 
 
@@ -239,7 +257,10 @@ def test_warnings_library(lmdb_storage, get_stderr):
 def test_arctic_instances_across_same_lmdb_multiprocessing(tmp_path):
     """Should not warn when across multiple processes."""
     ac = Arctic(f"lmdb://{tmp_path}")
-    ac.create_library("test")
-    ac["test"].write("a", pd.DataFrame())
-    with mp.Pool(5) as p:
-        p.starmap(create_arctic_instance, [(tmp_path, i) for i in range(20)])
+    try:
+        ac.create_library("test")
+        ac["test"].write("a", pd.DataFrame())
+        with mp.Pool(5) as p:
+            p.starmap(create_arctic_instance, [(tmp_path, i) for i in range(20)])
+    finally:
+        ac.delete_library("test")

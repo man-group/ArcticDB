@@ -127,6 +127,7 @@ def get_append_keys(lib, sym):
 @given(df_list=generate_dataframes(COLUMN_DESCRIPTIONS))
 def test_sort_merge_static_schema_write(lmdb_library, df_list):
     lib = lmdb_library
+    lib._nvs.version_store.clear()
     sym = "test_sort_merge_static_schema_write"
     for df in df_list:
         lib.write(sym, df, staged=True, validate_index=False)
@@ -150,6 +151,7 @@ def test_sort_merge_static_schema_write(lmdb_library, df_list):
 @given(df_list=generate_dataframes(COLUMN_DESCRIPTIONS), initial_df=generate_single_dataframe(COLUMN_DESCRIPTIONS, min_size=1, allow_nat_in_index=False))
 def test_sort_merge_static_schema_append(lmdb_library, df_list, initial_df):
     lib = lmdb_library
+    lib._nvs.version_store.clear()
     sym = "test_sort_merge_static_schema_append"
     initial_df.sort_index(inplace=True)
     lib.write(sym, initial_df)
@@ -179,6 +181,7 @@ def test_sort_merge_static_schema_append(lmdb_library, df_list, initial_df):
 @given(df_list=generate_dataframes(COLUMN_DESCRIPTIONS))
 def test_sort_merge_dynamic_schema_write(lmdb_library_dynamic_schema, df_list):
     lib = lmdb_library_dynamic_schema
+    lib._nvs.version_store.clear()
     sym = "test_sort_merge_dynamic_schema_write"
     for df in df_list:
         lib.write(sym, df, staged=True, validate_index=False)
@@ -203,6 +206,7 @@ def test_sort_merge_dynamic_schema_write(lmdb_library_dynamic_schema, df_list):
 @given(df_list=generate_dataframes(COLUMN_DESCRIPTIONS), initial_df=generate_single_dataframe(COLUMN_DESCRIPTIONS, min_size=1, allow_nat_in_index=False))
 def test_sort_merge_dynamic_schema_append(lmdb_library_dynamic_schema, df_list, initial_df):    
     lib = lmdb_library_dynamic_schema
+    lib._nvs.version_store.clear()
     sym = "test_sort_merge_dynamic_schema_append"
     initial_df.sort_index(inplace=True)
     lib.write(sym, initial_df)

@@ -31,13 +31,11 @@ from arcticdb.exceptions import (
 from arcticdb import QueryBuilder
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
-from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
 import arcticdb.version_store._normalization
 from arcticdb.version_store._store import VersionedItem
 from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException, StorageException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch, ManualClockVersionStore
-from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from arcticdb dynamically loads arcticc.pb2
 from arcticdb.util.test import (
     sample_dataframe,
     sample_dataframe_only_strings,
@@ -48,6 +46,7 @@ from arcticdb.util.test import (
     distinct_timestamps,
 )
 from tests.util.date import DateRange
+from arcticdb.util.test import equals
 
 
 @pytest.fixture()
@@ -108,25 +107,6 @@ def test_s3_breaking_chars(object_version_store, breaking_char):
         object_version_store.write(sym, df)
 
     assert sym not in object_version_store.list_symbols()
-
-
-@pytest.mark.parametrize("prefix", ["", "prefix"])
-@pytest.mark.parametrize("suffix", ["", "suffix"])
-def test_symbol_names_with_all_chars(object_version_store, prefix, suffix):
-    # Create symbol names with each character (except '\' because Azure replaces it with '/' in some cases)
-    names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != "\\"]
-    df = sample_dataframe()
-
-    written_symbols = set()
-    for name in names:
-        try:
-            object_version_store.write(name, df)
-            written_symbols.add(name)
-        # We should only fail with UserInputException (indicating that name validation failed)
-        except UserInputException:
-            pass
-
-    assert set(object_version_store.list_symbols()) == written_symbols
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
@@ -457,47 +437,6 @@ def test_prune_previous_versions_append_batch(basic_store):
     assert len(keys_for_sym2) == 3
     # Then - we got 4 symbol keys: 2 for each of the writes
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
-
-
-def test_batch_append_unicode(basic_store):
-    symbol = "test_append_unicode"
-    uc = "\u0420\u043e\u0441\u0441\u0438\u044f"
-
-    df1 = pd.DataFrame(
-        index=[pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03")],
-        data={"a": ["123", uc]},
-    )
-    basic_store.batch_write(symbols=[symbol], data_vector=[df1])
-    vit = basic_store.batch_read([symbol])[symbol]
-    assert_equal(vit.data, df1)
-
-    df2 = pd.DataFrame(
-        index=[pd.Timestamp("2018-01-04"), pd.Timestamp("2018-01-05")],
-        data={"a": ["123", uc]},
-    )
-    basic_store.batch_append(symbols=[symbol], data_vector=[df2])
-    vit = basic_store.batch_read([symbol])[symbol]
-    expected = pd.concat([df1, df2])
-    assert_equal(vit.data, expected)
-
-
-def test_batch_write_metadata_unicode(basic_store):
-    symbol = "test_append_unicode"
-    uc = "\u0420\u043e\u0441\u0441\u0438\u044f"
-    df1 = pd.DataFrame(
-        index=[pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03")],
-        data={"a": ["123", uc]},
-    )
-
-    basic_store.batch_write(symbols=[symbol], data_vector=[df1])
-    vit = basic_store.batch_read([symbol])[symbol]
-    assert_equal(vit.data, df1)
-
-    meta = {"a": 1, "b": uc}
-    basic_store.batch_write_metadata(symbols=[symbol], metadata_vector=[meta])
-    vits = basic_store.batch_read_metadata([symbol])
-    metadata = vits[symbol].metadata
-    assert metadata == meta
 
 
 def test_deleting_unknown_symbol(basic_store, symbol):
@@ -1261,189 +1200,11 @@ def test_metadata_with_snapshots(basic_store):
     assert snapshot["snap1"] == snap_metadata
 
 
-def equals(x, y):
-    if isinstance(x, tuple) or isinstance(x, list):
-        assert len(x) == len(y)
-        for vx, vy in zip(x, y):
-            equals(vx, vy)
-    elif isinstance(x, dict):
-        assert isinstance(y, dict)
-        assert set(x.keys()) == set(y.keys())
-        for k in x.keys():
-            equals(x[k], y[k])
-    elif isinstance(x, np.ndarray):
-        assert isinstance(y, np.ndarray)
-        assert np.allclose(x, y)
-    else:
-        assert x == y
-
-
-@pytest.mark.parametrize("batch", (True, False))
-def test_recursively_written_data(basic_store, batch):
-    samples = [
-        {"a": np.arange(5), "b": np.arange(8)},  # dict of np arrays
-        (np.arange(5), np.arange(6)),  # tuple of np arrays
-        [np.arange(9), np.arange(12), (1, 2)],  # list of numpy arrays and a python tuple
-        ({"a": np.arange(5), "b": [1, 2, 3]}),  # dict of np arrays and a python list
-    ]
-
-    for idx, sample in enumerate(samples):
-        recursive_sym = "sym_recursive" + str(idx)
-        pickled_sym = "sym_pickled" + str(idx)
-        basic_store.write(recursive_sym, sample, recursive_normalizers=True)
-        basic_store.write(pickled_sym, sample)  # pickled writes
-        if batch:
-            recursive_vit = basic_store.batch_read([recursive_sym])[recursive_sym]
-            pickled_vit = basic_store.batch_read([pickled_sym])[pickled_sym]
-        else:
-            recursive_vit = basic_store.read(recursive_sym)
-            pickled_vit = basic_store.read(pickled_sym)
-        equals(sample, recursive_vit.data)
-        equals(pickled_vit.data, recursive_vit.data)
-        assert recursive_vit.symbol == recursive_sym
-        assert pickled_vit.symbol == pickled_sym
-
-
-@pytest.mark.parametrize("batch", (True, False))
-def test_recursively_written_data_with_metadata(basic_store, batch):
-    samples = [
-        {"a": np.arange(5), "b": np.arange(8)},  # dict of np arrays
-        (np.arange(5), np.arange(6)),  # tuple of np arrays
-    ]
-
-    for idx, sample in enumerate(samples):
-        sym = "sym_recursive" + str(idx)
-        metadata = {"something": 1}
-        basic_store.write(sym, sample, metadata=metadata, recursive_normalizers=True)
-        if batch:
-            vit = basic_store.batch_read([sym])[sym]
-        else:
-            vit = basic_store.read(sym)
-        equals(sample, vit.data)
-        assert vit.symbol == sym
-        assert vit.metadata == metadata
-
-
-@pytest.mark.parametrize("batch", (True, False))
-def test_recursively_written_data_with_nones(basic_store, batch):
-    sample = {"a": np.arange(5), "b": np.arange(8), "c": None}
-    recursive_sym = "sym_recursive"
-    pickled_sym = "sym_pickled"
-    basic_store.write(recursive_sym, sample, recursive_normalizers=True)
-    basic_store.write(pickled_sym, sample)  # pickled writes
-    if batch:
-        recursive_vit = basic_store.batch_read([recursive_sym])[recursive_sym]
-        pickled_vit = basic_store.batch_read([pickled_sym])[pickled_sym]
-    else:
-        recursive_vit = basic_store.read(recursive_sym)
-        pickled_vit = basic_store.read(pickled_sym)
-    equals(sample, recursive_vit.data)
-    equals(pickled_vit.data, recursive_vit.data)
-    assert recursive_vit.symbol == recursive_sym
-    assert pickled_vit.symbol == pickled_sym
-
-
-@pytest.mark.parametrize("batch", (True, False))
-def test_recursive_nested_data(basic_store, batch):
-    sym = "test_recursive_nested_data"
-    sample_data = {"a": {"b": {"c": {"d": np.arange(24)}}}}
-    fl = Flattener()
-    assert fl.can_flatten(sample_data)
-    assert fl.is_dict_like(sample_data)
-    metast, to_write = fl.create_meta_structure(sample_data, "sym")
-    assert len(to_write) == 1
-    equals(list(to_write.values())[0], np.arange(24))
-
-    basic_store.write(sym, sample_data, recursive_normalizers=True)
-    if batch:
-        vit = basic_store.batch_read([sym])[sym]
-    else:
-        vit = basic_store.read(sym)
-    equals(vit.data, sample_data)
-    assert vit.symbol == sym
-
-
 def test_named_tuple_flattening_rejected():
     fl = Flattener()
     SomeThing = namedtuple("SomeThing", "prop another_prop")
     nt = SomeThing(1, 2)
     assert fl.can_flatten(nt) is False
-
-
-def test_data_directly_msgpackable(basic_store):
-    data = {"a": [1, 2, 3], "b": {"c": 5}}
-    fl = Flattener()
-    meta, to_write = fl.create_meta_structure(data, "sym")
-    assert len(to_write) == 0
-    assert meta["leaf"] is True
-    basic_store.write("s", data, recursive_normalizers=True)
-    equals(basic_store.read("s").data, data)
-
-
-class AlmostAList(list):
-    pass
-
-
-class AlmostAListNormalizer(CustomNormalizer):
-    NESTED_STRUCTURE = True
-
-    def normalize(self, item, **kwargs):
-        if not isinstance(item, AlmostAList):
-            return None
-        return list(item), NormalizationMetadata.CustomNormalizerMeta()
-
-    def denormalize(self, item, norm_meta):
-        return AlmostAList(item)
-
-
-def test_recursive_normalizer_with_custom_class():
-    list_like_obj = AlmostAList([1, 2, 3])
-    fl = Flattener()
-    assert not fl.is_normalizable_to_nested_structure(list_like_obj)  # normalizer not registered yet
-
-    register_normalizer(AlmostAListNormalizer())
-    # Should be normalizable now.
-    fl = Flattener()
-    assert fl.is_normalizable_to_nested_structure(list_like_obj)
-
-
-@pytest.mark.parametrize("batch", (True, False))
-def test_really_large_symbol_for_recursive_data(basic_store, batch):
-    sym = "s" * 100
-    data = {"a" * 100: {"b" * 100: {"c" * 1000: {"d": np.arange(5)}}}}
-    basic_store.write(sym, data, recursive_normalizers=True)
-    fl = Flattener()
-    metastruct, to_write = fl.create_meta_structure(data, "s" * 100)
-    assert len(list(to_write.keys())[0]) < fl.MAX_KEY_LENGTH
-    if batch:
-        vit = basic_store.batch_read([sym])[sym]
-    else:
-        vit = basic_store.read(sym)
-    equals(vit.data, data)
-    assert vit.symbol == sym
-
-
-def test_too_much_recursive_metastruct_data(monkeypatch, lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
-    sym = "test_too_much_recursive_metastruct_data"
-    data = [pd.DataFrame({"col": [0]}), pd.DataFrame({"col": [1]})]
-    with pytest.raises(ArcticDbNotYetImplemented) as e:
-        with monkeypatch.context() as m:
-            m.setattr(arcticdb.version_store._normalization, "_MAX_RECURSIVE_METASTRUCT", 1)
-            lib.write(sym, data, recursive_normalizers=True)
-    assert "recursive" in str(e.value).lower()
-
-
-def test_nested_custom_types(basic_store):
-    data = AlmostAList([1, 2, 3, AlmostAList([5, np.arange(6)])])
-    fl = Flattener()
-    meta, to_write = fl.create_meta_structure(data, "sym")
-    equals(list(to_write.values())[0], np.arange(6))
-    basic_store.write("sym", data, recursive_normalizers=True)
-    got_back = basic_store.read("sym").data
-    assert isinstance(got_back, AlmostAList)
-    assert isinstance(got_back[3], AlmostAList)
-    assert got_back[0] == 1
 
 
 def test_batch_operations(object_version_store_prune_previous):
@@ -2115,12 +1876,6 @@ def test_columns_as_nparray(basic_store, sym):
     assert all(vit.data["col2"] == [3, 4])
 
 
-def test_simple_recursive_normalizer(object_version_store):
-    object_version_store.write(
-        "rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True
-    )
-
-
 def test_dynamic_schema_similar_index_column(basic_store_dynamic_schema):
     lib = basic_store_dynamic_schema
     dr = pd.date_range("2020-01-01", "2020-01-31", name="date")
@@ -2694,7 +2449,7 @@ def test_missing_first_version_key_batch(basic_store):
 
         write_times.append(pd.Timestamp(vit.timestamp))
         expected.append(df1)
-        time.sleep(1)
+
         df2 = pd.DataFrame(
             {"d": range(x + 1, l + x + 1), "e": range(x + 2, l + x + 2), "f": range(x + 3, l + x + 3)}, index=idx
         )
@@ -2705,6 +2460,7 @@ def test_missing_first_version_key_batch(basic_store):
     vits = lib.batch_read(symbols, as_ofs=write_times)
     for x in range(num_items):
         assert_equal(vits[symbols[x]].data, expected[x])
+
 
 @pytest.mark.parametrize("use_caching", [True, False])
 def test_version_chain_cache(basic_store, use_caching):
@@ -2727,13 +2483,17 @@ def test_version_chain_cache(basic_store, use_caching):
 
         # Timestamp
         timestamp_index = timestamp_and_version_index
+
         def find_expected_version(first_to_check):
             for num in range(first_to_check, -1, -1):
                 if num not in deleted_versions:
                     return num
             return None
 
-        for timestamp, is_before in [(timestamps[timestamp_index].before, True), (timestamps[timestamp_index].after, False)]:
+        for timestamp, is_before in [
+            (timestamps[timestamp_index].before, True),
+            (timestamps[timestamp_index].after, False),
+        ]:
             first_version_to_check = timestamp_index - 1 if is_before else timestamp_index
             expected_version_to_find = find_expected_version(first_version_to_check)
             if expected_version_to_find is None:

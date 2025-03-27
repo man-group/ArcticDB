@@ -433,6 +433,7 @@ class NativeVersionStore:
                     metadata=metadata,
                     data=None,
                     host=self.env,
+                    timestamp=vit_composite.timestamp
                 )
 
     def _write_options(self):
@@ -2153,7 +2154,6 @@ class NativeVersionStore:
         data = self._normalizer.denormalize(frame_data, read_result.norm)
         if read_result.norm.HasField("custom"):
             data = self._custom_normalizer.denormalize(data, read_result.norm.custom)
-
         return VersionedItem(
             symbol=read_result.version.symbol,
             library=self._library.library_path,

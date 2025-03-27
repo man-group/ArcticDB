@@ -939,6 +939,9 @@ if(${TEST})
             processing/test/test_filter_and_project_sparse.cpp
             processing/test/test_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
+            processing/test/test_output_schema_aggregator_types.cpp
+            processing/test/test_output_schema_ast_validity.cpp
+            processing/test/test_output_schema_basic.cpp
             processing/test/test_parallel_processing.cpp
             processing/test/test_resample.cpp
             processing/test/test_set_membership.cpp
@@ -969,6 +972,7 @@ if(${TEST})
             util/test/test_cursor.cpp
             util/test/test_decimal.cpp
             util/test/test_exponential_backoff.cpp
+            util/test/test_folly.cpp
             util/test/test_format_date.cpp
             util/test/test_hash.cpp
             util/test/test_id_transformation.cpp

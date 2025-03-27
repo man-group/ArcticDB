@@ -8,9 +8,11 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 import pandas as pd
 import pytest
-from arcticdb.exceptions import SortingException, NormalizationException
+from arcticdb.exceptions import SortingException
 from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb.util.test import assert_frame_equal
 from pandas import MultiIndex
+from arcticdb.util.test import assert_frame_equal
 
 
 def test_write_numpy_array(lmdb_version_store):
@@ -132,4 +134,27 @@ def test_write_non_timestamp_index(lmdb_version_store, index_type, sorted, valid
     info = lib.get_info(symbol)
     assert info["sorted"] == "UNKNOWN"
 
+class TestMissingStringPlaceholders:
+    @pytest.mark.parametrize("dtype", [None, object, np.float32, np.double])
+    def test_write_with_nan_none(self, lmdb_version_store, dtype):
+        lib = lmdb_version_store
+        sym = "nan"
+        lib.write(sym, pd.DataFrame({"a": [None, np.nan]}, dtype=dtype))
+        data = lib.read(sym).data
+        assert_frame_equal(data, pd.DataFrame({"a": [None, np.nan]}, dtype=dtype))
 
+    @pytest.mark.parametrize("dtype", [None, object])
+    def test_write_with_nan_none_and_a_string(self, lmdb_version_store, dtype):
+        lib = lmdb_version_store
+        sym = "nan"
+        lib.write(sym, pd.DataFrame({"a": [None, np.nan, "string"]}, dtype=dtype))
+        data = lib.read(sym).data
+        assert_frame_equal(data, pd.DataFrame({"a": [None, np.nan, "string"]}, dtype=dtype))
+
+    @pytest.mark.parametrize("dtype", [None, object, np.double, np.float32])
+    def test_write_only_nan_column(self, lmdb_version_store, dtype):
+        lib = lmdb_version_store
+        sym = "nan"
+        lib.write(sym, pd.DataFrame({"a": [np.nan]}, dtype=dtype))
+        data = lib.read(sym).data
+        assert_frame_equal(data, pd.DataFrame({"a": [np.nan]}, dtype=dtype))
