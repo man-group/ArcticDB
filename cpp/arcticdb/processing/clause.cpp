@@ -1400,13 +1400,14 @@ split_schemas(std::vector<OutputSchema>&& schemas) {
     return {std::move(index_descs), std::move(norm_metas), std::move(columns)};
 }
 
-IndexDescriptorImpl generate_index_descriptor(const std::vector<IndexDescriptorImpl>& index_descs) {
+IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& output_schemas) {
     // Ensure:
     //  - Type is the same
     //  - Field count is the same
     std::optional<IndexDescriptor::Type> index_type;
     std::optional<uint32_t> index_desc_field_count;
-    for (const auto& index_desc: index_descs) {
+    for (const auto& schema: output_schemas) {
+        const auto& index_desc = schema.stream_descriptor().index();
         if (!index_type.has_value()) {
             index_type = index_desc.type();
         } else {
@@ -1464,7 +1465,7 @@ NormalizationMetadata generate_norm_meta(const std::vector<NormalizationMetadata
                 is_int = index.is_int();
             } else {
                 if ((index.name() != *name) || (index.is_int() != *is_int)) {
-                    name = "index";
+                    name = "";
                     is_int = false;
                 }
             }
@@ -1490,7 +1491,7 @@ NormalizationMetadata generate_norm_meta(const std::vector<NormalizationMetadata
                 fake_name = index.fake_name();
             } else {
                 if ((index.name() != *name) || (index.is_int() != *is_int) || index.fake_name() || *fake_name) {
-                    name = "index";
+                    name = "";
                     is_int = false;
                     fake_name = true;
                 }
@@ -1630,23 +1631,79 @@ FieldCollection outer_join(const std::vector<Columns>& columns_to_join) {
     return res;
 }
 
+std::pair<StreamDescriptor, arcticdb::proto::descriptors::NormalizationMetadata> join_indexes(std::vector<OutputSchema>& output_schemas) {
+    ARCTICDB_UNUSED auto index_desc = generate_index_descriptor(output_schemas);
+    StreamDescriptor stream_desc{StreamId{}, index_desc};
+    // Returns a set of indices of index fields where not all the input schema field names matched, which is needed to generate the output norm metadata
+    auto non_matching_name_indices = add_index_fields(stream_desc, output_schemas);
+    return {};
+}
+
+std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schemas) {
+    std::unordered_set<size_t> non_matching_name_indices;
+    auto num_index_fields = stream_desc.index().field_count();
+    if (num_index_fields == 0) {
+        return non_matching_name_indices;
+    }
+    // FieldCollection does not support renaming fields, so use a vector of FieldRef and then turn this into a FieldCollection at the end
+    std::vector<FieldRef> index_fields;
+    bool first_schema{true};
+    for (auto& schema: output_schemas) {
+        const auto& fields = schema.stream_descriptor().fields();
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(fields.size() >= num_index_fields,
+                                                        "Expected at least {} fields for index, but received {}",
+                                                        num_index_fields, fields.size());
+        if (first_schema) {
+            for (size_t idx = 0; idx < num_index_fields; ++idx) {
+                const auto& field = fields.at(idx);
+                index_fields.emplace_back(field.type(), field.name());
+                schema.column_types().erase(std::string(field.name()));
+            }
+            first_schema = false;
+        } else {
+            for (size_t idx = 0; idx < num_index_fields; ++idx) {
+                const auto& field = fields.at(idx);
+                auto& current_type = index_fields.at(idx).type_;
+                auto opt_common_type = has_valid_common_type(current_type, field.type());
+                if (opt_common_type.has_value()) {
+                    current_type = *opt_common_type;
+                } else {
+                    schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>("No common type between {} and {} when joining schemas", current_type, field.type());
+                }
+                schema.column_types().erase(std::string(field.name()));
+                auto& current_name = index_fields.at(idx).name_;
+                if (current_name != field.name()) {
+                    current_name = "";
+                    non_matching_name_indices.emplace(idx);
+                }
+            }
+        }
+    }
+    for (const auto& field: index_fields) {
+        stream_desc.add_field(field);
+    }
+    return non_matching_name_indices;
+}
+
 OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& output_schemas) const {
     util::check(!output_schemas.empty(), "Cannot join empty list of schemas");
+    auto [stream_desc, norm_meta] = join_indexes(output_schemas);
+
     // Decompose output_schemas vector into vectors of IndexDescriptorImpl, NormalizationMetadata, and Columns
-    auto [index_descs, norm_metas, columns] = split_schemas(std::move(output_schemas));
-    auto index_desc = generate_index_descriptor(index_descs);
-    auto norm_meta = generate_norm_meta(norm_metas);
-    if (norm_meta.df().common().has_multi_index()) {
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                norm_meta.df().common().multi_index().field_count() == index_desc.field_count(),
-                "Mismatching index field counts in schema join");
-    } else {
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                index_desc.field_count() <= 1,
-                "Mismatching index field counts in schema join");
-    }
-    auto fields = join_type_ == JoinType::INNER ? inner_join(columns) : outer_join(columns);
-    StreamDescriptor stream_desc{StreamId{}, index_desc, std::make_shared<FieldCollection>(std::move(fields))};
+//    auto [index_descs, norm_metas, columns] = split_schemas(std::move(output_schemas));
+//    auto index_desc = generate_index_descriptor(index_descs);
+//    auto norm_meta = generate_norm_meta(norm_metas);
+//    if (norm_meta.df().common().has_multi_index()) {
+//        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+//                norm_meta.df().common().multi_index().field_count() == index_desc.field_count(),
+//                "Mismatching index field counts in schema join");
+//    } else {
+//        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+//                index_desc.field_count() <= 1,
+//                "Mismatching index field counts in schema join");
+//    }
+//    auto fields = join_type_ == JoinType::INNER ? inner_join(columns) : outer_join(columns);
+//    StreamDescriptor stream_desc{StreamId{}, index_desc, std::make_shared<FieldCollection>(std::move(fields))};
     return {std::move(stream_desc), std::move(norm_meta)};
 }
 

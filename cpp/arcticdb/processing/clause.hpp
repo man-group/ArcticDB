@@ -787,7 +787,10 @@ struct Columns {
     ankerl::unordered_dense::map<std::string, DataType> column_types;
 };
 
-IndexDescriptorImpl generate_index_descriptor(const std::vector<IndexDescriptorImpl>& index_descs);
+std::pair<StreamDescriptor, arcticdb::proto::descriptors::NormalizationMetadata> join_indexes(std::vector<OutputSchema>& output_schemas);
+std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schemas);
+
+IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& output_schemas);
 arcticdb::proto::descriptors::NormalizationMetadata generate_norm_meta(
         const std::vector<arcticdb::proto::descriptors::NormalizationMetadata>& norm_metas);
 FieldCollection inner_join(const std::vector<Columns>& columns_to_join);
