@@ -68,13 +68,13 @@ def test_symbol_concat_basic(lmdb_library_factory, dynamic_schema, rows_per_segm
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_different_column_sets(lmdb_library_factory, dynamic_schema, columns_per_segment, join):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, columns_per_segment=columns_per_segment))
-    # Use floats so that our backfilling and Pandas' match
+    # Use floats and strings so that our backfilling and Pandas' match
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(5, dtype=np.float64),
             "col2": np.arange(5, dtype=np.float64),
-            "col3": np.arange(5, dtype=np.float64),
-            "col4": np.arange(5, dtype=np.float64),
+            "col3": ["a", "b", "c", "d", "e"],
+            "col4": ["1", "2", "3", "4", "5"],
             "col5": np.arange(5, dtype=np.float64),
         }
     )
@@ -82,7 +82,7 @@ def test_symbol_concat_different_column_sets(lmdb_library_factory, dynamic_schem
         {
             "col7": np.arange(5, dtype=np.float64),
             "col5": np.arange(5, dtype=np.float64),
-            "col3": np.arange(5, dtype=np.float64),
+            "col3": ["f", "g", "h", "i", "j"],
             "col1": np.arange(5, dtype=np.float64),
             "col6": np.arange(5, dtype=np.float64),
         }
@@ -266,6 +266,26 @@ def test_symbol_concat_querybuilder_syntax(lmdb_library):
 
     received = received.reindex(columns=sorted(received.columns))
     expected = pd.concat([df_0, df_1[1:], df_2[:4]]).resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
+    assert_frame_equal(expected, received)
+
+# @pytest.mark.parametrize("index_name_0", [None, "ts1", "ts2"])
+# @pytest.mark.parametrize("index_name_1", [None, "ts1", "ts2"])
+# @pytest.mark.parametrize("join", ["inner", "outer"])
+@pytest.mark.parametrize("index_name_0", ["ts1"])
+@pytest.mark.parametrize("index_name_1", ["ts2"])
+@pytest.mark.parametrize("join", ["outer"])
+def test_symbol_concat_differently_named_timeseries(lmdb_library, index_name_0, index_name_1, join):
+    lib = lmdb_library
+    # Differently named timestamp indexes
+    df_0 = pd.DataFrame({"col": [0]}, index=[pd.Timestamp(0)])
+    df_1 = pd.DataFrame({"col": [1]}, index=[pd.Timestamp(1)])
+    df_0.index.name = index_name_0
+    df_1.index.name = index_name_1
+    lib.write("sym0", df_0)
+    lib.write("sym1", df_1)
+    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True)).collect().data
+    expected = pd.concat([df_0, df_1])
+    expected.index.name = index_name_0 if index_name_0 == index_name_1 else None
     assert_frame_equal(expected, received)
 
 

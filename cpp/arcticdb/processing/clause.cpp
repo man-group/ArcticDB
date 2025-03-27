@@ -1464,7 +1464,7 @@ NormalizationMetadata generate_norm_meta(const std::vector<NormalizationMetadata
                 is_int = index.is_int();
             } else {
                 if ((index.name() != *name) || (index.is_int() != *is_int)) {
-                    name = "";
+                    name = "index";
                     is_int = false;
                 }
             }
@@ -1490,7 +1490,7 @@ NormalizationMetadata generate_norm_meta(const std::vector<NormalizationMetadata
                 fake_name = index.fake_name();
             } else {
                 if ((index.name() != *name) || (index.is_int() != *is_int) || index.fake_name() || *fake_name) {
-                    name = "";
+                    name = "index";
                     is_int = false;
                     fake_name = true;
                 }
