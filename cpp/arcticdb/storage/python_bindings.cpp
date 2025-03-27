@@ -323,6 +323,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def(py::init<std::shared_ptr<storage::Library>>())
         .def("write_library_config", [](const LibraryManager& library_manager, py::object& lib_cfg,
                                         std::string_view library_path, const StorageOverride& storage_override, const bool validate) {
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "write_library_config")
             LibraryPath lib_path{library_path, '.'};
             return library_manager.write_library_config(lib_cfg, lib_path, storage_override, validate);
         },
@@ -333,6 +334,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def("modify_library_option", [](const LibraryManager& library_manager, std::string_view library_path,
                                          std::variant<ModifiableLibraryOption, ModifiableEnterpriseLibraryOption> option,
                                          std::variant<bool, int64_t> new_value) {
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "modify_library_option")
             LibraryPath lib_path{library_path, '.'};
             return library_manager.modify_library_option(lib_path, option, new_value);
         },
@@ -340,12 +342,15 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
              py::arg("option"),
              py::arg("new_value"))
         .def("get_library_config", [](const LibraryManager& library_manager, std::string_view library_path, const StorageOverride& storage_override){
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "get_library_config")
             return library_manager.get_library_config(LibraryPath{library_path, '.'}, storage_override);
         }, py::arg("library_path"), py::arg("override") = StorageOverride{})
         .def("is_library_config_ok", [](const LibraryManager& library_manager, std::string_view library_path, bool throw_on_failure) {
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "is_library_config_ok")
             return library_manager.is_library_config_ok(LibraryPath{library_path, '.'}, throw_on_failure);
         }, py::arg("library_path"), py::arg("throw_on_failure") = true)
         .def("remove_library_config", [](const LibraryManager& library_manager, std::string_view library_path){
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "remove_library_config")
             return library_manager.remove_library_config(LibraryPath{library_path, '.'});
         }, py::call_guard<SingleThreadMutexHolder>())
         .def("get_library", [](
@@ -353,6 +358,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
                 const StorageOverride& storage_override,
                 const bool ignore_cache,
                 const NativeVariantStorage& native_storage_config) {
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "get_library")
             return library_manager.get_library(LibraryPath{library_path, '.'}, storage_override, ignore_cache, native_storage_config);
         },
              py::arg("library_path"),
@@ -361,12 +367,15 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
              py::arg("native_storage_config") = std::nullopt
         )
         .def("cleanup_library_if_open", [](LibraryManager& library_manager, std::string_view library_path) {
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "cleanup_library_if_open")
             return library_manager.cleanup_library_if_open(LibraryPath{library_path, '.'});
         })
         .def("has_library", [](const LibraryManager& library_manager, std::string_view library_path){
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "has_library")
             return library_manager.has_library(LibraryPath{library_path, '.'});
         })
         .def("list_libraries", [](const LibraryManager& library_manager){
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "list_libraries")
             std::vector<std::string> res;
             for(auto & lp:library_manager.get_library_paths()){
                 res.emplace_back(lp.to_delim_path());
