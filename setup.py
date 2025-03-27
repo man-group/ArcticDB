@@ -20,6 +20,10 @@ ARCTICDB_USING_CONDA = os.environ.get("ARCTICDB_USING_CONDA", "0")
 ARCTICDB_USING_CONDA = ARCTICDB_USING_CONDA != "0"
 print(f"ARCTICDB_USING_CONDA={ARCTICDB_USING_CONDA}")
 
+ARCTICDB_USING_CLANG = os.environ.get("ARCTICDB_USING_CLANG", "0")
+ARCTICDB_USING_CLANG = ARCTICDB_USING_CLANG != "0"
+print(f"ARCTICDB_USING_CLANG={ARCTICDB_USING_CLANG}")
+
 # flag to indicate if we want to build the tests
 ARCTICDB_BUILD_CPP_TESTS = os.environ.get("ARCTICDB_BUILD_CPP_TESTS", "0")
 ARCTICDB_BUILD_CPP_TESTS = ARCTICDB_BUILD_CPP_TESTS != "0"
@@ -151,8 +155,9 @@ class CMakeBuild(build_ext):
             return
         if preset == "*":
             conda_suffix = "-conda" if ARCTICDB_USING_CONDA else ""
+            clang_suffix = "-clang" if ARCTICDB_USING_CLANG else ""
             suffix = "-debug" if self.debug else "-release"
-            suffix = conda_suffix + suffix
+            suffix = conda_suffix + clang_suffix + suffix
             preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
 
         cmd = [

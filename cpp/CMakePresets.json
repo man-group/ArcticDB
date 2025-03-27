@@ -136,11 +136,26 @@
       "inherits": ["common_conda", "darwin"]
     },
 
-
+    {
+      "name": "linux-clang",
+      "inherits": ["common_vcpkg", "linux"],
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "VCPKG_OVERLAY_TRIPLETS": "custom-triplets",
+        "VCPKG_TARGET_TRIPLET": "x64-linux-clang"
+      }
+    },
+    {
+      "name": "linux-clang-debug",
+      "inherits": ["linux-clang", "linux-debug"]
+    },
+    
     { "name": "windows-cl-release",       "inherits": "windows-cl-debug",       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }},
     { "name": "windows-cl-conda-release", "inherits": "windows-cl-conda-debug", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" } },
     { "name": "linux-release",            "inherits": "linux-debug",            "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } },
     { "name": "linux-conda-release",      "inherits": "linux-conda-debug",      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } },
+    { "name": "linux-clang-release",      "inherits": "linux-clang-debug",      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } },
     { "name": "darwin-conda-release",     "inherits": "darwin-conda-debug",     "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } }
   ],
   "buildPresets": [
@@ -153,6 +168,8 @@
     {"name": "linux-conda-debug",         "configurePreset": "linux-conda-debug",         "targets": "arcticdb_ext" },
     {"name": "linux-conda-release",       "configurePreset": "linux-conda-release",       "targets": "arcticdb_ext" },
     {"name": "darwin-conda-debug",        "configurePreset": "darwin-conda-debug",        "targets": "arcticdb_ext" },
-    {"name": "darwin-conda-release",      "configurePreset": "darwin-conda-release",      "targets": "arcticdb_ext" }
+    {"name": "darwin-conda-release",      "configurePreset": "darwin-conda-release",      "targets": "arcticdb_ext" },
+    {"name": "linux-clang-debug",         "configurePreset": "linux-clang-debug",         "targets": "arcticdb_ext" },
+    {"name": "linux-clang-release",       "configurePreset": "linux-clang-release",       "targets": "arcticdb_ext" }
   ]
 }
