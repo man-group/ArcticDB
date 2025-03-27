@@ -316,7 +316,7 @@ jobs:
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
           cd cpp
-          cmake -DTEST=off --preset windows-cl-conda-release
+          cmake -DTEST=ON --preset windows-cl-conda-release
           cmake --build --preset windows-cl-conda-release --parallel
         env:
           ARCTICDB_USING_CONDA: 1
