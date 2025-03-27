@@ -1885,7 +1885,7 @@ VersionedItem compact_incomplete_impl(
     });
 
     return util::variant_match(std::move(result),
-                        [&slices, &pipeline_context, &store, &user_meta](CompactionWrittenKeys& written_keys) -> VersionedItem {
+                        [&slices, &pipeline_context, &store, &user_meta](CompactionWrittenKeys&& written_keys) -> VersionedItem {
                             auto vit = collate_and_write(
                                 store,
                                 pipeline_context,
@@ -1895,7 +1895,7 @@ VersionedItem compact_incomplete_impl(
                                 user_meta);
                             return vit;
                         },
-                        [](Error& error) -> VersionedItem {
+                        [](Error&& error) -> VersionedItem {
                             error.throw_error();
                             return VersionedItem{}; // unreachable
                         }
@@ -1995,7 +1995,7 @@ VersionedItem defragment_symbol_data_impl(
     });
 
     return util::variant_match(std::move(result),
-                               [&slices, &pre_defragmentation_info, &store](CompactionWrittenKeys& written_keys) -> VersionedItem {
+                               [&slices, &pre_defragmentation_info, &store](CompactionWrittenKeys&& written_keys) -> VersionedItem {
                                 return collate_and_write(
                                         store,
                                         pre_defragmentation_info.pipeline_context,
@@ -2004,7 +2004,7 @@ VersionedItem defragment_symbol_data_impl(
                                         pre_defragmentation_info.append_after.value(),
                                         std::nullopt);
                                },
-                               [](Error& error) -> VersionedItem {
+                               [](Error&& error) -> VersionedItem {
                                    error.throw_error();
                                    return VersionedItem{}; // unreachable
                                }
