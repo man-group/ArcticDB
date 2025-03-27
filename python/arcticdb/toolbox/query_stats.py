@@ -54,15 +54,12 @@ def _process_level(level: Any, current_dict: Dict[str, Any]) -> None:
         stat_idx = int(stat_enum)
         if stats_array[stat_idx] > 0:
             stat_name = _get_enum_name(stat_enum)
-            # For size metrics, only collect them for later use but don't add to current_dict
-            if stat_name in ["encode_compressed_size_bytes", "encode_uncompressed_size_bytes"]:
-                encode_size_metrics[stat_name] = stats_array[stat_idx]
-                continue
-            elif stat_name in ["decode_compressed_size_bytes", "decode_uncompressed_size_bytes"]:
-                decode_size_metrics[stat_name] = stats_array[stat_idx]
-                continue
-                
-            if stat_name in current_dict:
+            # For size metrics, collect them for later use but don't add to current_dict
+            if stat_enum == qs.StatsName.encode_compressed_size_bytes or stat_enum == qs.StatsName.encode_uncompressed_size_bytes:
+                encode_size_metrics[stat_name.split("_", 1)[1]] = stats_array[stat_idx] # e.g. encode_compressed_size_bytes -> compressed_size_bytes
+            elif stat_enum == qs.StatsName.decode_compressed_size_bytes or stat_enum == qs.StatsName.decode_uncompressed_size_bytes:
+                decode_size_metrics[stat_name.split("_", 1)[1]] = stats_array[stat_idx] # e.g. decode_compressed_size_bytes -> compressed_size_bytes
+            elif stat_name in current_dict:
                 current_dict[stat_name] += stats_array[stat_idx]
             else:
                 current_dict[stat_name] = stats_array[stat_idx]
@@ -116,24 +113,72 @@ def _process_level(level: Any, current_dict: Dict[str, Any]) -> None:
                 
                 if level_type == "storage_ops":
                     op_map = current_dict[level_type][sub_name]
+                    key_type_src = None
+                    key_type_dest = _get_enum_name(qs.GroupName.key_type)
+                    """
+                    From
+                    "GetObject": {
+                        "result_count": 1,
+                        "total_time_ms": 14,
+                        "count": 1
+                    }
+                    to
+                    "GetObject": {
+                        "compressed_size_bytes": 630,
+                        "uncompressed_size_bytes": 150,
+                        "result_count": 1,
+                        "total_time_ms": 14,
+                        "count": 1
+                    }
+                    """
                     if sub_name == "PutObject":
                         for metric, value in encode_size_metrics.items():
                             op_map[metric] = op_map.get(metric, 0) + value
-                        if _get_enum_name(qs.GroupName.encode_key_type) in current_dict:
-                            if _get_enum_name(qs.GroupName.key_type) in op_map:
-                                op_map[_get_enum_name(qs.GroupName.key_type)].update(current_dict[_get_enum_name(qs.GroupName.encode_key_type)])
-                            else:
-                                op_map[_get_enum_name(qs.GroupName.key_type)] = current_dict[_get_enum_name(qs.GroupName.encode_key_type)]
-                            del current_dict[_get_enum_name(qs.GroupName.encode_key_type)]
-                    if sub_name == "GetObject":
+                        key_type_src = _get_enum_name(qs.GroupName.encode_key_type)
+                    elif sub_name == "GetObject":
                         for metric, value in decode_size_metrics.items():
                             op_map[metric] = op_map.get(metric, 0) + value
-                        if _get_enum_name(qs.GroupName.decode_key_type) in current_dict:
-                            if _get_enum_name(qs.GroupName.key_type) in op_map:
-                                op_map[_get_enum_name(qs.GroupName.key_type)].update(current_dict[_get_enum_name(qs.GroupName.decode_key_type)])
-                            else:
-                                op_map[_get_enum_name(qs.GroupName.key_type)] = current_dict[_get_enum_name(qs.GroupName.decode_key_type)]
-                            del current_dict[_get_enum_name(qs.GroupName.decode_key_type)]
+                        key_type_src = _get_enum_name(qs.GroupName.decode_key_type)
+                    """
+                    From
+                    "decode_key_type": {
+                        "TABLE_INDEX": {
+                            "count": 2
+                        },
+                        "VERSION": {
+                            "count": 1
+                        }
+                    },
+                    "GetObject": {
+                        "compressed_size_bytes": 630,
+                        "uncompressed_size_bytes": 150,
+                        "result_count": 1,
+                        "total_time_ms": 14,
+                        "count": 1
+                    }
+                    to 
+                    "GetObject": {
+                        "compressed_size_bytes": 630,
+                        "uncompressed_size_bytes": 150,
+                        "key_type": {
+                            "TABLE_INDEX": {
+                                "count": 2
+                            },
+                            "VERSION": {
+                                "count": 1
+                            }
+                        },
+                        "result_count": 1,
+                        "total_time_ms": 14,
+                        "count": 1
+                    }
+                    """
+                    if key_type_src and key_type_src in current_dict:
+                        if key_type_dest in op_map:
+                            op_map[key_type_dest].update(current_dict[key_type_src])
+                        else:
+                            op_map[key_type_dest] = current_dict[key_type_src]
+                        del current_dict[key_type_src]
 
                 _process_level(sub_layer, current_dict[level_type][sub_name])
 
