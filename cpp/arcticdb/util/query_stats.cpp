@@ -101,10 +101,6 @@ const std::vector<std::shared_ptr<GroupingLevel>>& QueryStats::root_levels(async
     return root_levels_;
 }
 
-bool QueryStats::is_root_level_set() const {
-    return thread_local_var_->root_level_.operator bool();
-}
-
 void QueryStats::create_child_level(std::shared_ptr<ThreadLocalQueryStatsVar>&& parent_thread_local_var) {
     auto child_level = std::make_shared<GroupingLevel>();
     // Since ExecutorWithStatsInstance::add will be called first, which will pass the root ThreadLocalQueryStatsVar to folly thread
@@ -187,7 +183,7 @@ StatsGroup::~StatsGroup() {
     }
 }
 
-void add_logical_keys(const entity::KeyType physical_key_type, const SegmentInMemory& segment){
+void add_logical_keys(GroupName group_name, const entity::KeyType physical_key_type, const SegmentInMemory& segment){
     if (physical_key_type == entity::KeyType::TABLE_INDEX ||
         physical_key_type == entity::KeyType::VERSION_REF ||
         physical_key_type == entity::KeyType::VERSION ||
@@ -197,9 +193,8 @@ void add_logical_keys(const entity::KeyType physical_key_type, const SegmentInMe
         physical_key_type == entity::KeyType::SNAPSHOT ||
         physical_key_type == entity::KeyType::SNAPSHOT_TOMBSTONE ||
         physical_key_type == entity::KeyType::BLOCK_VERSION_REF) {
-        StatsGroup physical_key_group(false, GroupName::key_type, format_group_value(GroupName::key_type, physical_key_type));
         for (size_t i = 0; i < segment.row_count(); ++i) {
-            StatsGroup logical_key_group(false, GroupName::key_type, format_group_value(GroupName::key_type, stream::read_key_row(segment, i)));
+            StatsGroup logical_key_group(false, group_name, format_group_value(GroupName::key_type, stream::read_key_row(segment, i)));
             QueryStats::instance().current_level()->stats_[static_cast<size_t>(StatsName::count)] += 1;
         }
     }

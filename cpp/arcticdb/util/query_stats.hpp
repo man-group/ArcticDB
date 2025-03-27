@@ -86,18 +86,24 @@ namespace util::query_stats {
 enum class GroupName : size_t {
     arcticdb_call = 0,
     key_type = 1,
-    storage_ops = 2
+    encode_key_type = 2,
+    decode_key_type = 3,
+    storage_ops = 4
 };
 
 enum class StatsName : size_t {
     result_count = 0,
     total_time_ms = 1,
-    count = 2
+    count = 2,
+    encode_compressed_size_bytes = 3,
+    encode_uncompressed_size_bytes = 4,
+    decode_compressed_size_bytes = 5,
+    decode_uncompressed_size_bytes = 6,
 };
 
 struct GroupingLevel {
-    std::array<int64_t, 3> stats_ = {0}; // sizeof(StatsName)
-    std::array<std::map<std::string, std::shared_ptr<GroupingLevel>>, 3> next_level_maps_; // sizeof(GroupName)
+    std::array<int64_t, 7> stats_ = {0}; // sizeof(StatsName)
+    std::array<std::map<std::string, std::shared_ptr<GroupingLevel>>, 5> next_level_maps_; // sizeof(GroupName)
     void reset_stats();
     void merge_from(const GroupingLevel& other);
 };
@@ -122,7 +128,6 @@ public:
     std::shared_ptr<GroupingLevel> current_level();
     std::shared_ptr<GroupingLevel> root_level();
     const std::vector<std::shared_ptr<GroupingLevel>>& root_levels(async::TaskScheduler* const instance) const;
-    bool is_root_level_set() const;
     void create_child_level(std::shared_ptr<ThreadLocalQueryStatsVar>&& parent_thread_local_var);
     void set_level(std::shared_ptr<GroupingLevel> &level);
     void reset_stats();
@@ -163,7 +168,7 @@ std::string format_group_value(GroupName col_value, auto&& value) {
     constexpr bool is_value_key_type = std::is_same_v<std::remove_cv_t<std::remove_reference_t<decltype(value)>>, entity::KeyType>;
     constexpr bool is_value_key = std::convertible_to<decltype(value), entity::VariantKey>;
     check(
-        col_value != util::query_stats::GroupName::key_type || is_value_key_type || is_value_key, 
+        col_value != GroupName::encode_key_type || col_value != GroupName::decode_key_type || col_value != GroupName::key_type || is_value_key_type || is_value_key, 
         "key type query stats needs to have key_type value"
     );
     if constexpr (is_value_key_type) {
@@ -177,7 +182,7 @@ std::string format_group_value(GroupName col_value, auto&& value) {
     }
 }
 
-void add_logical_keys(const entity::KeyType physical_key_type, const SegmentInMemory& segment);
+void add_logical_keys(GroupName group_name, const entity::KeyType physical_key_type, const SegmentInMemory& segment);
 
 std::shared_ptr<ThreadLocalQueryStatsVar> get_root_thread_local_var();
 }
@@ -207,7 +212,7 @@ std::shared_ptr<ThreadLocalQueryStatsVar> get_root_thread_local_var();
     }
 
 
-#define QUERY_STATS_ADD_LOGICAL_KEYS(physical_key, segment) \
+#define QUERY_STATS_ADD_LOGICAL_KEYS(col_name, physical_key, segment) \
     if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
-        arcticdb::util::query_stats::add_logical_keys(physical_key, segment); \
+        arcticdb::util::query_stats::add_logical_keys(arcticdb::util::query_stats::GroupName::col_name, physical_key, segment); \
     }

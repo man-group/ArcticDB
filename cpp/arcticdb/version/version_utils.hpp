@@ -142,7 +142,6 @@ std::shared_ptr<VersionMapEntry> build_version_map_entry_with_predicate_iteratio
                 if (perform_read_segment_with_keys) {
                     auto [kv, seg] = store->read_sync(to_atom(key));
                     LoadProgress load_progress;
-                    QUERY_STATS_ADD_GROUP(key_type, key)
                     (void)read_segment_with_keys(seg, output, load_progress);
                 }
             },
@@ -190,7 +189,6 @@ inline void read_symbol_ref(const std::shared_ptr<StreamSource>& store, const St
             return;
         }
     }
-    QUERY_STATS_ADD_GROUP(key_type, KeyType::VERSION_REF)
     LoadProgress load_progress;
     entry.head_ = read_segment_with_keys(key_seg_pair.second, entry, load_progress);
     entry.load_progress_ = load_progress;

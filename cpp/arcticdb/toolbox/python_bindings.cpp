@@ -155,6 +155,8 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
     py::enum_<GroupName>(query_stats_module, "GroupName")
         .value("arcticdb_call", GroupName::arcticdb_call)
         .value("key_type", GroupName::key_type)
+        .value("encode_key_type", GroupName::encode_key_type)
+        .value("decode_key_type", GroupName::decode_key_type)
         .value("storage_ops", GroupName::storage_ops)
         .export_values();
     
@@ -162,6 +164,10 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
         .value("result_count", StatsName::result_count)
         .value("total_time_ms", StatsName::total_time_ms)
         .value("count", StatsName::count)
+        .value("encode_compressed_size_bytes", StatsName::encode_compressed_size_bytes)
+        .value("encode_uncompressed_size_bytes", StatsName::encode_uncompressed_size_bytes)
+        .value("decode_compressed_size_bytes", StatsName::decode_compressed_size_bytes)
+        .value("decode_uncompressed_size_bytes", StatsName::decode_uncompressed_size_bytes)
         .export_values();
     
     py::class_<GroupingLevel, std::shared_ptr<GroupingLevel>>(query_stats_module, "GroupingLevel")
@@ -169,21 +175,12 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
         .def_readonly("stats", &GroupingLevel::stats_)
         .def_readonly("next_level_maps", &GroupingLevel::next_level_maps_);
         
-    query_stats_module.def("current_level", []() { 
-        return QueryStats::instance().current_level(); 
-    });
     query_stats_module.def("root_levels", []() { 
         return QueryStats::instance().root_levels(async::TaskScheduler::instance()); 
     });
-    query_stats_module.def("is_root_level_set", []() { 
-        return QueryStats::instance().is_root_level_set(); 
-    });
     query_stats_module.def("reset_stats", []() { 
         QueryStats::instance().reset_stats(); 
-    });
-    query_stats_module.def("merge_levels", []() { 
-        QueryStats::instance().merge_levels(); 
-    });    
+    }); 
     query_stats_module.def("enable", []() { 
         QueryStats::instance().enable(); 
     });

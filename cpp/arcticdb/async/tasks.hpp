@@ -93,8 +93,11 @@ struct EncodeAtomTask : BaseTask {
     storage::KeySegmentPair encode() {
         ARCTICDB_DEBUG(log::codec(), "Encoding object with partial key {}", partial_key_);
         ARCTICDB_DEBUG_THROW(5)
-        QUERY_STATS_ADD_LOGICAL_KEYS(partial_key_.key_type, segment_);
+        QUERY_STATS_ADD_GROUP(key_type, partial_key_.key_type)
+        QUERY_STATS_ADD_LOGICAL_KEYS(encode_key_type, partial_key_.key_type, segment_);
+        QUERY_STATS_ADD(encode_uncompressed_size_bytes, segment_.num_bytes());
         auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
+        QUERY_STATS_ADD(encode_compressed_size_bytes, enc_seg.calculate_size());
         auto content_hash = get_segment_hash(enc_seg);
 
         AtomKey k = partial_key_.build_key(creation_ts_, content_hash);
@@ -126,8 +129,11 @@ struct EncodeSegmentTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeSegmentTask)
 
     storage::KeySegmentPair encode() {
-        QUERY_STATS_ADD_LOGICAL_KEYS(variant_key_type(key_), segment_);
+        QUERY_STATS_ADD_GROUP(key_type, key_)
+        QUERY_STATS_ADD_LOGICAL_KEYS(encode_key_type, variant_key_type(key_), segment_);
+        QUERY_STATS_ADD(encode_uncompressed_size_bytes, segment_.num_bytes());
         auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
+        QUERY_STATS_ADD(encode_compressed_size_bytes, enc_seg.calculate_size());
         return {std::move(key_), std::move(enc_seg)};
     }
 
@@ -162,8 +168,11 @@ struct EncodeRefTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeRefTask)
 
     [[nodiscard]] storage::KeySegmentPair encode() {
-        QUERY_STATS_ADD_LOGICAL_KEYS(key_type_, segment_);
+        QUERY_STATS_ADD_GROUP(key_type, key_type_)
+        QUERY_STATS_ADD_LOGICAL_KEYS(encode_key_type, key_type_, segment_);
+        QUERY_STATS_ADD(encode_uncompressed_size_bytes, segment_.num_bytes());
         auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
+        QUERY_STATS_ADD(encode_compressed_size_bytes, enc_seg.calculate_size());
         auto k = RefKey{id_, key_type_};
         return {std::move(k), std::move(enc_seg)};
     }
@@ -425,10 +434,13 @@ struct DecodeSegmentTask : BaseTask {
         auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment with key {}",
                              variant_key_view(key_seg.variant_key()));
-
-        auto segment = decode_segment(*key_seg.segment_ptr());
         
-        QUERY_STATS_ADD_LOGICAL_KEYS(variant_key_type(key_seg.variant_key()), segment);
+        QUERY_STATS_ADD_GROUP(key_type, key_seg.variant_key())
+        QUERY_STATS_ADD(decode_compressed_size_bytes, key_seg.segment_ptr()->size());
+        auto segment = decode_segment(*key_seg.segment_ptr());
+        QUERY_STATS_ADD(decode_uncompressed_size_bytes, segment.num_bytes());
+        
+        QUERY_STATS_ADD_LOGICAL_KEYS(decode_key_type, variant_key_type(key_seg.variant_key()), segment);
 
         return {key_seg.variant_key(), std::move(segment)};
     }
