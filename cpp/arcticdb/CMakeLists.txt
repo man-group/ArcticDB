@@ -1099,7 +1099,8 @@ if(${TEST})
     endif()
 
     gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
-
+    get_target_property(TEST_COMPILE_FLAGS test_unit_arcticdb COMPILE_OPTIONS)
+    message(STATUS "Test compile flags: ${TEST_COMPILE_FLAGS}")
     set(benchmark_srcs
             stream/test/stream_test_common.cpp
             column_store/test/benchmark_memory_segment.cpp

@@ -8,7 +8,6 @@
 #include "falp.hpp"
 #include "rd.hpp"
 #include "sampler.hpp"
-#include "storer.hpp"
 #include "ffor.hpp"
 #include "unffor.hpp"
 
