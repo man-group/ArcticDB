@@ -63,8 +63,8 @@
       "generator": "Ninja",
       "environment": { "cmakepreset_expected_host_system": "Windows" },
       "cacheVariables": {
-        "VCPKG_OVERLAY_TRIPLETS": "custom-triplets",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static-msvc"
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl"
       }
     },
     {
@@ -81,14 +81,16 @@
       },
       "cacheVariables": {
         "CMAKE_C_COMPILER": "cl",
-        "CMAKE_CXX_COMPILER": "cl"
+        "CMAKE_CXX_COMPILER": "cl",
+        "VCPKG_OVERLAY_TRIPLETS": "custom-triplets",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-msvc"
       }
     },
     {
       "name": "windows-cl-conda-debug",
-      "inherits": ["common_conda", "windows"]
+      "inherits": ["common_conda", "windows"],
+      "generator": "Ninja"
     },
-
     {
       "name": "windows-vs-2022",
       "generator": "Visual Studio 17 2022",
