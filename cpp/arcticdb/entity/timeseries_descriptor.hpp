@@ -96,6 +96,14 @@ struct TimeseriesDescriptor {
         *proto_->mutable_multi_key_meta() = std::move(multi_key_meta);
     }
 
+    void set_output_schema(OutputSchema&& output_schema) {
+        this->set_normalization_metadata(std::move(output_schema.norm_metadata_));
+        const auto& stream_descriptor = output_schema.stream_descriptor();
+        segment_desc_ = stream_descriptor.segment_desc_;
+        fields_ = stream_descriptor.fields_;
+        stream_id_ = stream_descriptor.stream_id_;
+    }
+
     [[nodiscard]] std::shared_ptr<FieldCollection> fields_ptr() const {
         return fields_;
     }

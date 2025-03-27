@@ -516,7 +516,7 @@ folly::Future<ReadVersionOutput> read_multi_key(
     VersionedItem versioned_item{std::move(dup)};
     TimeseriesDescriptor multi_key_desc{index_key_seg.index_descriptor()};
 
-    return read_frame_for_version(store, versioned_item, std::make_shared<ReadQuery>(), ReadOptions{}, handler_data)
+    return read_frame_for_version(store, StoredIndexKey{versioned_item}, std::make_shared<ReadQuery>(), ReadOptions{}, handler_data)
     .thenValue([multi_key_desc=std::move(multi_key_desc), keys=std::move(keys), key=std::move(key)](ReadVersionOutput&& read_version_output) mutable {
         multi_key_desc.mutable_proto().mutable_normalization()->CopyFrom(read_version_output.frame_and_descriptor_.desc_.proto().normalization());
         read_version_output.frame_and_descriptor_.desc_ = std::move(multi_key_desc);
@@ -524,6 +524,34 @@ folly::Future<ReadVersionOutput> read_multi_key(
         read_version_output.versioned_item_ = VersionedItem(std::move(key));
         return std::move(read_version_output);
     });
+}
+
+OutputSchema columns_filter_output_schema(OutputSchema&& output_schema, const std::vector<std::string>& columns_filter) {
+    auto columns_set = std::unordered_set<std::string>(columns_filter.begin(), columns_filter.end());
+    // TODO: Inefficient, copies instead of move
+    const auto& input_stream_desc = output_schema.stream_descriptor();
+    StreamDescriptor stream_desc(input_stream_desc.id());
+    stream_desc.set_index(input_stream_desc.index());
+
+    for (auto idx=0u; idx < input_stream_desc.fields().size(); ++idx) {
+        const auto& field = input_stream_desc.fields()[idx];
+        if (idx < stream_desc.index().field_count() || columns_set.contains(std::string(field.name()))) {
+            stream_desc.add_field(field);
+        }
+    }
+    output_schema.set_stream_descriptor(std::move(stream_desc));
+    return output_schema;
+}
+
+OutputSchema compute_output_schema(OutputSchema&& input_schema, const ReadQuery& read_query) {
+    OutputSchema output_schema = std::move(input_schema);
+    for (auto clause : read_query.clauses_) {
+        output_schema = clause->modify_schema(std::move(output_schema));
+    }
+    if (read_query.columns.has_value()) {
+        output_schema = columns_filter_output_schema(std::move(output_schema), read_query.columns.value());
+    }
+    return output_schema;
 }
 
 void add_slice_to_component_manager(
@@ -1016,16 +1044,11 @@ void check_multi_key_is_not_index_only(
 }
 
 void read_indexed_keys_to_pipeline(
-        const std::shared_ptr<Store>& store,
+        const index::IndexSegmentReader& index_segment_reader,
         const std::shared_ptr<PipelineContext>& pipeline_context,
         const VersionedItem& version_info,
         ReadQuery& read_query,
         const ReadOptions& read_options) {
-    auto maybe_reader = get_index_segment_reader(store, pipeline_context, version_info);
-    if(!maybe_reader)
-        return;
-
-    auto index_segment_reader = std::move(*maybe_reader);
     ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", index_segment_reader.size());
     check_can_read_index_only_if_required(index_segment_reader, read_query);
     check_column_and_date_range_filterable(index_segment_reader, read_query);
@@ -1046,10 +1069,24 @@ void read_indexed_keys_to_pipeline(
     pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
     pipeline_context->rows_ = index_segment_reader.tsd().total_rows();
-    pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization()));
-    pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta()));
+    // TODO: Think about not moving metadata out of index segment reader. Previously we used to move which can prove expensive if metadata is very large
+    pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(index_segment_reader.tsd().proto().normalization());
+    pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(index_segment_reader.tsd().proto().user_meta());
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
     ARCTICDB_DEBUG(log::version(), "read_indexed_keys_to_pipeline: Symbol {} Found {} keys with {} total rows", pipeline_context->slice_and_keys_.size(), pipeline_context->total_rows_, version_info.symbol());
+}
+
+void read_indexed_keys_to_pipeline(
+        const std::shared_ptr<Store>& store,
+        const std::shared_ptr<PipelineContext>& pipeline_context,
+        const VersionedItem& version_info,
+        ReadQuery& read_query,
+        const ReadOptions& read_options) {
+    auto maybe_reader = get_index_segment_reader(store, pipeline_context, version_info);
+    if(!maybe_reader)
+        return;
+
+    read_indexed_keys_to_pipeline(maybe_reader.value(), pipeline_context, version_info, read_query, read_options);
 }
 
 // Returns true if there are staged segments
@@ -2026,34 +2063,43 @@ void set_row_id_if_index_only(
 // part of a dataframe as-is, or transforms it via a processing pipeline
 folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store,
-        const std::variant<VersionedItem, StreamId>& version_info,
+        IndexSource&& index_source,
         const std::shared_ptr<ReadQuery>& read_query ,
         const ReadOptions& read_options,
         std::any& handler_data) {
     using namespace arcticdb::pipelines;
     auto pipeline_context = std::make_shared<PipelineContext>();
-    VersionedItem res_versioned_item;
-
-    if(std::holds_alternative<StreamId>(version_info)) {
-        pipeline_context->stream_id_ = std::get<StreamId>(version_info);
-        // This isn't ideal. It would be better if the version() and timestamp() methods on the C++ VersionedItem class
-        // returned optionals, but this change would bubble up to the Python VersionedItem class defined in _store.py.
-        // This class is very hard to change at this point, as users do things like pickling them to pass them around.
-        // This at least gets the symbol attribute of VersionedItem correct. The creation timestamp will be zero, which
-        // corresponds to 1970, and so with this obviously ridiculous version ID, it should be clear to users that these
-        // values are meaningless before an indexed version exists.
-        res_versioned_item = VersionedItem(AtomKeyBuilder()
-                                           .version_id(std::numeric_limits<VersionId>::max())
-                                           .build<KeyType::TABLE_INDEX>(std::get<StreamId>(version_info)));
-    } else {
-        pipeline_context->stream_id_ = std::get<VersionedItem>(version_info).key_.id();
-        read_indexed_keys_to_pipeline(store, pipeline_context, std::get<VersionedItem>(version_info), *read_query, read_options);
-        res_versioned_item = std::get<VersionedItem>(version_info);
-    }
+    auto read_index_from_incompletes = false;
+    auto versioned_item = util::variant_match(
+        index_source,
+        [&](Incompletes& source) {
+            util::check(read_options.incompletes() == std::make_optional(true), "Expected TODO");
+            read_index_from_incompletes = true;
+            // This isn't ideal. It would be better if the version() and timestamp() methods on the C++ VersionedItem class
+            // returned optionals, but this change would bubble up to the Python VersionedItem class defined in _store.py.
+            // This class is very hard to change at this point, as users do things like pickling them to pass them around.
+            // This at least gets the symbol attribute of VersionedItem correct. The creation timestamp will be zero, which
+            // corresponds to 1970, and so with this obviously ridiculous version ID, it should be clear to users that these
+            // values are meaningless before an indexed version exists.
+            return VersionedItem(AtomKeyBuilder()
+                                   .version_id(std::numeric_limits<VersionId>::max())
+                                   .build<KeyType::TABLE_INDEX>(source.stream_id));
+        },
+        [&](StoredIndexKey& source){
+            read_indexed_keys_to_pipeline(store, pipeline_context, source.versioned_item, *read_query, read_options);
+            return std::move(source.versioned_item);
+        },
+        [&](CachedIndexKey& source){
+            read_indexed_keys_to_pipeline(source.cached_index->isr, pipeline_context, source.versioned_item, *read_query, read_options);
+            return std::move(source.versioned_item);
+        }
+        // TODO: Add a variant for multi-key
+    );
+    pipeline_context->stream_id_ = versioned_item.symbol();
 
     if(pipeline_context->multi_key_) {
         check_multi_key_is_not_index_only(*pipeline_context, *read_query);
-        return read_multi_key(store, *pipeline_context->multi_key_, handler_data, std::move(res_versioned_item.key_));
+        return read_multi_key(store, *pipeline_context->multi_key_, handler_data, std::move(versioned_item.key_));
     }
 
     if(opt_false(read_options.incompletes())) {
@@ -2064,7 +2110,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
             read_incompletes_to_pipeline(store, pipeline_context, *read_query, read_options, false, false, false,  opt_false(read_options.dynamic_schema()));
     }
 
-    if(std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {
+    if(read_index_from_incompletes && !pipeline_context->incompletes_after_) {
         missing_data::raise<ErrorCode::E_NO_SYMBOL_DATA>(
             "read_dataframe_impl: read returned no data for symbol {} (found no versions or append data)", pipeline_context->stream_id_);
     }
@@ -2075,13 +2121,13 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 
     DecodePathData shared_data;
     return do_direct_read_or_process(store, read_query, read_options, pipeline_context, shared_data, handler_data)
-    .thenValue([res_versioned_item, pipeline_context, read_options, &handler_data, read_query, shared_data](auto&& frame) mutable {
+    .thenValue([versioned_item, pipeline_context, read_options, &handler_data, read_query, shared_data](auto&& frame) mutable {
         ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
         return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
         .via(&async::cpu_executor())
-        .thenValue([res_versioned_item, pipeline_context, frame, read_query, shared_data](auto&&) mutable {
+        .thenValue([versioned_item, pipeline_context, frame, read_query, shared_data](auto&&) mutable {
             set_row_id_if_index_only(*pipeline_context, frame, *read_query);
-            return ReadVersionOutput{std::move(res_versioned_item),
+            return ReadVersionOutput{std::move(versioned_item),
                                      {frame,
                                       timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_),
                                       {}}};

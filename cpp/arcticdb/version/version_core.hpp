@@ -140,6 +140,8 @@ folly::Future<ReadVersionOutput> read_multi_key(
     const SegmentInMemory& index_key_seg,
     std::any& handler_data);
 
+OutputSchema compute_output_schema(OutputSchema&& input_schema, const ReadQuery& read_query);
+
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
     std::shared_ptr<ComponentManager> component_manager,
     std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
@@ -201,6 +203,13 @@ void modify_descriptor(
     const ReadOptions& read_options);
 
 void read_indexed_keys_to_pipeline(
+    const index::IndexSegmentReader& index_segment_reader,
+    const std::shared_ptr<PipelineContext>& pipeline_context,
+    const VersionedItem& version_info,
+    ReadQuery& read_query,
+    const ReadOptions& read_options);
+
+void read_indexed_keys_to_pipeline(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<PipelineContext>& pipeline_context,
     const VersionedItem& version_info,
@@ -211,9 +220,20 @@ void add_index_columns_to_query(
     const ReadQuery& read_query, 
     const TimeseriesDescriptor& desc);
 
+// TODO: It would make more sense to use `AtomKey` instead of a `VersionedItem` but that would require a slightly bigger
+// refactor of `get_version_to_read`
+struct StoredIndexKey {VersionedItem versioned_item;};
+struct CachedIndexKey {
+    VersionedItem versioned_item;
+    // TODO: Maybe const?
+    std::shared_ptr<index::CachedIndex> cached_index;
+};
+struct Incompletes {StreamId stream_id;};
+using IndexSource = std::variant<StoredIndexKey, CachedIndexKey, Incompletes>;
+
 folly::Future<ReadVersionOutput> read_frame_for_version(
     const std::shared_ptr<Store>& store,
-    const std::variant<VersionedItem, StreamId>& version_info,
+    IndexSource&& index_source,
     const std::shared_ptr<ReadQuery>& read_query,
     const ReadOptions& read_options,
     std::any& handler_data

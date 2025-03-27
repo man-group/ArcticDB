@@ -1099,6 +1099,15 @@ std::vector<std::variant<DescriptorItem, DataError>> PythonVersionStore::batch_r
     return batch_read_descriptor_internal(stream_ids, version_queries, read_options);
 }
 
+DescriptorItem PythonVersionStore::read_output_schema(
+    const StreamId& stream_id,
+    const VersionQuery& version_query,
+    const ReadQuery& read_query,
+    const ReadOptions& read_options
+    ) {
+    return read_output_schema_internal(stream_id, version_query, read_query, read_options);
+}
+
 ReadResult PythonVersionStore::read_index(
     const StreamId& stream_id,
     const VersionQuery& version_query

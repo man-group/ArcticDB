@@ -12,7 +12,7 @@ import pytest
 
 from arcticdb import col, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest
 from arcticdb.util.test import assert_frame_equal
-
+from arcticdb_ext.types import FieldDescriptor, TypeDescriptor, DataType, Dimension
 
 pytestmark = pytest.mark.pipeline
 
@@ -455,3 +455,155 @@ def test_lazy_batch_pickling(lmdb_library):
     received_roundtripped = roundtripped.collect()
     for vit in received_roundtripped:
         assert_frame_equal(expected, vit.data)
+
+
+def to_pd_dtype(type_descriptor):
+    # TODO: Extend with more types
+    typ = type_descriptor.data_type()
+    if typ == DataType.INT64:
+        return np.int64
+    if typ == DataType.FLOAT64:
+        return np.float64
+    if typ == DataType.FLOAT32:
+        return np.float32
+    if typ == DataType.NANOSECONDS_UTC64:
+        return np.dtype("datetime64[ns]")
+    if typ == DataType.UTF_DYNAMIC64:
+        return np.dtype("object")
+    raise ValueError("Unexpected data type")
+
+
+def assert_lazy_frame_schema_equal(lazy_df, expected_types_and_names, expect_equal_column_order=True, check_against_collected=True):
+    tsd = lazy_df.collect_schema().timeseries_descriptor
+    lazy_fields = tsd.fields
+
+    if not expect_equal_column_order:
+        lazy_fields[1:] = sorted(lazy_fields[1:], key=lambda x: x.name)
+        expected_types_and_names[1:] = sorted(expected_types_and_names[1:], key=lambda x: x[1])
+
+    # Assert lazy_fields are same as expected
+    assert len(lazy_fields) == len(expected_types_and_names)
+    for lazy_field, (expected_type, expected_name) in zip(lazy_fields, expected_types_and_names):
+        assert lazy_field.type == TypeDescriptor(expected_type, Dimension.Dim0)
+        assert lazy_field.name == expected_name
+
+    # Assert lazy_fields are same as collected
+    if check_against_collected:
+        collected_df = lazy_df.collect().data
+        if not expect_equal_column_order:
+            collected_df = collected_df.reindex(sorted(collected_df.columns), axis=1)
+
+        field_names = [field.name for field in lazy_fields]
+        field_dtypes = [to_pd_dtype(field.type) for field in lazy_fields]
+        # TODO: The index name assertion should probably be better. Also add tests for dataframes with index name and other index types
+        assert field_names[0] == collected_df.index.name or (field_names[0] == "index" and collected_df.index.name is None)
+        assert field_names[1:] == list(collected_df.columns)
+        assert field_dtypes[0] == collected_df.index.dtype
+        print(type(collected_df.dtypes[0]), type(collected_df.index.dtype))
+        assert field_dtypes[1:] == list(collected_df.dtypes)
+
+
+def test_lazy_collect_schema_basic(lmdb_library):
+    lib = lmdb_library
+    sym = "sym"
+    num_rows = 10
+    df = pd.DataFrame({
+        "col_int": np.arange(num_rows, dtype=np.int64),
+        "col_float": np.arange(num_rows, dtype=np.float64),
+        "col_float_2": np.arange(num_rows, dtype=np.float32),
+        "col_str": [f"str_{i//5}" for i in range(num_rows)],
+        # TODO: Add more types
+    }, index=pd.date_range(pd.Timestamp(2025, 1, 1), periods=num_rows, freq="s"))
+    lib.write(sym, df)
+
+    # No query_builder
+    lazy_df = lib.read(sym, lazy=True)
+    expected_fields = [
+        (DataType.NANOSECONDS_UTC64, "index"),
+        (DataType.INT64, "col_int"),
+        (DataType.FLOAT64, "col_float"),
+        (DataType.FLOAT32, "col_float_2"),
+        (DataType.UTF_DYNAMIC64, "col_str"),
+    ]
+    assert_lazy_frame_schema_equal(lazy_df, expected_fields)
+
+    # With a filter we don't change the expected schema
+    lazy_df = lazy_df[(lazy_df["col_int"] < 20) & (lazy_df["col_float"] >= 0.4) & (lazy_df["col_str"].isin(["str_0", "str_1"]))]
+    assert_lazy_frame_schema_equal(lazy_df, expected_fields)
+
+    # With a projection
+    lazy_df.apply("col_sum", lazy_df["col_int"] + lazy_df["col_float"] / lazy_df["col_float_2"])
+    expected_fields = [
+        (DataType.NANOSECONDS_UTC64, "index"),
+        (DataType.INT64, "col_int"),
+        (DataType.FLOAT64, "col_float"),
+        (DataType.FLOAT32, "col_float_2"),
+        (DataType.UTF_DYNAMIC64, "col_str"),
+        (DataType.FLOAT64, "col_sum"),
+    ]
+    assert_lazy_frame_schema_equal(lazy_df, expected_fields)
+
+    # With a columns filter
+    lazy_df.select_columns(["col_int", "col_float", "col_sum"])
+    expected_fields = [
+        (DataType.NANOSECONDS_UTC64, "index"),
+        (DataType.INT64, "col_int"),
+        (DataType.FLOAT64, "col_float"),
+        (DataType.FLOAT64, "col_sum"),
+    ]
+    # TODO: We should check against collected. Problem will be fixed by 8774208809
+    assert_lazy_frame_schema_equal(lazy_df, expected_fields, check_against_collected=False)
+
+    # With resampling
+    lazy_df.resample("3s").agg({"col_int": "max", "col_float_2": "sum", "col_sum": "mean"})
+    lazy_df.select_columns(None) # Remove column filter
+    expected_fields = [
+        (DataType.NANOSECONDS_UTC64, "index"),
+        (DataType.INT64, "col_int"),
+        (DataType.FLOAT64, "col_float_2"),
+        (DataType.FLOAT64, "col_sum"),
+    ]
+    assert_lazy_frame_schema_equal(lazy_df, expected_fields, expect_equal_column_order=False)
+
+    # With group by
+    lazy_df = lib.read(sym, lazy=True)
+    lazy_df.groupby("col_str").agg({"col_int": "sum", "col_float": "mean", "col_float_2": "mean"})
+    expected_fields = [
+        (DataType.UTF_DYNAMIC64, "col_str"),
+        (DataType.INT64, "col_int"),
+        (DataType.FLOAT64, "col_float"),
+        (DataType.FLOAT64, "col_float_2"),
+    ]
+    assert_lazy_frame_schema_equal(lazy_df, expected_fields, expect_equal_column_order=False)
+
+
+def test_lazy_index_caching(lmdb_library_dynamic_schema):
+    lib = lmdb_library_dynamic_schema
+    sym = "sym"
+    dfs = [
+        pd.DataFrame({"col_1": np.arange(3, dtype=np.int32)}, index=pd.date_range(pd.Timestamp(2025, 1, 1), periods=3)),
+        pd.DataFrame({"col_1": np.arange(3, dtype=np.int64), "col_2": np.arange(3, dtype=np.int64)}, index=pd.date_range(pd.Timestamp(2025, 1, 4), periods=3)),
+        pd.DataFrame({"col_2": np.arange(3, dtype=np.int32), "col_3": np.arange(3, dtype=np.float32)}, index=pd.date_range(pd.Timestamp(2025, 1, 7), periods=3)),
+    ]
+
+    lib.write(sym, dfs[0])
+
+    lazy_df = lib.read(sym, lazy=True)
+    expected_fields = [
+        (DataType.NANOSECONDS_UTC64, "index"),
+        (DataType.INT32, "col_1"),
+    ]
+    assert_lazy_frame_schema_equal(lazy_df, expected_fields, check_against_collected=False) # We don't call collect
+
+    lib.append(sym, dfs[1])
+    # The lazy_df should have cached the index and still return the old schema and dataframe
+    assert_lazy_frame_schema_equal(lazy_df, expected_fields, check_against_collected=False) # We don't call collect
+    vit = lazy_df.collect()
+    assert vit.version == 0
+    assert_frame_equal(vit.data, dfs[0])
+
+    # But if we decide to use
+    vit = lazy_df.collect(use_latest_version=True)
+    assert vit.version == 1
+    assert_frame_equal(vit.data, pd.concat(dfs[:2]))
+

@@ -382,7 +382,6 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
         details::visit_type(val.type().data_type(), [&](auto val_tag) {
             using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
             if constexpr(!is_numeric_type(col_type_info::data_type) || !is_numeric_type(val_type_info::data_type)) {
-                std::string error_message;
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Non-numeric type provided to binary operation: {}",
                                 binary_operation_with_types_to_string(
                                         col.column_name_,

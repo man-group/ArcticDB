@@ -125,6 +125,6 @@ version_store::ReadVersionOutput read_dataframe_from_file_internal(
     const auto header_offset = key_data.key_offset_ + key_data.key_size_;
     ARCTICDB_DEBUG(log::storage(), "Got header offset at {}", header_offset);
     single_file_storage->load_header(header_offset, data_end - header_offset);
-    return version_store::read_frame_for_version(store, versioned_item, read_query, read_options, handler_data).get();
+    return version_store::read_frame_for_version(store, version_store::StoredIndexKey{versioned_item}, read_query, read_options, handler_data).get();
 }
 } //namespace arcticdb

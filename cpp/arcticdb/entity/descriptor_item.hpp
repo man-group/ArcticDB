@@ -18,12 +18,15 @@ struct DescriptorItem {
         entity::AtomKey &&key,
         std::optional<timestamp> start_index,
         std::optional<timestamp> end_index,
-        std::optional<TimeseriesDescriptor> timeseries_descriptor) :
+        std::optional<TimeseriesDescriptor> timeseries_descriptor,
+        std::optional<std::shared_ptr<index::CachedIndex>> cached_index
+        ) :
 
         key_(std::move(key)),
         start_index_(start_index),
         end_index_(end_index),
-        timeseries_descriptor_(std::move(timeseries_descriptor)) {
+        timeseries_descriptor_(std::move(timeseries_descriptor)),
+        cached_index_(std::move(cached_index)) {
     }
 
     DescriptorItem() = delete;
@@ -32,6 +35,7 @@ struct DescriptorItem {
     std::optional<timestamp> start_index_;
     std::optional<timestamp> end_index_;
     std::optional<TimeseriesDescriptor> timeseries_descriptor_;
+    std::optional<std::shared_ptr<index::CachedIndex>> cached_index_;
 
     std::string symbol() const { return fmt::format("{}", key_.id()); }
     uint64_t version() const { return key_.version_id(); }
@@ -39,5 +43,6 @@ struct DescriptorItem {
     std::optional<timestamp> start_index() const { return start_index_; }
     std::optional<timestamp> end_index() const { return end_index_; }
     std::optional<TimeseriesDescriptor> timeseries_descriptor() const { return timeseries_descriptor_; }
+    std::optional<std::shared_ptr<index::CachedIndex>> cached_index() const { return cached_index_; }
 };
 }
