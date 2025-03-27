@@ -6,7 +6,7 @@ namespace arcticdb::pipelines {
 inline std::optional<util::BitSet> clause_column_bitset(
     const StreamDescriptor& desc,
     const std::vector<std::shared_ptr<Clause>>& clauses) {
-    folly::F14FastSet<std::string_view> column_set;
+    ankerl::unordered_dense::set<std::string_view> column_set;
     for (const auto& clause: clauses) {
         auto opt_columns = clause->clause_info().input_columns_;
         if (opt_columns.has_value()) {

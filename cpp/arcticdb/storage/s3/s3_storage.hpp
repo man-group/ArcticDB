@@ -46,7 +46,7 @@ class S3Storage : public Storage, AsyncStorage {
         return ConfigsMap::instance()->get_int("S3.Async", 0) == 1;
     }
 
-    AsyncStorage* async_api() {
+    AsyncStorage* async_api() override {
         return dynamic_cast<AsyncStorage*>(this);
     }
 
@@ -67,11 +67,11 @@ class S3Storage : public Storage, AsyncStorage {
 
     folly::Future<KeySegmentPair> do_async_read(entity::VariantKey&& variant_key, ReadKeyOpts opts) final;
 
-    void do_remove(VariantKey&& variant_key, RemoveOpts opts);
+    void do_remove(VariantKey&& variant_key, RemoveOpts opts) override;
 
-    void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts);
+    void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) override;
 
-    ObjectSizes do_get_object_sizes(KeyType key_type, const std::string& prefix) override final;
+    ObjectSizes do_get_object_sizes(KeyType key_type, const std::string& prefix) final;
 
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
 
