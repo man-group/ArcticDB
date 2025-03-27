@@ -434,7 +434,6 @@ void PythonVersionStore::snapshot(
     ) {
     ARCTICDB_SAMPLE(CreateSnapshot, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: snapshot");
-    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "snapshot");
 
     util::check_arg(skip_symbols.empty() || versions.empty(), "Only one of skip_symbols and versions can be set");
 
@@ -763,7 +762,6 @@ void PythonVersionStore::write_parallel(
     bool validate_index,
     bool sort_on_index,
     std::optional<std::vector<std::string>> sort_columns) const {
-    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "write_parallel");
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, py::none(), cfg().write_options().empty_types());
     write_parallel_frame(stream_id, frame, validate_index, sort_on_index, sort_columns);
 }
