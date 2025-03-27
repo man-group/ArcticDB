@@ -1882,7 +1882,7 @@
                 "'arcticdb-amazon-s3'"
             ]
         ],
-        "setup_cache_key": "real_comparison_benchmarks:72",
+        "setup_cache_key": "real_comparison_benchmarks:73",
         "timeout": 60000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1903,7 +1903,7 @@
                 "'arcticdb-amazon-s3'"
             ]
         ],
-        "setup_cache_key": "real_comparison_benchmarks:72",
+        "setup_cache_key": "real_comparison_benchmarks:73",
         "timeout": 60000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1924,7 +1924,7 @@
                 "'arcticdb-amazon-s3'"
             ]
         ],
-        "setup_cache_key": "real_comparison_benchmarks:72",
+        "setup_cache_key": "real_comparison_benchmarks:73",
         "timeout": 60000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1950,7 +1950,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_comparison_benchmarks:72",
+        "setup_cache_key": "real_comparison_benchmarks:73",
         "timeout": 60000,
         "type": "time",
         "unit": "seconds",
