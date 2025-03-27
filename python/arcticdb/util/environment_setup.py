@@ -189,30 +189,48 @@ class StorageSetup:
 
 class TestLibraryManager:
     """
-    This class provides thin isolation of tests from storage and from arctic. 
-    This provides following benefits:
+    This class is a thin wrapper around Arctic class. Its goal is to provide natural user
+    experience while hiding the specifics associated with management of a shared storage
+    space. It does that by separating a common storage in 2 main parts:
 
-     - Any changes in the structure of how things are stored would not reflect the test case.
-     - New types of storages can be added quickly and without impact for the test
-     - Same tests can quickly be executed against new types of storages, or just experiment
-       with new storages by simply changing storage type
-     - A test ca be executed in test mode through `set_test_more` until it reaches production
-       state. then simply removing this from the test makes it production. That isolates well
-       production data from test data
+     - persistent storage space - where all client have access to each other's libraries.
+       That is the space of shared libraries among all instances. We could refer it as production
+       space for libraries. As such it needs to be protected only for code that is production ready.
+       Therefore a persistent client can be set to be in test mode. In this mode the development
+       and troubleshooting process should happen. In that mode, the client will work not in
+       the production shared space but in test shared space which is having same characteristics with 
+       production one
 
-    The class provides very limited set of functions which are more than enough to make any 
-    end 2 end tests with ASV or other frameworks. The only thing it discourages is use of
+    - modifiable (or client private space). This space is a separate space from persistent one. In this 
+      space each physical machine has private subspace which isolates its work from others. Thus all work 
+      there is seen only by this machine. That allows easy management of this space - the machine can 
+      easily manage its data - creation and deletion of libraries. Still this machine space is shared among
+      different tests on the same machine. In order not to conflict with each other each test/benchmark can
+      and in fact should create its unique label. This label will be part of the prefix of the library.
+      Thus each test in fact should have access to only its libs. One test can spawn multiple process.
+      Thus each process needs isolation from other processes - create/access/delete its own libraries. 
+      Therefore the library prefix carries also process id. 
+
+    As this structure is build on one shared storage space there needs to be enough protection - such that
+    no client have access to other space unintentionally. Therefore this wrapper object provides
+    all basic operations for libraries. Some of arctic methods are hidden or not implemented intentionally 
+    as their would be no practical need of them yet. Once such need arises they would need to be implemented
+    providing same user experience and philosophy
+
+    The class provides limited set of functions which are more than enough to make any 
+    end2end tests with ASV or other frameworks. The only thing it discourages is use of
     Arctic directly. That is with single goal to protect shared storage from unintentional damage.
-    All work should be done through `get_library` function. There are methods for setting library options,
-    and additional `has_library` method that would eliminate the need of direct use of Arctic object
+    All work could and should be done through `get_library` function. There are methods for setting 
+    library options, and additional `has_library` method that would eliminate the need of direct 
+    use of Arctic object.
 
     As there could be very few cases that could require use of Arctic object directly, such protected 
     methods do exist, but their use makes any test potentially either unsafe or one that should be 
     handled with extra care
 
-    The class provides additional 2 class methods which should be handled with care. As they create 
-    always new connection any concurrent modifications with them and running tests would most
-    probably end with errors. 
+    The class provides additional 2 class methods for removing data from storage, which should be handled 
+    with care. As they create always new connection any concurrent modifications with them and running 
+    tests would most probably end with errors. 
 
     """
 
