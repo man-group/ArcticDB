@@ -1708,6 +1708,5 @@ class TestEmptyDataFrames:
         empty = pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([]))
         lib.write(symbol, empty)
         lib.write(symbol, to_append, parallel=True)
-        with pytest.raises(SchemaException) as exception_info:
+        with pytest.raises(SchemaException, match="wrong_col"):
             lib.compact_incomplete(symbol, append=True, convert_int_to_float=False)
-        assert "wrong_col" in str(exception_info.value)

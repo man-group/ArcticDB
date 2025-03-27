@@ -946,6 +946,5 @@ class TestEmptyDataFrames:
         empty = pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([]))
         lib.write(symbol, empty)
         lib.write(symbol, to_append, staged=True)
-        with pytest.raises(SchemaException) as exception_info:
+        with pytest.raises(SchemaException, match="wrong_col"):
             lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
-        assert "wrong_col" in str(exception_info.value)
