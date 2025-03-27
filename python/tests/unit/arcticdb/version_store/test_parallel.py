@@ -1663,6 +1663,15 @@ class TestConvertIntToFloat:
         assert_frame_equal(lib.read(sym).data, expected, check_dtype=True)
 
 class TestEmptyDataFrames:
+    """
+    Tests the behavior of appending with compact incomplete when the dataframe on disk is an empty dataframe. It should
+    behave the same way is if there is data. Static schema must check index and column names and types, dynamic schema
+    should allow appending with differing names and types which are promotable. Index names must match regardless of
+    schema type.
+
+    Note with introduction of empty index and empty types (feature flagged at the moment) the tests might have to be
+    changed. Refer to TestEmptyIndexPreservesIndexNames class comment in python/tests/unit/arcticdb/version_store/test_empty_writes.py
+    """
     def test_append_to_empty(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
         symbol = "symbol"
@@ -1693,7 +1702,7 @@ class TestEmptyDataFrames:
             pd.DataFrame({"a": [1], "wrong_col": [2]}, pd.DatetimeIndex([pd.Timestamp(0)]))
         ]
     )
-    def test_appending_to_empty_with_differing_columns_fails(self, lmdb_version_store_v1, request, to_append):
+    def test_appending_to_empty_with_differing_columns_fails(self, lmdb_version_store_v1, to_append):
         lib = lmdb_version_store_v1
         symbol = "symbol"
         empty = pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([]))

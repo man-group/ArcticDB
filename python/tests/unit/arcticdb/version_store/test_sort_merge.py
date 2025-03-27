@@ -900,3 +900,52 @@ def test_sort_and_finalize_staged_data_dynamic_schema_named_index(
     staged_keys = 1 if mode == StagedDataFinalizeMethod.APPEND else 2
     expected_key_count = 0 if delete_staged_data_on_failure else staged_keys
     assert len(get_append_keys(lib, sym)) == expected_key_count
+
+class TestEmptyDataFrames:
+    """
+    Tests the behavior of appending with compact incomplete when the dataframe on disk is an empty dataframe. It should
+    behave the same way is if there is data. Static schema must check index and column names and types, dynamic schema
+    should allow appending with differing names and types which are promotable. Index names must match regardless of
+    schema type.
+
+    Note with introduction of empty index and empty types (feature flagged at the moment) the tests might have to be
+    changed. Refer to TestEmptyIndexPreservesIndexNames class comment in python/tests/unit/arcticdb/version_store/test_empty_writes.py
+    """
+    def test_append_to_empty(self, lmdb_library):
+        lib = lmdb_library
+        symbol = "symbol"
+        lib.write(symbol, pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([])))
+        df = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
+        lib.write(symbol, df, staged=True)
+        lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
+        assert_frame_equal(lib.read(symbol).data, df)
+
+    def test_appending_to_empty_with_differing_index_name_fails(self, lmdb_library_static_dynamic, request):
+        lib = lmdb_library_static_dynamic
+        symbol = "symbol"
+        empty = pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([], name="my_initial_index"))
+        lib.write(symbol, empty)
+        df = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)], name="my_new_index"))
+        lib.write(symbol, df, staged=True)
+        with pytest.raises(SchemaException) as exception_info:
+            lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
+        assert "index" in str(exception_info.value)
+        assert "my_initial_index" in str(exception_info.value)
+        assert "my_new_index" in str(exception_info.value)
+
+    @pytest.mark.parametrize(
+        "to_append",
+        [
+            pd.DataFrame({"wrong_col": [1]}, pd.DatetimeIndex([pd.Timestamp(0)])),
+            pd.DataFrame({"a": [1], "wrong_col": [2]}, pd.DatetimeIndex([pd.Timestamp(0)]))
+        ]
+    )
+    def test_appending_to_empty_with_differing_columns_fails(self, lmdb_library, to_append):
+        lib = lmdb_library
+        symbol = "symbol"
+        empty = pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([]))
+        lib.write(symbol, empty)
+        lib.write(symbol, to_append, staged=True)
+        with pytest.raises(SchemaException) as exception_info:
+            lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
+        assert "wrong_col" in str(exception_info.value)
