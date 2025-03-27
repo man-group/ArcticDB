@@ -94,7 +94,7 @@ VersionedItem update_impl(
     const UpdateInfo& update_info,
     const UpdateQuery & query,
     const std::shared_ptr<InputTensorFrame>& frame,
-    WriteOptions&& options,
+    const WriteOptions& options,
     BlockCodecImpl block_codec);
 
 folly::Future<AtomKey> async_update_impl(
@@ -102,9 +102,8 @@ folly::Future<AtomKey> async_update_impl(
     const UpdateInfo& update_info,
     const UpdateQuery& query,
     const std::shared_ptr<InputTensorFrame>& frame,
-    WriteOptions&& options,
-    bool dynamic_schema,
-    bool empty_types);
+    const WriteOptions& options,
+    BlockCodecImpl block_codec);
 
 VersionedItem delete_range_impl(
     const std::shared_ptr<Store>& store,

@@ -1028,7 +1028,7 @@ TEST(VersionStore, AdaptiveEncoding) {
 
     ReadOptions read_options;
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data();
+    auto handler_data = get_type_handler_data(OutputFormat::NATIVE);
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, handler_data);
     ASSERT_EQ(test_frame.segment_, read_result.frame_and_descriptor_.frame_);
 }

@@ -112,24 +112,6 @@ inline std::optional<util::BitSet> requested_column_bitset_including_index(const
     return std::nullopt;
 }
 
-inline std::optional<util::BitSet> clause_column_bitset(
-        const StreamDescriptor& desc,
-        const std::vector<std::shared_ptr<Clause>>& clauses) {
-    ankerl::unordered_dense::set<std::string_view> column_set;
-    for (const auto& clause: clauses) {
-        auto opt_columns = clause->clause_info().input_columns_;
-        if (opt_columns.has_value()) {
-            for (const auto& column: *clause->clause_info().input_columns_) {
-                column_set.insert(std::string_view(column));
-            }
-        }
-    }
-    if (!column_set.empty())
-        return build_column_bitset(desc, column_set);
-    else
-        return std::nullopt;
-}
-
 // Returns std::nullopt if all columns are required, which is the case if requested_columns is std::nullopt
 // Otherwise augment the requested_columns bitset with columns that are required by any of the clauses
 std::optional<util::BitSet> overall_column_bitset(

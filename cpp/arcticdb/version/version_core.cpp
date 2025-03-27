@@ -418,25 +418,21 @@ static std::pair<std::vector<SliceAndKey>, size_t> get_slice_and_keys_for_update
 }
 
 folly::Future<AtomKey> async_update_impl(
-    const std::shared_ptr<Store>& store,
-    const UpdateInfo& update_info,
-    const UpdateQuery& query,
-    const std::shared_ptr<InputTensorFrame>& frame,
-    const WriteOptions& options,
-    bool dynamic_schema,
-    bool empty_types,
-    BlockCodecImpl block_codec) {
+        const std::shared_ptr<Store>& store,
+        const UpdateInfo& update_info,
+        const UpdateQuery& query,
+        const std::shared_ptr<InputTensorFrame>& frame,
+        const WriteOptions& options,
+        BlockCodecImpl block_codec) {
     return index::async_get_index_reader(*(update_info.previous_index_key_), store).thenValue([
         store,
         update_info,
         query,
         frame,
         options=std::move(options),
-        dynamic_schema,
-        empty_types,
         &block_codec
         ](index::IndexSegmentReader&& index_segment_reader) {
-        check_can_update(*frame, index_segment_reader, update_info, dynamic_schema, empty_types);
+        check_can_update(*frame, index_segment_reader, update_info, options.dynamic_schema, options.empty_types);
         ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", frame->desc.id(), update_info.previous_index_key_->version_id());
         frame->set_bucketize_dynamic(index_segment_reader.bucketize_dynamic());
         return slice_and_write(frame, get_slicing_policy(options, *frame), IndexPartialKey{frame->desc.id(), update_info.next_version_id_} , store, options, block_codec, {})
@@ -494,10 +490,9 @@ VersionedItem update_impl(
     const UpdateInfo& update_info,
     const UpdateQuery& query,
     const std::shared_ptr<InputTensorFrame>& frame,
-    WriteOptions&& options,
-    bool dynamic_schema,
-    bool empty_types) {
-    auto version_key = async_update_impl(store, update_info, query, frame, std::move(options), dynamic_schema, empty_types).get();
+    const WriteOptions& options,
+    BlockCodecImpl block_codec) {
+    auto version_key = async_update_impl(store, update_info, query, frame, options, block_codec).get();
     auto versioned_item = VersionedItem(to_atom(std::move(version_key)));
     ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", frame->desc.id(), update_info.next_version_id_);
     return versioned_item;

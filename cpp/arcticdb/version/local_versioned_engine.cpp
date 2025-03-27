@@ -1267,7 +1267,8 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                     auto& [version_id, de_dup_map, update_info] = version_id_and_dedup_map;
                     ARCTICDB_SAMPLE(WriteDataFrame, 0)
                     ARCTICDB_DEBUG(log::version(), "Writing dataframe for stream id {}", stream_id);
-                    auto write_fut = async_write_dataframe_impl( store(),
+                    auto write_fut = async_write_dataframe_impl(
+                        store(),
                         version_id,
                         frame,
                         de_dup_map,
@@ -1393,12 +1394,11 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 }
 
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_update_internal(
-    const std::vector<StreamId>& stream_ids,
-    std::vector<std::shared_ptr<InputTensorFrame>>&& frames,
-    const std::vector<UpdateQuery>& update_queries,
-    bool prune_previous_versions,
-    bool upsert
-) {
+        const std::vector<StreamId>& stream_ids,
+        std::vector<std::shared_ptr<InputTensorFrame>>&& frames,
+        const std::vector<UpdateQuery>& update_queries,
+        bool prune_previous_versions,
+        bool upsert) {
     py::gil_scoped_release release_gil;
 
     auto stream_update_info_futures = batch_get_latest_undeleted_version_and_next_version_id_async(store(), version_map(),stream_ids);
@@ -1407,20 +1407,17 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     for (const auto&& [idx, stream_update_info_fut] : enumerate(stream_update_info_futures)) {
         update_versions_futs.push_back(
             std::move(stream_update_info_fut)
-            .thenValue([this, frame = std::move(frames[idx]), stream_id = stream_ids[idx], update_query = update_queries[idx], upsert](auto&& update_info) {
+            .thenValue([this, frame = std::move(frames[idx]), stream_id=stream_ids[idx], update_query=update_queries[idx], upsert](auto&& update_info) {
                 auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
                 auto write_options = get_write_options();
                 if (update_info.previous_index_key_.has_value()) {
-                    const bool dynamic_schema = cfg().write_options().dynamic_schema();
-                    const bool empty_types = cfg().write_options().empty_types();
                     index_key_fut = async_update_impl(
                         store(),
                         update_info,
                         update_query,
                         std::move(frame),
-                        std::move(write_options),
-                        dynamic_schema,
-                        empty_types);
+                        write_options,
+                        block_codec_);
                 } else {
                     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
                         upsert,
@@ -1431,9 +1428,9 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                         store(),
                         0,
                         std::move(frame),
-                        std::move(write_options),
                         std::make_shared<DeDupMap>(),
-                        false,
+                        std::move(write_options),
+                        block_codec_,
                         true);
                 }
                 return std::move(index_key_fut).thenValueInline([update_info = std::move(update_info)](auto&& index_key) mutable {
