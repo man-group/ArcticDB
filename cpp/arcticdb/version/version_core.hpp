@@ -196,13 +196,6 @@ VersionedItem sort_merge_impl(
     const WriteOptions& write_options,
     std::shared_ptr<PipelineContext>& pipeline_context);
 
-void read_indexed_keys_to_pipeline(
-    const std::shared_ptr<Store>& store,
-    const std::shared_ptr<PipelineContext>& pipeline_context,
-    const VersionedItem& version_info,
-    ReadQuery& read_query,
-    const ReadOptions& read_options);
-
 void add_index_columns_to_query(
     const ReadQuery& read_query, 
     const TimeseriesDescriptor& desc);
