@@ -52,6 +52,9 @@ void remove_incomplete_segments(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id);
 
+void remove_incomplete_segments(
+    const std::shared_ptr<Store>& store, const std::unordered_set<StreamId>& sids, const std::string& common_prefix);
+
 void write_parallel_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,

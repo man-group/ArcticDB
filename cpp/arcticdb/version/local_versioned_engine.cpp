@@ -989,6 +989,13 @@ void LocalVersionedEngine::remove_incomplete(
     remove_incomplete_segments(store_, stream_id);
 }
 
+void LocalVersionedEngine::remove_incompletes(
+    const std::unordered_set<StreamId>& stream_ids,
+    const std::string& common_prefix
+) {
+    remove_incomplete_segments(store_, stream_ids, common_prefix);
+}
+
 std::set<StreamId> LocalVersionedEngine::get_incomplete_symbols() {
     return ::arcticdb::get_incomplete_symbols(store_);
 }
