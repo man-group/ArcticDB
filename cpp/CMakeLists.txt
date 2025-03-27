@@ -88,10 +88,50 @@ if(WIN32)
     add_compile_definitions(
         NOGDI WIN32_LEAN_AND_MEAN HAVE_SNPRINTF NOMINMAX
         "$<$<CONFIG:Debug>:DEBUG_BUILD>"
-        # Required to link against protobuf.dll
-        # See: https://github.com/protocolbuffers/protobuf/blob/384fabf35a9b5d1f1502edaf9a139b1f51551a01/cmake/README.md?plain=1#L296-L319
-        "$<$<BOOL:${ARCTICDB_USING_CONDA}>:PROTOBUF_USE_DLLS>"
     )
+    if(${ARCTICDB_USING_CONDA})
+        add_compile_definitions(
+            # Required to link against zstd.dll
+            # See: https://github.com/facebook/zstd/blob/dev/lib/zstd.h#L47-L53
+            ZSTD_DLL_IMPORT=1
+
+            # Required to link against lz4.dll
+            # See: https://github.com/lz4/lz4/blob/dev/lib/lz4frame.h#L79-L85
+            LZ4_DLL_IMPORT=1
+
+            # Required to link against protobuf.dll
+            # See: https://github.com/protocolbuffers/protobuf/blob/384fabf35a9b5d1f1502edaf9a139b1f51551a01/cmake/README.md?plain=1#L296-L319
+            PROTOBUF_USE_DLLS=1
+
+            # Required to link against fmt.dll
+            FMT_SHARED=1
+
+            # Required to link against spdlog.dll
+            # See: https://github.com/gabime/spdlog/blob/faa0a7a9c5a3550ed5461fab7d8e31c37fd1a2ef/include/spdlog/common.h#L28-L48
+            SPDLOG_COMPILED_LIB=1
+            SPDLOG_SHARED_LIB=1
+            SPDLOG_HEADER_ONLY=0
+
+            # Indicate that we are building using fmt's external DLL instead of spdlog's internal fmt
+            SPDLOG_FMT_EXTERNAL=1
+
+            # Required to link against azure-core.dll
+            # See: https://github.com/Azure/azure-sdk-for-cpp/blob/c914c0933fa4835c6618a42bb276d6077423b170/sdk/storage/azure-storage-common/inc/azure/storage/common/dll_import_export.hpp#L19
+            AZ_CORE_DLL=1
+
+            # Required to link against azure-identity.dll
+            # See: https://github.com/Azure/azure-sdk-for-cpp/blob/bf36db827f5ea1ef2e38953875c6c335b4242b2e/sdk/identity/azure-identity/inc/azure/identity/dll_import_export.hpp
+            AZ_IDENTITY_DLL=1
+
+            # Required to link against azure-storage-common.dll
+            # See: https://github.com/Azure/azure-sdk-for-cpp/blob/c914c0933fa4835c6618a42bb276d6077423b170/sdk/storage/azure-storage-common/inc/azure/storage/common/dll_import_export.hpp#L19
+            AZ_STORAGE_COMMON_DLL=1
+
+            # Required to link against azure-storage-blobs.dll
+            # See: https://github.com/Azure/azure-sdk-for-cpp/blob/bf36db827f5ea1ef2e38953875c6c335b4242b2e/sdk/storage/azure-storage-blobs/inc/azure/storage/blobs/dll_import_export.hpp
+            AZ_STORAGE_BLOBS_DLL=1
+        )
+    endif()
 
     # We always generate the debug info on Windows since those are not in the final .dll.
     # sccache needs the /Z7 format, but the linker will still produce .pdb files.
