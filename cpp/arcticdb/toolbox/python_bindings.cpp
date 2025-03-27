@@ -36,38 +36,107 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
             .def(py::init<>([](std::shared_ptr<Library> lib) {
                 return std::make_shared<LibraryTool>(lib);
             }))
-            .def("read_to_segment", &LibraryTool::read_to_segment)
-            .def("read_metadata", &LibraryTool::read_metadata)
-            .def("key_exists", &LibraryTool::key_exists)
-            .def("read_descriptor", &LibraryTool::read_descriptor, R"pbdoc(
+            .def("read_to_segment", 
+                [](LibraryTool& lt, const VariantKey& key) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "read_to_segment")
+                    return lt.read_to_segment(key);
+                })
+            .def("read_metadata", 
+                [](LibraryTool& lt, const VariantKey& key) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "read_metadata")
+                    return lt.read_metadata(key);
+                })
+            .def("key_exists", 
+                [](LibraryTool& lt, const VariantKey& key) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "key_exists")
+                    return lt.key_exists(key);
+                })
+            .def("read_descriptor", 
+                [](LibraryTool& lt, const VariantKey& key) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "read_descriptor")
+                    return lt.read_descriptor(key);
+                }, R"pbdoc(
                 Gives the <StreamDescriptor> for a Variant key. The Stream Descriptor contains the <FieldRef>s for all fields in
                 the value written for that key.
 
                 E.g. an Index key will have fields like 'start_index', 'end_index', 'creation_ts', etc.
             )pbdoc")
-            .def("read_timeseries_descriptor", &LibraryTool::read_timeseries_descriptor, R"pbdoc(
+            .def("read_timeseries_descriptor", 
+                [](LibraryTool& lt, const VariantKey& key) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "read_timeseries_descriptor")
+                    return lt.read_timeseries_descriptor(key);
+                }, R"pbdoc(
                 Gives the <TimeseriesDescriptor> for a Variant key. The Timeseries Descriptor contains the <FieldRef>s for all
                 fields in the dataframe written for the corresponding symbol.
 
                 E.g. an Index key for a symbol which has columns "index" and "col" will have <FieldRef>s for those columns.
             )pbdoc")
-            .def("write", &LibraryTool::write)
-            .def("overwrite_segment_in_memory", &LibraryTool::overwrite_segment_in_memory)
-            .def("overwrite_append_data", &LibraryTool::overwrite_append_data)
-            .def("remove", &LibraryTool::remove)
-            .def("find_keys", &LibraryTool::find_keys)
-            .def("count_keys", &LibraryTool::count_keys)
-            .def("get_key_path", &LibraryTool::get_key_path)
-            .def("find_keys_for_id", &LibraryTool::find_keys_for_id)
-            .def("clear_ref_keys", &LibraryTool::clear_ref_keys)
-            .def("batch_key_exists", &LibraryTool::batch_key_exists, py::call_guard<SingleThreadMutexHolder>())
+            .def("write", 
+                [](LibraryTool& lt, const VariantKey& key, Segment& segment) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "write")
+                    lt.write(key, segment);
+                })
+            .def("overwrite_segment_in_memory", 
+                [](LibraryTool& lt, const VariantKey& key, SegmentInMemory& segment) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "overwrite_segment_in_memory")
+                    lt.overwrite_segment_in_memory(key, segment);
+                })
+            .def("overwrite_append_data", 
+                [](LibraryTool& lt, const VariantKey& key, const py::tuple& item, const py::object& norm, const py::object& user_meta) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "overwrite_append_data")
+                    return lt.overwrite_append_data(key, item, norm, user_meta);
+                })
+            .def("remove", 
+                [](LibraryTool& lt, const VariantKey& key) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "remove")
+                    lt.remove(key);
+                })
+            .def("find_keys", 
+                [](LibraryTool& lt, KeyType key_type) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "find_keys")
+                    return lt.find_keys(key_type);
+                })
+            .def("count_keys", 
+                [](LibraryTool& lt, KeyType key_type) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "count_keys")
+                    return lt.count_keys(key_type);
+                })
+            .def("get_key_path", 
+                [](LibraryTool& lt, const VariantKey& key) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "get_key_path")
+                    return lt.get_key_path(key);
+                })
+            .def("find_keys_for_id", 
+                [](LibraryTool& lt, entity::KeyType kt, const StreamId& stream_id) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "find_keys_for_id")
+                    return lt.find_keys_for_id(kt, stream_id);
+                })
+            .def("clear_ref_keys", 
+                [](LibraryTool& lt) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "clear_ref_keys")
+                    lt.clear_ref_keys();
+                })
+            .def("batch_key_exists", 
+                [](LibraryTool& lt, const std::vector<VariantKey>& keys) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "batch_key_exists")
+                    return lt.batch_key_exists(keys);
+                }, py::call_guard<SingleThreadMutexHolder>())
             .def("read_to_read_result",
-             [&](LibraryTool& lt, const VariantKey& key){
-                 return adapt_read_df(lt.read(key));
-             },
-             "Read the most recent dataframe from the store")
-             .def("inspect_env_variable", &LibraryTool::inspect_env_variable)
-             .def_static("read_unaltered_lib_cfg", &LibraryTool::read_unaltered_lib_cfg);
+                [&](LibraryTool& lt, const VariantKey& key){
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "read_to_read_result")
+                    return adapt_read_df(lt.read(key));
+                },
+                "Read the most recent dataframe from the store")
+            .def("inspect_env_variable", 
+                [](LibraryTool& lt, const std::string& name) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "inspect_env_variable")
+                    return lt.inspect_env_variable(name);
+                })
+            .def_static("read_unaltered_lib_cfg", 
+                [](const storage::LibraryManager& lib_manager, const std::string& lib_name) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "read_unaltered_lib_cfg")
+                    return LibraryTool::read_unaltered_lib_cfg(lib_manager, lib_name);
+                });
 
     // Reliable storage lock exposed for integration testing. It is intended for use in C++
     using namespace arcticdb::lock;
@@ -84,36 +153,76 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
             .def(py::init<>([](){
                 return ReliableStorageLockManager();
             }))
-            .def("take_lock_guard", &ReliableStorageLockManager::take_lock_guard)
-            .def("free_lock_guard", &ReliableStorageLockManager::free_lock_guard);
+            // Fix for take_lock_guard - expected ReliableStorageLock not string
+            .def("take_lock_guard", 
+                [](ReliableStorageLockManager& manager, const ReliableStorageLock<>& lock) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "take_lock_guard")
+                    manager.take_lock_guard(lock);
+                })
+            // Fix for free_lock_guard - takes no arguments
+            .def("free_lock_guard", 
+                [](ReliableStorageLockManager& manager) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "free_lock_guard")
+                    manager.free_lock_guard();
+                });
 
 
     py::class_<StorageMover>(tools, "StorageMover")
     .def(py::init<std::shared_ptr<storage::Library>, std::shared_ptr<storage::Library>>())
     .def("go",
-    &StorageMover::go,
-    "start the storage mover copy",
-    py::arg("batch_size") = 100)
+        [](StorageMover& mover, size_t batch_size) {
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "go")
+            return mover.go(batch_size);
+        },
+        "start the storage mover copy",
+        py::arg("batch_size") = 100)
     .def("get_keys_in_source_only",
-    &StorageMover::get_keys_in_source_only)
+        [](StorageMover& mover) {
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "get_keys_in_source_only")
+            return mover.get_keys_in_source_only();
+        })
     .def("get_all_source_keys",
-    &StorageMover::get_all_source_keys,
-    "get_all_source_keys")
+        [](StorageMover& mover) {
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "get_all_source_keys")
+            return mover.get_all_source_keys();
+        },
+        "get_all_source_keys")
     .def("incremental_copy",
-    &StorageMover::incremental_copy,
-    "incrementally copy keys")
+        [](StorageMover& mover, size_t batch_size, size_t thread_count, bool delete_keys, bool perform_checks) {
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "incremental_copy")
+            return mover.incremental_copy(batch_size, thread_count, delete_keys, perform_checks);
+        },
+        "incrementally copy keys",
+        py::arg("batch_size") = 1000,
+        py::arg("thread_count") = 32,
+        py::arg("delete_keys") = false,
+        py::arg("perform_checks") = true)
     .def("write_keys_from_source_to_target",
-    &StorageMover::write_keys_from_source_to_target,
-    "write_keys_from_source_to_target")
+        [](StorageMover& mover, const std::vector<py::object>& py_keys, size_t batch_size) {
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "write_keys_from_source_to_target")
+            return mover.write_keys_from_source_to_target(py_keys, batch_size);
+        },
+        "write_keys_from_source_to_target",
+        py::arg("py_keys"),
+        py::arg("batch_size") = 100)
     .def("write_symbol_trees_from_source_to_target",
-    &StorageMover::write_symbol_trees_from_source_to_target,
-    "write_symbol_trees_from_source_to_target")
+        [](StorageMover& mover, const std::vector<py::object>& py_partial_keys, bool append_versions) {
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "write_symbol_trees_from_source_to_target")
+            return mover.write_symbol_trees_from_source_to_target(py_partial_keys, append_versions);
+        },
+        "write_symbol_trees_from_source_to_target")
     .def("clone_all_keys_for_symbol",
-    &StorageMover::clone_all_keys_for_symbol,
-    "Clone all the keys that have this symbol as id to the dest library.")
+        [](StorageMover& mover, const StreamId& stream_id, size_t batch_size) {
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "clone_all_keys_for_symbol")
+            return mover.clone_all_keys_for_symbol(stream_id, batch_size);
+        },
+        "Clone all the keys that have this symbol as id to the dest library.")
     .def("clone_all_keys_for_symbol_for_type",
-    &StorageMover::clone_all_keys_for_symbol_for_type,
-    "Clone all the keys that have this symbol and type to the dest library.");
+        [](StorageMover& mover, const StreamId& stream_id, size_t batch_size, KeyType key_type) {
+            QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "clone_all_keys_for_symbol_for_type")
+            return mover.clone_all_keys_for_symbol_for_type(stream_id, batch_size, key_type);
+        },
+        "Clone all the keys that have this symbol and type to the dest library.");
 
     // S3 Storage tool
     using namespace arcticdb::storage::s3;
@@ -143,10 +252,26 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
     tools.add_object("CompactionLockName", py::str(arcticdb::CompactionLockName));
 
     py::class_<StorageLockWrapper>(tools, "StorageLock")
-            .def("lock", &StorageLockWrapper::lock)
-            .def("unlock", &StorageLockWrapper::unlock)
-            .def("lock_timeout", &StorageLockWrapper::lock_timeout)
-            .def("try_lock", &StorageLockWrapper::try_lock)
+            .def("lock", 
+                [](StorageLockWrapper& lock) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "lock")
+                    lock.lock();
+                })
+            .def("unlock", 
+                [](StorageLockWrapper& lock) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "unlock")
+                    lock.unlock();
+                })
+            .def("lock_timeout", 
+                [](StorageLockWrapper& lock, size_t timeout_ms) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "lock_timeout")
+                    return lock.lock_timeout(timeout_ms);
+                })
+            .def("try_lock", 
+                [](StorageLockWrapper& lock) {
+                    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "try_lock")
+                    return lock.try_lock();
+                })
             ;
 
 
