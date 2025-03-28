@@ -1558,12 +1558,12 @@ void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output
     if (output_schema.empty()) {
         return;
     }
-    // Start with the columns in the first element, and remove anything that isn't present in all other elements
-    auto columns_to_keep = output_schema.front().column_types();
+    ankerl::unordered_dense::map<std::string, DataType> columns_to_keep;
     bool first_element{true};
     for (auto& schema: output_schema) {
         if (first_element) {
-            // columns_to_keep was initialised from the first element, so don't need to re-check
+            // Start with the columns in the first element, and remove anything that isn't present in all other elements
+            columns_to_keep = schema.column_types();
             first_element = false;
         } else {
             // Iterate through the columns we are currently planning to keep
@@ -1596,20 +1596,17 @@ void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output
 }
 
 void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schema) {
-    if (output_schema.empty()) {
-        return;
-    }
-    // Start with the columns in the first element, and add in anything that is present in all other elements
-    auto columns_to_keep = output_schema.front().column_types();
+    ankerl::unordered_dense::map<std::string, DataType> columns_to_keep;
     // Maintain the order that columns appeared in through the schemas
     std::vector<std::string> column_names_to_keep;
-    for (size_t idx = stream_desc.index().field_count(); idx < output_schema.front().stream_descriptor().field_count(); ++idx) {
-        column_names_to_keep.emplace_back(output_schema.front().stream_descriptor().field(idx).name());
-    }
     bool first_element{true};
     for (auto& schema: output_schema) {
         if (first_element) {
-            // columns_to_keep was initialised from the first element, so don't need to re-check
+            // Start with the columns in the first element, and add in anything that is present in all other elements
+            columns_to_keep = schema.column_types();
+            for (size_t idx = stream_desc.index().field_count(); idx < schema.stream_descriptor().field_count(); ++idx) {
+                column_names_to_keep.emplace_back(schema.stream_descriptor().field(idx).name());
+            }
             first_element = false;
         } else {
             // Iterate through the columns of this element
