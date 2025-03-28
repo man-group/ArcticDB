@@ -37,50 +37,17 @@
       "default-features": false,
       "features": [ "s3", "identity-management" ]
     },
-    {
-      "name":  "aws-crt-cpp",
-      "version>=": "0.29.7"
-    },
-    {
-      "name": "aws-c-mqtt",
-      "version>=": "0.11.0"
-    },
-    {
-      "name": "aws-c-s3",
-      "version>=": "0.6.6"
-    },
-    {
-      "name": "aws-c-io",
-      "version>=": "0.14.18"
-    },
-    {
-      "name": "aws-c-common",
-      "version>=": "0.9.28"
-    },
-    {
-      "name": "aws-c-auth",
-      "version>=": "0.7.31"
-    },
-    {
-      "name": "aws-c-cal",
-      "version>=": "0.7.4"
-    },
-    {
-      "name": "aws-c-http",
-      "version>=": "0.8.10"
-    },
-    {
-      "name": "aws-c-sdkutils",
-      "version>=": "0.1.19"
-    },
-    {
-      "name": "aws-c-event-stream",
-      "version>=": "0.4.3"
-    },
-    {
-      "name": "aws-checksums",
-      "version>=": "0.1.20"
-    },
+    "aws-crt-cpp",
+    "aws-c-mqtt",
+    "aws-c-s3",
+    "aws-c-io",
+    "aws-c-common",
+    "aws-c-auth",
+    "aws-c-cal",
+    "aws-c-http",
+    "aws-c-sdkutils",
+    "aws-c-event-stream",
+    "aws-checksums",
     "boost-dynamic-bitset",
     "boost-interprocess",
     "boost-callable-traits",
@@ -104,13 +71,30 @@
     "azure-core-cpp",
     "azure-identity-cpp",
     "azure-storage-blobs-cpp",
-    "benchmark"
+    "benchmark",
+    {
+      "name": "arcticdb-sparrow",
+      "version>=": "0.6.0",
+      "$version reason": "version 0.6.0 supports older compiler versions required for arcticdb manylinux builds"
+    }
   ],
   "overrides": [
     { "name": "openssl", "version-string": "3.3.0" },
     { "name": "arrow", "version": "18.0.0" },
     { "name": "aws-sdk-cpp", "version": "1.11.474", "$note": "Update overlay json to upgrade; Upgrade to >=1.11.486 blocked by default integrity change" },
+    { "name":  "aws-crt-cpp", "version": "0.29.7" },
+    { "name": "aws-c-mqtt", "version": "0.11.0" },
+    { "name": "aws-c-s3", "version": "0.6.6" },
+    { "name": "aws-c-io", "version": "0.14.18" },
+    { "name": "aws-c-common", "version": "0.9.28" },
+    { "name": "aws-c-auth", "version": "0.7.31" },
+    { "name": "aws-c-cal", "version": "0.7.4" },
+    { "name": "aws-c-http", "version": "0.8.10" },
+    { "name": "aws-c-sdkutils", "version": "0.1.19" },
+    { "name": "aws-c-event-stream", "version": "0.4.3" },
+    { "name": "aws-checksums", "version": "0.1.20" },
     { "name": "azure-core-cpp", "version": "1.12.0" },
+    { "name": "azure-identity-cpp", "version": "1.6.0" },
     { "name": "benchmark", "version": "1.9.0" },
     { "name": "bitmagic", "version": "7.12.3" },
     { "name": "boost-algorithm", "version": "1.84.0" },
@@ -133,6 +117,7 @@
     { "name": "boost-core", "version": "1.84.0" },
     { "name": "boost-crc", "version": "1.84.0" },
     { "name": "boost-date-time", "version": "1.84.0" },
+    { "name": "boost-describe", "version": "1.84.0" },
     { "name": "boost-detail", "version": "1.84.0" },
     { "name": "boost-dynamic-bitset", "version": "1.84.0" },
     { "name": "boost-endian", "version": "1.84.0" },
@@ -140,6 +125,7 @@
     { "name": "boost-filesystem", "version": "1.84.0" },
     { "name": "boost-foreach", "version": "1.84.0" },
     { "name": "boost-function", "version": "1.84.0" },
+    { "name": "boost-functional", "version": "1.84.0" },
     { "name": "boost-function-types", "version": "1.84.0" },
     { "name": "boost-fusion", "version": "1.84.0" },
     { "name": "boost-integer", "version": "1.84.0" },
@@ -216,5 +202,5 @@
     "overlay-ports": ["third_party/vcpkg_overlays"]
   },
   "$note on builtin-baseline": "Remember to regenerate third_party/vcpkg_overlays",
-  "builtin-baseline": "0c20b2a97c390e106150837042d921b0939e7ecb"
+  "builtin-baseline": "533a5fda5c0646d1771345fb572e759283444d5f"
 }
