@@ -10,7 +10,7 @@ from tests.util.mark import SLOW_TESTS_MARK
 @pytest.mark.parametrize("prefix", ["", "prefix"])
 @pytest.mark.parametrize("suffix", ["", "suffix"])
 @pytest.mark.storage
-@pytest.mark.skip_fixture_value(["real_gcp"], "Skipped because of issues with lib names containing \\n and \\r")
+@pytest.mark.skip_fixture_params(["real_gcp"], "Skipped because of issues with lib names containing \\n and \\r")
 def test_create_library_with_all_chars(arctic_client_v1, prefix, suffix):
     logger = get_logger("test_create_library_with_all_chars")
     ac = arctic_client_v1

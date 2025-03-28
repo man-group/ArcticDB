@@ -460,27 +460,28 @@ def mem_storage() -> Generator[InMemoryStorageFixture, None, None]:
 # region ==================================== `Arctic` API Fixtures ====================================
 
 def filter_out_unwanted_mark(request, current_param):
-    """
+    """ Exclude specific fixture parameters or include only certain
+
     Provides ability tp filter out unwanted fixture parameter
     To do that add to test as many of the marks you want to stay using:
     
-      @pytest.mark.only_<fixture_param_name>
-    """
-    only_marks = [mark for mark in request.node.iter_markers() if mark.name.startswith("only_")]
-    if only_marks: 
-        # Only when defined at least one only_ mark evaluate what should stay
-        found = False
-        for only_mark in only_marks:
-            if only_mark.name == f"only_{current_param}":
-                found = True
-        if not found:
-            pytest.skip(reason = f"Skipping {current_param} parameter due to custom test mark.")
+      @pytest.mark.only_fixture_params([<fixture_param_names_list>], )
 
-    skip_fixture_value_mark = request.node.get_closest_marker("skip_fixture_value")
+    Or alternatively you can exclude as many as wanted:
+      @pytest.mark.skip_fixture_params([<fixture_param_names_list>], )
+    """
+    only_fixtures = request.node.get_closest_marker("only_fixture_params")
+    if only_fixtures: 
+        # Only when defined at least one only_ mark evaluate what should stay
+        values_to_include = only_fixtures.args[0]
+        if not current_param in values_to_include:
+            pytest.skip(reason = f"Skipping {current_param} param as not included in test 'only_fixture_params' mark.")
+
+    skip_fixture_value_mark = request.node.get_closest_marker("skip_fixture_params")
     if skip_fixture_value_mark:
-            values_to_skip = skip_fixture_value_mark.args[0]
-            if current_param in values_to_skip:
-                pytest.skip(reason = f"Skipping fixture value: {request.param} as per 'skip_fixture_value' mark")
+        values_to_skip = skip_fixture_value_mark.args[0]
+        if current_param in values_to_skip:
+            pytest.skip(reason = f"Skipping param: {current_param} as per 'skip_fixture_params' mark")
 
 @pytest.fixture(
     scope="function",
