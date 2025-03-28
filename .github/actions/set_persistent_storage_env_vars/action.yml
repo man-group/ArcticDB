@@ -54,7 +54,7 @@ runs:
         echo "ARCTICDB_REAL_GCP_CLEAR=1" >> $GITHUB_ENV
 
         # Against what storage type to run test?
-        if [[ "${{input.persistent_storage}}" == "AWS_S3" ]]; then 
+        if [[ "${{inputs.persistent_storage}}" == "AWS_S3" ]]; then 
             echo "Storage tests will run with AWS_S3"
             echo "ARCTICDB_STORAGE_AWS_S3=1"  >> $GITHUB_ENV
             # NO GCP
@@ -64,7 +64,7 @@ runs:
             echo "ARCTICDB_PERSISTENT_STORAGE_TESTS_TYPE=aws_s3"  >> $GITHUB_ENV
             echo "PYTEST_ADD_TO_COMMAND_LINE= -m storage"  >> $GITHUB_ENV
         fi
-        if [[ "${{input.persistent_storage}}" == "GCP" ]]; then 
+        if [[ "${{inputs.persistent_storage}}" == "GCP" ]]; then 
             echo "Storage tests will run with AWS_S3"
             echo "ARCTICDB_STORAGE_GCP=1"  >> $GITHUB_ENV
             # NO S3
