@@ -1426,20 +1426,25 @@ IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& o
     return {*index_desc_field_count, *index_type};
 }
 
-NormalizationMetadata generate_norm_meta(const std::vector<NormalizationMetadata>& norm_metas) {
+NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& output_schemas,
+                                         std::unordered_set<size_t>&& non_matching_name_indices) {
     // Ensure:
     // All have PandasIndex OR PandasMultiIndex
     // If PandasIndex:
-    //  - name - if all the same maintain, otherwise empty string
-    //  - is_int - means name is a string representation of an integer, so fold into name logic
-    //  - fake_name - true if any are true
-    //  - tz - same as name
+    //  - name/is_int/fake_name - if all the same maintain, otherwise "index"/false/true
+    //  - tz - if all the same maintain, otherwise empty string
     //  - is_physically stored must all be the same
     //  - RangeIndex
     //    - start==0/step==1 - maintain
     //    - All steps the same, use start from first schema and maintain step
     //    - Otherwise, log warning, set start==0/step==1
-    // PandasMultiIndex same, minus is_physically stored and fake_name, plus field_count matching
+    // If PandasMultiIndex:
+    //  - name/is_int - if all the same maintain, otherwise "index"/false
+    //  - field_count must all be same
+    //  - tz - if all the same maintain, otherwise empty string
+    //  - fake_field_pos - unioned together, along with non_matching_name_indices
+    //      fake_field_pos.contains(0) serves same purpose as fake_name flag on PandasIndex
+    //  - timezone - Like tz, for a given key all values must be same, otherwise set value to empty string
     std::optional<bool> has_multi_index;
     std::optional<std::string> name;
     std::optional<bool> is_int;
@@ -1449,8 +1454,9 @@ NormalizationMetadata generate_norm_meta(const std::vector<NormalizationMetadata
     std::optional<uint32_t> field_count;
     std::optional<int> start;
     std::optional<int> step;
-    for (const auto& norm_meta: norm_metas) {
-        const auto& common = norm_meta.df().common();
+    std::optional<std::unordered_map<uint32_t, std::string>> timezone;
+    for (const auto& schema: output_schemas) {
+        const auto& common = schema.norm_metadata_.df().common();
         if (!has_multi_index.has_value()) {
             has_multi_index = common.has_multi_index();
         } else {
@@ -1483,6 +1489,19 @@ NormalizationMetadata generate_norm_meta(const std::vector<NormalizationMetadata
                         index.field_count() == *field_count,
                         "Mismatching norm metadata in schema join");
             }
+            if (!timezone.has_value()) {
+                timezone = std::make_optional<std::unordered_map<uint32_t, std::string>>();
+                for (const auto& [idx, idx_timezone]: index.timezone()) {
+                    timezone->emplace(idx, idx_timezone);
+                }
+            } else {
+                for (const auto& [idx, idx_timezone]: index.timezone()) {
+                    timezone->at(idx) = timezone->at(idx) == idx_timezone ? idx_timezone : "";
+                }
+            }
+            for (auto pos: index.fake_field_pos()) {
+                non_matching_name_indices.insert(pos);
+            }
         } else {
             const auto& index = common.index();
             if (!name.has_value()) {
@@ -1491,7 +1510,7 @@ NormalizationMetadata generate_norm_meta(const std::vector<NormalizationMetadata
                 fake_name = index.fake_name();
             } else {
                 if ((index.name() != *name) || (index.is_int() != *is_int) || index.fake_name() || *fake_name) {
-                    name = "";
+                    name = "index";
                     is_int = false;
                     fake_name = true;
                 }
@@ -1525,10 +1544,19 @@ NormalizationMetadata generate_norm_meta(const std::vector<NormalizationMetadata
     NormalizationMetadata norm_meta;
     if (*has_multi_index) {
         auto* index = norm_meta.mutable_df()->mutable_common()->mutable_multi_index();
-        index->set_name(*name);
-        index->set_is_int(*is_int);
+        index->set_name(non_matching_name_indices.contains(0) ? "index" : *name);
+        index->set_is_int(non_matching_name_indices.contains(0) ? false :*is_int);
         index->set_tz(*tz);
         index->set_field_count(*field_count);
+        auto timezone_map = index->mutable_timezone();
+        timezone_map->clear();
+        for (const auto& [idx, idx_timezone]: *timezone) {
+            timezone_map->emplace(idx, idx_timezone);
+        }
+        index->clear_fake_field_pos();
+        for (auto idx: non_matching_name_indices) {
+            index->add_fake_field_pos(idx);
+        }
     } else {
         auto* index = norm_meta.mutable_df()->mutable_common()->mutable_index();
         index->set_name(*name);
@@ -1636,7 +1664,8 @@ std::pair<StreamDescriptor, arcticdb::proto::descriptors::NormalizationMetadata>
     StreamDescriptor stream_desc{StreamId{}, index_desc};
     // Returns a set of indices of index fields where not all the input schema field names matched, which is needed to generate the output norm metadata
     auto non_matching_name_indices = add_index_fields(stream_desc, output_schemas);
-    return {};
+    auto norm_meta = generate_norm_meta(output_schemas, std::move(non_matching_name_indices));
+    return {std::move(stream_desc), std::move(norm_meta)};
 }
 
 std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schemas) {
@@ -1657,6 +1686,8 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
             for (size_t idx = 0; idx < num_index_fields; ++idx) {
                 const auto& field = fields.at(idx);
                 index_fields.emplace_back(field.type(), field.name());
+                // Index columns are always included, so remove from the column types map so they are not considered in
+                // inner/outer join
                 schema.column_types().erase(std::string(field.name()));
             }
             first_schema = false;
@@ -1670,17 +1701,22 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
                 } else {
                     schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>("No common type between {} and {} when joining schemas", current_type, field.type());
                 }
+                // Index columns are always included, so remove from the column types map so they are not considered in
+                // inner/outer join
                 schema.column_types().erase(std::string(field.name()));
-                auto& current_name = index_fields.at(idx).name_;
+                const auto& current_name = index_fields.at(idx).name_;
                 if (current_name != field.name()) {
-                    current_name = "";
                     non_matching_name_indices.emplace(idx);
                 }
             }
         }
     }
-    for (const auto& field: index_fields) {
-        stream_desc.add_field(field);
+    for (size_t idx = 0; idx < index_fields.size(); ++idx) {
+        if (non_matching_name_indices.contains(idx)) {
+            stream_desc.fields().add_field(index_fields.at(idx).type(), idx == 0 ? "index" : fmt::format("__fkidx__{}", idx));
+        } else {
+            stream_desc.add_field(index_fields.at(idx));
+        }
     }
     return non_matching_name_indices;
 }

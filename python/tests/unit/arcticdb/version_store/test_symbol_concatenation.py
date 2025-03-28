@@ -150,6 +150,21 @@ def test_symbol_concat_multiindex(lmdb_library_factory, dynamic_schema, rows_per
     assert_frame_equal(df, received)
 
 
+def test_multiindex(lmdb_library):
+    lib = lmdb_library
+    sym = "test_multiindex"
+    df = pd.DataFrame(
+        {
+            "col1": np.arange(12, dtype=np.int64),
+            "col2": np.arange(100, 112, dtype=np.int64),
+            "col3": np.arange(1000, 1012, dtype=np.int64),
+        },
+        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4), [0, 1, 2]]),
+    )
+    lib.write(sym, df)
+    lib.read(sym)
+
+
 def test_symbol_concat_with_date_range(lmdb_library):
     lib = lmdb_library
     df_0 = pd.DataFrame(

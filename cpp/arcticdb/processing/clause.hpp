@@ -788,11 +788,10 @@ struct Columns {
 };
 
 std::pair<StreamDescriptor, arcticdb::proto::descriptors::NormalizationMetadata> join_indexes(std::vector<OutputSchema>& output_schemas);
-std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schemas);
-
 IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& output_schemas);
-arcticdb::proto::descriptors::NormalizationMetadata generate_norm_meta(
-        const std::vector<arcticdb::proto::descriptors::NormalizationMetadata>& norm_metas);
+std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schemas);
+arcticdb::proto::descriptors::NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& output_schemas,
+                                                                       std::unordered_set<size_t>&& non_matching_name_indices);
 FieldCollection inner_join(const std::vector<Columns>& columns_to_join);
 FieldCollection outer_join(const std::vector<Columns>& columns_to_join);
 
