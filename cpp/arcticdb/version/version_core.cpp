@@ -1691,7 +1691,7 @@ std::optional<DeleteIncompleteKeysOnExit> get_delete_keys_on_failure(
         return std::nullopt;
 }
 
-static void check_compaction_slicing_policy_matches_disk(
+static void read_indexed_keys_and_validate_compaction_slicing_policy(
     const CompactIncompleteOptions &options,
     const UpdateInfo &update_info,
     const std::shared_ptr<Store> &store,
@@ -1730,7 +1730,7 @@ VersionedItem sort_merge_impl(
     std::shared_ptr<PipelineContext>& pipeline_context) {
     auto read_query = ReadQuery{};
 
-    check_compaction_slicing_policy_matches_disk(options, update_info, store, pipeline_context, write_options, read_query, ReadOptions{});
+    read_indexed_keys_and_validate_compaction_slicing_policy(options, update_info, store, pipeline_context, write_options, read_query, ReadOptions{});
     const auto num_versioned_rows = pipeline_context->total_rows_;
     const bool append_to_existing = options.append_ && update_info.previous_index_key_.has_value();
     // Cache this before calling read_incompletes_to_pipeline as it changes the descripor
@@ -1850,7 +1850,7 @@ VersionedItem compact_incomplete_impl(
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     std::optional<SegmentInMemory> last_indexed;
-    check_compaction_slicing_policy_matches_disk(options, update_info, store, pipeline_context, write_options, read_query, read_options);
+    read_indexed_keys_and_validate_compaction_slicing_policy(options, update_info, store, pipeline_context, write_options, read_query, read_options);
     const bool append_to_existing = options.append_ && update_info.previous_index_key_.has_value();
     // Cache this before calling read_incompletes_to_pipeline as it changes the descriptor.
     const std::optional<SortedValue> initial_index_sorted_status = append_to_existing ? std::optional{pipeline_context->desc_->sorted()} : std::nullopt;
