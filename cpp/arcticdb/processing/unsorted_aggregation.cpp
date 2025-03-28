@@ -294,16 +294,6 @@ namespace
         }
     }
 
-    template<Extremum extremum>
-    requires (extremum == Extremum::MAX || extremum == Extremum::MIN)
-    consteval const char* extremum_name() {
-        if constexpr (extremum == Extremum::MAX) {
-            return "MAX";
-        } else if constexpr (extremum == Extremum::MIN) {
-            return "MIN";
-        }
-    }
-
     template <Extremum T>
     SegmentInMemory finalize_impl(
             const ColumnName& output_column_name,
@@ -333,7 +323,7 @@ namespace
                             "ArcticDB v6.0.0 and will change as follows. If Arrow is used as a backend, empty grouping"
                             " buckets will be use Arrow's missing value. If numpy is used as a backend all missing data"
                             "will be backfilled with 0.",
-                            output_column_name.value, col_type_info::data_type, extremum_name<T>(), dynamic_schema_data_type);
+                            output_column_name.value, col_type_info::data_type, T == Extremum::MIN ? "MIN" : "MAX", dynamic_schema_data_type);
                     }
                     auto prev_size = aggregated.size() / sizeof(MaybeValueType);
                     auto new_size = sizeof(MaybeValueType) * unique_values;

@@ -505,7 +505,6 @@ class TestDynamicSchemaLogsWarningWhenPromotingIntToFloat:
         qb = QueryBuilder().groupby("group").agg({agg: ("col", agg)})
         lib.read("sym", query_builder=qb)
         stdout, stderr = capfd.readouterr()
-        print(stderr)
         assert all([w in stderr for w in ["W arcticdb", agg, "ArcticDB v6.0.0", "FLOAT64", dtype.upper(), agg.upper()]])
 
     @pytest.mark.parametrize("agg", ["min", "max"])
