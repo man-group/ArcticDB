@@ -104,7 +104,8 @@
     "azure-core-cpp",
     "azure-identity-cpp",
     "azure-storage-blobs-cpp",
-    "benchmark"
+    "benchmark",
+    "arcticdb-sparrow"
   ],
   "overrides": [
     { "name": "openssl", "version-string": "3.3.0" },
@@ -216,5 +217,5 @@
     "overlay-ports": ["third_party/vcpkg_overlays"]
   },
   "$note on builtin-baseline": "Remember to regenerate third_party/vcpkg_overlays",
-  "builtin-baseline": "0c20b2a97c390e106150837042d921b0939e7ecb"
+  "builtin-baseline": "e2e3f654bc45c28f2696ace32d66f28429bb3b28"
 }
