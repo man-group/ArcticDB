@@ -486,3 +486,34 @@ def test_aggregation_grouping_column_missing_from_row_group(lmdb_version_store_d
     )
     lib.append(symbol, append_df)
     generic_aggregation_test(lib, symbol, pd.concat([write_df, append_df]), "grouping_column", {"to_sum": "sum"})
+
+
+class TestDynamicSchemaLogsWarningWhenPromotingIntToFloat:
+    """
+    Dynamic schema promotes int typed columns to float for min and max so that if that a column is missing from a
+    segment, and we end up with empty bucket we can set the value to NaN. That's because numpy can't handle missing
+    values properly. ArcticDB v6.0.0 will change that: the Arrow backend can handle missing values and for numpy it'll
+    be backfiled with 0. This tests that the current version emits a warning. Remove these tests when this is no longer
+    valid.
+    """
+    @pytest.mark.parametrize("agg", ["min", "max"])
+    @pytest.mark.parametrize("dtype", ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"])
+    def test_warn_int_types(self, lmdb_library_dynamic_schema, agg, dtype, capfd):
+        lib = lmdb_library_dynamic_schema
+        lib.write("sym", pd.DataFrame({"group": [0], "col": np.array([1], dtype=dtype)}))
+        lib.append("sym", pd.DataFrame({"group": [1]}))
+        qb = QueryBuilder().groupby("group").agg({agg: ("col", agg)})
+        lib.read("sym", query_builder=qb)
+        stdout, stderr = capfd.readouterr()
+        assert all([w in stderr for w in ["W arcticdb", agg, "ArcticDB v6.0.0", "FLOAT64", dtype.upper(), agg.upper()]])
+
+    @pytest.mark.parametrize("agg", ["min", "max"])
+    @pytest.mark.parametrize("dtype", ["datetime64[ns]", "float32", "float64"])
+    def test_dont_warn_non_int_types(self, lmdb_library_dynamic_schema, agg, dtype, capfd):
+        lib = lmdb_library_dynamic_schema
+        lib.write("sym", pd.DataFrame({"group": [0], "col": np.array([1], dtype=dtype)}))
+        lib.append("sym", pd.DataFrame({"group": [1]}))
+        qb = QueryBuilder().groupby("group").agg({agg: ("col", agg)})
+        lib.read("sym", query_builder=qb)
+        stdout, stderr = capfd.readouterr()
+        assert stderr == ""
