@@ -19,7 +19,7 @@ cmake_policy(POP)
 
 find_package(Boost REQUIRED)
 find_package(fmt REQUIRED)
-find_package(sparrow REQUIRED)
+find_package(sparrow CONFIG REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(Folly REQUIRED)
 find_package(Gflags REQUIRED)
@@ -697,7 +697,7 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
-        sparrow
+        sparrow::sparrow
         CURL::libcurl
 )
 
@@ -778,14 +778,11 @@ if (SSL_LINK)
 endif ()
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
 
-message(STATUS "Main SPARROW_INCLUDE_DIR: ${SPARROW_INCLUDE_DIR}")
-
 target_include_directories(arcticdb_core_object
         PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         ${arcticdb_core_includes}
-        ${SPARROW_INCLUDE_DIR}
         )
 
 add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
@@ -793,7 +790,6 @@ add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
 target_include_directories(arcticdb_core_static PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
-        ${SPARROW_INCLUDE_DIR}
         )
 
 target_link_libraries(arcticdb_core_static PUBLIC ${arcticdb_core_libraries})
@@ -846,7 +842,6 @@ target_include_directories(arcticdb_python PRIVATE
         ${LIBBSONCXX_STATIC_INCLUDE_DIRS}
         ${BITMAGIC_INCLUDE_DIRS}
         ${LMDB_LIBRARIES}
-        ${SPARROW_INCLUDE_DIR}
         )
 
 
@@ -896,7 +891,6 @@ target_include_directories(arcticdb_ext
         ${BITMAGIC_INCLUDE_DIRS}
         ${PYTHON_NUMPY_INCLUDE_DIR}
         ${AWSSDK_INCLUDE_DIRS}
-        ${SPARROW_INCLUDE_DIR}
         )
 
 install(TARGETS arcticdb_ext
@@ -1079,7 +1073,6 @@ if(${TEST})
                 ${LIBMONGOCXX_STATIC_INCLUDE_DIRS}
                 ${LIBBSONCXX_STATIC_INCLUDE_DIRS}
                 ${BITMAGIC_INCLUDE_DIRS}
-                ${SPARROW_INCLUDE_DIR}
                 )
     endif()
 
