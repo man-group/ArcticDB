@@ -21,6 +21,10 @@ pytestmark = pytest.mark.pipeline
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("index", [None, pd.date_range("2025-01-01", periods=12)])
+# @pytest.mark.parametrize("dynamic_schema", [False])
+# @pytest.mark.parametrize("rows_per_segment", [100_000])
+# @pytest.mark.parametrize("columns_per_segment", [100_000])
+# @pytest.mark.parametrize("index", [pd.date_range("2025-01-01", periods=12)])
 def test_symbol_concat_basic(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, index):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
     df_0 = pd.DataFrame(
@@ -283,15 +287,11 @@ def test_symbol_concat_querybuilder_syntax(lmdb_library):
     expected = pd.concat([df_0, df_1[1:], df_2[:4]]).resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
     assert_frame_equal(expected, received)
 
-# @pytest.mark.parametrize("index_name_0", [None, "ts1", "ts2"])
-# @pytest.mark.parametrize("index_name_1", [None, "ts1", "ts2"])
-# @pytest.mark.parametrize("join", ["inner", "outer"])
-@pytest.mark.parametrize("index_name_0", ["ts1"])
-@pytest.mark.parametrize("index_name_1", ["ts2"])
-@pytest.mark.parametrize("join", ["outer"])
+@pytest.mark.parametrize("index_name_0", [None, "ts1", "ts2"])
+@pytest.mark.parametrize("index_name_1", [None, "ts1", "ts2"])
+@pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_differently_named_timeseries(lmdb_library, index_name_0, index_name_1, join):
     lib = lmdb_library
-    # Differently named timestamp indexes
     df_0 = pd.DataFrame({"col": [0]}, index=[pd.Timestamp(0)])
     df_1 = pd.DataFrame({"col": [1]}, index=[pd.Timestamp(1)])
     df_0.index.name = index_name_0

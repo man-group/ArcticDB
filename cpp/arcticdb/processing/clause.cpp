@@ -1384,22 +1384,6 @@ std::vector<EntityId> ConcatClause::process(std::vector<EntityId>&& entity_ids) 
 // TODO: Move all this somewhere else
 using namespace arcticdb::proto::descriptors;
 
-std::tuple<std::vector<IndexDescriptorImpl>, std::vector<NormalizationMetadata>, std::vector<Columns>>
-split_schemas(std::vector<OutputSchema>&& schemas) {
-    std::vector<IndexDescriptorImpl> index_descs;
-    std::vector<NormalizationMetadata> norm_metas;
-    std::vector<Columns> columns;
-    index_descs.reserve(schemas.size());
-    norm_metas.reserve(schemas.size());
-    columns.reserve(schemas.size());
-    std::for_each(schemas.begin(), schemas.end(), [&](OutputSchema& schema) {
-        index_descs.emplace_back(schema.stream_descriptor().index());
-        norm_metas.emplace_back(std::move(schema.norm_metadata_));
-        columns.emplace_back(schema.stream_descriptor().fields_ptr(), std::move(schema.column_types()));
-    });
-    return {std::move(index_descs), std::move(norm_metas), std::move(columns)};
-}
-
 IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& output_schemas) {
     // Ensure:
     //  - Type is the same
@@ -1570,14 +1554,14 @@ NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& output
     return norm_meta;
 }
 
-FieldCollection inner_join(const std::vector<Columns>& columns_to_join) {
-    if (columns_to_join.empty()) {
-        return {};
+void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schema) {
+    if (output_schema.empty()) {
+        return;
     }
     // Start with the columns in the first element, and remove anything that isn't present in all other elements
-    ankerl::unordered_dense::map<std::string, DataType> columns_to_keep(columns_to_join.front().column_types);
+    auto columns_to_keep = output_schema.front().column_types();
     bool first_element{true};
-    for (const auto& columns: columns_to_join) {
+    for (auto& schema: output_schema) {
         if (first_element) {
             // columns_to_keep was initialised from the first element, so don't need to re-check
             first_element = false;
@@ -1585,7 +1569,7 @@ FieldCollection inner_join(const std::vector<Columns>& columns_to_join) {
             // Iterate through the columns we are currently planning to keep
             for (auto columns_to_keep_it = columns_to_keep.begin(); columns_to_keep_it != columns_to_keep.end();) {
                 const auto& column_name = columns_to_keep_it->first;
-                if (auto it = columns.column_types.find(column_name); it != columns.column_types.end()) {
+                if (auto it = schema.column_types().find(column_name); it != schema.column_types().end()) {
                     // Current set of columns under consideration contains column_name, so ensure types are compatible
                     // and if necessary modify the columns_to_keep value to a type capable of representing all
                     auto& current_data_type = columns_to_keep_it->second;
@@ -1602,36 +1586,34 @@ FieldCollection inner_join(const std::vector<Columns>& columns_to_join) {
             }
         }
     }
-    FieldCollection res;
     // All the columns we are retaining were in every schema. Just use the order from the first schema
-    for (const auto& field: *columns_to_join.front().fields) {
+    for (const auto& field: output_schema.front().stream_descriptor().fields()) {
         std::string column_name(field.name());
         if (auto it = columns_to_keep.find(column_name); it != columns_to_keep.end()) {
-            res.add_field(make_scalar_type(it->second), column_name);
+            stream_desc.add_scalar_field(it->second, column_name);
         }
     }
-    return res;
 }
 
-FieldCollection outer_join(const std::vector<Columns>& columns_to_join) {
-    if (columns_to_join.empty()) {
-        return {};
+void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schema) {
+    if (output_schema.empty()) {
+        return;
     }
     // Start with the columns in the first element, and add in anything that is present in all other elements
-    ankerl::unordered_dense::map<std::string, DataType> columns_to_keep(columns_to_join.front().column_types);
+    auto columns_to_keep = output_schema.front().column_types();
     // Maintain the order that columns appeared in through the schemas
     std::vector<std::string> column_names_to_keep;
-    for (const auto& field: *columns_to_join.front().fields) {
-        column_names_to_keep.emplace_back(field.name());
+    for (size_t idx = stream_desc.index().field_count(); idx < output_schema.front().stream_descriptor().field_count(); ++idx) {
+        column_names_to_keep.emplace_back(output_schema.front().stream_descriptor().field(idx).name());
     }
     bool first_element{true};
-    for (const auto& columns: columns_to_join) {
+    for (auto& schema: output_schema) {
         if (first_element) {
             // columns_to_keep was initialised from the first element, so don't need to re-check
             first_element = false;
         } else {
             // Iterate through the columns of this element
-            for (const auto& [column_name, data_type]: columns.column_types) {
+            for (const auto& [column_name, data_type]: schema.column_types()) {
                 if (auto columns_to_keep_it = columns_to_keep.find(column_name); columns_to_keep_it != columns_to_keep.end()) {
                     // Current set of columns under consideration contains column_name, so ensure types are compatible
                     // and if necessary modify the columns_to_keep value to a type capable of representing all
@@ -1652,16 +1634,13 @@ FieldCollection outer_join(const std::vector<Columns>& columns_to_join) {
 
         }
     }
-    FieldCollection res;
     for (const auto& column_name: column_names_to_keep) {
-        res.add_field(make_scalar_type(columns_to_keep.at(column_name)), column_name);
+        stream_desc.add_scalar_field(columns_to_keep.at(column_name), column_name);
     }
-    return res;
 }
 
 std::pair<StreamDescriptor, arcticdb::proto::descriptors::NormalizationMetadata> join_indexes(std::vector<OutputSchema>& output_schemas) {
-    ARCTICDB_UNUSED auto index_desc = generate_index_descriptor(output_schemas);
-    StreamDescriptor stream_desc{StreamId{}, index_desc};
+    StreamDescriptor stream_desc{StreamId{}, generate_index_descriptor(output_schemas)};
     // Returns a set of indices of index fields where not all the input schema field names matched, which is needed to generate the output norm metadata
     auto non_matching_name_indices = add_index_fields(stream_desc, output_schemas);
     auto norm_meta = generate_norm_meta(output_schemas, std::move(non_matching_name_indices));
@@ -1713,6 +1692,7 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
     }
     for (size_t idx = 0; idx < index_fields.size(); ++idx) {
         if (non_matching_name_indices.contains(idx)) {
+            // TODO: Smells bad to have such Pandas-specific column naming leaking into this code, is it avoidable?
             stream_desc.fields().add_field(index_fields.at(idx).type(), idx == 0 ? "index" : fmt::format("__fkidx__{}", idx));
         } else {
             stream_desc.add_field(index_fields.at(idx));
@@ -1724,22 +1704,7 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
 OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& output_schemas) const {
     util::check(!output_schemas.empty(), "Cannot join empty list of schemas");
     auto [stream_desc, norm_meta] = join_indexes(output_schemas);
-
-    // Decompose output_schemas vector into vectors of IndexDescriptorImpl, NormalizationMetadata, and Columns
-//    auto [index_descs, norm_metas, columns] = split_schemas(std::move(output_schemas));
-//    auto index_desc = generate_index_descriptor(index_descs);
-//    auto norm_meta = generate_norm_meta(norm_metas);
-//    if (norm_meta.df().common().has_multi_index()) {
-//        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-//                norm_meta.df().common().multi_index().field_count() == index_desc.field_count(),
-//                "Mismatching index field counts in schema join");
-//    } else {
-//        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-//                index_desc.field_count() <= 1,
-//                "Mismatching index field counts in schema join");
-//    }
-//    auto fields = join_type_ == JoinType::INNER ? inner_join(columns) : outer_join(columns);
-//    StreamDescriptor stream_desc{StreamId{}, index_desc, std::make_shared<FieldCollection>(std::move(fields))};
+    join_type_ == JoinType::INNER ? inner_join(stream_desc, output_schemas) : outer_join(stream_desc, output_schemas);
     return {std::move(stream_desc), std::move(norm_meta)};
 }
 

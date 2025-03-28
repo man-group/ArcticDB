@@ -792,8 +792,8 @@ IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& o
 std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schemas);
 arcticdb::proto::descriptors::NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& output_schemas,
                                                                        std::unordered_set<size_t>&& non_matching_name_indices);
-FieldCollection inner_join(const std::vector<Columns>& columns_to_join);
-FieldCollection outer_join(const std::vector<Columns>& columns_to_join);
+void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schema);
+void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schema);
 
 struct ConcatClause {
 
