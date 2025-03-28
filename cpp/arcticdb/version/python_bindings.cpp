@@ -580,6 +580,11 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
          .def("remove_incomplete",
              &PythonVersionStore::remove_incomplete,
              py::call_guard<SingleThreadMutexHolder>(), "Delete incomplete segments")
+         .def("remove_incompletes",
+              [&](PythonVersionStore& v, const std::unordered_set<StreamId>& sids, const std::string& common_prefix) {
+            return v.remove_incompletes(sids, common_prefix);
+         },
+         py::call_guard<SingleThreadMutexHolder>(), "Remove several incomplete segments")
          .def("compact_incomplete",
              &PythonVersionStore::compact_incomplete,
              py::arg("stream_id"),

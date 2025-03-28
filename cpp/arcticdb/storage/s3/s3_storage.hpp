@@ -47,7 +47,7 @@ class S3Storage : public Storage, AsyncStorage {
     }
 
     AsyncStorage* async_api() override {
-        return dynamic_cast<AsyncStorage*>(this);
+        return this;
     }
 
     bool supports_object_size_calculation() const final override;
