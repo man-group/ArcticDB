@@ -1176,7 +1176,7 @@ static bool read_incompletes_to_pipeline(
 }
 
 static void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineContext>& pipeline_context,
-                                                 const SortedValue previous_sorted_value,
+                                                 const std::optional<SortedValue> previous_sorted_value,
                                                  const bool append_to_existing) {
     /*
      Does nothing if the symbol is not timestamp-indexed
@@ -1189,9 +1189,12 @@ static void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<Pi
     if (pipeline_context->descriptor().index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
         std::optional<timestamp> last_existing_index_value;
         if (append_to_existing) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                previous_sorted_value.has_value(),
+                "When staged data is appended to existing data the descriptor should hold the \"sorted\" status of the existing data");
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
-                    previous_sorted_value == SortedValue::ASCENDING ||
-                    previous_sorted_value == SortedValue::UNKNOWN,
+                    *previous_sorted_value == SortedValue::ASCENDING ||
+                    *previous_sorted_value == SortedValue::UNKNOWN,
                     "Cannot append staged segments to existing data as existing data is not sorted in ascending order");
             auto last_indexed_slice_and_key = std::prev(pipeline_context->incompletes_begin())->slice_and_key();
             // -1 as end_time is stored as 1 greater than the last index value in the segment
@@ -1709,15 +1712,12 @@ static void check_compaction_slicing_policy_matches_disk(
     }
 }
 
-static SortedValue compute_post_compaction_sorted_status(
-    const CompactIncompleteOptions& options,
-    const UpdateInfo& update_info,
-    const SortedValue pre_compaction_status
-) {
-    const bool append_to_existing = options.append_ && update_info.previous_index_key_.has_value();
-    // do_compact ensures that the index in the compacted segments is sorted, thus when writing we're guaranteed
-    // to get SortedValue::ASCENDING if we're appending to existing data it must be taken into account
-    return append_to_existing ? deduce_sorted(pre_compaction_status, SortedValue::ASCENDING) : SortedValue::ASCENDING;
+static SortedValue compute_sorted_status(const std::optional<SortedValue>& initial_sorted_status) {
+    constexpr auto staged_segments_sorted_status = SortedValue::ASCENDING;
+    if(initial_sorted_status.has_value()) {
+        return deduce_sorted(*initial_sorted_status, staged_segments_sorted_status);
+    }
+    return staged_segments_sorted_status;
 }
 
 VersionedItem sort_merge_impl(
@@ -1732,8 +1732,9 @@ VersionedItem sort_merge_impl(
 
     check_compaction_slicing_policy_matches_disk(options, update_info, store, pipeline_context, write_options, read_query, ReadOptions{});
     const auto num_versioned_rows = pipeline_context->total_rows_;
+    const bool append_to_existing = options.append_ && update_info.previous_index_key_.has_value();
     // Cache this before calling read_incompletes_to_pipeline as it changes the descripor
-    const SortedValue on_disk_index_sort_status = pipeline_context->desc_ ? pipeline_context->desc_->sorted() : SortedValue::ASCENDING;
+    const std::optional<SortedValue> initial_index_sorted_status = append_to_existing ? std::optional{pipeline_context->desc_->sorted()} : std::nullopt;
     const ReadIncompletesFlags read_incomplete_flags{
         .convert_int_to_float = options.convert_int_to_float_,
         .via_iteration = options.via_iteration_,
@@ -1818,7 +1819,7 @@ VersionedItem sort_merge_impl(
                 aggregator.add_segment(std::move(segment), sk.slice(), options.convert_int_to_float_);
             }
             aggregator.commit();
-            pipeline_context->desc_->set_sorted(compute_post_compaction_sorted_status(options, update_info, on_disk_index_sort_status));
+            pipeline_context->desc_->set_sorted(compute_sorted_status(initial_index_sorted_status));
         },
         [&](const auto &) {
             util::raise_rte("Sort merge only supports datetime indexed data. You data does not have a datetime index.");
@@ -1851,8 +1852,8 @@ VersionedItem compact_incomplete_impl(
     std::optional<SegmentInMemory> last_indexed;
     check_compaction_slicing_policy_matches_disk(options, update_info, store, pipeline_context, write_options, read_query, read_options);
     const bool append_to_existing = options.append_ && update_info.previous_index_key_.has_value();
-    // Cache this before calling read_incompletes_to_pipeline as it changes the descripor
-    const SortedValue on_disk_index_sort_status = pipeline_context->desc_ ? pipeline_context->desc_->sorted() : SortedValue::ASCENDING;
+    // Cache this before calling read_incompletes_to_pipeline as it changes the descriptor.
+    const std::optional<SortedValue> initial_index_sorted_status = append_to_existing ? std::optional{pipeline_context->desc_->sorted()} : std::nullopt;
     const ReadIncompletesFlags read_incomplete_flags{
         .convert_int_to_float = options.convert_int_to_float_,
         .via_iteration = options.via_iteration_,
@@ -1872,7 +1873,7 @@ VersionedItem compact_incomplete_impl(
         "Finalizing staged data is not allowed with empty staging area"
     );
     if (options.validate_index_) {
-        check_incompletes_index_ranges_dont_overlap(pipeline_context, on_disk_index_sort_status, append_to_existing);
+        check_incompletes_index_ranges_dont_overlap(pipeline_context, initial_index_sorted_status, append_to_existing);
     }
     const auto& first_seg = pipeline_context->slice_and_keys_.begin()->segment(store);
 
@@ -1904,7 +1905,7 @@ VersionedItem compact_incomplete_impl(
                 write_options.segment_row_size,
                 compaction_options);
         if constexpr(std::is_same_v<IndexType, TimeseriesIndex>) {
-            pipeline_context->desc_->set_sorted(compute_post_compaction_sorted_status(options, update_info, on_disk_index_sort_status));
+            pipeline_context->desc_->set_sorted(compute_sorted_status(initial_index_sorted_status));
         }
         return compaction_result;
     });
