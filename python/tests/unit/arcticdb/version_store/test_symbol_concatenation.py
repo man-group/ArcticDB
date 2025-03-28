@@ -21,11 +21,8 @@ pytestmark = pytest.mark.pipeline
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("index", [None, pd.date_range("2025-01-01", periods=12)])
-# @pytest.mark.parametrize("dynamic_schema", [False])
-# @pytest.mark.parametrize("rows_per_segment", [100_000])
-# @pytest.mark.parametrize("columns_per_segment", [100_000])
-# @pytest.mark.parametrize("index", [pd.date_range("2025-01-01", periods=12)])
-def test_symbol_concat_basic(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, index):
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_basic(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, index, join):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
     df_0 = pd.DataFrame(
         {
@@ -55,7 +52,7 @@ def test_symbol_concat_basic(lmdb_library_factory, dynamic_schema, rows_per_segm
     lib.write("sym1", df_1)
     lib.write("sym2", df_2, metadata=2)
 
-    received = concat(lib.read_batch(["sym0", "sym1", "sym2"], lazy=True)).collect()
+    received = concat(lib.read_batch(["sym0", "sym1", "sym2"], lazy=True), join).collect()
     expected = pd.concat([df_0, df_1, df_2])
     if index is None:
         expected.index = pd.RangeIndex(len(expected))
@@ -104,7 +101,8 @@ def test_symbol_concat_different_column_sets(lmdb_library_factory, dynamic_schem
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns", [["col1"], ["col2"], ["col3"], ["col1", "col2"], ["col1", "col3"], ["col2", "col3"]])
-def test_symbol_concat_column_slicing(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, columns):
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_column_slicing(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, columns, join):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
     df_0 = pd.DataFrame(
         {
@@ -127,7 +125,7 @@ def test_symbol_concat_column_slicing(lmdb_library_factory, dynamic_schema, rows
     lazy_df_0 = lib.read("sym0", columns=columns, lazy=True)
     lazy_df_1 = lib.read("sym1", columns=columns, lazy=True)
 
-    received = concat([lazy_df_0, lazy_df_1]).collect().data
+    received = concat([lazy_df_0, lazy_df_1], join).collect().data
     expected = pd.concat([df_0.loc[:, columns], df_1.loc[:, columns]])
     expected.index = pd.RangeIndex(len(expected))
     assert_frame_equal(expected, received)
@@ -136,7 +134,8 @@ def test_symbol_concat_column_slicing(lmdb_library_factory, dynamic_schema, rows
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
-def test_symbol_concat_multiindex(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment):
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_multiindex(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, join):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
     df = pd.DataFrame(
         {
@@ -150,26 +149,12 @@ def test_symbol_concat_multiindex(lmdb_library_factory, dynamic_schema, rows_per
     lib.write("sym1", df[3:7])
     lib.write("sym2", df[7:])
 
-    received = concat(lib.read_batch(["sym0", "sym1", "sym2"], lazy=True)).collect().data
+    received = concat(lib.read_batch(["sym0", "sym1", "sym2"], lazy=True), join).collect().data
     assert_frame_equal(df, received)
 
 
-def test_multiindex(lmdb_library):
-    lib = lmdb_library
-    sym = "test_multiindex"
-    df = pd.DataFrame(
-        {
-            "col1": np.arange(12, dtype=np.int64),
-            "col2": np.arange(100, 112, dtype=np.int64),
-            "col3": np.arange(1000, 1012, dtype=np.int64),
-        },
-        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4), [0, 1, 2]]),
-    )
-    lib.write(sym, df)
-    lib.read(sym)
-
-
-def test_symbol_concat_with_date_range(lmdb_library):
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_with_date_range(lmdb_library, join):
     lib = lmdb_library
     df_0 = pd.DataFrame(
         {
@@ -192,7 +177,7 @@ def test_symbol_concat_with_date_range(lmdb_library):
     lazy_df_1 = lib.read("sym1", lazy=True)
     lazy_df_1 = lazy_df_1.date_range((pd.Timestamp(2000), None))
 
-    received = concat([lazy_df_0, lazy_df_1]).collect().data
+    received = concat([lazy_df_0, lazy_df_1], join).collect().data
     expected = pd.concat([df_0[:2], df_1[1:]])
     assert_frame_equal(expected, received)
 
@@ -200,7 +185,8 @@ def test_symbol_concat_with_date_range(lmdb_library):
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
-def test_symbol_concat_complex(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment):
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_complex(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, join):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
     df_0 = pd.DataFrame(
         {
@@ -235,7 +221,7 @@ def test_symbol_concat_complex(lmdb_library_factory, dynamic_schema, rows_per_se
     lazy_df_1 = lazy_df_1.date_range((pd.Timestamp(pd.Timestamp(3000)), None))
     lazy_df_2 = lib.read("sym2", date_range=(None, pd.Timestamp(9000)), lazy=True)
 
-    lazy_df = concat([lazy_df_0, lazy_df_1, lazy_df_2])
+    lazy_df = concat([lazy_df_0, lazy_df_1, lazy_df_2], join)
 
     lazy_df.resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
 
@@ -304,7 +290,8 @@ def test_symbol_concat_differently_named_timeseries(lmdb_library, index_name_0, 
     assert_frame_equal(expected, received)
 
 
-def test_symbol_concat_symbols_with_different_indexes(lmdb_library):
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_symbols_with_different_indexes(lmdb_library, join):
     lib = lmdb_library
     df_0 = pd.DataFrame({"col": [0]}, index=pd.RangeIndex(1))
     df_1 = pd.DataFrame({"col": [0]}, index=[pd.Timestamp(0)])
@@ -319,22 +306,22 @@ def test_symbol_concat_symbols_with_different_indexes(lmdb_library):
     lib.write("multiindex_sym", df_2)
 
     with pytest.raises(SchemaException):
-        concat(lib.read_batch(["range_index_sym", "timestamp_index_sym"], lazy=True)).collect()
+        concat(lib.read_batch(["range_index_sym", "timestamp_index_sym"], lazy=True), join).collect()
 
     with pytest.raises(SchemaException):
-        concat(lib.read_batch(["timestamp_index_sym", "range_index_sym"], lazy=True)).collect()
+        concat(lib.read_batch(["timestamp_index_sym", "range_index_sym"], lazy=True), join).collect()
 
     with pytest.raises(SchemaException):
-        concat(lib.read_batch(["range_index_sym", "multiindex_sym"], lazy=True)).collect()
+        concat(lib.read_batch(["range_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
     with pytest.raises(SchemaException):
-        concat(lib.read_batch(["multiindex_sym", "range_index_sym"], lazy=True)).collect()
+        concat(lib.read_batch(["multiindex_sym", "range_index_sym"], lazy=True), join).collect()
 
     with pytest.raises(SchemaException):
-        concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True)).collect()
+        concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
     with pytest.raises(SchemaException):
-        concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True)).collect()
+        concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
 
 def test_symbol_concat_pickled_data(lmdb_library):
