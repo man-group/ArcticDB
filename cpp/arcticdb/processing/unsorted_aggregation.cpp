@@ -295,13 +295,12 @@ namespace
     }
 
     template<Extremum extremum>
+    requires (extremum == Extremum::MAX || extremum == Extremum::MIN)
     consteval const char* extremum_name() {
         if constexpr (extremum == Extremum::MAX) {
             return "MAX";
         } else if constexpr (extremum == Extremum::MIN) {
             return "MIN";
-        } else {
-            static_assert(sizeof(extremum) == 0, "Unknown extremum value");
         }
     }
 
