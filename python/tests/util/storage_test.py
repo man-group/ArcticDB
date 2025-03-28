@@ -69,7 +69,7 @@ def real_s3_credentials(shared_path: bool = True):
 
 def real_gcp_credentials(shared_path: bool = True):
     endpoint = os.getenv("ARCTICDB_REAL_GCP_ENDPOINT")
-    if "://" in endpoint:
+    if endpoint is not None and "://" in endpoint:
        endpoint = endpoint.split("://")[1] 
     bucket = os.getenv("ARCTICDB_REAL_GCP_BUCKET")
     region = os.getenv("ARCTICDB_REAL_GCP_REGION")
