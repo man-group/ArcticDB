@@ -517,6 +517,13 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_readonly("uncompressed_size", &KeySizesInfo::uncompressed_size)
             .doc() = "Count of keys and their compressed and uncompressed sizes in bytes.";
 
+    py::class_<storage::ObjectSizes>(version, "ObjectSizes")
+        .def_readonly("key_type", &storage::ObjectSizes::key_type_)
+        .def_readonly("count", &storage::ObjectSizes::count_)
+        .def_readonly("compressed_size_bytes", &storage::ObjectSizes::compressed_size_bytes_)
+        .def("__repr__", [](storage::ObjectSizes object_sizes) {return fmt::format("{}", object_sizes);})
+        .doc() = "Count of keys and their uncompressed sizes in bytes for a given key type";
+
     py::class_<PythonVersionStore>(version, "PythonVersionStore")
         .def(py::init([](const std::shared_ptr<storage::Library>& library, std::optional<std::string>) {
                 return PythonVersionStore(library);
@@ -573,6 +580,11 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
          .def("remove_incomplete",
              &PythonVersionStore::remove_incomplete,
              py::call_guard<SingleThreadMutexHolder>(), "Delete incomplete segments")
+         .def("remove_incompletes",
+              [&](PythonVersionStore& v, const std::unordered_set<StreamId>& sids, const std::string& common_prefix) {
+            return v.remove_incompletes(sids, common_prefix);
+         },
+         py::call_guard<SingleThreadMutexHolder>(), "Remove several incomplete segments")
          .def("compact_incomplete",
              &PythonVersionStore::compact_incomplete,
              py::arg("stream_id"),
@@ -692,7 +704,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              &PythonVersionStore::scan_object_sizes_by_stream,
              py::call_guard<SingleThreadMutexHolder>(),
              "Scan the compressed sizes of all objects in the library, grouped by stream ID and KeyType. Sizes are in bytes. "
-             "Returns a dict {symbol_id: {KeyType: KeySizesInfo}")
+             "Returns a dict {symbol_id: {KeyType: KeySizesInfo}}")
         .def("find_version",
              &PythonVersionStore::get_version_to_read,
              py::call_guard<SingleThreadMutexHolder>(), "Check if a specific stream has been written to previously")
