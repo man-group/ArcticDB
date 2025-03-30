@@ -46,15 +46,4 @@ jobs:
       with:
         branch: ${{ needs.calculate-next-version.outputs.version }}
         sha: ${{ needs.get-master-sha.outputs.sha }}
-    
-  rc_release:
-    name: Tag and Release version ${{ needs.create-next-release-branch.outputs.new_branch }}rc0 from branch ${{ needs.create-next-release-branch.outputs.new_branch }} 
-    secrets: inherit
-    permissions:
-      checks: read
-      contents: write
-    uses: ./.github/workflows/tag.yml
-    needs: create-next-release-branch
-    with:
-      version: ${{ needs.create-next-release-branch.outputs.new_branch }}rc0
-      from_branch: ${{ needs.create-next-release-branch.outputs.new_branch }}
+  

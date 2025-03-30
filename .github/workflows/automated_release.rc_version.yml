@@ -15,24 +15,29 @@ jobs:
     outputs:
       next_version: ${{ steps.calculate-next-version.outputs.next_version }}
     steps:
-      - name: Get latest RC tag.
+      - name: Get latest RC tag
         id: latest_rc_tag
         uses: oprypin/find-latest-tag@v1
         with:
           repository: ${{ github.repository }}
-          prefix: v${{ env.CURRENT_BRANCH }}rc
-      
+          prefix: v${{ env.CURRENT_BRANCH }}${{ vars.RC_SUFFIX }}
+        continue-on-error: true
+
       - name: Calculate next_version
         id: calculate-next-version
         run: |
-          CURRENT_BRANCH="${{ github.ref_name }}"
           LATEST_TAG="${{ steps.latest_rc_tag.outputs.tag }}"
-          LATEST_TAG="${LATEST_TAG#v}"
-          # Split version by 'rc' and increment the last number
-          base="${LATEST_TAG%rc*}"
-          rc_number="${LATEST_TAG##*rc}"
-          next_rc_number=$((rc_number + 1))
-          next_version="${base}rc${next_rc_number}"
+          
+          if [[ -z "$LATEST_TAG" ]]; then
+            next_version="${CURRENT_BRANCH}${{ vars.RC_SUFFIX }}0"
+          else
+            LATEST_TAG="${LATEST_TAG#v}"
+            base="${LATEST_TAG%${{ vars.RC_SUFFIX }}*}"
+            rc_number="${LATEST_TAG##*${{ vars.RC_SUFFIX }}}"
+            next_rc_number=$((rc_number + 1))
+            next_version="${base}rc${next_rc_number}"
+          fi
+          
           echo "next_version=$next_version" >> $GITHUB_OUTPUT
 
   tag_and_release:

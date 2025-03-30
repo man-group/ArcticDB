@@ -67,7 +67,7 @@ jobs:
           esac
           echo "increment_type=$increment_type" >> $GITHUB_OUTPUT
           TAG=${{ steps.latest_tag.outputs.tag }}
-          echo "tag=${TAG%rc*}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG%${{ vars.RC_SUFFIX }}*}" >> $GITHUB_OUTPUT
 
       - name: Calculate next version. Increment type - ${{ steps.get_increment_type.outputs.increment_type }}
         id: get-next-version
