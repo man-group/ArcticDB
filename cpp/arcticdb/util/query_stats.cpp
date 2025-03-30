@@ -29,6 +29,7 @@ std::shared_ptr<GroupingLevel> QueryStats::current_level(){
             "QueryStats root_level_ and current_level_ should be either both null or both non-null");
         thread_local_var_->root_level_ = std::make_shared<GroupingLevel>();
         thread_local_var_->current_level_ = thread_local_var_->root_level_;
+        thread_local_var_->parent_current_level_ = thread_local_var_->root_level_;
         std::lock_guard<std::mutex> lock(root_level_mutex_);
         root_levels_.emplace_back(thread_local_var_->root_level_);
         ARCTICDB_DEBUG(log::version(), "Current GroupingLevel created");
@@ -89,6 +90,7 @@ std::shared_ptr<GroupingLevel> QueryStats::root_level() {
         util::check(!thread_local_var_->current_level_, "QueryStats current_level_ should be null if root_level_ is null");
         thread_local_var_->root_level_ = std::make_shared<GroupingLevel>();
         thread_local_var_->current_level_ = thread_local_var_->root_level_;
+        thread_local_var_->parent_current_level_ = thread_local_var_->root_level_;
         std::lock_guard<std::mutex> lock(root_level_mutex_);
         root_levels_.emplace_back(thread_local_var_->root_level_);
         ARCTICDB_DEBUG(log::version(), "Root GroupingLevel created");
@@ -101,7 +103,7 @@ const std::vector<std::shared_ptr<GroupingLevel>>& QueryStats::root_levels(async
     return root_levels_;
 }
 
-void QueryStats::create_child_level(std::shared_ptr<ThreadLocalQueryStatsVar>&& parent_thread_local_var) {
+void QueryStats::create_child_level(std::shared_ptr<ThreadLocalQueryStatsVar>&& parent_thread_local_var, std::shared_ptr<GroupingLevel>& parent_current_level) {
     auto child_level = std::make_shared<GroupingLevel>();
     // Since ExecutorWithStatsInstance::add will be called first, which will pass the root ThreadLocalQueryStatsVar to folly thread
     // folly thread's one neeeded to be reset here
@@ -109,8 +111,9 @@ void QueryStats::create_child_level(std::shared_ptr<ThreadLocalQueryStatsVar>&& 
     thread_local_var_->current_level_ = child_level;
     thread_local_var_->root_level_ = child_level;
     thread_local_var_->parent_thread_local_var_ = std::move(parent_thread_local_var);
+    thread_local_var_->parent_current_level_ = parent_current_level;
     std::lock_guard<std::mutex> lock(thread_local_var_->parent_thread_local_var_->child_level_creation_mutex_);
-    thread_local_var_->parent_thread_local_var_->child_levels_.emplace_back(thread_local_var_->parent_thread_local_var_->current_level_, child_level);
+    thread_local_var_->parent_thread_local_var_->child_levels_.emplace_back(parent_current_level, child_level);
 }
 
 void QueryStats::enable() {
@@ -201,7 +204,7 @@ void add_logical_keys(GroupName group_name, const entity::KeyType physical_key_t
 }
 
 std::shared_ptr<ThreadLocalQueryStatsVar> get_root_thread_local_var() {
-    if (QueryStats::instance().thread_local_var_->parent_thread_local_var_) {
+    if (async::is_folly_thread) {
         return QueryStats::instance().thread_local_var_->parent_thread_local_var_;
     }
     return QueryStats::instance().thread_local_var_;

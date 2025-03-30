@@ -102,7 +102,11 @@ enum class StatsName : size_t {
 };
 
 struct GroupingLevel {
-    std::array<int64_t, 7> stats_ = {0}; // sizeof(StatsName)
+    GroupingLevel() :
+        stats_{0} {
+        std::fill(next_level_maps_.begin(), next_level_maps_.end(), std::map<std::string, std::shared_ptr<GroupingLevel>>{});
+    }
+    std::array<int64_t, 7> stats_; // sizeof(StatsName)
     std::array<std::map<std::string, std::shared_ptr<GroupingLevel>>, 5> next_level_maps_; // sizeof(GroupName)
     void reset_stats();
     void merge_from(const GroupingLevel& other);
@@ -120,6 +124,7 @@ struct ThreadLocalQueryStatsVar {
     std::shared_ptr<GroupingLevel> root_level_ = nullptr;
     std::shared_ptr<GroupingLevel> current_level_ = nullptr;
     std::shared_ptr<ThreadLocalQueryStatsVar> parent_thread_local_var_ = nullptr;
+    std::shared_ptr<GroupingLevel> parent_current_level_ = nullptr;
 };
 
 
@@ -128,7 +133,7 @@ public:
     std::shared_ptr<GroupingLevel> current_level();
     std::shared_ptr<GroupingLevel> root_level();
     const std::vector<std::shared_ptr<GroupingLevel>>& root_levels(async::TaskScheduler* const instance) const;
-    void create_child_level(std::shared_ptr<ThreadLocalQueryStatsVar>&& parent_thread_local_var);
+    void create_child_level(std::shared_ptr<ThreadLocalQueryStatsVar>&& parent_thread_local_var, std::shared_ptr<GroupingLevel>& parent_current_level);
     void set_level(std::shared_ptr<GroupingLevel> &level);
     void reset_stats();
     static QueryStats& instance();

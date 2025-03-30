@@ -188,21 +188,33 @@ class ExecutorWithStatsInstance : public T{
         // Called by the submitter when submitted to a executor
         // Could be called by worker thread to submit the subsequent task back to executor
         void add(folly::Func func) override {
-            T::add(std::move(func));
+            add(std::move(func), std::chrono::milliseconds(0));
         }
 
         void add(folly::Func func,
             std::chrono::milliseconds expiration,
-            folly::Func expireCallback) override {
+            folly::Func expireCallback = nullptr) override {
             if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) {
-                auto wrapped_func = [thread_local_var = util::query_stats::QueryStats::instance().thread_local_var_, func = std::move(func)](auto&&... vars) mutable{
-                    util::query_stats::QueryStats::instance().thread_local_var_ = thread_local_var;
+                if (!is_folly_thread) {
+                    auto wrapped_func = [ root_thread_local_var = util::query_stats::get_root_thread_local_var(), parent_current_level = util::query_stats::QueryStats::instance().thread_local_var_->parent_current_level_, func = std::move(func)](auto&&... vars) mutable{
+                        util::query_stats::QueryStats::instance().create_child_level(std::move(root_thread_local_var), parent_current_level);
+                        return func(std::forward<decltype(vars)>(vars)...);
+                    };
+                    T::add(std::move(wrapped_func), expiration, std::move(expireCallback));
+                }
+                else {
+                    auto wrapped_func = [thread_local_var = util::query_stats::QueryStats::instance().thread_local_var_, func = std::move(func)](auto&&... vars) mutable{
+                        util::query_stats::QueryStats::instance().thread_local_var_ = thread_local_var;
+                        return func(std::forward<decltype(vars)>(vars)...);
+                    };
+                    T::add(std::move(wrapped_func), expiration, std::move(expireCallback));
+                }
+            }
+            else {
+                auto wrapped_func = [func = std::move(func)](auto&&... vars) mutable{
                     return func(std::forward<decltype(vars)>(vars)...);
                 };
                 T::add(std::move(wrapped_func), expiration, std::move(expireCallback));
-            }
-            else {
-                T::add(std::move(func), expiration, std::move(expireCallback));
             }
         }
 };
@@ -240,22 +252,7 @@ class TaskScheduler {
         ARCTICDB_DEBUG(log::schedule(), "{} Submitting CPU task {}: {} of {}", uintptr_t(this), typeid(task).name(), cpu_exec_.getTaskQueueSize(), cpu_exec_.kDefaultMaxQueueSize);
         // Executor::Add will be called before below function
         std::lock_guard lock{cpu_mutex_};
-        if (util::query_stats::QueryStats::instance().is_enabled()) {
-            if (!async::is_folly_thread && util::query_stats::QueryStats::instance().root_level() == util::query_stats::QueryStats::instance().current_level()) { 
-                log::schedule().warn(
-                    "'QUERY_STATS_ADD_GROUP....' must be marked at least once in the call stack before submitting folly tasks. "
-                    "Query stats could be incomplete"
-                );
-            }
-            auto wrapped_task = [root_thread_local_var = util::query_stats::get_root_thread_local_var(), task = std::move(task)]() mutable{
-                util::query_stats::QueryStats::instance().create_child_level(std::move(root_thread_local_var));
-                return task();
-            };
-            return cpu_exec_.addFuture(std::move(wrapped_task));
-        }
-        else {
-            return cpu_exec_.addFuture(std::move(task));
-        }
+        return cpu_exec_.addFuture(std::move(task));
     }
 
     template<class Task>
@@ -265,22 +262,7 @@ class TaskScheduler {
         ARCTICDB_DEBUG(log::schedule(), "{} Submitting IO task {}: {}", uintptr_t(this), typeid(task).name(), io_exec_.getPendingTaskCount());
         // Executor::Add will be called before below function
         std::lock_guard lock{io_mutex_};
-        if (util::query_stats::QueryStats::instance().is_enabled()) {
-            if (!async::is_folly_thread && util::query_stats::QueryStats::instance().root_level() == util::query_stats::QueryStats::instance().current_level()) { 
-                log::schedule().warn(
-                    "'QUERY_STATS_ADD_GROUP....' must be marked at least once in the call stack before submitting folly tasks. "
-                    "Query stats could be incomplete"
-                );
-            }
-            auto wrapped_task = [root_thread_local_var = util::query_stats::get_root_thread_local_var(), task = std::move(task)]() mutable{
-                util::query_stats::QueryStats::instance().create_child_level(std::move(root_thread_local_var));
-                return task();
-            };
-            return io_exec_.addFuture(std::move(wrapped_task));
-        }
-        else {
-            return io_exec_.addFuture(std::move(task));
-        }
+        return io_exec_.addFuture(std::move(task));
     }
 
     bool tasks_pending();
