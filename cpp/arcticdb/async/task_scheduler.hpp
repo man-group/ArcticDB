@@ -178,6 +178,8 @@ inline auto get_default_num_cpus([[maybe_unused]] const std::string& cgroup_fold
 * 3/ Priority: How to assign priorities to task in order to treat the most pressing first.
 * 4/ Throttling: (similar to priority) how to absorb work spikes and apply memory backpressure
 */
+
+#include <sys/syscall.h>
 template <typename T>
 class ExecutorWithStatsInstance : public T{
     public:
@@ -195,15 +197,20 @@ class ExecutorWithStatsInstance : public T{
             std::chrono::milliseconds expiration,
             folly::Func expireCallback = nullptr) override {
             if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) {
+                auto id = syscall(SYS_gettid);
                 if (!is_folly_thread) {
-                    auto wrapped_func = [ root_thread_local_var = util::query_stats::get_root_thread_local_var(), parent_current_level = util::query_stats::QueryStats::instance().thread_local_var_->parent_current_level_, func = std::move(func)](auto&&... vars) mutable{
+                    ARCTICDB_INFO(log::schedule(), "add create {}", id);
+                    auto wrapped_func = [id, root_thread_local_var = util::query_stats::get_root_thread_local_var(), parent_current_level = util::query_stats::get_root_thread_current_level(), func = std::move(func)](auto&&... vars) mutable{
+                        ARCTICDB_INFO(log::schedule(), "add create lambda {}, {}", id, syscall(SYS_gettid));
                         util::query_stats::QueryStats::instance().create_child_level(std::move(root_thread_local_var), parent_current_level);
                         return func(std::forward<decltype(vars)>(vars)...);
                     };
                     T::add(std::move(wrapped_func), expiration, std::move(expireCallback));
                 }
                 else {
-                    auto wrapped_func = [thread_local_var = util::query_stats::QueryStats::instance().thread_local_var_, func = std::move(func)](auto&&... vars) mutable{
+                    ARCTICDB_INFO(log::schedule(), "add pass {}", id);
+                    auto wrapped_func = [id, thread_local_var = util::query_stats::QueryStats::instance().thread_local_var_, func = std::move(func)](auto&&... vars) mutable{
+                        ARCTICDB_INFO(log::schedule(), "add pass lambda {}, {}", id, syscall(SYS_gettid));
                         util::query_stats::QueryStats::instance().thread_local_var_ = thread_local_var;
                         return func(std::forward<decltype(vars)>(vars)...);
                     };

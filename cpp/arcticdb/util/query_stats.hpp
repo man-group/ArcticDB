@@ -190,6 +190,7 @@ std::string format_group_value(GroupName col_value, auto&& value) {
 void add_logical_keys(GroupName group_name, const entity::KeyType physical_key_type, const SegmentInMemory& segment);
 
 std::shared_ptr<ThreadLocalQueryStatsVar> get_root_thread_local_var();
+std::shared_ptr<GroupingLevel> get_root_thread_current_level();
 }
 }
 

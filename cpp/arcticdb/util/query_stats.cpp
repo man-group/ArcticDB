@@ -209,4 +209,11 @@ std::shared_ptr<ThreadLocalQueryStatsVar> get_root_thread_local_var() {
     }
     return QueryStats::instance().thread_local_var_;
 }
+
+std::shared_ptr<GroupingLevel> get_root_thread_current_level(){
+    if (async::is_folly_thread) {
+        return QueryStats::instance().thread_local_var_->parent_current_level_;
+    }
+    return QueryStats::instance().current_level();
+}
 }
