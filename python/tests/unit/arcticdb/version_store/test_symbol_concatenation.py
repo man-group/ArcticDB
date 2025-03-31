@@ -313,14 +313,14 @@ def test_symbol_concat_differently_named_multiindexes(
             "col1": np.arange(1, dtype=np.float64),
             "col2": np.arange(1, 2, dtype=np.float64),
          },
-        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4), [0, 1, 2]], names=[index_name_0_level_0, index_name_0_level_1])
+        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4), ["hello", None, "goodbye"]], names=[index_name_0_level_0, index_name_0_level_1])
     )
     df_1 = pd.DataFrame(
         {
             "col1": np.arange(2, 3, dtype=np.float64),
             "col2": np.arange(3, 4, dtype=np.float64),
          },
-        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4), [0, 1, 2]], names=[index_name_1_level_0, index_name_1_level_1])
+        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4), ["bonjour", "au revoir", None]], names=[index_name_1_level_0, index_name_1_level_1])
     )
     lib.write("sym0", df_0)
     lib.write("sym1", df_1)
