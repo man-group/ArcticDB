@@ -548,7 +548,7 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-        codec/compression/encoding_types.hpp codec/compression/estimators.hpp codec/compression/bitpack_fused.hpp codec/compression/rle.hpp codec/compression/bitpack_fused.hpp codec/compression/transpose.hpp codec/encoding_scheme_picker.hpp codec/compression/encoder_data.hpp codec/compression/compressor.hpp codec/compression/encoding_scan_result.hpp codec/compression/contiguous_range_adaptor.hpp codec/compression/bitpack.hpp codec/compression/plain.hpp codec/compression/alp.hpp codec/bitmap_utils.hpp codec/bitmap_utils.cpp util/value_container.hpp codec/encode_v2.hpp codec/encode_v1.hpp)
+        codec/compression/encoding_types.hpp codec/compression/estimators.hpp codec/compression/bitpack_fused.hpp codec/compression/rle.hpp codec/compression/bitpack_fused.hpp codec/compression/transpose.hpp codec/encoding_scheme_picker.hpp codec/compression/encoder_data.hpp codec/compression/compressor.hpp codec/compression/encoding_scan_result.hpp codec/compression/contiguous_range_adaptor.hpp codec/compression/bitpack.hpp codec/compression/plain.hpp codec/compression/alp.hpp codec/bitmap_utils.hpp codec/bitmap_utils.cpp util/value_container.hpp codec/encode_v2.hpp codec/encode_v1.hpp codec/compression/alp_header.hpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -1028,7 +1028,7 @@ if(${TEST})
             codec/test/test_scanner.cpp
             codec/test/test_range_adaptor.cpp
             codec/test/test_bitpack_compress.cpp
-            codec/test/test_alp.cpp )
+            codec/test/test_alp.cpp codec/test/test_alp_header.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
