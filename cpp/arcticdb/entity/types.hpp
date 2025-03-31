@@ -9,10 +9,7 @@
 
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
-#include <arcticdb/util/variant.hpp>
 #include <arcticdb/entity/output_format.hpp>
-#include <arcticdb/log/log.hpp>
-#include <google/protobuf/util/message_differencer.h>
 #include "arcticdb/storage/memory_layout.hpp"
 
 #include <cstdint>

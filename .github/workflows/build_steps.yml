@@ -73,9 +73,7 @@ jobs:
           submodules: recursive # Just in case a dep has its own third-party deps
 
       - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: "v0.4.0"
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Windows Pagefile
         if: matrix.os == 'windows'

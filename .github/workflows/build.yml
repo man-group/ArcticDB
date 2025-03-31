@@ -26,9 +26,9 @@ on:
         type: choice
         options: ["-", debug, release]
       dev_image_tag:
-        description: Tag of the ArcticCB development image to use for the Linux C++ tests build
+        description: Tag of the ArcticDB development image to use for the Linux C++ tests build
         type: string
-        default: latest
+        default: arcticdb-dev-clang:latest
       pytest_args:
         description: Rewrite what tests will run
         type: string
@@ -89,7 +89,7 @@ jobs:
                   mongodb:
                     image: "mongo:4.4"
                 container:
-                  image: ghcr.io/man-group/arcticdb-dev:${{inputs.dev_image_tag || 'latest'}}
+                  image: ghcr.io/man-group/${{inputs.dev_image_tag || 'arcticdb-dev-clang:latest'}}
                   volumes:
                     - /:/mnt
             windows_matrix:
@@ -180,6 +180,7 @@ jobs:
     name: Linux C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
+    permissions: {packages: write}
     with:
       job_type: cpp-tests
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
@@ -230,6 +231,7 @@ jobs:
     name: Windows C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
+    permissions: {packages: write}
     with:
       job_type: cpp-tests
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
