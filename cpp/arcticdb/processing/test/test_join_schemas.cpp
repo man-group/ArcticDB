@@ -402,160 +402,98 @@ ankerl::unordered_dense::map<std::string, DataType> generate_column_types(const 
     return res;
 }
 
-TEST(InnerJoin, SingleSchema) {
-    auto fields = std::make_shared<FieldCollection>();
-    fields->add_field(make_scalar_type(DataType::INT64), "first");
-    fields->add_field(make_scalar_type(DataType::FLOAT64), "second");
-    fields->add_field(make_scalar_type(DataType::UTF_DYNAMIC64), "third");
-    Columns columns{fields, generate_column_types(*fields)};
-    std::vector<Columns> input(1, columns);
-    auto res = inner_join(input);
-    ASSERT_EQ(res, *columns.fields);
+TEST(Join, SingleSchema) {
+    StreamDescriptor input;
+    input.add_scalar_field(DataType::INT64, "first");
+    input.add_scalar_field(DataType::FLOAT64, "second");
+    input.add_scalar_field(DataType::UTF_DYNAMIC64, "third");
+    std::vector<OutputSchema> schemas;
+    schemas.emplace_back(input.clone(), NormalizationMetadata());
+    StreamDescriptor res_inner;
+    inner_join(res_inner, schemas);
+    ASSERT_EQ(res_inner, input);
+    StreamDescriptor res_outer;
+    outer_join(res_outer, schemas);
+    ASSERT_EQ(res_outer, input);
 }
 
-TEST(InnerJoin, ExactlyMatching) {
-    auto fields = std::make_shared<FieldCollection>();
-    fields->add_field(make_scalar_type(DataType::INT64), "first");
-    fields->add_field(make_scalar_type(DataType::FLOAT64), "second");
-    fields->add_field(make_scalar_type(DataType::UTF_DYNAMIC64), "third");
-    Columns columns{fields, generate_column_types(*fields)};
-    std::vector<Columns> input(4, columns);
-    auto res = inner_join(input);
-    ASSERT_EQ(res, *columns.fields);
+TEST(Join, MultipleSchema) {
+    StreamDescriptor input;
+    input.add_scalar_field(DataType::INT64, "first");
+    input.add_scalar_field(DataType::FLOAT64, "second");
+    input.add_scalar_field(DataType::UTF_DYNAMIC64, "third");
+    std::vector<OutputSchema> schemas;
+    schemas.emplace_back(input.clone(), NormalizationMetadata());
+    schemas.emplace_back(input.clone(), NormalizationMetadata());
+    StreamDescriptor res_inner;
+    inner_join(res_inner, schemas);
+    ASSERT_EQ(res_inner, input);
+    StreamDescriptor res_outer;
+    outer_join(res_outer, schemas);
+    ASSERT_EQ(res_outer, input);
 }
 
-TEST(InnerJoin, MatchingNamesCompatibleTypes) {
-    auto first_fields = std::make_shared<FieldCollection>();
-    first_fields->add_field(make_scalar_type(DataType::INT64), "first");
-    first_fields->add_field(make_scalar_type(DataType::UINT8), "second");
-    Columns first_columns{first_fields, generate_column_types(*first_fields)};
-    auto second_fields = std::make_shared<FieldCollection>();
-    second_fields->add_field(make_scalar_type(DataType::INT32), "first");
-    second_fields->add_field(make_scalar_type(DataType::FLOAT64), "second");
-    Columns second_columns{second_fields, generate_column_types(*second_fields)};
-    std::vector<Columns> input{first_columns, second_columns};
-    auto res = inner_join(input);
-    FieldCollection expected;
-    expected.add_field(make_scalar_type(DataType::INT64), "first");
-    expected.add_field(make_scalar_type(DataType::FLOAT64), "second");
-    ASSERT_EQ(res, expected);
+TEST(Join, MatchingNamesCompatibleTypes) {
+    StreamDescriptor first_input;
+    first_input.add_scalar_field(DataType::INT64, "first");
+    first_input.add_scalar_field(DataType::UINT8, "second");
+    StreamDescriptor second_input;
+    second_input.add_scalar_field(DataType::INT32, "first");
+    second_input.add_scalar_field(DataType::FLOAT64, "second");
+    std::vector<OutputSchema> schemas;
+    schemas.emplace_back(first_input.clone(), NormalizationMetadata());
+    schemas.emplace_back(second_input.clone(), NormalizationMetadata());
+    StreamDescriptor expected;
+    expected.add_scalar_field(DataType::INT64, "first");
+    expected.add_scalar_field(DataType::FLOAT64, "second");
+    StreamDescriptor res_inner;
+    inner_join(res_inner, schemas);
+    ASSERT_EQ(res_inner, expected);
+    StreamDescriptor res_outer;
+    outer_join(res_outer, schemas);
+    ASSERT_EQ(res_outer, expected);
 }
 
-TEST(InnerJoin, MatchingNamesIncompatibleTypes) {
-    auto first_fields = std::make_shared<FieldCollection>();
-    first_fields->add_field(make_scalar_type(DataType::INT64), "first");
-    first_fields->add_field(make_scalar_type(DataType::UINT8), "second");
-    Columns first_columns{first_fields, generate_column_types(*first_fields)};
-    auto second_fields = std::make_shared<FieldCollection>();
-    second_fields->add_field(make_scalar_type(DataType::INT32), "first");
-    second_fields->add_field(make_scalar_type(DataType::UTF_DYNAMIC64), "second");
-    Columns second_columns{second_fields, generate_column_types(*second_fields)};
-    std::vector<Columns> input{first_columns, second_columns};
-    ASSERT_THROW(inner_join(input), SchemaException);
+TEST(Join, MatchingNamesIncompatibleTypes) {
+    StreamDescriptor first_input;
+    first_input.add_scalar_field(DataType::INT64, "first");
+    first_input.add_scalar_field(DataType::UINT8, "second");
+    StreamDescriptor second_input;
+    second_input.add_scalar_field(DataType::INT32, "first");
+    second_input.add_scalar_field(DataType::UTF_DYNAMIC64, "second");
+    std::vector<OutputSchema> schemas;
+    schemas.emplace_back(first_input.clone(), NormalizationMetadata());
+    schemas.emplace_back(second_input.clone(), NormalizationMetadata());
+    StreamDescriptor res_inner;
+    ASSERT_THROW(inner_join(res_inner, schemas), SchemaException);
+    StreamDescriptor res_outer;
+    ASSERT_THROW(outer_join(res_outer, schemas), SchemaException);
 }
 
-TEST(InnerJoin, DisJointColumnNames) {
-    auto first_fields = std::make_shared<FieldCollection>();
-    first_fields->add_field(make_scalar_type(DataType::INT64), "first");
-    first_fields->add_field(make_scalar_type(DataType::UINT8), "second");
-    first_fields->add_field(make_scalar_type(DataType::FLOAT64), "third");
-    Columns first_columns{first_fields, generate_column_types(*first_fields)};
-    auto second_fields = std::make_shared<FieldCollection>();
-    second_fields->add_field(make_scalar_type(DataType::FLOAT64), "third");
-    second_fields->add_field(make_scalar_type(DataType::UINT8), "second");
-    second_fields->add_field(make_scalar_type(DataType::UTF_DYNAMIC64), "fourth");
-    Columns second_columns{second_fields, generate_column_types(*second_fields)};
-    std::vector<Columns> input{first_columns, second_columns};
-    auto res = inner_join(input);
-    FieldCollection expected;
-    expected.add_field(make_scalar_type(DataType::UINT8), "second");
-    expected.add_field(make_scalar_type(DataType::FLOAT64), "third");
-    ASSERT_EQ(res, expected);
-    input = std::vector<Columns>{second_columns, first_columns};
-    res = inner_join(input);
-    expected = FieldCollection();
-    expected.add_field(make_scalar_type(DataType::FLOAT64), "third");
-    expected.add_field(make_scalar_type(DataType::UINT8), "second");
-    ASSERT_EQ(res, expected);
-}
-
-TEST(OuterJoin, SingleSchema) {
-    auto fields = std::make_shared<FieldCollection>();
-    fields->add_field(make_scalar_type(DataType::INT64), "first");
-    fields->add_field(make_scalar_type(DataType::FLOAT64), "second");
-    fields->add_field(make_scalar_type(DataType::UTF_DYNAMIC64), "third");
-    Columns columns{fields, generate_column_types(*fields)};
-    std::vector<Columns> input(1, columns);
-    auto res = inner_join(input);
-    ASSERT_EQ(res, *columns.fields);
-}
-
-TEST(OuterJoin, ExactlyMatching) {
-    auto fields = std::make_shared<FieldCollection>();
-    fields->add_field(make_scalar_type(DataType::INT64), "first");
-    fields->add_field(make_scalar_type(DataType::FLOAT64), "second");
-    fields->add_field(make_scalar_type(DataType::UTF_DYNAMIC64), "third");
-    Columns columns{fields, generate_column_types(*fields)};
-    std::vector<Columns> input(4, columns);
-    auto res = inner_join(input);
-    ASSERT_EQ(res, *columns.fields);
-}
-
-TEST(OuterJoin, MatchingNamesCompatibleTypes) {
-    auto first_fields = std::make_shared<FieldCollection>();
-    first_fields->add_field(make_scalar_type(DataType::INT64), "first");
-    first_fields->add_field(make_scalar_type(DataType::UINT8), "second");
-    Columns first_columns{first_fields, generate_column_types(*first_fields)};
-    auto second_fields = std::make_shared<FieldCollection>();
-    second_fields->add_field(make_scalar_type(DataType::INT32), "first");
-    second_fields->add_field(make_scalar_type(DataType::FLOAT64), "second");
-    Columns second_columns{second_fields, generate_column_types(*second_fields)};
-    std::vector<Columns> input{first_columns, second_columns};
-    auto res = inner_join(input);
-    FieldCollection expected;
-    expected.add_field(make_scalar_type(DataType::INT64), "first");
-    expected.add_field(make_scalar_type(DataType::FLOAT64), "second");
-    ASSERT_EQ(res, expected);
-}
-
-TEST(OuterJoin, MatchingNamesIncompatibleTypes) {
-    auto first_fields = std::make_shared<FieldCollection>();
-    first_fields->add_field(make_scalar_type(DataType::INT64), "first");
-    first_fields->add_field(make_scalar_type(DataType::UINT8), "second");
-    Columns first_columns{first_fields, generate_column_types(*first_fields)};
-    auto second_fields = std::make_shared<FieldCollection>();
-    second_fields->add_field(make_scalar_type(DataType::INT32), "first");
-    second_fields->add_field(make_scalar_type(DataType::UTF_DYNAMIC64), "second");
-    Columns second_columns{second_fields, generate_column_types(*second_fields)};
-    std::vector<Columns> input{first_columns, second_columns};
-    ASSERT_THROW(inner_join(input), SchemaException);
-}
-
-TEST(OuterJoin, DisJointColumnNames) {
-    auto first_fields = std::make_shared<FieldCollection>();
-    first_fields->add_field(make_scalar_type(DataType::INT64), "first");
-    first_fields->add_field(make_scalar_type(DataType::UINT8), "second");
-    first_fields->add_field(make_scalar_type(DataType::FLOAT64), "third");
-    Columns first_columns{first_fields, generate_column_types(*first_fields)};
-    auto second_fields = std::make_shared<FieldCollection>();
-    second_fields->add_field(make_scalar_type(DataType::FLOAT64), "third");
-    second_fields->add_field(make_scalar_type(DataType::UINT8), "second");
-    second_fields->add_field(make_scalar_type(DataType::UTF_DYNAMIC64), "fourth");
-    Columns second_columns{second_fields, generate_column_types(*second_fields)};
-    std::vector<Columns> input{first_columns, second_columns};
-    auto res = inner_join(input);
-    FieldCollection expected;
-    first_fields->add_field(make_scalar_type(DataType::INT64), "first");
-    expected.add_field(make_scalar_type(DataType::UINT8), "second");
-    expected.add_field(make_scalar_type(DataType::FLOAT64), "third");
-    second_fields->add_field(make_scalar_type(DataType::UTF_DYNAMIC64), "fourth");
-    ASSERT_EQ(res, expected);
-    input = std::vector<Columns>{second_columns, first_columns};
-    res = inner_join(input);
-    expected = FieldCollection();
-    expected.add_field(make_scalar_type(DataType::FLOAT64), "third");
-    expected.add_field(make_scalar_type(DataType::UINT8), "second");
-    second_fields->add_field(make_scalar_type(DataType::UTF_DYNAMIC64), "fourth");
-    first_fields->add_field(make_scalar_type(DataType::INT64), "first");
-    ASSERT_EQ(res, expected);
+TEST(Join, DisJointColumnNames) {
+    StreamDescriptor first_input;
+    first_input.add_scalar_field(DataType::INT64, "first");
+    first_input.add_scalar_field(DataType::UINT8, "second");
+    first_input.add_scalar_field(DataType::FLOAT64, "third");
+    StreamDescriptor second_input;
+    second_input.add_scalar_field(DataType::FLOAT64, "third");
+    second_input.add_scalar_field(DataType::UINT8, "second");
+    second_input.add_scalar_field(DataType::UTF_DYNAMIC64, "fourth");
+    std::vector<OutputSchema> schemas;
+    schemas.emplace_back(first_input.clone(), NormalizationMetadata());
+    schemas.emplace_back(second_input.clone(), NormalizationMetadata());
+    StreamDescriptor expected_inner;
+    expected_inner.add_scalar_field(DataType::UINT8, "second");
+    expected_inner.add_scalar_field(DataType::FLOAT64, "third");
+    StreamDescriptor res_inner;
+    inner_join(res_inner, schemas);
+    ASSERT_EQ(res_inner, expected_inner);
+    StreamDescriptor expected_outer;
+    expected_outer.add_scalar_field(DataType::INT64, "first");
+    expected_outer.add_scalar_field(DataType::UINT8, "second");
+    expected_outer.add_scalar_field(DataType::FLOAT64, "third");
+    expected_outer.add_scalar_field(DataType::UTF_DYNAMIC64, "fourth");
+    StreamDescriptor res_outer;
+    outer_join(res_outer, schemas);
+    ASSERT_EQ(res_outer, expected_outer);
 }
