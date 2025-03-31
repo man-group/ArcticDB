@@ -798,15 +798,13 @@ struct ReduceColumnTask : async::BaseTask {
         const auto dynamic_schema = read_options_.dynamic_schema().value_or(false);
 
         const auto column_data = slice_map_->columns_.find(frame_field.name());
-        // In multi-symbol joins, we allow index columns of the same type with different names to be joined. Index columns
-        // by definition are always densely populated, and so are present in every row slice and can be ignored here
-        if(dynamic_schema && column_data == slice_map_->columns_.end() && column_index_ >= frame_.descriptor().index().field_count()) {
+        if(dynamic_schema && column_data == slice_map_->columns_.end()) {
             if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(read_options_.output_format(), column.type()); handler) {
                 handler->default_initialize(column.buffer(), 0, frame_.row_count() * handler->type_size(), shared_data_, handler_data_);
             } else {
                 column.default_initialize_rows(0, frame_.row_count(), false);
             }
-        } else if (column_data != slice_map_->columns_.end() && column_index_ >= frame_.descriptor().index().field_count()) {
+        } else if (column_data != slice_map_->columns_.end()) {
             if(dynamic_schema) {
                 NullValueReducer null_reducer{column, context_, frame_, shared_data_, handler_data_, read_options_.output_format()};
                 for (const auto &row : column_data->second) {

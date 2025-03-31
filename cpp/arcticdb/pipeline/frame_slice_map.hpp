@@ -23,6 +23,13 @@ struct FrameSliceMap {
     FrameSliceMap(std::shared_ptr<PipelineContext> context, bool dynamic_schema) :
         context_(std::move(context)) {
 
+        uint32_t num_index_fields;
+        if (context_->norm_meta_->df().common().has_multi_index()) {
+            num_index_fields = context_->norm_meta_->df().common().multi_index().field_count() + 1;
+        } else {
+            num_index_fields = context_->descriptor().index().field_count();
+        }
+
         for (const auto &context_row: *context_) {
             const auto& row_range = context_row.slice_and_key().slice_.row_range;
 
@@ -55,10 +62,22 @@ struct FrameSliceMap {
                         continue;
                     }
                 }
-
-                auto& column = columns_[field->name()];
-                ContextData data{context_row.index_, field.index};
-                column.insert(std::make_pair(row_range, data));
+                if (context_row.fetch_index()) {
+                    if (field.index < num_index_fields) {
+                        const entity::StreamDescriptor &descriptor = context_->descriptor();
+                        auto &column = columns_[descriptor.field(field.index).name()];
+                        ContextData data{context_row.index_, field.index};
+                        column.insert(std::make_pair(row_range, data));
+                    } else {
+                        auto &column = columns_[field->name()];
+                        ContextData data{context_row.index_, field.index};
+                        column.insert(std::make_pair(row_range, data));
+                    }
+                } else {
+                    auto &column = columns_[field->name()];
+                    ContextData data{context_row.index_, field.index};
+                    column.insert(std::make_pair(row_range, data));
+                }
             }
         }
     }

@@ -1529,7 +1529,7 @@ NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& output
     if (*has_multi_index) {
         auto* index = norm_meta.mutable_df()->mutable_common()->mutable_multi_index();
         index->set_name(non_matching_name_indices.contains(0) ? "index" : *name);
-        index->set_is_int(non_matching_name_indices.contains(0) ? false :*is_int);
+        index->set_is_int(non_matching_name_indices.contains(0) ? false : *is_int);
         index->set_tz(*tz);
         index->set_field_count(*field_count);
         auto timezone_map = index->mutable_timezone();
@@ -1596,6 +1596,14 @@ void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output
 }
 
 void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schema) {
+    // If the first schema is multiindexed then use this field count
+    // It will be checked later if the other norm metas are compatible
+    uint32_t num_index_fields;
+    if (output_schema.front().norm_metadata_.df().common().has_multi_index()) {
+        num_index_fields = output_schema.front().norm_metadata_.df().common().multi_index().field_count() + 1;
+    } else {
+        num_index_fields = stream_desc.index().field_count();
+    }
     ankerl::unordered_dense::map<std::string, DataType> columns_to_keep;
     // Maintain the order that columns appeared in through the schemas
     std::vector<std::string> column_names_to_keep;
@@ -1604,7 +1612,7 @@ void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output
         if (first_element) {
             // Start with the columns in the first element, and add in anything that is present in all other elements
             columns_to_keep = schema.column_types();
-            for (size_t idx = stream_desc.index().field_count(); idx < schema.stream_descriptor().field_count(); ++idx) {
+            for (size_t idx = num_index_fields; idx < schema.stream_descriptor().field_count(); ++idx) {
                 column_names_to_keep.emplace_back(schema.stream_descriptor().field(idx).name());
             }
             first_element = false;
@@ -1646,7 +1654,14 @@ std::pair<StreamDescriptor, arcticdb::proto::descriptors::NormalizationMetadata>
 
 std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schemas) {
     std::unordered_set<size_t> non_matching_name_indices;
-    auto num_index_fields = stream_desc.index().field_count();
+    uint32_t num_index_fields;
+    // If the first schema is multiindexed then use this field count
+    // It will be checked later if the other norm metas are compatible
+    if (output_schemas.front().norm_metadata_.df().common().has_multi_index()) {
+        num_index_fields = output_schemas.front().norm_metadata_.df().common().multi_index().field_count() + 1;
+    } else {
+        num_index_fields = stream_desc.index().field_count();
+    }
     if (num_index_fields == 0) {
         return non_matching_name_indices;
     }

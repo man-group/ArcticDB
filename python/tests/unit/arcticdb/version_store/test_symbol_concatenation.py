@@ -135,7 +135,11 @@ def test_symbol_concat_column_slicing(lmdb_library_factory, dynamic_schema, rows
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_multiindex(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, join):
+# @pytest.mark.parametrize("dynamic_schema", [False])
+# @pytest.mark.parametrize("rows_per_segment", [100_000])
+# @pytest.mark.parametrize("columns_per_segment", [2])
+# @pytest.mark.parametrize("join", ["inner"])
+def test_symbol_concat_multiindex_basic(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, join):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
     df = pd.DataFrame(
         {
@@ -278,15 +282,53 @@ def test_symbol_concat_querybuilder_syntax(lmdb_library):
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_differently_named_timeseries(lmdb_library, index_name_0, index_name_1, join):
     lib = lmdb_library
-    df_0 = pd.DataFrame({"col": [0]}, index=[pd.Timestamp(0)])
-    df_1 = pd.DataFrame({"col": [1]}, index=[pd.Timestamp(1)])
+    df_0 = pd.DataFrame({"col1": np.arange(1, dtype=np.float64), "col2": np.arange(1, 2, dtype=np.float64)}, index=[pd.Timestamp(0)])
+    df_1 = pd.DataFrame({"col1": np.arange(2, 3, dtype=np.float64), "col3": np.arange(3, 4, dtype=np.float64)}, index=[pd.Timestamp(1)])
     df_0.index.name = index_name_0
     df_1.index.name = index_name_1
     lib.write("sym0", df_0)
     lib.write("sym1", df_1)
-    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True)).collect().data
-    expected = pd.concat([df_0, df_1])
+    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join).collect().data
+    expected = pd.concat([df_0, df_1], join=join)
     expected.index.name = index_name_0 if index_name_0 == index_name_1 else None
+    assert_frame_equal(expected, received)
+
+
+@pytest.mark.parametrize("index_name_0_level_0", [None, "ts1", "ts2"])
+@pytest.mark.parametrize("index_name_0_level_1", [None, "hello", "goodbye"])
+@pytest.mark.parametrize("index_name_1_level_0", [None, "ts1", "ts2"])
+@pytest.mark.parametrize("index_name_1_level_1", [None, "hello", "goodbye"])
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_differently_named_multiindexes(
+        lmdb_library,
+        index_name_0_level_0,
+        index_name_0_level_1,
+        index_name_1_level_0,
+        index_name_1_level_1,
+        join
+):
+    lib = lmdb_library
+    df_0 = pd.DataFrame(
+        {
+            "col1": np.arange(1, dtype=np.float64),
+            "col2": np.arange(1, 2, dtype=np.float64),
+         },
+        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4), [0, 1, 2]], names=[index_name_0_level_0, index_name_0_level_1])
+    )
+    df_1 = pd.DataFrame(
+        {
+            "col1": np.arange(2, 3, dtype=np.float64),
+            "col2": np.arange(3, 4, dtype=np.float64),
+         },
+        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4), [0, 1, 2]], names=[index_name_1_level_0, index_name_1_level_1])
+    )
+    lib.write("sym0", df_0)
+    lib.write("sym1", df_1)
+    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join).collect().data
+    expected = pd.concat([df_0, df_1], join=join)
+    expected_level_0_name = index_name_0_level_0 if index_name_0_level_0 == index_name_1_level_0 else None
+    expected_level_1_name = index_name_0_level_1 if index_name_0_level_1 == index_name_1_level_1 else None
+    expected.index.names = [expected_level_0_name, expected_level_1_name]
     assert_frame_equal(expected, received)
 
 

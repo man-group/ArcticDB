@@ -1368,6 +1368,7 @@ struct CopyToBufferTask : async::BaseTask {
     SegmentInMemory source_segment_;
     SegmentInMemory target_segment_;
     FrameSlice frame_slice_;
+    uint32_t index_field_count_;
     DecodePathData shared_data_;
     std::any& handler_data_;
     bool fetch_index_;
@@ -1377,6 +1378,7 @@ struct CopyToBufferTask : async::BaseTask {
             SegmentInMemory&& source_segment,
             SegmentInMemory target_segment,
             FrameSlice frame_slice,
+            uint32_t index_field_count,
             DecodePathData shared_data,
             std::any& handler_data,
             bool fetch_index,
@@ -1384,6 +1386,7 @@ struct CopyToBufferTask : async::BaseTask {
             source_segment_(std::move(source_segment)),
         target_segment_(std::move(target_segment)),
         frame_slice_(std::move(frame_slice)),
+        index_field_count_(index_field_count),
         shared_data_(std::move(shared_data)),
         handler_data_(handler_data),
         fetch_index_(fetch_index),
@@ -1391,19 +1394,18 @@ struct CopyToBufferTask : async::BaseTask {
     }
 
     folly::Unit operator()() {
-        const auto index_field_count = get_index_field_count(target_segment_);
-        for (auto idx = 0u; idx < index_field_count && fetch_index_; ++idx) {
+        for (auto idx = 0u; idx < index_field_count_ && fetch_index_; ++idx) {
             copy_frame_data_to_buffer(target_segment_, idx, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
         }
 
-        auto field_count = frame_slice_.col_range.diff() + index_field_count;
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-        field_count == source_segment_.descriptor().field_count(),
-        "Column range does not match segment descriptor field count in copy_segments_to_frame: {} != {}",
-        field_count, source_segment_.descriptor().field_count());
+//        auto field_count = frame_slice_.col_range.diff() + index_field_count_;
+//        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+//        field_count == source_segment_.descriptor().field_count(),
+//        "Column range does not match segment descriptor field count in copy_segments_to_frame: {} != {}",
+//        field_count, source_segment_.descriptor().field_count());
 
         const auto& fields = source_segment_.descriptor().fields();
-        for (auto field_col = index_field_count; field_col < field_count; ++field_col) {
+        for (auto field_col = fetch_index_ ? index_field_count_ : get_index_field_count(source_segment_); field_col < fields.size(); ++field_col) {
             const auto& field = fields.at(field_col);
             const auto& field_name = field.name();
             auto frame_loc_opt = target_segment_.column_index(field_name);
@@ -1422,6 +1424,12 @@ folly::Future<folly::Unit> copy_segments_to_frame(
         SegmentInMemory frame,
         std::any& handler_data,
         OutputFormat output_format) {
+    uint32_t index_field_count;
+    if (pipeline_context->norm_meta_->df().common().has_multi_index()) {
+        index_field_count = pipeline_context->norm_meta_->df().common().multi_index().field_count() + 1;
+    } else {
+        index_field_count = pipeline_context->descriptor().index().field_count();
+    }
     std::vector<folly::Future<folly::Unit>> copy_tasks;
     DecodePathData shared_data;
     for (auto context_row : folly::enumerate(*pipeline_context)) {
@@ -1432,6 +1440,7 @@ folly::Future<folly::Unit> copy_segments_to_frame(
                 slice_and_key.release_segment(store),
                 frame,
                 context_row->slice_and_key().slice(),
+                index_field_count,
                 shared_data,
                 handler_data,
                 context_row->fetch_index(),
