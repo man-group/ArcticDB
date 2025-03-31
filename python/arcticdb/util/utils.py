@@ -403,14 +403,16 @@ class ListGenerators:
         unique_values = set()
         while len(unique_values) < pool_size:
             unique_values.add(ListGenerators.random_string(length=str_length, include_unicode=include_unicode,
-                                                           seed=None))
+                                                           seed=seed))
         return list(unique_values)
 
     @classmethod
     def generate_random_strings(cls, str_size: int, length: int, 
                                     include_unicode: bool = False, seed = 1434) -> List[str]:
+        if seed is not None:
+            random.seed(seed)
         return [ListGenerators.random_string(length=str_size, 
-                                             include_unicode=include_unicode, seed=seed) for _ in range(length)]
+                                             include_unicode=include_unicode, seed=None) for _ in range(length)]
     
     @classmethod
     def generate_random_ints(cls, dtype: ArcticIntType, 
@@ -459,15 +461,14 @@ class DFGenerator:
     """
 
     def __init__(self, size: int, seed = 5555):
-        self.__seed = seed
         self.__size = size
         self.__data = {}
         self.__types = {}
         self.__df = None
         self.__index = None
-        if self.__seed is not None:
-            np.random.seed(self.__seed)
-            random.seed(self.__seed)
+        if seed is not None:
+            np.random.seed(seed)
+            random.seed(seed)
 
     def generate_dataframe(self) -> pd.DataFrame:
         if self.__df is None:
@@ -629,6 +630,7 @@ class DFGenerator:
             string_sizes =  [10] * num_cols
         if seed is not None:
             np.random.seed(seed=seed)
+            random.seed(seed=seed)
         data = [[random_string(string_sizes[col]) 
                  for col in range(num_cols)] 
                  for _ in range(num_rows)]

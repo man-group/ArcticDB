@@ -50,9 +50,9 @@ class RealComparisonBenchmarks:
     #       Therefore if you plan changes to those numbers make sure to delete old library manually 
     NUMBER_ROWS = 2_000_000 #100_000
 
-    # NO_OPERATION measures class memory allocation. This is the actual memory that
+    # BASE_MEMORY measures class memory allocation. This is the actual memory that
     # is used by the tools and code that does the measurement. Thus any other measurement
-    # number should be deducted with NO_OPERATION number to receive actual number.
+    # number should be deducted with BASE_MEMORY number to receive actual number.
     # The whole discussion is available at: 
     # https://github.com/man-group/ArcticDB/wiki/ASV-Benchmarks:-Running,-designing-and-implementing#understanding-and-implementing-peakmem-benchmarks
     params = [BASE_MEMORY, CREATE_DATAFRAME, PANDAS_PARQUET, ARCTICDB_LMDB, ARCTICDB_AMAZON_S3]
