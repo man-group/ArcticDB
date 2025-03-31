@@ -18,13 +18,13 @@ cd $PARALLEL_TEST_ROOT
 
 export ARCTICDB_RAND_SEED=$RANDOM
 
-if [ -z "$ARCTICDB_PYTEST_ARGS" ] && [ -z "$PYTEST_ADD_TO_COMMAND_LINE" ]; then
+if [ -z "$ARCTICDB_PYTEST_ARGS" ]; then
     echo "Executing tests with no additional arguments"
     $catch python -m pytest --timeout=3600 $PYTEST_XDIST_MODE -v \
         --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
         --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
         --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
-        "$@" 2>&1 | sed -r "s#^(tests/.*/([^/]+\.py))?#\2#"
+        $PYTEST_ADD_TO_COMMAND_LINE "$@" 2>&1 | sed -r "s#^(tests/.*/([^/]+\.py))?#\2#"
 else
     echo "Executing tests with additional pytest argiments:"
     echo "from user: $ARCTICDB_PYTEST_ARGS"
