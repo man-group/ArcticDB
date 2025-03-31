@@ -98,6 +98,43 @@ def test_symbol_concat_different_column_sets(lmdb_library_factory, dynamic_schem
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
+@pytest.mark.parametrize("columns_per_segment", [2, 100_000])
+@pytest.mark.parametrize("index", [None, pd.date_range("2025-01-01", periods=5)])
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_empty_column_intersection(lmdb_library_factory, dynamic_schema, columns_per_segment, index, join):
+    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, columns_per_segment=columns_per_segment))
+    df_0 = pd.DataFrame(
+        {
+            "col1": np.arange(5, dtype=np.float64),
+            "col2": np.arange(5, dtype=np.float64),
+            "col3": np.arange(5, dtype=np.float64),
+        },
+        index=index,
+    )
+    df_1 = pd.DataFrame(
+        {
+            "col4": np.arange(5, dtype=np.float64),
+            "col5": np.arange(5, dtype=np.float64),
+            "col6": np.arange(5, dtype=np.float64),
+        },
+        index=index,
+    )
+    lib.write("sym0", df_0)
+    lib.write("sym1", df_1)
+
+    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join=join).collect().data
+    if join == "inner":
+        if index is None:
+            assert not len(received)
+        assert not len(received.columns)
+    else:
+        expected = pd.concat([df_0, df_1], join=join)
+        if index is None:
+            expected.index = pd.RangeIndex(len(expected))
+        assert_frame_equal(expected, received)
+
+
+@pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns", [["col1"], ["col2"], ["col3"], ["col1", "col2"], ["col1", "col3"], ["col2", "col3"]])
@@ -135,10 +172,6 @@ def test_symbol_concat_column_slicing(lmdb_library_factory, dynamic_schema, rows
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-# @pytest.mark.parametrize("dynamic_schema", [False])
-# @pytest.mark.parametrize("rows_per_segment", [100_000])
-# @pytest.mark.parametrize("columns_per_segment", [2])
-# @pytest.mark.parametrize("join", ["inner"])
 def test_symbol_concat_multiindex_basic(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, join):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
     df = pd.DataFrame(
