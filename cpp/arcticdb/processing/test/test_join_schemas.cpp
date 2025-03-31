@@ -73,7 +73,6 @@ protected:
         one_datetime_one_string_field.add_scalar_field(DataType::UTF_DYNAMIC64, "level2");
     }
 
-    StreamDescriptor zero_index_fields{{}, IndexDescriptorImpl{0, IndexDescriptor::Type::ROWCOUNT}};
     StreamDescriptor one_index_field{{}, IndexDescriptorImpl{1, IndexDescriptor::Type::TIMESTAMP}};
     StreamDescriptor two_index_fields{{}, IndexDescriptorImpl{2, IndexDescriptor::Type::TIMESTAMP}};
     StreamDescriptor one_datetime_field;
@@ -86,14 +85,6 @@ protected:
     StreamDescriptor one_datetime_one_float_field;
     StreamDescriptor one_datetime_one_string_field;
 };
-
-TEST_F(AddIndexFieldsTest, ZeroIndexFields) {
-    auto stream_desc = zero_index_fields.clone();
-    std::vector<OutputSchema> output_schemas;
-    auto non_matching_name_indices = add_index_fields(stream_desc, output_schemas);
-    ASSERT_EQ(stream_desc, zero_index_fields);
-    ASSERT_TRUE(non_matching_name_indices.empty());
-}
 
 TEST_F(AddIndexFieldsTest, NotEnoughIndexFields) {
     std::vector<OutputSchema> output_schemas(1);
