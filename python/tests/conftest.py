@@ -56,6 +56,7 @@ from .util.mark import (
 )
 from arcticdb.storage_fixtures.utils import safer_rmtree
 import arcticdb.toolbox.query_stats as query_stats
+# query_stats.enable()
 
 
 # region =================================== Misc. Constants & Setup ====================================

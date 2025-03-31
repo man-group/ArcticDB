@@ -390,6 +390,7 @@ def test_write_batch(library_factory):
 
 def test_write_batch_dedup(library_factory):
     """Should be able to write different size of batch of data reusing deduplicated data from previous versions."""
+    import arcticdb.toolbox.query_stats as qs
     lib = library_factory(LibraryOptions(rows_per_segment=10, dedup=True))
     assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
     assert lib._nvs._lib_cfg.lib_desc.version.write_options.de_duplication == True
@@ -404,13 +405,19 @@ def test_write_batch_dedup(library_factory):
     list_dataframes = {}
     columns = random_strings_of_length(num_columns, num_columns, True)
     df = generate_dataframe(random.sample(columns, num_columns), dt, num_days, num_rows_per_day)
+    log = True
     for v in range(num_versions):
         write_requests = []
         for sym in range(num_symbols):
             write_requests.append(WritePayload("symbol_" + str(sym), df, metadata="great_metadata" + str(v)))
             read_requests.append("symbol_" + str(sym))
             list_dataframes[sym] = df
+        if log:
+            qs.enable()
         write_batch_result = lib.write_batch(write_requests)
+        if log:
+            qs.disable()
+            log = False
         assert all(type(w) == PythonVersionedItem for w in write_batch_result)
 
     read_batch_result = lib.read_batch(read_requests)
@@ -426,7 +433,8 @@ def test_write_batch_dedup(library_factory):
         data_key_version = lib._nvs.read_index("symbol_" + str(sym))["version_id"]
         for s in range(num_segments):
             assert data_key_version[s] == 0
-
+    import json
+    print(json.dumps(qs.get_query_stats(), indent=4))
 
 def test_write_batch_missing_keys_dedup(library_factory):
     """When there is duplicate data to reuse for the current write, we need to access the index key of the previous

@@ -30,6 +30,7 @@
 #include <fstream>
 #include <fmt/format.h>
 #include <type_traits>
+#include <sys/syscall.h>
 
 namespace arcticdb::async {
 class TaskScheduler;
@@ -197,20 +198,20 @@ class ExecutorWithStatsInstance : public T{
             std::chrono::milliseconds expiration,
             folly::Func expireCallback = nullptr) override {
             if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) {
-                auto id = syscall(SYS_gettid);
                 if (!is_folly_thread) {
-                    ARCTICDB_INFO(log::schedule(), "add create {}", id);
+                    auto id = syscall(SYS_gettid);
                     auto wrapped_func = [id, root_thread_local_var = util::query_stats::get_root_thread_local_var(), parent_current_level = util::query_stats::get_root_thread_current_level(), func = std::move(func)](auto&&... vars) mutable{
-                        ARCTICDB_INFO(log::schedule(), "add create lambda {}, {}", id, syscall(SYS_gettid));
+                        ARCTICDB_INFO(log::version(), "ExecutorWithStatsInstance::add python thread {} {}", syscall(SYS_gettid), id);
                         util::query_stats::QueryStats::instance().create_child_level(std::move(root_thread_local_var), parent_current_level);
                         return func(std::forward<decltype(vars)>(vars)...);
                     };
                     T::add(std::move(wrapped_func), expiration, std::move(expireCallback));
                 }
                 else {
-                    ARCTICDB_INFO(log::schedule(), "add pass {}", id);
+                    auto id = syscall(SYS_gettid);
+                    ARCTICDB_INFO(log::version(), "ExecutorWithStatsInstance::add {}", syscall(SYS_gettid));
                     auto wrapped_func = [id, thread_local_var = util::query_stats::QueryStats::instance().thread_local_var_, func = std::move(func)](auto&&... vars) mutable{
-                        ARCTICDB_INFO(log::schedule(), "add pass lambda {}, {}", id, syscall(SYS_gettid));
+                        ARCTICDB_INFO(log::version(), "ExecutorWithStatsInstance::add lambda {} {}", syscall(SYS_gettid), id);
                         util::query_stats::QueryStats::instance().thread_local_var_ = thread_local_var;
                         return func(std::forward<decltype(vars)>(vars)...);
                     };
@@ -218,7 +219,10 @@ class ExecutorWithStatsInstance : public T{
                 }
             }
             else {
-                auto wrapped_func = [func = std::move(func)](auto&&... vars) mutable{
+                ARCTICDB_INFO(log::version(), "ExecutorWithStatsInstance::add {} no need to pass instance", syscall(SYS_gettid));
+                auto id = syscall(SYS_gettid);
+                auto wrapped_func = [id, func = std::move(func)](auto&&... vars) mutable{
+                    ARCTICDB_INFO(log::version(), "ExecutorWithStatsInstance::add lambda {} {} no need to pass instance", syscall(SYS_gettid), id);
                     return func(std::forward<decltype(vars)>(vars)...);
                 };
                 T::add(std::move(wrapped_func), expiration, std::move(expireCallback));
@@ -256,7 +260,7 @@ class TaskScheduler {
     auto submit_cpu_task(Task &&t) {
         auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only supports Task derived from BaseTask");
-        ARCTICDB_DEBUG(log::schedule(), "{} Submitting CPU task {}: {} of {}", uintptr_t(this), typeid(task).name(), cpu_exec_.getTaskQueueSize(), cpu_exec_.kDefaultMaxQueueSize);
+        ARCTICDB_INFO(log::schedule(), "{} Submitting CPU task {}: {} of {}", uintptr_t(this), typeid(task).name(), cpu_exec_.getTaskQueueSize(), cpu_exec_.kDefaultMaxQueueSize);
         // Executor::Add will be called before below function
         std::lock_guard lock{cpu_mutex_};
         return cpu_exec_.addFuture(std::move(task));
@@ -266,7 +270,7 @@ class TaskScheduler {
     auto submit_io_task(Task &&t) {
         auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only support Tasks derived from BaseTask");
-        ARCTICDB_DEBUG(log::schedule(), "{} Submitting IO task {}: {}", uintptr_t(this), typeid(task).name(), io_exec_.getPendingTaskCount());
+        ARCTICDB_INFO(log::schedule(), "{} Submitting IO task {}: {}", uintptr_t(this), typeid(task).name(), io_exec_.getPendingTaskCount());
         // Executor::Add will be called before below function
         std::lock_guard lock{io_mutex_};
         return io_exec_.addFuture(std::move(task));

@@ -857,6 +857,8 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
         }
     }
     """
+    import json
+    print(json.dumps(stats, indent=4))
     assert "batch_read" in stats
     batch_read_stats = stats["batch_read"]
     assert {"count", "key_type", "total_time_ms"} == batch_read_stats.keys()

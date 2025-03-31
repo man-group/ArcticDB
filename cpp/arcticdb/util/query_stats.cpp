@@ -13,6 +13,7 @@
 #include <arcticdb/stream/stream_utils.hpp>
 
 #include <pybind11/pybind11.h>
+#include <sys/syscall.h>
 
 namespace arcticdb::util::query_stats {
 
@@ -32,7 +33,7 @@ std::shared_ptr<GroupingLevel> QueryStats::current_level(){
         thread_local_var_->parent_current_level_ = thread_local_var_->root_level_;
         std::lock_guard<std::mutex> lock(root_level_mutex_);
         root_levels_.emplace_back(thread_local_var_->root_level_);
-        ARCTICDB_DEBUG(log::version(), "Current GroupingLevel created");
+        ARCTICDB_INFO(log::version(), "Current GroupingLevel created");
     }
     return thread_local_var_->current_level_;
 }
@@ -51,6 +52,10 @@ void QueryStats::reset_stats() {
 
 QueryStats& QueryStats::instance() {
     static QueryStats instance;
+    // std::lock_guard<std::mutex> lock(thread_local_var_->child_level_creation_mutex_);
+    // if (!(!async::is_folly_thread || thread_local_var_->child_levels_.size() == 0)) {
+    //     check(!async::is_folly_thread || thread_local_var_->child_levels_.size() == 0, "ABC");
+    // }
     return instance;
 }
 
@@ -93,7 +98,7 @@ std::shared_ptr<GroupingLevel> QueryStats::root_level() {
         thread_local_var_->parent_current_level_ = thread_local_var_->root_level_;
         std::lock_guard<std::mutex> lock(root_level_mutex_);
         root_levels_.emplace_back(thread_local_var_->root_level_);
-        ARCTICDB_DEBUG(log::version(), "Root GroupingLevel created");
+        ARCTICDB_INFO(log::version(), "Root GroupingLevel created");
     }
     return thread_local_var_->root_level_;
 }
@@ -155,6 +160,10 @@ StatsGroup::StatsGroup(
         prev_level_(QueryStats::instance().current_level()),
         start_(start),
         log_time_(log_time) {
+    auto id = syscall(SYS_gettid);
+    if (col == GroupName::key_type && default_value == "KeyType::TABLE_DATA") {
+        ARCTICDB_INFO(log::version(), "StatsGroup::StatsGroup {} {}", syscall(SYS_gettid), id);
+    }
     check(async::is_folly_thread || 
         prev_level_ != QueryStats::instance().root_level() || 
         col == GroupName::arcticdb_call,
@@ -181,7 +190,8 @@ StatsGroup::~StatsGroup() {
         stats[static_cast<size_t>(StatsName::count)]++;
     }
     query_stats_instance.set_level(prev_level_);
-    if (!async::is_folly_thread && query_stats_instance.current_level() == query_stats_instance.root_level()) {
+    if (!query_stats_instance.thread_local_var_->child_levels_.empty() && query_stats_instance.current_level() == query_stats_instance.root_level()) {
+        ARCTICDB_INFO(log::version(), "merge_levels {}", syscall(SYS_gettid));
         query_stats_instance.merge_levels();
     }
 }

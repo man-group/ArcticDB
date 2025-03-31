@@ -173,12 +173,12 @@ def _process_level(level: Any, current_dict: Dict[str, Any]) -> None:
                         "count": 1
                     }
                     """
-                    if key_type_src and key_type_src in current_dict:
-                        if key_type_dest in op_map:
-                            op_map[key_type_dest].update(current_dict[key_type_src])
-                        else:
-                            op_map[key_type_dest] = current_dict[key_type_src]
-                        del current_dict[key_type_src]
+                    # if key_type_src and key_type_src in current_dict:
+                    #     if key_type_dest in op_map:
+                    #         op_map[key_type_dest].update(current_dict[key_type_src])
+                    #     else:
+                    #         op_map[key_type_dest] = current_dict[key_type_src]
+                    #     del current_dict[key_type_src]
 
                 _process_level(sub_layer, current_dict[level_type][sub_name])
 
