@@ -11,7 +11,7 @@ from arcticdb import Arctic
 from arcticdb.version_store.library import WritePayload, ReadRequest
 import pandas as pd
 
-from .common import *
+from benchmarks.common import *
 
 
 # Common parameters between BasicFunctions and ModificationFunctions

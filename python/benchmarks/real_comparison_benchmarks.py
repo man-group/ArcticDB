@@ -17,7 +17,7 @@ from arcticdb.util.environment_setup import LibraryPopulationPolicy, LibraryType
 from arcticdb.util.test import random_string, random_integers, random_dates
 
 
-NO_OPERATION = "no-operation-load"
+BASE_MEMORY = "no-operation-load"
 CREATE_DATAFRAME = "create-df-pandas-from_dict"
 PANDAS_PARQUET = "pandas-parquet"
 ARCTICDB_LMDB = "arcticdb-lmdb"
@@ -55,7 +55,7 @@ class RealComparisonBenchmarks:
     # number should be deducted with NO_OPERATION number to receive actual number.
     # The whole discussion is available at: 
     # https://github.com/man-group/ArcticDB/wiki/ASV-Benchmarks:-Running,-designing-and-implementing#understanding-and-implementing-peakmem-benchmarks
-    params = [NO_OPERATION, CREATE_DATAFRAME, PANDAS_PARQUET, ARCTICDB_LMDB, ARCTICDB_AMAZON_S3]
+    params = [BASE_MEMORY, CREATE_DATAFRAME, PANDAS_PARQUET, ARCTICDB_LMDB, ARCTICDB_AMAZON_S3]
     param_names = ["backend_type"]
 
     library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="COMPARISON")
@@ -147,7 +147,7 @@ class RealComparisonBenchmarks:
 
     def peakmem_read_dataframe(self, tpl, btype):
         df, dict = tpl
-        if btype == NO_OPERATION:
+        if btype == BASE_MEMORY:
             # measures base memory which need to be deducted from 
             # any measurements with actual operations
             # see discussion above 
@@ -165,7 +165,7 @@ class RealComparisonBenchmarks:
 
     def peakmem_write_dataframe(self, tpl, btype):
         df, dict = tpl
-        if btype == NO_OPERATION:
+        if btype == BASE_MEMORY:
             # What is the tool mem load?
             return
         if btype == CREATE_DATAFRAME:
@@ -184,7 +184,7 @@ class RealComparisonBenchmarks:
         This scenario includes creation of dataframe and then its serialization to storage
         """
         df, dict = tpl
-        if btype == NO_OPERATION:
+        if btype == BASE_MEMORY:
             # What is the tool mem load?
             return
         df = pd.DataFrame(dict) # always create dataframe in this scenario
