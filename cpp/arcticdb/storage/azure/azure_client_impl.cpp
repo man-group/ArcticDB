@@ -6,7 +6,35 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+/**
+ * Azure Transport Selection:
+ *
+ * This file implements platform-specific HTTP transport selection for Azure storage operations:
+ *
+ * - On Windows (_WIN32):
+ *   - Always uses WinHTTP (native Windows HTTP client)
+ *   - CA certificate settings are ignored as WinHTTP uses Windows certificate store
+ *   - Custom CA certificates must be installed via Windows Certificate Manager (certmgr.msc)
+ *   - This provides better performance and integration with Windows security
+ *
+ * - On non-Windows platforms:
+ *   - Always uses libcurl as the HTTP transport
+ *   - Supports custom CA certificate configuration via ca_cert_path and ca_cert_dir
+ *
+ * The selection is done at compile time via preprocessor directives to ensure
+ * optimal performance and minimal runtime overhead. The appropriate transport
+ * header is included based on the platform, and the transport is configured
+ * in get_client_options().
+ */
+
+#if defined(_WIN32)
+#include <azure/core/http/win_http_transport.hpp>
+#else
 #include <azure/core/http/curl_transport.hpp>
+#endif
+
+#include <azure/core.hpp>
+#include <azure/storage/blobs.hpp>
 
 #include <arcticdb/storage/azure/azure_client_impl.hpp>
 #include <arcticdb/storage/azure/azure_client_interface.hpp>
@@ -43,6 +71,19 @@ Azure::Storage::Blobs::BlobClientOptions RealAzureClient::get_client_options(con
         }
         client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
     }
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using WinHTTP transport (Windows native)");
+#else
+    // On non-Windows platforms, always use libcurl
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using libcurl transport");
+    Azure::Core::Http::CurlTransportOptions curl_transport_options;
+    if (!conf.ca_cert_path().empty()) {
+        curl_transport_options.CAInfo = conf.ca_cert_path();
+    }
+    if (!conf.ca_cert_dir().empty()) {
+        curl_transport_options.CAPath = conf.ca_cert_dir();
+    }
+    client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
+#endif
     return client_options;
 }
 
