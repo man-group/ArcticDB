@@ -332,6 +332,44 @@ def test_symbol_concat_differently_named_multiindexes(
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("tz_0_level_0", [None, "Europe/Amsterdam", "US/Eastern"])
+@pytest.mark.parametrize("tz_0_level_1", [None, "Europe/Amsterdam", "Australia/Sydney"])
+@pytest.mark.parametrize("tz_1_level_0", [None, "Europe/Amsterdam", "US/Eastern"])
+@pytest.mark.parametrize("tz_1_level_1", [None, "Europe/Amsterdam", "Australia/Sydney"])
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_multiindex_timezone_handling(
+        lmdb_library,
+        tz_0_level_0,
+        tz_0_level_1,
+        tz_1_level_0,
+        tz_1_level_1,
+        join
+):
+    lib = lmdb_library
+    df_0 = pd.DataFrame(
+        {
+            "col1": np.arange(1, dtype=np.float64),
+            "col2": np.arange(1, 2, dtype=np.float64),
+        },
+        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4, tz=tz_0_level_0), pd.date_range("2025-01-01", periods=3, tz=tz_0_level_1)])
+    )
+    df_1 = pd.DataFrame(
+        {
+            "col1": np.arange(2, 3, dtype=np.float64),
+            "col2": np.arange(3, 4, dtype=np.float64),
+        },
+        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4, tz=tz_1_level_0), pd.date_range("2025-01-01", periods=3, tz=tz_1_level_1)])
+    )
+    lib.write("sym0", df_0)
+    lib.write("sym1", df_1)
+    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join).collect().data
+
+    expected_level_0_tz = f"datetime64[ns, {tz_0_level_0}]" if (tz_0_level_0 == tz_1_level_0 and tz_0_level_0 is not None) else "datetime64[ns]"
+    expected_level_1_tz = f"datetime64[ns, {tz_0_level_1}]" if (tz_0_level_1 == tz_1_level_1 and tz_0_level_1 is not None) else "datetime64[ns]"
+    assert str(received.index.dtypes[0]) == expected_level_0_tz
+    assert str(received.index.dtypes[1]) == expected_level_1_tz
+
+
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_symbols_with_different_indexes(lmdb_library, join):
     lib = lmdb_library
