@@ -121,6 +121,8 @@ def test_arcticdb_gcpxml_uri_bad(uri:str, expected: str):
     execute_uri_test(uri, expected, gcp_access_key, gcp_secret_key)
 
 
+@REAL_S3_TESTS_MARK
+@REAL_GCP_TESTS_MARK
 @pytest.mark.storage
 @pytest.mark.authentication
 def test_arcticdb_s3_config_file(tmpdir):

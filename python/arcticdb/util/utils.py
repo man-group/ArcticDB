@@ -9,6 +9,7 @@ import inspect
 import logging
 import os
 import random
+import re
 import string
 import time
 import sys
