@@ -665,4 +665,28 @@ struct RemoveBatchTask : BaseTask {
     }
 };
 
+struct ObjectSizesTask : BaseTask {
+    KeyType type_;
+    std::string prefix_;
+    std::shared_ptr<storage::Library> lib_;
+
+    ObjectSizesTask(
+        KeyType type,
+        std::string prefix,
+        std::shared_ptr<storage::Library> lib
+        ) :
+        type_(type),
+        prefix_(std::move(prefix)),
+        lib_(std::move(lib)) {
+        ARCTICDB_DEBUG(log::storage(), "Creating object sizes task for key type {} prefix {}", type_, prefix_);
+    }
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(ObjectSizesTask)
+
+    folly::Future<storage::ObjectSizes> operator()() {
+        util::check(lib_->supports_object_size_calculation(), "ObjectSizesBytesTask should only be used with storages"
+                                                              " that natively support size calculation");
+        return lib_->get_object_sizes(type_, prefix_);
+    }
+};
 }

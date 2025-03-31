@@ -430,11 +430,9 @@ std::vector<SliceAndKey> get_incomplete(
                             util::raise_rte("Only timestamp based ranges supported for filtering.");
                         },
                         [&entries](const IndexRange &index_range) {
-                            entries.erase(
-                                std::remove_if(std::begin(entries), std::end(entries), [&](const auto &entry) {
-                                    return !intersects(index_range, entry.slice_and_key_.key().index_range());
-                                }),
-                                std::end(entries));
+                            std::erase_if(entries, [&](const auto &entry) {
+                                return !intersects(index_range, entry.slice_and_key_.key().index_range());
+                            });
                         },
                         [](const auto &) {
                             // Don't know what to do with this index
@@ -463,6 +461,13 @@ void remove_incomplete_segments(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id) {
     delete_keys_of_type_for_stream(store, stream_id, KeyType::APPEND_DATA);
+}
+
+void remove_incomplete_segments(
+    const std::shared_ptr<Store>& store, const std::unordered_set<StreamId>& sids, const std::string& common_prefix
+) {
+    auto match_stream_id =  [&sids](const VariantKey & k){ return sids.contains(variant_key_id(k)); };
+    delete_keys_of_type_if(store, match_stream_id, KeyType::APPEND_DATA, common_prefix);
 }
 
 std::vector<AppendMapEntry> load_via_list(

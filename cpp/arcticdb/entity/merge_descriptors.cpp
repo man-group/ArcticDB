@@ -11,18 +11,25 @@
 #include <arcticdb/entity/type_utils.hpp>
 
 namespace arcticdb {
+/// @param convert_int_to_float This will convert all integer types (both signed and unsigned) to FLOAT64 without
+///   performing any type checks. This is available only via the V1 Library API and is used by tick collectors. It can
+///   be true only if descriptors are merged during a compact_incomplete call. Otherwise, it must be false.
 StreamDescriptor merge_descriptors(
     const StreamDescriptor &original,
     std::span<const std::shared_ptr<FieldCollection>> entries,
-    const std::unordered_set<std::string_view> &filtered_set,
-    const std::optional<IndexDescriptorImpl>& default_index) {
+    const std::unordered_set<std::string_view>& filtered_set,
+    const std::optional<IndexDescriptorImpl>& default_index,
+    bool convert_int_to_float) {
     using namespace arcticdb::stream;
     std::vector<std::string_view> merged_fields;
     std::unordered_map<std::string_view, TypeDescriptor> merged_fields_map;
 
     for (const auto &field : original.fields()) {
         merged_fields.push_back(field.name());
-        merged_fields_map.try_emplace(field.name(), field.type());
+        const TypeDescriptor type = convert_int_to_float && is_integer_type(field.type().data_type())
+                                        ? TypeDescriptor{DataType::FLOAT64, field.type().dimension()}
+                                        : field.type();
+        merged_fields_map.try_emplace(field.name(), type);
     }
 
     auto index = empty_index();
@@ -55,10 +62,12 @@ StreamDescriptor merge_descriptors(
             );
         }
 
-        for (size_t idx = has_index ? 1u : 0u; idx < static_cast<size_t>(fields->size()); ++idx) {
+        for (size_t idx = has_index ? 1u : 0u; idx < fields->size(); ++idx) {
             const auto& field = fields->at(idx);
-            const auto& type_desc = field.type();
-            if (filtered_set.empty() || (filtered_set.find(field.name()) != filtered_set.end())) {
+            if (filtered_set.empty() || filtered_set.contains(field.name())) {
+                const auto type_desc = convert_int_to_float && is_integer_type(field.type().data_type())
+                                           ? TypeDescriptor{DataType::FLOAT64, field.type().dimension()}
+                                           : field.type();
                 if(auto existing = merged_fields_map.find(field.name()); existing != merged_fields_map.end()) {
                     auto existing_type_desc = existing->second;
                     if(existing_type_desc != type_desc) {
@@ -91,41 +100,44 @@ StreamDescriptor merge_descriptors(
     for(const auto& field_name : merged_fields) {
         new_fields->add_field(merged_fields_map[field_name], field_name);
     }
-    return arcticdb::entity::StreamDescriptor{original.id(), get_descriptor_from_index(index), std::move(new_fields)};
+    return StreamDescriptor{original.id(), get_descriptor_from_index(index), std::move(new_fields)};
 }
 
 StreamDescriptor merge_descriptors(
     const StreamDescriptor &original,
     const std::vector<std::shared_ptr<FieldCollection>> &entries,
     const std::optional<std::vector<std::string>> &filtered_columns,
-    const std::optional<IndexDescriptorImpl>& default_index) {
+    const std::optional<IndexDescriptorImpl>& default_index,
+    bool convert_int_to_float) {
     std::unordered_set<std::string_view> filtered_set = filtered_columns.has_value()
         ? std::unordered_set<std::string_view>(filtered_columns->begin(), filtered_columns->end())
         : std::unordered_set<std::string_view>{};
-    return merge_descriptors(original, entries, filtered_set, default_index);
+    return merge_descriptors(original, entries, filtered_set, default_index, convert_int_to_float);
 }
 
 StreamDescriptor merge_descriptors(
     const StreamDescriptor& original,
     std::span<const std::shared_ptr<FieldCollection>> entries,
     const std::optional<std::vector<std::string>>& filtered_columns,
-    const std::optional<IndexDescriptorImpl>& default_index) {
+    const std::optional<IndexDescriptorImpl>& default_index,
+    bool convert_int_to_float) {
     std::unordered_set<std::string_view> filtered_set = filtered_columns.has_value()
         ? std::unordered_set<std::string_view>(filtered_columns->begin(), filtered_columns->end())
         : std::unordered_set<std::string_view>{};
-    return merge_descriptors(original, entries, filtered_set, default_index);
+    return merge_descriptors(original, entries, filtered_set, default_index, convert_int_to_float);
 }
 
 StreamDescriptor merge_descriptors(
     const StreamDescriptor &original,
     const std::vector<pipelines::SliceAndKey> &entries,
     const std::optional<std::vector<std::string>> &filtered_columns,
-    const std::optional<IndexDescriptorImpl>& default_index) {
+    const std::optional<IndexDescriptorImpl>& default_index,
+    bool convert_int_to_float) {
     std::vector<std::shared_ptr<FieldCollection>> fields;
     for (const auto &entry : entries) {
         fields.push_back(std::make_shared<FieldCollection>(entry.slice_.desc()->fields().clone()));
     }
-    return merge_descriptors(original, fields, filtered_columns, default_index);
+    return merge_descriptors(original, fields, filtered_columns, default_index, convert_int_to_float);
 }
 
 StreamDescriptor merge_descriptors(
@@ -133,11 +145,13 @@ StreamDescriptor merge_descriptors(
     const StreamDescriptor &original,
     const std::vector<pipelines::SliceAndKey> &entries,
     const std::unordered_set<std::string_view> &filtered_set,
-    const std::optional<IndexDescriptorImpl>& default_index) {
+    const std::optional<IndexDescriptorImpl>& default_index,
+    bool convert_int_to_float) {
     std::vector<std::shared_ptr<FieldCollection>> fields;
+    fields.reserve(entries.size());
     for (const auto &entry : entries) {
-        fields.push_back(std::make_shared<FieldCollection>(entry.segment(store).descriptor().fields().clone()));
+        fields.emplace_back(std::make_shared<FieldCollection>(entry.segment(store).descriptor().fields().clone()));
     }
-    return merge_descriptors(original, fields, filtered_set, default_index);
+    return merge_descriptors(original, fields, filtered_set, default_index, convert_int_to_float);
 }
 }

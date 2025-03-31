@@ -17,6 +17,7 @@ from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_mongo_library_to_env
 from arcticdb.adapters.prefixing_library_adapter_decorator import PrefixingLibraryAdapterDecorator
+from arcticdb.util.test import is_pytest_running
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 if TYPE_CHECKING:
@@ -28,9 +29,18 @@ logger = logging.getLogger("Mongo Storage Fixture")
 log_level = os.getenv("ARCTICDB_mongo_test_fixture_loglevel")
 if log_level:
     log_level = log_level.upper()
-    assert log_level in {"DEBUG", "INFO", "WARN", "ERROR"}, \
-        "Log level must be one of DEBUG, INFO, WARN, ERROR"
+    assert log_level in {"DEBUG", "INFO", "WARN", "ERROR"}, "Log level must be one of DEBUG, INFO, WARN, ERROR"
     logger.setLevel(getattr(logging, log_level))
+
+
+def get_mongo_client(mongo_uri: str) -> "MongoClient":
+    from pymongo import MongoClient
+
+    if is_pytest_running():
+        # Avoids some issues with the PyMongo driver during tests cleanup
+        return MongoClient(mongo_uri, heartbeatFrequencyMS=86400000)
+    else:
+        return MongoClient(mongo_uri)
 
 
 class MongoDatabase(StorageFixture):
@@ -50,11 +60,9 @@ class MongoDatabase(StorageFixture):
             Optionally reusing a client already connected to ``mongo_uri``.
         """
         super().__init__()
-        from pymongo import MongoClient
-
         assert mongo_uri.startswith("mongodb://")
         self.mongo_uri = mongo_uri
-        self.client = client or MongoClient(mongo_uri)
+        self.client = client or get_mongo_client(mongo_uri)
         if not name:
             while True:
                 logger.debug("Searching for new name")
@@ -114,13 +122,11 @@ class ManagedMongoDBServer(StorageFixtureFactory):
         self._client = None
 
     def _safe_enter(self):
-        from pymongo import MongoClient
-
         cmd = [self._executable, "--port", str(self._port), "--dbpath", self._data_dir]
         self._p = GracefulProcessUtils.start(cmd)
         self.mongo_uri = f"mongodb://localhost:{self._port}"
         wait_for_server_to_come_up(f"http://localhost:{self._port}", "mongod", self._p)
-        self._client = MongoClient(self.mongo_uri)
+        self._client = get_mongo_client(self.mongo_uri)
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self._client:
@@ -142,6 +148,7 @@ class ManagedMongoDBServer(StorageFixtureFactory):
 
 def is_mongo_host_running(host):
     import requests
+
     try:
         res = requests.get(f"http://{host}")
     except requests.exceptions.ConnectionError:
