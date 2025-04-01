@@ -64,22 +64,11 @@ struct FrameSliceMap {
                         continue;
                     }
                 }
-                if (context_row.fetch_index()) {
-                    if (field.index < num_index_fields) {
-                        const entity::StreamDescriptor &descriptor = context_->descriptor();
-                        auto &column = columns_[descriptor.field(field.index).name()];
-                        ContextData data{context_row.index_, field.index};
-                        column.insert(std::make_pair(row_range, data));
-                    } else {
-                        auto &column = columns_[field->name()];
-                        ContextData data{context_row.index_, field.index};
-                        column.insert(std::make_pair(row_range, data));
-                    }
-                } else {
-                    auto &column = columns_[field->name()];
-                    ContextData data{context_row.index_, field.index};
-                    column.insert(std::make_pair(row_range, data));
-                }
+                const auto& field_name = (context_row.fetch_index() && field.index < num_index_fields) ?
+                                  context_->descriptor().field(field.index).name() :
+                                  field->name();
+                auto &column = columns_[field_name];
+                column.insert(std::make_pair(row_range, ContextData{context_row.index_, field.index}));
             }
         }
     }
