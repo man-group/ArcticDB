@@ -317,12 +317,12 @@ namespace
                 if(dynamic_schema) {
                     if constexpr (dynamic_schema_data_type != col_type_info::data_type && is_integer_type(col_type_info::data_type)) {
                         log::message().warn(
-                            "The column \"{}\" of type {} is a result of a {} aggregation, and the library is using a"
-                            "dynamic schema. ArcticDB will promote the type to {} so that if a grouping bucket is empty,"
-                            " it will be assigned a value of NaN. This behavior will be deprecated with the release of "
-                            "ArcticDB v6.0.0 and will change as follows. If Arrow is used as a backend, empty grouping"
-                            " buckets will be use Arrow's missing value. If numpy is used as a backend all missing data"
-                            "will be backfilled with 0.",
+                            "The column \"{}\" of type {} is a result of a {} aggregation and the library is configured"
+                            " to use dynamic schema. ArcticDB will promote the type to {} so that if a grouping bucket "
+                            "is empty, it will be assigned a value of NaN. This behavior will be deprecated with the "
+                            "release of ArcticDB v6.0.0 and will change as follows. If Arrow output format is used, "
+                            "empty grouping buckets will be use Arrow's missing value. If numpy output format is used "
+                            "all missing data will be backfilled with 0.",
                             output_column_name.value, col_type_info::data_type, T == Extremum::MIN ? "MIN" : "MAX", dynamic_schema_data_type);
                     }
                     auto prev_size = aggregated.size() / sizeof(MaybeValueType);
