@@ -22,7 +22,7 @@ on:
       dev_image_tag:
         description: Tag of the ArcticDB development image to use for the Linux C++ tests build
         type: string
-        default: arcticdb-dev-clang:latest
+        default: arcticdb-dev:latest
       pytest_args:
         description: Rewrite what tests will run
         type: string
@@ -83,7 +83,7 @@ jobs:
                   mongodb:
                     image: "mongo:4.4"
                 container:
-                  image: ghcr.io/man-group/${{inputs.dev_image_tag || 'arcticdb-dev-clang:latest'}}
+                  image: ghcr.io/man-group/${{inputs.dev_image_tag || 'arcticdb-dev:latest'}}
                   volumes:
                     - /:/mnt
             windows_matrix:
