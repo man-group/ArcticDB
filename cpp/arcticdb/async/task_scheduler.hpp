@@ -179,7 +179,6 @@ inline auto get_default_num_cpus([[maybe_unused]] const std::string& cgroup_fold
 * 4/ Throttling: (similar to priority) how to absorb work spikes and apply memory backpressure
 */
 
-#include <sys/syscall.h>
 template <typename T>
 class ExecutorWithStatsInstance : public T{
     public:
@@ -197,35 +196,18 @@ class ExecutorWithStatsInstance : public T{
             std::chrono::milliseconds expiration,
             folly::Func expireCallback = nullptr) override {
             if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) {
-                if (arcticdb::util::query_stats::QueryStats::need_to_create_child_level_) {
-                    auto id = syscall(SYS_gettid);
-                    ARCTICDB_INFO(log::version(), "ExecutorWithStatsInstance::add python thread {}", syscall(SYS_gettid));
-                    auto wrapped_func = [id/*, create_childs_root_level_callback = arcticdb::util::query_stats::QueryStats::instance().get_create_childs_root_level_callback()*/, func = std::move(func)](auto&&... vars) mutable{
-                        ARCTICDB_INFO(log::version(), "ExecutorWithStatsInstance::add python thread {} {}", syscall(SYS_gettid), id);
-                        // util::query_stats::QueryStats::instance().create_child_level(create_childs_root_level_callback());
-                        return func(std::forward<decltype(vars)>(vars)...);
-                    };
-                    arcticdb::util::query_stats::QueryStats::instance().need_to_create_child_level_ = false;
-                    T::add(std::move(wrapped_func), expiration, std::move(expireCallback));
-                }
-                else {
-                    auto id = syscall(SYS_gettid);
-                    ARCTICDB_INFO(log::version(), "ExecutorWithStatsInstance::add {}", syscall(SYS_gettid));
-                    auto wrapped_func = [id, thread_local_var = util::query_stats::QueryStats::instance().thread_local_var_, create_childs_root_level_callback = util::query_stats::QueryStats::instance().get_create_childs_root_level_callback(), func = std::move(func)](auto&&... vars) mutable{
-                        ARCTICDB_INFO(log::version(), "ExecutorWithStatsInstance::add lambda {} {}", syscall(SYS_gettid), id);
-                        util::query_stats::QueryStats::instance().thread_local_var_->root_level_ = thread_local_var->root_level_;
-                        util::query_stats::QueryStats::instance().thread_local_var_->current_level_ = thread_local_var->current_level_;
-                        util::query_stats::QueryStats::instance().set_create_childs_root_level_callback(create_childs_root_level_callback);
-                        return func(std::forward<decltype(vars)>(vars)...);
-                    };
-                    T::add(std::move(wrapped_func), expiration, std::move(expireCallback));
-                }
-            }
-            else {
-                auto wrapped_func = [func = std::move(func)](auto&&... vars) mutable{
+                ARCTICDB_DEBUG(log::schedule(), "ExecutorWithStatsInstance::add");
+                auto wrapped_func = [thread_local_var = util::query_stats::QueryStats::instance().thread_local_var_, create_childs_root_level_callback = util::query_stats::QueryStats::instance().get_create_childs_root_level_callback(), func = std::move(func)](auto&&... vars) mutable{
+                    ARCTICDB_DEBUG(log::schedule(), "ExecutorWithStatsInstance::add lambda");
+                    util::query_stats::QueryStats::instance().thread_local_var_->root_level_ = thread_local_var->root_level_;
+                    util::query_stats::QueryStats::instance().thread_local_var_->current_level_ = thread_local_var->current_level_;
+                    util::query_stats::QueryStats::instance().set_create_childs_root_level_callback(create_childs_root_level_callback);
                     return func(std::forward<decltype(vars)>(vars)...);
                 };
                 T::add(std::move(wrapped_func), expiration, std::move(expireCallback));
+            }
+            else {
+                T::add(std::move(func), expiration, std::move(expireCallback));
             }
         }
 };
@@ -266,7 +248,6 @@ class TaskScheduler {
             auto wrapped_task = [task = std::move(task), create_childs_root_level_callback = util::query_stats::QueryStats::instance().get_create_childs_root_level_callback()]() mutable{
                 util::query_stats::QueryStats::instance().set_create_childs_root_level_callback(create_childs_root_level_callback);
                 util::query_stats::QueryStats::instance().create_child_level(create_childs_root_level_callback());
-                // util::query_stats::QueryStats::need_to_create_child_level_ = true;
                 return task();
             };
             return cpu_exec_.addFuture(std::move(wrapped_task));
@@ -286,7 +267,6 @@ class TaskScheduler {
             auto wrapped_task = [task = std::move(task), create_childs_root_level_callback = util::query_stats::QueryStats::instance().get_create_childs_root_level_callback()]() mutable{
                 util::query_stats::QueryStats::instance().set_create_childs_root_level_callback(create_childs_root_level_callback);
                 util::query_stats::QueryStats::instance().create_child_level(create_childs_root_level_callback());
-                // util::query_stats::QueryStats::need_to_create_child_level_ = true;
                 return task();
             };
             return io_exec_.addFuture(std::move(wrapped_task));
