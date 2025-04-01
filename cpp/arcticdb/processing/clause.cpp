@@ -1599,8 +1599,13 @@ void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output
     // If the first schema is multiindexed then use this field count
     // It will be checked later if the other norm metas are compatible
     uint32_t num_index_fields;
-    if (output_schema.front().norm_metadata_.df().common().has_multi_index()) {
-        num_index_fields = output_schema.front().norm_metadata_.df().common().multi_index().field_count() + 1;
+    const auto& first_norm_meta = output_schema.front().norm_metadata_;
+    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(first_norm_meta.has_df() || first_norm_meta.has_series(),
+                                                    "Multi-symbol joins only supported with Series and DataFrames");
+    if (first_norm_meta.has_df() && first_norm_meta.df().common().has_multi_index()) {
+        num_index_fields = first_norm_meta.df().common().multi_index().field_count() + 1;
+    } else if (first_norm_meta.has_series() && first_norm_meta.series().common().has_multi_index()) {
+        num_index_fields = first_norm_meta.series().common().multi_index().field_count() + 1;
     } else {
         num_index_fields = stream_desc.index().field_count();
     }
@@ -1663,8 +1668,13 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
     uint32_t num_index_fields;
     // If the first schema is multiindexed then use this field count
     // It will be checked later if the other norm metas are compatible
-    if (output_schemas.front().norm_metadata_.df().common().has_multi_index()) {
-        num_index_fields = output_schemas.front().norm_metadata_.df().common().multi_index().field_count() + 1;
+    const auto& first_norm_meta = output_schemas.front().norm_metadata_;
+    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(first_norm_meta.has_df() || first_norm_meta.has_series(),
+                                                    "Multi-symbol joins only supported with Series and DataFrames");
+    if (first_norm_meta.has_df() && first_norm_meta.df().common().has_multi_index()) {
+        num_index_fields = first_norm_meta.df().common().multi_index().field_count() + 1;
+    } else if (first_norm_meta.has_series() && first_norm_meta.series().common().has_multi_index()) {
+        num_index_fields = first_norm_meta.series().common().multi_index().field_count() + 1;
     } else {
         num_index_fields = stream_desc.index().field_count();
     }

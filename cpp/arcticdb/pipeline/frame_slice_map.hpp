@@ -24,12 +24,14 @@ struct FrameSliceMap {
         context_(std::move(context)) {
 
         uint32_t num_index_fields;
-        if (context_->norm_meta_->df().common().has_multi_index()) {
-            num_index_fields = context_->norm_meta_->df().common().multi_index().field_count() + 1;
+        const auto& norm_meta = context_->norm_meta_;
+        if (static_cast<bool>(norm_meta) && norm_meta->has_df() && norm_meta->df().common().has_multi_index()) {
+            num_index_fields = norm_meta->df().common().multi_index().field_count() + 1;
+        } else if (static_cast<bool>(norm_meta) && norm_meta->has_series() && norm_meta->series().common().has_multi_index()) {
+            num_index_fields = norm_meta->series().common().multi_index().field_count() + 1;
         } else {
             num_index_fields = context_->descriptor().index().field_count();
         }
-
         for (const auto &context_row: *context_) {
             const auto& row_range = context_row.slice_and_key().slice_.row_range;
 

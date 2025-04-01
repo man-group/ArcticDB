@@ -1397,13 +1397,6 @@ struct CopyToBufferTask : async::BaseTask {
         for (auto idx = 0u; idx < index_field_count_ && fetch_index_; ++idx) {
             copy_frame_data_to_buffer(target_segment_, idx, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
         }
-
-//        auto field_count = frame_slice_.col_range.diff() + index_field_count_;
-//        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-//        field_count == source_segment_.descriptor().field_count(),
-//        "Column range does not match segment descriptor field count in copy_segments_to_frame: {} != {}",
-//        field_count, source_segment_.descriptor().field_count());
-
         const auto& fields = source_segment_.descriptor().fields();
         for (auto field_col = fetch_index_ ? index_field_count_ : get_index_field_count(source_segment_); field_col < fields.size(); ++field_col) {
             const auto& field = fields.at(field_col);
@@ -1424,9 +1417,12 @@ folly::Future<folly::Unit> copy_segments_to_frame(
         SegmentInMemory frame,
         std::any& handler_data,
         OutputFormat output_format) {
+    const auto& norm_meta = pipeline_context->norm_meta_;
     uint32_t index_field_count;
-    if (pipeline_context->norm_meta_->df().common().has_multi_index()) {
-        index_field_count = pipeline_context->norm_meta_->df().common().multi_index().field_count() + 1;
+    if (norm_meta->has_df() && norm_meta->df().common().has_multi_index()) {
+        index_field_count = norm_meta->df().common().multi_index().field_count() + 1;
+    } else if (norm_meta->has_series() && norm_meta->series().common().has_multi_index()) {
+        index_field_count = norm_meta->series().common().multi_index().field_count() + 1;
     } else {
         index_field_count = pipeline_context->descriptor().index().field_count();
     }
