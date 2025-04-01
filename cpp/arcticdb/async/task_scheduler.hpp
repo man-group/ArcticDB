@@ -197,10 +197,16 @@ class ExecutorWithStatsInstance : public T{
             folly::Func expireCallback = nullptr) override {
             if (util::query_stats::QueryStats::instance().is_enabled()) {
                 ARCTICDB_DEBUG(log::schedule(), "ExecutorWithStatsInstance::add");
-                auto wrapped_func = [root_level = util::query_stats::QueryStats::instance().thread_local_var_->root_level_, current_level = util::query_stats::QueryStats::instance().thread_local_var_->current_level_, create_childs_root_level_callback = util::query_stats::QueryStats::instance().get_create_childs_root_level_callback(), func = std::move(func)](auto&&... vars) mutable{
+                auto& query_stat_instance = util::query_stats::QueryStats::instance();
+                auto wrapped_func = [
+                        root_level = query_stat_instance.root_level(), 
+                        current_level = query_stat_instance.current_level(), 
+                        create_childs_root_level_callback = query_stat_instance.get_create_childs_root_level_callback(), 
+                        func = std::move(func)
+                    ](auto&&... vars) mutable{
                     ARCTICDB_DEBUG(log::schedule(), "ExecutorWithStatsInstance::add lambda");
-                    util::query_stats::QueryStats::instance().thread_local_var_->root_level_ = root_level;
-                    util::query_stats::QueryStats::instance().thread_local_var_->current_level_ = current_level;
+                    util::query_stats::QueryStats::instance().thread_local_var_.root_level_ = root_level;
+                    util::query_stats::QueryStats::instance().thread_local_var_.current_level_ = current_level;
                     util::query_stats::QueryStats::instance().set_create_childs_root_level_callback(create_childs_root_level_callback);
                     return func(std::forward<decltype(vars)>(vars)...);
                 };
@@ -245,6 +251,8 @@ class TaskScheduler {
         ARCTICDB_DEBUG(log::schedule(), "{} Submitting CPU task {}: {} of {}", uintptr_t(this), typeid(task).name(), cpu_exec_.getTaskQueueSize(), cpu_exec_.kDefaultMaxQueueSize);
         std::lock_guard lock{cpu_mutex_};
         if (util::query_stats::QueryStats::instance().is_enabled()) {
+            // Callback for creating new child level at parent's level (python thread) is needed for support submitting new tasks in folly tasks
+            // Note that folly tasks being submitted in folly tasks will share the same parent level as the folly task submits them 
             auto wrapped_task = [task = std::move(task), create_childs_root_level_callback = util::query_stats::QueryStats::instance().get_create_childs_root_level_callback()]() mutable{
                 util::query_stats::QueryStats::instance().set_create_childs_root_level_callback(create_childs_root_level_callback);
                 util::query_stats::QueryStats::instance().create_child_level(create_childs_root_level_callback());
@@ -264,6 +272,8 @@ class TaskScheduler {
         ARCTICDB_DEBUG(log::schedule(), "{} Submitting IO task {}: {}", uintptr_t(this), typeid(task).name(), io_exec_.getPendingTaskCount());
         std::lock_guard lock{io_mutex_};
         if (util::query_stats::QueryStats::instance().is_enabled()) {
+            // Callback for creating new child level at parent's level (python thread) is needed for support submitting new tasks in folly tasks
+            // Note that folly tasks being submitted in folly tasks will share the same parent level as the folly task submits them 
             auto wrapped_task = [task = std::move(task), create_childs_root_level_callback = util::query_stats::QueryStats::instance().get_create_childs_root_level_callback()]() mutable{
                 util::query_stats::QueryStats::instance().set_create_childs_root_level_callback(create_childs_root_level_callback);
                 util::query_stats::QueryStats::instance().create_child_level(create_childs_root_level_callback());

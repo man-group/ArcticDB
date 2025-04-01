@@ -144,7 +144,7 @@ public:
     QueryStats(const QueryStats&) = delete;
     QueryStats() = default;
 
-    thread_local inline static std::shared_ptr<ThreadLocalQueryStatsVar> thread_local_var_ = std::make_shared<ThreadLocalQueryStatsVar>();
+    thread_local inline static ThreadLocalQueryStatsVar thread_local_var_;
 private:
     bool is_enabled_ = false;
     std::mutex root_level_mutex_; 
@@ -190,7 +190,7 @@ std::string format_group_value(GroupName col_value, auto&& value) {
 }
 
 void add_logical_keys(GroupName group_name, const entity::KeyType physical_key_type, const SegmentInMemory& segment);
-std::shared_ptr<GroupingLevel> create_childs_root_level(std::shared_ptr<ThreadLocalQueryStatsVar> thread_local_var, std::shared_ptr<GroupingLevel> parent_current_level);
+std::shared_ptr<GroupingLevel> create_childs_root_level(ThreadLocalQueryStatsVar& thread_local_var, std::shared_ptr<GroupingLevel> parent_current_level);
 }
 }
 
