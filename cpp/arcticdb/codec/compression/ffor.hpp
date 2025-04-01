@@ -144,7 +144,6 @@ struct FForCompressor : public FFORCompressData {
         });
     }
 
-
     size_t compress(ColumnData data, T *__restrict out, size_t count) {
         if (count == 0)
             return 0;
@@ -205,10 +204,7 @@ struct FForCompressor : public FFORCompressData {
                 get_reference<T>()
             );
         }
-        ARCTICDB_DEBUG(log::codec(), "Compressed size including remainder: {} from {} bytes",
-                       compressed_size * sizeof(T),
-                       count * sizeof(T));
-
+        ARCTICDB_DEBUG(log::codec(), "Compressed size including remainder: {} from {} bytes", compressed_size * sizeof(T), count * sizeof(T));
         return compressed_size;
     }
 };

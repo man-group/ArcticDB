@@ -128,4 +128,100 @@ TEST(RealDoubleHeaderTest, OffsetsAndDataPreservationFloat) {
     EXPECT_EQ(header->exceptions()[0], 0xCCCC);
     EXPECT_EQ(header->exception_positions()[0], 0xDDDD);
 }
+
+TEST(ALPDecimalHeaderTest, Float) {
+    alp::state<float> state;
+    state.exceptions_count = 5;
+    state.bit_width = 8;
+    state.exp = 2;
+    state.fac = 3;
+
+    using EncodedType = StorageType<float>::signed_type;
+    size_t dataSize = alp::config::VECTOR_SIZE * sizeof(EncodedType);
+    size_t exceptionsBytes = state.exceptions_count * sizeof(float);
+    size_t exceptionPositionsSize = state.exceptions_count * sizeof(uint16_t);
+    constexpr size_t headerSize = ALPDecimalHeader<float>::HeaderSize;
+    size_t expectedTotalSize = headerSize + dataSize + exceptionsBytes + exceptionPositionsSize;
+
+    std::vector<uint8_t> buffer(expectedTotalSize, 0xFF);
+
+    ALPDecimalHeader<float>* header = new (buffer.data()) ALPDecimalHeader<float>(state);
+
+    EXPECT_EQ(header->total_size(), expectedTotalSize);
+
+    auto encoded = header->data();
+    for (size_t i = 0; i < alp::config::VECTOR_SIZE; ++i) {
+        encoded[i] = static_cast<EncodedType>(i);
+    }
+
+    float* exceptions = header->exceptions();
+    for (uint16_t i = 0; i < state.exceptions_count; ++i) {
+        exceptions[i] = static_cast<float>(i * 10);
+    }
+
+    uint16_t* positions = header->exception_positions();
+    for (uint16_t i = 0; i < state.exceptions_count; ++i) {
+        positions[i] = i + 100;
+    }
+
+    for (size_t i = 0; i < alp::config::VECTOR_SIZE; ++i) {
+        EXPECT_EQ(encoded[i], static_cast<EncodedType>(i));
+    }
+
+    for (uint16_t i = 0; i < state.exceptions_count; ++i) {
+        EXPECT_EQ(exceptions[i], static_cast<float>(i * 10));
+    }
+
+    for (uint16_t i = 0; i < state.exceptions_count; ++i) {
+        EXPECT_EQ(positions[i], i + 100);
+    }
+}
+
+TEST(ALPDecimalHeaderTest, Double) {
+    alp::state<double> state;
+    state.exceptions_count = 5;
+    state.bit_width = 16;
+    state.exp = 4;
+    state.fac = 6;
+
+    using EncodedType = StorageType<double>::signed_type;
+    size_t dataSize = alp::config::VECTOR_SIZE * sizeof(EncodedType);
+    size_t exceptionsBytes = state.exceptions_count * sizeof(double);
+    size_t exceptionPositionsSize = state.exceptions_count * sizeof(uint16_t);
+    constexpr size_t headerSize = ALPDecimalHeader<double>::HeaderSize;
+    size_t expectedTotalSize = headerSize + dataSize + exceptionsBytes + exceptionPositionsSize;
+
+    std::vector<uint8_t> buffer(expectedTotalSize, 0xFF);
+    ALPDecimalHeader<double>* header = new (buffer.data()) ALPDecimalHeader<double>(state);
+
+    EXPECT_EQ(header->total_size(), expectedTotalSize);
+
+    auto encoded = header->data();
+    for (size_t i = 0; i < alp::config::VECTOR_SIZE; ++i) {
+        encoded[i] = static_cast<EncodedType>(i);
+    }
+
+    double* exceptions = header->exceptions();
+    for (uint16_t i = 0; i < state.exceptions_count; ++i) {
+        exceptions[i] = static_cast<double>(i * 20);
+    }
+
+    uint16_t* positions = header->exception_positions();
+    for (uint16_t i = 0; i < state.exceptions_count; ++i) {
+        positions[i] = i + 200;
+    }
+
+    for (size_t i = 0; i < alp::config::VECTOR_SIZE; ++i) {
+        EXPECT_EQ(encoded[i], static_cast<EncodedType>(i));
+    }
+
+    for (uint16_t i = 0; i < state.exceptions_count; ++i) {
+        EXPECT_EQ(exceptions[i], static_cast<double>(i * 20));
+    }
+
+    for (uint16_t i = 0; i < state.exceptions_count; ++i) {
+        EXPECT_EQ(positions[i], i + 200);
+    }
+}
+
 }

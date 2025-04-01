@@ -7,43 +7,45 @@
 #include <arcticdb/codec/compression/fastlanes_common.hpp>
 #include "frequency.hpp"
 #include <arcticdb/codec/compression/contiguous_range_adaptor.hpp>
+#include <arcticdb/codec/compression/alp/rd.hpp>
+#include <arcticdb/codec/compression/alp_header.hpp>
 
 namespace arcticdb {
-template<typename T>
 struct CompressionSample {
-    double ratio;
-    size_t bits_needed;
+    size_t bits_needed_;
+    size_t bit_width_;
+    size_t exceptions_;
 };
 
-template<typename T>
 struct CompressionEstimate {
-    double estimated_ratio;
-    size_t estimated_bits_needed;
-    std::vector<CompressionSample<T>> samples;
+    size_t estimated_bytes_;
+    size_t max_bit_width_;
+    size_t max_exceptions_;
+    std::vector<CompressionSample> samples_;
 };
 
-// Generic block analyzer that takes a function to calculate bits needed
-template<typename T, typename BitsCalculator>
-CompressionSample<T> analyze_block(
+constexpr std::size_t round_up_bits(std::size_t bits) noexcept {
+    return (bits + (CHAR_BIT - 1)) / CHAR_BIT;
+}
+
+template<typename T, typename Estimator>
+CompressionSample analyze_block(
         FieldStatsImpl field_stats,
         const T* data,
         size_t block_size,
-        BitsCalculator&& calc_bits) {
-    size_t bits_needed = calc_bits(field_stats, data, block_size);
-    double ratio = static_cast<double>(bits_needed * block_size) / (sizeof(T) * CHAR_BIT * block_size);
-    return {ratio, bits_needed};
+        Estimator&& estimator) {
+    return estimator(field_stats, data, block_size);
 }
 
-template<typename T, typename BitsCalculator>
-CompressionEstimate<T> estimate_compression(
+template<typename T, typename Estimator>
+CompressionEstimate estimate_compression(
     FieldStatsImpl field_stats,
     ColumnData data,
     size_t row_count,
-    BitsCalculator&& calc_bits,
+    Estimator&& estimator,
     size_t num_samples = 10) {
 
-    static constexpr size_t bits_per_block = 1024;
-    static constexpr size_t values_per_block = bits_per_block / (sizeof(T) * CHAR_BIT);
+    static constexpr size_t values_per_block = BLOCK_SIZE;
 
     const size_t num_blocks = row_count / values_per_block;
     if (num_blocks == 0) {
@@ -53,11 +55,12 @@ CompressionEstimate<T> estimate_compression(
     const size_t samples_to_take = std::min(num_samples, num_blocks);
     const size_t block_stride = num_blocks / samples_to_take;
 
-    std::vector<CompressionSample<T>> samples;
+    std::vector<CompressionSample> samples;
     samples.reserve(samples_to_take);
 
-    double total_ratio = 0.0;
-    size_t max_bits_needed = 0;
+    size_t max_bit_width = 0;
+    size_t max_exceptions = 0;
+    size_t total_sample_compressed_size = 0;
 
     ContiguousRangeRandomAccessAdaptor<T, values_per_block> adaptor{data};
     for (size_t i = 0; i < samples_to_take; ++i) {
@@ -67,23 +70,27 @@ CompressionEstimate<T> estimate_compression(
             field_stats,
             ptr,
             values_per_block,
-            calc_bits);
+            estimator);
 
         samples.push_back(sample);
-        total_ratio += sample.ratio;
-        max_bits_needed = std::max(max_bits_needed, sample.bits_needed);
+        max_bit_width = std::max(max_bit_width, sample.bits_needed_);
+        max_exceptions = std::max(max_exceptions, sample.exceptions_);
+        total_sample_compressed_size += round_up_bits(sample.bits_needed_);
     }
 
+    const auto estimated_bytes = (total_sample_compressed_size / samples_to_take) * num_blocks;
+
     return {
-        total_ratio / samples_to_take,
-        max_bits_needed,
-        std::move(samples)
+        .estimated_bytes_ = estimated_bytes,
+        .max_bit_width_ = max_bit_width,
+        .max_exceptions_ = max_exceptions,
+        .samples_ = std::move(samples)
     };
 }
 
 template<typename T>
 struct RunLengthEstimator {
-    size_t operator()(const T* data, size_t block_size) const {
+    CompressionSample operator()(const T* data, size_t block_size) const {
         T max_run = 1;
         size_t current_run = 1;
 
@@ -96,8 +103,8 @@ struct RunLengthEstimator {
             }
         }
         max_run = std::max(max_run, static_cast<T>(current_run));
-
-        return std::bit_width(static_cast<std::make_unsigned_t<T>>(max_run));
+        auto bit_width = std::bit_width(static_cast<std::make_unsigned_t<T>>(max_run));
+        return {.bits_needed_ = bit_width * block_size, .bit_width_ = bit_width, .exceptions_ = 0};
     }
 };
 
@@ -107,7 +114,7 @@ struct DeltaEstimator {
         return Helper<T>::num_lanes * sizeof(T);
     }
 
-    size_t operator()(
+    CompressionSample operator()(
             FieldStatsImpl,
             const T* data,
             size_t block_size) const {
@@ -118,13 +125,85 @@ struct DeltaEstimator {
             max_delta = std::max(max_delta, delta);
         }
 
-        return std::bit_width(static_cast<std::make_unsigned_t<T>>(max_delta));
+        const auto bit_width = std::bit_width(static_cast<std::make_unsigned_t<T>>(max_delta));
+        return {.bits_needed_ = bit_width * block_size, .bit_width_ = bit_width, .exceptions_ = 0};
+    }
+};
+
+
+template <typename T>
+struct ALPEstimator {
+    static constexpr size_t overhead() {
+        return 0;
+    }
+
+    CompressionSample operator()(
+        FieldStatsImpl,
+        const T* data,
+        size_t block_size) const {
+        alp::state<T> state;
+        std::array<T, alp::config::VECTOR_SIZE> sample_buf;
+        alp::encoder<T>::init(data, 0, block_size, sample_buf.data(), state);
+        if(block_size < alp::config::VECTOR_SIZE)
+            return {.bits_needed_ = sizeof(T) * block_size * CHAR_BIT, .bit_width_ = 0, .exceptions_ = 0};
+
+        switch(state.scheme) {
+        case alp::Scheme::ALP_RD: {
+            std::array<uint16_t, alp::config::VECTOR_SIZE> exceptions;
+            std::array<uint16_t, alp::config::VECTOR_SIZE> positions;
+            std::array<uint16_t, alp::config::VECTOR_SIZE> excp_count;
+            std::array<typename StorageType<T>::unsigned_type, alp::config::VECTOR_SIZE> right;
+            std::array<uint16_t, alp::config::VECTOR_SIZE> left;
+
+            alp::rd_encoder<T>::init(data, 0UL, alp::config::VECTOR_SIZE, sample_buf.data(), state);
+            alp::rd_encoder<T>::encode(
+                data,
+                exceptions.data(),
+                positions.data(),
+                excp_count.data(),
+                right.data(),
+                left.data(),
+                state);
+
+            RealDoubleHeader<T> header{state};
+
+            return {
+                .bits_needed_ = header.total_size() * block_size,
+                .bit_width_ = std::max(state.right_bit_width, state.left_bit_width),
+                .exceptions_ = state.exceptions_count
+            };
+        }
+        case alp::Scheme::ALP: {
+            std::array<T, BLOCK_SIZE> exceptions;
+            std::array<uint16_t, BLOCK_SIZE> exception_positions;
+            uint16_t exception_count = 0;
+            std::array<int64_t, BLOCK_SIZE> encoded;
+
+            alp::encoder<T>::init(data, 0, 1024, sample_buf.data(), state);
+            alp::encoder<T>::encode(data, exceptions.data(), exception_positions.data(), &exception_count, encoded.data(), state);
+
+            ALPDecimalHeader<T> header{state};
+
+            return {
+                .bits_needed_ = header.total_size() * block_size,
+                .bit_width_ = state.bit_width,
+                .exceptions_ = state.exceptions_count
+            };
+        }
+        case alp::Scheme::INVALID: {
+            return {sizeof(T) * block_size, 0, 0};
+        }
+        }
     }
 };
 
 template<typename T>
 struct FForEstimator {
-    size_t operator()(
+    constexpr static size_t overhead() {
+        return sizeof(FForHeader<T>);
+    }
+
+    CompressionSample operator()(
             FieldStatsImpl field_stats,
             const T* data,
             size_t block_size) const {
@@ -135,7 +214,8 @@ struct FForEstimator {
             max_delta = std::max<T>(max_delta, data[i] - reference);
         }
 
-        return std::bit_width(static_cast<std::make_unsigned_t<T>>(max_delta));
+        const auto bit_width = std::bit_width(static_cast<std::make_unsigned_t<T>>(max_delta));
+        return {.bits_needed_ = bit_width * block_size, .bit_width_ = bit_width, .exceptions_ = 0};
     }
 };
 
@@ -146,7 +226,7 @@ struct FrequencyEstimator {
     explicit FrequencyEstimator(double required_percentage = 90.0) :
         required_percentage_(required_percentage) {}
 
-    size_t operator()(const T* data, size_t block_size) const {
+    CompressionSample operator()(const T* data, size_t block_size) const {
         // First pass: find candidate for dominant value using Boyer-Moore majority vote
         T candidate{};
         int32_t count = 0;
@@ -178,12 +258,12 @@ struct FrequencyEstimator {
             size_t exception_bits = num_exceptions * sizeof(T) * 8;
             size_t bitmap_bits = block_size + 64;  // Rough estimate of bitmap overhead
 
-            // Return average bits per value
-            return (header_bits + exception_bits + bitmap_bits) / block_size;
+            auto required_size = (header_bits + exception_bits + bitmap_bits) / block_size;
+            return {.bits_needed_ = required_size, .bit_width_ = 0, .exceptions_ = 0};
         }
 
-        // If frequency requirement not met, return original size
-        return sizeof(T) * 8;
+        // If no dominator found, return full size
+        return {.bits_needed_ = sizeof(T) * block_size, .bit_width_ = 0, .exceptions_ = 0};
     }
 };
 

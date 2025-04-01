@@ -147,7 +147,7 @@ size_t calculate_block_size(size_t bit_width) {
 }
 
 template <typename T>
-constexpr size_t full_header_size() {
+constexpr size_t delta_header_size() {
     return (sizeof(DeltaHeader<T>) + sizeof(T) - 1) / sizeof(T);
 }
 
@@ -177,7 +177,7 @@ private:
             simd_bit_width_
         };
 
-        return full_header_size<T>();
+        return delta_header_size<T>();
     }
 
     size_t create_size_only_header(T* output) {
@@ -210,7 +210,7 @@ public:
 
         size_t total_size = 0UL;
         if (full_blocks_ > 0) {
-            total_size += full_header_size<T>();
+            total_size += delta_header_size<T>();
             ARCTICDB_DEBUG(log::codec(), "Total size including header: {}", total_size);
 
             T max_delta = std::numeric_limits<T>::lowest();
@@ -391,7 +391,7 @@ public:
 
         if (full_blocks > 0) {
             const auto* full_header = reinterpret_cast<const DeltaHeader<T>*>(input);
-            input_offset = full_header_size<T>() + full_blocks * calculate_block_size<T>(full_header->bit_width_);
+            input_offset = delta_header_size<T>() + full_blocks * calculate_block_size<T>(full_header->bit_width_);
         } else {
             input_offset = sizeof(DeltaSize) / sizeof(T);
         }

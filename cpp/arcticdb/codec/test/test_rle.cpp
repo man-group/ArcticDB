@@ -2,7 +2,6 @@
 #include <vector>
 #include <cstdint>
 #include <limits>
-#include <arcticdb/codec/compression/rle.hpp>
 
 
 namespace arcticdb {

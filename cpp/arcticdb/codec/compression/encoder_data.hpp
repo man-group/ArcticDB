@@ -6,6 +6,8 @@
 #include <arcticdb/storage/memory_layout.hpp>
 #include <arcticdb/util/value_container.hpp>
 #include <arcticdb/util/bitset.hpp>
+#include <arcticdb/codec/compression/alp/constants.hpp>
+#include <arcticdb/codec/compression/alp/encoder.hpp>
 
 namespace arcticdb {
 struct DeltaCompressData {
@@ -37,6 +39,14 @@ struct FFORCompressData {
     }
 };
 
+template <typename T>
+struct ALPCompressData {
+    alp::Scheme scheme_;
+    std::vector<alp::state<T>> states_;
+    size_t max_bit_width_ = 0UL;
+    size_t max_exceptions_ = 0UL;
+};
+
 struct BitPackData {
     size_t bits_needed_;
 };
@@ -49,6 +59,6 @@ struct FrequencyEncodingData {
     std::optional<size_t> expected_bytes_;
 };
 
-using EncoderData = std::variant<std::monostate, DeltaCompressData, FFORCompressData, FrequencyEncodingData, BitPackData>;
+using EncoderData = std::variant<std::monostate, DeltaCompressData, FFORCompressData, FrequencyEncodingData, BitPackData, ALPCompressData<double>, ALPCompressData<float>>;
 
 }

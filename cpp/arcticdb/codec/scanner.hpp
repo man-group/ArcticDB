@@ -121,14 +121,15 @@ inline EncodingScanResultSet predicted_optimal_encodings(ColumnData column_data)
         if(auto exact_size = deterministic_size(type, column_data.field_stats(), data_type, column_data.row_count())) {
             results.try_emplace(create_scan_result(type, *exact_size, speed_factor(type), original_size, true));
         } else {
-            auto maybe_size = estimated_size(
+            auto scan_result = estimated_size(
                 type,
                 column_data.field_stats(),
                 data_type,
                 column_data,
-                column_data.row_count());
+                column_data.row_count(),
+                original_size);
 
-            results.try_emplace(create_scan_result(type, maybe_size, speed_factor(type), original_size, false));
+            results.try_emplace(std::move(scan_result));
         }
     }
 

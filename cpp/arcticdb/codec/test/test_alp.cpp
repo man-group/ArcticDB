@@ -71,56 +71,6 @@ alp::state<T> metadata_to_alp_state(const VectorMetadata &metadata) {
     return state;
 }
 
-template <typename T>
-double calculate_alp_pde_compression_total_bytes(VectorMetadata& vector_metadata) {
-    // Total bits for non-exception values
-    double non_exception_bits = (alp::config::VECTOR_SIZE - vector_metadata.exceptions_count) * vector_metadata.bit_width;
-
-    // Total bits for exceptions
-    double exception_bits = static_cast<double>(vector_metadata.exceptions_count) *
-        (alp::Constants<double>::EXCEPTION_SIZE + alp::EXCEPTION_POSITION_SIZE);
-
-    // Overhead bits is assumed to be specified per value; multiply by VECTOR_SIZE.
-    double overhead_bits = get_overhead_per_vector<T>() * alp::config::VECTOR_SIZE;
-
-    // Total bits for the vector
-    double total_bits = non_exception_bits + exception_bits + overhead_bits;
-
-    // Convert to bytes.
-    return total_bits / 8.0;
-}
-double alprd_overhead_per_vector {static_cast<double>(alp::config::MAX_RD_DICTIONARY_SIZE * 16) / alp::config::ROWGROUP_SIZE};
-
-double calculate_alprd_compression_total_bytes(VectorMetadata& vector_metadata) {
-    // For the ALP_RD scheme the base encoding uses right_bit_width and left_bit_width for every value.
-    double base_bits = alp::config::VECTOR_SIZE * (vector_metadata.right_bit_width + vector_metadata.left_bit_width);
-
-    // Exception bits for ALP_RD are added separately.
-    double exception_bits = static_cast<double>(vector_metadata.exceptions_count) *
-        (alp::RD_EXCEPTION_SIZE + alp::RD_EXCEPTION_POSITION_SIZE);
-
-    // Similarly, overhead specified per value.
-    double overhead_bits = alprd_overhead_per_vector;
-
-    double total_bits = base_bits + exception_bits + overhead_bits;
-    return total_bits / 8.0;
-}
-
-template <typename T>
-double calculate_alp_compression_total_bytes(std::vector<VectorMetadata>& vector_metadatas) {
-    double total_bytes = 0.0;
-    for (auto& vector_metadata : vector_metadatas) {
-        if (vector_metadata.scheme == alp::Scheme::ALP_RD) {
-            total_bytes += calculate_alprd_compression_total_bytes(vector_metadata);
-        } else if (vector_metadata.scheme == alp::Scheme::ALP) {
-            total_bytes += calculate_alp_pde_compression_total_bytes<T>(vector_metadata);
-        } else {
-            throw std::runtime_error("No valid scheme is chosen");
-        }
-    }
-    return total_bytes;
-}
-
 std::vector<double> random_doubles(size_t num_rows = 1024, double min = 0.0, double max = 1000.0) {
     using namespace arcticdb;
     //auto rd = std::random_device();
@@ -242,7 +192,6 @@ TEST(ALP, RoundtripLong) {
     }
     ASSERT_EQ(data, output);
 }
-
 
 TEST(ALP, RoundtripVectorMetadata) {
     constexpr size_t NUM_VALUES = BLOCK_SIZE * 100;
@@ -470,17 +419,17 @@ TEST(ALP, RoundtripALPDecimalContiguous) {
         const auto pos = i * alp::config::VECTOR_SIZE;
         alp::encoder<double>::init(data.data(), pos, NUM_VALUES, sample_buf.data(), states[i]);
         total_size += decimal_size_from_state(states[i]);
-        log::codec().info("state: {}", state.exceptions_count);
+       // log::codec().info("state: {}", state.exceptions_count);
     }
 
     std::vector<uint8_t> compressed(total_size);
     size_t write_pos = 0;
     std::array<double, BLOCK_SIZE> exceptions;
     std::array<uint16_t, BLOCK_SIZE> exception_positions;
-    for(auto i = 0UL; i < 1; ++i) {
+    for(auto i = 0UL; i < num_blocks; ++i) {
         const auto pos = i * alp::config::VECTOR_SIZE;
         auto header = new (compressed.data() + write_pos) ALPDecimalHeader<double>{states[i]};
-        alp::rd_encoder<double>::init(data.data(), pos, NUM_VALUES, sample_buf.data(), state);
+        alp::encoder<double>::init(data.data(), pos, NUM_VALUES, sample_buf.data(), states[i]);
         uint16_t exception_count;
         alp::encoder<double>::encode(
             data.data() + pos,
@@ -488,26 +437,27 @@ TEST(ALP, RoundtripALPDecimalContiguous) {
             exception_positions.data(),
             &exception_count,
             header->data(),
-            state);
+            states[i]);
 
         header->exception_count_ = exception_count;
         if(exception_count > 0) {
             memcpy(header->exceptions(), exceptions.data(), exception_count * sizeof(uint16_t));
             memcpy(header->exception_positions(), exception_positions.data(), exception_count * sizeof(uint16_t));
         }
-        // header->exception_count_ = exception_count;
+        header->exp_ = states[i].exp;
+        header->fac_ = states[i].fac;
         write_pos += header->total_size();
     }
 
     std::vector<double> output(NUM_VALUES);
     auto read_pos = 0UL;
-    for(auto i = 0UL; i < 1; ++i) {
+    for(auto i = 0UL; i < num_blocks; ++i) {
         const auto pos = i * alp::config::VECTOR_SIZE;
         auto* header = reinterpret_cast<ALPDecimalHeader<double>*>(compressed.data() + read_pos);
         header->magic_.check();
         uint16_t exception_count = header->exceptions_count();
         alp::decoder<double>::decode(
-            reinterpret_cast<const StorageType<double>::signed_type*>(compressed.data() + read_pos),
+            reinterpret_cast<const StorageType<double>::signed_type*>(header->data()),
             header->fac_,
             header->exp_,
             output.data() + pos);
