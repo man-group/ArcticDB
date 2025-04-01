@@ -198,13 +198,15 @@ class ExecutorWithStatsInstance : public T{
             std::chrono::milliseconds expiration,
             folly::Func expireCallback = nullptr) override {
             if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) {
-                if (!is_folly_thread) {
+                if (util::query_stats::QueryStats::need_to_create_child_level_) {
                     auto id = syscall(SYS_gettid);
+                    ARCTICDB_INFO(log::version(), "ExecutorWithStatsInstance::add python thread {}", syscall(SYS_gettid));
                     auto wrapped_func = [id, root_thread_local_var = util::query_stats::get_root_thread_local_var(), parent_current_level = util::query_stats::get_root_thread_current_level(), func = std::move(func)](auto&&... vars) mutable{
                         ARCTICDB_INFO(log::version(), "ExecutorWithStatsInstance::add python thread {} {}", syscall(SYS_gettid), id);
                         util::query_stats::QueryStats::instance().create_child_level(std::move(root_thread_local_var), parent_current_level);
                         return func(std::forward<decltype(vars)>(vars)...);
                     };
+                    util::query_stats::QueryStats::need_to_create_child_level_ = false;
                     T::add(std::move(wrapped_func), expiration, std::move(expireCallback));
                 }
                 else {
@@ -263,7 +265,16 @@ class TaskScheduler {
         ARCTICDB_INFO(log::schedule(), "{} Submitting CPU task {}: {} of {}", uintptr_t(this), typeid(task).name(), cpu_exec_.getTaskQueueSize(), cpu_exec_.kDefaultMaxQueueSize);
         // Executor::Add will be called before below function
         std::lock_guard lock{cpu_mutex_};
-        return cpu_exec_.addFuture(std::move(task));
+        if (util::query_stats::QueryStats::instance().is_enabled()) {
+            auto wrapped_task = [task = std::move(task)]() mutable{
+                util::query_stats::QueryStats::need_to_create_child_level_ = true;
+                return task();
+            };
+            return cpu_exec_.addFuture(std::move(wrapped_task));
+        }
+        else {
+            return cpu_exec_.addFuture(std::move(task));
+        }
     }
 
     template<class Task>
@@ -273,7 +284,16 @@ class TaskScheduler {
         ARCTICDB_INFO(log::schedule(), "{} Submitting IO task {}: {}", uintptr_t(this), typeid(task).name(), io_exec_.getPendingTaskCount());
         // Executor::Add will be called before below function
         std::lock_guard lock{io_mutex_};
-        return io_exec_.addFuture(std::move(task));
+        if (util::query_stats::QueryStats::instance().is_enabled()) {
+            auto wrapped_task = [task = std::move(task)]() mutable{
+                util::query_stats::QueryStats::need_to_create_child_level_ = true;
+                return task();
+            };
+            return io_exec_.addFuture(std::move(wrapped_task));
+        }
+        else {
+            return io_exec_.addFuture(std::move(task));
+        }
     }
 
     bool tasks_pending();

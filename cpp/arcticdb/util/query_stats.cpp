@@ -162,7 +162,10 @@ StatsGroup::StatsGroup(
         log_time_(log_time) {
     auto id = syscall(SYS_gettid);
     if (col == GroupName::key_type && default_value == "KeyType::TABLE_DATA") {
-        ARCTICDB_INFO(log::version(), "StatsGroup::StatsGroup {} {}", syscall(SYS_gettid), id);
+        ARCTICDB_INFO(log::version(), "StatsGroup::StatsGroup {} {} {}", syscall(SYS_gettid), id, default_value);
+    }
+    else {
+        ARCTICDB_INFO(log::version(), "StatsGroup::StatsGroup {} {} {}", syscall(SYS_gettid), id, default_value);
     }
     check(async::is_folly_thread || 
         prev_level_ != QueryStats::instance().root_level() || 

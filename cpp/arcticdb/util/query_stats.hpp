@@ -145,6 +145,8 @@ public:
     QueryStats() = default;
 
     thread_local inline static std::shared_ptr<ThreadLocalQueryStatsVar> thread_local_var_ = std::make_shared<ThreadLocalQueryStatsVar>();
+    thread_local inline static bool need_to_create_child_level_ = false;
+    thread_local inline static std::function<std::shared_ptr<GroupingLevel>(ThreadLocalQueryStatsVar& thread_local_var)> create_childs_root_level;
 private:
     bool is_enabled_ = false;
     std::mutex root_level_mutex_; 
