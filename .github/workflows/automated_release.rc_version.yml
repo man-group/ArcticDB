@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
 
 run-name: Release next RC from '${{ github.ref_name }}' 
 jobs:
@@ -35,7 +36,7 @@ jobs:
             base="${LATEST_TAG%${{ vars.RC_SUFFIX }}*}"
             rc_number="${LATEST_TAG##*${{ vars.RC_SUFFIX }}}"
             next_rc_number=$((rc_number + 1))
-            next_version="${base}rc${next_rc_number}"
+            next_version="${base}${{ vars.RC_SUFFIX }}${next_rc_number}"
           fi
           
           echo "next_version=$next_version" >> $GITHUB_OUTPUT
