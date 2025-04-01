@@ -310,7 +310,7 @@ jobs:
           cache-environment: true
           post-cleanup: 'all'
 
-      - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
+      - name: Build ArcticDB C++ target (arcticdb_ext) for conda
         shell: cmd /C call {0}
         run: |
           set CMAKE_GENERATOR_PLATFORM=
@@ -323,18 +323,19 @@ jobs:
           ARCTICDB_BUILD_CPP_TESTS: 1
           ARCTIC_CMAKE_PRESET: windows-cl-conda-release
 
-      - name: Build C++ Tests
+      - name: Build and Run C++ Tests
         shell: bash -elo pipefail {0}
         run: |
-          cd cpp\out\windows-cl-conda-release
-          msbuild arcticdb_rapidcheck_tests.vcxproj /p:Configuration=Release /p:Platform=x64 /m
-          msbuild test_unit_arcticdb.vcxproj /p:Configuration=Release /p:Platform=x64 /m
+          cd cpp
+          CTEST_OUTPUT_ON_FAILURE=1 ctest -C Release --output-on-failure --label-regex "arcticdb_rapidcheck_tests|test_unit_arcticdb"
 
-      - name: Run C++ Tests
-        shell: bash -elo pipefail {0}
+      - name: Build Python target for conda
         run: |
-          cd cpp\out\windows-cl-conda-release
-          ctest -C Release -T test
+          python -m pip install --no-build-isolation --no-deps -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
+          ARCTICDB_BUILD_CPP_TESTS: 1
+          ARCTIC_CMAKE_PRESET: windows-cl-conda-release
 
       - name: Install npm
         uses: actions/setup-node@v3.3.0
