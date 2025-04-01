@@ -242,7 +242,7 @@ class TaskScheduler {
     auto submit_cpu_task(Task &&t) {
         auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only supports Task derived from BaseTask");
-        ARCTICDB_INFO(log::schedule(), "{} Submitting CPU task {}: {} of {}", uintptr_t(this), typeid(task).name(), cpu_exec_.getTaskQueueSize(), cpu_exec_.kDefaultMaxQueueSize);
+        ARCTICDB_DEBUG(log::schedule(), "{} Submitting CPU task {}: {} of {}", uintptr_t(this), typeid(task).name(), cpu_exec_.getTaskQueueSize(), cpu_exec_.kDefaultMaxQueueSize);
         std::lock_guard lock{cpu_mutex_};
         if (util::query_stats::QueryStats::instance().is_enabled()) {
             auto wrapped_task = [task = std::move(task), create_childs_root_level_callback = util::query_stats::QueryStats::instance().get_create_childs_root_level_callback()]() mutable{
@@ -261,7 +261,7 @@ class TaskScheduler {
     auto submit_io_task(Task &&t) {
         auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only support Tasks derived from BaseTask");
-        ARCTICDB_INFO(log::schedule(), "{} Submitting IO task {}: {}", uintptr_t(this), typeid(task).name(), io_exec_.getPendingTaskCount());
+        ARCTICDB_DEBUG(log::schedule(), "{} Submitting IO task {}: {}", uintptr_t(this), typeid(task).name(), io_exec_.getPendingTaskCount());
         std::lock_guard lock{io_mutex_};
         if (util::query_stats::QueryStats::instance().is_enabled()) {
             auto wrapped_task = [task = std::move(task), create_childs_root_level_callback = util::query_stats::QueryStats::instance().get_create_childs_root_level_callback()]() mutable{
