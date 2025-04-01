@@ -1,9 +1,8 @@
 name: "Automated Release: Create next release branch"
 
 on:
-  release:
-    types: [released]
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   get-master-sha:
@@ -27,7 +26,7 @@ jobs:
     needs: get-master-sha
     uses: ./.github/workflows/automated_release.calculate_next_version.yml
     with:
-      regex: ^v\d+\.\d+\.\d+$
+      regex: ^v\d+\.\d+\.\d+\${{ vars.RC_SUFFIX }}\d+$
       from_branch: ${{ needs.get-master-sha.outputs.sha }}
     
   create-next-release-branch:
