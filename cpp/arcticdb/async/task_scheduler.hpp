@@ -197,21 +197,25 @@ class ExecutorWithStatsInstance : public T{
             std::chrono::milliseconds expiration,
             folly::Func expireCallback = nullptr) override {
             if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) {
-                auto id = syscall(SYS_gettid);
-                if (!is_folly_thread) {
-                    ARCTICDB_INFO(log::schedule(), "add create {}", id);
-                    auto wrapped_func = [id, root_thread_local_var = util::query_stats::get_root_thread_local_var(), parent_current_level = util::query_stats::get_root_thread_current_level(), func = std::move(func)](auto&&... vars) mutable{
-                        ARCTICDB_INFO(log::schedule(), "add create lambda {}, {}", id, syscall(SYS_gettid));
-                        util::query_stats::QueryStats::instance().create_child_level(std::move(root_thread_local_var), parent_current_level);
+                if (arcticdb::util::query_stats::QueryStats::need_to_create_child_level_) {
+                    auto id = syscall(SYS_gettid);
+                    ARCTICDB_INFO(log::version(), "ExecutorWithStatsInstance::add python thread {}", syscall(SYS_gettid));
+                    auto wrapped_func = [id/*, create_childs_root_level_callback = arcticdb::util::query_stats::QueryStats::instance().get_create_childs_root_level_callback()*/, func = std::move(func)](auto&&... vars) mutable{
+                        ARCTICDB_INFO(log::version(), "ExecutorWithStatsInstance::add python thread {} {}", syscall(SYS_gettid), id);
+                        // util::query_stats::QueryStats::instance().create_child_level(create_childs_root_level_callback());
                         return func(std::forward<decltype(vars)>(vars)...);
                     };
+                    arcticdb::util::query_stats::QueryStats::instance().need_to_create_child_level_ = false;
                     T::add(std::move(wrapped_func), expiration, std::move(expireCallback));
                 }
                 else {
-                    ARCTICDB_INFO(log::schedule(), "add pass {}", id);
-                    auto wrapped_func = [id, thread_local_var = util::query_stats::QueryStats::instance().thread_local_var_, func = std::move(func)](auto&&... vars) mutable{
-                        ARCTICDB_INFO(log::schedule(), "add pass lambda {}, {}", id, syscall(SYS_gettid));
-                        util::query_stats::QueryStats::instance().thread_local_var_ = thread_local_var;
+                    auto id = syscall(SYS_gettid);
+                    ARCTICDB_INFO(log::version(), "ExecutorWithStatsInstance::add {}", syscall(SYS_gettid));
+                    auto wrapped_func = [id, thread_local_var = util::query_stats::QueryStats::instance().thread_local_var_, create_childs_root_level_callback = util::query_stats::QueryStats::instance().get_create_childs_root_level_callback(), func = std::move(func)](auto&&... vars) mutable{
+                        ARCTICDB_INFO(log::version(), "ExecutorWithStatsInstance::add lambda {} {}", syscall(SYS_gettid), id);
+                        util::query_stats::QueryStats::instance().thread_local_var_->root_level_ = thread_local_var->root_level_;
+                        util::query_stats::QueryStats::instance().thread_local_var_->current_level_ = thread_local_var->current_level_;
+                        util::query_stats::QueryStats::instance().set_create_childs_root_level_callback(create_childs_root_level_callback);
                         return func(std::forward<decltype(vars)>(vars)...);
                     };
                     T::add(std::move(wrapped_func), expiration, std::move(expireCallback));
@@ -256,20 +260,40 @@ class TaskScheduler {
     auto submit_cpu_task(Task &&t) {
         auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only supports Task derived from BaseTask");
-        ARCTICDB_DEBUG(log::schedule(), "{} Submitting CPU task {}: {} of {}", uintptr_t(this), typeid(task).name(), cpu_exec_.getTaskQueueSize(), cpu_exec_.kDefaultMaxQueueSize);
-        // Executor::Add will be called before below function
+        ARCTICDB_INFO(log::schedule(), "{} Submitting CPU task {}: {} of {}", uintptr_t(this), typeid(task).name(), cpu_exec_.getTaskQueueSize(), cpu_exec_.kDefaultMaxQueueSize);
         std::lock_guard lock{cpu_mutex_};
-        return cpu_exec_.addFuture(std::move(task));
+        if (util::query_stats::QueryStats::instance().is_enabled()) {
+            auto wrapped_task = [task = std::move(task), create_childs_root_level_callback = util::query_stats::QueryStats::instance().get_create_childs_root_level_callback()]() mutable{
+                util::query_stats::QueryStats::instance().set_create_childs_root_level_callback(create_childs_root_level_callback);
+                util::query_stats::QueryStats::instance().create_child_level(create_childs_root_level_callback());
+                // util::query_stats::QueryStats::need_to_create_child_level_ = true;
+                return task();
+            };
+            return cpu_exec_.addFuture(std::move(wrapped_task));
+        }
+        else {
+            return cpu_exec_.addFuture(std::move(task));
+        }
     }
 
     template<class Task>
     auto submit_io_task(Task &&t) {
         auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only support Tasks derived from BaseTask");
-        ARCTICDB_DEBUG(log::schedule(), "{} Submitting IO task {}: {}", uintptr_t(this), typeid(task).name(), io_exec_.getPendingTaskCount());
-        // Executor::Add will be called before below function
+        ARCTICDB_INFO(log::schedule(), "{} Submitting IO task {}: {}", uintptr_t(this), typeid(task).name(), io_exec_.getPendingTaskCount());
         std::lock_guard lock{io_mutex_};
-        return io_exec_.addFuture(std::move(task));
+        if (util::query_stats::QueryStats::instance().is_enabled()) {
+            auto wrapped_task = [task = std::move(task), create_childs_root_level_callback = util::query_stats::QueryStats::instance().get_create_childs_root_level_callback()]() mutable{
+                util::query_stats::QueryStats::instance().set_create_childs_root_level_callback(create_childs_root_level_callback);
+                util::query_stats::QueryStats::instance().create_child_level(create_childs_root_level_callback());
+                // util::query_stats::QueryStats::need_to_create_child_level_ = true;
+                return task();
+            };
+            return io_exec_.addFuture(std::move(wrapped_task));
+        }
+        else {
+            return io_exec_.addFuture(std::move(task));
+        }
     }
 
     bool tasks_pending();

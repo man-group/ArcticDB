@@ -123,8 +123,6 @@ struct ThreadLocalQueryStatsVar {
     std::vector<ChildLevel> child_levels_;
     std::shared_ptr<GroupingLevel> root_level_ = nullptr;
     std::shared_ptr<GroupingLevel> current_level_ = nullptr;
-    std::shared_ptr<ThreadLocalQueryStatsVar> parent_thread_local_var_ = nullptr;
-    std::shared_ptr<GroupingLevel> parent_current_level_ = nullptr;
 };
 
 
@@ -133,9 +131,11 @@ public:
     std::shared_ptr<GroupingLevel> current_level();
     std::shared_ptr<GroupingLevel> root_level();
     const std::vector<std::shared_ptr<GroupingLevel>>& root_levels(async::TaskScheduler* const instance) const;
-    void create_child_level(std::shared_ptr<ThreadLocalQueryStatsVar>&& parent_thread_local_var, std::shared_ptr<GroupingLevel>& parent_current_level);
+    void create_child_level(std::shared_ptr<GroupingLevel> new_root_level);
     void set_level(std::shared_ptr<GroupingLevel> &level);
     void reset_stats();
+    std::function<std::shared_ptr<GroupingLevel>()> get_create_childs_root_level_callback();
+    void set_create_childs_root_level_callback(std::function<std::shared_ptr<GroupingLevel>()> callback);
     static QueryStats& instance();
     void merge_levels();
     void enable();
@@ -145,11 +145,14 @@ public:
     QueryStats() = default;
 
     thread_local inline static std::shared_ptr<ThreadLocalQueryStatsVar> thread_local_var_ = std::make_shared<ThreadLocalQueryStatsVar>();
+    thread_local inline static bool need_to_create_child_level_ = false;
 private:
     bool is_enabled_ = false;
     std::mutex root_level_mutex_; 
     // As GIL could be released, each python thread will have their own root level.
     std::vector<std::shared_ptr<GroupingLevel>> root_levels_;
+    
+    thread_local inline static std::function<std::shared_ptr<GroupingLevel>()> create_childs_root_level_callback_;
 };
     
     
@@ -188,9 +191,7 @@ std::string format_group_value(GroupName col_value, auto&& value) {
 }
 
 void add_logical_keys(GroupName group_name, const entity::KeyType physical_key_type, const SegmentInMemory& segment);
-
-std::shared_ptr<ThreadLocalQueryStatsVar> get_root_thread_local_var();
-std::shared_ptr<GroupingLevel> get_root_thread_current_level();
+std::shared_ptr<GroupingLevel> create_childs_root_level(std::shared_ptr<ThreadLocalQueryStatsVar> thread_local_var, std::shared_ptr<GroupingLevel> parent_current_level);
 }
 }
 
