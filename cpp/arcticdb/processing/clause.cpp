@@ -1643,26 +1643,6 @@ void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output
                     }
                 }
             }
-
-            for (const auto& [column_name, data_type]: schema.column_types()) {
-                if (auto columns_to_keep_it = columns_to_keep.find(column_name); columns_to_keep_it != columns_to_keep.end()) {
-                    // Current set of columns under consideration contains column_name, so ensure types are compatible
-                    // and if necessary modify the columns_to_keep value to a type capable of representing all
-                    auto& current_data_type = columns_to_keep_it->second;
-                    auto opt_common_type = has_valid_common_type(make_scalar_type(current_data_type), make_scalar_type(data_type));
-                    if (opt_common_type.has_value()) {
-                        current_data_type = opt_common_type->data_type();
-                    } else {
-                        schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>("No common type between {} and {} when joining schemas", current_data_type, data_type);
-                    }
-                } else {
-                    // This column is new, add it in
-                    auto [_, inserted] = columns_to_keep.emplace(column_name, data_type);
-                    util::check(inserted, "Adding same column name to map twice in outer_join");
-                    column_names_to_keep.emplace_back(column_name);
-                }
-            }
-
         }
     }
     for (const auto& column_name: column_names_to_keep) {
