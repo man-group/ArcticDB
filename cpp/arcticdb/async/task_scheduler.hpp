@@ -195,12 +195,12 @@ class ExecutorWithStatsInstance : public T{
         void add(folly::Func func,
             std::chrono::milliseconds expiration,
             folly::Func expireCallback = nullptr) override {
-            if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) {
+            if (util::query_stats::QueryStats::instance().is_enabled()) {
                 ARCTICDB_DEBUG(log::schedule(), "ExecutorWithStatsInstance::add");
-                auto wrapped_func = [thread_local_var = util::query_stats::QueryStats::instance().thread_local_var_, create_childs_root_level_callback = util::query_stats::QueryStats::instance().get_create_childs_root_level_callback(), func = std::move(func)](auto&&... vars) mutable{
+                auto wrapped_func = [root_level = util::query_stats::QueryStats::instance().thread_local_var_->root_level_, current_level = util::query_stats::QueryStats::instance().thread_local_var_->current_level_, create_childs_root_level_callback = util::query_stats::QueryStats::instance().get_create_childs_root_level_callback(), func = std::move(func)](auto&&... vars) mutable{
                     ARCTICDB_DEBUG(log::schedule(), "ExecutorWithStatsInstance::add lambda");
-                    util::query_stats::QueryStats::instance().thread_local_var_->root_level_ = thread_local_var->root_level_;
-                    util::query_stats::QueryStats::instance().thread_local_var_->current_level_ = thread_local_var->current_level_;
+                    util::query_stats::QueryStats::instance().thread_local_var_->root_level_ = root_level;
+                    util::query_stats::QueryStats::instance().thread_local_var_->current_level_ = current_level;
                     util::query_stats::QueryStats::instance().set_create_childs_root_level_callback(create_childs_root_level_callback);
                     return func(std::forward<decltype(vars)>(vars)...);
                 };
