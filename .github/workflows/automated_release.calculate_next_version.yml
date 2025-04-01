@@ -49,9 +49,9 @@ jobs:
         id: get_increment_type
         env:
           PULL_REQUESTS: ${{ steps.pull_requests.outputs.pull_requests }}
-          MAJOR_LABEL: "api break"
-          MINOR_LABEL: "enhancement"
-          PATCH_LABEL: "bug"
+          MAJOR_LABEL: "major"
+          MINOR_LABEL: "minor"
+          PATCH_LABEL: "patch"
         run: |
           if [ -z "$PULL_REQUESTS" ]; then
             echo "Error: No PRs found between branches" && exit 1
