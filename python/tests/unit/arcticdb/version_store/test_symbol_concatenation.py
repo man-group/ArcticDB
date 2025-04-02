@@ -97,6 +97,48 @@ def test_symbol_concat_different_column_sets(lmdb_library_factory, dynamic_schem
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_dynamic_schema_missing_columns(lmdb_library_factory, join):
+    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=True))
+    df_0 = pd.DataFrame(
+        {
+            "col1": np.arange(5, dtype=np.float64),
+            "col2": np.arange(5, 10, dtype=np.float64),
+            "col3": np.arange(10, 15, dtype=np.float64),
+        }
+    )
+    df_1 = pd.DataFrame(
+        {
+            "col2": np.arange(15, 20, dtype=np.float64),
+            "col3": np.arange(15, 20, dtype=np.float64),
+            "col4": np.arange(20, 25, dtype=np.float64),
+        }
+    )
+    df_2 = pd.DataFrame(
+        {
+            "col1": np.arange(25, 30, dtype=np.float64),
+            "col4": np.arange(30, 35, dtype=np.float64),
+            "col5": np.arange(35, 40, dtype=np.float64),
+        }
+    )
+    df_3 = pd.DataFrame(
+        {
+            "col4": np.arange(40, 45, dtype=np.float64),
+            "col5": np.arange(45, 50, dtype=np.float64),
+            "col6": np.arange(50, 55, dtype=np.float64),
+        }
+    )
+    lib.write("sym0", df_0)
+    lib.append("sym0", df_1)
+    lib.write("sym1", df_2)
+    lib.append("sym1", df_3)
+
+    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join=join).collect().data
+    expected = pd.concat([pd.concat([df_0, df_1], join="outer"), pd.concat([df_2, df_3], join="outer")], join=join)
+    expected.index = pd.RangeIndex(len(expected))
+    assert_frame_equal(expected, received)
+
+
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("index", [None, pd.date_range("2025-01-01", periods=5)])
