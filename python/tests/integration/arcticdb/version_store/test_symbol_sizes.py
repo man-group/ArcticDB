@@ -273,20 +273,25 @@ def test_symbol_sizes_matches_boto(request, store, lib_name):
     s3_storage = request.getfixturevalue(store)
     bucket = s3_storage.get_boto_bucket()
     lib = s3_storage.create_version_store_factory(lib_name)()
-    df = sample_dataframe(100, 0)
-    lib.write("s", df)
 
-    sizes = lib.version_store.scan_object_sizes()
-    assert len(sizes) == 9
-    key_types = {s.key_type for s in sizes}
-    assert key_types == {KeyType.TABLE_DATA, KeyType.TABLE_INDEX, KeyType.VERSION, KeyType.VERSION_REF, KeyType.APPEND_DATA,
-                         KeyType.SNAPSHOT_REF, KeyType.LOG, KeyType.LOG_COMPACTED, KeyType.SYMBOL_LIST}
+    try:
+        df = sample_dataframe(100, 0)
 
-    data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
-    data_keys = [o for o in bucket.objects.all() if "test_symbol_sizes_matches_boto" in o.key and "/tdata/" in o.key]
-    assert len(data_keys) == 1
-    assert len(data_keys) == data_size.count
-    assert data_keys[0].size == data_size.compressed_size
+        lib.write("s", df)
+
+        sizes = lib.version_store.scan_object_sizes()
+        assert len(sizes) == 9
+        key_types = {s.key_type for s in sizes}
+        assert key_types == {KeyType.TABLE_DATA, KeyType.TABLE_INDEX, KeyType.VERSION, KeyType.VERSION_REF, KeyType.APPEND_DATA,
+                             KeyType.SNAPSHOT_REF, KeyType.LOG, KeyType.LOG_COMPACTED, KeyType.SYMBOL_LIST}
+
+        data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
+        data_keys = [o for o in bucket.objects.all() if "test_symbol_sizes_matches_boto" in o.key and "/tdata/" in o.key]
+        assert len(data_keys) == 1
+        assert len(data_keys) == data_size.count
+        assert data_keys[0].size == data_size.compressed_size
+    finally:
+        lib.version_store.clear()
 
 
 def test_symbol_sizes_matches_azurite(azurite_storage, lib_name):
