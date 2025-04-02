@@ -12,6 +12,7 @@ from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.version_store.library import Library
 import hypothesis
 import os
+import threading
 import pytest
 import pandas as pd
 import platform
@@ -88,7 +89,9 @@ def sym(request: "pytest.FixtureRequest"):
 @pytest.fixture()
 def lib_name(request: "pytest.FixtureRequest") -> str:
     name = re.sub(r"[^\w]", "_", request.node.name)[:30]
-    return f"{name}.{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+    pid = os.getpid()
+    thread_id = threading.get_ident()
+    return f"{name}.{random.randint(0, 999)}_{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
 
 
 @pytest.fixture
@@ -176,7 +179,9 @@ def wrapped_s3_storage_factory() -> Generator[MotoS3StorageFixtureFactory, None,
         use_ssl=False,
         ssl_test_support=False,
         bucket_versioning=False,
-        native_config=NativeVariantStorage(NativeS3Settings(AWSAuthMethod.DISABLED, "", True)), # True: use_internal_client_wrapper_for_testing
+        native_config=NativeVariantStorage(
+            NativeS3Settings(AWSAuthMethod.DISABLED, "", True)
+        ),  # True: use_internal_client_wrapper_for_testing
     ) as f:
         yield f
 

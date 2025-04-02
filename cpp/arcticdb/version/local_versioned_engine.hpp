@@ -24,6 +24,8 @@
 
 namespace arcticdb::version_store {
 
+using VersionedItemOrError = std::variant<VersionedItem, DataError>;
+
 /**
  * Implements the parent interface and provides additional methods not needed/suitable by a RemoteVersionedEngine.
  *
@@ -109,6 +111,10 @@ public:
     void remove_incomplete(
         const StreamId& stream_id
     ) override;
+
+    void remove_incompletes(
+        const std::unordered_set<StreamId>& sids, const std::string& common_prefix
+        );
 
     std::optional<VersionedItem> get_latest_version(
         const StreamId &stream_id);

@@ -7,20 +7,22 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import copy
 import datetime
+import os
 
 import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
+
+from arcticdb.exceptions import ArcticDbNotYetImplemented
 from numpy import datetime64
 
-from arcticdb.options import \
-    LibraryOptions, EnterpriseLibraryOptions, ModifiableLibraryOption, ModifiableEnterpriseLibraryOption
+from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
 from arcticdb.preconditions import check
 from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
-from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
+from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError, OutputFormat
 import pandas as pd
@@ -532,6 +534,29 @@ class DevTools:
 
     def library_tool(self):
         return self._nvs.library_tool()
+
+    def remove_incompletes(self, symbols: List[str]):
+        """
+        Removes staged data for several symbols.
+
+        Does not raise if a symbol has no staged data.
+
+        In the worst case this can list over all the staged data in your library, so if you are only touching a small
+        subset of the staged data in your library, it may be better to use the remove_incomplete method above.
+
+        This is a private function for now and its API is not stable.
+
+        Parameters
+        ----------
+        symbols : List[str]
+            Symbols to remove staged data for.
+        """
+        if self._nvs.get_backing_store() == "mongo_storage":
+            # Issue ref: 8784267430
+            raise ArcticDbNotYetImplemented("remove_incompletes is not yet implemented on MongoDB")
+        symbols_set = set(symbols)
+        common_prefix = os.path.commonprefix(symbols)
+        self._nvs.version_store.remove_incompletes(symbols_set, common_prefix)
 
 class Library:
     """
