@@ -531,7 +531,7 @@ void do_visit_object_sizes_for_type_impl(
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
 
             auto zipped = folly::gen::from(output.s3_object_sizes) | folly::gen::zip(output.s3_object_names) | folly::gen::as<std::vector>();
-            for (auto& [size, name] : std::move(zipped)) {
+            for (const auto& [size, name] : zipped) {
                 auto key = name.substr(path_info.path_to_key_size_);
                 auto k = variant_key_from_bytes(
                     reinterpret_cast<uint8_t *>(key.data()),
