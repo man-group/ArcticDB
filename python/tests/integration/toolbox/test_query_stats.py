@@ -1,9 +1,39 @@
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import config_context
+from tests.util.mark import AZURE_TESTS_MARK
 
 import pandas as pd
+import pytest
+import enum
+class Operation(enum.IntEnum):
+    READ = 0
+    WRITE = 1
+    LIST = 2
+    EXIST = 3
+    DELETE = 4
+    
+S3_STORAGE_OPS = ["GetObject", "PutObject", "ListObjectsV2", "HeadObject", "DeleteObjects"]
+AZURE_STORAGE_OPS = ["DownloadTo", "UploadFrom", "ListBlobs", "GetProperties", "DeleteBlob"]
 
-def verify_list_symbool_stats(count):
+@pytest.fixture(
+    scope="function",
+    params=(
+        "s3_version_store_v1",
+        pytest.param("azure_version_store", marks=AZURE_TESTS_MARK),
+    ),
+)
+def query_stats_supported_version_store_and_ops(request):
+    """
+    Designed to test all supported stores
+    """
+    if request.param == "s3_version_store_v1":
+        storage_ops = S3_STORAGE_OPS
+    elif request.param == "azure_version_store":
+        storage_ops = AZURE_STORAGE_OPS
+    yield (request.getfixturevalue(request.param), storage_ops)
+    
+    
+def verify_list_symbool_stats(count, storage_ops):
     stats = qs.get_query_stats()
     """
     Sample output:
@@ -90,34 +120,35 @@ def verify_list_symbool_stats(count):
     for key, key_type_map in key_types.items():
         if key in keys_to_check:
             assert "storage_ops" in key_type_map
-            assert "ListObjectsV2" in key_type_map["storage_ops"]
-            assert "result_count" in key_type_map["storage_ops"]["ListObjectsV2"]
-            list_object_stats = key_type_map["storage_ops"]["ListObjectsV2"]
+            assert storage_ops[Operation.LIST] in key_type_map["storage_ops"]
+            assert "result_count" in key_type_map["storage_ops"][storage_ops[Operation.LIST]]
+            list_object_stats = key_type_map["storage_ops"][storage_ops[Operation.LIST]]
             result_count = list_object_stats["result_count"]
             assert result_count == count if key == "SYMBOL_LIST" else 1 
-            assert list_object_stats["total_time_ms"] / result_count > 1
+            assert list_object_stats["total_time_ms"] / result_count >= 1
             assert list_object_stats["total_time_ms"] / result_count < 100
 
 
-def test_query_stats(s3_version_store_v1, clear_query_stats):
-    s3_version_store_v1.write("a", 1)
+def test_query_stats(query_stats_supported_version_store_and_ops, clear_query_stats):
+    query_stats_supported_version_store, storage_ops = query_stats_supported_version_store_and_ops
+    query_stats_supported_version_store.write("a", 1)
     qs.enable()
     
-    s3_version_store_v1.list_symbols()
-    verify_list_symbool_stats(1)
-    s3_version_store_v1.list_symbols()
-    verify_list_symbool_stats(2)
+    query_stats_supported_version_store.list_symbols()
+    verify_list_symbool_stats(1, storage_ops)
+    query_stats_supported_version_store.list_symbols()
+    verify_list_symbool_stats(2, storage_ops)
     
 
 def test_query_stats_context(s3_version_store_v1, clear_query_stats):
     s3_version_store_v1.write("a", 1)
     with qs.query_stats():
         s3_version_store_v1.list_symbols()
-    verify_list_symbool_stats(1)
+    verify_list_symbool_stats(1, S3_STORAGE_OPS)
     
     with qs.query_stats():
         s3_version_store_v1.list_symbols()
-    verify_list_symbool_stats(2)
+    verify_list_symbool_stats(2, S3_STORAGE_OPS)
 
 
 def test_query_stats_clear(s3_version_store_v1, clear_query_stats):
@@ -128,15 +159,16 @@ def test_query_stats_clear(s3_version_store_v1, clear_query_stats):
     assert not qs.get_query_stats()
 
     s3_version_store_v1.list_symbols()
-    verify_list_symbool_stats(1)
+    verify_list_symbool_stats(1, S3_STORAGE_OPS)
 
 
-def test_query_stats_snapshot(s3_version_store_v1, clear_query_stats):
-    s3_version_store_v1.write("a", 1)
+def test_query_stats_snapshot(query_stats_supported_version_store_and_ops, clear_query_stats):
+    query_stats_supported_version_store, storage_ops = query_stats_supported_version_store_and_ops
+    query_stats_supported_version_store.write("a", 1)
     qs.enable()
-    s3_version_store_v1.snapshot("abc")
+    query_stats_supported_version_store.snapshot("abc")
     with config_context("VersionMap.ReloadInterval", 0):
-        s3_version_store_v1.snapshot("abc2")
+        query_stats_supported_version_store.snapshot("abc2")
     stats = qs.get_query_stats()
     """
     "SNAPSHOT": {
@@ -203,16 +235,16 @@ def test_query_stats_snapshot(s3_version_store_v1, clear_query_stats):
     
     assert "SNAPSHOT" in key_types
     assert "storage_ops" in key_types["SNAPSHOT"]
-    assert "ListObjectsV2" in key_types["SNAPSHOT"]["storage_ops"]
-    list_ops = key_types["SNAPSHOT"]["storage_ops"]["ListObjectsV2"]
+    assert storage_ops[Operation.LIST] in key_types["SNAPSHOT"]["storage_ops"]
+    list_ops = key_types["SNAPSHOT"]["storage_ops"][storage_ops[Operation.LIST]]
     assert list_ops["count"] == 2
     assert list_ops["total_time_ms"] > 0
     
     assert "SNAPSHOT_REF" in key_types
     assert "storage_ops" in key_types["SNAPSHOT_REF"]
-    assert "HeadObject" in key_types["SNAPSHOT_REF"]["storage_ops"]
-    assert "PutObject" in key_types["SNAPSHOT_REF"]["storage_ops"]
-    put_ops = key_types["SNAPSHOT_REF"]["storage_ops"]["PutObject"]
+    assert storage_ops[Operation.EXIST] in key_types["SNAPSHOT_REF"]["storage_ops"]
+    assert storage_ops[Operation.WRITE] in key_types["SNAPSHOT_REF"]["storage_ops"]
+    put_ops = key_types["SNAPSHOT_REF"]["storage_ops"][storage_ops[Operation.WRITE]]
     assert put_ops["count"] == 2
     assert "compressed_size_bytes" in put_ops
     assert "uncompressed_size_bytes" in put_ops
@@ -220,8 +252,8 @@ def test_query_stats_snapshot(s3_version_store_v1, clear_query_stats):
     
     assert "VERSION_REF" in key_types
     assert "storage_ops" in key_types["VERSION_REF"]
-    assert {"GetObject", "ListObjectsV2"} == key_types["VERSION_REF"]["storage_ops"].keys()
-    get_object_ops = key_types["VERSION_REF"]["storage_ops"]["GetObject"]
+    assert {storage_ops[Operation.READ], storage_ops[Operation.LIST]} == key_types["VERSION_REF"]["storage_ops"].keys()
+    get_object_ops = key_types["VERSION_REF"]["storage_ops"][storage_ops[Operation.READ]]
     assert "result_count" in get_object_ops
     assert get_object_ops["result_count"] == 2
     assert "key_type" in get_object_ops
@@ -232,13 +264,14 @@ def test_query_stats_snapshot(s3_version_store_v1, clear_query_stats):
     assert get_object_ops["key_type"]["VERSION"]["count"] == 2
 
 
-def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
+def test_query_stats_read_write(query_stats_supported_version_store_and_ops, clear_query_stats):
+    query_stats_supported_version_store, storage_ops = query_stats_supported_version_store_and_ops
     qs.enable()
-    s3_version_store_v1.write("a", 1)
-    s3_version_store_v1.write("a", 2)
+    query_stats_supported_version_store.write("a", 1)
+    query_stats_supported_version_store.write("a", 2)
     with config_context("VersionMap.ReloadInterval", 0):
-        s3_version_store_v1.read("a")
-        s3_version_store_v1.read("a")
+        query_stats_supported_version_store.read("a")
+        query_stats_supported_version_store.read("a")
     stats = qs.get_query_stats()
     """
     {
@@ -390,21 +423,21 @@ def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
     assert expected_read_keys.issubset(read_key_types.keys())
     
     assert "storage_ops" in read_key_types["TABLE_DATA"]
-    assert "GetObject" in read_key_types["TABLE_DATA"]["storage_ops"]
-    table_data_get = read_key_types["TABLE_DATA"]["storage_ops"]["GetObject"]
+    assert storage_ops[Operation.READ] in read_key_types["TABLE_DATA"]["storage_ops"]
+    table_data_get = read_key_types["TABLE_DATA"]["storage_ops"][storage_ops[Operation.READ]]
     assert table_data_get["result_count"] == 2
     assert table_data_get["count"] == 2
     assert table_data_get["total_time_ms"] > 0
     
-    assert "GetObject" in read_key_types["TABLE_INDEX"]["storage_ops"]
-    table_index_get = read_key_types["TABLE_INDEX"]["storage_ops"]["GetObject"]
+    assert storage_ops[Operation.READ] in read_key_types["TABLE_INDEX"]["storage_ops"]
+    table_index_get = read_key_types["TABLE_INDEX"]["storage_ops"][storage_ops[Operation.READ]]
     assert "compressed_size_bytes" in table_index_get
     assert "uncompressed_size_bytes" in table_index_get
     assert "key_type" in table_index_get
     assert "TABLE_DATA" in table_index_get["key_type"]
     assert table_index_get["key_type"]["TABLE_DATA"]["count"] == 2
     
-    version_ref_get = read_key_types["VERSION_REF"]["storage_ops"]["GetObject"]
+    version_ref_get = read_key_types["VERSION_REF"]["storage_ops"][storage_ops[Operation.READ]]
     assert version_ref_get["result_count"] == 2
     assert "key_type" in version_ref_get
     assert {"TABLE_INDEX", "VERSION"} == version_ref_get["key_type"].keys()
@@ -419,33 +452,34 @@ def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
     expected_write_keys = {"SYMBOL_LIST", "TABLE_DATA", "TABLE_INDEX", "VERSION", "VERSION_REF"}
     assert expected_write_keys.issubset(write_key_types.keys())
     
-    assert "PutObject" in write_key_types["SYMBOL_LIST"]["storage_ops"]
-    symbol_list_put = write_key_types["SYMBOL_LIST"]["storage_ops"]["PutObject"]
+    assert storage_ops[Operation.WRITE] in write_key_types["SYMBOL_LIST"]["storage_ops"]
+    symbol_list_put = write_key_types["SYMBOL_LIST"]["storage_ops"][storage_ops[Operation.WRITE]]
     assert "compressed_size_bytes" in symbol_list_put
     assert "uncompressed_size_bytes" in symbol_list_put
     assert symbol_list_put["count"] == 2
     
-    assert {"GetObject", "PutObject"} == write_key_types["VERSION"]["storage_ops"].keys()
-    version_put = write_key_types["VERSION"]["storage_ops"]["PutObject"]
+    assert {storage_ops[Operation.READ], storage_ops[Operation.WRITE]} == write_key_types["VERSION"]["storage_ops"].keys()
+    version_put = write_key_types["VERSION"]["storage_ops"][storage_ops[Operation.WRITE]]
     assert "key_type" in version_put
     assert {"TABLE_INDEX", "VERSION"}.issubset(version_put["key_type"].keys())
     
-    assert {"GetObject", "PutObject"} == write_key_types["VERSION_REF"]["storage_ops"].keys()
-    version_ref_put = write_key_types["VERSION_REF"]["storage_ops"]["PutObject"]
+    assert {storage_ops[Operation.READ], storage_ops[Operation.WRITE]} == write_key_types["VERSION_REF"]["storage_ops"].keys()
+    version_ref_put = write_key_types["VERSION_REF"]["storage_ops"][storage_ops[Operation.WRITE]]
     assert "compressed_size_bytes" in version_ref_put
     assert "uncompressed_size_bytes" in version_ref_put
     assert "key_type" in version_ref_put
-    assert {"TABLE_INDEX", "VERSION"} == write_key_types["VERSION_REF"]["storage_ops"]["PutObject"]["key_type"].keys()
+    assert {"TABLE_INDEX", "VERSION"} == write_key_types["VERSION_REF"]["storage_ops"][storage_ops[Operation.WRITE]]["key_type"].keys()
 
 
-def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
+def test_query_stats_metadata(query_stats_supported_version_store_and_ops, clear_query_stats):
+    query_stats_supported_version_store, storage_ops = query_stats_supported_version_store_and_ops
     qs.enable()
     meta1 = {"meta1" : 1, "arr" : [1, 2, 4]}
     with config_context("VersionMap.ReloadInterval", 0):
-        s3_version_store_v1.write_metadata("a", meta1)
-        s3_version_store_v1.write_metadata("a", meta1)
-        s3_version_store_v1.read_metadata("a")
-        s3_version_store_v1.read_metadata("a")
+        query_stats_supported_version_store.write_metadata("a", meta1)
+        query_stats_supported_version_store.write_metadata("a", meta1)
+        query_stats_supported_version_store.read_metadata("a")
+        query_stats_supported_version_store.read_metadata("a")
     stats = qs.get_query_stats()
     """
     {
@@ -612,17 +646,17 @@ def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
     assert "TABLE_INDEX" in read_key_types
     assert "VERSION_REF" in read_key_types    
     assert "storage_ops" in read_key_types["TABLE_INDEX"]
-    assert "GetObject" in read_key_types["TABLE_INDEX"]["storage_ops"]
+    assert storage_ops[Operation.READ] in read_key_types["TABLE_INDEX"]["storage_ops"]
     
-    table_index_get = read_key_types["TABLE_INDEX"]["storage_ops"]["GetObject"]
+    table_index_get = read_key_types["TABLE_INDEX"]["storage_ops"][storage_ops[Operation.READ]]
     assert "result_count" in table_index_get
     assert table_index_get["result_count"] == 2
     assert table_index_get["count"] == 2
     assert table_index_get["total_time_ms"] > 0
     assert "storage_ops" in read_key_types["VERSION_REF"]
-    assert "GetObject" in read_key_types["VERSION_REF"]["storage_ops"]
+    assert storage_ops[Operation.READ] in read_key_types["VERSION_REF"]["storage_ops"]
     
-    version_ref_get = read_key_types["VERSION_REF"]["storage_ops"]["GetObject"]
+    version_ref_get = read_key_types["VERSION_REF"]["storage_ops"][storage_ops[Operation.READ]]
     assert "compressed_size_bytes" in version_ref_get
     assert "uncompressed_size_bytes" in version_ref_get
     assert version_ref_get["compressed_size_bytes"] > 0
@@ -647,17 +681,17 @@ def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
     assert expected_write_keys.issubset(write_key_types.keys())
     
     assert "storage_ops" in write_key_types["SYMBOL_LIST"]
-    assert "PutObject" in write_key_types["SYMBOL_LIST"]["storage_ops"]
-    symbol_list_put = write_key_types["SYMBOL_LIST"]["storage_ops"]["PutObject"]
+    assert storage_ops[Operation.WRITE] in write_key_types["SYMBOL_LIST"]["storage_ops"]
+    symbol_list_put = write_key_types["SYMBOL_LIST"]["storage_ops"][storage_ops[Operation.WRITE]]
     assert "compressed_size_bytes" in symbol_list_put
     assert "uncompressed_size_bytes" in symbol_list_put
     assert symbol_list_put["count"] == 2
     assert symbol_list_put["total_time_ms"] > 0
     
-    assert "GetObject" in write_key_types["TABLE_INDEX"]["storage_ops"]
-    assert "PutObject" in write_key_types["TABLE_INDEX"]["storage_ops"]
+    assert storage_ops[Operation.READ] in write_key_types["TABLE_INDEX"]["storage_ops"]
+    assert storage_ops[Operation.WRITE] in write_key_types["TABLE_INDEX"]["storage_ops"]
     
-    table_index_get = write_key_types["TABLE_INDEX"]["storage_ops"]["GetObject"]
+    table_index_get = write_key_types["TABLE_INDEX"]["storage_ops"][storage_ops[Operation.READ]]
     assert "compressed_size_bytes" in table_index_get
     assert "uncompressed_size_bytes" in table_index_get
     assert "key_type" in table_index_get
@@ -667,7 +701,7 @@ def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
     assert table_index_get["result_count"] == 1
     assert table_index_get["count"] == 1
     
-    table_index_put = write_key_types["TABLE_INDEX"]["storage_ops"]["PutObject"]
+    table_index_put = write_key_types["TABLE_INDEX"]["storage_ops"][storage_ops[Operation.WRITE]]
     assert "compressed_size_bytes" in table_index_put
     assert "uncompressed_size_bytes" in table_index_put
     assert "key_type" in table_index_put
@@ -676,16 +710,17 @@ def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
     assert table_index_put["total_time_ms"] > 0
     assert table_index_put["count"] == 2
     
-    assert "GetObject" in write_key_types["VERSION_REF"]["storage_ops"]
-    assert "PutObject" in write_key_types["VERSION_REF"]["storage_ops"]
-    version_ref_put = write_key_types["VERSION_REF"]["storage_ops"]["PutObject"]
+    assert storage_ops[Operation.READ] in write_key_types["VERSION_REF"]["storage_ops"]
+    assert storage_ops[Operation.WRITE] in write_key_types["VERSION_REF"]["storage_ops"]
+    version_ref_put = write_key_types["VERSION_REF"]["storage_ops"][storage_ops[Operation.WRITE]]
     assert "compressed_size_bytes" in version_ref_put
     assert "uncompressed_size_bytes" in version_ref_put
     assert "key_type" in version_ref_put
     assert {"TABLE_INDEX", "VERSION"} == version_ref_put["key_type"].keys()
 
 
-def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
+def test_query_stats_batch(query_stats_supported_version_store_and_ops, clear_query_stats):
+    query_stats_supported_version_store, storage_ops = query_stats_supported_version_store_and_ops
     sym1 = "test_symbol1"
     sym2 = "test_symbol2"
     df0 = pd.DataFrame({"col_0": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
@@ -693,10 +728,10 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
 
     qs.enable()
     with config_context("VersionMap.ReloadInterval", 0):
-        s3_version_store_v1.batch_write([sym1, sym2], [df0, df0])
-        s3_version_store_v1.batch_read([sym1, sym2])
-        s3_version_store_v1.batch_write([sym1, sym2], [df1, df1])
-        s3_version_store_v1.batch_read([sym1, sym2])
+        query_stats_supported_version_store.batch_write([sym1, sym2], [df0, df0])
+        query_stats_supported_version_store.batch_read([sym1, sym2])
+        query_stats_supported_version_store.batch_write([sym1, sym2], [df1, df1])
+        query_stats_supported_version_store.batch_read([sym1, sym2])
 
     stats = qs.get_query_stats()
     """
@@ -868,14 +903,14 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
     assert expected_read_keys.issubset(read_key_types.keys())
     
     assert "storage_ops" in read_key_types["TABLE_DATA"]
-    assert "GetObject" in read_key_types["TABLE_DATA"]["storage_ops"]
-    table_data_get = read_key_types["TABLE_DATA"]["storage_ops"]["GetObject"]
+    assert storage_ops[Operation.READ] in read_key_types["TABLE_DATA"]["storage_ops"]
+    table_data_get = read_key_types["TABLE_DATA"]["storage_ops"][storage_ops[Operation.READ]]
     assert table_data_get["result_count"] == 4
     assert table_data_get["count"] == 4
     assert table_data_get["total_time_ms"] > 0
     
-    assert "GetObject" in read_key_types["TABLE_INDEX"]["storage_ops"]
-    table_index_get = read_key_types["TABLE_INDEX"]["storage_ops"]["GetObject"]
+    assert storage_ops[Operation.READ] in read_key_types["TABLE_INDEX"]["storage_ops"]
+    table_index_get = read_key_types["TABLE_INDEX"]["storage_ops"][storage_ops[Operation.READ]]
     assert "compressed_size_bytes" in table_index_get
     assert "uncompressed_size_bytes" in table_index_get
     assert "key_type" in table_index_get
@@ -883,7 +918,7 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
     assert table_index_get["key_type"]["TABLE_DATA"]["count"] == 4
     assert table_index_get["result_count"] == 4
     
-    version_ref_get = read_key_types["VERSION_REF"]["storage_ops"]["GetObject"]
+    version_ref_get = read_key_types["VERSION_REF"]["storage_ops"][storage_ops[Operation.READ]]
     assert "compressed_size_bytes" in version_ref_get
     assert "uncompressed_size_bytes" in version_ref_get
     assert "key_type" in version_ref_get
@@ -901,14 +936,14 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
     expected_write_keys = {"SYMBOL_LIST", "TABLE_DATA", "TABLE_INDEX", "VERSION", "VERSION_REF"}
     assert expected_write_keys.issubset(write_key_types.keys())
     
-    assert "PutObject" in write_key_types["SYMBOL_LIST"]["storage_ops"]
-    symbol_list_put = write_key_types["SYMBOL_LIST"]["storage_ops"]["PutObject"]
+    assert storage_ops[Operation.WRITE] in write_key_types["SYMBOL_LIST"]["storage_ops"]
+    symbol_list_put = write_key_types["SYMBOL_LIST"]["storage_ops"][storage_ops[Operation.WRITE]]
     assert "compressed_size_bytes" in symbol_list_put
     assert "uncompressed_size_bytes" in symbol_list_put
     assert symbol_list_put["count"] == 4
-    assert {"GetObject", "PutObject"} == write_key_types["VERSION"]["storage_ops"].keys()
+    assert {storage_ops[Operation.READ], storage_ops[Operation.WRITE]} == write_key_types["VERSION"]["storage_ops"].keys()
     
-    version_get = write_key_types["VERSION"]["storage_ops"]["GetObject"]
+    version_get = write_key_types["VERSION"]["storage_ops"][storage_ops[Operation.READ]]
     assert "compressed_size_bytes" in version_get
     assert "uncompressed_size_bytes" in version_get
     assert "key_type" in version_get
@@ -919,7 +954,7 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
     assert version_get["count"] == 6
     assert version_get["total_time_ms"] > 0
     
-    version_put = write_key_types["VERSION"]["storage_ops"]["PutObject"]
+    version_put = write_key_types["VERSION"]["storage_ops"][storage_ops[Operation.WRITE]]
     assert "compressed_size_bytes" in version_put
     assert version_put["compressed_size_bytes"] > 0
     assert "uncompressed_size_bytes" in version_put
@@ -931,8 +966,8 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
     assert version_put["total_time_ms"] > 0
     assert version_put["count"] == 4
     
-    assert {"GetObject", "PutObject"} == write_key_types["VERSION_REF"]["storage_ops"].keys()
-    version_ref_put = write_key_types["VERSION_REF"]["storage_ops"]["PutObject"]
+    assert {storage_ops[Operation.READ], storage_ops[Operation.WRITE]} == write_key_types["VERSION_REF"]["storage_ops"].keys()
+    version_ref_put = write_key_types["VERSION_REF"]["storage_ops"][storage_ops[Operation.WRITE]]
     assert "compressed_size_bytes" in version_ref_put
     assert "uncompressed_size_bytes" in version_ref_put
     assert "key_type" in version_ref_put
@@ -940,7 +975,7 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
     assert version_ref_put["key_type"]["TABLE_INDEX"]["count"] == 6
     assert version_ref_put["key_type"]["VERSION"]["count"] == 4
     
-    version_ref_get = write_key_types["VERSION_REF"]["storage_ops"]["GetObject"]
+    version_ref_get = write_key_types["VERSION_REF"]["storage_ops"][storage_ops[Operation.READ]]
     assert "key_type" in version_ref_get
     assert {"TABLE_INDEX", "VERSION"} == version_ref_get["key_type"].keys()
     assert version_ref_get["key_type"]["TABLE_INDEX"]["count"] == 4

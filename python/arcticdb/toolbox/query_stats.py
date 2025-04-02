@@ -131,11 +131,11 @@ def _process_level(level: Any, current_dict: Dict[str, Any]) -> None:
                         "count": 1
                     }
                     """
-                    if sub_name == "PutObject":
+                    if sub_name == "PutObject" or sub_name == "UploadFrom":
                         for metric, value in encode_size_metrics.items():
                             op_map[metric] = op_map.get(metric, 0) + value
                         key_type_src = _get_enum_name(qs.GroupName.encode_key_type)
-                    elif sub_name == "GetObject":
+                    elif sub_name == "GetObject" or sub_name == "DownloadTo":
                         for metric, value in decode_size_metrics.items():
                             op_map[metric] = op_map.get(metric, 0) + value
                         key_type_src = _get_enum_name(qs.GroupName.decode_key_type)
