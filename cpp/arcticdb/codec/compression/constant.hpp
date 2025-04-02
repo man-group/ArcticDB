@@ -6,17 +6,16 @@
 #include <cstdint>
 
 namespace arcticdb {
+
+template <typename T>
+struct __attribute((packed)) ConstantCompressData {
+    uint64_t size_;
+    T value_;
+};
+
 template<typename T>
-struct ConstantEncoding {
-
-#pragma pack(push, 1)
-    struct Data {
-        uint64_t size_;
-        T value_;
-    };
-#pragma pack(pop)
-
-    std::optional<size_t> max_required_bytes(const T* data_in, size_t num_rows) {
+struct ConstantEncoder {
+    std::optional<size_t> max_required_bytes(const T *data_in, size_t num_rows) {
         if (num_rows == 0)
             return 0;
 
@@ -31,27 +30,28 @@ struct ConstantEncoding {
             ++pos;
         } while (pos != end);
 
-        return sizeof(Data);
+        return sizeof(ConstantCompressData<T>);
     }
 
-    size_t encode(const T *data_in, size_t num_rows, uint8_t *data_out) {
+    size_t compress(const T *data_in, size_t num_rows, uint8_t *data_out) {
         if (num_rows == 0)
             return 0;
 
-        auto *state = reinterpret_cast<Data*>(data_out);
+        auto *state = reinterpret_cast<ConstantCompressData<T> *>(data_out);
         state->size_ = num_rows;
         state->value_ = *data_in;
-        return sizeof(Data);
+        return sizeof(ConstantCompressData<T>);
     }
+};
 
-    size_t decode(const uint8_t *data_in, size_t bytes, T *data_out) {
-        util::check(bytes == sizeof(Data), "Not enough bytes in constant encoding");
-
-        const auto *state = reinterpret_cast<const Data*>(data_in);
+template <typename T>
+struct ConstantDecompressor {
+    static DecompressResult decompress(const uint8_t *data_in, T *data_out) {
+        const auto *state = reinterpret_cast<const ConstantCompressData<T>*>(data_in);
         auto *target = data_out;
         auto *target_end = target + state->size_;
         std::fill(target, target_end, state->value_);
-        return state->size_;
+        return {.compressed_ = state->size,_ .uncompressed_=state->size_ * sizeof(T)};
     }
 };
 }

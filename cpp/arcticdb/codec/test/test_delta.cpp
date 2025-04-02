@@ -234,8 +234,8 @@ TEST(DeltaCompressionStressTest, CompressDecompressSeparate) {
     for (size_t i = 0; i < iterations; i++) {
         DeltaDecompressor<T> decompressor{};
         decompressor.init(compressed.data());
-        size_t rows_decomp = decompressor.decompress(compressed.data(), decompressed.data());
-        total_decomp_rows += rows_decomp;
+        auto rows_decomp = decompressor.decompress(compressed.data(), decompressed.data());
+        total_decomp_rows += rows_decomp.compressed_;
     }
     auto end_decompress = std::chrono::high_resolution_clock::now();
     auto decompress_duration = std::chrono::duration_cast<std::chrono::microseconds>(end_decompress - start_decompress).count();

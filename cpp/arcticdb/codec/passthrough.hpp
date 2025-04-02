@@ -154,6 +154,7 @@ private:
 struct PassthroughDecoder {
     template<typename T>
     static void decode_block(
+            const EncodedBlock&,
             const std::uint8_t *in,
             std::size_t in_bytes,
             T *t_out,

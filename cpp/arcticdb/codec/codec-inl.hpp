@@ -25,19 +25,25 @@
 
 namespace arcticdb {
 
-template<typename T, typename BlockType>
-void decode_block(const BlockType &block, const std::uint8_t *input, T *output) {
+template<typename T>
+void decode_block(const EncodedBlock& block, const std::uint8_t *input, T *output) {
     ARCTICDB_SUBSAMPLE_AGG(DecodeBlock)
     std::size_t size_to_decode = block.out_bytes();
     std::size_t decoded_size = block.in_bytes();
 
     if (!block.has_codec()) {
-        arcticdb::detail::PassthroughDecoder::decode_block<T>(input, size_to_decode, output, decoded_size);
+        arcticdb::detail::PassthroughDecoder::decode_block<T>(
+            block,
+            input,
+            size_to_decode,
+            output,
+            decoded_size);
     } else {
         std::uint32_t encoder_version = block.encoder_version();
         switch (block.codec().codec_type()) {
         case arcticdb::Codec::ZSTD:
             arcticdb::detail::ZstdDecoder::decode_block<T>(
+                block,
                 encoder_version,
                 input,
                 size_to_decode,
@@ -46,6 +52,7 @@ void decode_block(const BlockType &block, const std::uint8_t *input, T *output) 
             break;
         case arcticdb::Codec::LZ4:
             arcticdb::detail::Lz4Decoder::decode_block<T>(
+                block,
                 encoder_version,
                 input,
                 size_to_decode,
@@ -55,6 +62,7 @@ void decode_block(const BlockType &block, const std::uint8_t *input, T *output) 
 
         case arcticdb::Codec::ADAPTIVE:
             AdaptiveDecoder::decode_block<T>(
+                block,
                 encoder_version,
                 input,
                 size_to_decode,
@@ -67,9 +75,9 @@ void decode_block(const BlockType &block, const std::uint8_t *input, T *output) 
     }
 }
 
-template<typename FieldType, class DataSink>
+template<class DataSink>
 inline void read_shapes(
-    FieldType& encoded_field,
+    const EncodedFieldImpl& encoded_field,
     DataSink& data_sink,
     uint8_t const *& data_in,
     int shapes_block,
@@ -82,15 +90,14 @@ inline void read_shapes(
     data_sink.advance_shapes(shape.in_bytes());
 }
 
-template<class DataSink, typename NDArrayEncodedFieldType>
+template<class DataSink>
 std::size_t decode_ndarray(
-    const TypeDescriptor& td,
-    const NDArrayEncodedFieldType& field,
-    const std::uint8_t* input,
-    DataSink& data_sink,
-    std::optional<util::BitMagic>& bv,
-    EncodingVersion encoding_version
-) {
+        const TypeDescriptor& td,
+        const EncodedFieldImpl& field,
+        const std::uint8_t* input,
+        DataSink& data_sink,
+        std::optional<util::BitMagic>& bv,
+        EncodingVersion encoding_version) {
     ARCTICDB_SUBSAMPLE_AGG(DecodeNdArray)
 
     std::size_t read_bytes = 0;

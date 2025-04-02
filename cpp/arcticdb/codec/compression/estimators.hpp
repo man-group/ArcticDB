@@ -9,6 +9,7 @@
 #include <arcticdb/codec/compression/contiguous_range_adaptor.hpp>
 #include <arcticdb/codec/compression/alp/rd.hpp>
 #include <arcticdb/codec/compression/alp_header.hpp>
+#include <arcticdb/codec/compression/compression_utils.hpp>
 
 namespace arcticdb {
 struct CompressionSample {
@@ -23,10 +24,6 @@ struct CompressionEstimate {
     size_t max_exceptions_;
     std::vector<CompressionSample> samples_;
 };
-
-constexpr std::size_t round_up_bits(std::size_t bits) noexcept {
-    return (bits + (CHAR_BIT - 1)) / CHAR_BIT;
-}
 
 template<typename T, typename Estimator>
 CompressionSample analyze_block(
@@ -133,8 +130,15 @@ struct DeltaEstimator {
 
 template <typename T>
 struct ALPEstimator {
+
+    alp::Scheme scheme_;
+
     static constexpr size_t overhead() {
         return 0;
+    }
+
+    explicit ALPEstimator(alp::Scheme scheme) :
+        scheme_(scheme) {
     }
 
     CompressionSample operator()(
@@ -142,18 +146,18 @@ struct ALPEstimator {
         const T* data,
         size_t block_size) const {
         alp::state<T> state;
+        state.scheme = scheme_;  //TODO necessary?
         std::array<T, alp::config::VECTOR_SIZE> sample_buf;
-        alp::encoder<T>::init(data, 0, block_size, sample_buf.data(), state);
         if(block_size < alp::config::VECTOR_SIZE)
             return {.bits_needed_ = sizeof(T) * block_size * CHAR_BIT, .bit_width_ = 0, .exceptions_ = 0};
 
-        switch(state.scheme) {
+        switch(scheme_) {
         case alp::Scheme::ALP_RD: {
-            std::array<uint16_t, alp::config::VECTOR_SIZE> exceptions;
-            std::array<uint16_t, alp::config::VECTOR_SIZE> positions;
-            std::array<uint16_t, alp::config::VECTOR_SIZE> excp_count;
+            std::array<uint16_t, alp::config::VECTOR_SIZE> exceptions{};
+            std::array<uint16_t, alp::config::VECTOR_SIZE> positions{};
+            std::array<uint16_t, alp::config::VECTOR_SIZE> excp_count{};
             std::array<typename StorageType<T>::unsigned_type, alp::config::VECTOR_SIZE> right;
-            std::array<uint16_t, alp::config::VECTOR_SIZE> left;
+            std::array<uint16_t, alp::config::VECTOR_SIZE> left{};
 
             alp::rd_encoder<T>::init(data, 0UL, alp::config::VECTOR_SIZE, sample_buf.data(), state);
             alp::rd_encoder<T>::encode(
@@ -175,9 +179,9 @@ struct ALPEstimator {
         }
         case alp::Scheme::ALP: {
             std::array<T, BLOCK_SIZE> exceptions;
-            std::array<uint16_t, BLOCK_SIZE> exception_positions;
+            std::array<uint16_t, BLOCK_SIZE> exception_positions{};
             uint16_t exception_count = 0;
-            std::array<int64_t, BLOCK_SIZE> encoded;
+            std::array<typename StorageType<T>::signed_type , BLOCK_SIZE> encoded = {};
 
             alp::encoder<T>::init(data, 0, 1024, sample_buf.data(), state);
             alp::encoder<T>::encode(data, exceptions.data(), exception_positions.data(), &exception_count, encoded.data(), state);

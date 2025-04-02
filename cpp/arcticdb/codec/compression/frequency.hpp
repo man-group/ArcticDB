@@ -15,6 +15,7 @@
 #include <arcticdb/codec/compression/encoder_data.hpp>
 #include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/util//sparse_utils.hpp>
+#include <arcticdb/codec/compression/compressor.hpp>
 
 #include <bitmagic/bmalgo.h>
 #include <ankerl/unordered_dense.h>
@@ -23,23 +24,22 @@
 
 namespace arcticdb {
 
+template <typename T>
+struct FrequencyCompressData {
+    T leader_;
+    uint32_t exceptions_;
+    uint32_t bitset_bytes_;
+    uint32_t num_rows_;
+};
 
 template <typename T, size_t required_percentage = 90>
 struct FrequencyCompressor : public FrequencyEncodingData {
     static_assert(required_percentage != 0, "required_percentage must be non-zero");
 
-    struct Data {
-        T leader_;
-        uint32_t exceptions_;
-        uint32_t bitset_bytes_;
-        uint32_t num_rows_;
-    };
-
     FrequencyCompressor() = default;
 
-    explicit FrequencyCompressor(const FrequencyEncodingData& parent)
-        : FrequencyEncodingData(parent)
-    {}
+    explicit FrequencyCompressor(const FrequencyEncodingData &parent)
+        : FrequencyEncodingData(parent) {}
 
     size_t bitset_max_bytes() {
         typename bm::serializer<util::BitSet>::statistics_type stat{};
@@ -50,10 +50,10 @@ struct FrequencyCompressor : public FrequencyEncodingData {
 
     void scan(ColumnData data) {
         T value;
-        for(auto block_num = 0UL; block_num < data.num_blocks(); ++block_num) {
+        for (auto block_num = 0UL; block_num < data.num_blocks(); ++block_num) {
             auto block = data.buffer().blocks()[block_num];
             size_t num_rows = block->bytes() / sizeof(T);
-            auto data_in = reinterpret_cast<const T*>(block->data());
+            auto data_in = reinterpret_cast<const T *>(block->data());
             for (size_t k = 0; k < num_rows; ++k) {
                 if (count_ == 0) {
                     ++count_;
@@ -74,7 +74,7 @@ struct FrequencyCompressor : public FrequencyEncodingData {
         util::BitSet::bulk_insert_iterator inserter(*bitset_);
         auto value = value_.template get_value<T>();
         auto pos = 0UL;
-        for(auto block_num = 0UL; block_num < data.num_blocks(); ++block_num) {
+        for (auto block_num = 0UL; block_num < data.num_blocks(); ++block_num) {
             auto block = data.buffer().blocks()[block_num];
             size_t block_rows = block->bytes() / sizeof(T);
             auto data_in = reinterpret_cast<const T *>(block->data());
@@ -100,9 +100,12 @@ struct FrequencyCompressor : public FrequencyEncodingData {
             leader_.first.template set_value<T>(value_.template get_value<T>());
             leader_.second = leader;
             auto num_exceptions = num_rows - leader;
-            util::check(leader <= num_rows, "Count of leader {} cannot be more than num_rows {} in frequency encoding", count_, num_rows);
+            util::check(leader <= num_rows,
+                        "Count of leader {} cannot be more than num_rows {} in frequency encoding",
+                        count_,
+                        num_rows);
 
-            expected_bytes_ = sizeof(Data) + (num_exceptions * sizeof(T)) + bitset_max_bytes();
+            expected_bytes_ = sizeof(FrequencyCompressData<T>) + (num_exceptions * sizeof(T)) + bitset_max_bytes();
             ARCTICDB_DEBUG(log::version(), "Frequency encoding max required bytes: {}", *expected_bytes_);
             util::check(*expected_bytes_ != 0, "Frequency encoding expects non-zero output bytes");
             return expected_bytes_;
@@ -111,23 +114,23 @@ struct FrequencyCompressor : public FrequencyEncodingData {
         }
     }
 
-    size_t compress(ColumnData column_data, size_t num_rows, uint8_t* data_out, size_t estimated_size) {
+    size_t compress(ColumnData column_data, size_t num_rows, uint8_t *data_out, size_t estimated_size) {
         if (num_rows == 0)
             return 0;
 
-        auto* target = data_out;
-        auto* header = reinterpret_cast<Data*>(target);
+        auto *target = data_out;
+        auto *header = reinterpret_cast<FrequencyCompressData<T> *>(target);
 
         const T leaderValue = leader_.first.get_value<T>();
         header->leader_ = leaderValue;
         header->exceptions_ = num_rows - leader_.second;
         header->num_rows_ = num_rows;
 
-        target += sizeof(Data);
-        auto* exception_ptr = reinterpret_cast<T*>(target);
+        target += sizeof(FrequencyCompressData<T>);
+        auto *exception_ptr = reinterpret_cast<T *>(target);
 
-        if(column_data.num_blocks() == 1) {
-            auto pos = reinterpret_cast<const T*>(column_data.buffer().data());
+        if (column_data.num_blocks() == 1) {
+            auto pos = reinterpret_cast<const T *>(column_data.buffer().data());
             BitVisitorFunctor visitor{[&exception_ptr, pos](uint32_t offset, uint64_t /*rank*/) {
                 *exception_ptr++ = pos[offset];
             }};
@@ -149,18 +152,21 @@ struct FrequencyCompressor : public FrequencyEncodingData {
 
         ARCTICDB_DEBUG(log::version(), "Frequency encoding actual bytes: {}", target - data_out);
         const size_t used_bytes = target - data_out;
-        util::check(used_bytes == estimated_size, "Size mismatch in frequency encoding, {} != {}", estimated_size, used_bytes);
+        util::check(used_bytes == estimated_size,
+                    "Size mismatch in frequency encoding, {} != {}",
+                    estimated_size,
+                    used_bytes);
         return used_bytes;
     }
+};
 
-    size_t decode(const uint8_t* data_in, size_t bytes, T* data_out) {
-        auto* data = reinterpret_cast<const Data*>(data_in);
+template <typename T>
+struct FrequencyDecompressor {
+    static DecompressResult decompress(const uint8_t* data_in, T* data_out) {
+        auto* data = reinterpret_cast<const FrequencyCompressData<T>*>(data_in);
         const auto exceptions_bytes = data->exceptions_ * sizeof(T);
-        util::check(sizeof(Data) + exceptions_bytes + data->bitset_bytes_ == bytes,
-                    "Size mismatch, expected {} + {} + {} = {}",
-                    sizeof(Data), exceptions_bytes, data->bitset_bytes_, bytes);
 
-        const auto bitset_offset = sizeof(Data) + (data->exceptions_ * sizeof(T));
+        const auto bitset_offset = sizeof(FrequencyCompressData<T>) + (data->exceptions_ * sizeof(T));
         auto bitmap_ptr = &data_in[bitset_offset];
         auto bitmap = util::deserialize_bytes_to_bitmap(bitmap_ptr, data->bitset_bytes_);
 
@@ -168,12 +174,13 @@ struct FrequencyCompressor : public FrequencyEncodingData {
         const auto num_rows = data->num_rows_;
         std::fill(target, target + num_rows, data->leader_);
 
-        const auto* exceptions = reinterpret_cast<const T*>(data_in + sizeof(Data));
+        const auto* exceptions = reinterpret_cast<const T*>(data_in + sizeof(FrequencyCompressData<T>));
         BitVisitorFunctor visitor{[target, exceptions](uint32_t offset, uint64_t rank) {
             target[offset] = exceptions[rank];
         }};
         bm::for_each_bit(bitmap, visitor);
-        return num_rows;
+        auto compressed_size = sizeof(FrequencyCompressData<T>) + exceptions_bytes + data->bitset_bytes_;
+        return {.compressed_=compressed_size, .uncompressed_=num_rows * sizeof(T)};
     }
 };
 

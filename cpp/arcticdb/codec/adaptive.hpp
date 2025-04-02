@@ -12,6 +12,7 @@
 #include <arcticdb/codec/compression/bitpack.hpp>
 #include <arcticdb/codec/compression/plain.hpp>
 #include <arcticdb/codec/compression/alp.hpp>
+#include <arcticdb/codec/compression/constant.hpp>
 
 namespace arcticdb {
 
@@ -43,7 +44,6 @@ inline EncodedBlock block_from_scan_result(const EncodingScanResult& scan_result
         memcpy(codec.data_.data(), &delta, std::min(BlockCodec::DataSize, sizeof(delta)));
         break;
     }
-
     default:
         codec.type_ = Codec::UNKNOWN;
         break;
@@ -52,7 +52,7 @@ inline EncodedBlock block_from_scan_result(const EncodingScanResult& scan_result
     block.codec_ = codec;
     return block;
 }
-
+/*
 template<template<typename> class BlockType, class TD>
 struct AdaptiveEncoderV1 {
     using Opts = AdaptiveCodec;
@@ -71,11 +71,10 @@ struct AdaptiveEncoderV1 {
             util::raise_rte("Adaptive encoding not supported with V1 format");
     }
 };
-
+*/
 
 template<template<typename> class BlockType, class TD>
 struct AdaptiveEncoder {
-
     static void encode_shapes(
         const BlockType<TD> &block,
         Buffer &out,
@@ -150,36 +149,67 @@ struct AdaptiveEncoder {
             util::raise_rte("Unhandled type in adaptive encoding");
         }
     }
-
-private:
-    template<class T, typename EncodedBlockType>
-    static void encode_block(
-        const T* in,
-        size_t in_byte_size,
-        HashAccum& hasher,
-        T* out,
-        std::ptrdiff_t& pos,
-        EncodedBlockType& output_block,
-        EncodingScanResult scan_result [[maybe_unused]]) {
-        memcpy(out, in, in_byte_size);
-        hasher(in, in_byte_size / sizeof(T));
-        pos += static_cast<ssize_t>(in_byte_size);
-        output_block.mutable_codec()->type_ = Codec::ADAPTIVE;
-        output_block.set_in_bytes(in_byte_size);
-        output_block.set_out_bytes(in_byte_size);
-    }
 };
+
+void check_result(EncodingType type, const DecompressResult& result, size_t in_bytes, size_t out_bytes) {
+    util::check(result.uncompressed_ == out_bytes, "Uncompressed size mismatch in {} decoder: {} != {}", static_cast<uint16_t>(type), result.uncompressed_, out_bytes);
+    util::check(result.compressed_ == in_bytes, "Uncompressed size mismatch in {} decoder: {} != {}", static_cast<uint16_t>(type), result.compressed_, in_bytes);
+}
 
 struct AdaptiveDecoder {
     template<typename T>
     static void decode_block(
+        const EncodedBlock& block,
         [[maybe_unused]] std::uint32_t encoder_version,
         const std::uint8_t *in,
         std::size_t in_bytes,
-        T *t_out,
+        T *out,
         std::size_t out_bytes) {
-        arcticdb::util::check_arg(in_bytes == out_bytes, "expected  in_bytes==out_bytes, actual {} != {}", in_bytes,out_bytes);
-        memcpy(t_out, in, in_bytes);
+        auto type = block.codec().adaptive().encoding_type_;
+        switch(type) {
+        case EncodingType::FFOR: {
+            auto result = FForDecompressor<T>::decompress(in, out);
+            check_result(type, result, in_bytes, out_bytes);
+            break;
+        }
+        case EncodingType::DELTA: {
+            DeltaDecompressor<T> decompressor;
+            decompressor.init(in);
+            auto result = decompressor.decompress(in, out);
+            check_result(type, result, in_bytes, out_bytes);
+            break;
+        }
+        case EncodingType::BITPACK: {
+            auto result = BitPackDecompressor<T>::decompress(in, out);
+            check_result(type, result, in_bytes, out_bytes);
+            break;
+        }
+        case EncodingType::FREQUENCY: {
+            auto result = FrequencyDecompressor<T>::decompress(in, out);
+            check_result(type, result, in_bytes, out_bytes);
+            break;
+        }
+        case EncodingType::CONSTANT: {
+            auto result = ConstantDecompressor<T>::decompress(in, out);
+            check_result(type, result, in_bytes, out_bytes);
+            break;
+        }
+        case EncodingType::ALP: {
+            ALPDecompressor<T> decompressor;
+            decompressor.init(in);
+            auto result = decompressor.decompress(in, out);
+            check_result(type, result, in_bytes, out_bytes);
+            break;
+        }
+        case EncodingType::PLAIN: {
+            auto result = PlainDecompressor<T>::decompress(in, out);
+            check_result(type, result, in_bytes, out_bytes);
+            break;
+        }
+        default:
+            util::raise_rte("Unknown encoding type: {}", type);
+        }
+
     }
 };
 

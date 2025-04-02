@@ -298,16 +298,43 @@ struct Alp {
             if constexpr (is_floating_point_type(TagType::data_type)) {
                 using RawType = typename TagType::raw_type;
 
+                alp::state<RawType> state;
+                std::array<RawType, alp::config::VECTOR_SIZE> sample_buf;
+                if(data.num_blocks() == 1) {
+                    auto first_block = data.buffer().blocks()[0];
+                    alp::encoder<RawType>::init(
+                        reinterpret_cast<RawType*>(first_block->data()),
+                        0,
+                        first_block->bytes() / sizeof(RawType),
+                        sample_buf.data(),
+                        state);
+                } else {
+                    ContiguousRangeForwardAdaptor<RawType, alp::config::VECTOR_SIZE> adaptor{data};
+                    alp::encoder<RawType>::init(
+                        adaptor.current(),
+                        0,
+                        alp::config::VECTOR_SIZE,
+                        sample_buf.data(),
+                        state);
+                }
+                ALPEstimator<RawType> estimator(state.scheme);
+
                 auto estimate = estimate_compression<RawType>(
                     field_stats,
                     data,
                     row_count,
-                    ALPEstimator<RawType>{},
+                    std::move(estimator),
                     NUM_SAMPLES);
 
                 auto size = ALPEstimator<RawType>::overhead() + estimate.estimated_bytes_;
                 auto scan_result = create_scan_result(EncodingType::ALP, size, speed_factor(), original_size, false);
-                scan_result.data_ = ALPCompressData<RawType>{.max_bit_width_ = estimate.max_bit_width_, .max_exceptions_ = estimate.max_exceptions_};
+                scan_result.data_ = ALPCompressData<RawType>{
+                    .scheme_=state.scheme,
+                    .states_={},
+                    .max_bit_width_ = estimate.max_bit_width_,
+                    .max_exceptions_ = estimate.max_exceptions_};
+
+                return scan_result;
             } else {
                 util::raise_rte("Unsupported type for ALP encoding");
             }

@@ -4,6 +4,7 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/codec/compression/fastlanes_common.hpp>
 #include <arcticdb/codec/compression/bitpack_fused.hpp>
+#include <arcticdb/codec/compression/compressor.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/codec/compression/contiguous_range_adaptor.hpp>
@@ -197,11 +198,11 @@ struct BitPackCompressor : public BitPackData {
 
 template<typename T>
 struct BitPackDecompressor {
-    static size_t decompress(const T *__restrict in, T *__restrict out) {
+    static DecompressResult decompress(const T *__restrict in, T *__restrict out) {
         const auto *header = reinterpret_cast<const BitPackHeader<T> *>(in);
         const size_t count = header->num_rows;
         if (count == 0)
-            return 0;
+            return {.compressed_=sizeof(BitPackHeader<T>), .uncompressed_ = 0};
 
         const size_t bits_needed = header->bits_needed;
         ARCTICDB_DEBUG(log::codec(), "Decompressing Identity data packed to {} bits", bits_needed);
@@ -236,7 +237,7 @@ struct BitPackDecompressor {
             );
         }
         ARCTICDB_DEBUG(log::codec(), "Decompressed {} remaining values, total count {}", remaining, count);
-        return count;
+        return {.compressed_ = input_offset, .uncompressed_ = count * sizeof(T)};
     }
 };
 

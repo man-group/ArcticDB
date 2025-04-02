@@ -61,7 +61,8 @@ struct Lz4BlockEncoder {
 struct Lz4Decoder {
     template<typename T>
     static void decode_block(
-            [[maybe_unused]] std::uint32_t encoder_version, //support multiple versions but won't be used before we have them
+            const EncodedBlock&,
+            std::uint32_t, //support multiple versions but won't be used before we have them
             const std::uint8_t* in,
             std::size_t in_bytes,
             T* t_out,

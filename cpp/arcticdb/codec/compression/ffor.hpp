@@ -12,6 +12,7 @@
 #include <arcticdb/codec/compression/contiguous_range_adaptor.hpp>
 #include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/codec/compression/encoder_data.hpp>
+#include <arcticdb/codec/compression/compressor.hpp>
 
 namespace arcticdb {
 
@@ -211,12 +212,12 @@ struct FForCompressor : public FFORCompressData {
 
 template <typename T>
 struct FForDecompressor {
-    static size_t decompress(const T *__restrict in, T *__restrict out) {
+    static DecompressResult decompress(const T *__restrict in, T *__restrict out) {
         static constexpr size_t BLOCK_SIZE = 1024;
         const auto *header = reinterpret_cast<const FForHeader<T> *>(in);
         const size_t count = header->num_rows;
         if (count == 0)
-            return 0;
+            return {.compressed_ = 0, .uncompressed_ = 0};
 
         const T reference = header->reference;
         const size_t bits_needed = header->bits_needed;
@@ -255,7 +256,7 @@ struct FForDecompressor {
             );
         }
         ARCTICDB_DEBUG(log::codec(), "Decompressed {} remaining values to offset {}", remaining, input_offset * sizeof(T) + sizeof(FForHeader<T>));
-        return count;
+        return {.compressed_ = input_offset, .uncompressed_ = count * sizeof(T)};
     }
 };
 

@@ -16,6 +16,7 @@
 #include <arcticdb/codec/compression/fastlanes_common.hpp>
 #include <arcticdb/codec/compression/encoder_data.hpp>
 #include <arcticdb/codec/compression/bitpack_fused.hpp>
+#include <arcticdb/codec/compression/compressor.hpp>
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/codec/compression/transpose.hpp>
@@ -351,16 +352,17 @@ public:
         remainder_ = header_->num_rows_ % BLOCK_SIZE;
     }
 
-    // Get total number of rows
-    [[nodiscard]] size_t num_rows() const { return header_->num_rows_; }
+    [[nodiscard]] size_t num_rows() const {
+        return header_->num_rows_;
+    }
 
-    size_t decompress(const T *input, T *output) {
+    DecompressResult decompress(const T *input, T *output) {
         size_t input_offset = calculate_input_offset();
         if (full_blocks_ > 0) {
             auto full_header = reinterpret_cast<const DeltaHeader<T> *>(header_);
 
             std::array<T, BLOCK_SIZE> untransposed;
-            for (size_t block = 0; block < full_blocks_; block++) {
+            for (size_t block = 0; block < full_blocks_; ++block) {
                 DeltaUncompressKernel<T> decompress_kernel(input + input_offset);
                 input_offset += h::num_lanes;
 
@@ -381,7 +383,8 @@ public:
                 output + remainder_offset()
             );
         }
-        return input_offset;
+
+        return {.compressed_ = input_offset, .uncompressed_ = header_->num_rows_ * sizeof(T)};
     }
 
     static size_t compressed_size(const T* input) {
@@ -403,7 +406,6 @@ public:
 
             input_offset += calc_remainder_size<T>(remainder, remainder_metadata->bit_width);
         }
-
         return input_offset;
     }
 };

@@ -56,13 +56,12 @@ struct ZstdDecoder {
     /// @param[in] encoder_version Used to support multiple versions but won't be used before we have them
     template <typename T>
     static void decode_block(
-        [[maybe_unused]] std::uint32_t encoder_version,
-        const std::uint8_t* in,
-        std::size_t in_bytes,
-        T* t_out,
-        std::size_t out_bytes
-    ) {
-
+            const EncodedBlock&,
+            [[maybe_unused]] std::uint32_t encoder_version,
+            const std::uint8_t* in,
+            std::size_t in_bytes,
+            T* t_out,
+            std::size_t out_bytes) {
         const std::size_t decomp_size = ZSTD_getFrameContentSize(in, in_bytes);
         codec::check<ErrorCode::E_DECODE_ERROR>(
             decomp_size == out_bytes,

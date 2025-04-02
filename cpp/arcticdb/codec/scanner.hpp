@@ -160,10 +160,12 @@ inline EncodingScanResult shape_encoding(const ColumnData& col) {
         auto shape_ptr = shapes.ptr_cast<shape_t>(0, shapes.bytes());
         auto [min, max] = std::minmax_element(shape_ptr, shape_ptr + num_shapes); 
         FieldStatsImpl stats{*min, *max, static_cast<uint32_t>(num_shapes), UniqueCountType::PRECISE, SortedValue::UNKNOWN};
-        if(Ffor::is_viable(stats, DataType::INT64, num_shapes))
-            return Ffor::max_compressed_size(stats, DataType::INT64, num_shapes, col);
-        else
+        if(Ffor::is_viable(stats, DataType::INT64, num_shapes)) {
+            EncoderData encoder_data;
+            return Ffor::max_compressed_size(stats, DataType::INT64, num_shapes, col, encoder_data);
+        } else {
             return plain_result(shapes.bytes());
+        }
     }
 }
 
@@ -188,7 +190,8 @@ inline void select_encoding_for_column(const ColumnData& column_data, EncodingSc
             break;
         }
 
-        auto scanned_result = max_compressed_size(encodings_set[i].type_, column_data.field_stats(), column_data.type().data_type(), column_data.row_count(), column_data);
+        EncoderData encoder_data;
+        auto scanned_result = max_compressed_size(encodings_set[i].type_, column_data.field_stats(), column_data.type().data_type(), column_data.row_count(), column_data, encoder_data);
         if(is_acceptable_result(scanned_result)) {
             encodings_set.select(i);
             result.max_compressed_bytes_ += encodings_set[i].estimated_size_;
