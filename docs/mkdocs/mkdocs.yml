@@ -131,10 +131,11 @@ nav:
   - Arctic: 'api/arctic.md'
   - Arctic URI: 'api/arctic_uri.md'
   - Library: 'api/library.md'
-  - Library related objects: 'api/library_types.md'
+  - Library Related Objects: 'api/library_types.md'
   - DataFrame Processing Operations API: 'api/processing.md'
   - Exceptions: 'api/exceptions.md'
   - Config: 'api/config.md'
+  - Admin Tools: 'api/admin_tools.md'
 
 exclude_docs: |
   *.py

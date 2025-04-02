@@ -112,12 +112,15 @@ class AdminTools:
         """
         A breakdown of compressed sizes (in bytes) in the library, grouped by symbol and then key type.
 
-        The following key types (and only these) are always included in the output:
-            VERSION_REF
-            VERSION
-            TABLE_INDEX
-            TABLE_DATA
-            APPEND_DATA
+        The following key types (and only these) are always included in the output,
+
+        ```
+        VERSION_REF
+        VERSION
+        TABLE_INDEX
+        TABLE_DATA
+        APPEND_DATA
+        ```
         """
         sizes = self._nvs.version_store.scan_object_sizes_by_stream()
         res = dict()
@@ -131,11 +134,14 @@ class AdminTools:
         A breakdown of compressed sizes (in bytes) used by the given symbol, grouped by key type.
 
         The following key types (and only these) are always included in the output:
-            VERSION_REF
-            VERSION
-            TABLE_INDEX
-            TABLE_DATA
-            APPEND_DATA
+
+        ```
+        VERSION_REF
+        VERSION
+        TABLE_INDEX
+        TABLE_DATA
+        APPEND_DATA
+        ```
 
         Does not raise if the symbol does not exist.
         """
