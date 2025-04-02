@@ -319,6 +319,17 @@ jobs:
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{needs.common_config.outputs.windows_matrix}}
 
+  cpp-test-macos:
+    needs: [common_config]
+    name: macOS C++ Tests
+    uses: ./.github/workflows/build_steps.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      job_type: cpp-tests
+      cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
+      matrix: ${{needs.common_config.outputs.macos_matrix}}
+
   build-python-wheels-windows:
     needs: [common_config, storage_type]
     strategy:
@@ -427,7 +438,7 @@ jobs:
       pytest_args: ${{inputs.pytest_args}}
 
   can_merge:
-    needs: [cpp-test-linux, cpp-test-windows, build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos, persistent_storage_verify_linux, persistent_storage_verify_windows]
+    needs: [cpp-test-linux, cpp-test-windows, cpp-test-macos, build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos, persistent_storage_verify_linux, persistent_storage_verify_windows]
     if: |
       always() &&
       !failure() &&

@@ -61,11 +61,6 @@ jobs:
         CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
         ARCTICDB_BUILD_DIR TEST_OUTPUT_DIR ARCTICDB_VCPKG_INSTALLED_DIR ARCTICDB_VCPKG_PACKAGES_DIR
         SCCACHE_BUCKET SCCACHE_ENDPOINT AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY SCCACHE_REGION SCCACHE_S3_USE_SSL
-      CIBW_ENVIRONMENT_PASS_MACOS: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN VCPKG_INSTALLATION_ROOT
-        VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN
-        CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
-        ARCTICDB_BUILD_DIR TEST_OUTPUT_DIR ARCTICDB_VCPKG_INSTALLED_DIR ARCTICDB_VCPKG_PACKAGES_DIR
-        SCCACHE_BUCKET SCCACHE_ENDPOINT AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY SCCACHE_REGION SCCACHE_S3_USE_SSL
       ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
       python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
@@ -207,19 +202,9 @@ jobs:
 
       - name: Build wheel
         if: inputs.job_type == 'build-python-wheels'
-        run: |
-          if [ "${{matrix.os}}" = "macos" ]; then
-            # For macOS, we need to set up the build environment
-            brew install cmake ninja
-            # Set up Python environment
-            python3 -m pip install --upgrade pip
-            pip3 install cibuildwheel==${{inputs.cibw_version}}
-          fi
-          pipx run cibuildwheel==${{inputs.cibw_version}}
+        run: pipx run cibuildwheel==${{inputs.cibw_version}}
         env:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
-          CIBW_MACOSX_DEPLOYMENT_TARGET: "11.0"
-          CIBW_ARCHS_MACOS: "x86_64 arm64"
 
       - name: Store wheel artifact
         if: inputs.job_type == 'build-python-wheels'
