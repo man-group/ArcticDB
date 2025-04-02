@@ -1413,6 +1413,7 @@ IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& o
 NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& output_schemas,
                                          std::unordered_set<size_t>&& non_matching_name_indices) {
     // Ensure:
+    // All are Series or all are DataFrames
     // All have PandasIndex OR PandasMultiIndex
     // If PandasIndex:
     //  - name/is_int/fake_name - if all the same maintain, otherwise "index"/false/true
@@ -1429,8 +1430,11 @@ NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& output
     //  - fake_field_pos - unioned together, along with non_matching_name_indices
     //      fake_field_pos.contains(0) serves same purpose as fake_name flag on PandasIndex
     //  - timezone - Like tz, for a given key all values must be same, otherwise set value to empty string
+    std::optional<bool> is_series;
+    std::optional<bool> series_has_name;
+    std::optional<std::string> series_name;
     std::optional<bool> has_multi_index;
-    std::optional<std::string> name;
+    std::optional<std::string> index_name;
     std::optional<bool> is_int;
     std::optional<bool> fake_name;
     std::optional<std::string> tz;
@@ -1440,7 +1444,26 @@ NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& output
     std::optional<int> step;
     std::optional<std::unordered_map<uint32_t, std::string>> timezone;
     for (const auto& schema: output_schemas) {
-        const auto& common = schema.norm_metadata_.df().common();
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(schema.norm_metadata_.has_series() || schema.norm_metadata_.has_df(),
+                                                        "Multi-symbol joins only supported with Series and DataFrames");
+        if (!is_series.has_value()) {
+            is_series = schema.norm_metadata_.has_series();
+        } else {
+            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(*is_series == schema.norm_metadata_.has_series(),
+                                                            "Multi-symbol joins cannot join a Series to a DataFrame");
+        }
+        const auto& common = *is_series ? schema.norm_metadata_.series().common() : schema.norm_metadata_.df().common();
+        if (*is_series) {
+            if (!series_has_name.has_value()) {
+                series_has_name = common.has_name();
+                series_name = common.name();
+            } else {
+                if (*series_name != common.name() || !common.has_name() || !*series_has_name) {
+                    series_name = "";
+                    series_has_name = false;
+                }
+            }
+        }
         if (!has_multi_index.has_value()) {
             has_multi_index = common.has_multi_index();
         } else {
@@ -1450,12 +1473,12 @@ NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& output
         }
         if (*has_multi_index) {
             const auto& index = common.multi_index();
-            if (!name.has_value()) {
-                name = index.name();
+            if (!index_name.has_value()) {
+                index_name = index.name();
                 is_int = index.is_int();
             } else {
-                if ((index.name() != *name) || (index.is_int() != *is_int)) {
-                    name = "";
+                if ((index.name() != *index_name) || (index.is_int() != *is_int)) {
+                    index_name = "";
                     is_int = false;
                 }
             }
@@ -1488,13 +1511,13 @@ NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& output
             }
         } else {
             const auto& index = common.index();
-            if (!name.has_value()) {
-                name = index.name();
+            if (!index_name.has_value()) {
+                index_name = index.name();
                 is_int = index.is_int();
                 fake_name = index.fake_name();
             } else {
-                if ((index.name() != *name) || (index.is_int() != *is_int) || index.fake_name() || *fake_name) {
-                    name = "index";
+                if ((index.name() != *index_name) || (index.is_int() != *is_int) || index.fake_name() || *fake_name) {
+                    index_name = "index";
                     is_int = false;
                     fake_name = true;
                 }
@@ -1526,9 +1549,13 @@ NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& output
         }
     }
     NormalizationMetadata norm_meta;
+    if (*is_series) {
+        norm_meta.mutable_series()->mutable_common()->set_has_name(*series_has_name);
+        norm_meta.mutable_series()->mutable_common()->set_name(*series_name);
+    }
     if (*has_multi_index) {
-        auto* index = norm_meta.mutable_df()->mutable_common()->mutable_multi_index();
-        index->set_name(non_matching_name_indices.contains(0) ? "index" : *name);
+        auto* index = *is_series ? norm_meta.mutable_series()->mutable_common()->mutable_multi_index() : norm_meta.mutable_df()->mutable_common()->mutable_multi_index();
+        index->set_name(non_matching_name_indices.contains(0) ? "index" : *index_name);
         index->set_is_int(non_matching_name_indices.contains(0) ? false : *is_int);
         index->set_tz(*tz);
         index->set_field_count(*field_count);
@@ -1542,8 +1569,8 @@ NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& output
             index->add_fake_field_pos(idx);
         }
     } else {
-        auto* index = norm_meta.mutable_df()->mutable_common()->mutable_index();
-        index->set_name(*name);
+        auto* index = *is_series ? norm_meta.mutable_series()->mutable_common()->mutable_index() : norm_meta.mutable_df()->mutable_common()->mutable_index();
+        index->set_name(*index_name);
         index->set_is_int(*is_int);
         index->set_fake_name(*fake_name);
         index->set_tz(*tz);
@@ -1599,9 +1626,7 @@ void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output
     // If the first schema is multiindexed then use this field count
     // It will be checked later if the other norm metas are compatible
     const auto& first_norm_meta = output_schema.front().norm_metadata_;
-    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(first_norm_meta.has_df() || first_norm_meta.has_series(),
-                                                    "Multi-symbol joins only supported with Series and DataFrames");
-    auto index_field_count = pipelines::index::index_field_count(stream_desc, first_norm_meta);
+    auto required_fields_count = pipelines::index::required_fields_count(stream_desc, first_norm_meta);
     ankerl::unordered_dense::map<std::string, DataType> columns_to_keep;
     // Maintain the order that columns appeared in through the schemas
     std::vector<std::string> column_names_to_keep;
@@ -1610,7 +1635,7 @@ void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output
         if (first_element) {
             // Start with the columns in the first element, and add in anything that is present in all other elements
             columns_to_keep = schema.column_types();
-            for (size_t idx = index_field_count; idx < schema.stream_descriptor().field_count(); ++idx) {
+            for (size_t idx = required_fields_count; idx < schema.stream_descriptor().field_count(); ++idx) {
                 column_names_to_keep.emplace_back(schema.stream_descriptor().field(idx).name());
             }
             first_element = false;
@@ -1661,10 +1686,8 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
     // If the first schema is multiindexed then use this field count
     // It will be checked later if the other norm metas are compatible
     const auto& first_norm_meta = output_schemas.front().norm_metadata_;
-    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(first_norm_meta.has_df() || first_norm_meta.has_series(),
-                                                    "Multi-symbol joins only supported with Series and DataFrames");
-    auto index_field_count = pipelines::index::index_field_count(stream_desc, first_norm_meta);
-    if (index_field_count == 0) {
+    auto required_fields_count = pipelines::index::required_fields_count(stream_desc, first_norm_meta);
+    if (required_fields_count == 0) {
         return non_matching_name_indices;
     }
     // FieldCollection does not support renaming fields, so use a vector of FieldRef and then turn this into a FieldCollection at the end
@@ -1672,11 +1695,11 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
     bool first_schema{true};
     for (auto& schema: output_schemas) {
         const auto& fields = schema.stream_descriptor().fields();
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(fields.size() >= index_field_count,
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(fields.size() >= required_fields_count,
                                                         "Expected at least {} fields for index, but received {}",
-                                                        index_field_count, fields.size());
+                                                        required_fields_count, fields.size());
         if (first_schema) {
-            for (size_t idx = 0; idx < index_field_count; ++idx) {
+            for (size_t idx = 0; idx < required_fields_count; ++idx) {
                 const auto& field = fields.at(idx);
                 index_fields.emplace_back(field.type(), field.name());
                 // Index columns are always included, so remove from the column types map so they are not considered in
@@ -1685,7 +1708,7 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
             }
             first_schema = false;
         } else {
-            for (size_t idx = 0; idx < index_field_count; ++idx) {
+            for (size_t idx = 0; idx < required_fields_count; ++idx) {
                 const auto& field = fields.at(idx);
                 auto& current_type = index_fields.at(idx).type_;
                 auto opt_common_type = has_valid_common_type(current_type, field.type());
