@@ -396,8 +396,32 @@ jobs:
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
       pytest_args: ${{inputs.pytest_args}}
 
+  python-tests-macos:
+    needs: [common_config]
+    strategy:
+      fail-fast: false
+      matrix:
+        python3: ${{fromJson(vars.MACOS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11, 12, 13]')}}
+        include:
+          - python_deps_ids: [""]
+            matrix_override: ${{fromJson(needs.common_config.outputs.macos_matrix)}}
+            pytest_xdist_mode: "-n auto"
+    name: 3.${{matrix.python3}} macOS
+    uses: ./.github/workflows/build_steps.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      job_type: python-tests
+      python3: ${{matrix.python3}}
+      cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
+      matrix: ${{toJson(matrix.matrix_override)}}
+      python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      persistent_storage: ${{ inputs.persistent_storage }}
+      pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
+      pytest_args: ${{inputs.pytest_args}}
+
   can_merge:
-    needs: [cpp-test-linux, cpp-test-windows, cpp-test-macos, build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos, persistent_storage_verify_linux, persistent_storage_verify_windows]
+    needs: [cpp-test-linux, cpp-test-windows, cpp-test-macos, build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos, python-tests-macos, persistent_storage_verify_linux, persistent_storage_verify_windows]
     if: |
       always() &&
       !failure() &&
