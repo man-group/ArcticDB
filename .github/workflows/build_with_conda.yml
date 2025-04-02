@@ -340,6 +340,7 @@ jobs:
           CTEST_OUTPUT_ON_FAILURE=1 ctest -C Release --output-on-failure --label-regex "arcticdb_rapidcheck_tests|test_unit_arcticdb"
 
       - name: Build Python target for conda
+        shell: cmd /C call {0}
         run: |
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
