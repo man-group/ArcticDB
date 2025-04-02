@@ -292,6 +292,7 @@ jobs:
     runs-on: windows-latest
     env:
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
     steps:
       - uses: actions/checkout@v3.3.0
         # DONT use recursive submodules checkout to simulate conda feedstock build
@@ -301,6 +302,11 @@ jobs:
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
 
       - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v2.0.4
@@ -316,7 +322,11 @@ jobs:
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
           cd cpp
-          cmake -DTEST=ON --preset windows-cl-conda-release
+          cmake ^
+            -DTEST=ON ^
+            --preset windows-cl-conda-release ^
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache
           cmake --build --preset windows-cl-conda-release --parallel
         env:
           ARCTICDB_USING_CONDA: 1
