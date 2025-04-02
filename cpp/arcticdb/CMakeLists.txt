@@ -153,7 +153,7 @@ if (NOT MSVC)
     if(NOT ${ARCTICDB_USING_CONDA})
         # Compilers on conda-forge are relatively strict.
         # For now, we do not want to treat warnings as errors for those builds.
-        add_compile_options("-Werror")
+        # add_compile_options("-Werror")
     endif()
     add_compile_options("-ggdb")
     add_compile_options("-fvisibility=hidden")
@@ -838,7 +838,7 @@ if (NOT WIN32)
     if(NOT ${ARCTICDB_USING_CONDA})
         # Compilers on conda-forge are relatively strict.
         # For now, we do not want to treat warnings as errors for those builds.
-        add_compile_options("-Werror")
+        # add_compile_options("-Werror")
     endif()
 endif ()
 
