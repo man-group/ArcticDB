@@ -1598,17 +1598,10 @@ void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output
 void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schema) {
     // If the first schema is multiindexed then use this field count
     // It will be checked later if the other norm metas are compatible
-    uint32_t num_index_fields;
     const auto& first_norm_meta = output_schema.front().norm_metadata_;
     schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(first_norm_meta.has_df() || first_norm_meta.has_series(),
                                                     "Multi-symbol joins only supported with Series and DataFrames");
-    if (first_norm_meta.has_df() && first_norm_meta.df().common().has_multi_index()) {
-        num_index_fields = first_norm_meta.df().common().multi_index().field_count() + 1;
-    } else if (first_norm_meta.has_series() && first_norm_meta.series().common().has_multi_index()) {
-        num_index_fields = first_norm_meta.series().common().multi_index().field_count() + 1;
-    } else {
-        num_index_fields = stream_desc.index().field_count();
-    }
+    auto index_field_count = pipelines::index::index_field_count(stream_desc, first_norm_meta);
     ankerl::unordered_dense::map<std::string, DataType> columns_to_keep;
     // Maintain the order that columns appeared in through the schemas
     std::vector<std::string> column_names_to_keep;
@@ -1617,7 +1610,7 @@ void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output
         if (first_element) {
             // Start with the columns in the first element, and add in anything that is present in all other elements
             columns_to_keep = schema.column_types();
-            for (size_t idx = num_index_fields; idx < schema.stream_descriptor().field_count(); ++idx) {
+            for (size_t idx = index_field_count; idx < schema.stream_descriptor().field_count(); ++idx) {
                 column_names_to_keep.emplace_back(schema.stream_descriptor().field(idx).name());
             }
             first_element = false;
@@ -1665,20 +1658,13 @@ std::pair<StreamDescriptor, arcticdb::proto::descriptors::NormalizationMetadata>
 
 std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schemas) {
     std::unordered_set<size_t> non_matching_name_indices;
-    uint32_t num_index_fields;
     // If the first schema is multiindexed then use this field count
     // It will be checked later if the other norm metas are compatible
     const auto& first_norm_meta = output_schemas.front().norm_metadata_;
     schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(first_norm_meta.has_df() || first_norm_meta.has_series(),
                                                     "Multi-symbol joins only supported with Series and DataFrames");
-    if (first_norm_meta.has_df() && first_norm_meta.df().common().has_multi_index()) {
-        num_index_fields = first_norm_meta.df().common().multi_index().field_count() + 1;
-    } else if (first_norm_meta.has_series() && first_norm_meta.series().common().has_multi_index()) {
-        num_index_fields = first_norm_meta.series().common().multi_index().field_count() + 1;
-    } else {
-        num_index_fields = stream_desc.index().field_count();
-    }
-    if (num_index_fields == 0) {
+    auto index_field_count = pipelines::index::index_field_count(stream_desc, first_norm_meta);
+    if (index_field_count == 0) {
         return non_matching_name_indices;
     }
     // FieldCollection does not support renaming fields, so use a vector of FieldRef and then turn this into a FieldCollection at the end
@@ -1686,11 +1672,11 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
     bool first_schema{true};
     for (auto& schema: output_schemas) {
         const auto& fields = schema.stream_descriptor().fields();
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(fields.size() >= num_index_fields,
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(fields.size() >= index_field_count,
                                                         "Expected at least {} fields for index, but received {}",
-                                                        num_index_fields, fields.size());
+                                                        index_field_count, fields.size());
         if (first_schema) {
-            for (size_t idx = 0; idx < num_index_fields; ++idx) {
+            for (size_t idx = 0; idx < index_field_count; ++idx) {
                 const auto& field = fields.at(idx);
                 index_fields.emplace_back(field.type(), field.name());
                 // Index columns are always included, so remove from the column types map so they are not considered in
@@ -1699,7 +1685,7 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
             }
             first_schema = false;
         } else {
-            for (size_t idx = 0; idx < num_index_fields; ++idx) {
+            for (size_t idx = 0; idx < index_field_count; ++idx) {
                 const auto& field = fields.at(idx);
                 auto& current_type = index_fields.at(idx).type_;
                 auto opt_common_type = has_valid_common_type(current_type, field.type());

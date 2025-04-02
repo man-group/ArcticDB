@@ -22,15 +22,11 @@ struct FrameSliceMap {
 
     FrameSliceMap(std::shared_ptr<PipelineContext> context, bool dynamic_schema) :
         context_(std::move(context)) {
-
-        uint32_t num_index_fields;
-        const auto& norm_meta = context_->norm_meta_;
-        if (static_cast<bool>(norm_meta) && norm_meta->has_df() && norm_meta->df().common().has_multi_index()) {
-            num_index_fields = norm_meta->df().common().multi_index().field_count() + 1;
-        } else if (static_cast<bool>(norm_meta) && norm_meta->has_series() && norm_meta->series().common().has_multi_index()) {
-            num_index_fields = norm_meta->series().common().multi_index().field_count() + 1;
+        uint32_t index_field_count;
+        if (static_cast<bool>(context_->norm_meta_)) {
+            index_field_count = pipelines::index::index_field_count(context_->descriptor(), *context_->norm_meta_);
         } else {
-            num_index_fields = context_->descriptor().index().field_count();
+            index_field_count = pipelines::index::index_field_count(context_->descriptor());
         }
         for (const auto &context_row: *context_) {
             const auto& row_range = context_row.slice_and_key().slice_.row_range;
@@ -64,7 +60,7 @@ struct FrameSliceMap {
                         continue;
                     }
                 }
-                const auto& field_name = (context_row.fetch_index() && field.index < num_index_fields) ?
+                const auto& field_name = (context_row.fetch_index() && field.index < index_field_count) ?
                                   context_->descriptor().field(field.index).name() :
                                   field->name();
                 auto &column = columns_[field_name];

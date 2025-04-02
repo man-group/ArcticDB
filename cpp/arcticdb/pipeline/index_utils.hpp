@@ -140,4 +140,10 @@ TimeseriesDescriptor get_merged_tsd(
 
 [[nodiscard]] bool is_timeseries_index(const IndexDescriptorImpl& index_desc);
 
+// If NormalizationMetadata is provided, and this represents a Pandas type with a multiindex, returns the number of
+// levels in the multiindex. Otherwise, returns the index field count from the stream descriptor.
+uint32_t index_field_count(
+        const StreamDescriptor& stream_desc,
+        const std::optional<proto::descriptors::NormalizationMetadata>& norm_meta = std::nullopt);
+
 } //namespace arcticdb::pipelines::index

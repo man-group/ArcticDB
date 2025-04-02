@@ -1417,15 +1417,7 @@ folly::Future<folly::Unit> copy_segments_to_frame(
         SegmentInMemory frame,
         std::any& handler_data,
         OutputFormat output_format) {
-    const auto& norm_meta = pipeline_context->norm_meta_;
-    uint32_t index_field_count;
-    if (norm_meta->has_df() && norm_meta->df().common().has_multi_index()) {
-        index_field_count = norm_meta->df().common().multi_index().field_count() + 1;
-    } else if (norm_meta->has_series() && norm_meta->series().common().has_multi_index()) {
-        index_field_count = norm_meta->series().common().multi_index().field_count() + 1;
-    } else {
-        index_field_count = pipeline_context->descriptor().index().field_count();
-    }
+    auto index_field_count = pipelines::index::index_field_count(pipeline_context->descriptor(), *pipeline_context->norm_meta_);
     std::vector<folly::Future<folly::Unit>> copy_tasks;
     DecodePathData shared_data;
     for (auto context_row : folly::enumerate(*pipeline_context)) {
