@@ -4,6 +4,8 @@ channels:
 dependencies:
   # Build tools
   - sel(win): ninja
+  - wheel
+  - setuptools
   - cxx-compiler
   - c-compiler
   - cmake
