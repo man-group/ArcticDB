@@ -7,6 +7,8 @@ from arcticdb.util.test import sample_dataframe, config_context_multi
 from arcticdb_ext.storage import KeyType
 import arcticdb_ext.cpp_async as adb_async
 
+from tests.util.mark import REAL_S3_TESTS_MARK
+
 
 @pytest.mark.storage
 def test_symbol_sizes(arctic_library):
@@ -261,9 +263,15 @@ def test_symbol_sizes_concurrent(reader_store, writer_store):
     assert exceptions_in_reader.empty()
 
 
-@pytest.mark.parametrize("store", ["s3_storage", "nfs_backed_s3_storage"])
+@pytest.mark.parametrize("store", [
+    "s3_storage",
+    "nfs_backed_s3_storage",
+    "gcp_storage",
+    pytest.param("real_s3_storage", marks=REAL_S3_TESTS_MARK)
+])
 def test_symbol_sizes_matches_boto(request, store, lib_name):
     s3_storage = request.getfixturevalue(store)
+    bucket = s3_storage.get_boto_bucket()
     lib = s3_storage.create_version_store_factory(lib_name)()
     df = sample_dataframe(100, 0)
     lib.write("s", df)
@@ -275,7 +283,6 @@ def test_symbol_sizes_matches_boto(request, store, lib_name):
                          KeyType.SNAPSHOT_REF, KeyType.LOG, KeyType.LOG_COMPACTED, KeyType.SYMBOL_LIST}
 
     data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
-    bucket = s3_storage.get_boto_bucket()
     data_keys = [o for o in bucket.objects.all() if "test_symbol_sizes_matches_boto" in o.key and "/tdata/" in o.key]
     assert len(data_keys) == 1
     assert len(data_keys) == data_size.count
@@ -292,7 +299,7 @@ def test_symbol_sizes_matches_azurite(azurite_storage, lib_name):
     total_size = 0
     total_count = 0
     for blob in blobs:
-        if blob.container == azurite_storage.container and "/tdata" in blob.name:
+        if lib_name.replace(".", "/") in blob.name and blob.container == azurite_storage.container and "/tdata/" in blob.name:
             total_size += blob.size
             total_count += 1
 

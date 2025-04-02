@@ -706,7 +706,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     _s3_admin: Any
     _iam_admin: Any = None
     _bucket_id = 0
-    _live_buckets: List[S3Bucket] = []
+    _live_buckets: List[S3Bucket] = None
 
     def __init__(
         self,
@@ -733,6 +733,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         # and we need to make sure the bucket names are unique
         # set the unique_id to the current UNIX timestamp to avoid conflicts
         self.unique_id = str(int(time.time()))
+        self._live_buckets = []
 
     def bucket_name(self, bucket_type="s3"):
         # We need to increment the bucket_id for each new bucket

@@ -1749,7 +1749,6 @@ static constexpr std::array<KeyType, 5> TYPES_FOR_SIZE_BY_STREAM_CALCULATION = {
 std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes_for_stream(const StreamId& stream_id) {
     using ObjectSizes = storage::ObjectSizes;
     std::vector<folly::Future<std::shared_ptr<ObjectSizes>>> sizes_futs;
-    sizes_futs.reserve(TYPES_FOR_SIZE_BY_STREAM_CALCULATION.size());
 
     for (const auto& key_type : TYPES_FOR_SIZE_BY_STREAM_CALCULATION) {
         sizes_futs.push_back(store()->get_object_sizes(key_type, stream_id));
@@ -1768,7 +1767,6 @@ std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> LocalVer
     std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> sizes;
 
     std::vector<folly::Future<folly::Unit>> futs;
-    futs.reserve(TYPES_FOR_SIZE_BY_STREAM_CALCULATION.size());
     for (const auto& key_type : TYPES_FOR_SIZE_BY_STREAM_CALCULATION) {
         futs.push_back(store()->visit_object_sizes(key_type, std::nullopt, [&mutex, &sizes, key_type](const VariantKey& k, storage::CompressedSize size){
             auto stream_id = variant_key_id(k);
