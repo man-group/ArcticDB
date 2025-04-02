@@ -97,6 +97,39 @@ def test_symbol_concat_different_column_sets(lmdb_library_factory, dynamic_schem
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+@pytest.mark.parametrize("columns_per_segment", [2, 100_000])
+def test_symbol_concat_integer_columns_outer_join(lmdb_library_factory, dynamic_schema, columns_per_segment):
+    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, columns_per_segment=columns_per_segment))
+    df_0 = pd.DataFrame(
+        {
+            "col1": np.arange(5, dtype=np.int64),
+            "col2": np.arange(5, 10, dtype=np.int64),
+            "col3": np.arange(10, 15, dtype=np.int64),
+            "col4": np.arange(15, 20, dtype=np.int64),
+            "col5": np.arange(20, 25, dtype=np.int64),
+        }
+    )
+    df_1 = pd.DataFrame(
+        {
+            "col7": np.arange(25, 30, dtype=np.int64),
+            "col5": np.arange(30, 35, dtype=np.int64),
+            "col3": np.arange(35, 40, dtype=np.int64),
+            "col1": np.arange(40, 45, dtype=np.int64),
+            "col6": np.arange(45, 50, dtype=np.int64),
+        }
+    )
+    lib.write("sym0", df_0)
+    lib.write("sym1", df_1)
+
+    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join="outer").collect().data
+    expected = pd.concat([df_0, df_1], join="outer")
+    expected.index = pd.RangeIndex(len(expected))
+    expected.fillna(0, inplace=True)
+    expected = expected.astype(np.int64)
+    assert_frame_equal(expected, received)
+
+
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_dynamic_schema_missing_columns(lmdb_library_factory, join):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=True))
