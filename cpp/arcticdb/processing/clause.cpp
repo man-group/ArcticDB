@@ -1702,8 +1702,8 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
             for (size_t idx = 0; idx < required_fields_count; ++idx) {
                 const auto& field = fields.at(idx);
                 index_fields.emplace_back(field.type(), field.name());
-                // Index columns are always included, so remove from the column types map so they are not considered in
-                // inner/outer join
+                // Index columns, and the first non-index column in the case of Series are always included, so remove
+                // from the column types map so they are not considered in inner/outer join
                 schema.column_types().erase(std::string(field.name()));
             }
             first_schema = false;
@@ -1717,8 +1717,8 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
                 } else {
                     schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>("No common type between {} and {} when joining schemas", current_type, field.type());
                 }
-                // Index columns are always included, so remove from the column types map so they are not considered in
-                // inner/outer join
+                // Index columns, and the first non-index column in the case of Series are always included, so remove
+                // from the column types map so they are not considered in inner/outer join
                 schema.column_types().erase(std::string(field.name()));
                 const auto& current_name = index_fields.at(idx).name_;
                 if (current_name != field.name()) {

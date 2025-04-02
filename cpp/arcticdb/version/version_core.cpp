@@ -1398,7 +1398,7 @@ struct CopyToBufferTask : async::BaseTask {
             copy_frame_data_to_buffer(target_segment_, idx, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
         }
         const auto& fields = source_segment_.descriptor().fields();
-        for (auto field_col = fetch_index_ ? required_fields_count_ : get_required_fields_count(source_segment_); field_col < fields.size(); ++field_col) {
+        for (auto field_col = fetch_index_ ? required_fields_count_ : get_index_field_count(source_segment_); field_col < fields.size(); ++field_col) {
             const auto& field = fields.at(field_col);
             const auto& field_name = field.name();
             auto frame_loc_opt = target_segment_.column_index(field_name);
