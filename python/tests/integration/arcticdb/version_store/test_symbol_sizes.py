@@ -272,7 +272,8 @@ def test_symbol_sizes_concurrent(reader_store, writer_store):
 def test_symbol_sizes_matches_boto(request, store, lib_name):
     s3_storage = request.getfixturevalue(store)
     bucket = s3_storage.get_boto_bucket()
-    lib = s3_storage.create_version_store_factory(lib_name)()
+    ac = s3_storage.create_arctic(encoding_version=EncodingVersion.V1)
+    lib = ac.create_library(lib_name)._nvs
 
     try:
         df = sample_dataframe(100, 0)
@@ -292,6 +293,7 @@ def test_symbol_sizes_matches_boto(request, store, lib_name):
         assert data_keys[0].size == data_size.compressed_size
     finally:
         lib.version_store.clear()
+        assert lib.version_store.empty()
 
 
 def test_symbol_sizes_matches_azurite(azurite_storage, lib_name):
