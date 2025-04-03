@@ -40,6 +40,11 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
 
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
+
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v2.0.0
         with:
@@ -57,6 +62,8 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
+          CMAKE_C_COMPILER_LAUNCHER: sccache
 
       - name: Build C++ Tests
         shell: bash -l {0}
@@ -124,6 +131,11 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
 
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
+
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v2.0.0
         with:
@@ -142,6 +154,8 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
+          CMAKE_C_COMPILER_LAUNCHER: sccache
 
       - name: Build C++ Tests
         shell: bash -l {0}
