@@ -127,6 +127,14 @@ jobs:
           toolset: 14.41
           vs-path: 'C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools'
 
+      - name: Setup cmake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.31.6'
+
+      - name: Use cmake
+        run: cmake --version
+
       - name: CMake compile
         if: inputs.job_type != 'build-python-wheels'
         # We are pinning the version to 10.6 because >= 10.7, use node20 which is not supported in the container
