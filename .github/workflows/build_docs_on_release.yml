@@ -49,6 +49,9 @@ jobs:
     needs: check-inputs
     name: "Build docs with version: ${{ needs.check-inputs.outputs.version }}, latest: ${{ needs.check-inputs.outputs.latest }}"
     uses: ./.github/workflows/docs_build.yml
+    secrets: inherit
+    permissions:
+       contents: write
     with:
       version: ${{ needs.check-inputs.outputs.version }}
       latest: ${{ needs.check-inputs.outputs.latest }}
