@@ -25,15 +25,16 @@ echo "Building:
 * sccache_ver=${sccache_ver}
 "
 
-cd `mktemp -d`
+
+TMP_DIR=`mktemp -d`
+cp docker/build_gcc.sh $TMP_DIR
+cd $TMP_DIR
 trap "rm -rf $PWD" EXIT
 
 wget -nv https://github.com/mozilla/sccache/releases/download/$sccache_ver/sccache-$sccache_ver-x86_64-unknown-linux-musl.tar.gz
 tar xvf sccache*.tar.gz
 mv sccache-*/sccache .
 chmod 555 sccache
-
-
 
 echo "
 FROM $manylinux_image
@@ -44,10 +45,20 @@ RUN rpmkeys --import 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3F
             s/#?exclude.*/exclude=.edu/' /etc/yum/pluginconf.d/fastestmirror.conf
 ADD sccache /usr/local/bin/
 RUN yum update -y && \
-    yum install -y zip jq less devtoolset-11-gdb perl-IPC-Cmd \
-      openssl-devel cyrus-sasl-devel devtoolset-10-libatomic-devel libcurl-devel python3-devel flex && \
-    rpm -Uvh --nodeps \$(repoquery --location mono-{core,web,devel,data,wcf,winfx}) && \
+    yum install -y zip jq less devtoolset-11-binutils devtoolset-11-gdb devtoolset-11-libatomic-devel perl-IPC-Cmd \
+      openssl-devel cyrus-sasl-devel libcurl-devel python3-devel flex && \
+    rpm -Uvh --nodeps \$(repoquery --location mono-{core,web,devel,data,wcf,winfx})
+RUN yum install -y gmp-devel mpfr-devel libmpc-devel
+ADD build_gcc.sh /tmp/build_gcc.sh
+RUN /tmp/build_gcc.sh 11.4.0
+RUN yum remove -y gmp-devel mpfr-devel libmpc-devel devtoolset-10* && \
     yum clean all && touch /etc/arcticdb_deps_installed
+ENV PATH=\"/opt/gcc/11.4.0/bin:/opt/rh/devtoolset-11/root/usr/bin/:$PATH\"
+ENV CC=/opt/gcc/11.4.0/bin/gcc
+ENV CMAKE_C_COMPILER=/opt/gcc/11.4.0/bin/gcc
+ENV CXX=/opt/gcc/11.4.0/bin/g++
+ENV CMAKE_CXX_COMPILER=/opt/gcc/11.4.0/bin/g++
+ENV LD_LIBRARY_PATH=/opt/gcc/11.4.0/lib64
 LABEL io.arcticdb.cibw_ver=\"${cibuildwheel_ver}\" io.arcticdb.base=\"${manylinux_image}\"
 " > Dockerfile
 
