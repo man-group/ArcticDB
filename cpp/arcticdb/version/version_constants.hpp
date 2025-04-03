@@ -19,7 +19,7 @@ namespace arcticdb {
     static const char* const StorageLogId = "__storage_log__";
     static const char* const FailedStorageLogId = "__failed_storage_log__";
     // Used by v2 replication in the enterprise repo to manually recreate a symbol
-    static const char* const RecreateVersionId = "__recreate__";
+    static const char* const RecreateSymbolId = "__recreate__";
     // Used by v2 replication in the enterprise repo to manually refresh a symbol
-    static const char* const RefreshVersionId = "__refresh__";
+    static const char* const RefreshSymbolId = "__refresh__";
 }
