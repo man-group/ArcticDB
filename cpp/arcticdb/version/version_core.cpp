@@ -1381,7 +1381,6 @@ struct CopyToBufferTask : async::BaseTask {
             uint32_t required_fields_count,
             DecodePathData shared_data,
             std::any& handler_data,
-            bool fetch_index,
             OutputFormat output_format) :
             source_segment_(std::move(source_segment)),
         target_segment_(std::move(target_segment)),
@@ -1389,16 +1388,17 @@ struct CopyToBufferTask : async::BaseTask {
         required_fields_count_(required_fields_count),
         shared_data_(std::move(shared_data)),
         handler_data_(handler_data),
-        fetch_index_(fetch_index),
         output_format_(output_format){
     }
 
     folly::Unit operator()() {
-        for (auto idx = 0u; idx < required_fields_count_ && fetch_index_; ++idx) {
-            copy_frame_data_to_buffer(target_segment_, idx, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
+        for (auto idx = frame_slice_.columns().first == 0 ? 0u : get_index_field_count(source_segment_);
+        static_cast<int64_t>(idx) < std::min(static_cast<int64_t>(required_fields_count_) - static_cast<int64_t>(frame_slice_.columns().first), static_cast<int64_t>(source_segment_.descriptor().fields().size())); ++idx) {
+            copy_frame_data_to_buffer(target_segment_, idx + frame_slice_.columns().first, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
         }
         const auto& fields = source_segment_.descriptor().fields();
-        for (auto field_col = fetch_index_ ? required_fields_count_ : get_index_field_count(source_segment_); field_col < fields.size(); ++field_col) {
+        for (auto field_col = std::max(static_cast<int64_t>(required_fields_count_) - static_cast<int64_t>(frame_slice_.columns().first), static_cast<int64_t>(get_index_field_count(source_segment_)));
+        field_col < static_cast<int64_t>(fields.size()); ++field_col) {
             const auto& field = fields.at(field_col);
             const auto& field_name = field.name();
             auto frame_loc_opt = target_segment_.column_index(field_name);
@@ -1432,7 +1432,6 @@ folly::Future<folly::Unit> copy_segments_to_frame(
                 required_fields_count,
                 shared_data,
                 handler_data,
-                context_row->fetch_index(),
                 output_format}));
     }
     return folly::collect(copy_tasks).via(&async::cpu_executor()).unit();

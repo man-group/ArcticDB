@@ -64,22 +64,28 @@ def test_symbol_concat_basic(lmdb_library_factory, dynamic_schema, rows_per_segm
         assert version.metadata == (None if idx == 1 else idx)
 
 
+@pytest.mark.parametrize(
+    "index",
+    [
+        None,
+        pd.date_range("2025-01-01", periods=8),
+        pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=2), [0, 1], ["hello", "goodbye"]]),
+    ]
+)
 @pytest.mark.parametrize("name_0", [None, "", "s1", "s2"])
 @pytest.mark.parametrize("name_1", [None, "", "s1", "s2"])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-# @pytest.mark.parametrize("name_0", ["s1"])
-# @pytest.mark.parametrize("name_1", ["s2"])
-# @pytest.mark.parametrize("join", ["inner"])
-def test_symbol_concat_with_series(lmdb_library_factory, name_0, name_1, join):
-    lib = lmdb_library_factory()
-    s_0 = pd.Series(np.arange(5, dtype=np.float64), name=name_0)
-    s_1 = pd.Series(np.arange(10, 15, dtype=np.float64), name=name_1)
+def test_symbol_concat_with_series(lmdb_library_factory, index, name_0, name_1, join):
+    lib = lmdb_library_factory(LibraryOptions(columns_per_segment=2))
+    s_0 = pd.Series(np.arange(8, dtype=np.float64), index=index, name=name_0)
+    s_1 = pd.Series(np.arange(10, 18, dtype=np.float64), index=index, name=name_1)
     lib.write("sym0", s_0)
     lib.write("sym1", s_1)
 
     received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join=join).collect().data
     expected = pd.concat([s_0, s_1], join=join)
-    expected.index = pd.RangeIndex(len(expected))
+    if index is None:
+        expected.index = pd.RangeIndex(len(expected))
     expected.name = name_0 if name_0 == name_1 else None
     assert_series_equal(expected, received)
 

@@ -30,6 +30,7 @@ struct FrameSliceMap {
         }
         for (const auto &context_row: *context_) {
             const auto& row_range = context_row.slice_and_key().slice_.row_range;
+            const auto& col_range = context_row.slice_and_key().slice_.col_range;
 
             const auto& fields = context_row.descriptor().fields();
             for(const auto& field : folly::enumerate(fields)) {
@@ -60,8 +61,10 @@ struct FrameSliceMap {
                         continue;
                     }
                 }
-                const auto& field_name = (context_row.fetch_index() && field.index < required_fields_count) ?
-                                  context_->descriptor().field(field.index).name() :
+                auto required_field = ((col_range.first == 0 ? 0 : context_->descriptor().index().field_count()) <= field.index) &&
+                        (static_cast<int64_t>(field.index) < static_cast<int64_t>(required_fields_count) - static_cast<int64_t>(col_range.first));
+                const auto& field_name = required_field ?
+                                  context_->descriptor().field(field.index + col_range.first).name() :
                                   field->name();
                 auto &column = columns_[field_name];
                 column.insert(std::make_pair(row_range, ContextData{context_row.index_, field.index}));
