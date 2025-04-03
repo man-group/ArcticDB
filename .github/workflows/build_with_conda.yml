@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
     services:
       mongodb:
         image: mongo:4.4
@@ -121,6 +122,7 @@ jobs:
     runs-on: ${{ inputs.run_on_arm_mac == true && 'macos-13-xlarge' || matrix.os }}
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
     steps:
       - uses: actions/checkout@v3.3.0
         # DONT use recursive submodules checkout to simulate conda feedstock build
