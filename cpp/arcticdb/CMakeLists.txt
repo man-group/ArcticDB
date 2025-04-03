@@ -19,6 +19,7 @@ cmake_policy(POP)
 
 find_package(Boost REQUIRED)
 find_package(fmt REQUIRED)
+find_package(sparrow REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(Folly REQUIRED)
 find_package(Gflags REQUIRED)
@@ -27,7 +28,6 @@ find_package(prometheus-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(double-conversion REQUIRED)
 find_package(unordered_dense CONFIG REQUIRED)
-#find_package(date REQUIRED)
 
 if(NOT WIN32 AND ${SSL_LINK})
     find_package(Kerberos REQUIRED)
@@ -698,8 +698,6 @@ set (arcticdb_core_libraries
         Azure::azure-identity
         Azure::azure-storage-blobs
         sparrow
-        date::date
-        date::date-tz
         CURL::libcurl
 )
 
