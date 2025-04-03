@@ -52,7 +52,7 @@ from arcticdb.util.test import (
 from arcticdb.util._versions import IS_PANDAS_ZERO, IS_PANDAS_TWO
 from arcticdb.exceptions import ArcticNativeException
 
-from tests.util.mark import param_dict, ZONE_INFO_MARK
+from tests.util.mark import param_dict, PYARROW_TESTS_MARK, ZONE_INFO_MARK
 
 params = {
     "simple_dict": {"a": "1", "b": 2, "c": 3.0, "d": True},
@@ -728,11 +728,11 @@ def test_column_names_roundtrip_csv(lmdb_version_store, sym):
     assert_frame_equal(lmdb_version_store.read(sym).data, df)
 
 
+@PYARROW_TESTS_MARK
 @pytest.mark.skipif(
     not IS_PANDAS_TWO, reason="The full-support of pyarrow-backed pandas objects is pandas 2.0-specific."
 )
 def test_pyarrow_error(lmdb_version_store):
-    _ = pytest.importorskip("pyarrow")
     error_msg_intro = "PyArrow-backed pandas DataFrame and Series are not currently supported by ArcticDB."
     df = pd.DataFrame(data=[[1.0, 0.2], [0.2, 0.5]], dtype="float32[pyarrow]")
     with pytest.raises(ArcticDbNotYetImplemented, match=error_msg_intro):

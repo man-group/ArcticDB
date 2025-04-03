@@ -59,6 +59,17 @@ REAL_S3_TESTS_MARK = pytest.mark.skipif(
 """Mark on tests using the real (i.e. hosted by AWS as opposed to moto) S3.
 Currently controlled by the ARCTICDB_PERSISTENT_STORAGE_TESTS and ARCTICDB_FAST_TESTS_ONLY env vars."""
 
+# PyArrow might not be installed on the system, so we need to skip the tests that use it.
+try:
+    import pyarrow
+    PYARROW_INSTALLED = True
+except ImportError:
+    PYARROW_INSTALLED = False
+
+PYARROW_TESTS_MARK = pytest.mark.skipif(
+    not PYARROW_INSTALLED,
+    reason="PyArrow is not installed on the system",
+)
 
 """Windows and MacOS have different handling of self-signed CA cert for test. 
 TODO: https://github.com/man-group/ArcticDB/issues/1394"""
