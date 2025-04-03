@@ -57,8 +57,7 @@ dependencies:
   # Build dependencies for tests
   # Use libarrow==18.0.0 only on Linux and MacOS (resolution problem on Windows)
   # TODO: Remove this when the issue is resolved
-  - sel(linux): libarrow==18.0.0
-  - sel(osx): libarrow==18.0.0
+  - sel(unix): libarrow==18.0.0
   # Python dependences
   # Python 3.13+ is not yet supported
   - python <3.13
@@ -76,7 +75,6 @@ dependencies:
   # See: https://github.com/man-group/ArcticDB/pull/291
   - hypothesis <6.73
   - pytest-sugar
-  - pytest-xdist
   - pytest-timeout
   # Python dependencies (for tests only)
   - azure-storage-blob
@@ -89,10 +87,8 @@ dependencies:
   - psutil
   # Use pyarrow only on Linux and MacOS (resolution problem on Windows)
   # TODO: Remove this when the issue is resolved
-  - sel(linux): pyarrow
-  - sel(osx): pyarrow
+  - sel(unix): pyarrow
   # Use memray and pytest-memray only on Linux and MacOS
-  - sel(linux): memray
-  - sel(linux): pytest-memray
-  - sel(osx): memray
-  - sel(osx): pytest-memray
+  - sel(unix): memray
+  - sel(unix): pytest-memray
+  - sel(unix): pytest-xdist
