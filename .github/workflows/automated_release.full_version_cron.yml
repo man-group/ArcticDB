@@ -19,14 +19,14 @@ jobs:
         uses: oprypin/find-latest-tag@v1
         with:
           repository: ${{ github.repository }}
-          regex: ^v\d+\.\d+\.\d+rc\d+$
+          regex: ^v\d+\.\d+\.\d+\${{ vars.RC_SUFFIX }}\d+$
       
       - name: Calculate next version
         id: calculate-next-version
         run: |
           LATEST_TAG="${{ steps.latest_rc_tag.outputs.tag }}"
           LATEST_TAG="${LATEST_TAG#v}"
-          base="${LATEST_TAG%rc*}"
+          base="${LATEST_TAG%${{ vars.RC_SUFFIX }}*}"
           echo "next_version=$base" >> $GITHUB_OUTPUT
 
   tag_and_release:
@@ -40,3 +40,11 @@ jobs:
     with:
       version: ${{ needs.get_tag_name.outputs.next_version }}  
       from_branch: ${{ needs.get_tag_name.outputs.next_version }}
+
+  create_next_release_branch:
+    name: Create next release branch
+    permissions:
+      checks: read
+      contents: write
+    secrets: inherit
+    uses: ./.github/workflows/automated_release.create_release_branch.yml
