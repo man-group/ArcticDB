@@ -368,7 +368,7 @@ jobs:
         run: |
           npm install -g azurite
 
-      - name: Test with pytest
+      - name: Run Python Tests
         shell: bash -elo pipefail {0}
         run: |
           cd python
