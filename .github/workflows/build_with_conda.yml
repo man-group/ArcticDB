@@ -323,7 +323,7 @@ jobs:
           set CMAKE_GENERATOR_TOOLSET=
           cd cpp
           cmake ^
-            -DTEST=ON ^
+            -DTEST=OFF ^
             --preset windows-cl-conda-release ^
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
             -DCMAKE_C_COMPILER_LAUNCHER=sccache
@@ -334,10 +334,20 @@ jobs:
           ARCTIC_CMAKE_PRESET: windows-cl-conda-release
 
       - name: Build and Run C++ Tests
-        shell: bash -elo pipefail {0}
-        run: |
+        shell: cmd /C call {0}
+        run:
+          set CMAKE_GENERATOR_PLATFORM=
+          set CMAKE_GENERATOR_TOOLSET=
           cd cpp
-          CTEST_OUTPUT_ON_FAILURE=1 ctest -C Release --output-on-failure --label-regex "arcticdb_rapidcheck_tests|test_unit_arcticdb"
+          cmake ^
+            -DTEST=ON ^
+            --preset windows-cl-conda-release ^
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache
+          cmake --build --preset windows-cl-conda-release --parallel --target arcticdb_rapidcheck_tests
+          cmake --build --preset windows-cl-conda-release --parallel --target test_unit_arcticdb
+          cd out/windows-cl-conda-release-build/
+          CTEST_OUTPUT_ON_FAILURE=1 cmake --build . --target test
 
       - name: Build Python target for conda
         shell: cmd /C call {0}
