@@ -99,8 +99,8 @@ jobs:
                 container: null
     steps:
       - run: |
-          if [[ "$GITHUB_REF" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            # Can only upload to Pypi once per version, so only publish stable (non-rc) tags:
+          if ${{startsWith(github.ref, 'refs/tags/v')}}; then
+            # Can only upload to Pypi once per version, so only auto upload on tag builds:
             echo -e "PUBLISH_ENV=ProdPypi\nCMAKE_PRESET_TYPE=release\nPYPI_PUBLISH=1" | tee -a $GITHUB_ENV
           elif $GITHUB_REF_PROTECTED || ${{github.ref == 'refs/heads/master'}} ; then
             echo -e "PUBLISH_ENV=TestPypi\nCMAKE_PRESET_TYPE=release" | tee -a $GITHUB_ENV
