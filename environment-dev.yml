@@ -58,6 +58,7 @@ dependencies:
   # Use libarrow==18.0.0 only on Linux and MacOS (resolution problem on Windows)
   # TODO: Remove this when the issue is resolved
   - sel(unix): libarrow==18.0.0
+  - sel(win): libarrow
   # Python dependences
   # Python 3.13+ is not yet supported
   - python <3.13
