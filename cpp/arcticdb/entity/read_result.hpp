@@ -52,6 +52,12 @@ inline ReadResult create_python_read_result(
     std::optional<std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>&& user_meta = std::nullopt) {
     auto result = std::move(fd);
 
+    // If version is a vector then this was a multi-symbol join, so the user_meta vector should have a value
+    // Otherwise, there is a single piece of metadata on the frame descriptor
+    util::check(
+            std::holds_alternative<VersionedItem>(version) ^ user_meta.has_value(),
+            "Unexpected argument combination to create_python_read_result");
+
     // Very old (pre Nov-2020) PandasIndex protobuf messages had no "start" or "step" fields. If is_physically_stored
     // (renamed from is_not_range_index) was false, the index was always RangeIndex(num_rows, 1)
     // This used to be handled in the Python layer by passing None to the DataFrame index parameter, which would then
