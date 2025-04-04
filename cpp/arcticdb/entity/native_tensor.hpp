@@ -14,10 +14,6 @@
 // for std::accumulate
 #include <numeric>
 
-#include <pybind11/numpy.h>
-
-namespace py = pybind11;
-
 namespace arcticdb::entity {
 
 inline ssize_t calc_elements(const shape_t* shape, ssize_t ndim) {
@@ -166,6 +162,7 @@ ssize_t byte_offset_impl(const stride_t* strides, ssize_t i, Ix... index) {
 //TODO is the conversion to a typed tensor really necessary for the codec part?
 template<typename T>
 struct TypedTensor : public NativeTensor {
+    using value_type = T;
     static size_t itemsize() { return sizeof(T); }
 
     std::array<stride_t, 2> f_style_strides() {
@@ -255,10 +252,6 @@ private:
         }  
     }
 };
-template<typename T>
-py::array to_py_array(const TypedTensor<T>& tensor) {
-    return py::array({tensor.shape(), tensor.shape() + tensor.ndim()}, reinterpret_cast<const T*>(tensor.data()));
-}
 
 template<typename T>
 using TensorType = TypedTensor<T>;
