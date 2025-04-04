@@ -95,3 +95,4 @@ jobs:
           set -x
           cd docs/mkdocs
           mike list
+if: false

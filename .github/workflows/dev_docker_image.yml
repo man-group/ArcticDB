@@ -53,3 +53,4 @@ jobs:
         run: |
           docker tag $clang_image_name $clang_image_name:latest
           docker push $clang_image_name:latest
+if: false
