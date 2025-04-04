@@ -87,9 +87,6 @@ dependencies:
   - retrying
   - trustme
   - psutil
-  # Use pyarrow only on Linux and MacOS (resolution problem on Windows)
-  # TODO: Remove this when the issue is resolved
-  - sel(unix): pyarrow
   # Use memray and pytest-memray only on Linux and MacOS
   - sel(unix): memray
   - sel(unix): pytest-memray
