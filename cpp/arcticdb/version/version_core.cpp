@@ -1392,20 +1392,25 @@ struct CopyToBufferTask : async::BaseTask {
     }
 
     folly::Unit operator()() {
-        for (auto idx = frame_slice_.columns().first == 0 ? 0u : get_index_field_count(source_segment_);
-        static_cast<int64_t>(idx) < std::min(static_cast<int64_t>(required_fields_count_) - static_cast<int64_t>(frame_slice_.columns().first), static_cast<int64_t>(source_segment_.descriptor().fields().size())); ++idx) {
-            copy_frame_data_to_buffer(target_segment_, idx + frame_slice_.columns().first, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
-        }
+        const size_t first_col = frame_slice_.columns().first;
+        const bool first_col_slice = first_col == 0;
         const auto& fields = source_segment_.descriptor().fields();
-        for (auto field_col = std::max(static_cast<int64_t>(required_fields_count_) - static_cast<int64_t>(frame_slice_.columns().first), static_cast<int64_t>(get_index_field_count(source_segment_)));
-        field_col < static_cast<int64_t>(fields.size()); ++field_col) {
-            const auto& field = fields.at(field_col);
-            const auto& field_name = field.name();
-            auto frame_loc_opt = target_segment_.column_index(field_name);
-            if (!frame_loc_opt)
-                continue;
-
-            copy_frame_data_to_buffer(target_segment_, *frame_loc_opt, source_segment_, field_col, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
+        // Skip the "true" index fields (i.e. those stored in every column slice) if we are not in the first column slice
+        for (size_t idx = first_col_slice ? 0 : get_index_field_count(source_segment_); idx < fields.size(); ++idx) {
+            // First condition required to avoid underflow when substracting one unsigned value from another
+            if (required_fields_count_ >= first_col && idx < required_fields_count_ - first_col) {
+                // This is a required column in the output. The name in source_segment_ may not match that in target_segment_
+                // e.g. If 2 timeseries are joined that had differently named indexes
+                copy_frame_data_to_buffer(target_segment_, idx + first_col, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
+            } else {
+                // All other columns use names to match the source with the destination
+                const auto& field = fields.at(idx);
+                const auto& field_name = field.name();
+                auto frame_loc_opt = target_segment_.column_index(field_name);
+                if (!frame_loc_opt)
+                    continue;
+                copy_frame_data_to_buffer(target_segment_, *frame_loc_opt, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
+            }
         }
         return folly::Unit{};
     }
