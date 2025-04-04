@@ -28,7 +28,15 @@ void register_column_store(py::module &m) {
     py::class_<StringPool>(m, "StringPool")
         .def(py::init())
         .def_property_readonly("nbytes", &StringPool::size)
-        .def("as_buffer_info", &StringPool::as_buffer_info);
+        .def("as_buffer_info", [](const StringPool& s) {
+                return py::buffer_info{
+                    (void *) s.get_const_view(0).data(),
+                    1,
+                    py::format_descriptor<char>::format(),
+                    ssize_t(s.get_const_view(0).size())
+                    
+                };
+            });
 }
 
 } // namespace arcticc::column_store

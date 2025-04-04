@@ -8,6 +8,7 @@
 #pragma once
 
 #include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
 #include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
@@ -16,6 +17,7 @@
 namespace arcticdb::convert {
 
 namespace py = pybind11;
+
 using namespace arcticdb::entity;
 
 struct ARCTICDB_VISIBILITY_HIDDEN PyStringWrapper {
@@ -90,5 +92,10 @@ std::shared_ptr<pipelines::InputTensorFrame> py_ndf_to_frame(
     bool empty_types);
 
 std::shared_ptr<pipelines::InputTensorFrame> py_none_to_frame();
+
+template<typename T>
+py::array to_py_array(const TypedTensor<T>& tensor) {
+    return py::array({tensor.shape(), tensor.shape() + tensor.ndim()}, reinterpret_cast<const T*>(tensor.data()));
+}
 
 } // namespace arcticdb::convert
