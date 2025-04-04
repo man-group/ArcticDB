@@ -60,8 +60,7 @@ dependencies:
   - sel(unix): libarrow==18.0.0
   - sel(win): libarrow
   # Python dependences
-  # Python 3.13+ is not yet supported
-  - python <3.13
+  - python >=3.12
   - packaging
   - numpy
   - pandas
