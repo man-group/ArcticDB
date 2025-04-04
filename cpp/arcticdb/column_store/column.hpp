@@ -15,6 +15,7 @@
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/bitset.hpp>
+#include <arcticdb/util/concepts.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/util/flatten_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
@@ -26,23 +27,14 @@
 #include <cstdio>
 #endif
 #include <folly/Function.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/numpy.h>
 
 #include <concepts>
 #include <numeric>
 #include <optional>
 
-namespace py = pybind11;
-
 namespace arcticdb {
 
-// this is needed to make templates of templates work
-// since py::array_t has more than one template parameter
-// (the rest are defaulted)
-template< class T>
-using py_array_t = py::array_t<T>;
-
+using util::arithmetic_tensor;
 using namespace arcticdb::entity;
 
 // N.B. this will not catch all the things that C++ considers to be narrowing conversions, because
@@ -449,10 +441,9 @@ public:
         return std::move(shapes_.buffer());
     }
 
-    template<class T, template<class> class Tensor, std::enable_if_t<
-            std::is_integral_v<T> || std::is_floating_point_v<T>,
-            int> = 0>
-    void set_array(ssize_t row_offset, Tensor<T> &val) {
+    template<arithmetic_tensor TensorType>
+    void set_array(ssize_t row_offset, TensorType& val) {
+        using value_type = typename TensorType::value_type;
         ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
         magic_.check();
         util::check_arg(last_logical_row_ + 1 == row_offset, "set_array expected row {}, actual {} ", last_logical_row_ + 1, row_offset);
@@ -461,26 +452,8 @@ public:
         memcpy(shapes_.cursor(), val.shape(), val.ndim() * sizeof(shape_t));
         auto info = val.request();
         util::FlattenHelper flatten(val);
-        auto data_ptr = reinterpret_cast<T*>(data_.cursor());
-        flatten.flatten(data_ptr, reinterpret_cast<const T *>(info.ptr));
-        update_offsets(val.nbytes());
-        data_.commit();
-        shapes_.commit();
-        ++last_logical_row_;
-    }
-
-    template<class T, std::enable_if_t< std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    void set_array(ssize_t row_offset, py::array_t<T>& val) {
-        ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
-        magic_.check();
-        util::check_arg(last_logical_row_ + 1 == row_offset, "set_array expected row {}, actual {} ", last_logical_row_ + 1, row_offset);
-        data_.ensure_bytes(val.nbytes());
-        shapes_.ensure<shape_t>(val.ndim());
-        memcpy(shapes_.cursor(), val.shape(), val.ndim() * sizeof(shape_t));
-        auto info = val.request();
-        util::FlattenHelper<T, py_array_t> flatten(val);
-        auto data_ptr = reinterpret_cast<T*>(data_.cursor());
-        flatten.flatten(data_ptr, reinterpret_cast<const T*>(info.ptr));
+        auto data_ptr = reinterpret_cast<value_type*>(data_.cursor());
+        flatten.flatten(data_ptr, reinterpret_cast<const value_type*>(info.ptr));
         update_offsets(val.nbytes());
         data_.commit();
         shapes_.commit();

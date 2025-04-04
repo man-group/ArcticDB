@@ -18,12 +18,6 @@
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/column_data.hpp>
 
-namespace pybind11 {
-    struct buffer_info;
-}
-
-namespace py = pybind11;
-
 #include <ankerl/unordered_dense.h>
 
 namespace arcticdb {
@@ -171,8 +165,6 @@ class StringPool {
     size_t size() const;
 
     [[nodiscard]] size_t num_blocks() const;
-
-    py::buffer_info as_buffer_info() const;
 
     std::optional<position_t> get_offset_for_column(std::string_view str, const Column& column);
     ankerl::unordered_dense::set<position_t> get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column);

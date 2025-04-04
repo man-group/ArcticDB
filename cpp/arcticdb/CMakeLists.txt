@@ -199,7 +199,6 @@ set(arcticdb_srcs
         column_store/column_data.hpp
         column_store/column_data_random_accessor.hpp
         column_store/column.hpp
-        column_store/column_utils.hpp
         column_store/key_segment.hpp
         column_store/memory_segment.hpp
         column_store/memory_segment_impl.hpp
@@ -345,6 +344,7 @@ set(arcticdb_srcs
         util/buffer.hpp
         util/buffer_pool.hpp
         util/clock.hpp
+        util/concepts.hpp
         util/configs_map.hpp
         util/constants.hpp
         util/constructors.hpp

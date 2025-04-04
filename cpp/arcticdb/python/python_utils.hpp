@@ -13,6 +13,7 @@
 #include <arcticdb/entity/read_result.hpp>
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/processing/clause.hpp>
+#include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/stream/stream_reader.hpp>
 #include <arcticdb/util/variant.hpp>
@@ -64,7 +65,7 @@ class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
                     } else {
                         auto opt_tensor = segment.tensor_at<RawType>(row_pos, col);
                         if(opt_tensor.has_value()){
-                            set_col(col, to_py_array(*opt_tensor));
+                            set_col(col, convert::to_py_array(*opt_tensor));
                         }
                     }
                 }
