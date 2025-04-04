@@ -29,7 +29,28 @@ struct PlainCompressor {
         util::check(data_bytes == data.buffer().bytes(), "Size mismatch in plain compression: {} != {}", data_bytes, data.buffer().bytes());
         auto size_written = data_bytes + sizeof(PlainCompressData);
         util::check(output_size == size_written, "Expected write size mismatch in plain encoder, {} != {}", output_size, size_written);
+        return size_written;
     }
+
+    static size_t compress_shapes(const T *data, size_t num_elements, T *__restrict out, size_t output_size) {
+        auto *out_ptr = reinterpret_cast<uint8_t *>(out);
+        PlainCompressData header = {0};
+
+        std::memcpy(out_ptr, &header, sizeof(PlainCompressData));
+        out_ptr += sizeof(PlainCompressData);
+
+        size_t data_bytes = num_elements * sizeof(T);
+        std::memcpy(out_ptr, reinterpret_cast<const uint8_t *>(data), data_bytes);
+        out_ptr += data_bytes;
+
+        header.num_rows = num_elements;
+        std::memcpy(out, &header, sizeof(PlainCompressData));
+
+        size_t size_written = data_bytes + sizeof(PlainCompressData);
+        util::check(output_size == size_written, "Expected write size mismatch in plain encoder, {} != {}", output_size, size_written);
+        return size_written;
+    }
+
 };
 
 template<typename T>

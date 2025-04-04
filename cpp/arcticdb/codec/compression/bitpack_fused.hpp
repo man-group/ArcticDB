@@ -29,8 +29,8 @@ namespace arcticdb {
 }
 
 template<typename T, std::size_t bit_width>
-struct BitPackFused : public BitPackHelper<T, bit_width> {
-    using Parent = BitPackHelper<T, bit_width>;
+struct BitPackFused : public BitPackHelper<std::make_unsigned_t<T>, bit_width> {
+    using Parent = BitPackHelper<std::make_unsigned_t<T>, bit_width>;
     using p = Parent;
 
     static constexpr std::size_t BLOCK_SIZE = 1024;
@@ -178,16 +178,17 @@ struct BitPackFused : public BitPackHelper<T, bit_width> {
     }
 };
 
-#define BITUNPACK_ROW(n) {                                                                      \
+#define BITUNPACK_ROW(n) {                  \
+    using U = std::make_unsigned_t<T>;                                                           \
     constexpr std::size_t row = (n);                                                            \
     constexpr auto shift = p::shift(row);                                                       \
     if constexpr (p::at_end(row)) {                                                             \
         constexpr auto current_bits = p::current_bits(row);                                     \
-        constexpr auto current_bits_mask = construct_mask<T, current_bits>();                   \
+        constexpr auto current_bits_mask = construct_mask<U, current_bits>();                   \
         tmp = (src >> shift) & current_bits_mask;                                               \
         if constexpr (p::next_word(row) < bit_width) {                                          \
             constexpr auto next_word = p::next_word(row);                                       \
-            constexpr auto remaining_bits_mask = construct_mask<T, p::remaining_bits(row)>();   \
+            constexpr auto remaining_bits_mask = construct_mask<U, p::remaining_bits(row)>();   \
             src = in[num_lanes * next_word + lane];                                             \
             tmp |= (src & remaining_bits_mask) << current_bits;                                 \
         }                                                                                       \
@@ -199,8 +200,8 @@ struct BitPackFused : public BitPackHelper<T, bit_width> {
 }
 
 template<typename T, std::size_t bit_width>
-struct BitUnpackFused : public BitPackHelper<T, bit_width> {
-    using Parent = BitPackHelper<T, bit_width>;
+struct BitUnpackFused : public BitPackHelper<std::make_unsigned_t<T>, bit_width> {
+    using Parent = BitPackHelper<std::make_unsigned_t<T>, bit_width>;
     static constexpr auto num_bits = Parent::num_bits;
     static constexpr auto num_lanes = Parent::num_lanes;
     static constexpr auto mask = Parent::mask;

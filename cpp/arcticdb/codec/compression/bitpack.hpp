@@ -9,6 +9,7 @@
 #include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/codec/compression/contiguous_range_adaptor.hpp>
 #include <arcticdb/codec/compression/encoder_data.hpp>
+#include <arcticdb/codec/compression/compression_utils.hpp>
 
 namespace arcticdb {
 
@@ -124,11 +125,10 @@ struct BitPackCompressor : public BitPackData {
 
         const size_t num_full_blocks = count / BLOCK_SIZE;
         const size_t remainder = count % BLOCK_SIZE;
-        constexpr size_t t_bits = sizeof(T) * 8;
 
-        const size_t full_block_T = (BLOCK_SIZE * bit_width + t_bits - 1) / t_bits;
+        const size_t full_block_size_in_t = round_up_in_t<T>(BLOCK_SIZE * bit_width);
 
-        size_t size_in_t = header_size + (num_full_blocks * full_block_T);
+        size_t size_in_t = header_size + (num_full_blocks * full_block_size_in_t);
 
         if (remainder > 0) 
             size_in_t += calculate_remainder_data_size_bitpack<T>(remainder, bit_width);
@@ -141,15 +141,16 @@ struct BitPackCompressor : public BitPackData {
             return 0;
 
         ARCTICDB_DEBUG(log::codec(), "Bitpacking requires {} bits", bits_needed_);
-
+        util::check(bits_needed_ < sizeof(T) * CHAR_BIT, "Bit width {} >= type bits, no compression possible", bits_needed_, sizeof(T) * CHAR_BIT);
         auto *header [[maybe_unused]] = new(out) BitPackHeader<T>{
             static_cast<uint32_t>(bits_needed_),
             static_cast<uint32_t>(count)
         };
 
-        T *out_ptr = out + header_size_in_t<BitPackHeader<T>, T>();
+        constexpr auto header_size = header_size_in_t<BitPackHeader<T>, T>();
+        T *out_ptr = out + header_size;
         const size_t num_full_blocks = count / BLOCK_SIZE;
-        size_t compressed_size = sizeof(BitPackHeader<T>) / sizeof(T);
+        size_t compressed_size = header_size_in_t<BitPackHeader<T>, T>();
 
         BitPackCompressKernel<T> kernel;
         if (data.num_blocks() == 1) {
@@ -192,7 +193,7 @@ struct BitPackCompressor : public BitPackData {
         }
 
         ARCTICDB_DEBUG(log::codec(), "Compressed size including remainder: {} from {} bytes", compressed_size * sizeof(T), count * sizeof(T));
-        return compressed_size;
+        return compressed_size * sizeof(T);
     }
 };
 

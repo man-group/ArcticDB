@@ -5,11 +5,12 @@
 #include <bit>
 
 #include <arcticdb/codec/compression/fastlanes_common.hpp>
-#include "frequency.hpp"
+#include <arcticdb/codec/compression/frequency.hpp>
 #include <arcticdb/codec/compression/contiguous_range_adaptor.hpp>
 #include <arcticdb/codec/compression/alp/rd.hpp>
 #include <arcticdb/codec/compression/alp_header.hpp>
 #include <arcticdb/codec/compression/compression_utils.hpp>
+#include <arcticdb/codec/compression/ffor.hpp>
 
 namespace arcticdb {
 struct CompressionSample {

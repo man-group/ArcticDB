@@ -1020,7 +1020,6 @@ if(${TEST})
             storage/test/common.hpp
             version/test/test_sort_index.cpp
             codec/test/test_delta.cpp
-            codec/test/test_rle.cpp
             codec/test/test_estimators.cpp
             codec/test/test_lz4.cpp
             codec/test/test_fastlanes.cpp

@@ -147,7 +147,7 @@ std::size_t decode_ndarray(
             const auto& block_info = field.values(block_num);
             ARCTICDB_TRACE(log::codec(), "Decoding block {} at pos {}", block_num, data_in - input);
             size_t block_inflated_size;
-            decode_block<T>(block_info, data_in, reinterpret_cast<T *>(data_out));
+            decode_block<T>(block_info, data_in, reinterpret_cast<T*>(data_out));
             block_inflated_size = block_info.in_bytes();
             data_out += block_inflated_size;
             data_sink.advance_data(block_inflated_size);

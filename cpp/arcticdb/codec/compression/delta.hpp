@@ -37,7 +37,7 @@ struct __attribute__((packed)) DeltaHeader : public DeltaSize {
 
 template <typename T>
 struct DeltaCompressKernel {
-    using h = Helper<T>;
+    using h = Helper<std::make_unsigned_t<T>>;
     T prev_[h::num_lanes];
 
     ARCTICDB_NO_MOVE_OR_COPY(DeltaCompressKernel)
@@ -51,9 +51,9 @@ struct DeltaCompressKernel {
     }
 
     ALWAYS_INLINE
-    T operator()(const T* ptr, size_t offset, size_t lane) {
+    std::make_unsigned_t<T> operator()(const T* ptr, size_t offset, size_t lane) {
         T value = ptr[offset];
-        T delta = value - prev_[lane];
+        std::make_unsigned_t<T> delta = value - prev_[lane];
         prev_[lane] = value;
         return delta;
     }
@@ -69,7 +69,7 @@ struct DeltaUncompressKernel {
         std::copy(in, in + h::num_lanes, prev_);
     }
 
-    void operator()(T* __restrict ptr, size_t offset, T value, size_t lane)  {
+    void operator()(T* __restrict ptr, size_t offset, std::make_unsigned_t<T> value, size_t lane)  {
         const T result = value + prev_[lane];
         prev_[lane] = result;
         ptr[offset] = result;
@@ -89,23 +89,24 @@ size_t calc_remainder_size(size_t count, size_t bit_width) {
 }
 
 template<typename T>
-size_t compress_remainder(const T* input, size_t count, T* output, size_t bit_width) {
+size_t compress_delta_remainder(const T* input, size_t count, T* output, size_t bit_width) {
     auto* metadata [[maybe_unused]] = new (output) RemainderMetadata{
         static_cast<uint32_t>(count),
         static_cast<uint32_t>(bit_width),
         {}
     };
-    ARCTICDB_DEBUG(log::codec(), "Compressing {} values of remainder", count);
-    T* data_out = output + sizeof(RemainderMetadata)/sizeof(T);
-
-    *data_out++ = input[0];
+    ARCTICDB_DEBUG(log::codec(), "Delta compressing {} values of remainder", count);
+    auto* data_start = output + sizeof(RemainderMetadata) / sizeof(T);
+    *data_start = input[0];
+    auto data_out = reinterpret_cast<std::make_unsigned_t<T>*>(data_start);
+    ++data_out;
 
     T prev = input[0];
     size_t bit_pos = 0;
-    T current_word = 0;
+    std::make_unsigned_t<T> current_word = 0;
 
     for (size_t i = 1; i < count; ++i) {
-        T delta = input[i] - prev;
+        std::make_unsigned_t<T> delta = input[i] - prev;
         ARCTICDB_TRACE(log::codec(), "Value {}, delta = {}", input[i], delta);
         scalar_pack(delta, bit_width, bit_pos, current_word, data_out);
         prev = input[i];
@@ -121,13 +122,15 @@ size_t decompress_delta_remainder(const T* input, T* output) {
     const uint32_t count = metadata->size;
     const uint32_t bit_width = metadata->bit_width;
 
-    const T* data_in = input + sizeof(RemainderMetadata)/sizeof(T);
-    output[0] = *data_in++;
-    T current_word = *data_in;
+    const T* data_start = input + sizeof(RemainderMetadata)/sizeof(T);
+    output[0] = *data_start;
+    auto data_in = reinterpret_cast<const std::make_unsigned_t<T>*>(data_start);
+    ++data_in;
+    std::make_unsigned_t<T> current_word = *data_in;
     size_t bit_pos = 0;
 
     for (size_t i = 1; i < count; ++i) {
-        T delta = scalar_unpack(bit_width, bit_pos, current_word, data_in);
+        std::make_unsigned_t<T> delta = scalar_unpack(bit_width, bit_pos, current_word, data_in);
         output[i] = output[i-1] + delta;
     }
 
@@ -214,12 +217,12 @@ public:
             total_size += delta_header_size<T>();
             ARCTICDB_DEBUG(log::codec(), "Total size including header: {}", total_size);
 
-            T max_delta = std::numeric_limits<T>::lowest();
+            std::make_unsigned_t<T> max_delta = std::numeric_limits<std::make_unsigned_t<T>>::lowest();
             if(input.num_blocks() == 1) {
                 auto ptr = reinterpret_cast<const T*>(input.buffer().data());
                 auto current = *ptr;
                 for (auto i = 1UL; i < full_blocks_ * BLOCK_SIZE; ++i) {
-                    const T delta = ptr[i] - current;
+                    const std::make_unsigned_t<T> delta = ptr[i] - current;
                     current = ptr[i];
                     max_delta = std::max(delta, max_delta);
                 }
@@ -229,8 +232,8 @@ public:
                 for(auto i = 0UL; i < full_blocks_; ++i) {
                     auto ptr = adaptor.next();
                     for (auto j = 0UL; j < BLOCK_SIZE; ++j) {
-                        const T delta = ptr[i] - current;
-                        current = ptr[i];
+                        const std::make_unsigned_t<T> delta = ptr[j] - current;
+                        current = ptr[j];
                         max_delta = std::max(delta, max_delta);
                     }
                 }
@@ -247,10 +250,10 @@ public:
             DynamicRangeRandomAccessAdaptor<T> adaptor{input};
             const T* remainder_ptr = adaptor.at(remainder_offset(), remainder_);
             T prev = remainder_ptr[0];
-            T max_delta = 0;
+            std::make_unsigned_t<T> max_delta = 0;
 
             for (size_t i = 1; i < remainder_; i++) {
-                T delta = remainder_ptr[i] - prev;
+                std::make_unsigned_t<T> delta = remainder_ptr[i] - prev;
                 max_delta = std::max(max_delta, delta);
                 prev = remainder_ptr[i];
             }
@@ -309,7 +312,7 @@ public:
             DynamicRangeRandomAccessAdaptor<T> adaptor{data};
             const T* remainder_ptr = adaptor.at(remainder_offset(), remainder_);
             ARCTICDB_DEBUG(log::codec(), "Remainder offset: {} ({}), first value {}", remainder_offset(), output_offset, *remainder_ptr);
-            output_offset += compress_remainder(
+            output_offset += compress_delta_remainder(
                 remainder_ptr,
                 remainder_,
                 output + output_offset,

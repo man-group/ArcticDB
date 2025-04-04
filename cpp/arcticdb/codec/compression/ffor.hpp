@@ -23,7 +23,7 @@ class FForCompressKernel {
 public:
     explicit FForCompressKernel(T reference) : reference_(reference) {}
 
-    T operator()(const T* __restrict ptr, size_t offset, size_t /*lane*/) const {
+    std::make_unsigned_t<T> operator()(const T* __restrict ptr, size_t offset, size_t /*lane*/) const {
         return ptr[offset] - reference_;
     }
 };
@@ -61,21 +61,24 @@ static size_t calculate_remainder_data_size(size_t count, size_t bit_width) {
 }
 
 template<typename T>
-size_t compress_remainder(const T* input, size_t count, T* output, size_t bit_width, T reference) {
+size_t compress_ffor_remainder(const T* input, size_t count, T* output, size_t bit_width, T reference) {
     auto* metadata [[maybe_unused]] = new (output) FForRemainderMetadata{
         static_cast<uint32_t>(count),
         static_cast<uint32_t>(bit_width),
         {}
     };
 
-    T* data_out = output + header_size_in_t<FForRemainderMetadata, T>();
-    *data_out++ = reference;
+    ARCTICDB_DEBUG(log::codec(), "FFOR compressing {} values of remainder", count);
+    auto data_start = output + header_size_in_t<FForRemainderMetadata, T>();
+    *data_start = reference;
+    auto data_out = reinterpret_cast<std::make_unsigned_t<T>*>(data_start);
+    ++data_out;
 
     size_t bit_pos = 0;
-    T current_word = 0;
+    std::make_unsigned_t<T> current_word = 0;
 
     for (size_t i = 0; i < count; ++i) {
-        T delta = input[i] - reference;
+        std::make_unsigned_t<T> delta = input[i] - reference;
         scalar_pack(delta, bit_width, bit_pos, current_word, data_out);
     }
 
@@ -88,25 +91,28 @@ size_t compress_remainder(const T* input, size_t count, T* output, size_t bit_wi
 }
 
 template<typename T>
-size_t decompress_remainder(const T* input, T* output) {
+size_t decompress_ffor_remainder(const T* input, T* output) {
     const auto* metadata = reinterpret_cast<const FForRemainderMetadata*>(input);
     metadata->magic_.check();
     const uint32_t count = metadata->size;
     const uint32_t bit_width = metadata->bit_width;
 
-    const T* data_in = input + header_size_in_t<FForRemainderMetadata, T>();
-    const T reference = *data_in++;
+    const T* data_start = input + header_size_in_t<FForRemainderMetadata, T>();
+    const T reference = *data_start;
+    auto data_in = reinterpret_cast<const std::make_unsigned_t<T>*>(data_start);
+    ++data_in;
 
-    T current_word = *data_in;
+    std::make_unsigned_t<T> current_word = *data_in;
     size_t bit_pos = 0;
 
     for (size_t i = 0; i < count; ++i) {
-        T delta = scalar_unpack(bit_width, bit_pos, current_word, data_in);
+        std::make_unsigned_t<T> delta = scalar_unpack(bit_width, bit_pos, current_word, data_in);
         output[i] = delta + reference;
     }
 
     return calculate_remainder_data_size<T>(count, bit_width);
 }
+
 template <typename T>
 struct FForCompressor : public FFORCompressData {
     FForCompressor(FFORCompressData data) :
@@ -197,7 +203,7 @@ struct FForCompressor : public FFORCompressData {
             auto remaining_in = adaptor.at(num_full_blocks * BLOCK_SIZE, remaining);
             T *remaining_out = out_ptr + compressed_size - header_size_in_t<FForHeader<T>, T>();
 
-            compressed_size += compress_remainder(
+            compressed_size += compress_ffor_remainder(
                 remaining_in,
                 remaining,
                 remaining_out,
@@ -206,6 +212,49 @@ struct FForCompressor : public FFORCompressData {
             );
         }
         ARCTICDB_DEBUG(log::codec(), "Compressed size including remainder: {} from {} bytes", compressed_size * sizeof(T), count * sizeof(T));
+        return compressed_size;
+    }
+
+    size_t compress_shapes(const T *data, size_t count, T *__restrict out) {
+        if (count == 0)
+            return 0;
+
+        ARCTICDB_DEBUG(log::codec(), "FFOR bitpacking (contiguous) requires {} bits", bits_needed_);
+
+        auto *header [[maybe_unused]] = new(out) FForHeader<T>{
+            get_reference<T>(),
+            static_cast<uint32_t>(bits_needed_),
+            static_cast<uint32_t>(count)
+        };
+
+        T *out_ptr = out + header_size_in_t<FForHeader<T>, T>();
+        const size_t num_full_blocks = count / BLOCK_SIZE;
+        size_t compressed_size = header_size_in_t<FForHeader<T>, T>();
+
+        FForCompressKernel<T> kernel(get_reference<T>());
+        for (size_t block = 0; block < num_full_blocks; ++block) {
+            compressed_size += dispatch_bitwidth_fused<T, BitPackFused>(
+                data + block * BLOCK_SIZE,
+                out_ptr + (compressed_size - header_size_in_t<FForHeader<T>, T>()),
+                bits_needed_,
+                kernel
+            );
+        }
+
+        size_t remaining = count % BLOCK_SIZE;
+        if (remaining > 0) {
+            const T *remaining_in = data + num_full_blocks * BLOCK_SIZE;
+            T *remaining_out = out_ptr + (compressed_size - header_size_in_t<FForHeader<T>, T>());
+            compressed_size += compress_ffor_remainder(
+                remaining_in,
+                remaining,
+                remaining_out,
+                bits_needed_,
+                get_reference<T>()
+            );
+        }
+
+        ARCTICDB_DEBUG(log::codec(), "Compressed contiguous data: {} from {} bytes", compressed_size * sizeof(T), count * sizeof(T));
         return compressed_size;
     }
 };
@@ -250,7 +299,7 @@ struct FForDecompressor {
         ARCTICDB_DEBUG(log::codec(), "Decompressed {} full blocks to offset {}", num_full_blocks, input_offset);
         size_t remaining = count % 1024;
         if (remaining > 0) {
-            input_offset += decompress_remainder(
+            input_offset += decompress_ffor_remainder(
                 in_ptr + input_offset,
                 out + num_full_blocks * 1024
             );

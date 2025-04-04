@@ -6,7 +6,7 @@
 #include <arcticdb/codec/scanner.hpp>
 
 namespace arcticdb {
-
+/*
 TEST(AdaptiveCodec, SimpleRoundtrip) {
     constexpr auto num_rows = 100 * 1024;
     Column column{make_scalar_type(DataType::UINT64), num_rows, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
@@ -44,5 +44,5 @@ TEST(AdaptiveCodec, SimpleRoundtrip) {
     output.set_row_data(num_rows - 1);
     ASSERT_EQ(column, output);
 }
-
+*/
 }

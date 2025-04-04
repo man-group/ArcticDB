@@ -36,11 +36,11 @@ protected:
         T min_value = *std::min_element(original.begin(), original.end());
         EXPECT_EQ(header->reference, min_value);
 
-        size_t decompressed_size = FForDecompressor<T>::decompress(
+        auto result = FForDecompressor<T>::decompress(
             compressed.data(),
             decompressed.data()
         );
-        EXPECT_EQ(decompressed_size, original.size());
+        EXPECT_EQ(result.uncompressed_, original.size() * sizeof(T));
 
         for (size_t i = 0; i < original.size(); ++i) {
             if(original[i] != decompressed[i])
@@ -167,6 +167,109 @@ TEST_F(FForCodecTest, RangePatterns) {
 
         std::sort(data.begin(), data.end());
         verify_roundtrip(data, make_scalar_type(DataType::UINT32));
+    }
+}
+TEST_F(FForCodecTest, SingleBlockSignedInt32) {
+    std::vector<int32_t> data(values_per_block);
+    std::iota(data.begin(), data.end(), -1000);
+    verify_roundtrip(data, make_scalar_type(DataType::INT32));
+}
+
+TEST_F(FForCodecTest, MultipleCompleteBlocksSignedInt32) {
+    std::vector<int32_t> data(values_per_block * 4);
+    std::iota(data.begin(), data.end(), -5000);
+    verify_roundtrip(data, make_scalar_type(DataType::INT32));
+}
+
+TEST_F(FForCodecTest, BlocksWithRemainderSignedInt32) {
+    std::vector<int32_t> data(values_per_block * 3 + values_per_block / 2);
+    std::iota(data.begin(), data.end(), -1000);
+    verify_roundtrip(data, make_scalar_type(DataType::INT32));
+}
+
+TEST_F(FForCodecTest, SmallRangeSignedInt32) {
+    std::vector<int32_t> data(values_per_block * 2);
+    std::mt19937 rng(42);
+    std::uniform_int_distribution<int32_t> dist(-100, -85);
+    for (auto& i : data)
+        i = dist(rng);
+    std::sort(data.begin(), data.end());
+    verify_roundtrip(data, make_scalar_type(DataType::INT32));
+}
+
+TEST_F(FForCodecTest, LargeRangeSignedInt32) {
+    std::vector<int32_t> data(values_per_block * 2);
+    std::mt19937 rng(42);
+    std::uniform_int_distribution<int32_t> dist(-1000000, 1000000);
+    for (auto& i : data)
+        i = dist(rng);
+    std::sort(data.begin(), data.end());
+    verify_roundtrip(data, make_scalar_type(DataType::INT32));
+}
+
+TEST_F(FForCodecTest, DifferentTypesSigned) {
+    {
+        std::vector<int32_t> data(values_per_block * 2);
+        std::iota(data.begin(), data.end(), -500);
+        verify_roundtrip(data, make_scalar_type(DataType::INT32));
+    }
+    {
+        std::vector<int64_t> data(values_per_block * 2);
+        std::iota(data.begin(), data.end(), -10000LL);
+        verify_roundtrip(data, make_scalar_type(DataType::INT64));
+    }
+    {
+        std::vector<int8_t> data(256);
+        for (size_t i = 0; i < data.size(); ++i)
+            data[i] = static_cast<int8_t>(i % 128 - 64);
+        verify_roundtrip(data, make_scalar_type(DataType::INT8));
+    }
+}
+
+TEST_F(FForCodecTest, EdgeCasesSigned) {
+    {
+        std::vector<int32_t> data(values_per_block);
+        std::iota(data.begin(), data.end(), -1000);
+        verify_roundtrip(data, make_scalar_type(DataType::INT32));
+    }
+    {
+        std::vector<int32_t> data(values_per_block + 1);
+        std::iota(data.begin(), data.end(), -1000);
+        verify_roundtrip(data, make_scalar_type(DataType::INT32));
+    }
+    {
+        std::vector<int32_t> data(values_per_block * 2, -42);
+        verify_roundtrip(data, make_scalar_type(DataType::INT32));
+    }
+    {
+        std::vector<int32_t> data(values_per_block * 2, -42);
+        data.back() = -41;
+        verify_roundtrip(data, make_scalar_type(DataType::INT32));
+    }
+}
+
+TEST_F(FForCodecTest, RangePatternsSigned) {
+    {
+        std::vector<int32_t> data(values_per_block * 2);
+        for (size_t i = 0; i < data.size(); ++i)
+            data[i] = -(1 << (i % 10));
+        std::sort(data.begin(), data.end());
+        verify_roundtrip(data, make_scalar_type(DataType::INT32));
+    }
+    {
+        std::vector<int32_t> data(values_per_block * 2);
+        for (size_t i = 0; i < data.size(); ++i)
+            data[i] = static_cast<int32_t>(std::log2(i + 2) * 1000);
+        verify_roundtrip(data, make_scalar_type(DataType::INT32));
+    }
+    {
+        std::vector<int32_t> data(values_per_block * 2);
+        std::mt19937 rng(42);
+        std::normal_distribution<double> dist(0, 10);
+        for (auto& i : data)
+            i = static_cast<int32_t>(dist(rng));
+        std::sort(data.begin(), data.end());
+        verify_roundtrip(data, make_scalar_type(DataType::INT32));
     }
 }
 

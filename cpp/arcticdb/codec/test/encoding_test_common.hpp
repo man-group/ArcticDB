@@ -21,11 +21,11 @@ DataType data_type_for_type() {
         return DataType::INT16;
     else if constexpr(std::is_same_v<T, int32_t>)
         return DataType::INT32;
-    else if constexpr(std::is_same_v<T, int32_t>)
+    else if constexpr(std::is_same_v<T, uint32_t>)
         return DataType::UINT32;
     else if constexpr(std::is_same_v<T, int64_t>)
         return DataType::INT64;
-    else if constexpr(std::is_same_v<T, int64_t>)
+    else if constexpr(std::is_same_v<T, uint64_t>)
         return DataType::UINT64;
     else if constexpr(std::is_same_v<T, float>)
         return DataType::FLOAT32;

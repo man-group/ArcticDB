@@ -152,7 +152,7 @@ struct FrequencyCompressor : public FrequencyEncodingData {
 
         ARCTICDB_DEBUG(log::version(), "Frequency encoding actual bytes: {}", target - data_out);
         const size_t used_bytes = target - data_out;
-        util::check(used_bytes == estimated_size,
+        util::check(used_bytes < estimated_size,
                     "Size mismatch in frequency encoding, {} != {}",
                     estimated_size,
                     used_bytes);

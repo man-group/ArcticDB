@@ -65,11 +65,6 @@ constexpr EncodingsList StringEncodings {
     //EncodingType::RLE
 };
 
-constexpr EncodingsList ShapesEncodings {
-    EncodingType::CONSTANT,
-    EncodingType::FFOR
-};
-
 inline EncodingsList possible_encodings(DataType data_type) {
     if(is_sequence_type(data_type)) {
         return StringEncodings;

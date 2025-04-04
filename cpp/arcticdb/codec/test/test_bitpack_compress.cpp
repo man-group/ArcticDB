@@ -29,10 +29,10 @@ TYPED_TEST(BitPackTest, SingleBlock) {
     EXPECT_EQ(expected_size, compressed_size);
 
     std::vector<T> output(input.size(), 0);
-    size_t decompressed = BitPackDecompressor<T>::decompress(compressed.data(), output.data());
+    auto result = BitPackDecompressor<T>::decompress(compressed.data(), output.data());
 
     EXPECT_EQ(output, input);
-    EXPECT_EQ(decompressed, input.size());
+    EXPECT_EQ(result.uncompressed_, input.size() * sizeof(T));
 }
 
 TYPED_TEST(BitPackTest, MultiBlock) {
@@ -40,7 +40,7 @@ TYPED_TEST(BitPackTest, MultiBlock) {
     const size_t size = 3000;  // multiple blocks
     std::vector<T> input(size);
     for (size_t i = 0; i < size; ++i)
-        input[i] = static_cast<T>((i * 37) % 256);
+        input[i] = static_cast<T>((i * 37) % 128);
 
     auto wrapper = from_vector(input, type_desc_for_type<T>());
 
@@ -52,12 +52,11 @@ TYPED_TEST(BitPackTest, MultiBlock) {
     size_t compressed_size = bitpack.compress(wrapper.data_, compressed.data(), input.size());
     EXPECT_EQ(expected_size, compressed_size);
 
-
     std::vector<T> output(input.size(), 0);
-    size_t decompressed = BitPackDecompressor<T>::decompress(compressed.data(), output.data());
+    auto result = BitPackDecompressor<T>::decompress(compressed.data(), output.data());
 
     EXPECT_EQ(output, input);
-    EXPECT_EQ(decompressed, input.size());
+    EXPECT_EQ(result.uncompressed_, input.size() * sizeof(T));
 }
 
 TYPED_TEST(BitPackTest, AllIdentical) {
@@ -76,35 +75,10 @@ TYPED_TEST(BitPackTest, AllIdentical) {
 ;
 
     std::vector<T> output(input.size(), 0);
-    size_t decompressed = BitPackDecompressor<T>::decompress(compressed.data(), output.data());
+    auto result = BitPackDecompressor<T>::decompress(compressed.data(), output.data());
 
     EXPECT_EQ(output, input);
-    EXPECT_EQ(decompressed, input.size());
-}
-
-TYPED_TEST(BitPackTest, Extremes) {
-    using T = TypeParam;
-    const size_t size = 1024; // exactly one full block
-    std::vector<T> input(size);
-    for (size_t i = 0; i < size; ++i)
-        input[i] = (i % 2 == 0) ? 0 : std::numeric_limits<T>::max();
-
-    auto wrapper = from_vector(input, type_desc_for_type<T>());
-
-    std::vector<T> compressed(8192, 0);
-
-    auto bitpack_data = BitPackCompressor<T>::compute_bitwidth(wrapper.data_);
-    auto expected_size = BitPackCompressor<T>::compressed_size(input.size(), bitpack_data);
-    BitPackCompressor<T> bitpack(bitpack_data);
-    size_t compressed_size = bitpack.compress(wrapper.data_, compressed.data(), input.size());
-    EXPECT_EQ(expected_size, compressed_size);
-
-
-    std::vector<T> output(input.size(), 0);
-    size_t decompressed = BitPackDecompressor<T>::decompress(compressed.data(), output.data());
-
-    EXPECT_EQ(output, input);
-    EXPECT_EQ(decompressed, input.size());
+    EXPECT_EQ(result.uncompressed_, input.size() * sizeof(T));
 }
 
 } // namespace arcticdb

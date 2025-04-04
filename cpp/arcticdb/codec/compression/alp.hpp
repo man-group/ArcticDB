@@ -47,6 +47,12 @@ struct ALPCompressor {
         data_(std::move(compress_data)) {
     }
 
+
+   /* explicit ALPCompressor(const ALPCompressData<T> &compress_data) :
+        data_(compress_data) {
+        util::check(data_.scheme_.empty(), "Copying states array");
+    } */
+
     size_t calculate_full_blocks(size_t rows) {
         if (rows < alp::config::VECTOR_SIZE)
             return 0;
@@ -87,7 +93,7 @@ struct ALPCompressor {
                 }
                 case alp::Scheme::ALP_RD: {
                     for (auto i = 1UL; i < full_blocks_; ++i) {
-                        alp::rd_encoder<double>::init(ptr, 0, 1024, sample_buf.data(), data_.states_[i]);
+                        alp::rd_encoder<T>::init(ptr, 0, 1024, sample_buf.data(), data_.states_[i]);
                         total_size += required_rd_size(data_);
                     }
                 }
@@ -106,7 +112,7 @@ struct ALPCompressor {
                 case alp::Scheme::ALP_RD: {
                     for (auto i = 0UL; i < full_blocks_; ++i) {
                         auto ptr = adaptor.next();
-                        alp::rd_encoder<double>::init(ptr, 0, 1024, sample_buf.data(), data_.states_[i]);
+                        alp::rd_encoder<T>::init(ptr, 0, 1024, sample_buf.data(), data_.states_[i]);
                         total_size += required_rd_size(data_);
                     }
                 }
@@ -136,7 +142,7 @@ struct ALPCompressor {
             }
             case alp::Scheme::ALP_RD: {
                 for (auto i = 0UL; i < full_blocks_; ++i) {
-                    alp::rd_encoder<double>::init(remainder_data.data(), 0, 1024, sample_buf.data(), data_.states_[i]);
+                    alp::rd_encoder<T>::init(remainder_data.data(), 0, 1024, sample_buf.data(), data_.states_[i]);
                     total_size += required_rd_size(data_);
                 }
             }
@@ -150,17 +156,15 @@ struct ALPCompressor {
     }
 
     void write_real_double_data(
-        const T *data,
-        std::array<T, alp::config::VECTOR_SIZE> &exceptions,
-        std::array<T, alp::config::VECTOR_SIZE> &exception_positions,
-        alp::state<T> state,
-        uint8_t *out,
-        size_t &write_pos
-    ) {
-
-        auto header = new(out + write_pos) RealDoubleHeader<double>{state};
+            const T *data,
+            std::array<uint16_t, alp::config::VECTOR_SIZE> &exceptions,
+            std::array<uint16_t, alp::config::VECTOR_SIZE> &exception_positions,
+            alp::state<T> state,
+            uint8_t *out,
+            size_t &write_pos) {
+        auto header = new(out + write_pos) RealDoubleHeader<T>{state};
         uint16_t exception_count;
-        alp::rd_encoder<double>::encode(
+        alp::rd_encoder<T>::encode(
             data,
             exceptions.data(),
             exception_positions.data(),
@@ -182,15 +186,13 @@ struct ALPCompressor {
     void write_decimal_data(
         const T *data,
         std::array<T, alp::config::VECTOR_SIZE> &exceptions,
-        std::array<T, alp::config::VECTOR_SIZE> &exception_positions,
+        std::array<uint16_t, alp::config::VECTOR_SIZE> &exception_positions,
         alp::state<T> state,
         uint8_t *out,
-        size_t &write_pos
-    ) {
-
-        auto header = new(out + write_pos) ALPDecimalHeader<double>{state};
+        size_t &write_pos) {
+        auto header = new(out + write_pos) ALPDecimalHeader<T>{state};
         uint16_t exception_count;
-        alp::encoder<double>::encode(
+        alp::encoder<T>::encode(
             data,
             exceptions.data(),
             exception_positions.data(),
@@ -220,24 +222,25 @@ struct ALPCompressor {
                        full_blocks_,
                        remainder_);
         size_t total_size = sizeof(ALPHeader<T>);
-        auto header [[maybe_unused]] = new(out) ALPHeader<T>{.num_rows = rows, .scheme=data_.scheme_};
-        std::array<T, BLOCK_SIZE> exceptions;
+        auto header [[maybe_unused]] = new(out) ALPHeader<T>{.num_rows_ = static_cast<uint32_t>(rows), .scheme_ = data_.scheme_};
         std::array<uint16_t, BLOCK_SIZE> exception_positions;
+        auto out_ptr = reinterpret_cast<uint8_t*>(out);
         if (full_blocks_ > 0) {
             ARCTICDB_DEBUG(log::codec(), "Total size including header: {}", total_size);
 
-            T max_delta = std::numeric_limits<T>::lowest();
             if (input.num_blocks() == 1) {
                 auto ptr = reinterpret_cast<const T *>(input.buffer().data());
                 switch (data_.scheme_) {
                 case alp::Scheme::ALP: {
+                    std::array<T, BLOCK_SIZE> exceptions;
                     for (auto i = 1UL; i < full_blocks_; ++i) {
-                        write_decimal_data(ptr, exceptions, exception_positions, data_.states_[i], out, total_size);
+                        write_decimal_data(ptr, exceptions, exception_positions, data_.states_[i], out_ptr, total_size);
                     }
                 }
                 case alp::Scheme::ALP_RD: {
+                    std::array<uint16_t, BLOCK_SIZE> exceptions;
                     for (auto i = 1UL; i < full_blocks_; ++i) {
-                        write_real_double_data(ptr, exceptions, exception_positions, data_.states_[i], out, total_size);
+                        write_real_double_data(ptr, exceptions, exception_positions, data_.states_[i], out_ptr, total_size);
                     }
                 }
                 default:util::raise_rte("Unhandled ALP scheme type");
@@ -246,15 +249,17 @@ struct ALPCompressor {
                 ContiguousRangeForwardAdaptor<T, BLOCK_SIZE> adaptor(input);
                 switch (data_.scheme_) {
                 case alp::Scheme::ALP: {
+                    std::array<T, BLOCK_SIZE> exceptions;
                     for (auto i = 0UL; i < full_blocks_; ++i) {
                         auto ptr = adaptor.next();
-                        write_decimal_data(ptr, exceptions, exception_positions, data_.states_[i], out, total_size);
+                        write_decimal_data(ptr, exceptions, exception_positions, data_.states_[i], out_ptr, total_size);
                     }
                 }
                 case alp::Scheme::ALP_RD: {
+                    std::array<uint16_t, BLOCK_SIZE> exceptions;
                     for (auto i = 0UL; i < full_blocks_; ++i) {
                         auto ptr = adaptor.next();
-                        write_real_double_data(ptr, exceptions, exception_positions, data_.states_[i], out, total_size);
+                        write_real_double_data(ptr, exceptions, exception_positions, data_.states_[i], out_ptr, total_size);
                     }
                 }
                 default:util::raise_rte("Unhandled ALP scheme type");
@@ -268,25 +273,27 @@ struct ALPCompressor {
             DynamicRangeRandomAccessAdaptor<T> adaptor{input};
             const T *remainder_ptr = adaptor.at(remainder_offset(), remainder_);
             std::fill(std::begin(remainder_data), std::end(remainder_data), 0.0);
-            std::copy(remainder_data, remainder_ptr, remainder_);
+            mempcpy(remainder_data.data(), remainder_ptr, remainder_ * sizeof(T));
             switch (data_.scheme_) {
             case alp::Scheme::ALP: {
+                std::array<T, BLOCK_SIZE> exceptions;
                 for (auto i = 0UL; i < full_blocks_; ++i) {
                     write_decimal_data(remainder_data.data(),
                                        exceptions,
                                        exception_positions,
                                        data_.states_[i],
-                                       out,
+                                       out_ptr,
                                        total_size);
                 }
             }
             case alp::Scheme::ALP_RD: {
+                std::array<uint16_t, BLOCK_SIZE> exceptions;
                 for (auto i = 0UL; i < full_blocks_; ++i) {
                     write_real_double_data(remainder_data.data(),
                                            exceptions,
                                            exception_positions,
                                            data_.states_[i],
-                                           out,
+                                           out_ptr,
                                            total_size);
                 }
             }
@@ -299,7 +306,7 @@ struct ALPCompressor {
 };
 
 template<typename T>
-void set_state_from_header(alp::state<T> &state, const RealDoubleHeader<T> &header) {
+void set_state_from_header(alp::state<T> &state, const RealDoubleHeader<T>& header) {
     state.exceptions_count = header.exceptions_count();
     memcpy(state.left_parts_dict, header.dict(), header.dict_size());
     state.actual_dictionary_size_bytes = header.dict_size();
@@ -338,7 +345,7 @@ public:
                 switch (header_->scheme_) {
                 case alp::Scheme::ALP: {
                     for (auto i = 1UL; i < full_blocks_; ++i) {
-                        auto *header = reinterpret_cast<ALPDecimalHeader<T> *>(input + read_pos);
+                        auto *header = reinterpret_cast<const ALPDecimalHeader<T>*>(input + read_pos);
                         header->magic_.check();
                         uint16_t exception_count = header->exceptions_count();
                         alp::decoder<T>::decode(
@@ -358,13 +365,13 @@ public:
                     }
                 }
                 case alp::Scheme::ALP_RD: {
-                    alp::state<double> restored_state;
+                    alp::state<T> restored_state;
                     for (auto i = 1UL; i < full_blocks_; ++i) {
-                        auto *header = reinterpret_cast<RealDoubleHeader<double> *>(input + read_pos);
+                        auto *header = reinterpret_cast<RealDoubleHeader<T>*>(const_cast<T*>(input) + read_pos);
                         header->magic_.check();
                         uint16_t exception_count = header->exceptions_count();
                         set_state_from_header(restored_state, *header);
-                        alp::rd_encoder<double>::decode(
+                        alp::rd_encoder<T>::decode(
                             output + write_pos,
                             header->right(),
                             header->left(),
@@ -383,20 +390,19 @@ public:
 
         if (remainder_ > 0) {
             ARCTICDB_DEBUG(log::codec(), " ALP decompressing remainder at offset {}", write_pos);
-
             std::array<T, alp::config::VECTOR_SIZE> remainder_data;
             switch (header_->scheme_) {
             case alp::Scheme::ALP: {
-                auto *header = reinterpret_cast<ALPDecimalHeader<T> *>(input + read_pos);
+                auto *header = reinterpret_cast<ALPDecimalHeader<T>*>(const_cast<T*>(input) + read_pos);
                 header->magic_.check();
                 uint16_t exception_count = header->exceptions_count();
-                alp::decoder<double>::decode(
-                    reinterpret_cast<const StorageType<T>::signed_type *>(header->data()),
+                alp::decoder<T>::decode(
+                    reinterpret_cast<const StorageType<T>::signed_type*>(header->data()),
                     header->fac_,
                     header->exp_,
                     remainder_data.data());
 
-                alp::decoder<double>::patch_exceptions(
+                alp::decoder<T>::patch_exceptions(
                     output + write_pos,
                     header->exceptions(),
                     header->exception_positions(),
@@ -405,12 +411,12 @@ public:
                 read_pos += header->total_size();
             }
             case alp::Scheme::ALP_RD: {
-                alp::state<double> restored_state;
-                auto *header = reinterpret_cast<RealDoubleHeader<double> *>(input + read_pos);
+                alp::state<T> restored_state;
+                auto *header = reinterpret_cast<RealDoubleHeader<T>*>(const_cast<T*>(input) + read_pos);
                 header->magic_.check();
                 uint16_t exception_count = header->exceptions_count();
                 set_state_from_header(restored_state, *header);
-                alp::rd_encoder<double>::decode(
+                alp::rd_encoder<T>::decode(
                     remainder_data.data(),
                     header->right(),
                     header->left(),
@@ -423,7 +429,7 @@ public:
             }
             default:util::raise_rte("Unhandled ALP scheme type");
             }
-            std::copy(output + write_pos, std::begin(remainder_data), remainder_);
+            memcpy(output + write_pos, remainder_data.data(), remainder_ * sizeof(T));
             write_pos += remainder_;
         }
         return {.compressed_ = read_pos, .uncompressed_ = header_->num_rows_ * sizeof(T)};

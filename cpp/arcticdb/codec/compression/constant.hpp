@@ -1,7 +1,8 @@
 #pragma once
 
-#include "arcticdb/log/log.hpp"
-#include "arcticdb/util/preconditions.hpp"
+#include <arcticdb/log/log.hpp>
+#include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/codec/compression/compressor.hpp>
 
 #include <cstdint>
 
@@ -14,7 +15,7 @@ struct __attribute((packed)) ConstantCompressData {
 };
 
 template<typename T>
-struct ConstantEncoder {
+struct ConstantCompressor {
     std::optional<size_t> max_required_bytes(const T *data_in, size_t num_rows) {
         if (num_rows == 0)
             return 0;
@@ -51,7 +52,7 @@ struct ConstantDecompressor {
         auto *target = data_out;
         auto *target_end = target + state->size_;
         std::fill(target, target_end, state->value_);
-        return {.compressed_ = state->size,_ .uncompressed_=state->size_ * sizeof(T)};
+        return {.compressed_ = state->size_, .uncompressed_=state->size_ * sizeof(T)};
     }
 };
 }

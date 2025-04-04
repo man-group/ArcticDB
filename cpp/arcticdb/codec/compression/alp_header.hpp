@@ -4,12 +4,13 @@
 #include <cstddef>
 
 #include <arcticdb/codec/compression/alp/alp.hpp>
+#include <arcticdb/codec/compression/alp/decoder.hpp>
 
 #include <arcticdb/util/magic_num.hpp>
 
 namespace arcticdb {
 
-template<typename T>
+template<typename T, typename = std::enable_if_t<std::is_same_v<T, float> || std::is_same_v<T, double>>>
 struct StorageType {
     using unsigned_type = alp::inner_t<T>::ut;
     using signed_type = alp::inner_t<T>::st;
@@ -24,9 +25,13 @@ struct RealDoubleHeader {
     uint32_t dict_size_ = 0U;
 
     static constexpr size_t HeaderSize =
-        sizeof(exception_count_) + sizeof(right_bit_width_) + sizeof(left_bit_width_) + sizeof(dict_size_)
-            + sizeof(magic_);
-    using RightType = uint64_t;
+        sizeof(exception_count_)
+        + sizeof(right_bit_width_)
+        + sizeof(left_bit_width_)
+        + sizeof(dict_size_)
+        + sizeof(magic_);
+
+    using RightType = StorageType<T>::unsigned_type;
 
     uint8_t data_[1] = {};
 
@@ -56,16 +61,28 @@ struct RealDoubleHeader {
         return reinterpret_cast<const RawType *>(data_ + bytes);
     }
 
-    uint16_t *left() {
+    uint16_t* left() {
         return at<uint16_t>(0UL);
     }
 
-    RightType *right() {
+    RightType* right() {
         return at<RightType>(left_size());
     }
 
-    uint16_t *exceptions() {
+    [[nodiscard]] const uint16_t* left() const {
+        return const_at<uint16_t>(0UL);
+    }
+
+    const RightType* right() const {
+        return const_at<RightType>(left_size());
+    }
+
+    uint16_t* exceptions() {
         return at<uint16_t>(left_size() + right_size());
+    }
+
+    [[nodiscard]] const uint16_t* exceptions() const {
+        return const_at<uint16_t>(left_size() + right_size());
     }
 
     [[nodiscard]] size_t exceptions_bytes() const {
@@ -76,19 +93,22 @@ struct RealDoubleHeader {
         return exception_count_;
     }
 
-    uint16_t *exception_positions() {
+    uint16_t* exception_positions() {
         return at<uint16_t>(left_size() + right_size() + exceptions_bytes());
     }
 
+    [[nodiscard]] const uint16_t* exception_positions() const {
+        return const_at<uint16_t>(left_size() + right_size() + exceptions_bytes());
+    }
     [[nodiscard]] size_t exception_positions_size() const {
         return exception_count_ * sizeof(uint16_t);
     }
 
-    uint16_t *dict() {
+    uint16_t* dict() {
         return at<uint16_t>(left_size() + right_size() + exceptions_bytes() + exception_positions_size());
     }
 
-    [[nodiscard]] const uint16_t *dict() const {
+    [[nodiscard]] const uint16_t* dict() const {
         return const_at<uint16_t>(left_size() + right_size() + exceptions_bytes() + exception_positions_size());
     }
 
@@ -100,7 +120,7 @@ struct RealDoubleHeader {
         return dict_size_ * sizeof(uint16_t);
     }
 
-    void set_dict(uint16_t *dict_ptr, size_t dict_size) {
+    void set_dict(uint16_t* dict_ptr, size_t dict_size) {
         dict_size_ = dict_size;
         memcpy(dict(), dict_ptr, dict_size_ * sizeof(uint16_t));
     }
@@ -116,8 +136,11 @@ struct ALPDecimalHeader {
     uint8_t fac_ = 0;
 
     static constexpr size_t HeaderSize =
-        sizeof(magic_) + sizeof(exception_count_) + sizeof(bit_width_) +
-             sizeof(exp_) + sizeof(fac_);
+        sizeof(magic_)
+        + sizeof(exception_count_)
+        + sizeof(bit_width_)
+        + sizeof(exp_)
+        + sizeof(fac_);
 
     using EncodedType = typename StorageType<T>::signed_type;
 
@@ -142,17 +165,25 @@ struct ALPDecimalHeader {
         return reinterpret_cast<RawType *>(data_ + bytes);
     }
 
-    /*template<typename RawType>
+    template<typename RawType>
     const RawType *const_at(size_t bytes) const {
         return reinterpret_cast<const RawType *>(data_ + bytes);
-    } */
+    }
 
     EncodedType *data() {
         return at<EncodedType>(0UL);
     }
 
-    T *exceptions() {
+    const EncodedType* data() const {
+        return const_at<EncodedType>(0UL);
+    }
+
+    T* exceptions() {
         return at<T>(data_size());
+    }
+
+    const T* exceptions() const {
+        return const_at<T>(data_size());
     }
 
     [[nodiscard]] size_t exceptions_bytes() const {
@@ -163,8 +194,12 @@ struct ALPDecimalHeader {
         return exception_count_;
     }
 
-    uint16_t *exception_positions() {
+    uint16_t* exception_positions() {
         return at<uint16_t>(data_size() + exceptions_bytes());
+    }
+
+    [[nodiscard]] const uint16_t* exception_positions() const {
+        return const_at<uint16_t>(data_size() + exceptions_bytes());
     }
 
     [[nodiscard]] size_t exception_positions_size() const {

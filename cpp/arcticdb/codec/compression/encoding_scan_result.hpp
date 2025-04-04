@@ -101,7 +101,7 @@ struct EncodingScanResultSet {
         return results_[pos];
     }
 
-    [[nodiscard]] const EncodingScanResult& first() const {
+    [[nodiscard]] EncodingScanResult& first() {
         util::check(members_ == 1, "Unexpected number of results: {}", members_);
         return results_[0];
     }

@@ -90,24 +90,18 @@ TEST(RealDoubleHeaderTest, OffsetsAndDataPreservationFloat) {
     Header* header = new (buffer.data()) Header(dummy_state);
     header->set_dict(dummy_dict.data(), dict_entries);
 
-    EXPECT_EQ(reinterpret_cast<uintptr_t>(header->left()),
-              reinterpret_cast<uintptr_t>(header->at<uint16_t>(0UL)));
-    EXPECT_EQ(reinterpret_cast<uintptr_t>(header->right()),
-              reinterpret_cast<uintptr_t>(header->at<typename Header::RightType>(header->left_size())));
-    EXPECT_EQ(reinterpret_cast<uintptr_t>(header->exceptions()),
-              reinterpret_cast<uintptr_t>(
-                  header->at<uint16_t>(header->left_size() + header->right_size())));
-    size_t expected_dict_offset = header->left_size() + header->right_size() +
-        (dummy_state.exceptions_count * sizeof(uint16_t)) * 2;
-    EXPECT_EQ(reinterpret_cast<uintptr_t>(header->dict()),
-              reinterpret_cast<uintptr_t>(header->at<uint16_t>(expected_dict_offset)));
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(header->left()), reinterpret_cast<uintptr_t>(header->at<uint16_t>(0UL)));
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(header->right()), reinterpret_cast<uintptr_t>(header->at<typename Header::RightType>(header->left_size())));
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(header->exceptions()), reinterpret_cast<uintptr_t>(header->at<uint16_t>(header->left_size() + header->right_size())));
+    size_t expected_dict_offset = header->left_size() + header->right_size() + (dummy_state.exceptions_count * sizeof(uint16_t)) * 2;
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(header->dict()), reinterpret_cast<uintptr_t>(header->at<uint16_t>(expected_dict_offset)));
 
     uint16_t left_value = 0xAAAA;
     for (size_t i = 0; i < alp::config::VECTOR_SIZE; i++) {
         header->left()[i] = left_value;
     }
 
-    typename Header::RightType right_pattern = 0xBBBBBBBBBBBBBBBBULL;
+    typename Header::RightType right_pattern = 0xBBBBBBBBU;
     for (size_t i = 0; i < alp::config::VECTOR_SIZE; i++) {
         header->right()[i] = right_pattern;
     }

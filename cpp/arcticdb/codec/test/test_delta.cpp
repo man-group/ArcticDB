@@ -97,6 +97,11 @@ TEST_F(CompressionTest, BlocksPlusRemainder) {
     verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
+TEST_F(CompressionTest, SimpleSmallBLock) {
+    std::vector<uint16_t> input{1, 2, 3, 63, 64, 65};
+    verify_roundtrip(input, make_scalar_type(DataType::UINT16));
+}
+
 TEST_F(CompressionTest, SmallSizes) {
     for (size_t size : {1, 2, 3, 63, 64, 65}) {
         SCOPED_TRACE("Testing size: " + std::to_string(size));
@@ -159,6 +164,63 @@ TEST_F(CompressionTest, MonotonicSequences) {
     verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
+TEST_F(CompressionTest, SingleFullBlockSignedInt16) {
+    auto input = generate_data<int16_t>(1024, -500, 1);
+    verify_roundtrip(input, make_scalar_type(DataType::INT16));
+}
+
+TEST_F(CompressionTest, SinglePartialBlockSignedInt16) {
+    auto input = generate_data<int16_t>(500, -500, 1);
+    verify_roundtrip(input, make_scalar_type(DataType::INT16));
+}
+
+TEST_F(CompressionTest, ThreeFullBlocksSignedInt32) {
+    auto input = generate_data<int32_t>(1024 * 3, -100000, 5);
+    verify_roundtrip(input, make_scalar_type(DataType::INT32));
+}
+
+TEST_F(CompressionTest, BlocksPlusRemainderSignedInt32) {
+    auto input = generate_data<int32_t>(1024 * 2 + 500, -100000, 5);
+    verify_roundtrip(input, make_scalar_type(DataType::INT32));
+}
+
+TEST_F(CompressionTest, SimpleSmallBlockSignedInt8) {
+    std::vector<int8_t> input{-120, -119, -118, -60, -59, -58};
+    verify_roundtrip(input, make_scalar_type(DataType::INT8));
+}
+
+TEST_F(CompressionTest, NegativeStartSignedInt32) {
+    auto input = generate_data<int32_t>(2000, -10000, 10);
+    verify_roundtrip(input, make_scalar_type(DataType::INT32));
+}
+
+TEST_F(CompressionTest, MonotonicSequencesSignedInt16) {
+    std::vector<int16_t> input(2000);
+    std::iota(input.begin(), input.end(), -500);
+    verify_roundtrip(input, make_scalar_type(DataType::INT16));
+}
+
+TEST_F(CompressionTest, SmallSizesSignedInt32) {
+    for (size_t size : {1, 2, 3, 63, 64, 65}) {
+        auto input = generate_data<int32_t>(size, -500, 1);
+        verify_roundtrip(input, make_scalar_type(DataType::INT32));
+    }
+}
+
+TEST_F(CompressionTest, DifferentRangesSignedInt32) {
+    {
+        auto input = generate_data<int32_t>(2000, -100000, 1);
+        verify_roundtrip(input, make_scalar_type(DataType::INT32));
+    }
+    {
+        auto input = generate_data<int32_t>(2000, -100000, 100);
+        verify_roundtrip(input, make_scalar_type(DataType::INT32));
+    }
+    {
+        auto input = generate_data<int32_t>(2000, -100000, 4000);
+        verify_roundtrip(input, make_scalar_type(DataType::INT32));
+    }
+}
 TEST_F(CompressionTest, SizeEstimation) {
     auto input = generate_data<uint16_t>(2000, 0, 1);
 

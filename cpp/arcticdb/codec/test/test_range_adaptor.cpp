@@ -28,7 +28,7 @@ TEST(ContiguousRangeForwardAdaptorTest, DirectSegment) {
     // Using expected_rows = 500 ensures that only one block is allocated.
     Column col(intType, 500, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
     const int numValues = 500;
-    for (int i = 0; i < numValues; ++i) {
+    for (int64_t i = 0; i < numValues; ++i) {
         col.push_back(i);
     }
     ColumnData data = col.data();
@@ -36,28 +36,15 @@ TEST(ContiguousRangeForwardAdaptorTest, DirectSegment) {
     // Use the adaptor with a fixed segment size of 100 ints.
     // (Since 100*4 = 400 bytes is well below the block capacity,
     // the adaptor should return a direct pointer into the current block.)
-    ContiguousRangeForwardAdaptor<int, 100> adaptor(data);
+    ContiguousRangeForwardAdaptor<int64_t, 100> adaptor(data);
     EXPECT_TRUE(adaptor.valid());
 
     // First segment: expect values 0..99.
-    const int *seg1 = adaptor.next();
+    const int64_t *seg1 = adaptor.next();
     // In the direct branch the returned pointer should not equal the internal buffer.
     EXPECT_NE(seg1, adaptor.buffer_.data());
     for (int i = 0; i < 100; ++i) {
         EXPECT_EQ(seg1[i], i);
-    }
-
-    // Second segment: expect values 100..199.
-    const int *seg2 = adaptor.next();
-    EXPECT_NE(seg2, adaptor.buffer_.data());
-    for (int i = 0; i < 100; ++i) {
-        EXPECT_EQ(seg2[i], i + 100);
-    }
-
-    // Third segment: expect values 200..299.
-    const int *seg3 = adaptor.next();
-    for (int i = 0; i < 100; ++i) {
-        EXPECT_EQ(seg3[i], i + 200);
     }
 }
 

@@ -43,7 +43,7 @@ void test_encoder() {
         size_t encoded_size = encoder.compress(wrapper.data_, num_rows, encoded_data.data(), *max_bytes_opt);
 
         std::vector<T> decoded_data(num_rows);
-        encoder.decode(encoded_data.data(), encoded_size, decoded_data.data());
+        FrequencyDecompressor<T>::decompress(encoded_data.data(), decoded_data.data());
 
         RC_ASSERT(input == decoded_data);
     });
@@ -78,9 +78,9 @@ void test_encoder_random_data() {
                   size_t encoded_size = encoding.compress(wrapper.data_, input.size(), encoded.data(), *required_bytes);
 
                   std::vector<T> decoded(input.size());
-                  size_t decoded_size = encoding.decode(encoded.data(), encoded_size, decoded.data());
+                  auto decoded_size =  FrequencyDecompressor<T>::decompress(encoded.data(), decoded.data());
 
-                  RC_ASSERT(decoded_size == input.size());
+                  RC_ASSERT(decoded_size.uncompressed_ == input.size() * sizeof(T));
                   RC_ASSERT(decoded == input);
               });
 }

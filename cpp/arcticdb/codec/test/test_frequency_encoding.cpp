@@ -27,8 +27,8 @@ TEST(FrequencyCompressor, Basic) {
     auto bytes = encoding.compress(wrapper.data_, data.size(), output.data(), *estimated_size);
     ASSERT_EQ(bytes, 49);
     std::vector<uint32_t> decompressed(data.size());
-    auto num_rows = encoding.decode(output.data(), bytes, decompressed.data());
-    ASSERT_EQ(num_rows, data.size());
+    auto result = FrequencyDecompressor<InputType>::decompress(output.data(), decompressed.data());
+    ASSERT_EQ(result.uncompressed_, data.size() * sizeof(InputType));
     ASSERT_EQ(decompressed, data);
 }
 
@@ -67,7 +67,7 @@ TEST(FrequencyCompressor, Stress) {
     std::vector<InputType> decompressed(data.size());
     timer.start_timer("Decompress");
     for(auto i = 0UL; i < num_runs; ++i) {
-        (void) encoding.decode(output.data(), bytes, decompressed.data());
+        (void) FrequencyDecompressor<InputType>::decompress(output.data(), decompressed.data());
     }
     timer.stop_timer("Decompress");
     log::version().info("{}", timer.display_all());
