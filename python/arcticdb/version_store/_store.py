@@ -1124,7 +1124,7 @@ class NativeVersionStore:
         return versioned_items
 
     def _batch_read_with_join(
-            self, symbols, as_ofs, date_ranges, row_ranges, columns, per_symbol_query_builders, query_builder
+            self, symbols, as_ofs, date_ranges, row_ranges, columns, per_symbol_query_builders, query_builder, **kwargs
     ):
         implement_read_index = True
         if columns:
@@ -1134,7 +1134,7 @@ class NativeVersionStore:
         per_symbol_query_builders = copy.deepcopy(per_symbol_query_builders)
         force_ranges_to_queries = True
         read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, per_symbol_query_builders, force_ranges_to_queries)
-        read_options = self._get_read_options(iterate_snapshots_if_tombstoned=False)
+        read_options = self._get_read_options(iterate_snapshots_if_tombstoned=False, **kwargs)
         return self._adapt_read_res(ReadResult(*self.version_store.batch_read_with_join(symbols, version_queries, read_queries, read_options, query_builder.clauses)))
 
     def batch_read_metadata(

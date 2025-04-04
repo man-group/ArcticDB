@@ -269,6 +269,41 @@ def test_symbol_concat_column_slicing(lmdb_library_factory, dynamic_schema, rows
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("only_incompletes", [True, False])
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_with_streaming_incompletes(lmdb_library, only_incompletes, join):
+    lib = lmdb_library
+    if not only_incompletes:
+        df_0 = pd.DataFrame({"col1": np.arange(3, dtype=np.float64), "col2": np.arange(3, 6, dtype=np.float64)}, index=pd.date_range("2025-01-01", periods=3))
+        lib.write("sym0", df_0)
+    df_1 = pd.DataFrame({"col1": np.arange(6, 9, dtype=np.float64), "col2": np.arange(9, 12, dtype=np.float64)}, index=pd.date_range("2025-01-04", periods=3))
+    lib._dev_tools.library_tool().append_incomplete("sym0", df_1)
+    df_2 = pd.DataFrame({"col2": np.arange(12, 15, dtype=np.float64), "col3": np.arange(15, 18, dtype=np.float64)}, index=pd.date_range("2025-01-07", periods=3))
+    lib.write("sym1", df_2)
+    # Not part of the V2 API right now, so use the hidden method on NativeVersionStore to future-proof the feature
+    received = lib._nvs._batch_read_with_join(
+        ["sym0", "sym1"],
+        [None, None],
+        [(None, None), (None, None)],
+        [None, None],
+        [None, None],
+        [None, None],
+        QueryBuilder().concat(join),
+        incomplete=True
+    )
+    if only_incompletes:
+        expected = pd.concat([df_1, df_2], join=join)
+    else:
+        expected = pd.concat([df_0, df_1, df_2], join=join)
+    assert_frame_equal(expected, received.data)
+    for idx, version in enumerate(received.versions):
+        assert version.symbol == f"sym{idx}"
+        assert version.data is None
+        assert version.metadata is None
+    assert received.versions[0].version == (np.iinfo(np.uint64).max if only_incompletes else 0)
+    assert received.versions[1].version == 0
+
+
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
