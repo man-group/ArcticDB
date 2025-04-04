@@ -1262,21 +1262,21 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_with_join_internal(
     return folly::collect(symbol_processing_result_futs).via(&async::io_executor())
     .thenValueInline([this, &handler_data, pipeline_context, clauses_ptr, component_manager](auto&& symbol_processing_results) mutable {
         util::check(!clauses_ptr->empty(), "Cannot join with no joining clause provided");
-        std::vector<OutputSchema> output_schemas;
+        std::vector<OutputSchema> input_schemas;
         std::vector<std::vector<EntityId>> entity_ids;
         auto res_versioned_items = std::make_shared<std::vector<VersionedItem>>();
         auto res_metadatas = std::make_shared<std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>();
-        output_schemas.reserve(symbol_processing_results.size());
+        input_schemas.reserve(symbol_processing_results.size());
         entity_ids.reserve(symbol_processing_results.size());
         res_versioned_items->reserve(symbol_processing_results.size());
         res_metadatas->reserve(symbol_processing_results.size());
         for (const auto& symbol_processing_result: symbol_processing_results) {
-            output_schemas.emplace_back(std::move(symbol_processing_result.output_schema_));
+            input_schemas.emplace_back(std::move(symbol_processing_result.output_schema_));
             entity_ids.emplace_back(std::move(symbol_processing_result.entity_ids_));
             res_versioned_items->emplace_back(std::move(symbol_processing_result.versioned_item_));
             res_metadatas->emplace_back(std::move(symbol_processing_result.metadata_));
         }
-        auto output_schema = clauses_ptr->front()->join_schemas(std::move(output_schemas));
+        auto output_schema = clauses_ptr->front()->join_schemas(std::move(input_schemas));
         for (const auto& clause: *clauses_ptr) {
             output_schema = clause->modify_schema(std::move(output_schema));
         }

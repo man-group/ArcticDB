@@ -1384,13 +1384,13 @@ std::vector<EntityId> ConcatClause::process(std::vector<EntityId>&& entity_ids) 
 // TODO: Move all this somewhere else
 using namespace arcticdb::proto::descriptors;
 
-IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& output_schemas) {
+IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& input_schemas) {
     // Ensure:
     //  - Type is the same
     //  - Field count is the same
     std::optional<IndexDescriptor::Type> index_type;
     std::optional<uint32_t> index_desc_field_count;
-    for (const auto& schema: output_schemas) {
+    for (const auto& schema: input_schemas) {
         const auto& index_desc = schema.stream_descriptor().index();
         if (!index_type.has_value()) {
             index_type = index_desc.type();
@@ -1410,7 +1410,7 @@ IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& o
     return {*index_desc_field_count, *index_type};
 }
 
-NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& output_schemas,
+NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& input_schemas,
                                          std::unordered_set<size_t>&& non_matching_name_indices) {
     // Ensure:
     // All are Series or all are DataFrames
@@ -1443,7 +1443,7 @@ NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& output
     std::optional<int> start;
     std::optional<int> step;
     std::optional<std::unordered_map<uint32_t, std::string>> timezone;
-    for (const auto& schema: output_schemas) {
+    for (const auto& schema: input_schemas) {
         schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(schema.norm_metadata_.has_series() || schema.norm_metadata_.has_df(),
                                                         "Multi-symbol joins only supported with Series and DataFrames");
         if (!is_series.has_value()) {
@@ -1581,13 +1581,13 @@ NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& output
     return norm_meta;
 }
 
-void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schema) {
-    if (output_schema.empty()) {
+void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas) {
+    if (input_schemas.empty()) {
         return;
     }
     ankerl::unordered_dense::map<std::string, DataType> columns_to_keep;
     bool first_element{true};
-    for (auto& schema: output_schema) {
+    for (auto& schema: input_schemas) {
         if (first_element) {
             // Start with the columns in the first element, and remove anything that isn't present in all other elements
             columns_to_keep = schema.column_types();
@@ -1614,7 +1614,7 @@ void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output
         }
     }
     // All the columns we are retaining were in every schema. Just use the order from the first schema
-    for (const auto& field: output_schema.front().stream_descriptor().fields()) {
+    for (const auto& field: input_schemas.front().stream_descriptor().fields()) {
         std::string column_name(field.name());
         if (auto it = columns_to_keep.find(column_name); it != columns_to_keep.end()) {
             stream_desc.add_scalar_field(it->second, column_name);
@@ -1622,16 +1622,16 @@ void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output
     }
 }
 
-void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schema) {
+void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas) {
     // If the first schema is multiindexed then use this field count
     // It will be checked later if the other norm metas are compatible
-    const auto& first_norm_meta = output_schema.front().norm_metadata_;
+    const auto& first_norm_meta = input_schemas.front().norm_metadata_;
     auto required_fields_count = pipelines::index::required_fields_count(stream_desc, first_norm_meta);
     ankerl::unordered_dense::map<std::string, DataType> columns_to_keep;
     // Maintain the order that columns appeared in through the schemas
     std::vector<std::string> column_names_to_keep;
     bool first_element{true};
-    for (auto& schema: output_schema) {
+    for (auto& schema: input_schemas) {
         if (first_element) {
             // Start with the columns in the first element, and add in anything that is present in all other elements
             columns_to_keep = schema.column_types();
@@ -1673,19 +1673,19 @@ void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output
     }
 }
 
-std::pair<StreamDescriptor, arcticdb::proto::descriptors::NormalizationMetadata> join_indexes(std::vector<OutputSchema>& output_schemas) {
-    StreamDescriptor stream_desc{StreamId{}, generate_index_descriptor(output_schemas)};
+std::pair<StreamDescriptor, arcticdb::proto::descriptors::NormalizationMetadata> join_indexes(std::vector<OutputSchema>& input_schemas) {
+    StreamDescriptor stream_desc{StreamId{}, generate_index_descriptor(input_schemas)};
     // Returns a set of indices of index fields where not all the input schema field names matched, which is needed to generate the output norm metadata
-    auto non_matching_name_indices = add_index_fields(stream_desc, output_schemas);
-    auto norm_meta = generate_norm_meta(output_schemas, std::move(non_matching_name_indices));
+    auto non_matching_name_indices = add_index_fields(stream_desc, input_schemas);
+    auto norm_meta = generate_norm_meta(input_schemas, std::move(non_matching_name_indices));
     return {std::move(stream_desc), std::move(norm_meta)};
 }
 
-std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schemas) {
+std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas) {
     std::unordered_set<size_t> non_matching_name_indices;
     // If the first schema is multiindexed then use this field count
     // It will be checked later if the other norm metas are compatible
-    const auto& first_norm_meta = output_schemas.front().norm_metadata_;
+    const auto& first_norm_meta = input_schemas.front().norm_metadata_;
     auto required_fields_count = pipelines::index::required_fields_count(stream_desc, first_norm_meta);
     if (required_fields_count == 0) {
         return non_matching_name_indices;
@@ -1693,7 +1693,7 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
     // FieldCollection does not support renaming fields, so use a vector of FieldRef and then turn this into a FieldCollection at the end
     std::vector<FieldRef> index_fields;
     bool first_schema{true};
-    for (auto& schema: output_schemas) {
+    for (auto& schema: input_schemas) {
         const auto& fields = schema.stream_descriptor().fields();
         schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(fields.size() >= required_fields_count,
                                                         "Expected at least {} fields for index, but received {}",
@@ -1738,10 +1738,10 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
     return non_matching_name_indices;
 }
 
-OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& output_schemas) const {
-    util::check(!output_schemas.empty(), "Cannot join empty list of schemas");
-    auto [stream_desc, norm_meta] = join_indexes(output_schemas);
-    join_type_ == JoinType::INNER ? inner_join(stream_desc, output_schemas) : outer_join(stream_desc, output_schemas);
+OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& input_schemas) const {
+    util::check(!input_schemas.empty(), "Cannot join empty list of schemas");
+    auto [stream_desc, norm_meta] = join_indexes(input_schemas);
+    join_type_ == JoinType::INNER ? inner_join(stream_desc, input_schemas) : outer_join(stream_desc, input_schemas);
     return {std::move(stream_desc), std::move(norm_meta)};
 }
 

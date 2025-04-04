@@ -76,8 +76,8 @@ struct IClause {
             return folly::poly_call<6>(*this, std::move(output_schema));
         }
 
-        OutputSchema join_schemas(std::vector<OutputSchema>&& output_schemas) const {
-            return folly::poly_call<7>(*this, std::move(output_schemas));
+        OutputSchema join_schemas(std::vector<OutputSchema>&& input_schemas) const {
+            return folly::poly_call<7>(*this, std::move(input_schemas));
         }
     };
 
@@ -787,13 +787,13 @@ struct Columns {
     ankerl::unordered_dense::map<std::string, DataType> column_types;
 };
 
-std::pair<StreamDescriptor, arcticdb::proto::descriptors::NormalizationMetadata> join_indexes(std::vector<OutputSchema>& output_schemas);
-IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& output_schemas);
-std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schemas);
-arcticdb::proto::descriptors::NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& output_schemas,
+std::pair<StreamDescriptor, arcticdb::proto::descriptors::NormalizationMetadata> join_indexes(std::vector<OutputSchema>& input_schemas);
+IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& input_schemas);
+std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas);
+arcticdb::proto::descriptors::NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& input_schemas,
                                                                        std::unordered_set<size_t>&& non_matching_name_indices);
-void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schema);
-void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& output_schema);
+void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas);
+void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas);
 
 struct ConcatClause {
 
@@ -828,7 +828,7 @@ struct ConcatClause {
         return output_schema;
     }
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&& output_schemas) const;
+    OutputSchema join_schemas(std::vector<OutputSchema>&& input_schemas) const;
 
     [[nodiscard]] std::string to_string() const;
 };
