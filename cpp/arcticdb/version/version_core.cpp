@@ -1371,7 +1371,6 @@ struct CopyToBufferTask : async::BaseTask {
     uint32_t required_fields_count_;
     DecodePathData shared_data_;
     std::any& handler_data_;
-    bool fetch_index_;
     OutputFormat output_format_;
 
     CopyToBufferTask(
