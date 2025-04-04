@@ -74,6 +74,7 @@ jobs:
   pypi:
     environment: ${{inputs.environment}}
     runs-on: ubuntu-22.04
+    if: ${{ contains(github.ref, vars.RC_SUFFIX) == false }}
     steps:
       - name: Gather wheels from run ${{ env.RUN_ID }}
         id: gather-wheels
