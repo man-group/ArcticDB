@@ -22,15 +22,15 @@ struct FrameSliceMap {
 
     FrameSliceMap(std::shared_ptr<PipelineContext> context, bool dynamic_schema) :
         context_(std::move(context)) {
+        const entity::StreamDescriptor& descriptor = context_->descriptor();
         uint32_t required_fields_count;
         if (static_cast<bool>(context_->norm_meta_)) {
-            required_fields_count = pipelines::index::required_fields_count(context_->descriptor(), *context_->norm_meta_);
+            required_fields_count = pipelines::index::required_fields_count(descriptor, *context_->norm_meta_);
         } else {
-            required_fields_count = pipelines::index::required_fields_count(context_->descriptor());
+            required_fields_count = pipelines::index::required_fields_count(descriptor);
         }
         for (const auto &context_row: *context_) {
             const auto& row_range = context_row.slice_and_key().slice_.row_range;
-            const auto& col_range = context_row.slice_and_key().slice_.col_range;
 
             const auto& fields = context_row.descriptor().fields();
             for(const auto& field : folly::enumerate(fields)) {
@@ -48,7 +48,6 @@ struct FrameSliceMap {
                     // run over them.
                     // TODO: This logic won't be needed when we move string handling into separate type handler
                     if(is_empty_type(row_range_type)) {
-                        const entity::StreamDescriptor& descriptor = context_->descriptor();
                         const size_t global_field_idx = descriptor.find_field(field->name()).value();
                         const Field& global_field = descriptor.field(global_field_idx);
                         const entity::DataType global_field_type = global_field.type().data_type();
@@ -61,11 +60,19 @@ struct FrameSliceMap {
                         continue;
                     }
                 }
-                auto required_field = ((col_range.first == 0 ? 0 : context_->descriptor().index().field_count()) <= field.index) &&
-                        (static_cast<int64_t>(field.index) < static_cast<int64_t>(required_fields_count) - static_cast<int64_t>(col_range.first));
-                const auto& field_name = required_field ?
-                                  context_->descriptor().field(field.index + col_range.first).name() :
-                                  field->name();
+                const size_t first_col = context_row.slice_and_key().slice_.columns().first;
+                const bool first_col_slice = first_col == 0;
+                // Skip the "true" index fields (i.e. those stored in every column slice) if we are not in the first column slice
+                // Second condition required to avoid underflow when substracting one unsigned value from another
+                const bool required_field =
+                        ((first_col_slice ? 0 : descriptor.index().field_count()) <= field.index) &&
+                        (required_fields_count >= first_col) &&
+                        (field.index < required_fields_count - first_col);
+                // If required_field is true, this is a required column in the output. The name in slice stream
+                // descriptor may not match that in the global stream descriptor, so use the global name here
+                // e.g. If 2 timeseries are joined that had differently named indexes
+                // All other columns use names to match the source with the destination
+                const auto& field_name = required_field ? descriptor.field(field.index + first_col).name() : field->name();
                 auto &column = columns_[field_name];
                 column.insert(std::make_pair(row_range, ContextData{context_row.index_, field.index}));
             }
