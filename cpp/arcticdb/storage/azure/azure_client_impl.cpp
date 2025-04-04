@@ -30,6 +30,12 @@
  * optimal performance and minimal runtime overhead. The appropriate transport
  * header is included based on the platform, and the transport is configured
  * in get_client_options().
+ *
+ * Note that conda-forge's distribution of `libcurl` uses CA certificates
+ * provided by the `ca-certificates` package originated from the certifi python package.
+ *
+ * See: https://github.com/conda-forge/ca-certificates-feedstock/blob/d13d63b3192ec707b514637930fd215d0776c604/recipe/meta.yaml#L8
+ * See: https://github.com/conda-forge/curl-feedstock/blob/c6144ac9941ab00393a5a76954ddc19fab8005d1/recipe/build.sh#L19
  */
 
 #if defined(_WIN32)
