@@ -40,7 +40,7 @@ void test_encoder() {
         size_t max_bytes = max_bytes_opt.value();
         std::vector<uint8_t> encoded_data(max_bytes);
 
-        size_t encoded_size = encoder.compress(wrapper.data_, num_rows, encoded_data.data(), *max_bytes_opt);
+        (void)encoder.compress(wrapper.data_, num_rows, encoded_data.data(), *max_bytes_opt);
 
         std::vector<T> decoded_data(num_rows);
         FrequencyDecompressor<T>::decompress(encoded_data.data(), decoded_data.data());
@@ -75,7 +75,7 @@ void test_encoder_random_data() {
                       RC_SUCCEED("No single value comprises more than 90% of the array");
 
                   std::vector<uint8_t> encoded(*required_bytes);
-                  size_t encoded_size = encoding.compress(wrapper.data_, input.size(), encoded.data(), *required_bytes);
+                  (void)encoding.compress(wrapper.data_, input.size(), encoded.data(), *required_bytes);
 
                   std::vector<T> decoded(input.size());
                   auto decoded_size =  FrequencyDecompressor<T>::decompress(encoded.data(), decoded.data());
