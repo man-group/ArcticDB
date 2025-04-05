@@ -514,13 +514,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def(py::init())
             .def_readonly("count", &KeySizesInfo::count)
             .def_readonly("compressed_size", &KeySizesInfo::compressed_size)
-            .def_readonly("uncompressed_size", &KeySizesInfo::uncompressed_size)
             .doc() = "Count of keys and their compressed and uncompressed sizes in bytes.";
 
     py::class_<storage::ObjectSizes>(version, "ObjectSizes")
         .def_readonly("key_type", &storage::ObjectSizes::key_type_)
-        .def_readonly("count", &storage::ObjectSizes::count_)
-        .def_readonly("compressed_size_bytes", &storage::ObjectSizes::compressed_size_bytes_)
+        .def_property_readonly("count", [](storage::ObjectSizes& self) {return self.count_.load();})
+        .def_property_readonly("compressed_size", [](storage::ObjectSizes& self) {return self.compressed_size_.load();})
         .def("__repr__", [](storage::ObjectSizes object_sizes) {return fmt::format("{}", object_sizes);})
         .doc() = "Count of keys and their uncompressed sizes in bytes for a given key type";
 
@@ -698,13 +697,15 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
          .def("scan_object_sizes",
               &PythonVersionStore::scan_object_sizes,
               py::call_guard<SingleThreadMutexHolder>(),
-              "Scan the compressed sizes of all objects in the library. Sizes are in bytes. Returns a dict "
-              "{KeyType: KeySizesInfo}")
+              "Scan the compressed sizes of all objects in the library.")
         .def("scan_object_sizes_by_stream",
              &PythonVersionStore::scan_object_sizes_by_stream,
              py::call_guard<SingleThreadMutexHolder>(),
-             "Scan the compressed sizes of all objects in the library, grouped by stream ID and KeyType. Sizes are in bytes. "
-             "Returns a dict {symbol_id: {KeyType: KeySizesInfo}}")
+             "Scan the compressed sizes of all objects in the library, grouped by stream ID and KeyType.")
+        .def("scan_object_sizes_for_stream",
+             &PythonVersionStore::scan_object_sizes_for_stream,
+             py::call_guard<SingleThreadMutexHolder>(),
+             "Scan the compressed sizes of the given symbol.")
         .def("find_version",
              &PythonVersionStore::get_version_to_read,
              py::call_guard<SingleThreadMutexHolder>(), "Check if a specific stream has been written to previously")
