@@ -171,3 +171,29 @@ def test_entirely_empty_column(lmdb_version_store):
     lib = lmdb_version_store
     lib.write("test_entirely_empty_column", df)
     assert_frame_equal(df, lib.read("test_entirely_empty_column").data)
+
+class TestEmptyIndexPreservesIndexNames:
+    """
+    Verify that when the dataframe (and the index) are empty the index name will be preserved. When/if the empty type
+    and the empty index features are enabled this might lead to some contradictions. We should be able to append
+    anything to an empty dataframe/index even allow to change the type of the index. There are two potential problems
+        1. Exceptions because of different names. We need to decide if we are going to allow to append to an empty index
+        if the name of the new index is different from the name of the empty index in store.
+        2. What should happen with multiindex data. The empty index has a different normalization metadata which does
+        not allow for multiple names. What should be done in this case? Should we keep all index names?
+    """
+    @pytest.mark.parametrize("index",[pd.DatetimeIndex([], name="my_empty_index"), pd.RangeIndex(0,0,1, name="my_empty_index")])
+    def test_single_index(self, lmdb_version_store_v1, index):
+        lib = lmdb_version_store_v1
+        df = pd.DataFrame({"col": []}, index=index)
+        lib.write("sym", df)
+        result_df = lib.read("sym").data
+        assert result_df.index.name == "my_empty_index"
+
+    def test_multiindex(self, lmdb_version_store_v1):
+        lib = lmdb_version_store_v1
+        index = pd.MultiIndex.from_tuples([], names=["first", "second"])
+        df = pd.DataFrame({"col": []}, index=index)
+        lib.write("sym", df)
+        result_df = lib.read("sym").data
+        assert result_df.index.names == index.names
