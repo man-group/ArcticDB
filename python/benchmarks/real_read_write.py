@@ -13,12 +13,12 @@ import numpy as np
 import pandas as pd
 
 from arcticdb.util.utils import DFGenerator, TimestampNumber
-from arcticdb.util.environment_setup import GeneralSetupLibraryWithSymbols, Storage
+from arcticdb.util.environment_setup import SetupSingleLibrary, Storage
 
 
 #region Setup classes
 
-class ReadWriteBenchmarkSettings(GeneralSetupLibraryWithSymbols):
+class ReadWriteBenchmarkSettings(SetupSingleLibrary):
     """
     Setup Read Tests Library for different storages.
     Its aim is to have at one place the responsibility for setting up any supported storage
@@ -60,8 +60,8 @@ class ReadWriteBenchmarkSettings(GeneralSetupLibraryWithSymbols):
             .add_int_col("uint64", np.uint64, min=100, max=199)
             .add_float_col("float16",np.float32)
             .add_float_col("float2",min=-100.0, max=200.0, round_at=4)
-            .add_string_col("string10", str_size=10)
-            .add_string_col("string20", str_size=20, num_unique_values=20000)
+            .add_string_col(name="string10", str_size=10)
+            .add_string_col(name="string20", str_size=20, num_unique_values=20000)
             .add_bool_col("bool")
             .add_timestamp_index("time", ReadWriteBenchmarkSettings.INDEX_FREQ, ReadWriteBenchmarkSettings.START_DATE_INDEX)
             ).generate_dataframe()
