@@ -6,7 +6,6 @@
  */
 
 #include <arcticdb/codec/python_bindings.hpp>
-
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/column_data.hpp>
@@ -23,6 +22,7 @@
 #include <memory>
 #include <algorithm>
 #include <string>
+
 
 namespace py = pybind11;
 using namespace arcticdb::python_util;
