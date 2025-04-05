@@ -228,6 +228,123 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("incompletes", &ReadOptions::get_incompletes)
         .def_property_readonly("output_format", &ReadOptions::output_format);
 
+    py::class_<pipelines::SignedRowRange, std::shared_ptr<pipelines::SignedRowRange>>(version, "SignedRowRange")
+        .def(py::init([](int64_t start, int64_t end){
+            return SignedRowRange{start, end};
+        }));
+
+    py::class_<IndexRange>(version, "IndexRange")
+        .def(py::init([](timestamp start, timestamp end){
+            return IndexRange(start, end);
+        }))
+        .def_property_readonly("start_ts",[](const IndexRange&self){
+            return std::get<timestamp>(self.start_);
+        })
+        .def_property_readonly("end_ts",[](const IndexRange&self){
+            return std::get<timestamp>(self.end_);
+        });
+
+    py::class_<pipelines::RowRange, std::shared_ptr<pipelines::RowRange>>(version, "RowRange")
+        .def(py::init([](std::size_t start, std::size_t end){
+            return RowRange(start, end);
+        }))
+        .def_property_readonly("start", &pipelines::RowRange::start)
+        .def_property_readonly("end", &pipelines::RowRange::end)
+        .def_property_readonly("diff", &pipelines::RowRange::diff);
+
+    py::class_<ExpressionContext, std::shared_ptr<ExpressionContext>>(version, "ExpressionContext")
+        .def(py::init())
+        .def("add_expression_node", &ExpressionContext::add_expression_node)
+        .def("add_value", &ExpressionContext::add_value)
+        .def("add_value_set", &ExpressionContext::add_value_set)
+        .def_readwrite("root_node_name", &ExpressionContext::root_node_name_);
+
+    py::enum_<PipelineOptimisation>(version, "PipelineOptimisation")
+        .value("SPEED", PipelineOptimisation::SPEED)
+        .value("MEMORY", PipelineOptimisation::MEMORY);
+
+    py::class_<FilterClause, std::shared_ptr<FilterClause>>(version, "FilterClause")
+        .def(py::init<
+                std::unordered_set<std::string>,
+                ExpressionContext,
+                std::optional<PipelineOptimisation>>())
+        .def("__str__", &FilterClause::to_string)
+        .def("set_pipeline_optimisation", &FilterClause::set_pipeline_optimisation);
+
+    py::class_<ProjectClause, std::shared_ptr<ProjectClause>>(version, "ProjectClause")
+        .def(py::init<
+                std::unordered_set<std::string>,
+                std::string,
+                ExpressionContext>())
+        .def("__str__", &ProjectClause::to_string);
+        
+    py::class_<GroupByClause, std::shared_ptr<GroupByClause>>(version, "GroupByClause")
+        .def(py::init<std::string>())
+        .def_property_readonly("grouping_column", [](const GroupByClause& self) {
+            return self.grouping_column_;
+        })
+        .def("__str__", &GroupByClause::to_string);
+
+    py::class_<AggregationClause, std::shared_ptr<AggregationClause>>(version, "AggregationClause")
+        .def(py::init([](
+                const std::string& grouping_colum,
+                const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregations) {
+            return AggregationClause(grouping_colum, python_util::named_aggregators_from_dict(aggregations));
+        }))
+        .def("__str__", &AggregationClause::to_string);
+
+    py::enum_<ResampleBoundary>(version, "ResampleBoundary")
+        .value("LEFT", ResampleBoundary::LEFT)
+        .value("RIGHT", ResampleBoundary::RIGHT);
+
+    declare_resample_clause<ResampleBoundary::LEFT>(version);
+    declare_resample_clause<ResampleBoundary::RIGHT>(version);
+
+    py::enum_<RowRangeClause::RowRangeType>(version, "RowRangeType")
+        .value("HEAD", RowRangeClause::RowRangeType::HEAD)
+        .value("TAIL", RowRangeClause::RowRangeType::TAIL)
+        .value("RANGE", RowRangeClause::RowRangeType::RANGE);
+
+    py::class_<RowRangeClause, std::shared_ptr<RowRangeClause>>(version, "RowRangeClause")
+        .def(py::init<RowRangeClause::RowRangeType, int64_t>())
+        .def(py::init<int64_t, int64_t>())
+        .def("__str__", &RowRangeClause::to_string);
+
+    py::class_<DateRangeClause, std::shared_ptr<DateRangeClause>>(version, "DateRangeClause")
+        .def(py::init<timestamp, timestamp>())
+        .def_property_readonly("start", &DateRangeClause::start)
+        .def_property_readonly("end", &DateRangeClause::end)
+        .def("__str__", &DateRangeClause::to_string);
+
+    py::class_<ReadQuery, std::shared_ptr<ReadQuery>>(version, "PythonVersionStoreReadQuery")
+        .def(py::init())
+        .def_readwrite("columns",&ReadQuery::columns)
+        .def_readwrite("row_range",&ReadQuery::row_range)
+        .def_readwrite("row_filter",&ReadQuery::row_filter)
+        .def_readonly("needs_post_processing",&ReadQuery::needs_post_processing)
+        // Unsurprisingly, pybind11 doesn't understand folly::poly, so use vector of variants here
+        .def("add_clauses",
+             [](ReadQuery& self,
+                std::vector<std::variant<std::shared_ptr<FilterClause>,
+                            std::shared_ptr<ProjectClause>,
+                            std::shared_ptr<GroupByClause>,
+                            std::shared_ptr<AggregationClause>,
+                            std::shared_ptr<ResampleClause<ResampleBoundary::LEFT>>,
+                            std::shared_ptr<ResampleClause<ResampleBoundary::RIGHT>>,
+                            std::shared_ptr<RowRangeClause>,
+                            std::shared_ptr<DateRangeClause>>> clauses) {
+            clauses = plan_query(std::move(clauses));
+            std::vector<std::shared_ptr<Clause>> _clauses;
+            self.needs_post_processing = false;
+            for (auto&& clause: clauses) {
+                util::variant_match(
+                    clause,
+                    [&](auto&& clause) {_clauses.emplace_back(std::make_shared<Clause>(*clause));}
+                );
+            }
+            self.add_clauses(_clauses);
+        });
+
     version.def("write_dataframe_to_file", &write_dataframe_to_file);
     version.def("read_dataframe_from_file",
         [] (StreamId sid, const std::string(path), std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options){
@@ -323,116 +440,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("col_range", &pipelines::FrameSlice::columns)
         .def_property_readonly("row_range", &pipelines::FrameSlice::rows);
 
-    py::class_<pipelines::RowRange, std::shared_ptr<pipelines::RowRange>>(version, "RowRange")
-        .def(py::init([](std::size_t start, std::size_t end){
-            return RowRange(start, end);
-        }))
-        .def_property_readonly("start", &pipelines::RowRange::start)
-        .def_property_readonly("end", &pipelines::RowRange::end)
-        .def_property_readonly("diff", &pipelines::RowRange::diff);
-
-    py::class_<pipelines::SignedRowRange, std::shared_ptr<pipelines::SignedRowRange>>(version, "SignedRowRange")
-    .def(py::init([](int64_t start, int64_t end){
-        return SignedRowRange{start, end};
-    }));
-
     py::class_<pipelines::ColRange, std::shared_ptr<pipelines::ColRange>>(version, "ColRange")
         .def_property_readonly("start", &pipelines::ColRange::start)
         .def_property_readonly("end", &pipelines::ColRange::end)
         .def_property_readonly("diff", &pipelines::ColRange::diff);
-
-    py::class_<IndexRange>(version, "IndexRange")
-            .def(py::init([](timestamp start, timestamp end){
-                return IndexRange(start, end);
-            }))
-            .def_property_readonly("start_ts",[](const IndexRange&self){
-                return std::get<timestamp>(self.start_);
-            })
-            .def_property_readonly("end_ts",[](const IndexRange&self){
-                return std::get<timestamp>(self.end_);
-            });
-
-    py::class_<FilterClause, std::shared_ptr<FilterClause>>(version, "FilterClause")
-            .def(py::init<
-                    std::unordered_set<std::string>,
-                    ExpressionContext,
-                    std::optional<PipelineOptimisation>>())
-            .def("__str__", &FilterClause::to_string)
-            .def("set_pipeline_optimisation", &FilterClause::set_pipeline_optimisation);
-
-    py::class_<ProjectClause, std::shared_ptr<ProjectClause>>(version, "ProjectClause")
-            .def(py::init<
-                    std::unordered_set<std::string>,
-                    std::string,
-                    ExpressionContext>())
-            .def("__str__", &ProjectClause::to_string);
-
-    py::class_<GroupByClause, std::shared_ptr<GroupByClause>>(version, "GroupByClause")
-            .def(py::init<std::string>())
-            .def_property_readonly("grouping_column", [](const GroupByClause& self) {
-                return self.grouping_column_;
-            })
-            .def("__str__", &GroupByClause::to_string);
-
-    py::class_<AggregationClause, std::shared_ptr<AggregationClause>>(version, "AggregationClause")
-            .def(py::init([](
-                    const std::string& grouping_colum,
-                    const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregations) {
-                return AggregationClause(grouping_colum, python_util::named_aggregators_from_dict(aggregations));
-            }))
-            .def("__str__", &AggregationClause::to_string);
-
-    declare_resample_clause<ResampleBoundary::LEFT>(version);
-    declare_resample_clause<ResampleBoundary::RIGHT>(version);
-
-    py::enum_<ResampleBoundary>(version, "ResampleBoundary")
-            .value("LEFT", ResampleBoundary::LEFT)
-            .value("RIGHT", ResampleBoundary::RIGHT);
-
-    py::enum_<RowRangeClause::RowRangeType>(version, "RowRangeType")
-            .value("HEAD", RowRangeClause::RowRangeType::HEAD)
-            .value("TAIL", RowRangeClause::RowRangeType::TAIL)
-            .value("RANGE", RowRangeClause::RowRangeType::RANGE);
-
-    py::class_<RowRangeClause, std::shared_ptr<RowRangeClause>>(version, "RowRangeClause")
-            .def(py::init<RowRangeClause::RowRangeType, int64_t>())
-            .def(py::init<int64_t, int64_t>())
-            .def("__str__", &RowRangeClause::to_string);
-
-    py::class_<DateRangeClause, std::shared_ptr<DateRangeClause>>(version, "DateRangeClause")
-            .def(py::init<timestamp, timestamp>())
-            .def_property_readonly("start", &DateRangeClause::start)
-            .def_property_readonly("end", &DateRangeClause::end)
-            .def("__str__", &DateRangeClause::to_string);
-
-    py::class_<ReadQuery, std::shared_ptr<ReadQuery>>(version, "PythonVersionStoreReadQuery")
-            .def(py::init())
-            .def_readwrite("columns",&ReadQuery::columns)
-            .def_readwrite("row_range",&ReadQuery::row_range)
-            .def_readwrite("row_filter",&ReadQuery::row_filter)
-            .def_readonly("needs_post_processing",&ReadQuery::needs_post_processing)
-            // Unsurprisingly, pybind11 doesn't understand folly::poly, so use vector of variants here
-            .def("add_clauses",
-                 [](ReadQuery& self,
-                    std::vector<std::variant<std::shared_ptr<FilterClause>,
-                                std::shared_ptr<ProjectClause>,
-                                std::shared_ptr<GroupByClause>,
-                                std::shared_ptr<AggregationClause>,
-                                std::shared_ptr<ResampleClause<ResampleBoundary::LEFT>>,
-                                std::shared_ptr<ResampleClause<ResampleBoundary::RIGHT>>,
-                                std::shared_ptr<RowRangeClause>,
-                                std::shared_ptr<DateRangeClause>>> clauses) {
-                clauses = plan_query(std::move(clauses));
-                std::vector<std::shared_ptr<Clause>> _clauses;
-                self.needs_post_processing = false;
-                for (auto&& clause: clauses) {
-                    util::variant_match(
-                        clause,
-                        [&](auto&& clause) {_clauses.emplace_back(std::make_shared<Clause>(*clause));}
-                    );
-                }
-                self.add_clauses(_clauses);
-            });
 
     py::enum_<OperationType>(version, "OperationType")
             .value("ABS", OperationType::ABS)
@@ -456,12 +467,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .value("AND", OperationType::AND)
             .value("OR", OperationType::OR)
             .value("XOR", OperationType::XOR);
-
-    py::enum_<SortedValue>(version, "SortedValue")
-            .value("UNKNOWN", SortedValue::UNKNOWN)
-            .value("UNSORTED", SortedValue::UNSORTED)
-            .value("ASCENDING", SortedValue::ASCENDING)
-            .value("DESCENDING", SortedValue::DESCENDING);
 
     py::class_<ColumnStats>(version, "ColumnStats")
             .def(py::init<std::unordered_map<std::string, std::unordered_set<std::string>>>())
@@ -494,17 +499,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def(py::init([](VariantNode left, OperationType operation_type) {
                 return ExpressionNode(left, operation_type);
             }));
-
-    py::enum_<PipelineOptimisation>(version, "PipelineOptimisation")
-            .value("SPEED", PipelineOptimisation::SPEED)
-            .value("MEMORY", PipelineOptimisation::MEMORY);
-
-    py::class_<ExpressionContext, std::shared_ptr<ExpressionContext>>(version, "ExpressionContext")
-            .def(py::init())
-            .def("add_expression_node", &ExpressionContext::add_expression_node)
-            .def("add_value", &ExpressionContext::add_value)
-            .def("add_value_set", &ExpressionContext::add_value_set)
-            .def_readwrite("root_node_name", &ExpressionContext::root_node_name_);
 
     py::class_<UpdateQuery>(version, "PythonVersionStoreUpdateQuery")
             .def(py::init())

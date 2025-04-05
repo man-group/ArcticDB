@@ -21,7 +21,7 @@ import pytz
 if sys.version_info >= (3, 9):
     import zoneinfo
 from numpy.testing import assert_equal, assert_array_equal
-from arcticdb_ext.version_store import SortedValue as _SortedValue
+from arcticdb_ext.storage import SortedValue as _SortedValue
 
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticException
 from arcticdb.version_store._custom_normalizers import (
