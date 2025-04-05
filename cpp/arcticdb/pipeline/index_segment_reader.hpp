@@ -142,4 +142,15 @@ IndexRange get_index_segment_range(
 
 void check_column_and_date_range_filterable(const IndexSegmentReader& index_segment_reader, const ReadQuery& read_query);
 
+// TODO: Consider renaming to IndexKeyAndSegment or something. It is not used only as a cache but as intermediate steps in some calls e.g. get_descriptor.
+// Can be used to cache index key and index segment between runs, to avoid re-reading from storage
+struct CachedIndex {
+    AtomKey index_key;
+    IndexSegmentReader isr;
+
+    CachedIndex(AtomKey&& index_key, SegmentInMemory&& seg) : index_key(std::move(index_key)), isr(std::move(seg)) {
+        util::check(index_key.type() == KeyType::TABLE_INDEX, "Expected an index key in CachedIndex but got {}", index_key.type());
+    }
+};
+
 } // namespace arcticdb::pipelines::index
