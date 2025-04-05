@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
     services:
       mongodb:
         image: mongo:4.4
@@ -39,6 +40,11 @@ jobs:
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
 
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v2.0.0
@@ -57,6 +63,8 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
+          CMAKE_C_COMPILER_LAUNCHER: sccache
 
       - name: Build C++ Tests
         shell: bash -l {0}
@@ -114,6 +122,7 @@ jobs:
     runs-on: ${{ inputs.run_on_arm_mac == true && 'macos-13-xlarge' || matrix.os }}
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
     steps:
       - uses: actions/checkout@v3.3.0
         # DONT use recursive submodules checkout to simulate conda feedstock build
@@ -123,6 +132,11 @@ jobs:
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
 
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v2.0.0
@@ -142,6 +156,8 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
+          CMAKE_C_COMPILER_LAUNCHER: sccache
 
       - name: Build C++ Tests
         shell: bash -l {0}
