@@ -8,8 +8,14 @@ on:
   workflow_dispatch:
     inputs:
       persistent_storage:
-        description: Run the persistent storage tests
-        type: boolean
+        description: Run the persistent storage tests?
+        type: choice
+        options:
+          - 'no'
+          - 'AWS_S3'
+          - 'GCPXML'
+        default: 'no'
+
       pypi_publish:
         type: boolean
       publish_env:

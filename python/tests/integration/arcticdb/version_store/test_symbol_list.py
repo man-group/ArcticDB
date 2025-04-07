@@ -42,6 +42,7 @@ def make_read_only(lib):
     return NativeVersionStore.create_store_from_lib_config(lib.lib_cfg(), Defaults.ENV, OpenMode.READ)
 
 
+@pytest.mark.storage
 def test_with_symbol_list(basic_store):
     syms = []
     df = sample_dataframe(100)
@@ -78,6 +79,7 @@ def test_with_symbol_list(basic_store):
         assert sym in expected_syms
 
 
+@pytest.mark.storage
 def test_symbol_list_with_rec_norm(basic_store):
     basic_store.write(
         "rec_norm",
@@ -89,6 +91,7 @@ def test_symbol_list_with_rec_norm(basic_store):
     assert basic_store.list_symbols() == ["rec_norm"]
 
 
+@pytest.mark.storage
 def test_interleaved_store_read(version_store_and_real_s3_basic_store_factory):
     basic_store_factory = version_store_and_real_s3_basic_store_factory
     vs1 = basic_store_factory()
@@ -100,6 +103,7 @@ def test_interleaved_store_read(version_store_and_real_s3_basic_store_factory):
     assert vs1.list_symbols() == []
 
 
+@pytest.mark.storage
 def test_symbol_list_regex(basic_store):
     for i in range(15):
         basic_store.write(f"sym_{i}", pd.DataFrame())
@@ -117,6 +121,7 @@ def test_symbol_list_regex(basic_store):
 
 @pytest.mark.parametrize("compact_first", [True, False])
 # Using S3 because LMDB does not allow OpenMode to be changed
+@pytest.mark.storage
 def test_symbol_list_read_only_compaction_needed(small_max_delta, object_version_store, compact_first):
     lib_write = object_version_store
 
@@ -140,6 +145,7 @@ def test_symbol_list_read_only_compaction_needed(small_max_delta, object_version
     assert new_compaction != old_compaction
 
 
+@pytest.mark.storage
 def test_symbol_list_delete(basic_store):
     lib = basic_store
     lib.write("a", 1)
@@ -149,6 +155,7 @@ def test_symbol_list_delete(basic_store):
     assert lib.list_symbols() == ["b"]
 
 
+@pytest.mark.storage
 def test_symbol_list_delete_incremental(basic_store):
     lib = basic_store
     lib.write("a", 1)
@@ -160,6 +167,7 @@ def test_symbol_list_delete_incremental(basic_store):
     assert lib.list_symbols() == ["b"]
 
 
+@pytest.mark.storage
 def test_deleted_symbol_with_tombstones(basic_store_tombstones_no_symbol_list):
     lib = basic_store_tombstones_no_symbol_list
     lib.write("a", 1)
@@ -169,6 +177,7 @@ def test_deleted_symbol_with_tombstones(basic_store_tombstones_no_symbol_list):
     assert lib.list_symbols() == ["b"]
 
 
+@pytest.mark.storage
 def test_empty_lib(basic_store):
     lib = basic_store
     assert lib.list_symbols() == []
@@ -176,6 +185,7 @@ def test_empty_lib(basic_store):
     assert len(lt.find_keys(KeyType.SYMBOL_LIST)) == 1
 
 
+@pytest.mark.storage
 def test_no_active_symbols(basic_store_prune_previous):
     lib = basic_store_prune_previous
     for idx in range(20):
@@ -189,6 +199,7 @@ def test_no_active_symbols(basic_store_prune_previous):
     assert lib.list_symbols() == []
 
 
+@pytest.mark.storage
 def test_only_latest_compaction_key_is_used(basic_store):
     lib: NativeVersionStore = basic_store
     lt = lib.library_tool()
@@ -217,6 +228,7 @@ def test_only_latest_compaction_key_is_used(basic_store):
 
 
 @pytest.mark.parametrize("write_another", [False, True])
+@pytest.mark.storage
 def test_turning_on_symbol_list_after_a_symbol_written(object_store_factory, write_another):
     # The if(!maybe_last_compaction) case
     lib: NativeVersionStore = object_store_factory(symbol_list=False)
@@ -247,6 +259,7 @@ def test_turning_on_symbol_list_after_a_symbol_written(object_store_factory, wri
 
 
 @pytest.mark.parametrize("mode", ["conflict", "normal"])
+@pytest.mark.storage
 def test_lock_contention(small_max_delta, basic_store, mode):
     lib = basic_store
     lt = lib.library_tool()

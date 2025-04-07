@@ -33,6 +33,7 @@ MAP_TIMEOUTS = [0, SECOND * 5, SECOND * 10000]
 
 
 @pytest.mark.parametrize("map_timeout", MAP_TIMEOUTS)
+@pytest.mark.storage
 def test_delete_all(map_timeout, object_and_mem_and_lmdb_version_store, sym):
     with config_context("VersionMap.ReloadInterval", map_timeout):
         lib = object_and_mem_and_lmdb_version_store
@@ -55,6 +56,7 @@ def test_delete_all(map_timeout, object_and_mem_and_lmdb_version_store, sym):
         assert_frame_equal(vit.data, df1)
 
 
+@pytest.mark.storage
 def test_version_missing(object_version_store):
     with pytest.raises(NoDataFoundException):
         object_version_store.read("not_there")
@@ -114,6 +116,7 @@ def test_delete_version_basic(s3_version_store, idx, sym):
     assert len(object_version_store.list_versions(symbol)) == 0
 
 
+@pytest.mark.storage
 def test_delete_version_with_batch_write(object_version_store, sym):
     sym_1 = sym
     sym_2 = "another-{}".format(sym)
@@ -150,6 +153,7 @@ def test_delete_version_with_batch_write(object_version_store, sym):
 
 
 @pytest.mark.parametrize("idx", [0, 1])
+@pytest.mark.storage
 def test_delete_version_with_append(object_version_store, idx, sym):
     symbol = sym
     idx1 = np.arange(0, 1000000)
@@ -186,6 +190,7 @@ def test_delete_version_with_append(object_version_store, idx, sym):
         assert vit.version == 2
 
 
+@pytest.mark.storage
 def test_delete_version_with_batch_append(object_version_store, sym):
     sym_1 = sym
     sym_2 = "another-{}".format(sym)
@@ -222,6 +227,7 @@ def test_delete_version_with_batch_append(object_version_store, sym):
     assert_frame_equal(vit[sym_2].data, expected_2)
 
 
+@pytest.mark.storage
 def test_delete_version_with_update(object_version_store, sym):
     symbol = sym
     idx1 = pd.date_range("2000-1-1", periods=5)
@@ -248,6 +254,7 @@ def test_delete_version_with_update(object_version_store, sym):
 
 
 @pytest.mark.parametrize("idx", [2, 3])
+@pytest.mark.storage
 def test_delete_version_with_write_metadata(object_version_store, idx, sym):
     symbol = sym
     idx1 = np.arange(0, 1000000)
@@ -292,6 +299,7 @@ def test_delete_version_with_write_metadata(object_version_store, idx, sym):
 
 
 @pytest.mark.parametrize("idx", [2, 3])
+@pytest.mark.storage
 def test_delete_version_with_batch_write_metadata(object_version_store, idx, sym):
     sym_1 = sym
     sym_2 = "another-{}".format(sym)
@@ -347,6 +355,7 @@ def test_delete_version_with_batch_write_metadata(object_version_store, idx, sym
 
 
 @pytest.mark.parametrize("map_timeout", MAP_TIMEOUTS)
+@pytest.mark.storage
 def test_delete_version_with_snapshot(map_timeout, object_and_mem_and_lmdb_version_store, sym):
     with config_context("VersionMap.ReloadInterval", map_timeout):
         lib = object_and_mem_and_lmdb_version_store
@@ -378,6 +387,7 @@ def test_delete_version_with_snapshot(map_timeout, object_and_mem_and_lmdb_versi
         assert_frame_equal(lib.read(symbol, "delete_version_snap_1").data, df1)
 
 
+@pytest.mark.storage
 def test_delete_mixed(object_version_store, sym):
     symbol = sym
     df1 = pd.DataFrame({"x": np.arange(10, dtype=np.int64)})
@@ -392,6 +402,7 @@ def test_delete_mixed(object_version_store, sym):
     assert object_version_store.has_symbol(symbol) is False
 
 
+@pytest.mark.storage
 def tests_with_pruning_and_tombstones(basic_store_tombstone_and_pruning, sym):
     symbol = sym
     lib = basic_store_tombstone_and_pruning
@@ -409,6 +420,7 @@ def tests_with_pruning_and_tombstones(basic_store_tombstone_and_pruning, sym):
 
 
 @pytest.mark.parametrize("map_timeout", MAP_TIMEOUTS)
+@pytest.mark.storage
 def test_with_snapshot_pruning_tombstones(basic_store_tombstone_and_pruning, map_timeout, sym):
     with config_context("VersionMap.ReloadInterval", map_timeout):
         symbol = sym
@@ -442,6 +454,7 @@ def test_with_snapshot_pruning_tombstones(basic_store_tombstone_and_pruning, map
 
 
 @pytest.mark.parametrize("map_timeout", MAP_TIMEOUTS)
+@pytest.mark.storage
 def test_normal_flow_with_snapshot_and_pruning(basic_store_tombstone_and_pruning, map_timeout, sym):
     with config_context("VersionMap.ReloadInterval", map_timeout):
         symbol = sym
@@ -470,6 +483,7 @@ def test_normal_flow_with_snapshot_and_pruning(basic_store_tombstone_and_pruning
         assert len([ver for ver in lib.list_versions() if not ver["deleted"]]) == 2
 
 
+@pytest.mark.storage
 def test_deleting_tombstoned_versions(basic_store_tombstone_and_pruning, sym):
     lib = basic_store_tombstone_and_pruning
     lib.write(sym, 1)
@@ -479,6 +493,7 @@ def test_deleting_tombstoned_versions(basic_store_tombstone_and_pruning, sym):
     # Two versions are tombstoned at this point.
 
 
+@pytest.mark.storage
 def test_delete_multi_keys(object_version_store, sym):
     object_version_store.write(
         sym,
@@ -497,6 +512,7 @@ def test_delete_multi_keys(object_version_store, sym):
 
 
 @pytest.mark.parametrize("map_timeout", MAP_TIMEOUTS)
+@pytest.mark.storage
 def test_delete_multi_keys_snapshot(basic_store, map_timeout, sym):
     data = {"e": np.arange(1000), "f": np.arange(8000), "g": None}
     basic_store.write(sym, data=data, metadata="realyolo2", recursive_normalizers=True)
@@ -624,6 +640,7 @@ def test_delete_date_range_get_info(lmdb_version_store_tiny_segment):
     assert received.index[0] == lib.get_info(sym)["date_range"][0]
 
 
+@pytest.mark.storage
 def test_delete_read_from_timestamp(basic_store):
     sym = "test_from_timestamp_with_delete"
     lib = basic_store
