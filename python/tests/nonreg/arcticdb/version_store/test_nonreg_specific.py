@@ -424,3 +424,12 @@ def test_update_index_overlap_corner_cases(lmdb_version_store_tiny_segment, inde
     expected_df = pd.concat(chunks)
     received_df = lib.read(sym).data
     assert_frame_equal(expected_df, received_df)
+
+
+def test_delete_snapshot_regression(nfs_clean_bucket):
+    lib = nfs_clean_bucket.create_version_store_factory("test_delete_snapshot_regression")()
+    lib.write("sym", 1)
+    lib.snapshot("snap")
+    assert "snap" in lib.list_snapshots()
+    lib.delete_snapshot("snap")
+    assert "snap" not in lib.list_snapshots()
