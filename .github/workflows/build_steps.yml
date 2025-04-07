@@ -277,6 +277,7 @@ jobs:
       python_impl_name: ${{needs.compile.outputs.python_impl_name}}
       distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      real_tests_enabled: ${{inputs.persistent_storage || 'no'}}
     steps:
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -340,7 +341,7 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       - name: Set persistent storage variables
-        if: inputs.persistent_storage != 'no'
+        if: ${{ env.real_tests_enabled }} != 'no'
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -351,7 +352,7 @@ jobs:
           strategy_branch: "${{ env.distinguishing_name }}"
         
       - name: Set s3 sts persistent storage variables for Windows
-        if: inputs.persistent_storage != 'no' && matrix.os == 'windows'
+        if: ${{ env.real_tests_enabled }} != 'no' && matrix.os == 'windows'
         uses: ./.github/actions/set_s3_sts_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
