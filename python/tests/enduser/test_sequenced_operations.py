@@ -17,11 +17,11 @@ import arcticdb_ext
 from arcticdb.options import LibraryOptions
 from arcticdb.util import test
 from arcticdb.util.test import dataframe_dump_to_log, dataframe_simulate_arcticdb_update_static
-from arcticdb.util.utils import DFGenerator, TimestampNumber, get_logger
+from arcticdb.util.utils import ArcticTypes, DFGenerator, TimestampNumber, get_logger
 from arcticdb.version_store.library import Library
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 
 logger = get_logger()
@@ -75,7 +75,8 @@ class UtilizationProfile:
         return random.randint(*self.normal_dataframe_size)
 
 
-def prepare_base_dataframe(number_rows: int, start_timestamp_number: TimestampNumber, profile: UtilizationProfile) -> DFGenerator:
+def prepare_base_dataframe(number_rows: int, start_timestamp_number: TimestampNumber, profile: UtilizationProfile, 
+                           auto_inc_initial_value: int, type_value: int) -> DFGenerator:
     return (DFGenerator(number_rows, seed=None)
               .add_bool_col("bool")
               .add_float_col(name="float64", dtype=np.float64)
@@ -85,7 +86,10 @@ def prepare_base_dataframe(number_rows: int, start_timestamp_number: TimestampNu
               .add_int_col(name="uint64", dtype=np.uint64)
               .add_string_col("string", 10)
               .add_string_col("string_enum", 5, 250)
-              .add_timestamp_index("time", profile.timestamp_default_frequency, start_timestamp_number.to_timestamp()))
+              .add_timestamp_index("time", profile.timestamp_default_frequency, start_timestamp_number.to_timestamp())
+              .add_auto_inc_col("auto", auto_inc_initial_value)
+              .add_const_col("type", type_value)
+              )
 
 
 def append_dataframes(df_list : List[pd.DataFrame]) -> pd.DataFrame:
@@ -112,12 +116,11 @@ class AppendGenerator:
         self.utilization_profile = profile
         return self
 
-    def _generate_dataframe(self, number_rows: int) -> pd.DataFrame:
-        df = (prepare_base_dataframe(number_rows, self.current_timestamp_number, self.utilization_profile)
-              .add_auto_inc_col("auto", self.rows_generated)
-              .add_const_col("type", self.append_constant))
-        self.rows_generated += number_rows
-        self.current_timestamp_number = self.current_timestamp_number + number_rows
+    def _generate_dataframe(self, number_elements: int) -> pd.DataFrame:
+        df = (prepare_base_dataframe(number_elements, self.current_timestamp_number, self.utilization_profile,
+                                     self.rows_generated, self.append_constant))
+        self.rows_generated += number_elements
+        self.current_timestamp_number = self.current_timestamp_number + number_elements
         return df.generate_dataframe()
     
     def generate_sequence(self, num_dataframes:int) -> List[pd.DataFrame]:
@@ -189,9 +192,8 @@ class UpdateGenerator:
         return self
 
     def _generate_dataframe(self, number_elements: int, start_timestamp_number: TimestampNumber) -> pd.DataFrame:
-        df = (prepare_base_dataframe(number_elements, start_timestamp_number, self.utilization_profile)
-              .add_auto_inc_col("auto", self.rows_updated)
-              .add_const_col("type", self.update_constant))
+        df = (prepare_base_dataframe(number_elements, start_timestamp_number, self.utilization_profile,
+                                     self.rows_updated, self.update_constant))
         self.rows_updated += number_elements
         return df.generate_dataframe()
 
@@ -237,6 +239,53 @@ class UpdateGenerator:
         return update_df
 
 
+class ErrorDataGenerator:
+
+    def __init__(self):
+        self.rows_generated = 0
+        self.errors_constant = -3
+        self.utilization_profile = UtilizationProfile()
+
+    def set_profile(self, profile: UtilizationProfile):
+        self.utilization_profile = profile
+        return self
+
+    def _generate_dataframe(self, number_elements: int, start_timestamp_number: TimestampNumber) -> pd.DataFrame:
+        df = (prepare_base_dataframe(number_elements, start_timestamp_number, self.utilization_profile,
+                                     self.rows_generated, self.errors_constant))
+        self.rows_generated += number_elements
+        return df.generate_dataframe()
+    
+    def generate_error_values_for_type(self, dtype: ArcticTypes) -> List[Tuple[Any, ArcticTypes]]:
+        values_list: List[Tuple[Any, ArcticTypes]] = list()
+        if dtype == np.int32:
+            values_list.append((np.int64(np.iinfo(np.int32).max) + 10, np.int64))
+            values_list.append((np.iinfo(np.uint32).max, np.uint32))
+            values_list.append((0.1, np.float32))
+            values_list.append((0.1, np.float64))
+            values_list.append(("error", str))
+        return values_list
+        
+
+    def generate_error_data_sequence(self, original_dataframe: pd.DataFrame) -> List[pd.DataFrame]:
+        errors_list: List[pd.DataFrame] = list()
+
+        start = TimestampNumber.from_timestamp(original_dataframe.index[0], DEFAULT_FREQ)
+        number_rows = 2
+
+        _type = np.int32
+        err_val_list = self.generate_error_values_for_type(_type)
+        columns = original_dataframe.select_dtypes(include=[_type]).columns
+        if columns is not None:
+            for err_val in err_val_list:
+                df = self._generate_dataframe(number_elements=number_rows,
+                                            start_timestamp_number=start+1) 
+                df[columns[0]] = df[columns[0]].astype(err_val[1])
+                errors_list.append(df)
+
+        return errors_list
+
+
 def update_symbol_protected(lib: Library, symbol_name:str, update: pd.DataFrame) -> pd.DataFrame:
     """
     If an error happens we would like to save the dataframe which caused it 
@@ -274,6 +323,35 @@ def set_seed(seed_value: int = None):
 
 symbol="s"
 
+#@pytest.mark.only_fixture_params(["real_s3", "real_gcp"] )
+@pytest.mark.only_fixture_params(["lmdb"] )
+def test_errors_prevention(arctic_client_v1, lib_name):
+    set_seed()
+    default_profile = UtilizationProfile()
+    seg_size=default_profile.segment_size
+    lib = arctic_client_v1.create_library(name=lib_name, 
+                                          library_options=LibraryOptions(rows_per_segment=seg_size,
+                                                                         columns_per_segment=seg_size))
+    try:
+        error_missed = False
+        gen = ErrorDataGenerator().set_profile(default_profile)
+        df = gen._generate_dataframe(10, TimestampNumber.from_timestamp(pd.Timestamp("1-1-1990"), DEFAULT_FREQ))
+        lib.write(symbol, df)
+        err_list = gen.generate_error_data_sequence(df)
+        for err_df in err_list:
+            try:
+                lib.update(symbol=symbol,data=err_df)
+                logger.error(f"Dataframe did not produced error")
+                logger.error(f"{err_df}")
+                error_missed = True
+            except Exception as e:
+                logger.info(f"Expected error appeared")
+        assert not error_missed, "At least one error was accepted"
+    except Exception as e:
+        arctic_client_v1.delete_library(lib_name)
+        raise
+
+
 @pytest.mark.only_fixture_params(["real_s3", "real_gcp"] )
 def test_sequenced_operations_updates_over_updates(arctic_client_v1, lib_name):
 
@@ -283,7 +361,6 @@ def test_sequenced_operations_updates_over_updates(arctic_client_v1, lib_name):
     lib = arctic_client_v1.create_library(name=lib_name, 
                                           library_options=LibraryOptions(rows_per_segment=seg_size,
                                                                          columns_per_segment=seg_size))
-
 
     # Add to profile list to examine different parameters
     try:
