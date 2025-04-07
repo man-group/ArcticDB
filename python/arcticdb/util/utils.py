@@ -5,10 +5,15 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 from datetime import timedelta
+import inspect
+import logging
+import os
 import random
+import re
 import string
 import time
-import sys 
+import sys
+from typing import Dict 
 if sys.version_info >= (3, 8): 
     from typing import Literal, Any, List, Tuple, Union, get_args
 else: 
@@ -20,10 +25,74 @@ import pandas as pd
 from arcticdb.util.test import create_datetime_index, get_sample_dataframe, random_integers, random_string
 from arcticdb.version_store.library import Library
 
+
 # Types supported by arctic
 ArcticIntType = Union[np.uint8, np.uint16, np.uint32, np.uint64, np.int8, np.int16, np.int32, np.int64]
 ArcticFloatType = Union[np.float64, np.float32]
 ArcticTypes = Union[ArcticIntType, ArcticFloatType, str]
+
+
+class GitHubSanitizingHandler(logging.StreamHandler):
+    """
+    The handler sanitizes messages only when execution is in GitHub
+    """
+
+    def emit(self, record: logging.LogRecord):
+        # Sanitize the message here
+        record.msg = self.sanitize_message(record.msg)
+        super().emit(record)
+
+    @staticmethod
+    def sanitize_message(message: str) -> str:
+        if (os.getenv("GITHUB_ACTIONS") == "true") and isinstance(message, str):
+            # Use regex to find and replace sensitive access keys
+            sanitized_message = re.sub(r'(secret=)[^\s&]+', r'\1***', message)
+            sanitized_message = re.sub(r'(access=)[^\s&]+', r'\1***', sanitized_message)
+            return sanitized_message
+        return message
+
+
+loggers:Dict[str, logging.Logger] = {}
+
+
+def get_logger(bencmhark_cls: Union[str, Any] = None):
+    """
+    Creates logger instance with associated console handler.
+    The logger name can be either passed as string or class,
+    or if not automatically will assume the caller module name
+    """
+    logLevel = logging.INFO
+    if bencmhark_cls:
+        if isinstance(bencmhark_cls, str):
+            value = bencmhark_cls
+        else:
+            value = type(bencmhark_cls).__name__
+        name = value
+    else:
+        frame = inspect.stack()[1]
+        module = inspect.getmodule(frame[0])
+        name = module.__name__
+
+    logger = loggers.get(name, None)
+    if logger :
+        return logger
+    logger = logging.getLogger(name)    
+    logger.setLevel(logLevel)
+    console_handler = GitHubSanitizingHandler()
+    console_handler.setLevel(logLevel)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    loggers[name] = logger
+    return logger
+
+
+class GitHubSanitizingException(Exception):
+    def __init__(self, message: str):
+        # Sanitize the message
+        sanitized_message = GitHubSanitizingHandler.sanitize_message(message)
+        super().__init__(sanitized_message)
+
 
 class  TimestampNumber:
     """

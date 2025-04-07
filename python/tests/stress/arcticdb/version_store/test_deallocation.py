@@ -7,10 +7,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import pandas as pd
 import numpy as np
+import pytest
 
 from arcticdb.util.test import assert_frame_equal
 
 
+@pytest.mark.storage
 def test_many_version_store(basic_store_factory):
     idx2 = np.arange(10, 20)
     d2 = {"x": np.arange(20, 30, dtype=np.int64)}

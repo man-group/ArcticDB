@@ -9,7 +9,7 @@ on:
       cibw_version:      {required: false, type: string, description: build-python-wheels only. Must match the cibw_image_tag}
       python_deps_ids:   {default: '[""]', type: string, description: build-python-wheels test matrix parameter. JSON string.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
-      persistent_storage:      {default: "false", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
+      persistent_storage:      {default: "no", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
       pytest_xdist_mode: {default: "", type: string, description: additional argument to pass for pytest-xdist}
       pytest_args:       {default: "", type: string, description: a way to rewrite the pytest args to change what tests are being run}
 jobs:
@@ -340,15 +340,18 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       - name: Set persistent storage variables
-        if: inputs.persistent_storage == 'true'
+        if: inputs.persistent_storage != 'no'
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+          gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
+          gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+          persistent_storage: "${{ inputs.persistent_storage }}"
           strategy_branch: "${{ env.distinguishing_name }}"
         
       - name: Set s3 sts persistent storage variables for Windows
-        if: inputs.persistent_storage == 'true' && matrix.os == 'windows'
+        if: inputs.persistent_storage != 'no' && matrix.os == 'windows'
         uses: ./.github/actions/set_s3_sts_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"

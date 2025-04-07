@@ -15,10 +15,10 @@ from multiprocessing import Process
 one_sec = 1_000_000_000
 
 
-def slow_increment_task(real_s3_storage_factory, lib_name, symbol, sleep_time):
+def slow_increment_task(real_storage_factory, lib_name, symbol, sleep_time):
     # We need to explicitly build the library object in each process, otherwise the s3 library doesn't get copied
     # properly between processes, and we get spurious `XAmzContentSHA256Mismatch` errors.
-    fixture = real_s3_storage_factory.create_fixture()
+    fixture = real_storage_factory.create_fixture()
     lib = fixture.create_arctic()[lib_name]
     lock = ReliableStorageLock("test_lock", lib._nvs._library, 10 * one_sec)
     lock_manager = ReliableStorageLockManager()
@@ -32,8 +32,9 @@ def slow_increment_task(real_s3_storage_factory, lib_name, symbol, sleep_time):
 
 @pytest.mark.parametrize("num_processes,max_sleep", [(100, 1), (5, 20)])
 @REAL_S3_TESTS_MARK
-def test_many_increments(real_s3_storage_factory, lib_name, num_processes, max_sleep):
-    fixture = real_s3_storage_factory.create_fixture()
+@pytest.mark.storage
+def test_many_increments(real_storage_factory, lib_name, num_processes, max_sleep):
+    fixture = real_storage_factory.create_fixture()
     lib = fixture.create_arctic().create_library(lib_name)
     init_df = pd.DataFrame({"col": [0]})
     symbol = "counter"
@@ -41,7 +42,7 @@ def test_many_increments(real_s3_storage_factory, lib_name, num_processes, max_s
     lib.write(symbol, init_df)
 
     processes = [
-        Process(target=slow_increment_task, args=(real_s3_storage_factory, lib_name, symbol, 0 if i % 2 == 0 else max_sleep))
+        Process(target=slow_increment_task, args=(real_storage_factory, lib_name, symbol, 0 if i % 2 == 0 else max_sleep))
         for i in range(num_processes)
     ]
     for p in processes:
