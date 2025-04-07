@@ -151,39 +151,10 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
 
 
     using namespace arcticdb::util::query_stats;
-    auto query_stats_module = tools.def_submodule("query_stats", "Query stats functionality");    
-    py::enum_<GroupName>(query_stats_module, "GroupName")
-        .value("arcticdb_call", GroupName::arcticdb_call)
-        .value("key_type", GroupName::key_type)
-        .value("storage_ops", GroupName::storage_ops)
-        .export_values();
-    
-    py::enum_<StatsName>(query_stats_module, "StatsName")
-        .value("result_count", StatsName::result_count)
-        .value("total_time_ms", StatsName::total_time_ms)
-        .value("count", StatsName::count)
-        .export_values();
-    
-    py::class_<GroupingLevel, std::shared_ptr<GroupingLevel>>(query_stats_module, "GroupingLevel")
-        .def(py::init<>())
-        .def_readonly("stats", &GroupingLevel::stats_)
-        .def_readonly("next_level_maps", &GroupingLevel::next_level_maps_);
-        
-    query_stats_module.def("current_level", []() { 
-        return QueryStats::instance().current_level(); 
-    });
-    query_stats_module.def("root_levels", []() { 
-        return QueryStats::instance().root_levels(); 
-    });
-    query_stats_module.def("is_root_level_set", []() { 
-        return QueryStats::instance().is_root_level_set(); 
-    });
+    auto query_stats_module = tools.def_submodule("query_stats", "Query stats functionality");
     query_stats_module.def("reset_stats", []() { 
         QueryStats::instance().reset_stats(); 
     });
-    query_stats_module.def("merge_levels", []() { 
-        QueryStats::instance().merge_levels(); 
-    });    
     query_stats_module.def("enable", []() { 
         QueryStats::instance().enable(); 
     });

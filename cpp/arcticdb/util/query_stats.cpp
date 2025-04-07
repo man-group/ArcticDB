@@ -41,6 +41,8 @@ CallStats::CallStats() :
 
 }
 
+QueryStats QueryStats::instance_;
+
 QueryStats& QueryStats::instance() {
     return instance_;
 }
@@ -68,7 +70,7 @@ void QueryStats::set_call(const std::string& call_name){
         call_stat_ptr_ = &it->second;
     } 
     else {
-        auto insert_result = calls_stats_map_.emplace(std::piecewise_construct, std::forward_as_tuple(call_name), std::forward_as_tuple(CallStats()));
+        auto insert_result = calls_stats_map_.emplace(call_name, CallStats());
         call_stat_ptr_ = &insert_result.first->second;
     }
 }

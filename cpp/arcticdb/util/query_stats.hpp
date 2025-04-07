@@ -11,7 +11,6 @@
 #include <memory>
 #include <vector>
 #include <list>
-#include <map>
 #include <atomic>
 #include <type_traits>
 #include <string>
@@ -82,11 +81,11 @@ public:
     QueryStats(const QueryStats&) = delete;
     QueryStats() = default;
 private:
-    std::map<std::string, CallStats> calls_stats_map_;
+    ankerl::unordered_dense::map<std::string, CallStats> calls_stats_map_;
     std::mutex calls_stats_map_mutex_;
     thread_local static CallStats* call_stat_ptr_;
 
-    static QueryStats& instance_;
+    static QueryStats instance_;
     bool is_enabled_ = false;
 };
 
