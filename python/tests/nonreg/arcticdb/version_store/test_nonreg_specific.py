@@ -17,6 +17,8 @@ from arcticdb_ext.storage import KeyType
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from tests.util.date import DateRange
 
+
+@pytest.mark.storage
 def test_read_keys(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_float_int"
@@ -33,6 +35,7 @@ def test_read_keys(object_and_mem_and_lmdb_version_store_dynamic_schema):
     assert_frame_equal(expected, result)
 
 
+@pytest.mark.storage
 def test_update_int_float(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_int_float"
@@ -49,6 +52,7 @@ def test_update_int_float(object_and_mem_and_lmdb_version_store_dynamic_schema):
     assert_frame_equal(expected, result)
 
 
+@pytest.mark.storage
 def test_update_nan_int(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_nan_int"
@@ -65,6 +69,7 @@ def test_update_nan_int(object_and_mem_and_lmdb_version_store_dynamic_schema):
     assert_frame_equal(expected, result)
 
 
+@pytest.mark.storage
 def test_update_int_nan(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_int_nan"
@@ -82,6 +87,7 @@ def test_update_int_nan(object_and_mem_and_lmdb_version_store_dynamic_schema):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="SKIP_WIN Only dynamic strings are supported on Windows")
+@pytest.mark.storage
 def test_append_dynamic_to_fixed_width_strings(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_append_dynamic_to_fixed_width_strings"
@@ -105,6 +111,7 @@ def test_append_dynamic_to_fixed_width_strings(object_and_mem_and_lmdb_version_s
     assert_frame_equal(expected_df, read_df)
 
 
+@pytest.mark.storage
 def test_append_fixed_width_to_dynamic_strings(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_append_fixed_width_to_dynamic_strings"
@@ -131,6 +138,7 @@ def test_append_fixed_width_to_dynamic_strings(object_and_mem_and_lmdb_version_s
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="SKIP_WIN Only dynamic strings are supported on Windows")
+@pytest.mark.storage
 def test_update_dynamic_to_fixed_width_strings(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_dynamic_to_fixed_width_strings"
@@ -155,6 +163,7 @@ def test_update_dynamic_to_fixed_width_strings(object_and_mem_and_lmdb_version_s
     assert_frame_equal(expected_df, read_df)
 
 
+@pytest.mark.storage
 def test_update_fixed_width_to_dynamic_strings(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_fixed_width_to_dynamic_strings"

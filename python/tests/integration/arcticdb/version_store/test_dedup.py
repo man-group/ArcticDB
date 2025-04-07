@@ -34,6 +34,7 @@ def comp_dict(d1, d2):
             assert d1[k] == d2[k]
 
 
+@pytest.mark.storage
 def test_basic_de_dup(basic_store_factory):
     lib = basic_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True)
     symbol = "test_basic_de_dup"
@@ -59,6 +60,7 @@ def test_basic_de_dup(basic_store_factory):
     assert len(get_data_keys(lib, symbol)) == num_elements
 
 
+@pytest.mark.storage
 def test_de_dup_same_value_written(basic_store_factory):
     lib = basic_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True)
     symbol = "test_de_dup_same_value_written"
@@ -82,6 +84,7 @@ def test_de_dup_same_value_written(basic_store_factory):
     assert len(get_data_keys(lib, symbol)) == num_keys
 
 
+@pytest.mark.storage
 def test_de_dup_with_delete(basic_store_factory):
     lib = basic_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True)
     symbol = "test_de_dup_with_delete"
@@ -138,6 +141,7 @@ def test_de_dup_with_delete(basic_store_factory):
     assert len(get_data_keys(lib, symbol)) == num_elements
 
 
+@pytest.mark.storage
 def test_de_dup_with_snapshot(basic_store_factory):
     lib = basic_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True)
     symbol = "test_de_dup_with_snapshot"
@@ -179,6 +183,7 @@ def test_de_dup_with_snapshot(basic_store_factory):
     assert_frame_equal(lib.read(symbol, as_of="my_snap").data, new_df)
 
 
+@pytest.mark.storage
 def test_de_dup_with_tombstones(basic_store_factory):
     lib = basic_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True)
     symbol = "test_de_dup_with_tombstones"
@@ -238,6 +243,7 @@ def test_de_dup_with_tombstones(basic_store_factory):
     assert len(get_data_keys(lib, symbol)) == 3 * num_elements / 2
 
 
+@pytest.mark.storage
 def test_snapshot_dedup_basic(basic_store_factory):
     lib = basic_store_factory(
         column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
@@ -280,6 +286,7 @@ def test_snapshot_dedup_basic(basic_store_factory):
     assert len(get_data_keys(lib, symbol)) == num_elements
 
 
+@pytest.mark.storage
 def test_snapshot_dedup_multiple1(basic_store_factory):
     lib = basic_store_factory(
         column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
@@ -348,6 +355,7 @@ def test_snapshot_dedup_multiple1(basic_store_factory):
     assert len(get_data_keys(lib, symbol)) == 3 * num_elements / 2
 
 
+@pytest.mark.storage
 def test_snapshot_dedup_multiple2(basic_store_factory):
     lib = basic_store_factory(
         column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
@@ -404,6 +412,7 @@ def test_snapshot_dedup_multiple2(basic_store_factory):
     assert len(get_data_keys(lib, symbol)) == 3 * num_elements / 2
 
 
+@pytest.mark.storage
 def test_dedup_multi_keys(basic_store_factory):
     lib = basic_store_factory(
         column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
@@ -452,6 +461,7 @@ def test_dedup_multi_keys(basic_store_factory):
     comp_dict(data3, lib.read(symbol).data)
 
 
+@pytest.mark.storage
 def test_dedup_multi_keys_snapshot(basic_store_factory):
     lib = basic_store_factory(
         column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True

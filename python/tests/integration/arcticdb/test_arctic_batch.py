@@ -61,6 +61,7 @@ def generate_dataframe(columns, dt, num_days, num_rows_per_day):
     return pd.concat(dataframes)
 
 
+@pytest.mark.storage
 def test_write_meta_batch_with_as_ofs(arctic_library):
     lib = arctic_library
     num_symbols = 2
@@ -88,6 +89,7 @@ def test_write_meta_batch_with_as_ofs(arctic_library):
             assert results_list[idx].metadata == {"meta_" + str(sym): version}
 
 
+@pytest.mark.storage
 def test_write_metadata_batch_with_none(arctic_library):
     lib = arctic_library
     symbol = "symbol_"
@@ -116,6 +118,7 @@ def test_write_metadata_batch_with_none(arctic_library):
         assert results_read[sym].version == 0
 
 
+@pytest.mark.storage
 def test_read_meta_batch_with_as_ofs(arctic_library):
     lib = arctic_library
 
@@ -142,6 +145,7 @@ def test_read_meta_batch_with_as_ofs(arctic_library):
     assert batch[3].metadata == {"meta2": 1}
 
 
+@pytest.mark.storage
 def test_read_metadata_batch_with_none(arctic_library):
     lib = arctic_library
 
@@ -164,6 +168,7 @@ def test_read_metadata_batch_with_none(arctic_library):
     assert batch[1].version == 0
 
 
+@pytest.mark.storage
 def test_read_metadata_batch_missing_keys(arctic_library):
     lib = arctic_library
 
@@ -209,6 +214,7 @@ def test_read_metadata_batch_missing_keys(arctic_library):
     assert batch[2].metadata == {"meta3": 0}
 
 
+@pytest.mark.storage
 def test_read_metadata_batch_symbol_doesnt_exist(arctic_library):
     lib = arctic_library
 
@@ -231,6 +237,7 @@ def test_read_metadata_batch_symbol_doesnt_exist(arctic_library):
     assert batch[1].error_category == ErrorCategory.MISSING_DATA
 
 
+@pytest.mark.storage
 def test_read_metadata_batch_version_doesnt_exist(arctic_library):
     lib = arctic_library
 
@@ -263,6 +270,7 @@ class A:
         return self.id == other.id
 
 
+@pytest.mark.storage
 def test_write_batch_with_pickle_mode(arctic_library):
     """Writing in pickle mode should succeed when the user uses the dedicated method."""
     lib = arctic_library
@@ -275,6 +283,7 @@ def test_write_batch_with_pickle_mode(arctic_library):
     assert lib["test_2"].metadata == "the metadata"
 
 
+@pytest.mark.storage
 def test_write_object_in_batch_without_pickle_mode(arctic_library):
     """Writing outside of pickle mode should fail when the user does not use the dedicated method."""
     lib = arctic_library
@@ -287,6 +296,7 @@ def test_write_object_in_batch_without_pickle_mode(arctic_library):
     )
 
 
+@pytest.mark.storage
 def test_write_object_in_batch_without_pickle_mode_many_symbols(arctic_library):
     """Writing outside of pickle mode should fail when the user does not use the dedicated method."""
     lib = arctic_library
@@ -296,6 +306,7 @@ def test_write_object_in_batch_without_pickle_mode_many_symbols(arctic_library):
     assert "(and more)... 10 data in total have bad types." in message
 
 
+@pytest.mark.storage
 def test_write_batch_duplicate_symbols(arctic_library):
     """Should throw and not write if duplicate symbols are provided."""
     lib = arctic_library
@@ -310,6 +321,7 @@ def test_write_batch_duplicate_symbols(arctic_library):
     assert not lib.list_symbols()
 
 
+@pytest.mark.storage
 def test_write_pickle_batch_duplicate_symbols(arctic_library):
     """Should throw and not write if duplicate symbols are provided."""
     lib = arctic_library
@@ -324,6 +336,7 @@ def test_write_pickle_batch_duplicate_symbols(arctic_library):
     assert not lib.list_symbols()
 
 
+@pytest.mark.storage
 def test_write_pickle_batch_dataerror(library_factory):
     """Only way to trigger a DataError response with write_pickle_batch is to enable dedup and delete previous version's
     index key."""
@@ -359,6 +372,7 @@ def test_write_pickle_batch_dataerror(library_factory):
     assert vit.data == 4
 
 
+@pytest.mark.storage
 def test_write_batch(library_factory):
     """Should be able to write different size of batch of data."""
     lib = library_factory(LibraryOptions(rows_per_segment=10))
@@ -389,6 +403,7 @@ def test_write_batch(library_factory):
         assert_frame_equal(read_batch_result[sym].data, original_dataframe)
 
 
+@pytest.mark.storage
 def test_write_batch_dedup(library_factory):
     """Should be able to write different size of batch of data reusing deduplicated data from previous versions."""
     lib = library_factory(LibraryOptions(rows_per_segment=10, dedup=True))
@@ -429,6 +444,7 @@ def test_write_batch_dedup(library_factory):
             assert data_key_version[s] == 0
 
 
+@pytest.mark.storage
 def test_write_batch_missing_keys_dedup(library_factory):
     """When there is duplicate data to reuse for the current write, we need to access the index key of the previous
     versions in order to refer to the corresponding keys for the deduplicated data."""
@@ -471,6 +487,7 @@ def test_write_batch_missing_keys_dedup(library_factory):
     assert_frame_equal(read_dataframe.data, df2)
 
 
+@pytest.mark.storage
 def test_delete_batch(library_factory, sym):
     lib = library_factory(LibraryOptions(rows_per_segment=2))
     df = pd.DataFrame({"y": np.arange(1000)})
@@ -480,6 +497,7 @@ def test_delete_batch(library_factory, sym):
     assert not lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
 
 
+@pytest.mark.storage
 def test_append_batch(library_factory):
     lib = library_factory(LibraryOptions(rows_per_segment=10))
     assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
@@ -527,6 +545,7 @@ def test_append_batch(library_factory):
         assert_frame_equal(read_dataframe.data, original_dataframe)
 
 
+@pytest.mark.storage
 def test_append_batch_missing_keys(arctic_library):
     lib = arctic_library
 
@@ -569,6 +588,7 @@ def test_append_batch_missing_keys(arctic_library):
     assert_frame_equal(read_dataframe.data, pd.concat([df2_write, df2_append]))
 
 
+@pytest.mark.storage
 def test_read_batch_time_stamp(arctic_library):
     """Should be able to read data in batch mode using a timestamp."""
     lib = arctic_library
@@ -603,6 +623,7 @@ def test_read_batch_time_stamp(arctic_library):
         assert_frame_equal(d1.data, d2)
 
 
+@pytest.mark.storage
 def test_read_batch_mixed_request_supported(arctic_library):
     lib = arctic_library
 
@@ -624,6 +645,7 @@ def test_read_batch_mixed_request_supported(arctic_library):
     assert batch[3].data.empty
 
 
+@pytest.mark.storage
 def test_read_batch_with_columns(arctic_library):
     lib = arctic_library
 
@@ -637,6 +659,7 @@ def test_read_batch_with_columns(arctic_library):
     assert_frame_equal(pd.DataFrame({"B": [4, 5, 6], "C": [7, 8, 9]}), batch[0].data)
 
 
+@pytest.mark.storage
 def test_read_batch_overall_query_builder(arctic_library):
     lib = arctic_library
 
@@ -652,6 +675,7 @@ def test_read_batch_overall_query_builder(arctic_library):
     assert_frame_equal(batch[1].data, pd.DataFrame({"a": [4]}))
 
 
+@pytest.mark.storage
 def test_read_batch_per_symbol_query_builder(arctic_library):
     lib = arctic_library
 
@@ -669,6 +693,7 @@ def test_read_batch_per_symbol_query_builder(arctic_library):
     assert_frame_equal(batch[1].data, pd.DataFrame({"a": [4, 6]}))
 
 
+@pytest.mark.storage
 def test_read_batch_as_of(arctic_library):
     lib = arctic_library
 
@@ -685,6 +710,7 @@ def test_read_batch_as_of(arctic_library):
     assert type(batch[1]) == PythonVersionedItem
 
 
+@pytest.mark.storage
 def test_batch_methods_with_negative_as_of(arctic_library):
     lib = arctic_library
     sym = "test_batch_methods_with_negative_as_of"
@@ -707,6 +733,7 @@ def test_batch_methods_with_negative_as_of(arctic_library):
     assert res[1] == lib.get_description(sym, as_of=0)
 
 
+@pytest.mark.storage
 def test_read_batch_date_ranges(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
@@ -727,6 +754,7 @@ def test_read_batch_date_ranges(arctic_library):
     )
 
 
+@pytest.mark.storage
 def test_read_batch_date_ranges_dates_not_times(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
@@ -747,6 +775,7 @@ def test_read_batch_date_ranges_dates_not_times(arctic_library):
     )
 
 
+@pytest.mark.storage
 def test_read_batch_row_ranges(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
@@ -767,6 +796,7 @@ def test_read_batch_row_ranges(arctic_library):
     )
 
 
+@pytest.mark.storage
 def test_read_batch_overall_query_builder_and_per_request_query_builder_raises(arctic_library):
     lib = arctic_library
 
@@ -781,6 +811,7 @@ def test_read_batch_overall_query_builder_and_per_request_query_builder_raises(a
         lib.read_batch([ReadRequest("s", query_builder=q_1)], query_builder=q_2)
 
 
+@pytest.mark.storage
 def test_read_batch_unhandled_type(arctic_library):
     """Only str and ReadRequest are supported."""
     lib = arctic_library
@@ -789,6 +820,7 @@ def test_read_batch_unhandled_type(arctic_library):
         lib.read_batch([1])
 
 
+@pytest.mark.storage
 def test_read_batch_symbol_doesnt_exist(arctic_library):
     lib = arctic_library
 
@@ -807,6 +839,7 @@ def test_read_batch_symbol_doesnt_exist(arctic_library):
     assert batch[1].error_category == ErrorCategory.MISSING_DATA
 
 
+@pytest.mark.storage
 def test_read_batch_version_doesnt_exist(arctic_library):
     lib = arctic_library
 
@@ -834,6 +867,7 @@ def test_read_batch_version_doesnt_exist(arctic_library):
     assert batch[2].error_category == ErrorCategory.MISSING_DATA
 
 
+@pytest.mark.storage
 def test_read_batch_missing_keys(arctic_library):
     lib = arctic_library
 
@@ -882,6 +916,7 @@ def test_read_batch_missing_keys(arctic_library):
     assert batch[2].error_category == ErrorCategory.STORAGE
 
 
+@pytest.mark.storage
 def test_write_metadata_batch_missing_keys(arctic_library):
     lib = arctic_library
 
@@ -916,6 +951,7 @@ def test_write_metadata_batch_missing_keys(arctic_library):
     assert batch[1].error_category == ErrorCategory.STORAGE
 
 
+@pytest.mark.storage
 def test_read_batch_query_builder_missing_keys(arctic_library):
     lib = arctic_library
 
@@ -966,6 +1002,7 @@ def test_read_batch_query_builder_missing_keys(arctic_library):
     assert batch[2].error_category == ErrorCategory.STORAGE
 
 
+@pytest.mark.storage
 def test_get_description_batch_missing_keys(arctic_library):
     lib = arctic_library
 
@@ -1017,6 +1054,7 @@ def test_get_description_batch_missing_keys(arctic_library):
     assert batch[2].sorted == "ASCENDING"
 
 
+@pytest.mark.storage
 def test_get_description_batch_symbol_doesnt_exist(arctic_library):
     lib = arctic_library
 
@@ -1045,6 +1083,7 @@ def test_get_description_batch_symbol_doesnt_exist(arctic_library):
     assert batch[1].error_category == ErrorCategory.MISSING_DATA
 
 
+@pytest.mark.storage
 def test_get_description_batch_version_doesnt_exist(arctic_library):
     lib = arctic_library
 
@@ -1084,6 +1123,7 @@ def test_get_description_batch_version_doesnt_exist(arctic_library):
     assert batch[2].error_category == ErrorCategory.MISSING_DATA
 
 
+@pytest.mark.storage
 def test_read_batch_query_builder_symbol_doesnt_exist(arctic_library):
     lib = arctic_library
 
@@ -1103,6 +1143,7 @@ def test_read_batch_query_builder_symbol_doesnt_exist(arctic_library):
     assert batch[1].error_category == ErrorCategory.MISSING_DATA
 
 
+@pytest.mark.storage
 def test_read_batch_query_builder_version_doesnt_exist(arctic_library):
     lib = arctic_library
 
@@ -1132,6 +1173,7 @@ def test_read_batch_query_builder_version_doesnt_exist(arctic_library):
     assert batch[2].error_category == ErrorCategory.MISSING_DATA
 
 
+@pytest.mark.storage
 def test_delete_version_with_snapshot_batch(arctic_library):
     lib = arctic_library
     sym = "test_delete_version_with_snapshot_batch"
@@ -1152,6 +1194,7 @@ def test_delete_version_with_snapshot_batch(arctic_library):
         assert isinstance(lib.get_description_batch([read_info_request])[0], DataError)
 
 
+@pytest.mark.storage
 def test_get_description_batch(arctic_library):
     lib = arctic_library
 
@@ -1212,6 +1255,7 @@ def test_get_description_batch(arctic_library):
         assert info.sorted == "ASCENDING"
 
 
+@pytest.mark.storage
 def test_get_description_batch_multiple_versions(arctic_library):
     lib = arctic_library
 
@@ -1272,6 +1316,7 @@ def test_get_description_batch_multiple_versions(arctic_library):
         assert info.sorted == "ASCENDING"
 
 
+@pytest.mark.storage
 def test_get_description_batch_high_amount(arctic_library):
     lib = arctic_library
     num_symbols = 10
@@ -1311,6 +1356,7 @@ def test_get_description_batch_high_amount(arctic_library):
                 assert tz == pytz.UTC
 
 
+@pytest.mark.storage
 def test_get_description_batch_empty_nat(arctic_library):
     lib = arctic_library
     num_symbols = 10
@@ -1323,6 +1369,7 @@ def test_get_description_batch_empty_nat(arctic_library):
         assert np.isnat(results_list[sym].date_range[1])
 
 
+@pytest.mark.storage
 def test_read_batch_mixed_with_snapshots(arctic_library):
     num_symbols = 10
     num_versions = 10
