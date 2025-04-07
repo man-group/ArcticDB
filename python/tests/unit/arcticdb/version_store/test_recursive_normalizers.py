@@ -11,6 +11,7 @@ from arcticdb.util.venv import CompatLibrary
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.storage import KeyType
 
+from tests.util.mark import PYARROW_TESTS_MARK
 
 class AlmostAList(list):
     pass
@@ -217,6 +218,7 @@ assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
                 for key in data.keys():
                     assert_frame_equal(data[key], expected[key])
 
+    @PYARROW_TESTS_MARK
     def test_write_new_read_old(self, old_venv_and_arctic_uri, lib_name):
         old_venv, arctic_uri = old_venv_and_arctic_uri
         with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
