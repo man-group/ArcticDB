@@ -104,6 +104,8 @@ class S3Bucket(StorageFixture):
             self.arctic_uri += f"&path_prefix={factory.default_prefix}"
         if factory.ssl:
             self.arctic_uri += "&ssl=True"
+        if factory.is_nfs_layout:
+            self.arctic_uri += "&is_nfs_layout=True"
         if platform.system() == "Linux":
             if factory.client_cert_file:
                 self.arctic_uri += f"&CA_cert_path={self.factory.client_cert_file}"
@@ -203,17 +205,16 @@ class NfsS3Bucket(S3Bucket):
 
 
 class GcpS3Bucket(S3Bucket):
-
     def __init__(
         self,
         factory: "BaseGCPStorageFixtureFactory",
         bucket: str,
         native_config: Optional[NativeVariantStorage] = None,
     ):
-        if any(sub in factory.endpoint for sub in ["http:", "https:"])  :
+        if any(sub in factory.endpoint for sub in ["http:", "https:"]):
             super().__init__(factory, bucket, native_config=native_config)
             self.arctic_uri = self.arctic_uri.replace("s3", "gcpxml", 1)
-        else: 
+        else:
             StorageFixture.__init__(self)
             self.factory = factory
             self.bucket = bucket
@@ -247,10 +248,7 @@ class GcpS3Bucket(S3Bucket):
             with_prefix = False
 
         add_gcp_library_to_env(
-            cfg=cfg,
-            lib_name=lib_name,
-            env_name=Defaults.ENV,
-            with_prefix=with_prefix
+            cfg=cfg, lib_name=lib_name, env_name=Defaults.ENV, with_prefix=with_prefix
         )  # client_cert_dir is skipped on purpose; It will be tested manually in other tests
         return cfg, self.native_config
 
@@ -356,6 +354,7 @@ def real_s3_from_environment_variables(
     else:
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "") + additional_suffix
     return out
+
 
 def real_gcp_from_environment_variables(
     shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""
@@ -719,6 +718,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         use_mock_storage_for_testing: bool = False,
         use_internal_client_wrapper_for_testing: bool = False,
         native_config: Optional[NativeVariantStorage] = None,
+        is_nfs_layout: bool = False,
     ):
         super().__init__(native_config)
         self.http_protocol = "https" if use_ssl else "http"
@@ -728,6 +728,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self.use_raw_prefix = use_raw_prefix
         self.use_mock_storage_for_testing = use_mock_storage_for_testing
         self.use_internal_client_wrapper_for_testing = use_internal_client_wrapper_for_testing
+        self.is_nfs_layout = is_nfs_layout
         # This is needed because we might have multiple factory instances in the same test run
         # and we need to make sure the bucket names are unique
         # set the unique_id to the current UNIX timestamp to avoid conflicts

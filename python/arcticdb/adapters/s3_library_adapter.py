@@ -62,6 +62,8 @@ class ParsedQuery:
 
     ssl: Optional[bool] = False
 
+    is_nfs_layout: bool = False
+
 
 class S3LibraryAdapter(ArcticLibraryAdapter):
     REGEX = r"s3(s)?://(?P<endpoint>.*):(?P<bucket>[-_a-zA-Z0-9.]+)(?P<query>\?.*)?"
@@ -105,13 +107,20 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
         self._ssl = self._query_params.ssl
 
+        self._is_nfs_layout = self._query_params.is_nfs_layout
+
         if "amazonaws" in self._endpoint:
             self._configure_aws()
 
         super().__init__(uri, self._encoding_version)
 
     def native_config(self):
-        return NativeVariantStorage(NativeS3Settings(self._query_params.aws_auth, self._query_params.aws_profile, False))
+        if self._is_nfs_layout:
+            return None
+        else:
+            return NativeVariantStorage(
+                NativeS3Settings(self._query_params.aws_auth, self._query_params.aws_profile, False)
+            )
 
     def __repr__(self):
         return "S3(endpoint=%s, bucket=%s)" % (self._endpoint, self._bucket)
@@ -148,14 +157,22 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             ca_cert_path=self._ca_cert_path,
             ca_cert_dir=self._ca_cert_dir,
             ssl=self._ssl,
+            is_nfs_layout=self._is_nfs_layout,
             aws_auth=self._query_params.aws_auth,
             aws_profile=self._query_params.aws_profile,
             native_cfg=self.native_config(),
         )
-
-        lib = NativeVersionStore.create_store_from_config(
-            (env_cfg, self.native_config()), _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
-        )
+        if self._is_nfs_layout:
+            lib = NativeVersionStore.create_store_from_config(
+                (env_cfg), _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
+            )
+        else:
+            lib = NativeVersionStore.create_store_from_config(
+                (env_cfg, self.native_config()),
+                _DEFAULT_ENV,
+                CONFIG_LIBRARY_NAME,
+                encoding_version=self._encoding_version,
+            )
 
         return lib._library
 
@@ -230,7 +247,8 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
     def get_storage_override(self) -> StorageOverride:
         storage_override = StorageOverride()
-        storage_override.set_s3_override(self._get_s3_override())
+        if not self._is_nfs_layout:
+            storage_override.set_s3_override(self._get_s3_override())
         return storage_override
 
     def get_masking_override(self) -> StorageOverride:
@@ -272,6 +290,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             ca_cert_path=self._ca_cert_path,
             ca_cert_dir=self._ca_cert_dir,
             ssl=self._ssl,
+            is_nfs_layout=self._is_nfs_layout,
             aws_auth=self._query_params.aws_auth,
             aws_profile=self._query_params.aws_profile,
             native_cfg=self.native_config(),
