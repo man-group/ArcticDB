@@ -428,7 +428,7 @@ bool do_iterate_type_impl(
     if (prefix.empty()) {
         key_type_dir += "/";
     }
-    QUERY_STATS_ADD_GROUP(key_type, key_type)
+    QUERY_STATS_SET_KEY_TYPE(key_type)
 
     // Generally we get the key descriptor from the AtomKey, but in the case of iterating version journals
     // where we want to have a narrower prefix, we can use the info that it's a version journal and derive
@@ -444,7 +444,7 @@ bool do_iterate_type_impl(
 
     auto continuation_token = std::optional<std::string>();
     do {
-        QUERY_STATS_ADD_GROUP_WITH_TIME(storage_ops, "ListObjectsV2")
+        QUERY_STATS_SET_TASK_TYPE(S3_ListObjectsV2)
         auto list_objects_result = s3_client.list_objects(key_prefix, bucket_name, continuation_token);
         if (list_objects_result.is_success()) {
             auto& output = list_objects_result.get_output();

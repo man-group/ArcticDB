@@ -12,103 +12,42 @@
 
 namespace arcticdb::util::query_stats {
 
-std::shared_ptr<GroupingLevel> QueryStats::current_level(){
-    // current_level_ != nullptr && root_level_ != nullptr -> stats has been setup; Nothing to do
-    // current_level_ == nullptr && root_level_ == nullptr -> clean slate; Need to setup
-    // current_level_ != nullptr && root_level_ == nullptr -> Something is off
-    // current_level_ == nullptr && root_level_ != nullptr -> Something is off
-    if (!thread_local_var_.current_level_ || !thread_local_var_.root_level_) {
-        check(!async::is_folly_thread, "Folly thread should have its GroupingLevel passed by caller only");
-        check(thread_local_var_.current_level_.operator bool() == thread_local_var_.root_level_.operator bool(), 
-            "QueryStats root_level_ and current_level_ should be either both null or both non-null");
-        thread_local_var_.root_level_ = std::make_shared<GroupingLevel>();
-        thread_local_var_.current_level_ = thread_local_var_.root_level_;
-        std::lock_guard<std::mutex> lock(root_level_mutex_);
-        root_levels_.emplace_back(thread_local_var_.root_level_);
-        ARCTICDB_DEBUG(log::version(), "Current GroupingLevel created");
+
+OpStats::OpStats() : 
+    logical_key_counts_{0},
+    result_count_(0),
+    total_time_ms_(0),
+    count_(0) {
+
+}
+
+OpStats& OpStats::operator=(const OpStats& other) {
+    if (this != &other) {
+        for (size_t i = 0; i < logical_key_counts_.size(); ++i) {
+            logical_key_counts_[i] = other.logical_key_counts_[i].load(std::memory_order_relaxed);
+        }
+        result_count_ = other.result_count_.load(std::memory_order_relaxed);
+        total_time_ms_ = other.total_time_ms_.load(std::memory_order_relaxed);
+        count_ = other.count_.load(std::memory_order_relaxed);
     }
-    return thread_local_var_.current_level_;
+    return *this;
 }
 
-void QueryStats::set_level(std::shared_ptr<GroupingLevel> &level) {
-    thread_local_var_.current_level_ = level;
+
+CallStats::CallStats() : 
+    keys_stats_{},
+    total_time_ms_(0),
+    count_(0) {
+
 }
 
-void QueryStats::set_root_level(std::shared_ptr<GroupingLevel> &level) {
-    thread_local_var_.current_level_ = level;
-    thread_local_var_.root_level_ = level;
+QueryStats& QueryStats::instance() {
+    return instance_;
 }
 
 void QueryStats::reset_stats() {
     check(!async::TaskScheduler::instance()->tasks_pending(), "Folly tasks are still running");
-    std::lock_guard<std::mutex> lock(root_level_mutex_);
-    for (auto& level : root_levels_) {
-        level->reset_stats();
-    }
-}
-
-QueryStats& QueryStats::instance() {
-    static QueryStats instance;
-    return instance;
-}
-
-void QueryStats::merge_levels() {
-    for (auto& child_level : thread_local_var_.child_levels_) {
-        child_level.parent_level_->merge_from(*child_level.root_level_);
-    }
-    thread_local_var_.child_levels_.clear();
-}
-
-void GroupingLevel::reset_stats() {
-    stats_.fill(0);
-    for (auto& next_level_map : next_level_maps_) {
-        next_level_map.clear();
-    }
-}
-
-void GroupingLevel::merge_from(const GroupingLevel& other) {
-    for (size_t i = 0; i < stats_.size(); ++i) {
-        stats_[i] += other.stats_[i];
-    }
-    
-    for (size_t i = 0; i < next_level_maps_.size(); ++i) {
-        for (const auto& [key, other_level] : other.next_level_maps_[i]) {
-            auto& next_level_map = next_level_maps_[i];
-            auto it = next_level_map.find(key);
-            if (it == next_level_map.end()) {
-                it = next_level_map.emplace(key, std::make_shared<GroupingLevel>()).first;
-            }
-            it->second->merge_from(*other_level);
-        }
-    }
-}
-
-std::shared_ptr<GroupingLevel> QueryStats::root_level() {
-    if (!thread_local_var_.root_level_) {
-        util::check(!thread_local_var_.current_level_, "QueryStats current_level_ should be null if root_level_ is null");
-        thread_local_var_.root_level_ = std::make_shared<GroupingLevel>();
-        thread_local_var_.current_level_ = thread_local_var_.root_level_;
-        std::lock_guard<std::mutex> lock(root_level_mutex_);
-        root_levels_.emplace_back(thread_local_var_.root_level_);
-        ARCTICDB_DEBUG(log::version(), "Root GroupingLevel created");
-    }
-    return thread_local_var_.root_level_;
-}
-
-const std::vector<std::shared_ptr<GroupingLevel>>& QueryStats::root_levels() const{
-    check(!async::TaskScheduler::instance()->tasks_pending(), "Folly tasks are still running");
-    return root_levels_;
-}
-
-bool QueryStats::is_root_level_set() const {
-    return thread_local_var_.root_level_.operator bool();
-}
-
-void QueryStats::create_child_level(ThreadLocalQueryStatsVar& parent_thread_local_var) {
-    auto child_level = std::make_shared<GroupingLevel>();
-    set_root_level(child_level);
-    std::lock_guard<std::mutex> lock(parent_thread_local_var.child_level_creation_mutex_);
-    parent_thread_local_var.child_levels_.emplace_back(parent_thread_local_var.current_level_, child_level);
+    calls_stats_map_.clear();
 }
 
 void QueryStats::enable() {
@@ -123,33 +62,38 @@ bool QueryStats::is_enabled() const {
     return is_enabled_;
 }
 
-StatsGroup::StatsGroup(bool log_time, GroupName col, const std::string& value) : 
-        prev_level_(QueryStats::instance().current_level()),
-        start_(std::chrono::high_resolution_clock::now()),
-        log_time_(log_time) {
-    check(async::is_folly_thread || 
-        prev_level_ != QueryStats::instance().root_level() || 
-        col == GroupName::arcticdb_call,
-        "Root of query stats map should always be set to arcticdb_call");
-    auto& next_level_map = prev_level_->next_level_maps_[static_cast<size_t>(col)];
-    if (next_level_map.find(value) == next_level_map.end()) {
-        next_level_map[value] = std::make_shared<GroupingLevel>();
+void QueryStats::set_call(const std::string& call_name){
+    std::lock_guard<std::mutex> lock(calls_stats_map_mutex_);
+    if (auto it = calls_stats_map_.find(call_name); it != calls_stats_map_.end()) {
+        call_stat_ptr_ = &it->second;
+    } 
+    else {
+        auto insert_result = calls_stats_map_.emplace(std::piecewise_construct, std::forward_as_tuple(call_name), std::forward_as_tuple(CallStats()));
+        call_stat_ptr_ = &insert_result.first->second;
     }
-    QueryStats::instance().set_level(next_level_map[value]);
 }
 
-StatsGroup::~StatsGroup() {
-    auto& query_stats_instance = QueryStats::instance();
-    if (log_time_) {
-        auto end = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start_);
-        auto& stats = query_stats_instance.current_level()->stats_;
-        stats[static_cast<size_t>(StatsName::total_time_ms)] += duration.count();
-        stats[static_cast<size_t>(StatsName::count)]++;
-    }
-    query_stats_instance.set_level(prev_level_);
-    if (!async::is_folly_thread && query_stats_instance.current_level() == query_stats_instance.root_level()) {
-        query_stats_instance.merge_levels();
-    }
+CallStats& QueryStats::get_call_stats(){
+    check(get_call_stats_ptr() != nullptr, "Call stat pointer is null"); \
+    return *call_stat_ptr_;
+}
+
+CallStats* QueryStats::get_call_stats_ptr(){
+    check(get_call_stats_ptr() != nullptr, "Call stat pointer is null");
+    return call_stat_ptr_;
+}
+
+void QueryStats::set_call_stat_ptr(CallStats* call_stat_ptr) {
+    call_stat_ptr_ = call_stat_ptr;
+}
+
+RAIIRunLambda::RAIIRunLambda(std::function<void(uint64_t)> lambda) :
+    lambda_(std::move(lambda)),
+    start_(std::chrono::steady_clock::now()) {
+
+}
+
+RAIIRunLambda::~RAIIRunLambda() {
+    lambda_(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_).count());
 }
 }

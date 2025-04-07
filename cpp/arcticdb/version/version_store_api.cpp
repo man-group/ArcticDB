@@ -501,7 +501,7 @@ std::set<StreamId> PythonVersionStore::list_streams(
     const std::optional<bool>& opt_all_symbols
 
     ) {
-    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "list_symbols");
+    QUERY_STATS_SET_CALL("list_symbols");
     return list_streams_internal(snap_name, regex, prefix, opt_use_symbol_list, opt_all_symbols);
 }
 
@@ -608,7 +608,6 @@ VersionedItem PythonVersionStore::write_versioned_dataframe(
     bool sparsify_floats,
     bool validate_index) {
     ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
-    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "write_versioned_dataframe");
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types());
     auto versioned_item = write_versioned_dataframe_internal(stream_id, frame, prune_previous_versions, sparsify_floats, validate_index);
 
@@ -764,7 +763,6 @@ void PythonVersionStore::write_parallel(
     bool validate_index,
     bool sort_on_index,
     std::optional<std::vector<std::string>> sort_columns) const {
-    QUERY_STATS_ADD_GROUP_WITH_TIME(arcticdb_call, "write_parallel");
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, py::none(), cfg().write_options().empty_types());
     write_parallel_frame(stream_id, frame, validate_index, sort_on_index, sort_columns);
 }
