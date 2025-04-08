@@ -4,7 +4,7 @@ import pytest
 import sys
 
 from arcticdb_ext.tools import ReliableStorageLock, ReliableStorageLockManager
-from tests.util.mark import REAL_S3_TESTS_MARK
+from tests.util.mark import REAL_GCP_TESTS_MARK, REAL_S3_TESTS_MARK
 
 import time
 
@@ -32,6 +32,7 @@ def slow_increment_task(real_storage_factory, lib_name, symbol, sleep_time):
 
 @pytest.mark.parametrize("num_processes,max_sleep", [(100, 1), (5, 20)])
 @REAL_S3_TESTS_MARK
+@REAL_GCP_TESTS_MARK
 @pytest.mark.storage
 def test_many_increments(real_storage_factory, lib_name, num_processes, max_sleep):
     fixture = real_storage_factory.create_fixture()
