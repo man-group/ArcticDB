@@ -1068,7 +1068,7 @@ static bool read_incompletes_to_pipeline(
     std::shared_ptr<PipelineContext>& pipeline_context,
     const ReadQuery& read_query,
     const ReadOptions& read_options,
-    const ReadIncompletesFlags flags) {
+    const ReadIncompletesFlags& flags) {
 
     auto incomplete_segments = get_incomplete(
         store,
@@ -1691,22 +1691,33 @@ std::optional<DeleteIncompleteKeysOnExit> get_delete_keys_on_failure(
         return std::nullopt;
 }
 
-static void read_indexed_keys_and_validate_compaction_slicing_policy(
+static void read_indexed_keys_for_compaction(
     const CompactIncompleteOptions &options,
     const UpdateInfo &update_info,
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<PipelineContext> &pipeline_context,
-    const WriteOptions& write_options,
     ReadQuery& read_query,
     const ReadOptions& read_options
 ) {
     const bool append_to_existing = options.append_ && update_info.previous_index_key_.has_value();
     if(append_to_existing) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, read_options);
+    }
+}
+
+static void validate_slicing_policy_for_compaction(
+    const CompactIncompleteOptions &options,
+    const UpdateInfo &update_info,
+    const std::shared_ptr<PipelineContext> &pipeline_context,
+    const WriteOptions& write_options
+) {
+    const bool append_to_existing = options.append_ && update_info.previous_index_key_.has_value();
+    if(append_to_existing) {
         if (!write_options.dynamic_schema && !pipeline_context->slice_and_keys_.empty()) {
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 pipeline_context->slice_and_keys_.front().slice().columns() == pipeline_context->slice_and_keys_.back().slice().columns(),
-                "Appending using sort and finalize is not supported when existing data being appended to is column sliced."
+                "Appending using sort_and_finalize_staged_data/compact_incompletes/finalize_staged_data is not"
+                " supported when existing data being appended to is column sliced."
             );
         }
     }
@@ -1730,7 +1741,8 @@ VersionedItem sort_merge_impl(
     std::shared_ptr<PipelineContext>& pipeline_context) {
     auto read_query = ReadQuery{};
 
-    read_indexed_keys_and_validate_compaction_slicing_policy(options, update_info, store, pipeline_context, write_options, read_query, ReadOptions{});
+    read_indexed_keys_for_compaction(options, update_info, store, pipeline_context, read_query, ReadOptions{});
+    validate_slicing_policy_for_compaction(options, update_info, pipeline_context, write_options);
     const auto num_versioned_rows = pipeline_context->total_rows_;
     const bool append_to_existing = options.append_ && update_info.previous_index_key_.has_value();
     // Cache this before calling read_incompletes_to_pipeline as it changes the descripor
@@ -1850,7 +1862,8 @@ VersionedItem compact_incomplete_impl(
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     std::optional<SegmentInMemory> last_indexed;
-    read_indexed_keys_and_validate_compaction_slicing_policy(options, update_info, store, pipeline_context, write_options, read_query, read_options);
+    read_indexed_keys_for_compaction(options, update_info, store, pipeline_context, read_query, ReadOptions{});
+    validate_slicing_policy_for_compaction(options, update_info, pipeline_context, write_options);
     const bool append_to_existing = options.append_ && update_info.previous_index_key_.has_value();
     // Cache this before calling read_incompletes_to_pipeline as it changes the descriptor.
     const std::optional<SortedValue> initial_index_sorted_status = append_to_existing ? std::optional{pipeline_context->desc_->sorted()} : std::nullopt;
