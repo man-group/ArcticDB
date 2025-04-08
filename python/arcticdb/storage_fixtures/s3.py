@@ -265,6 +265,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
     clean_bucket_on_fixture_exit = True
     use_mock_storage_for_testing = None  # If set to true allows error simulation
     use_internal_client_wrapper_for_testing = None  # If set to true uses the internal client wrapper for testing
+    is_nfs_layout: bool = False
 
     def __init__(self, native_config: Optional[dict] = None):
         self.client_cert_file = None
