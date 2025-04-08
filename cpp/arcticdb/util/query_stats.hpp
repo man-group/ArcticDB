@@ -22,7 +22,11 @@
 
 #include <arcticdb/entity/key.hpp>
 
-namespace arcticdb::util::query_stats {
+namespace arcticdb{
+namespace async {
+    class TaskScheduler;
+};
+namespace util::query_stats {
 enum class TaskType : size_t {
     S3_ListObjectsV2 = 0
 };
@@ -64,7 +68,7 @@ public:
     void set_call(const std::string& call_name);
     void set_call_stats(std::shared_ptr<CallStats>&& call_stats);
     std::shared_ptr<CallStats> get_call_stats();
-    ankerl::unordered_dense::map<std::string, std::shared_ptr<CallStats>> get_calls_stats_map();
+    ankerl::unordered_dense::map<std::string, std::shared_ptr<CallStats>> get_calls_stats_map(async::TaskScheduler* const instance);
     QueryStats(const QueryStats&) = delete;
     QueryStats() = default;
 private:
@@ -84,7 +88,8 @@ private:
     std::function<void(uint64_t)> lambda_;
     std::chrono::time_point<std::chrono::steady_clock> start_;
 };
-}
+} //util::query_stats
+} //arcticdb
 
 #define QUERY_STATS_SET_CALL(call_name) \
     std::optional<arcticdb::util::query_stats::RAIIRunLambda> log_total_time = std::nullopt; \

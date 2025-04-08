@@ -190,13 +190,13 @@ TEST(Async, StatsQueryDemo) {
                     return folly::Unit{};
                 })
             );
-            folly::collectAll(stuff);
+            folly::collectAll(stuff).get();
         }
     };
     std::thread t1(work), t2(work); // mimic multithreading at python level
     t1.join();
     t2.join();
-    auto result = QueryStats::instance().get_calls_stats_map();
+    auto result = QueryStats::instance().get_calls_stats_map(&sched);
     auto it = result.find("AddFuture");
     ASSERT_TRUE(it != result.end());
     ASSERT_EQ(it->second->count_, 2);

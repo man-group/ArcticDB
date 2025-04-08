@@ -122,7 +122,8 @@ void QueryStats::set_call_stats(std::shared_ptr<CallStats>&& call_stats) {
     call_stat_ptr_ = std::move(call_stats);
 }
 
-ankerl::unordered_dense::map<std::string, std::shared_ptr<CallStats>> QueryStats::get_calls_stats_map() {
+ankerl::unordered_dense::map<std::string, std::shared_ptr<CallStats>> QueryStats::get_calls_stats_map(async::TaskScheduler* const instance) {
+    check(!instance->tasks_pending(), "Folly tasks are still running");
     std::lock_guard<std::mutex> lock(calls_stats_map_mutex_);
     return calls_stats_map_;
 }
