@@ -239,7 +239,7 @@ class TaskScheduler {
         std::lock_guard lock{cpu_mutex_};
         if (util::query_stats::QueryStats::instance().is_enabled()) {
             auto wrapped_task = [call_stats = util::query_stats::QueryStats::instance().get_call_stats(), task = std::move(task)]() mutable{
-                    util::query_stats::QueryStats::instance().set_call_stats(std::move(call_stats));
+                util::query_stats::QueryStats::instance().set_call_stats(std::move(call_stats));
                 return task();
             };
             return cpu_exec_.addFuture(std::move(wrapped_task));
