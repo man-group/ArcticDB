@@ -184,7 +184,7 @@ KeySegmentPair NfsBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts o
 
 void NfsBackedStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
     auto enc = encode_object_id(variant_key);
-    std::array<VariantKey, 1> arr{std::move(enc)};
+    std::array<VariantKey, 1> arr{std::move(variant_key)};
     s3::detail::do_remove_impl(std::span(arr), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
