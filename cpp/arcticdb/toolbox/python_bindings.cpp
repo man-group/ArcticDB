@@ -16,6 +16,7 @@
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/util/storage_lock.hpp>
 #include <arcticdb/util/reliable_storage_lock.hpp>
+#include <arcticdb/util/query_stats.hpp>
 #include <arcticdb/toolbox/storage_mover.hpp>
 
 namespace arcticdb::toolbox::apy {

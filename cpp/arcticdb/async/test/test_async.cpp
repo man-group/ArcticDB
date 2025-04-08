@@ -11,10 +11,11 @@
 #include <arcticdb/storage/library_index.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/async/async_store.hpp>
-#include <arcticdb/util/test/config_common.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
+#include <arcticdb/util/test/config_common.hpp>
 #include <arcticdb/util/random.h>
+#include <arcticdb/util/query_stats.hpp>
 
 #include <fmt/format.h>
 
@@ -158,7 +159,6 @@ TEST(Async, StatsQueryDemo) {
     auto work = [&]() {
         std::vector<folly::Future<folly::Unit>> stuff;
         {
-            QUERY_STATS_SET_CALL("AddFuture") // Always add group at the bottom of the C++ call stack
             stuff.push_back(sched.submit_cpu_task(MaybeThrowTask(false))
                 .thenValue([](auto) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(1)); // For verifying call duration calculation
@@ -196,13 +196,11 @@ TEST(Async, StatsQueryDemo) {
     std::thread t1(work), t2(work); // mimic multithreading at python level
     t1.join();
     t2.join();
-    auto result = QueryStats::instance().get_calls_stats_map(&sched);
-    auto it = result.find("AddFuture");
-    ASSERT_TRUE(it != result.end());
-    ASSERT_EQ(it->second->count_, 2);
-    ASSERT_TRUE(it->second->total_time_ms_ > 1);
-    ASSERT_EQ(it->second->keys_stats_[static_cast<size_t>(KeyType::SYMBOL_LIST)][static_cast<size_t>(TaskType::S3_ListObjectsV2)].count_, 6);
-    ASSERT_EQ(it->second->keys_stats_[static_cast<size_t>(KeyType::SYMBOL_LIST)][static_cast<size_t>(TaskType::S3_ListObjectsV2)].result_count_, 1158);
+    auto& result = QueryStats::instance().get_stats(&sched);
+    ASSERT_EQ(result.count_, 2);
+    ASSERT_TRUE(result.total_time_ms_ > 1);
+    ASSERT_EQ(result.keys_stats_[static_cast<size_t>(KeyType::SYMBOL_LIST)][static_cast<size_t>(TaskType::S3_ListObjectsV2)].count_, 6);
+    ASSERT_EQ(result.keys_stats_[static_cast<size_t>(KeyType::SYMBOL_LIST)][static_cast<size_t>(TaskType::S3_ListObjectsV2)].result_count_, 1158);
 }
 
 using IndexSegmentReader = int;

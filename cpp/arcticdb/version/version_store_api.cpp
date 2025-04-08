@@ -501,7 +501,6 @@ std::set<StreamId> PythonVersionStore::list_streams(
     const std::optional<bool>& opt_all_symbols
 
     ) {
-    QUERY_STATS_SET_CALL("list_symbols");
     return list_streams_internal(snap_name, regex, prefix, opt_use_symbol_list, opt_all_symbols);
 }
 

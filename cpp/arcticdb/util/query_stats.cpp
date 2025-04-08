@@ -21,62 +21,31 @@ OpStats::OpStats() :
 
 }
 
-OpStats::OpStats(const OpStats& other) : 
-    result_count_(other.result_count_.load(std::memory_order_relaxed)),
-    total_time_ms_(other.total_time_ms_.load(std::memory_order_relaxed)),
-    count_(other.count_.load(std::memory_order_relaxed)) {
-    for (size_t i = 0; i < logical_key_counts_.size(); ++i) {
-        logical_key_counts_[i] = other.logical_key_counts_[i].load(std::memory_order_relaxed);
+void OpStats::reset_stats() {
+    for (auto& logical_key_count : logical_key_counts_) {
+        logical_key_count = 0;
     }
-}
-
-OpStats::OpStats(OpStats&& other) noexcept : 
-    result_count_(other.result_count_.load(std::memory_order_relaxed)),
-    total_time_ms_(other.total_time_ms_.load(std::memory_order_relaxed)),
-    count_(other.count_.load(std::memory_order_relaxed)) {
-    for (size_t i = 0; i < logical_key_counts_.size(); ++i) {
-        logical_key_counts_[i] = other.logical_key_counts_[i].load(std::memory_order_relaxed);
-    }
-}
-
-OpStats& OpStats::operator=(const OpStats& other) {
-    if (this != &other) {
-        for (size_t i = 0; i < logical_key_counts_.size(); ++i) {
-            logical_key_counts_[i] = other.logical_key_counts_[i].load(std::memory_order_relaxed);
-        }
-        result_count_ = other.result_count_.load(std::memory_order_relaxed);
-        total_time_ms_ = other.total_time_ms_.load(std::memory_order_relaxed);
-        count_ = other.count_.load(std::memory_order_relaxed);
-    }
-    return *this;
+    result_count_ = 0;
+    total_time_ms_ = 0;
+    count_ = 0;
 }
 
 
-CallStats::CallStats() : 
+Stats::Stats() : 
     keys_stats_{},
     total_time_ms_(0),
     count_(0) {
 
 }
 
-CallStats::CallStats(const CallStats& other) : 
-    total_time_ms_(other.total_time_ms_.load(std::memory_order_relaxed)),
-    count_(other.count_.load(std::memory_order_relaxed)) {
-    for (size_t i = 0; i < NUMBER_OF_KEYS; ++i) {
-        for (size_t j = 0; j < NUMBER_OF_TASK_TYPES; ++j) {
-            keys_stats_[i][j] = other.keys_stats_[i][j];
+void Stats::reset_stats() {
+    for (auto& op_stats : keys_stats_) {
+        for (auto& op_stat : op_stats) {
+            op_stat.reset_stats();
         }
     }
-}
-
-CallStats::CallStats(CallStats&& other) noexcept : 
-    total_time_ms_(other.total_time_ms_.load(std::memory_order_relaxed)),
-    count_(other.count_.load(std::memory_order_relaxed)) {
-    for (size_t i = 0; i < NUMBER_OF_KEYS; ++i) {
-        for (size_t j = 0; j < NUMBER_OF_TASK_TYPES; ++j) {
-            keys_stats_[i][j] = std::move(other.keys_stats_[i][j]);
-        }
-    }
+    total_time_ms_ = 0;
+    count_ = 0;
 }
 
 QueryStats QueryStats::instance_;
@@ -87,8 +56,7 @@ QueryStats& QueryStats::instance() {
 
 void QueryStats::reset_stats() {
     check(!async::TaskScheduler::instance()->tasks_pending(), "Folly tasks are still running");
-    std::lock_guard<std::mutex> lock(calls_stats_map_mutex_);
-    calls_stats_map_.clear();
+    stats_.reset_stats();
 }
 
 void QueryStats::enable() {
@@ -103,30 +71,9 @@ bool QueryStats::is_enabled() const {
     return is_enabled_;
 }
 
-void QueryStats::set_call(const std::string& call_name){
-    std::lock_guard<std::mutex> lock(calls_stats_map_mutex_);
-    if (auto it = calls_stats_map_.find(call_name); it != calls_stats_map_.end()) {
-        call_stat_ptr_ = it->second;
-    } 
-    else {
-        auto insert_result = calls_stats_map_.emplace(call_name, std::make_shared<CallStats>());
-        call_stat_ptr_ = insert_result.first->second;
-    }
-}
-
-std::shared_ptr<CallStats> QueryStats::get_call_stats(){
-    check(call_stat_ptr_.operator bool(), "Call stat pointer is null");
-    return call_stat_ptr_;
-}
-
-void QueryStats::set_call_stats(std::shared_ptr<CallStats>&& call_stats) {
-    call_stat_ptr_ = std::move(call_stats);
-}
-
-ankerl::unordered_dense::map<std::string, std::shared_ptr<CallStats>> QueryStats::get_calls_stats_map(async::TaskScheduler* const instance) {
+const Stats& QueryStats::get_stats(async::TaskScheduler* const instance) const {
     check(!instance->tasks_pending(), "Folly tasks are still running");
-    std::lock_guard<std::mutex> lock(calls_stats_map_mutex_);
-    return calls_stats_map_;
+    return stats_;
 }
 
 RAIIRunLambda::RAIIRunLambda(std::function<void(uint64_t)>&& lambda) :

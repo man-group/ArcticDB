@@ -14,7 +14,6 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/home_directory.hpp>
 #include <arcticdb/util/string_utils.hpp>
-#include <arcticdb/util/query_stats.hpp>
 
 #include <arcticdb/async/base_task.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
@@ -175,52 +174,12 @@ inline auto get_default_num_cpus([[maybe_unused]] const std::string& cgroup_fold
  * 3/ Priority: How to assign priorities to task in order to treat the most pressing first.
  * 4/ Throttling: (similar to priority) how to absorb work spikes and apply memory backpressure
  */
-template <typename T>
-class ExecutorWithStatsInstance : public T{
-    public:
-        template<typename... Args>
-        ExecutorWithStatsInstance(Args&&... args) : T(std::forward<Args>(args)...){}
-
-        // The first overload function will call the second one in folly. Have to override both as they are overloading
-        // Called by the submitter when submitted to a executor
-        // Could be called by worker thread to submit the subsequent task back to executor
-        void add(folly::Func func) override {
-            T::add(std::move(func));
-        }
-
-        void add(folly::Func func,
-            std::chrono::milliseconds expiration,
-            folly::Func expireCallback) override {
-            if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) {
-                auto wrapped_func = [call_stats = util::query_stats::QueryStats::instance().get_call_stats(), func = std::move(func)](auto&&... vars) mutable{
-                    util::query_stats::QueryStats::instance().set_call_stats(std::move(call_stats));
-                    return func(std::forward<decltype(vars)>(vars)...);
-                };
-                T::add(std::move(wrapped_func), expiration, std::move(expireCallback));
-            }
-            else {
-                T::add(std::move(func), expiration, std::move(expireCallback));
-            }
-        }
-};
-
-template <typename T>
-class SchedulerTypeWithStatsInstanceExecutor : public folly::FutureExecutor<ExecutorWithStatsInstance<T>>{
-    public:
-        template<typename... Args>
-        SchedulerTypeWithStatsInstanceExecutor(Args&&... args) : folly::FutureExecutor<ExecutorWithStatsInstance<T>>(std::forward<Args>(args)...){}
-        
-        auto addFuture(auto &&func) {
-            return folly::FutureExecutor<ExecutorWithStatsInstance<T>>::addFuture(std::forward<decltype(func)>(func));
-        }
-};
-
 class TaskScheduler {
   public:
-    using CPUSchedulerType = SchedulerTypeWithStatsInstanceExecutor<folly::CPUThreadPoolExecutor>;
-    using IOSchedulerType = SchedulerTypeWithStatsInstanceExecutor<folly::IOThreadPoolExecutor>;
+    using CPUSchedulerType = folly::FutureExecutor<folly::CPUThreadPoolExecutor>;
+    using IOSchedulerType = folly::FutureExecutor<folly::IOThreadPoolExecutor>;
 
-    explicit TaskScheduler(const std::optional<size_t>& cpu_thread_count = std::nullopt, const std::optional<size_t>& io_thread_count = std::nullopt) :
+     explicit TaskScheduler(const std::optional<size_t>& cpu_thread_count = std::nullopt, const std::optional<size_t>& io_thread_count = std::nullopt) :
         cgroup_folder_("/sys/fs/cgroup"),
         cpu_thread_count_(cpu_thread_count ? *cpu_thread_count : ConfigsMap::instance()->get_int("VersionStore.NumCPUThreads", get_default_num_cpus(cgroup_folder_))),
         io_thread_count_(io_thread_count ? *io_thread_count : ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", (int) (cpu_thread_count_ * 1.5))),
@@ -235,18 +194,8 @@ class TaskScheduler {
         auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only supports Task derived from BaseTask");
         ARCTICDB_DEBUG(log::schedule(), "{} Submitting CPU task {}: {} of {}", uintptr_t(this), typeid(task).name(), cpu_exec_.getTaskQueueSize(), cpu_exec_.kDefaultMaxQueueSize);
-        // Executor::Add will be called before below function
         std::lock_guard lock{cpu_mutex_};
-        if (util::query_stats::QueryStats::instance().is_enabled()) {
-            auto wrapped_task = [call_stats = util::query_stats::QueryStats::instance().get_call_stats(), task = std::move(task)]() mutable{
-                util::query_stats::QueryStats::instance().set_call_stats(std::move(call_stats));
-                return task();
-            };
-            return cpu_exec_.addFuture(std::move(wrapped_task));
-        }
-        else {
-            return cpu_exec_.addFuture(std::move(task));
-        }
+        return cpu_exec_.addFuture(std::move(task));
     }
 
     template<class Task>
@@ -254,18 +203,8 @@ class TaskScheduler {
         auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only support Tasks derived from BaseTask");
         ARCTICDB_DEBUG(log::schedule(), "{} Submitting IO task {}: {}", uintptr_t(this), typeid(task).name(), io_exec_.getPendingTaskCount());
-        // Executor::Add will be called before below function
         std::lock_guard lock{io_mutex_};
-        if (util::query_stats::QueryStats::instance().is_enabled()) {
-            auto wrapped_task = [call_stats = util::query_stats::QueryStats::instance().get_call_stats(), task = std::move(task)]() mutable{
-                util::query_stats::QueryStats::instance().set_call_stats(std::move(call_stats));
-                return task();
-            };
-            return io_exec_.addFuture(std::move(wrapped_task));
-        }
-        else {
-            return io_exec_.addFuture(std::move(task));
-        }
+        return io_exec_.addFuture(std::move(task));
     }
 
     bool tasks_pending();
