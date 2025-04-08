@@ -21,6 +21,24 @@ OpStats::OpStats() :
 
 }
 
+OpStats::OpStats(const OpStats& other) : 
+    result_count_(other.result_count_.load(std::memory_order_relaxed)),
+    total_time_ms_(other.total_time_ms_.load(std::memory_order_relaxed)),
+    count_(other.count_.load(std::memory_order_relaxed)) {
+    for (size_t i = 0; i < logical_key_counts_.size(); ++i) {
+        logical_key_counts_[i] = other.logical_key_counts_[i].load(std::memory_order_relaxed);
+    }
+}
+
+OpStats::OpStats(OpStats&& other) noexcept : 
+    result_count_(other.result_count_.load(std::memory_order_relaxed)),
+    total_time_ms_(other.total_time_ms_.load(std::memory_order_relaxed)),
+    count_(other.count_.load(std::memory_order_relaxed)) {
+    for (size_t i = 0; i < logical_key_counts_.size(); ++i) {
+        logical_key_counts_[i] = other.logical_key_counts_[i].load(std::memory_order_relaxed);
+    }
+}
+
 OpStats& OpStats::operator=(const OpStats& other) {
     if (this != &other) {
         for (size_t i = 0; i < logical_key_counts_.size(); ++i) {
@@ -39,6 +57,26 @@ CallStats::CallStats() :
     total_time_ms_(0),
     count_(0) {
 
+}
+
+CallStats::CallStats(const CallStats& other) : 
+    total_time_ms_(other.total_time_ms_.load(std::memory_order_relaxed)),
+    count_(other.count_.load(std::memory_order_relaxed)) {
+    for (size_t i = 0; i < NUMBER_OF_KEYS; ++i) {
+        for (size_t j = 0; j < NUMBER_OF_TASK_TYPES; ++j) {
+            keys_stats_[i][j] = other.keys_stats_[i][j];
+        }
+    }
+}
+
+CallStats::CallStats(CallStats&& other) noexcept : 
+    total_time_ms_(other.total_time_ms_.load(std::memory_order_relaxed)),
+    count_(other.count_.load(std::memory_order_relaxed)) {
+    for (size_t i = 0; i < NUMBER_OF_KEYS; ++i) {
+        for (size_t j = 0; j < NUMBER_OF_TASK_TYPES; ++j) {
+            keys_stats_[i][j] = std::move(other.keys_stats_[i][j]);
+        }
+    }
 }
 
 QueryStats QueryStats::instance_;
@@ -81,12 +119,17 @@ CallStats& QueryStats::get_call_stats(){
 }
 
 CallStats* QueryStats::get_call_stats_ptr(){
-    check(get_call_stats_ptr() != nullptr, "Call stat pointer is null");
+    check(call_stat_ptr_ != nullptr, "Call stat pointer is null");
     return call_stat_ptr_;
 }
 
 void QueryStats::set_call_stat_ptr(CallStats* call_stat_ptr) {
     call_stat_ptr_ = call_stat_ptr;
+}
+
+ankerl::unordered_dense::map<std::string, CallStats> QueryStats::get_calls_stats_map() {
+    std::lock_guard<std::mutex> lock(calls_stats_map_mutex_);
+    return calls_stats_map_;
 }
 
 RAIIRunLambda::RAIIRunLambda(std::function<void(uint64_t)> lambda) :
