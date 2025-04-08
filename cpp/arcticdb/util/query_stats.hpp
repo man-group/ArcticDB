@@ -62,16 +62,15 @@ public:
     void disable();
     bool is_enabled() const;
     void set_call(const std::string& call_name);
-    void set_call_stat_ptr(CallStats* call_stat_ptr);
-    CallStats& get_call_stats();
-    CallStats* get_call_stats_ptr();
-    ankerl::unordered_dense::map<std::string, CallStats> get_calls_stats_map();
+    void set_call_stats(std::shared_ptr<CallStats>&& call_stats);
+    std::shared_ptr<CallStats> get_call_stats();
+    ankerl::unordered_dense::map<std::string, std::shared_ptr<CallStats>> get_calls_stats_map();
     QueryStats(const QueryStats&) = delete;
     QueryStats() = default;
 private:
-    ankerl::unordered_dense::map<std::string, CallStats> calls_stats_map_;
+    ankerl::unordered_dense::map<std::string, std::shared_ptr<CallStats>> calls_stats_map_;
     std::mutex calls_stats_map_mutex_;
-    thread_local inline static CallStats* call_stat_ptr_ = nullptr;
+    thread_local inline static std::shared_ptr<CallStats> call_stat_ptr_ = nullptr;
 
     static QueryStats instance_;
     bool is_enabled_ = false;
@@ -90,24 +89,25 @@ private:
 #define QUERY_STATS_SET_CALL(call_name) \
     std::optional<arcticdb::util::query_stats::RAIIRunLambda> log_total_time = std::nullopt; \
     if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
-        arcticdb::util::query_stats::QueryStats::instance().set_call(call_name); \
+        using namespace arcticdb::util::query_stats; \
+        QueryStats::instance().set_call(call_name); \
         log_total_time.emplace([](auto time){ \
-            auto &call_stats = arcticdb::util::query_stats::QueryStats::instance().get_call_stats(); \
-            call_stats.count_.fetch_add(1, std::memory_order_relaxed); \
-            call_stats.total_time_ms_.fetch_add(time, std::memory_order_relaxed); \
+            auto call_stats = QueryStats::instance().get_call_stats(); \
+            call_stats->count_.fetch_add(1, std::memory_order_relaxed); \
+            call_stats->total_time_ms_.fetch_add(time, std::memory_order_relaxed); \
         }); \
     }
 
 #define QUERY_STATS_ADD(stat_name, value) \
     if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
-        util::check(arcticdb::util::query_stats::QueryStats::instance().get_call_stats_ptr() != nullptr, "Call stat pointer is null"); \
-        arcticdb::util::query_stats::QueryStats::instance().get_call_stats().keys_stats_[static_cast<size_t>(query_stat_key_type)][static_cast<size_t>(query_stat_op)].stat_name##_.fetch_add(value, std::memory_order_relaxed); \
+        using namespace arcticdb::util::query_stats; \
+        QueryStats::instance().get_call_stats()->keys_stats_[static_cast<size_t>(query_stat_key_type)][static_cast<size_t>(query_stat_op)].stat_name##_.fetch_add(value, std::memory_order_relaxed); \
     }
 #define QUERY_STATS_ADD_TIME(stat_name) \
     std::optional<arcticdb::util::query_stats::RAIIRunLambda> log_total_time = std::nullopt; \
     if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
-        util::check(arcticdb::util::query_stats::QueryStats::instance().get_call_stats_ptr() != nullptr, "Call stat pointer is null"); \
-        log_total_time.emplace([&stat_name = arcticdb::util::query_stats::QueryStats::instance().get_call_stats().keys_stats_[static_cast<size_t>(query_stat_key_type)][static_cast<size_t>(query_stat_op)].stat_name##_](auto duration){ \
+        using namespace arcticdb::util::query_stats; \
+        log_total_time.emplace([&stat_name = QueryStats::instance().get_call_stats()->keys_stats_[static_cast<size_t>(query_stat_key_type)][static_cast<size_t>(query_stat_op)].stat_name##_](auto duration){ \
             stat_name.fetch_add(duration, std::memory_order_relaxed); \
         }); \
     }

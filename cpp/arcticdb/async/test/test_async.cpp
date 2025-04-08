@@ -199,10 +199,10 @@ TEST(Async, StatsQueryDemo) {
     auto result = QueryStats::instance().get_calls_stats_map();
     auto it = result.find("AddFuture");
     ASSERT_TRUE(it != result.end());
-    ASSERT_EQ(it->second.count_, 2);
-    ASSERT_TRUE(it->second.total_time_ms_ > 1);
-    ASSERT_EQ(it->second.keys_stats_[static_cast<size_t>(KeyType::SYMBOL_LIST)][static_cast<size_t>(TaskType::S3_ListObjectsV2)].count_, 6);
-    ASSERT_EQ(it->second.keys_stats_[static_cast<size_t>(KeyType::SYMBOL_LIST)][static_cast<size_t>(TaskType::S3_ListObjectsV2)].result_count_, 1158);
+    ASSERT_EQ(it->second->count_, 2);
+    ASSERT_TRUE(it->second->total_time_ms_ > 1);
+    ASSERT_EQ(it->second->keys_stats_[static_cast<size_t>(KeyType::SYMBOL_LIST)][static_cast<size_t>(TaskType::S3_ListObjectsV2)].count_, 6);
+    ASSERT_EQ(it->second->keys_stats_[static_cast<size_t>(KeyType::SYMBOL_LIST)][static_cast<size_t>(TaskType::S3_ListObjectsV2)].result_count_, 1158);
 }
 
 using IndexSegmentReader = int;

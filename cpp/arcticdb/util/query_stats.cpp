@@ -105,29 +105,24 @@ bool QueryStats::is_enabled() const {
 void QueryStats::set_call(const std::string& call_name){
     std::lock_guard<std::mutex> lock(calls_stats_map_mutex_);
     if (auto it = calls_stats_map_.find(call_name); it != calls_stats_map_.end()) {
-        call_stat_ptr_ = &it->second;
+        call_stat_ptr_ = it->second;
     } 
     else {
-        auto insert_result = calls_stats_map_.emplace(call_name, CallStats());
-        call_stat_ptr_ = &insert_result.first->second;
+        auto insert_result = calls_stats_map_.emplace(call_name, std::make_shared<CallStats>());
+        call_stat_ptr_ = insert_result.first->second;
     }
 }
 
-CallStats& QueryStats::get_call_stats(){
-    check(get_call_stats_ptr() != nullptr, "Call stat pointer is null"); \
-    return *call_stat_ptr_;
-}
-
-CallStats* QueryStats::get_call_stats_ptr(){
-    check(call_stat_ptr_ != nullptr, "Call stat pointer is null");
+std::shared_ptr<CallStats> QueryStats::get_call_stats(){
+    check(call_stat_ptr_.operator bool(), "Call stat pointer is null");
     return call_stat_ptr_;
 }
 
-void QueryStats::set_call_stat_ptr(CallStats* call_stat_ptr) {
-    call_stat_ptr_ = call_stat_ptr;
+void QueryStats::set_call_stats(std::shared_ptr<CallStats>&& call_stats) {
+    call_stat_ptr_ = std::move(call_stats);
 }
 
-ankerl::unordered_dense::map<std::string, CallStats> QueryStats::get_calls_stats_map() {
+ankerl::unordered_dense::map<std::string, std::shared_ptr<CallStats>> QueryStats::get_calls_stats_map() {
     std::lock_guard<std::mutex> lock(calls_stats_map_mutex_);
     return calls_stats_map_;
 }
