@@ -341,7 +341,7 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       - name: Set persistent storage variables
-        if: ${{ env.real_tests_enabled != no }}
+        if: ${{ env.real_tests_enabled != 'no' }}
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -352,7 +352,7 @@ jobs:
           strategy_branch: "${{ env.distinguishing_name }}"
         
       - name: Set s3 sts persistent storage variables for Windows
-        if: ${{ env.real_tests_enabled != "no" && matrix.os == 'windows' }}
+        if: ${{ env.real_tests_enabled != 'no' && matrix.os == 'windows' }}
         uses: ./.github/actions/set_s3_sts_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
