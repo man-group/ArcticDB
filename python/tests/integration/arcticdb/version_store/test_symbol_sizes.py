@@ -8,6 +8,7 @@ from arcticdb_ext.storage import KeyType
 import arcticdb_ext.cpp_async as adb_async
 
 
+@pytest.mark.storage
 def test_symbol_sizes(basic_store):
     sizes = basic_store.version_store.scan_object_sizes_by_stream()
     assert len(sizes) == 1
@@ -30,6 +31,7 @@ def test_symbol_sizes(basic_store):
     assert sizes["sym_0"][KeyType.TABLE_DATA].compressed_size < 15000
 
 
+@pytest.mark.storage
 def test_symbol_sizes_big(basic_store):
     """
     Manual testing lines up well:
@@ -66,6 +68,7 @@ def test_symbol_sizes_big(basic_store):
     assert sizes["sym"][KeyType.TABLE_DATA].count == 1
 
 
+@pytest.mark.storage
 def test_symbol_sizes_multiple_versions(basic_store):
     basic_store.write("sym", sample_dataframe(1000))
     basic_store.write("sym", sample_dataframe(1000))
@@ -79,6 +82,7 @@ def test_symbol_sizes_multiple_versions(basic_store):
     assert 100_000 < sizes["sym"][KeyType.TABLE_DATA].uncompressed_size < 250_000
 
 
+@pytest.mark.storage
 def test_scan_object_sizes(arctic_client, lib_name):
     lib = arctic_client.create_library(lib_name)
     basic_store = lib._nvs

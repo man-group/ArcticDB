@@ -153,6 +153,7 @@ def test_(
 )
 @SLOW_TESTS_MARK
 @pytest.mark.skip(reason="Needs to be fixed with issue #496")
+@pytest.mark.storage
 def test_append_with_defragmentation(
     sym,
     col_per_append_df,

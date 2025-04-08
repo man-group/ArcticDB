@@ -9,7 +9,7 @@ on:
       cibw_version:      {required: false, type: string, description: build-python-wheels only. Must match the cibw_image_tag}
       python_deps_ids:   {default: '[""]', type: string, description: build-python-wheels test matrix parameter. JSON string.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
-      persistent_storage:      {default: "false", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
+      persistent_storage:      {default: "no", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
       pytest_xdist_mode: {default: "", type: string, description: additional argument to pass for pytest-xdist}
       pytest_args:       {default: "", type: string, description: a way to rewrite the pytest args to change what tests are being run}
 jobs:
@@ -73,9 +73,7 @@ jobs:
           submodules: recursive # Just in case a dep has its own third-party deps
 
       - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: "v0.4.0"
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Windows Pagefile
         if: matrix.os == 'windows'
@@ -128,6 +126,14 @@ jobs:
           arch: x64
           toolset: 14.41
           vs-path: 'C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools'
+
+      - name: Setup cmake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.31.6'
+
+      - name: Use cmake
+        run: cmake --version
 
       - name: CMake compile
         if: inputs.job_type != 'build-python-wheels'
@@ -271,6 +277,7 @@ jobs:
       python_impl_name: ${{needs.compile.outputs.python_impl_name}}
       distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      real_tests_enabled: ${{inputs.persistent_storage || 'no'}}
     steps:
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -334,15 +341,18 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       - name: Set persistent storage variables
-        if: inputs.persistent_storage == 'true'
+        if: ${{ env.real_tests_enabled }} != 'no'
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+          gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
+          gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+          persistent_storage: "${{ inputs.persistent_storage }}"
           strategy_branch: "${{ env.distinguishing_name }}"
         
       - name: Set s3 sts persistent storage variables for Windows
-        if: inputs.persistent_storage == 'true' && matrix.os == 'windows'
+        if: ${{ env.real_tests_enabled }} != 'no' && matrix.os == 'windows'
         uses: ./.github/actions/set_s3_sts_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"

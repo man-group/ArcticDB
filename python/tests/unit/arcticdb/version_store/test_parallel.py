@@ -16,7 +16,7 @@ import pytest
 from arcticdb.exceptions import (
     SortingException,
     SchemaException,
-    UserInputException,
+    UserInputException, ArcticDbNotYetImplemented,
 )
 from arcticdb.util.test import (
     assert_frame_equal,
@@ -70,42 +70,123 @@ def test_staging_doesnt_write_append_ref(lmdb_version_store_v1):
     assert not len(lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, sym))
 
 
-def test_remove_incomplete(basic_store):
-    lib = basic_store
-    lib_tool = lib.library_tool()
+@pytest.mark.storage
+@pytest.mark.parametrize("batch", (True, False))
+@pytest.mark.parametrize("batch_size", (1000, 7))
+def test_remove_incomplete(arctic_library_v1, batch, batch_size, lib_name):
+    lib = arctic_library_v1._nvs
+    if lib.get_backing_store() == "mongo_storage":
+        with pytest.raises(ArcticDbNotYetImplemented):
+            arctic_library_v1._dev_tools.remove_incompletes(["sym"])
+        return # remove_incompletes not implemented on Mongo 8784267430
+
+    with config_context_multi({"Storage.DeleteBatchSize": batch_size, "S3Storage.DeleteBatchSize": 2 * batch_size}):
+        lib_tool = lib.library_tool()
+        assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
+        assert lib.list_symbols_with_incomplete_data() == []
+
+        if batch:
+            def remove(sym):
+                arctic_library_v1._dev_tools.remove_incompletes([sym])
+        else:
+            def remove(sym):
+                lib.remove_incomplete(sym)
+
+        sym1 = "test_remove_incomplete_1"
+        sym2 = "test_remove_incomplete_2"
+        num_chunks = 10
+        df1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2000-01-01", periods=num_chunks))
+        df2 = pd.DataFrame(
+            {"col": np.arange(100, 110)},
+            index=pd.date_range("2001-01-01", periods=num_chunks),
+        )
+        for idx in range(num_chunks):
+            lib.write(sym1, df1.iloc[idx : idx + 1, :], parallel=True)
+            lib.write(sym2, df2.iloc[idx : idx + 1, :], parallel=True)
+
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym1)) == num_chunks
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym2)) == num_chunks
+        assert sorted(lib.list_symbols_with_incomplete_data()) == [sym1, sym2]
+
+        remove(sym1)
+        assert lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym1) == []
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym2)) == num_chunks
+        assert lib.list_symbols_with_incomplete_data() == [sym2]
+
+        remove(sym2)
+        assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
+        assert lib.list_symbols_with_incomplete_data() == []
+
+        # Removing incompletes from a symbol that doesn't exist, or a symbol with no incompletes, is a no-op
+        remove("non-existent-symbol")
+        sym3 = "test_remove_incomplete_3"
+        lib.write(sym3, df1)
+        remove(sym3)
+
+
+@pytest.mark.parametrize("batch_size", (1000, 7))
+def test_remove_incompletes(arctic_library_v1, batch_size):
+    if arctic_library_v1._nvs.get_backing_store() == "mongo_storage":
+        with pytest.raises(ArcticDbNotYetImplemented):
+            arctic_library_v1._dev_tools.remove_incompletes(["sym"])
+        return # remove_incompletes not implemented on Mongo 8784267430
+
+    with config_context_multi({"Storage.DeleteBatchSize": batch_size, "S3Storage.DeleteBatchSize": 2 * batch_size}):
+        lib = arctic_library_v1
+        lib_tool = lib._dev_tools.library_tool()
+        assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
+        assert lib.get_staged_symbols() == []
+
+        n_symbols = 20
+        n_to_delete = 9
+        syms = [f"sym_{i}" for i in range(n_symbols)]
+        other_syms = [f"other_prefix_{i}" for i in range(n_symbols)]
+        to_delete = list(np.random.choice(syms, n_to_delete))
+
+        num_chunks = 10
+        df = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2000-01-01", periods=num_chunks))
+        for s in syms + other_syms:
+            for idx in range(num_chunks):
+                lib.write(s, df.iloc[idx : idx + 1, :], staged=True)
+
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, "sym_0")) == num_chunks
+        assert sorted(lib.get_staged_symbols()) == sorted(syms + other_syms)
+
+        lib._dev_tools.remove_incompletes(to_delete)
+        for s in to_delete:
+            assert lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, s) == []
+
+        survivors = set(syms + other_syms) - set(to_delete)
+        for s in survivors:
+            assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, s)) == num_chunks
+        assert sorted(lib.get_staged_symbols()) == sorted(list(survivors))
+
+        with pytest.raises(UserInputException, match="E_NO_STAGED_SEGMENTS"):
+            lib.finalize_staged_data(to_delete[0])
+
+        to_finalize = survivors.pop()
+        lib.finalize_staged_data(to_finalize)
+        assert_frame_equal(lib.read(to_finalize).data, df)
+
+
+def test_remove_incompletes_no_common_prefix(basic_store):
+    lib = Library("desc", basic_store)
+    lib_tool = lib._dev_tools.library_tool()
     assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
-    assert lib.list_symbols_with_incomplete_data() == []
+    assert lib.get_staged_symbols() == []
 
-    sym1 = "test_remove_incomplete_1"
-    sym2 = "test_remove_incomplete_2"
-    num_chunks = 10
-    df1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2000-01-01", periods=num_chunks))
-    df2 = pd.DataFrame(
-        {"col": np.arange(100, 110)},
-        index=pd.date_range("2001-01-01", periods=num_chunks),
-    )
-    for idx in range(num_chunks):
-        lib.write(sym1, df1.iloc[idx : idx + 1, :], parallel=True)
-        lib.write(sym2, df2.iloc[idx : idx + 1, :], parallel=True)
+    df = pd.DataFrame({"a": [1]})
+    df.index = [pd.Timestamp(0)]
+    lib.write("sym", df, staged=True)
+    lib.write("tzm", df, staged=True)
+    lib.write("uan", df, staged=True)
 
-    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym1)) == num_chunks
-    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym2)) == num_chunks
-    assert sorted(lib.list_symbols_with_incomplete_data()) == [sym1, sym2]
+    assert len(lib_tool.find_keys(KeyType.APPEND_DATA)) == 3
+    assert sorted(lib.get_staged_symbols()) == ["sym", "tzm", "uan"]
 
-    lib.remove_incomplete(sym1)
-    assert lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym1) == []
-    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym2)) == num_chunks
-    assert lib.list_symbols_with_incomplete_data() == [sym2]
-
-    lib.remove_incomplete(sym2)
-    assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
-    assert lib.list_symbols_with_incomplete_data() == []
-
-    # Removing incompletes from a symbol that doesn't exist, or a symbol with no incompletes, is a no-op
-    lib.remove_incomplete("non-existent-symbol")
-    sym3 = "test_remove_incomplete_3"
-    lib.write(sym3, df1)
-    lib.remove_incomplete(sym3)
+    lib._dev_tools.remove_incompletes(["sym", "uan"])
+    assert len(lib_tool.find_keys(KeyType.APPEND_DATA)) == 1
+    assert sorted(lib.get_staged_symbols()) == ["tzm"]
 
 
 @pytest.mark.parametrize("num_segments_live_during_compaction, num_io_threads, num_cpu_threads", [
@@ -114,6 +195,7 @@ def test_remove_incomplete(basic_store):
     (1, 10, 1),
     (None, None, None)
 ])
+@pytest.mark.storage
 def test_parallel_write(basic_store_tiny_segment, num_segments_live_during_compaction, num_io_threads, num_cpu_threads):
     try:
         with config_context_multi({"VersionStore.NumSegmentsLiveDuringCompaction": num_segments_live_during_compaction,
@@ -273,6 +355,7 @@ def test_floats_to_nans(lmdb_version_store_dynamic_schema):
     "num_segments_live_during_compaction, num_io_threads, num_cpu_threads", [(1, 1, 1), (10, 1, 1), (None, None, None)]
 )
 @pytest.mark.parametrize("prune_previous_versions", (True, False))
+@pytest.mark.storage
 def test_parallel_write_sort_merge(
     basic_store_tiny_segment,
     lib_name,
@@ -326,6 +409,7 @@ def test_parallel_write_sort_merge(
 
 
 @pytest.mark.parametrize("prune_previous_versions", [True, False])
+@pytest.mark.storage
 def test_sort_merge_append(basic_store_dynamic_schema, prune_previous_versions):
     lib = basic_store_dynamic_schema
     num_rows_per_day = 10
