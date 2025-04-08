@@ -87,6 +87,7 @@ QueryStats& QueryStats::instance() {
 
 void QueryStats::reset_stats() {
     check(!async::TaskScheduler::instance()->tasks_pending(), "Folly tasks are still running");
+    std::lock_guard<std::mutex> lock(calls_stats_map_mutex_);
     calls_stats_map_.clear();
 }
 
@@ -128,7 +129,7 @@ ankerl::unordered_dense::map<std::string, std::shared_ptr<CallStats>> QueryStats
     return calls_stats_map_;
 }
 
-RAIIRunLambda::RAIIRunLambda(std::function<void(uint64_t)> lambda) :
+RAIIRunLambda::RAIIRunLambda(std::function<void(uint64_t)>&& lambda) :
     lambda_(std::move(lambda)),
     start_(std::chrono::steady_clock::now()) {
 

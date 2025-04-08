@@ -82,7 +82,7 @@ private:
 
 class RAIIRunLambda {
 public:
-    RAIIRunLambda(std::function<void(uint64_t)> lambda);
+    RAIIRunLambda(std::function<void(uint64_t)>&& lambda);
     ~RAIIRunLambda();
 private:
     std::function<void(uint64_t)> lambda_;

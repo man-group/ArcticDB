@@ -34,8 +34,6 @@
 namespace arcticdb::async {
 class TaskScheduler;
 
-extern thread_local bool is_folly_thread;
-
 struct TaskSchedulerPtrWrapper{
     TaskScheduler* ptr_;
 
@@ -69,9 +67,8 @@ public:
         std::lock_guard lock{mutex_};
         return named_factory_.newThread(
                 [func = std::move(func)]() mutable {
-                is_folly_thread = true;
                 ARCTICDB_SAMPLE_THREAD();
-                func();
+              func();
             });
     
   }
@@ -170,14 +167,14 @@ inline auto get_default_num_cpus([[maybe_unused]] const std::string& cgroup_fold
 }
 
 /*
-* Possible areas of inprovement in the future:
-* 1/ Task/op decoupling: push task and then use strategy to implement smart batching to
-* amortize costs wherever possible
-* 2/ Worker thread Affinity - would better locality improve throughput by keeping hot structure in
-* hot cachelines and not jumping from one thread to the next (assuming thread/core affinity in hw too) ?
-* 3/ Priority: How to assign priorities to task in order to treat the most pressing first.
-* 4/ Throttling: (similar to priority) how to absorb work spikes and apply memory backpressure
-*/
+ * Possible areas of inprovement in the future:
+ * 1/ Task/op decoupling: push task and then use strategy to implement smart batching to
+ * amortize costs wherever possible
+ * 2/ Worker thread Affinity - would better locality improve throughput by keeping hot structure in
+ * hot cachelines and not jumping from one thread to the next (assuming thread/core affinity in hw too) ?
+ * 3/ Priority: How to assign priorities to task in order to treat the most pressing first.
+ * 4/ Throttling: (similar to priority) how to absorb work spikes and apply memory backpressure
+ */
 template <typename T>
 class ExecutorWithStatsInstance : public T{
     public:
