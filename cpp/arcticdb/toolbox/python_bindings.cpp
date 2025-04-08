@@ -11,13 +11,14 @@
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/s3/s3_storage_tool.hpp>
 #include <arcticdb/toolbox/library_tool.hpp>
-#include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/version/symbol_list.hpp>
+#include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/util/storage_lock.hpp>
 #include <arcticdb/util/reliable_storage_lock.hpp>
 #include <arcticdb/util/query_stats.hpp>
 #include <arcticdb/toolbox/storage_mover.hpp>
+#include <arcticdb/async/task_scheduler.hpp>
 
 namespace arcticdb::toolbox::apy {
 
@@ -165,5 +166,32 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
     query_stats_module.def("is_enabled", []() { 
         return QueryStats::instance().is_enabled(); 
     });
+    query_stats_module.def("get_stats", []() -> const Stats& { 
+        return QueryStats::instance().get_stats(async::TaskScheduler::instance()); 
+    });
+    
+    // Add bindings for TaskType enum
+    py::enum_<TaskType>(query_stats_module, "TaskType")
+        .value("S3_ListObjectsV2", TaskType::S3_ListObjectsV2);
+    
+    // Add bindings for OpStats class
+    py::class_<OpStats>(query_stats_module, "OpStats")
+        .def(py::init<>())
+        .def_property_readonly("result_count", [](const OpStats& stats) { 
+            return stats.result_count_.load(std::memory_order_relaxed); 
+        })
+        .def_property_readonly("total_time_ms", [](const OpStats& stats) { 
+            return stats.total_time_ms_.load(std::memory_order_relaxed); 
+        })
+        .def_property_readonly("count", [](const OpStats& stats) { 
+            return stats.count_.load(std::memory_order_relaxed); 
+        });
+    
+    // Add bindings for Stats class
+    py::class_<Stats>(query_stats_module, "Stats")
+        .def(py::init<>())
+        .def_property_readonly("keys_stats_", [](const Stats& stats) -> const std::array<std::array<OpStats, NUMBER_OF_TASK_TYPES>, NUMBER_OF_KEYS>& {
+            return stats.keys_stats_;
+        });
 }
 } // namespace arcticdb::toolbox::apy
