@@ -54,7 +54,7 @@ dependencies:
   # Build dependencies for tests
   - libarrow==18.0.0
   # Python dependences
-  - python
+  - python <3.14
   - packaging
   - numpy
   - pandas
