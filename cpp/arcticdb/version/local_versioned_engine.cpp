@@ -1053,6 +1053,17 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     const CompactIncompleteOptions& options) {
     log::version().debug("Compacting incomplete symbol {} with options {}", stream_id, options);
 
+    // INTENTIONAL
+    std::vector<int> use_after_move = {1, 2, 3};
+    std::vector<int> moved = std::move(use_after_move);
+    for (auto i : use_after_move) {
+        std::cout<<i<<std::endl;
+    }
+
+    int* use_after_free = new int(0);
+    delete use_after_free;
+    std::cout<<*use_after_free<<std::endl;
+
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     if (update_info.previous_index_key_) {
         ARCTICDB_DEBUG(log::version(), "Found previous version for symbol {}", stream_id);
