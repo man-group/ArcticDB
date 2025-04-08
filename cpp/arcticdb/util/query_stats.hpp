@@ -48,8 +48,6 @@ public:
 class Stats{
 public:
     std::array<std::array<OpStats, NUMBER_OF_TASK_TYPES>, NUMBER_OF_KEYS> keys_stats_;
-    std::atomic<uint64_t> total_time_ms_;
-    std::atomic<uint64_t> count_;
     void reset_stats();
     Stats();
 };

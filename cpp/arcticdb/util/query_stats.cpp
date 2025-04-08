@@ -32,9 +32,7 @@ void OpStats::reset_stats() {
 
 
 Stats::Stats() : 
-    keys_stats_{},
-    total_time_ms_(0),
-    count_(0) {
+    keys_stats_{} {
 
 }
 
@@ -44,8 +42,6 @@ void Stats::reset_stats() {
             op_stat.reset_stats();
         }
     }
-    total_time_ms_ = 0;
-    count_ = 0;
 }
 
 QueryStats QueryStats::instance_;

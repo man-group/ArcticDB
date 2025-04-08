@@ -161,9 +161,9 @@ TEST(Async, StatsQueryDemo) {
         {
             stuff.push_back(sched.submit_cpu_task(MaybeThrowTask(false))
                 .thenValue([](auto) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1)); // For verifying call duration calculation
                     QUERY_STATS_SET_KEY_TYPE(KeyType::SYMBOL_LIST)
                     QUERY_STATS_SET_TASK_TYPE(S3_ListObjectsV2)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1)); // For verifying call duration calculation
                     QUERY_STATS_ADD(count, 1)
                     QUERY_STATS_ADD(count, 1)
                     QUERY_STATS_ADD(result_count, 123)
@@ -197,10 +197,10 @@ TEST(Async, StatsQueryDemo) {
     t1.join();
     t2.join();
     auto& result = QueryStats::instance().get_stats(&sched);
-    ASSERT_EQ(result.count_, 2);
-    ASSERT_TRUE(result.total_time_ms_ > 1);
-    ASSERT_EQ(result.keys_stats_[static_cast<size_t>(KeyType::SYMBOL_LIST)][static_cast<size_t>(TaskType::S3_ListObjectsV2)].count_, 6);
-    ASSERT_EQ(result.keys_stats_[static_cast<size_t>(KeyType::SYMBOL_LIST)][static_cast<size_t>(TaskType::S3_ListObjectsV2)].result_count_, 1158);
+    auto& op_stats = result.keys_stats_[static_cast<size_t>(KeyType::SYMBOL_LIST)][static_cast<size_t>(TaskType::S3_ListObjectsV2)];
+    ASSERT_TRUE(op_stats.total_time_ms_ > 0);
+    ASSERT_EQ(op_stats.count_, 6);
+    ASSERT_EQ(op_stats.result_count_, 1158);
 }
 
 using IndexSegmentReader = int;
