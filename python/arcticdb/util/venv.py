@@ -215,3 +215,38 @@ class CurrentVersion:
         unset_config_int("VersionMap.ReloadInterval")
         del self.lib
         del self.ac
+
+
+class CompatLibrary:
+    """
+    Responsible for creating and cleaning up a library when writing compatibility tests.
+
+    Usually the library cleanup is managed by pytest fixtures, but it is hard to do so for compatibility tests because
+    they are responsible for maintaining their own arctic instances across several processes. As long as libraries
+    within the test are wrapped in a CompatLibrary cleanup will be dealt with.
+    """
+    def __init__(self, old_venv, uri, lib_name, create_with_current_version=False):
+        self.old_venv = old_venv
+        self.uri = uri
+        self.lib_name = lib_name
+        self.create_with_current_version = create_with_current_version
+
+    def __enter__(self):
+        if self.create_with_current_version:
+            ac = Arctic(self.uri)
+            ac.create_library(self.lib_name)
+            del ac
+        else:
+            old_ac = self.old_venv.create_arctic(self.uri)
+            old_ac.create_library(self.lib_name)
+
+        self.old_ac = self.old_venv.create_arctic(self.uri)
+        self.old_lib = self.old_ac.get_library(self.lib_name)
+        return self
+
+    def current_version(self):
+        return CurrentVersion(self.uri, self.lib_name)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        with self.current_version() as curr:
+            curr.ac.delete_library(self.lib_name)
