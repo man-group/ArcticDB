@@ -168,7 +168,7 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
     });
     query_stats_module.def("get_stats", []() -> const Stats& { 
         return QueryStats::instance().get_stats(async::TaskScheduler::instance()); 
-    });
+    }, py::return_value_policy::reference);
     
     py::enum_<TaskType>(query_stats_module, "TaskType")
         .value("S3_ListObjectsV2", TaskType::S3_ListObjectsV2);
@@ -183,6 +183,13 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
         })
         .def_property_readonly("count", [](const OpStats& stats) { 
             return stats.count_.load(std::memory_order_relaxed); 
+        })
+        .def_property_readonly("logical_key_counts", [](const OpStats& stats){
+            std::array<uint64_t, NUMBER_OF_KEYS> logical_key_counts;
+            for (size_t i = 0; i < NUMBER_OF_KEYS; ++i) {
+                logical_key_counts[i] = stats.logical_key_counts_[i].load(std::memory_order_relaxed);
+            }
+            return logical_key_counts;
         });
     
     py::class_<Stats>(query_stats_module, "Stats")
