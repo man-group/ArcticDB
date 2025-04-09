@@ -171,7 +171,12 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
     }, py::return_value_policy::reference);
     
     py::enum_<TaskType>(query_stats_module, "TaskType")
-        .value("S3_ListObjectsV2", TaskType::S3_ListObjectsV2);
+        .value("S3_ListObjectsV2", TaskType::S3_ListObjectsV2)
+        .value("S3_PutObject", TaskType::S3_PutObject)
+        .value("S3_GetObject", TaskType::S3_GetObject)
+        .value("S3_GetObjectAsync", TaskType::S3_GetObjectAsync)
+        .value("S3_DeleteObjects", TaskType::S3_DeleteObjects)
+        .value("S3_HeadObject", TaskType::S3_HeadObject);
     
     py::class_<OpStats>(query_stats_module, "OpStats")
         .def(py::init<>())

@@ -72,9 +72,9 @@ const Stats& QueryStats::get_stats(async::TaskScheduler* const instance) const {
     return stats_;
 }
 
-RAIIAddTime::RAIIAddTime(std::atomic<uint64_t>& time_var) :
+RAIIAddTime::RAIIAddTime(std::atomic<uint64_t>& time_var, std::optional<std::chrono::time_point<std::chrono::steady_clock>> start) :
     time_var_(time_var),
-    start_(std::chrono::steady_clock::now()) {
+    start_(start ? start.value() : std::chrono::steady_clock::now()) {
 
 }
 

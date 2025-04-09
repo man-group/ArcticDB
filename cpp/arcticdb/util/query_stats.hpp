@@ -21,11 +21,16 @@ namespace async {
 };
 namespace util::query_stats {
 enum class TaskType : size_t {
-    S3_ListObjectsV2 = 0
+    S3_ListObjectsV2 = 0,
+    S3_PutObject = 1,
+    S3_GetObject = 2,
+    S3_GetObjectAsync = 3,
+    S3_DeleteObjects = 4,
+    S3_HeadObject = 5
 };
 
 constexpr const size_t NUMBER_OF_KEYS = 29;
-constexpr const size_t NUMBER_OF_TASK_TYPES = 1;
+constexpr const size_t NUMBER_OF_TASK_TYPES = 6;
 
 class OpStats{
 public:
@@ -65,7 +70,7 @@ private:
 
 class RAIIAddTime {
 public:
-    RAIIAddTime(std::atomic<uint64_t>& time_var);
+    RAIIAddTime(std::atomic<uint64_t>& time_var, std::optional<std::chrono::time_point<std::chrono::steady_clock>> start = std::nullopt);
     ~RAIIAddTime();
 private:
     std::atomic<uint64_t>& time_var_;
@@ -79,16 +84,18 @@ private:
         using namespace arcticdb::util::query_stats; \
         QueryStats::instance().stats_.keys_stats_[static_cast<size_t>(query_stat_key_type)][static_cast<size_t>(query_stat_op)].stat_name##_.fetch_add(value, std::memory_order_relaxed); \
     }
-#define QUERY_STATS_ADD_TIME(stat_name) \
+#define QUERY_STATS_ADD_TIME(stat_name, ...) \
     std::optional<arcticdb::util::query_stats::RAIIAddTime> log_total_time = std::nullopt; \
     if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
         using namespace arcticdb::util::query_stats; \
-        log_total_time.emplace(QueryStats::instance().stats_.keys_stats_[static_cast<size_t>(query_stat_key_type)][static_cast<size_t>(query_stat_op)].stat_name##_); \
+        log_total_time.emplace(QueryStats::instance().stats_.keys_stats_[static_cast<size_t>(query_stat_key_type)][static_cast<size_t>(query_stat_op)].stat_name##_, ##__VA_ARGS__); \
     }
 
 #define QUERY_STATS_SET_KEY_TYPE(key_type) \
     static_assert(std::is_same_v<std::remove_cv_t<std::remove_reference_t<decltype(key_type)>>, arcticdb::entity::KeyType>); \
     auto query_stat_key_type = key_type;
-#define QUERY_STATS_SET_TASK_TYPE(task_type) \
+#define QUERY_STATS_SET_TASK_TYPE(task_type, ...) \
     auto query_stat_op = arcticdb::util::query_stats::TaskType::task_type; \
-    QUERY_STATS_ADD_TIME(total_time_ms)
+    QUERY_STATS_ADD_TIME(total_time_ms, ##__VA_ARGS__) \
+    QUERY_STATS_ADD(count, 1)
+
