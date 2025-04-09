@@ -211,7 +211,7 @@ def s3_ssl_disabled_storage_factory() -> Generator[MotoS3StorageFixtureFactory, 
 @pytest.fixture(scope="session")
 def nfs_backed_s3_storage_factory() -> Generator[MotoNfsBackedS3StorageFixtureFactory, None, None]:
     with MotoNfsBackedS3StorageFixtureFactory(
-        use_ssl=False, ssl_test_support=False, bucket_versioning=False, is_nfs_layout=True
+        use_ssl=False, ssl_test_support=False, bucket_versioning=False, _test_only_is_nfs_layout=True
     ) as f:
         yield f
 

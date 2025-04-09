@@ -104,8 +104,8 @@ class S3Bucket(StorageFixture):
             self.arctic_uri += f"&path_prefix={factory.default_prefix}"
         if factory.ssl:
             self.arctic_uri += "&ssl=True"
-        if factory.is_nfs_layout:
-            self.arctic_uri += "&is_nfs_layout=True"
+        if factory._test_only_is_nfs_layout:
+            self.arctic_uri += "&_test_only_is_nfs_layout=True"
         if platform.system() == "Linux":
             if factory.client_cert_file:
                 self.arctic_uri += f"&CA_cert_path={self.factory.client_cert_file}"
@@ -265,7 +265,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
     clean_bucket_on_fixture_exit = True
     use_mock_storage_for_testing = None  # If set to true allows error simulation
     use_internal_client_wrapper_for_testing = None  # If set to true uses the internal client wrapper for testing
-    is_nfs_layout: bool = False
+    _test_only_is_nfs_layout: bool = False
 
     def __init__(self, native_config: Optional[dict] = None):
         self.client_cert_file = None
@@ -719,7 +719,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         use_mock_storage_for_testing: bool = False,
         use_internal_client_wrapper_for_testing: bool = False,
         native_config: Optional[NativeVariantStorage] = None,
-        is_nfs_layout: bool = False,
+        _test_only_is_nfs_layout: bool = False,
     ):
         super().__init__(native_config)
         self.http_protocol = "https" if use_ssl else "http"
@@ -729,7 +729,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self.use_raw_prefix = use_raw_prefix
         self.use_mock_storage_for_testing = use_mock_storage_for_testing
         self.use_internal_client_wrapper_for_testing = use_internal_client_wrapper_for_testing
-        self.is_nfs_layout = is_nfs_layout
+        self._test_only_is_nfs_layout = _test_only_is_nfs_layout
         # This is needed because we might have multiple factory instances in the same test run
         # and we need to make sure the bucket names are unique
         # set the unique_id to the current UNIX timestamp to avoid conflicts
