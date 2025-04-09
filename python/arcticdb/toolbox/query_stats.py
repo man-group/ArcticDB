@@ -34,10 +34,6 @@ def get_query_stats() -> Dict[str, Any]:
                 stats_data["result_count"] = op_stats.result_count
                 has_data = True
                 
-            if op_stats.total_time_ms > 0:
-                stats_data["total_time_ms"] = op_stats.total_time_ms
-                has_data = True
-                
             if op_stats.count > 0:
                 stats_data["count"] = op_stats.count
                 has_data = True
@@ -48,6 +44,10 @@ def get_query_stats() -> Dict[str, Any]:
             
             if op_stats.compressed_size_bytes > 0:
                 stats_data["compressed_size_bytes"] = op_stats.compressed_size_bytes
+                has_data = True
+                
+            if has_data or op_stats.total_time_ms > 0:
+                stats_data["total_time_ms"] = op_stats.total_time_ms
                 has_data = True
             
             logical_key_counts = op_stats.logical_key_counts

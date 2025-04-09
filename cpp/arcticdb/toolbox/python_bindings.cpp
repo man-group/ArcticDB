@@ -178,7 +178,12 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
         .value("S3_DeleteObjects", TaskType::S3_DeleteObjects)
         .value("S3_HeadObject", TaskType::S3_HeadObject)
         .value("Encode", TaskType::Encode)
-        .value("Decode", TaskType::Decode);
+        .value("Decode", TaskType::Decode)
+        .value("AZURE_UploadFrom", TaskType::AZURE_UploadFrom)
+        .value("AZURE_DownloadTo", TaskType::AZURE_DownloadTo)
+        .value("AZURE_DeleteBlobs", TaskType::AZURE_DeleteBlobs)
+        .value("AZURE_ListBlobs", TaskType::AZURE_ListBlobs)
+        .value("AZURE_GetProperties", TaskType::AZURE_GetProperties);
     
     py::class_<OpStats>(query_stats_module, "OpStats")
         .def(py::init<>())

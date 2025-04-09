@@ -29,11 +29,16 @@ enum class TaskType : size_t {
     S3_DeleteObjects = 4,
     S3_HeadObject = 5,
     Encode = 6,
-    Decode = 7
+    Decode = 7,
+    AZURE_UploadFrom = 8,
+    AZURE_DownloadTo = 9,
+    AZURE_DeleteBlobs = 10,
+    AZURE_ListBlobs = 11,
+    AZURE_GetProperties = 12,
 };
 
 constexpr const size_t NUMBER_OF_KEYS = 29;
-constexpr const size_t NUMBER_OF_TASK_TYPES = 8;
+constexpr const size_t NUMBER_OF_TASK_TYPES = 13;
 
 class OpStats{
 public:

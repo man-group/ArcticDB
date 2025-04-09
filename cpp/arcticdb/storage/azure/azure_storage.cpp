@@ -19,6 +19,7 @@
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/configs_map.hpp>
+#include <arcticdb/util/query_stats.hpp>
 #include <arcticdb/storage/azure/azure_client_interface.hpp>
 #include <arcticdb/storage/azure/azure_client_impl.hpp>
 #include <arcticdb/storage/mock/azure_mock_client.hpp>
@@ -111,12 +112,14 @@ void do_write_impl(
     ARCTICDB_SAMPLE(AzureStorageWrite, 0)
 
     auto key_type_dir = key_type_folder(root_folder, key_seg.key_type());
+    QUERY_STATS_SET_KEY_TYPE(key_seg.key_type())
     ARCTICDB_TRACE(log::storage(), "Azure key_type_folder is {}", key_type_dir);
 
     ARCTICDB_SUBSAMPLE(AzureStorageWriteValues, 0)
     auto& k = key_seg.variant_key();
     auto blob_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
 
+    QUERY_STATS_SET_TASK_TYPE(AZURE_UploadFrom)
     try {
         azure_client.write_blob(blob_name, *key_seg.segment_ptr(), upload_option, request_timeout);
     }
@@ -150,12 +153,17 @@ void do_read_impl(
     ARCTICDB_SAMPLE(AzureStorageRead, 0)
     std::optional<VariantKey> failed_read;
 
-    auto key_type_dir = key_type_folder(root_folder, variant_key_type(variant_key));
+    auto key_type = variant_key_type(variant_key);
+    QUERY_STATS_SET_KEY_TYPE(key_type)
+
+    auto key_type_dir = key_type_folder(root_folder, key_type);
     auto blob_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
+    QUERY_STATS_SET_TASK_TYPE(AZURE_DownloadTo)
+    
     try {
         Segment segment = azure_client.read_blob(blob_name, download_option, request_timeout);
         visitor(variant_key, std::move(segment));
-        ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(variant_key), variant_key_view(variant_key));
+        ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", key_type, variant_key_view(variant_key));
     }
     catch (const Azure::Core::RequestFailedException& e) {
         raise_if_unexpected_error(e, blob_name);
@@ -168,8 +176,12 @@ void do_read_impl(
         }
         failed_read.emplace(variant_key);
     }
-    if (failed_read)
+    if (failed_read) {
         throw KeyNotFoundException(*failed_read);
+    }
+    else {
+        QUERY_STATS_ADD(result_count, 1)
+    }
 }
 
 template<class KeyBucketizer>
@@ -184,11 +196,16 @@ KeySegmentPair do_read_impl(
     ARCTICDB_SAMPLE(AzureStorageRead, 0)
     std::optional<VariantKey> failed_read;
 
-    auto key_type_dir = key_type_folder(root_folder, variant_key_type(variant_key));
+    auto key_type = variant_key_type(variant_key);
+    QUERY_STATS_SET_KEY_TYPE(key_type)
+    auto key_type_dir = key_type_folder(root_folder, key_type);
     auto blob_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
+    auto result = KeySegmentPair{};
     try {
-        return {VariantKey{variant_key}, azure_client.read_blob(blob_name, download_option, request_timeout)};
-        ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(variant_key), variant_key_view(variant_key));
+        QUERY_STATS_SET_TASK_TYPE(AZURE_DownloadTo)
+        result = KeySegmentPair{VariantKey{variant_key}, azure_client.read_blob(blob_name, download_option, request_timeout)};
+        ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", key_type, variant_key_view(variant_key));
+        QUERY_STATS_ADD(result_count, 1)
     }
     catch (const Azure::Core::RequestFailedException& e) {
         raise_if_unexpected_error(e, blob_name);
@@ -209,7 +226,7 @@ KeySegmentPair do_read_impl(
     } catch(const std::exception&) {
         throw KeyNotFoundException(variant_key);
     }
-    return KeySegmentPair{};
+    return result;
 }
 
 namespace fg = folly::gen;
@@ -227,31 +244,27 @@ void do_remove_impl(
     static const size_t delete_object_limit =
         std::min(BATCH_SUBREQUEST_LIMIT, static_cast<size_t>(ConfigsMap::instance()->get_int("AzureStorage.DeleteBatchSize", BATCH_SUBREQUEST_LIMIT)));
 
-    auto submit_batch = [&azure_client, &request_timeout](auto &to_delete) {
-        try {
-            azure_client.delete_blobs(to_delete, request_timeout);
-        } catch (const Azure::Core::RequestFailedException& e) {
-            std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
-            raise_azure_exception(e, failed_objects);
-        }
-        to_delete.clear();
-    };
-
     (fg::from(variant_keys) | fg::move | fg::groupBy(fmt_db)).foreach(
-        [&root_folder, b=std::move(bucketizer), delete_object_limit=delete_object_limit, &to_delete, &submit_batch] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
+        [&root_folder, b=std::move(bucketizer), delete_object_limit=delete_object_limit, &to_delete, &azure_client, &request_timeout] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
+            QUERY_STATS_SET_KEY_TYPE(group.key())
             auto key_type_dir = key_type_folder(root_folder, group.key());
             for (auto k : folly::enumerate(group.values())) {
                 auto blob_name = object_path(b.bucketize(key_type_dir, *k), *k);
                 to_delete.emplace_back(std::move(blob_name));
-                if (to_delete.size() == delete_object_limit) {
-                    submit_batch(to_delete);
+                if (to_delete.size() == delete_object_limit || k.index + 1 == group.size()) {
+                    try {
+                        QUERY_STATS_SET_TASK_TYPE(AZURE_DeleteBlobs)
+                        azure_client.delete_blobs(to_delete, request_timeout);
+                        QUERY_STATS_ADD(result_count, to_delete.size());
+                    } catch (const Azure::Core::RequestFailedException& e) {
+                        std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
+                        raise_azure_exception(e, failed_objects);
+                    }
+                    to_delete.clear();
                 }
             }
         }
     );
-    if (!to_delete.empty()) {
-        submit_batch(to_delete);
-    }
 }
 
 std::string prefix_handler(const std::string& prefix,
@@ -267,6 +280,7 @@ bool do_iterate_type_impl(KeyType key_type,
                           AzureClientWrapper& azure_client,
                           const std::string& prefix = std::string{}) {
     ARCTICDB_SAMPLE(AzureStorageIterateType, 0)
+    QUERY_STATS_SET_KEY_TYPE(key_type)
     auto key_type_dir = key_type_folder(root_folder, key_type);
     const auto path_to_key_size = key_type_dir.size() + 1;
     // if prefix is empty, add / to avoid matching both log and logc when key_type_dir is {root_folder}/log
@@ -281,7 +295,9 @@ bool do_iterate_type_impl(KeyType key_type,
     auto key_prefix = prefix_handler(prefix, key_type_dir, key_descriptor, key_type);
 
     try {
+        QUERY_STATS_SET_TASK_TYPE(AZURE_ListBlobs)
         for (auto page = azure_client.list_blobs(key_prefix); page.HasPage(); page.MoveToNextPage()) {
+            QUERY_STATS_ADD(result_count, page.Blobs.size())
             for (const auto& blob : page.Blobs) {
                 auto key = blob.Name.substr(path_to_key_size);
                 ARCTICDB_TRACE(log::version(), "Got object_list: {}, key: {}", blob.Name, key);
@@ -312,10 +328,14 @@ bool do_key_exists_impl(
     const VariantKey& key,
     const std::string& root_folder,
     AzureClientWrapper& azure_client) {
-    auto key_type_dir = key_type_folder(root_folder, variant_key_type(key));
+    auto key_type = variant_key_type(key);
+    QUERY_STATS_SET_KEY_TYPE(key_type)
+    auto key_type_dir = key_type_folder(root_folder, key_type);
     auto blob_name = object_path(key_type_dir, key);
+    bool result = false;
+    QUERY_STATS_SET_TASK_TYPE(AZURE_GetProperties)
     try {
-        return azure_client.blob_exists(blob_name);
+        result = azure_client.blob_exists(blob_name);
     }
     catch (const Azure::Core::RequestFailedException& e) {
         raise_if_unexpected_error(e, blob_name);
@@ -325,7 +345,10 @@ bool do_key_exists_impl(
                              static_cast<int>(e.StatusCode),
                              e.ReasonPhrase);
     }
-    return false;
+    if (result) {
+        QUERY_STATS_ADD(result_count, 1)
+    }
+    return result;
 }
 } //namespace detail
 
