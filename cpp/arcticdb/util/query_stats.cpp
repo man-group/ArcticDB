@@ -72,13 +72,13 @@ const Stats& QueryStats::get_stats(async::TaskScheduler* const instance) const {
     return stats_;
 }
 
-RAIIRunLambda::RAIIRunLambda(std::function<void(uint64_t)>&& lambda) :
-    lambda_(std::move(lambda)),
+RAIIAddTime::RAIIAddTime(std::atomic<uint64_t>& time_var) :
+    time_var_(time_var),
     start_(std::chrono::steady_clock::now()) {
 
 }
 
-RAIIRunLambda::~RAIIRunLambda() {
-    lambda_(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_).count());
+RAIIAddTime::~RAIIAddTime() {
+    time_var_.fetch_add(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_).count(), std::memory_order_relaxed);
 }
 }

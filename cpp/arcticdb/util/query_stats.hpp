@@ -63,12 +63,12 @@ private:
     bool is_enabled_ = false;
 };
 
-class RAIIRunLambda {
+class RAIIAddTime {
 public:
-    RAIIRunLambda(std::function<void(uint64_t)>&& lambda);
-    ~RAIIRunLambda();
+    RAIIAddTime(std::atomic<uint64_t>& time_var);
+    ~RAIIAddTime();
 private:
-    std::function<void(uint64_t)> lambda_;
+    std::atomic<uint64_t>& time_var_;
     std::chrono::time_point<std::chrono::steady_clock> start_;
 };
 } //util::query_stats
@@ -80,12 +80,10 @@ private:
         QueryStats::instance().stats_.keys_stats_[static_cast<size_t>(query_stat_key_type)][static_cast<size_t>(query_stat_op)].stat_name##_.fetch_add(value, std::memory_order_relaxed); \
     }
 #define QUERY_STATS_ADD_TIME(stat_name) \
-    std::optional<arcticdb::util::query_stats::RAIIRunLambda> log_total_time = std::nullopt; \
+    std::optional<arcticdb::util::query_stats::RAIIAddTime> log_total_time = std::nullopt; \
     if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
         using namespace arcticdb::util::query_stats; \
-        log_total_time.emplace([&stat_name = QueryStats::instance().stats_.keys_stats_[static_cast<size_t>(query_stat_key_type)][static_cast<size_t>(query_stat_op)].stat_name##_](auto duration){ \
-            stat_name.fetch_add(duration, std::memory_order_relaxed); \
-        }); \
+        log_total_time.emplace(QueryStats::instance().stats_.keys_stats_[static_cast<size_t>(query_stat_key_type)][static_cast<size_t>(query_stat_op)].stat_name##_); \
     }
 
 #define QUERY_STATS_SET_KEY_TYPE(key_type) \
