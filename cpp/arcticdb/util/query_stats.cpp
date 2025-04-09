@@ -9,16 +9,14 @@
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/log/log.hpp>
+#include <arcticdb/entity/variant_key.hpp>
+#include <arcticdb/stream/stream_utils.hpp>
 
 namespace arcticdb::util::query_stats {
 
 
-OpStats::OpStats() : 
-    logical_key_counts_{0},
-    result_count_(0),
-    total_time_ms_(0),
-    count_(0) {
-
+OpStats::OpStats(){
+    reset_stats();
 }
 
 void OpStats::reset_stats() {
@@ -28,6 +26,8 @@ void OpStats::reset_stats() {
     result_count_ = 0;
     total_time_ms_ = 0;
     count_ = 0;
+    uncompressed_size_bytes_ = 0;
+    compressed_size_bytes_ = 0;
 }
 
 
@@ -80,5 +80,24 @@ RAIIAddTime::RAIIAddTime(std::atomic<uint64_t>& time_var, std::optional<std::chr
 
 RAIIAddTime::~RAIIAddTime() {
     time_var_.fetch_add(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_).count(), std::memory_order_relaxed);
+}
+
+void add_logical_keys(const entity::KeyType physical_key_type, const TaskType task_type, const SegmentInMemory& segment) {
+    if (physical_key_type == entity::KeyType::TABLE_INDEX ||
+        physical_key_type == entity::KeyType::VERSION_REF ||
+        physical_key_type == entity::KeyType::VERSION ||
+        physical_key_type == entity::KeyType::APPEND_REF ||
+        physical_key_type == entity::KeyType::MULTI_KEY ||
+        physical_key_type == entity::KeyType::SNAPSHOT_REF ||
+        physical_key_type == entity::KeyType::SNAPSHOT ||
+        physical_key_type == entity::KeyType::SNAPSHOT_TOMBSTONE ||
+        physical_key_type == entity::KeyType::BLOCK_VERSION_REF) {
+        for (size_t i = 0; i < segment.row_count(); ++i) {
+            auto physical_key_type_index = static_cast<size_t>(physical_key_type);
+            auto task_type_index = static_cast<size_t>(task_type);
+            auto logical_key_type_index = static_cast<size_t>(variant_key_type(stream::read_key_row(segment, i)));
+            QueryStats::instance().stats_.keys_stats_[physical_key_type_index][task_type_index].logical_key_counts_[logical_key_type_index].fetch_add(1, std::memory_order_relaxed);
+        }
+    }
 }
 }

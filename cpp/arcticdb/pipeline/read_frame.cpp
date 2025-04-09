@@ -25,6 +25,7 @@
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/codec/segment_identifier.hpp>
 #include <arcticdb/util/spinlock.hpp>
+#include <arcticdb/util/query_stats.hpp>
 #include <arcticdb/pipeline/string_reducers.hpp>
 #include <arcticdb/pipeline/read_query.hpp>
 
@@ -884,11 +885,15 @@ folly::Future<SegmentInMemory> fetch_data(
             keys_and_continuations.emplace_back(row.slice_and_key().key(),
             [row=row, frame=frame, dynamic_schema=dynamic_schema, shared_data, &handler_data, read_query, read_options](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
+                QUERY_STATS_SET_KEY_TYPE(variant_key_type(key_seg.variant_key()))
+                QUERY_STATS_SET_TASK_TYPE(Decode)
+                QUERY_STATS_ADD(compressed_size_bytes, key_seg.segment_ptr()->size());
                 if(dynamic_schema) {
                     decode_into_frame_dynamic(frame, row, key_seg.segment(), shared_data, handler_data, read_query, read_options);
                 } else {
                     decode_into_frame_static(frame, row, key_seg.segment(), shared_data, handler_data, read_query, read_options);
                 }
+                QUERY_STATS_ADD(uncompressed_size_bytes, frame.num_bytes());
 
                 return key_seg.variant_key();
             });

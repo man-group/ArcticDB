@@ -176,7 +176,9 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
         .value("S3_GetObject", TaskType::S3_GetObject)
         .value("S3_GetObjectAsync", TaskType::S3_GetObjectAsync)
         .value("S3_DeleteObjects", TaskType::S3_DeleteObjects)
-        .value("S3_HeadObject", TaskType::S3_HeadObject);
+        .value("S3_HeadObject", TaskType::S3_HeadObject)
+        .value("Encode", TaskType::Encode)
+        .value("Decode", TaskType::Decode);
     
     py::class_<OpStats>(query_stats_module, "OpStats")
         .def(py::init<>())
@@ -188,6 +190,12 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
         })
         .def_property_readonly("count", [](const OpStats& stats) { 
             return stats.count_.load(std::memory_order_relaxed); 
+        })
+        .def_property_readonly("uncompressed_size_bytes", [](const OpStats& stats) { 
+            return stats.uncompressed_size_bytes_.load(std::memory_order_relaxed); 
+        })
+        .def_property_readonly("compressed_size_bytes", [](const OpStats& stats) { 
+            return stats.compressed_size_bytes_.load(std::memory_order_relaxed); 
         })
         .def_property_readonly("logical_key_counts", [](const OpStats& stats){
             std::array<uint64_t, NUMBER_OF_KEYS> logical_key_counts;

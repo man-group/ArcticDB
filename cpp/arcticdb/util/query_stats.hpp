@@ -14,6 +14,7 @@
 #include <array>
 
 #include <arcticdb/entity/key.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
 
 namespace arcticdb{
 namespace async {
@@ -26,11 +27,13 @@ enum class TaskType : size_t {
     S3_GetObject = 2,
     S3_GetObjectAsync = 3,
     S3_DeleteObjects = 4,
-    S3_HeadObject = 5
+    S3_HeadObject = 5,
+    Encode = 6,
+    Decode = 7
 };
 
 constexpr const size_t NUMBER_OF_KEYS = 29;
-constexpr const size_t NUMBER_OF_TASK_TYPES = 6;
+constexpr const size_t NUMBER_OF_TASK_TYPES = 8;
 
 class OpStats{
 public:
@@ -38,6 +41,8 @@ public:
     std::atomic<uint64_t> result_count_;
     std::atomic<uint64_t> total_time_ms_;
     std::atomic<uint64_t> count_;
+    std::atomic<uint64_t> uncompressed_size_bytes_;
+    std::atomic<uint64_t> compressed_size_bytes_;
 
     void reset_stats();
     OpStats();
@@ -76,6 +81,8 @@ private:
     std::atomic<uint64_t>& time_var_;
     std::chrono::time_point<std::chrono::steady_clock> start_;
 };
+
+void add_logical_keys(const entity::KeyType physical_key_type, const TaskType task_type, const SegmentInMemory& segment);
 } //util::query_stats
 } //arcticdb
 
@@ -90,6 +97,10 @@ private:
         using namespace arcticdb::util::query_stats; \
         log_total_time.emplace(QueryStats::instance().stats_.keys_stats_[static_cast<size_t>(query_stat_key_type)][static_cast<size_t>(query_stat_op)].stat_name##_, ##__VA_ARGS__); \
     }
+#define QUERY_STATS_ADD_LOGICAL_KEYS(segment) \
+    if (arcticdb::util::query_stats::QueryStats::instance().is_enabled()) { \
+        arcticdb::util::query_stats::add_logical_keys(query_stat_key_type, query_stat_op, segment); \
+    }
 
 #define QUERY_STATS_SET_KEY_TYPE(key_type) \
     static_assert(std::is_same_v<std::remove_cv_t<std::remove_reference_t<decltype(key_type)>>, arcticdb::entity::KeyType>); \
@@ -98,4 +109,3 @@ private:
     auto query_stat_op = arcticdb::util::query_stats::TaskType::task_type; \
     QUERY_STATS_ADD_TIME(total_time_ms, ##__VA_ARGS__) \
     QUERY_STATS_ADD(count, 1)
-
