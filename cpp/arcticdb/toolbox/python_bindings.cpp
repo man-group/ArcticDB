@@ -170,11 +170,9 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
         return QueryStats::instance().get_stats(async::TaskScheduler::instance()); 
     });
     
-    // Add bindings for TaskType enum
     py::enum_<TaskType>(query_stats_module, "TaskType")
         .value("S3_ListObjectsV2", TaskType::S3_ListObjectsV2);
     
-    // Add bindings for OpStats class
     py::class_<OpStats>(query_stats_module, "OpStats")
         .def(py::init<>())
         .def_property_readonly("result_count", [](const OpStats& stats) { 
@@ -187,7 +185,6 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
             return stats.count_.load(std::memory_order_relaxed); 
         });
     
-    // Add bindings for Stats class
     py::class_<Stats>(query_stats_module, "Stats")
         .def(py::init<>())
         .def_property_readonly("keys_stats_", [](const Stats& stats) -> const std::array<std::array<OpStats, NUMBER_OF_TASK_TYPES>, NUMBER_OF_KEYS>& {
