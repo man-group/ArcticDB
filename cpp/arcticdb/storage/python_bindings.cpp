@@ -277,10 +277,8 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
                                        [](const arcticdb::proto::storage::VersionStoreConfig & cfg){
                                            return pb_to_python(cfg);
                                        },
-                                       [](const std::monostate & ){
-                                            auto none = py::none{};
-                                            none.inc_ref();
-                                            return none.cast<py::object>();
+                                       [](const std::monostate & ) -> py::object {
+                                            return py::none{};
                                        });
         })
         ;
