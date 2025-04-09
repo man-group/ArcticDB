@@ -78,8 +78,13 @@ def get_query_stats() -> Dict[str, Any]:
             
         for op_group, op_group_data in key_type_data.items():
             result[key_type][op_group] = {}
-            for task_type, task_data in op_group_data.items():                
-                result[key_type][op_group][task_type] = task_data.stats
+            for task_type, task_data in op_group_data.items():
+                # Merge stats and key_type at OperationStatsOutput into a single dict
+                merged_task_data = task_data.stats
+                if task_data.key_type:
+                    merged_task_data['key_type'] = task_data.key_type
+
+                result[key_type][op_group][task_type] = merged_task_data
                 
     return result
 

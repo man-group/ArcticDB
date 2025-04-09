@@ -26,6 +26,7 @@
 #include <arcticdb/codec/segment_identifier.hpp>
 #include <arcticdb/pipeline/string_reducers.hpp>
 #include <arcticdb/pipeline/read_query.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 
 #include <ankerl/unordered_dense.h>
 
@@ -888,11 +889,15 @@ folly::Future<SegmentInMemory> fetch_data(
             keys_and_continuations.emplace_back(row.slice_and_key().key(),
             [row=row, frame=frame, dynamic_schema=dynamic_schema, shared_data, &handler_data, read_query, read_options](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
+                auto key_type = variant_key_type(key_seg.variant_key());
+                query_stats::add(key_type, query_stats::TaskType::Decode, query_stats::StatType::COMPRESSED_SIZE_BYTES, key_seg.segment_ptr()->size());
+                auto query_stat_operation_time = query_stats::add_task_count_and_time(key_type, query_stats::TaskType::Decode);
                 if(dynamic_schema) {
                     decode_into_frame_dynamic(frame, row, key_seg, shared_data, handler_data, read_query, read_options);
                 } else {
                     decode_into_frame_static(frame, row, key_seg, shared_data, handler_data, read_query, read_options);
                 }
+                query_stats::add(key_type, query_stats::TaskType::Decode, query_stats::StatType::UNCOMPRESSED_SIZE_BYTES, frame.num_bytes());
 
                 return key_seg.variant_key();
             });
