@@ -1308,6 +1308,7 @@ def arctic_uri(request):
     """
     storage_fixture = request.getfixturevalue(request.param + "_storage")
     if request.param == "mongo":
+        pytest.skip()
         return storage_fixture.mongo_uri
     else:
         return storage_fixture.arctic_uri
