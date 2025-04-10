@@ -41,6 +41,8 @@ from arcticdb.version_store.library import (
     ArcticInvalidApiUsageException,
 )
 
+from tests.enduser.shared_tests import generate_dataframe, execute_test_write_batch
+
 
 @pytest.fixture
 def library_factory(arctic_client, lib_name):
@@ -48,17 +50,6 @@ def library_factory(arctic_client, lib_name):
         return arctic_client.create_library(name, library_options)
 
     return create_library
-
-
-def generate_dataframe(columns, dt, num_days, num_rows_per_day):
-    dataframes = []
-    for _ in range(num_days):
-        index = pd.Index([dt + timedelta(seconds=s) for s in range(num_rows_per_day)])
-        vals = {c: random_floats(num_rows_per_day) for c in columns}
-        new_df = pd.DataFrame(data=vals, index=index)
-        dataframes.append(new_df)
-        dt = dt + timedelta(days=1)
-    return pd.concat(dataframes)
 
 
 @pytest.mark.storage
@@ -374,33 +365,7 @@ def test_write_pickle_batch_dataerror(library_factory):
 
 @pytest.mark.storage
 def test_write_batch(library_factory):
-    """Should be able to write different size of batch of data."""
-    lib = library_factory(LibraryOptions(rows_per_segment=10))
-    assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
-    num_days = 40
-    num_symbols = 2
-    dt = datetime(2019, 4, 8, 0, 0, 0)
-    column_length = 4
-    num_columns = 5
-    num_rows_per_day = 1
-    write_requests = []
-    read_requests = []
-    list_dataframes = {}
-    columns = random_strings_of_length(num_columns, num_columns, True)
-    for sym in range(num_symbols):
-        df = generate_dataframe(random.sample(columns, num_columns), dt, num_days, num_rows_per_day)
-        write_requests.append(WritePayload("symbol_" + str(sym), df, metadata="great_metadata" + str(sym)))
-        read_requests.append("symbol_" + str(sym))
-        list_dataframes[sym] = df
-
-    write_batch_result = lib.write_batch(write_requests)
-    assert all(type(w) == PythonVersionedItem for w in write_batch_result)
-
-    read_batch_result = lib.read_batch(read_requests)
-    for sym in range(num_symbols):
-        original_dataframe = list_dataframes[sym]
-        assert read_batch_result[sym].metadata == "great_metadata" + str(sym)
-        assert_frame_equal(read_batch_result[sym].data, original_dataframe)
+    execute_test_write_batch(library_factory)
 
 
 @pytest.mark.storage

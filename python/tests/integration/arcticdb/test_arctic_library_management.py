@@ -35,6 +35,7 @@ from arcticdb.version_store.library import (
     ArcticInvalidApiUsageException,
 )
 
+from tests.enduser.shared_tests import execute_test_library_creation_deletion
 from tests.util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -49,32 +50,7 @@ from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibrar
 
 @pytest.mark.storage
 def test_library_creation_deletion(arctic_client, lib_name):
-    ac = arctic_client
-    ac.create_library(lib_name)
-    try:
-        with pytest.raises(ValueError):
-            ac.create_library(lib_name)
-
-        assert lib_name in ac.list_libraries()
-        assert ac.has_library(lib_name)
-        assert lib_name in ac
-        if "mongo" in arctic_client.get_uri():
-            # The mongo fixture uses PrefixingLibraryAdapterDecorator which leaks in this one case
-            assert ac[lib_name].name.endswith(lib_name)
-        else:
-            assert ac[lib_name].name == lib_name
-
-        ac.delete_library(lib_name)
-        # Want this to be silent.
-        ac.delete_library("library_that_does_not_exist")
-
-        assert lib_name not in ac.list_libraries()
-        with pytest.raises(LibraryNotFound):
-            _lib = ac[lib_name]
-        assert not ac.has_library(lib_name)
-        assert lib_name not in ac
-    finally:
-        ac.delete_library(lib_name)
+    execute_test_library_creation_deletion(arctic_client, lib_name)  
 
 
 @pytest.mark.storage
