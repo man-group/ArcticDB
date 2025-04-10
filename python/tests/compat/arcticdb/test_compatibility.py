@@ -231,7 +231,8 @@ assert lib.read_metadata({repr(sym)}, as_of=4).metadata == timestamp_pytz
         ])
 
 
-def test_compat_read_incomplete(old_venv_and_arctic_uri, lib_name):
+@pytest.mark.parametrize("run", range(100))
+def test_compat_read_incomplete(old_venv_and_arctic_uri, lib_name, run):
     old_venv, arctic_uri = old_venv_and_arctic_uri
     with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
         sym = "sym"
