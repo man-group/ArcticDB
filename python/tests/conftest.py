@@ -1323,5 +1323,3 @@ def old_venv_and_arctic_uri(old_venv, arctic_uri):
         pytest.skip("LMDB storage backed has a bug in versions before 5.0.0 which leads to flaky segfaults")
 
     yield old_venv, arctic_uri
-
-    old_venv.create_arctic(arctic_uri).cleanup()
