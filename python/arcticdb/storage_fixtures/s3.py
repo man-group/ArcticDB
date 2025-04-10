@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import platform
+import uuid
 from tempfile import mkdtemp
 import boto3
 import time
@@ -705,7 +706,6 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     _p: multiprocessing.Process
     _s3_admin: Any
     _iam_admin: Any = None
-    _bucket_id = 0
     _live_buckets: List[S3Bucket] = None
 
     def __init__(
@@ -728,20 +728,11 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self.use_raw_prefix = use_raw_prefix
         self.use_mock_storage_for_testing = use_mock_storage_for_testing
         self.use_internal_client_wrapper_for_testing = use_internal_client_wrapper_for_testing
-        self._test_only_is_nfs_layout = _test_only_is_nfs_layout
-        # This is needed because we might have multiple factory instances in the same test run
-        # and we need to make sure the bucket names are unique
-        # set the unique_id to the current UNIX timestamp to avoid conflicts
-        self.unique_id = str(int(time.time()))
         self._live_buckets = []
 
     def bucket_name(self, bucket_type="s3"):
-        # We need to increment the bucket_id for each new bucket
-        self._bucket_id += 1
-        # We need the unique_id because we have tests that are creating the factory directly
-        # and not using the fixtures
-        # so this guarantees a unique bucket name
-        return f"test_{bucket_type}_bucket_{self.unique_id}_{self._bucket_id}"
+        unique_id = uuid.uuid4()
+        return f"test_{bucket_type}_bucket_{unique_id}"
 
     def _start_server(self):
         port = self.port = get_ephemeral_port(2)
