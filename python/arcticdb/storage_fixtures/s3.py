@@ -18,14 +18,13 @@ import boto3
 import time
 import random
 from datetime import datetime
-import string
 
 import requests
 from typing import Optional, Any, Type
 
 import werkzeug
-from moto.moto_server.werkzeug_app import DomainDispatcherApplication, create_backend_app
 import botocore.exceptions
+from moto.server import DomainDispatcherApplication, create_backend_app
 
 from .api import *
 from .utils import (
