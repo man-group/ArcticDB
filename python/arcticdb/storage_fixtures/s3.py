@@ -830,7 +830,14 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
 
     def create_fixture(self) -> S3Bucket:
         bucket = self.bucket_name("s3")
-        self._s3_admin.create_bucket(Bucket=bucket)
+        for i in range(max_retries):
+            try:
+                self._s3_admin.create_bucket(Bucket=bucket)
+                break
+            except botocore.exceptions.EndpointConnectionError as e:
+                if i >= max_retries-1: 
+                    raise
+            time.sleep(1)
         if self.bucket_versioning:
             self._s3_admin.put_bucket_versioning(Bucket=bucket, VersioningConfiguration={"Status": "Enabled"})
 
@@ -866,7 +873,14 @@ _PermissionCapableFactory = MotoS3StorageFixtureFactory
 class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
     def create_fixture(self) -> NfsS3Bucket:
         bucket = self.bucket_name("nfs")
-        self._s3_admin.create_bucket(Bucket=bucket)
+        for i in range(max_retries):
+            try:
+                self._s3_admin.create_bucket(Bucket=bucket)
+                break
+            except botocore.exceptions.EndpointConnectionError as e:
+                if i >= max_retries-1: 
+                    raise
+            time.sleep(1)
         out = NfsS3Bucket(self, bucket)
         self._live_buckets.append(out)
         return out
@@ -907,7 +921,14 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
 
     def create_fixture(self) -> GcpS3Bucket:
         bucket = self.bucket_name("gcp")
-        self._s3_admin.create_bucket(Bucket=bucket)
+        for i in range(max_retries):
+            try:
+                self._s3_admin.create_bucket(Bucket=bucket)
+                break
+            except botocore.exceptions.EndpointConnectionError as e:
+                if i >= max_retries-1: 
+                    raise
+            time.sleep(1)
         out = GcpS3Bucket(self, bucket)
         self._live_buckets.append(out)
         return out
