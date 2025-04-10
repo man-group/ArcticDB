@@ -1295,7 +1295,9 @@ def pandas_v1_venv(request):
 @pytest.fixture(
     scope="session",
     params=[
-        "lmdb_shared",
+        pytest.param("lmdb_shared", marks=pytest.mark.skip(
+            "LMDB can very rarely trigger segfaults on cleanup. It is likely due the multiprocessing nature of "
+            "compatibility tests and LMDB's lack of support for multiprocessing")),
         "s3_ssl_disabled",
         pytest.param("azurite", marks=AZURE_TESTS_MARK),
         pytest.param("mongo", marks=MONGO_TESTS_MARK),
