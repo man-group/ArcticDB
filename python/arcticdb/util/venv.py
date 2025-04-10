@@ -8,6 +8,7 @@ import venv
 
 from typing import Dict, List, Optional, Union
 
+from arcticdb_ext.exceptions import StorageException
 from packaging.version import Version
 from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb.arctic import Arctic
@@ -161,10 +162,6 @@ class VenvArctic:
     def get_library(self, lib_name: str) -> "VenvLib":
         return VenvLib(self, lib_name, create_if_not_exists=False)
 
-    def cleanup(self):
-        ac = Arctic(self.uri)
-        for lib in ac.list_libraries():
-            ac.delete_library(lib)
 
 class VenvLib:
     def __init__(self, arctic, lib_name, create_if_not_exists=True):
@@ -253,5 +250,14 @@ class CompatLibrary:
     def __exit__(self, exc_type, exc_val, exc_tb):
         ac = Arctic(self.uri)
         for lib_name in self.lib_names:
-            ac.delete_library(lib_name)
+            try:
+                ac.delete_library(lib_name)
+            except StorageException as e:
+                if self.uri.startswith("lmdb"):
+                    # For lmdb on windows sometimes the venv process keeps a dangling reference to the library for some
+                    # time. Since we use temporary directories for lmdb it's fine to not retry because the temporary
+                    # directory will be cleaned up in the end of the pytest process.
+                    logger.info(f"Failed to delete an lmdb library due to a Storage Exception: {e}")
+                else:
+                    raise
         del ac
