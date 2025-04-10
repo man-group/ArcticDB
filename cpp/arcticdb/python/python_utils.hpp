@@ -16,7 +16,6 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/stream/stream_reader.hpp>
 #include <arcticdb/util/variant.hpp>
-#include <arcticdb/util/gil_safe_py_none.hpp>
 
 namespace py = pybind11;
 
@@ -105,14 +104,13 @@ inline void prefill_with_none(
     SpinLock& spin_lock,
     IncrementRefCount inc_ref_count = IncrementRefCount::ON) {
     std::lock_guard lock(spin_lock);
-    auto none = GilSafePyNone::instance();
     for (auto i = 0U; i < num_rows; ++i)
-        *ptr_dest++ = none->ptr();
+        *ptr_dest++ = Py_None;
 
     if(inc_ref_count == IncrementRefCount::ON) {
         auto none_count = num_rows - sparse_count;
         for (auto j = 0U; j < none_count; ++j)
-            Py_INCREF(none->ptr());
+            Py_INCREF(Py_None);
     }
 }
 
