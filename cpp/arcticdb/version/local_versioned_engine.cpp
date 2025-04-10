@@ -1710,12 +1710,13 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
 
 // Some key types are historical or very specialized, so restrict to these in size calculations to avoid extra listing
 // operations
-static constexpr std::array<KeyType, 9> TYPES_FOR_SIZE_CALCULATION = {
+static constexpr std::array<KeyType, 10> TYPES_FOR_SIZE_CALCULATION = {
     KeyType::VERSION_REF,
     KeyType::VERSION,
     KeyType::TABLE_INDEX,
     KeyType::TABLE_DATA,
     KeyType::APPEND_DATA,
+    KeyType::MULTI_KEY,
     KeyType::SNAPSHOT_REF,
     KeyType::LOG,
     KeyType::LOG_COMPACTED,
@@ -1738,12 +1739,13 @@ std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes() {
     return res;
 }
 
-static constexpr std::array<KeyType, 5> TYPES_FOR_SIZE_BY_STREAM_CALCULATION = {
+static constexpr std::array<KeyType, 6> TYPES_FOR_SIZE_BY_STREAM_CALCULATION = {
     KeyType::VERSION_REF,
     KeyType::VERSION,
     KeyType::TABLE_INDEX,
     KeyType::TABLE_DATA,
     KeyType::APPEND_DATA,
+    KeyType::MULTI_KEY
 };
 
 std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes_for_stream(const StreamId& stream_id) {

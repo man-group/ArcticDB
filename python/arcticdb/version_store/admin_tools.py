@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 from enum import Enum
-from typing import Dict
+from typing import Dict, Iterable
 
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.storage import KeyType as NativeKeyType
@@ -24,6 +24,14 @@ class Size:
 
     count: int
     """The number of objects contributing to the size."""
+
+    def __add__(self, other):
+        return Size(self.bytes_compressed + other.bytes_compressed, self.count + other.count)
+
+
+def sum_sizes(sizes: Iterable[Size]) -> Size:
+    """The sum of the given sizes."""
+    return sum(sizes, Size(0, 0))
 
 
 class KeyType(Enum):
@@ -48,16 +56,23 @@ class KeyType(Enum):
     APPEND_DATA = 5
     """Only used for staged writes. Data that has been staged but not yet finalized."""
 
-    SNAPSHOT_REF = 6
+    MULTI_KEY = 6
+    """Only used for "recursively normalized" data, which cannot currently be written with the `Library` API. 
+
+    Records all the TABLE_INDEX keys used to compose the overall structure.
+    For example, if you save a list of two dataframes with recursive normalizers, this key would refer to the two
+    index keys used to serialize the two dataframes."""
+
+    SNAPSHOT_REF = 7
     """Metadata used by ArcticDB to store the contents of a snapshot (the structure created when you call `lib.snapshot`)."""
 
-    LOG = 7
+    LOG = 8
     """Only used for enterprise replication. Small objects recording a stream of changes to the library."""
 
-    LOG_COMPACTED = 8
+    LOG_COMPACTED = 9
     """Only used for some enterprise replication installations. A compacted form of the LOG keys."""
 
-    SYMBOL_LIST = 9
+    SYMBOL_LIST = 10
     """A collection of keys that together store the total set of symbols stored in a library. Used for `list_symbols`."""
 
     @staticmethod
@@ -74,6 +89,8 @@ class KeyType(Enum):
             return KeyType.SNAPSHOT_REF
         elif native_key_type == NativeKeyType.APPEND_DATA:
             return KeyType.APPEND_DATA
+        elif native_key_type == NativeKeyType.MULTI_KEY:
+            return KeyType.MULTI_KEY
         elif native_key_type == NativeKeyType.LOG:
             return KeyType.LOG
         elif native_key_type == NativeKeyType.LOG_COMPACTED:
@@ -103,7 +120,7 @@ class AdminTools:
         """
         A breakdown of compressed sizes (in bytes) in the library, grouped by key type.
 
-        All the key types in KeyType (and only these) are always included in the output.
+        All the key types in KeyType are always included in the output.
         """
         sizes = self._nvs.version_store.scan_object_sizes()
         return {KeyType._from_native(s.key_type) : Size(s.compressed_size, s.count) for s in sizes}

@@ -241,9 +241,9 @@ folly::Future<folly::Unit> visit_object_sizes(
         key_size_calculators.emplace_back(std::move(k), [visitor, stream_id_opt] (auto&& key_seg) {
             if (!stream_id_opt || variant_key_id(key_seg.variant_key()) == *stream_id_opt) {
                 auto compressed_size = key_seg.segment().size();
-                visitor(std::forward<decltype(key_seg)>(key_seg).variant_key(), compressed_size);
+                visitor(key_seg.variant_key(), compressed_size);
             }
-            return key_seg.variant_key();
+            return std::forward<decltype(key_seg)>(key_seg).variant_key();
         });
     }, prefix);
 
