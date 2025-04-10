@@ -122,10 +122,17 @@ find_min(const T *data, size_t n) {
 }
 
 template<typename T>
-typename std::enable_if<std::is_integral<T>::value, T>::type
+requires std::is_integral_v<T>
 find_max(const T *data, size_t n) {
     util::check(size != 0, "Got zero size in find_max");
     return *std::max_element(data, data + n);
+}
+
+template<typename T>
+requires std::is_integral_v<T>
+MinMax<T> find_min_max(const T* data, size_t n) {
+    auto res = std::min_max_element(data, data + n);
+    return {*res.first, *res.second};
 }
 
 #endif

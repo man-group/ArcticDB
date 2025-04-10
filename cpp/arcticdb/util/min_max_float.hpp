@@ -5,6 +5,7 @@
 #include <algorithm>
 
 #include <arcticdb/util/vector_common.hpp>
+#include <arcticdb/util/preconditions.hpp>
 
 namespace arcticdb {
 
@@ -78,14 +79,14 @@ T find_float_max(const T* data, size_t n) {
 template<typename T>
 typename std::enable_if<std::is_floating_point<T>::value, T>::type
 find_float_min(const T *data, size_t n) {
-    util::check(size != 0, "Got zero size in find_float_min");
+    util::check(n != 0, "Got zero size in find_float_min");
     return *std::min_element(data, data + n);
 }
 
 template<typename T>
 typename std::enable_if<std::is_floating_point<T>::value, T>::type
 find_float_max(const T *data, size_t n) {
-    util::check(size != 0, "Got zero size in find_float_max");
+    util::check(n != 0, "Got zero size in find_float_max");
     return *std::max_element(data, data + n);
 }
 
