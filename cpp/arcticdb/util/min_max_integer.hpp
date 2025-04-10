@@ -9,12 +9,13 @@
 
 namespace arcticdb {
 
-#if HAS_VECTOR_EXTENSIONS
 template<typename T>
 struct MinMax {
     T min;
     T max;
 };
+
+#if HAS_VECTOR_EXTENSIONS
 
 template<bool ComputeMin, bool ComputeMax, typename T>
 class ExtremumFinder {
@@ -37,22 +38,23 @@ public:
         T init_min = std::numeric_limits<T>::max();
         T init_max = std::numeric_limits<T>::min();
 
-        VectorType vector_min, vector_max;
+        VectorType vector_min;
+        VectorType vector_max;
         if constexpr (ComputeMin) {
-            T* lanes = reinterpret_cast<T*>(&vector_min);
+            auto lanes = reinterpret_cast<T*>(&vector_min);
             for (size_t i = 0; i < lane_count; i++) {
                 lanes[i] = init_min;
             }
         }
         if constexpr (ComputeMax) {
-            T* lanes = reinterpret_cast<T*>(&vector_max);
+            auto lanes = reinterpret_cast<T*>(&vector_max);
             for (size_t i = 0; i < lane_count; i++) {
                 lanes[i] = init_max;
             }
         }
 
         size_t num_vectors = n / lane_count;
-        const VectorType* vdata = reinterpret_cast<const VectorType*>(data);
+        auto vdata = reinterpret_cast<const VectorType*>(data);
         for (size_t i = 0; i < num_vectors; i++) {
             VectorType v = vdata[i];
             if constexpr (ComputeMin) {
@@ -66,13 +68,13 @@ public:
         T final_min = init_min;
         T final_max = init_max;
         if constexpr (ComputeMin) {
-            const T* lanes = reinterpret_cast<const T*>(&vector_min);
+            auto lanes = reinterpret_cast<const T*>(&vector_min);
             for (size_t i = 0; i < lane_count; i++) {
                 final_min = std::min(final_min, lanes[i]);
             }
         }
         if constexpr (ComputeMax) {
-            const T* lanes = reinterpret_cast<const T*>(&vector_max);
+            auto lanes = reinterpret_cast<const T*>(&vector_max);
             for (size_t i = 0; i < lane_count; i++) {
                 final_max = std::max(final_max, lanes[i]);
             }
