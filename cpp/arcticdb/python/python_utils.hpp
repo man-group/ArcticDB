@@ -114,7 +114,6 @@ inline void prefill_with_none(
         for (auto j = 0U; j < none_count; ++j)
             Py_INCREF(none->ptr());
     }
-    spin_lock.unlock();
 }
 
 template<typename Msg>
