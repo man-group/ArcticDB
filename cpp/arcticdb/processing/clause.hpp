@@ -49,7 +49,7 @@ struct IClause {
         // for one ProcessingUnit.
         [[nodiscard]] std::vector<std::vector<size_t>>
         structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys) {
-            return std::move(folly::poly_call<0>(*this, ranges_and_keys));
+            return folly::poly_call<0>(*this, ranges_and_keys);
         }
 
         [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(
@@ -59,7 +59,7 @@ struct IClause {
 
         [[nodiscard]] std::vector<EntityId>
         process(std::vector<EntityId>&& entity_ids) const {
-            return std::move(folly::poly_call<2>(*this, std::move(entity_ids)));
+            return folly::poly_call<2>(*this, std::move(entity_ids));
         }
 
         [[nodiscard]] const ClauseInfo& clause_info() const { return folly::poly_call<3>(*this); };

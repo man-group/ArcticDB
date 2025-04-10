@@ -12,8 +12,6 @@ from arcticdb.util.test import assert_frame_equal
 from arcticdb.exceptions import MissingDataException
 from arcticdb_ext.storage import KeyType
 
-from arcticdb.util.venv import CurrentVersion
-
 @pytest.mark.parametrize("batch", (True, False))
 def test_read_incompletes_with_indexed_data(lmdb_version_store_v1, batch):
     lib = lmdb_version_store_v1
