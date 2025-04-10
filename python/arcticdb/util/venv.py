@@ -219,34 +219,39 @@ class CurrentVersion:
 
 class CompatLibrary:
     """
-    Responsible for creating and cleaning up a library when writing compatibility tests.
+    Responsible for creating and cleaning up a library (or multiple libraries) when writing compatibility tests.
 
     Usually the library cleanup is managed by pytest fixtures, but it is hard to do so for compatibility tests because
     they are responsible for maintaining their own arctic instances across several processes. As long as libraries
     within the test are wrapped in a CompatLibrary cleanup will be dealt with.
     """
-    def __init__(self, old_venv, uri, lib_name, create_with_current_version=False):
+    def __init__(self, old_venv : Venv, uri : str, lib_names : Union[str, List[str]], create_with_current_version=False):
         self.old_venv = old_venv
         self.uri = uri
-        self.lib_name = lib_name
+        self.lib_names = lib_names if isinstance(lib_names, list) else [lib_names]
+        assert len(self.lib_names) > 0
         self.create_with_current_version = create_with_current_version
 
     def __enter__(self):
-        if self.create_with_current_version:
-            ac = Arctic(self.uri)
-            ac.create_library(self.lib_name)
-            del ac
-        else:
-            old_ac = self.old_venv.create_arctic(self.uri)
-            old_ac.create_library(self.lib_name)
+        for lib_name in self.lib_names:
+            if self.create_with_current_version:
+                ac = Arctic(self.uri)
+                ac.create_library(lib_name)
+                del ac
+            else:
+                old_ac = self.old_venv.create_arctic(self.uri)
+                old_ac.create_library(lib_name)
 
         self.old_ac = self.old_venv.create_arctic(self.uri)
-        self.old_lib = self.old_ac.get_library(self.lib_name)
+        self.old_libs = {lib_name : self.old_ac.get_library(lib_name) for lib_name in self.lib_names}
+        self.old_lib = self.old_libs[self.lib_names[0]]
         return self
 
     def current_version(self):
-        return CurrentVersion(self.uri, self.lib_name)
+        return CurrentVersion(self.uri, self.lib_names[0])
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        with self.current_version() as curr:
-            curr.ac.delete_library(self.lib_name)
+        ac = Arctic(self.uri)
+        for lib_name in self.lib_names:
+            ac.delete_library(lib_name)
+        del ac

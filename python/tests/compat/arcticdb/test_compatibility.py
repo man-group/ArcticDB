@@ -293,15 +293,15 @@ lib._nvs.append("sym", df_2, incomplete=True)
 def test_storage_mover_clone_old_library(old_venv_and_arctic_uri, lib_name):
     old_venv, arctic_uri = old_venv_and_arctic_uri
     dst_lib_name = "local.extra"
-    with CompatLibrary(old_venv, arctic_uri, lib_name) as source, CompatLibrary(old_venv, arctic_uri, dst_lib_name, create_with_current_version=True) as dst:
+    with CompatLibrary(old_venv, arctic_uri, [lib_name, dst_lib_name]) as compat:
         df = pd.DataFrame({"col": [1, 2, 3]})
         df_2 = pd.DataFrame({"col": [4, 5, 6]})
         sym = "a"
 
-        source.old_lib.write(sym, df)
-        source.old_lib.write(sym, df_2)
+        compat.old_libs[lib_name].write(sym, df)
+        compat.old_libs[lib_name].write(sym, df_2)
 
-        with source.current_version() as curr:
+        with compat.current_version() as curr:
             src_lib = curr.ac.get_library(lib_name)
             dst_lib = curr.ac.get_library(dst_lib_name)
             s = StorageMover(src_lib._nvs._library, dst_lib._nvs._library)
@@ -312,4 +312,4 @@ def test_storage_mover_clone_old_library(old_venv_and_arctic_uri, lib_name):
             pytest.skip("Reading the new library on s3 or azure with 1.6.2 requires some work arounds")
 
         # Make sure that we can read the new lib with the old version
-        dst.old_lib.assert_read(sym, df_2)
+        compat.old_libs[dst_lib_name].assert_read(sym, df_2)
