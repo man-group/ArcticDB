@@ -830,6 +830,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
 
     def create_fixture(self) -> S3Bucket:
         bucket = self.bucket_name("s3")
+        max_retries = 15
         for i in range(max_retries):
             try:
                 self._s3_admin.create_bucket(Bucket=bucket)
@@ -873,6 +874,7 @@ _PermissionCapableFactory = MotoS3StorageFixtureFactory
 class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
     def create_fixture(self) -> NfsS3Bucket:
         bucket = self.bucket_name("nfs")
+        max_retries = 15
         for i in range(max_retries):
             try:
                 self._s3_admin.create_bucket(Bucket=bucket)
@@ -921,6 +923,7 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
 
     def create_fixture(self) -> GcpS3Bucket:
         bucket = self.bucket_name("gcp")
+        max_retries = 15
         for i in range(max_retries):
             try:
                 self._s3_admin.create_bucket(Bucket=bucket)
