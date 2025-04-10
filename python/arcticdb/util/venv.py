@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import venv
+import gc
 
 from typing import Dict, List, Optional, Union
 
@@ -161,10 +162,6 @@ class VenvArctic:
     def get_library(self, lib_name: str) -> "VenvLib":
         return VenvLib(self, lib_name, create_if_not_exists=False)
 
-    def cleanup(self):
-        ac = Arctic(self.uri)
-        for lib in ac.list_libraries():
-            ac.delete_library(lib)
 
 class VenvLib:
     def __init__(self, arctic, lib_name, create_if_not_exists=True):
@@ -251,6 +248,10 @@ class CompatLibrary:
         return CurrentVersion(self.uri, self.lib_names[0])
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        # To successfully clear LMDB libraries we need to make sure no other arctic clients access the same library.
+        # Even though we call `del` on arctic clients on some python versions we might need to explicitly call the
+        # garbage collector to do the cleanup
+        gc.collect()
         ac = Arctic(self.uri)
         for lib_name in self.lib_names:
             ac.delete_library(lib_name)
