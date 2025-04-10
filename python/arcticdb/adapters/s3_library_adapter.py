@@ -107,7 +107,6 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
         self._ssl = self._query_params.ssl
 
-        print(self._query_params)
         self._test_only_is_nfs_layout = self._query_params._test_only_is_nfs_layout
 
         if "amazonaws" in self._endpoint:
