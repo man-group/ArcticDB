@@ -210,7 +210,9 @@ def s3_ssl_disabled_storage_factory() -> Generator[MotoS3StorageFixtureFactory, 
 
 @pytest.fixture(scope="session")
 def nfs_backed_s3_storage_factory() -> Generator[MotoNfsBackedS3StorageFixtureFactory, None, None]:
-    with MotoNfsBackedS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=False) as f:
+    with MotoNfsBackedS3StorageFixtureFactory(
+        use_ssl=False, ssl_test_support=False, bucket_versioning=False, _test_only_is_nfs_layout=True
+    ) as f:
         yield f
 
 
@@ -310,9 +312,10 @@ def real_gcp_storage_factory() -> BaseGCPStorageFixtureFactory:
     )
 
 
-@pytest.fixture(scope="session",
-                params=[pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
-                        pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK)])
+@pytest.fixture(
+    scope="session",
+    params=[pytest.param("real_s3", marks=REAL_S3_TESTS_MARK), pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK)],
+)
 def real_storage_factory(request) -> Union[BaseGCPStorageFixtureFactory, BaseGCPStorageFixtureFactory]:
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage_factory")
     return storage_fixture
@@ -465,29 +468,31 @@ def mem_storage() -> Generator[InMemoryStorageFixture, None, None]:
 # endregion
 # region ==================================== `Arctic` API Fixtures ====================================
 
+
 def filter_out_unwanted_mark(request, current_param):
-    """ Exclude specific fixture parameters or include only certain
+    """Exclude specific fixture parameters or include only certain
 
     Provides ability tp filter out unwanted fixture parameter
     To do that add to test as many of the marks you want to stay using:
-    
+
       @pytest.mark.only_fixture_params([<fixture_param_names_list>], )
 
     Or alternatively you can exclude as many as wanted:
       @pytest.mark.skip_fixture_params([<fixture_param_names_list>], )
     """
     only_fixtures = request.node.get_closest_marker("only_fixture_params")
-    if only_fixtures: 
+    if only_fixtures:
         # Only when defined at least one only_ mark evaluate what should stay
         values_to_include = only_fixtures.args[0]
         if not current_param in values_to_include:
-            pytest.skip(reason = f"Skipping {current_param} param as not included in test 'only_fixture_params' mark.")
+            pytest.skip(reason=f"Skipping {current_param} param as not included in test 'only_fixture_params' mark.")
 
     skip_fixture_value_mark = request.node.get_closest_marker("skip_fixture_params")
     if skip_fixture_value_mark:
         values_to_skip = skip_fixture_value_mark.args[0]
         if current_param in values_to_skip:
-            pytest.skip(reason = f"Skipping param: {current_param} as per 'skip_fixture_params' mark")
+            pytest.skip(reason=f"Skipping param: {current_param} as per 'skip_fixture_params' mark")
+
 
 @pytest.fixture(
     scope="function",
@@ -508,6 +513,7 @@ def arctic_client(request, encoding_version) -> Arctic:
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
     ac = storage_fixture.create_arctic(encoding_version=encoding_version)
     return ac
+
 
 @pytest.fixture(
     scope="function",
@@ -534,6 +540,8 @@ def arctic_client_v1(request) -> Arctic:
     scope="function",
     params=[
         pytest.param("s3", marks=SIM_S3_TESTS_MARK),
+        pytest.param("nfs_backed_s3", marks=SIM_NFS_TESTS_MARK),
+        pytest.param("gcp", marks=SIM_GCP_TESTS_MARK),
         pytest.param("mem", marks=MEM_TESTS_MARK),
         pytest.param("azurite", marks=AZURE_TESTS_MARK),
         pytest.param("mongo", marks=MONGO_TESTS_MARK),
@@ -824,9 +832,13 @@ def local_object_version_store_prune_previous(local_object_store_factory):
     return local_object_store_factory(prune_previous_version=True)
 
 
-@pytest.fixture(params=[pytest.param("version_store_factory", marks=LMDB_TESTS_MARK),
-                        pytest.param("real_gcp_store_factory", marks=REAL_GCP_TESTS_MARK), 
-                        pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK)])
+@pytest.fixture(
+    params=[
+        pytest.param("version_store_factory", marks=LMDB_TESTS_MARK),
+        pytest.param("real_gcp_store_factory", marks=REAL_GCP_TESTS_MARK),
+        pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
+    ]
+)
 def version_store_and_real_s3_basic_store_factory(request):
     """
     Just the version_store and real_s3 specifically for the test test_interleaved_store_read
@@ -839,7 +851,7 @@ def version_store_and_real_s3_basic_store_factory(request):
 @pytest.fixture(
     params=[
         pytest.param("version_store_factory", marks=LMDB_TESTS_MARK),
-        pytest.param("in_memory_store_factory",marks=MEM_TESTS_MARK),
+        pytest.param("in_memory_store_factory", marks=MEM_TESTS_MARK),
         pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
         pytest.param("real_gcp_store_factory", marks=REAL_GCP_TESTS_MARK),
     ]

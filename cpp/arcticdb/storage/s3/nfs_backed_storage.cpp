@@ -207,17 +207,28 @@ static std::string prefix_handler(const std::string& prefix, const std::string& 
     return !prefix.empty() ? fmt::format("{}/{}", key_type_dir, new_prefix) : key_type_dir;
 }
 
+// signature needs to match PrefixHandler in s3_storage.hpp
+static std::string iter_prefix_handler(const std::string&, const std::string& key_type_dir, const KeyDescriptor&, KeyType) {
+    // The prefix handler is not used for filtering (done in func below)
+    // so we just return the key type dir
+    return key_type_dir;
+}
+
 bool NfsBackedStorage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix) {
+    // We need this filtering here instead of a regex like in s3/azure
+    // because we are doing sharding through subdirectories
+    // and the prefix might be partial(e.g. "sym_" instead of "sym_123")
+    // so it cannot be hashed to the correct shard
     const IterateTypePredicate func = [&v = visitor, prefix=prefix] (VariantKey&& k) {
         auto key = unencode_object_id(k);
-        if(prefix.empty() || variant_key_id(key) == StreamId{prefix}) {
+        if(prefix.empty() || variant_key_view(key).find(prefix) != std::string::npos) {
           return v(std::move(key));
         } else {
           return false;
         }
     };
 
-    return s3::detail::do_iterate_type_impl(key_type, func, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, prefix_handler, prefix);
+    return s3::detail::do_iterate_type_impl(key_type, func, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, iter_prefix_handler, prefix);
 }
 
 bool NfsBackedStorage::do_key_exists(const VariantKey& key) {
