@@ -103,11 +103,10 @@ inline void prefill_with_none(
     size_t sparse_count,
     SpinLock& spin_lock,
     IncrementRefCount inc_ref_count = IncrementRefCount::ON) {
-    std::lock_guard lock(spin_lock);
-    for (auto i = 0U; i < num_rows; ++i)
-        *ptr_dest++ = Py_None;
+    std::fill_n(ptr_dest, num_rows, Py_None);
 
     if(inc_ref_count == IncrementRefCount::ON) {
+        std::lock_guard lock(spin_lock);
         auto none_count = num_rows - sparse_count;
         for (auto j = 0U; j < none_count; ++j)
             Py_INCREF(Py_None);
