@@ -697,9 +697,10 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
             s3_client.create_bucket(Bucket=bucket_name)
             return
         except botocore.exceptions.EndpointConnectionError as e:
-            time.sleep(1)
-            
-    raise botocore.exceptions.EndpointConnectionError("Failed to create bucket {}".format(bucket_name))    
+            if i >= max_retries - 1:
+                raise
+            logger.warn(f"S3 create bucket failed. Retry {1}/{max_retries}")
+            time.sleep(1)   
 
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
