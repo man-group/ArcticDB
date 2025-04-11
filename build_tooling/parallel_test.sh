@@ -17,7 +17,7 @@ set -o xtrace -o pipefail
 # Build a directory that's just the test assets, so can't access other Python source not in the wheel
 mkdir -p $PARALLEL_TEST_ROOT
 MSYS=winsymlinks:nativestrict ln -s "$(realpath "$tooling_dir/../python/tests")" $PARALLEL_TEST_ROOT/
-#cd $PARALLEL_TEST_ROOT
+cd $PARALLEL_TEST_ROOT
 
 export ARCTICDB_RAND_SEED=$RANDOM
 
@@ -27,7 +27,7 @@ if [ -z "$ARCTICDB_PYTEST_ARGS" ]; then
         --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
         --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
         --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
-        --rootdir="$project_dir" \
+        --rootdir="./../" \
         $PYTEST_ADD_TO_COMMAND_LINE "$@" 2>&1 | sed -r "s#^(tests/.*/([^/]+\.py))?#\2#"
 else
     echo "Executing tests with additional pytest argiments:"
