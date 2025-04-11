@@ -59,5 +59,13 @@ inline bool is_py_nan(PyObject* obj) {
     return false;
 }
 
+inline bool is_py_none(PyObject* obj) {
+#if PY_MAJOR_VERSION >=3 && PY_MINOR_VERSION >= 10
+    return Py_IsNone(obj);
+#else
+    return obj == Py_None;
+#endif
+}
+
 }
 

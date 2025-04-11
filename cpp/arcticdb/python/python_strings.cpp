@@ -93,13 +93,12 @@ void DynamicStringReducer::reduce(const Column& source_column,
 
 void DynamicStringReducer::finalize() {
     if (row_ != total_rows_) {
-        auto none = GilSafePyNone::instance();;
         const auto diff = total_rows_ - row_;
         for (; row_ < total_rows_; ++row_, ++ptr_dest_) {
-            *ptr_dest_ = none->ptr();
+            *ptr_dest_ = Py_None;
         }
 
-        increment_none_refcount(diff, none);
+        increment_none_refcount(diff);
     }
 }
 

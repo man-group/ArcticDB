@@ -382,7 +382,6 @@ set(arcticdb_srcs
         util/lazy.hpp
         util/type_traits.hpp
         util/variant.hpp
-        util/gil_safe_py_none.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
         version/schema_checks.hpp
@@ -522,7 +521,6 @@ set(arcticdb_srcs
         util/type_handler.cpp
         version/key_block.hpp
         version/key_block.cpp
-        util/gil_safe_py_none.cpp
         version/local_versioned_engine.cpp
         version/schema_checks.cpp
         version/op_log.cpp

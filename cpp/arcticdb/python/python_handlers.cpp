@@ -16,23 +16,12 @@
 
 namespace arcticdb {
 
-/// @brief Generate numpy.dtype object from ArcticDB type descriptor
-/// The dtype is used as type specifier for numpy arrays stored as column elements
-/// @note There is special handling for ArcticDB's empty type
-/// When numpy creates an empty array its type is float64. We want to mimic this because:
-/// i) There is no equivalent to empty value
-/// ii) We want input dataframes to be exact match of the output and that includes the type
-
-
 static inline PyObject** fill_with_none(PyObject** ptr_dest, size_t count, SpinLock& spin_lock) {
-    auto none = GilSafePyNone::instance();
-    for(auto i = 0U; i < count; ++i)
-        *ptr_dest++ = none->ptr();
-
-    spin_lock.lock();
-    for(auto i = 0U; i < count; ++i)
-        Py_INCREF(none->ptr());
-    spin_lock.unlock();
+    std::lock_guard lock{spin_lock};
+    for(auto i = 0U; i < count; ++i) {
+        *ptr_dest++ = Py_None;
+        Py_INCREF(Py_None);
+    }
     return ptr_dest;
 }
 
