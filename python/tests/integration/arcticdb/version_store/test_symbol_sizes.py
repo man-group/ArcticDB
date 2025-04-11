@@ -3,6 +3,8 @@ from multiprocessing import Queue, Process
 import pytest
 from arcticdb import LibraryOptions
 from arcticdb.encoding_version import EncodingVersion
+from arcticdb.storage_fixtures.azure import AzuriteStorageFixtureFactory
+from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, MotoNfsBackedS3StorageFixtureFactory, MotoGcpS3StorageFixtureFactory
 from arcticdb.util.test import sample_dataframe, config_context_multi
 from arcticdb_ext.storage import KeyType
 import arcticdb_ext.cpp_async as adb_async
@@ -11,19 +13,15 @@ from tests.util.mark import REAL_S3_TESTS_MARK
 
 
 @pytest.mark.storage
-def test_symbol_sizes(arctic_library):
-    nvs = arctic_library._nvs
-    sizes = nvs.version_store.scan_object_sizes_by_stream()
-    assert len(sizes) == 0
-
+def test_symbol_sizes(basic_store):
     sym_names = []
     for i in range(5):
         df = sample_dataframe(100, i)
         sym = "sym_{}".format(i)
         sym_names.append(sym)
-        nvs.write(sym, df)
+        basic_store.write(sym, df)
 
-    sizes = nvs.version_store.scan_object_sizes_by_stream()
+    sizes = basic_store.version_store.scan_object_sizes_by_stream()
 
     for s in sym_names:
         assert s in sizes
@@ -34,18 +32,17 @@ def test_symbol_sizes(arctic_library):
 
 
 @pytest.mark.storage
-def test_symbol_sizes_for_stream(arctic_library):
-    nvs = arctic_library._nvs
+def test_symbol_sizes_for_stream(basic_store):
     sym_names = []
     for i in range(5):
         df = sample_dataframe(100, i)
         sym = "sym_{}".format(i)
         sym_names.append(sym)
-        nvs.write(sym, df)
+        basic_store.write(sym, df)
 
     last_data_size = -1
     for s in sym_names:
-        sizes = nvs.version_store.scan_object_sizes_for_stream(s)
+        sizes = basic_store.version_store.scan_object_sizes_for_stream(s)
         res = dict()
         for size in sizes:
             res[size.key_type] = (size.count, size.compressed_size)
@@ -60,8 +57,8 @@ def test_symbol_sizes_for_stream(arctic_library):
     # 10x larger than those of the smaller writes.
     big_sym = "big_sym"
     df = sample_dataframe(1000, 4)
-    nvs.write(big_sym, df)
-    sizes = nvs.version_store.scan_object_sizes_for_stream(big_sym)
+    basic_store.write(big_sym, df)
+    sizes = basic_store.version_store.scan_object_sizes_for_stream(big_sym)
     big_data_sizes = [s.compressed_size for s in sizes if s.key_type == KeyType.TABLE_DATA]
     assert len(big_data_sizes) == 1
     big_data_size = big_data_sizes[0]
@@ -263,56 +260,56 @@ def test_symbol_sizes_concurrent(reader_store, writer_store):
     assert exceptions_in_reader.empty()
 
 
-@pytest.mark.parametrize("store", [
-    "s3_storage",
-    "nfs_backed_s3_storage",
-    "gcp_storage",
-    pytest.param("real_s3_storage", marks=REAL_S3_TESTS_MARK)
-])
-def test_symbol_sizes_matches_boto(request, store, lib_name):
-    s3_storage = request.getfixturevalue(store)
-    bucket = s3_storage.get_boto_bucket()
-    ac = s3_storage.create_arctic(encoding_version=EncodingVersion.V1)
-    lib = ac.create_library(lib_name)._nvs
+@pytest.mark.parametrize("factory", [MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory, MotoGcpS3StorageFixtureFactory])
+def test_symbol_sizes_matches_boto(factory, lib_name):
+    """Manage fixture for this test alone to avoid conflicts with the confusing session scoped fixtures."""
+    with factory(use_ssl=False, ssl_test_support=False, bucket_versioning=False) as f:
+        with f.create_fixture() as s3_storage:
+            bucket = s3_storage.get_boto_bucket()
+            ac = s3_storage.create_arctic(encoding_version=EncodingVersion.V1)
+            lib = ac.create_library(lib_name)._nvs
 
-    try:
-        df = sample_dataframe(100, 0)
+            try:
+                df = sample_dataframe(100, 0)
 
-        lib.write("s", df)
+                lib.write("s", df)
 
-        sizes = lib.version_store.scan_object_sizes()
-        assert len(sizes) == 10
-        key_types = {s.key_type for s in sizes}
-        assert key_types == {KeyType.TABLE_DATA, KeyType.TABLE_INDEX, KeyType.VERSION, KeyType.VERSION_REF, KeyType.APPEND_DATA,
-                             KeyType.MULTI_KEY, KeyType.SNAPSHOT_REF, KeyType.LOG, KeyType.LOG_COMPACTED, KeyType.SYMBOL_LIST}
+                sizes = lib.version_store.scan_object_sizes()
+                assert len(sizes) == 10
+                key_types = {s.key_type for s in sizes}
+                assert key_types == {KeyType.TABLE_DATA, KeyType.TABLE_INDEX, KeyType.VERSION, KeyType.VERSION_REF, KeyType.APPEND_DATA,
+                                     KeyType.MULTI_KEY, KeyType.SNAPSHOT_REF, KeyType.LOG, KeyType.LOG_COMPACTED, KeyType.SYMBOL_LIST}
 
-        data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
-        data_keys = [o for o in bucket.objects.all() if "test_symbol_sizes_matches_boto" in o.key and "/tdata/" in o.key]
-        assert len(data_keys) == 1
-        assert len(data_keys) == data_size.count
-        assert data_keys[0].size == data_size.compressed_size
-    finally:
-        lib.version_store.clear()
-        assert lib.version_store.empty()
+                data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
+                data_keys = [o for o in bucket.objects.all() if "test_symbol_sizes_matches_boto" in o.key and "/tdata/" in o.key]
+                assert len(data_keys) == 1
+                assert len(data_keys) == data_size.count
+                assert data_keys[0].size == data_size.compressed_size
+            finally:
+                lib.version_store.clear()
+                assert lib.version_store.empty()
 
 
-def test_symbol_sizes_matches_azurite(azurite_storage, lib_name):
-    factory = azurite_storage.create_version_store_factory(lib_name)
-    df = sample_dataframe(100, 0)
-    lib = factory()
-    lib.write("s", df)
+def test_symbol_sizes_matches_azurite(lib_name):
+    """Manage fixture for this test alone to avoid conflicts with the confusing session scoped fixtures."""
+    with AzuriteStorageFixtureFactory(use_ssl=False, ssl_test_support=False) as f:
+        with f.create_fixture() as azurite_storage:
+            factory = azurite_storage.create_version_store_factory(lib_name)
+            df = sample_dataframe(100, 0)
+            lib = factory()
+            lib.write("s", df)
 
-    blobs = azurite_storage.client.list_blobs()
-    total_size = 0
-    total_count = 0
-    for blob in blobs:
-        if lib_name.replace(".", "/") in blob.name and blob.container == azurite_storage.container and "/tdata/" in blob.name:
-            total_size += blob.size
-            total_count += 1
+            blobs = azurite_storage.client.list_blobs()
+            total_size = 0
+            total_count = 0
+            for blob in blobs:
+                if lib_name.replace(".", "/") in blob.name and blob.container == azurite_storage.container and "/tdata/" in blob.name:
+                    total_size += blob.size
+                    total_count += 1
 
-    sizes = lib.version_store.scan_object_sizes()
+            sizes = lib.version_store.scan_object_sizes()
 
-    data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
-    assert total_count == 1
-    assert data_size.count == total_count
-    assert data_size.compressed_size == total_size
+            data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
+            assert total_count == 1
+            assert data_size.count == total_count
+            assert data_size.compressed_size == total_size

@@ -5,11 +5,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-import sys
-
 import numpy as np
 import pandas as pd
-import pytest
 from arcticdb.util.test import sample_dataframe
 from arcticdb import KeyType, Size, Arctic
 
@@ -17,7 +14,6 @@ from arcticdb.options import EnterpriseLibraryOptions
 from arcticdb.version_store.admin_tools import sum_sizes
 
 
-@pytest.mark.skipif(sys.version_info.major == 3 and sys.version_info.minor < 10, reason="Issue with Azurite on earlier Pythons")
 def test_get_sizes(arctic_client, lib_name):
     lib_opts = EnterpriseLibraryOptions(replication=True)
     arctic_library = arctic_client.create_library(lib_name, enterprise_library_options=lib_opts)
