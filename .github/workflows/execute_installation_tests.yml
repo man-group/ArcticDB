@@ -2,7 +2,8 @@ name: Run Installation Tests
 
 on:
   push:
-    branches: ["master"]
+    branches: 
+      - installation_tests
   workflow_dispatch:
 
 jobs:
