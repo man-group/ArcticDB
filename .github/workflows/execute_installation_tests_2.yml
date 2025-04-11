@@ -44,7 +44,6 @@ jobs:
     - name: Run tests
       run: |
         echo $pwd
-        ls -al *
         export ARCTICDB_STORAGE_GCP=1
         export ARCTICDB_STORAGE_AWS_S3=1
         pytest -s -rs --log-file="tests.log" -v ./installation_tests
