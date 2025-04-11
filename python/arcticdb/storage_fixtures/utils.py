@@ -38,7 +38,7 @@ def get_ephemeral_port(seed=0):
     # https://stackoverflow.com/a/61685162/ and multiple test runners call this function at roughly the same time, they
     # may get the same port! Below more sophisticated implementation uses the PID to avoid that:
     pid = os.getpid()
-    port = (pid // 1000 + pid) % 1000 + seed * 1000 + 10000  # Crude hash
+    port = (pid // 1000 + pid) % 1000 + seed % 1000 + 10000  # Crude hash
     while port < 65535:
         try:
             with socketserver.TCPServer(("localhost", port), None):
@@ -47,7 +47,7 @@ def get_ephemeral_port(seed=0):
         except OSError as e:
             print(repr(e), file=sys.stderr)
             port += 1000
-    raise Exception(f"Cannot find a free port for PID {pid}")
+    raise Exception(f"Cannot find a free port for PID {pid}, last attempted port {port}")
 
 
 ProcessUnion = Union[multiprocessing.Process, subprocess.Popen]

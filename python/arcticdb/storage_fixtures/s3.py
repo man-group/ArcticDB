@@ -718,6 +718,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         use_mock_storage_for_testing: bool = False,
         use_internal_client_wrapper_for_testing: bool = False,
         native_config: Optional[NativeVariantStorage] = None,
+        port: Optional[int] = None,
         _test_only_is_nfs_layout: bool = False,
     ):
         super().__init__(native_config)
@@ -728,6 +729,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self.use_raw_prefix = use_raw_prefix
         self.use_mock_storage_for_testing = use_mock_storage_for_testing
         self.use_internal_client_wrapper_for_testing = use_internal_client_wrapper_for_testing
+        self.port = port
         self._live_buckets = []
 
     def bucket_name(self, bucket_type="s3"):
@@ -735,7 +737,11 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         return f"test_{bucket_type}_bucket_{unique_id}"
 
     def _start_server(self):
-        port = self.port = get_ephemeral_port(2)
+        if self.port is None:
+            port = get_ephemeral_port(2)
+        else:
+            port = self.port
+
         self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
         self.working_dir = mkdtemp(suffix="MotoS3StorageFixtureFactory")
         self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
@@ -867,7 +873,10 @@ class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
 
 class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
     def _start_server(self):
-        port = self.port = get_ephemeral_port(3)
+        if self.port is None:
+            port = get_ephemeral_port(3)
+        else:
+            port = self.port
         self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
         self.working_dir = mkdtemp(suffix="MotoGcpS3StorageFixtureFactory")
         self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"

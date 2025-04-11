@@ -5,6 +5,7 @@ from arcticdb import LibraryOptions
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.storage_fixtures.azure import AzuriteStorageFixtureFactory
 from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, MotoNfsBackedS3StorageFixtureFactory, MotoGcpS3StorageFixtureFactory
+from arcticdb.storage_fixtures.utils import get_ephemeral_port
 from arcticdb.util.test import sample_dataframe, config_context_multi
 from arcticdb_ext.storage import KeyType
 import arcticdb_ext.cpp_async as adb_async
@@ -260,56 +261,66 @@ def test_symbol_sizes_concurrent(reader_store, writer_store):
     assert exceptions_in_reader.empty()
 
 
-@pytest.mark.parametrize("factory", [MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory, MotoGcpS3StorageFixtureFactory])
-def test_symbol_sizes_matches_boto(factory, lib_name):
-    """Manage fixture for this test alone to avoid conflicts with the confusing session scoped fixtures."""
-    with factory(use_ssl=False, ssl_test_support=False, bucket_versioning=False) as f:
-        with f.create_fixture() as s3_storage:
-            bucket = s3_storage.get_boto_bucket()
-            ac = s3_storage.create_arctic(encoding_version=EncodingVersion.V1)
-            lib = ac.create_library(lib_name)._nvs
-
-            try:
-                df = sample_dataframe(100, 0)
-
-                lib.write("s", df)
-
-                sizes = lib.version_store.scan_object_sizes()
-                assert len(sizes) == 10
-                key_types = {s.key_type for s in sizes}
-                assert key_types == {KeyType.TABLE_DATA, KeyType.TABLE_INDEX, KeyType.VERSION, KeyType.VERSION_REF, KeyType.APPEND_DATA,
-                                     KeyType.MULTI_KEY, KeyType.SNAPSHOT_REF, KeyType.LOG, KeyType.LOG_COMPACTED, KeyType.SYMBOL_LIST}
-
-                data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
-                data_keys = [o for o in bucket.objects.all() if "test_symbol_sizes_matches_boto" in o.key and "/tdata/" in o.key]
-                assert len(data_keys) == 1
-                assert len(data_keys) == data_size.count
-                assert data_keys[0].size == data_size.compressed_size
-            finally:
-                lib.version_store.clear()
-                assert lib.version_store.empty()
+@pytest.fixture(scope="session", params=[(MotoNfsBackedS3StorageFixtureFactory, 100),
+                                         (MotoS3StorageFixtureFactory, 101),
+                                         (MotoGcpS3StorageFixtureFactory, 102)])
+def s3_like_storage(request):
+    factory, seed = request.param
+    with factory(use_ssl=False, ssl_test_support=False, bucket_versioning=False, port=get_ephemeral_port(seed)) as f:
+        with f.create_fixture() as g:
+            yield g
 
 
-def test_symbol_sizes_matches_azurite(lib_name):
-    """Manage fixture for this test alone to avoid conflicts with the confusing session scoped fixtures."""
-    with AzuriteStorageFixtureFactory(use_ssl=False, ssl_test_support=False) as f:
-        with f.create_fixture() as azurite_storage:
-            factory = azurite_storage.create_version_store_factory(lib_name)
-            df = sample_dataframe(100, 0)
-            lib = factory()
-            lib.write("s", df)
+def test_symbol_sizes_matches_boto(s3_like_storage, lib_name):
+    bucket = s3_like_storage.get_boto_bucket()
+    ac = s3_like_storage.create_arctic(encoding_version=EncodingVersion.V1)
+    lib = ac.create_library(lib_name)._nvs
 
-            blobs = azurite_storage.client.list_blobs()
-            total_size = 0
-            total_count = 0
-            for blob in blobs:
-                if lib_name.replace(".", "/") in blob.name and blob.container == azurite_storage.container and "/tdata/" in blob.name:
-                    total_size += blob.size
-                    total_count += 1
+    try:
+        df = sample_dataframe(100, 0)
 
-            sizes = lib.version_store.scan_object_sizes()
+        lib.write("s", df)
 
-            data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
-            assert total_count == 1
-            assert data_size.count == total_count
-            assert data_size.compressed_size == total_size
+        sizes = lib.version_store.scan_object_sizes()
+        assert len(sizes) == 10
+        key_types = {s.key_type for s in sizes}
+        assert key_types == {KeyType.TABLE_DATA, KeyType.TABLE_INDEX, KeyType.VERSION, KeyType.VERSION_REF, KeyType.APPEND_DATA,
+                             KeyType.MULTI_KEY, KeyType.SNAPSHOT_REF, KeyType.LOG, KeyType.LOG_COMPACTED, KeyType.SYMBOL_LIST}
+
+        data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
+        data_keys = [o for o in bucket.objects.all() if "test_symbol_sizes_matches_boto" in o.key and "/tdata/" in o.key]
+        assert len(data_keys) == 1
+        assert len(data_keys) == data_size.count
+        assert data_keys[0].size == data_size.compressed_size
+    finally:
+        lib.version_store.clear()
+        assert lib.version_store.empty()
+
+
+@pytest.fixture(scope="session")
+def azure_storage_for_symbol_sizes():
+    with AzuriteStorageFixtureFactory(use_ssl=False, ssl_test_support=False, port=get_ephemeral_port(103)) as f:
+        with f.create_fixture() as g:
+            yield g
+
+
+def test_symbol_sizes_matches_azurite(azure_storage_for_symbol_sizes, lib_name):
+    factory = azure_storage_for_symbol_sizes.create_version_store_factory(lib_name)
+    df = sample_dataframe(100, 0)
+    lib = factory()
+    lib.write("s", df)
+
+    blobs = azure_storage_for_symbol_sizes.client.list_blobs()
+    total_size = 0
+    total_count = 0
+    for blob in blobs:
+        if lib_name.replace(".", "/") in blob.name and blob.container == azure_storage_for_symbol_sizes.container and "/tdata/" in blob.name:
+            total_size += blob.size
+            total_count += 1
+
+    sizes = lib.version_store.scan_object_sizes()
+
+    data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
+    assert total_count == 1
+    assert data_size.count == total_count
+    assert data_size.compressed_size == total_size
