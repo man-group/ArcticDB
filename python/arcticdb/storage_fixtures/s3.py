@@ -691,6 +691,17 @@ def run_gcp_server(port, key_file, cert_file):
         ssl_context=(cert_file, key_file) if cert_file and key_file else None,
     )
 
+def create_bucket(s3_client, bucket_name, max_retries=15):
+    for i in range(max_retries):
+        try:
+            s3_client.create_bucket(Bucket=bucket_name)
+            return
+        except botocore.exceptions.EndpointConnectionError as e:
+            if i >= max_retries - 1:
+                raise
+            logger.warn(f"S3 create bucket failed. Retry {1}/{max_retries}")
+            time.sleep(1)   
+
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     default_key = Key(id="awd", secret="awd", user_name="dummy")
@@ -831,7 +842,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
 
     def create_fixture(self) -> S3Bucket:
         bucket = self.bucket_name("s3")
-        self._s3_admin.create_bucket(Bucket=bucket)
+        create_bucket(self._s3_admin, bucket)
         if self.bucket_versioning:
             self._s3_admin.put_bucket_versioning(Bucket=bucket, VersioningConfiguration={"Status": "Enabled"})
 
@@ -867,7 +878,7 @@ _PermissionCapableFactory = MotoS3StorageFixtureFactory
 class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
     def create_fixture(self) -> NfsS3Bucket:
         bucket = self.bucket_name("nfs")
-        self._s3_admin.create_bucket(Bucket=bucket)
+        create_bucket(self._s3_admin, bucket)
         out = NfsS3Bucket(self, bucket)
         self._live_buckets.append(out)
         return out
@@ -908,7 +919,8 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
 
     def create_fixture(self) -> GcpS3Bucket:
         bucket = self.bucket_name("gcp")
-        self._s3_admin.create_bucket(Bucket=bucket)
+        max_retries = 15
+        create_bucket(self._s3_admin, bucket)
         out = GcpS3Bucket(self, bucket)
         self._live_buckets.append(out)
         return out
