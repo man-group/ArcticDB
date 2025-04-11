@@ -226,7 +226,7 @@ folly::Future<folly::Unit> visit_object_sizes(
     KeyType type, const std::optional<StreamId>& stream_id_opt, storage::ObjectSizesVisitor visitor) override {
     std::string prefix;
     if (stream_id_opt) {
-        auto stream_id = *stream_id_opt;
+        const auto& stream_id = *stream_id_opt;
         prefix = std::holds_alternative<StringId>(stream_id) ? std::get<StringId>(stream_id) : std::string();
     }
 

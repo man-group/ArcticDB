@@ -517,7 +517,7 @@ void do_visit_object_sizes_for_type_impl(
     ) {
     ARCTICDB_SAMPLE(S3StorageCalculateSizesForType, 0)
 
-    auto path_info = calculate_path_info(root_folder, key_type, prefix_handler, prefix, std::move(bucketizer));
+    auto path_info = calculate_path_info(root_folder, key_type, prefix_handler, prefix, std::forward<KeyBucketizer>(bucketizer));
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Calculating sizes for objects in bucket {} with prefix {}", bucket_name,
                            path_info.key_prefix_);
 
