@@ -261,7 +261,7 @@ def test_symbol_sizes_concurrent(reader_store, writer_store):
     assert exceptions_in_reader.empty()
 
 
-@pytest.fixture(scope="session", params=[(MotoNfsBackedS3StorageFixtureFactory, 100),
+@pytest.fixture(scope="function", params=[(MotoNfsBackedS3StorageFixtureFactory, 100),
                                          (MotoS3StorageFixtureFactory, 101),
                                          (MotoGcpS3StorageFixtureFactory, 102)])
 def s3_like_storage(request):
@@ -297,7 +297,7 @@ def test_symbol_sizes_matches_boto(s3_like_storage, lib_name):
         assert lib.version_store.empty()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def azure_storage_for_symbol_sizes():
     with AzuriteStorageFixtureFactory(use_ssl=False, ssl_test_support=False, port=get_ephemeral_port(103)) as f:
         with f.create_fixture() as g:

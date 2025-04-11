@@ -38,11 +38,11 @@ def get_ephemeral_port(seed=0):
     # https://stackoverflow.com/a/61685162/ and multiple test runners call this function at roughly the same time, they
     # may get the same port! Below more sophisticated implementation uses the PID to avoid that:
     pid = os.getpid()
-    port = (pid // 1000 + pid) % 1000 + seed % 1000 + 10000  # Crude hash
+    port = pid % 1000 + seed % 1000 + 10000  # Crude hash
     while port < 65535:
         try:
             with socketserver.TCPServer(("localhost", port), None):
-                time.sleep(20 if ARCTICDB_USING_CONDA else 10)  # Hold the port open for a while to improve the chance of collision detection
+                time.sleep(20)  # Hold the port open for a while to improve the chance of collision detection
                 return port
         except OSError as e:
             print(repr(e), file=sys.stderr)
