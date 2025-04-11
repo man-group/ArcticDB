@@ -11,8 +11,7 @@ import pandas as pd
 import pytest
 
 from arcticdb.util.defrag_timeseries import _defrag_timeseries
-
-from python.arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal
 
 
 def generic_defrag_test(lib, sym):
