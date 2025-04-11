@@ -10,6 +10,17 @@ from arcticdb.version_store.library import Library
 from arcticdb.version_store._store import NativeVersionStore
 
 
+# This is incredibly basic, but should work well on append-only libraries
+# Limitations:
+# - Will throw an exception during the call to update if the symbol is not a timeseries
+# - Requires all the fragmented data to fit into memory at once
+# - Assumes that if the data is fragmented at a given timestamp, that all subsequent data is also fragmented
+# - Has no tolerance, so a row-slice with 99,999 rows will be considered fragmented and compacted into a 100k row
+#   segment
+# - Cannot specify the number of rows per slice, just uses the library default
+# - Has no concept of changing the column slicing policy
+# - Creates a new version
+# - Can inefficiently traverse the entire index key when data is column sliced but not fragmented
 def _defrag_timeseries(lib: Union[Library, NativeVersionStore], sym: str):
     if isinstance(lib, Library):
         lib = lib._nvs
