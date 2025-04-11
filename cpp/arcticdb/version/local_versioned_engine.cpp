@@ -785,7 +785,7 @@ VersionedItem LocalVersionedEngine::write_individual_segment(
     auto key = store_->write(pk, std::move(segment)).get();
     std::vector sk{SliceAndKey{frame_slice, to_atom(key)}};
     auto index_key_fut = index::write_index(index, std::move(descriptor), std::move(sk), IndexPartialKey{stream_id, version_id}, store_);
-    auto versioned_item = VersionedItem{to_atom(std::move(index_key_fut).get())};
+    auto versioned_item = VersionedItem{std::move(index_key_fut).get()};
 
     write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
     return versioned_item;
@@ -1521,11 +1521,11 @@ std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine
 
     for(const auto& stream_id : folly::enumerate(stream_ids)) {
         auto prev = previous->find(*stream_id);
-        auto maybe_prev = prev == std::end(*previous) ? std::nullopt : std::make_optional<AtomKey>(to_atom(prev->second));
+        auto maybe_prev = prev == std::end(*previous) ? std::nullopt : std::make_optional<AtomKey>(prev->second);
 
         auto version = versions_to_restore->find(*stream_id);
         util::check(version != std::end(*versions_to_restore), "Did not find version for symbol {}", *stream_id);
-        fut_vec.emplace_back(async::submit_io_task(AsyncRestoreVersionTask{store(), version_map(), *stream_id, to_atom(version->second), maybe_prev}));
+        fut_vec.emplace_back(async::submit_io_task(AsyncRestoreVersionTask{store(), version_map(), *stream_id, version->second, maybe_prev}));
     }
     auto output = folly::collect(fut_vec).get();
 

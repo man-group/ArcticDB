@@ -121,8 +121,8 @@ inline folly::Future<VersionedItem> index_and_version(
         std::move(time_series),
         std::move(slice_and_keys),
         IndexPartialKey{stream_id, version_id},
-        store).thenValue([] (auto&& version_key) {
-            return VersionedItem(to_atom(std::move(version_key)));
+        store).thenValue([] (AtomKey&& version_key) {
+            return VersionedItem(std::move(version_key));
         });
 }
 
