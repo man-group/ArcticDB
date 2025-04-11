@@ -208,7 +208,7 @@ static std::string prefix_handler(const std::string& prefix, const std::string& 
 }
 
 // signature needs to match PrefixHandler in s3_storage.hpp
-static std::string iter_prefix_handler([[maybe_unused]] const std::string& prefix, const std::string& key_type_dir, [[maybe_unused]] const KeyDescriptor& key_descriptor, [[maybe_unused]] KeyType) {
+static std::string iter_prefix_handler(const std::string&, const std::string& key_type_dir, const KeyDescriptor&, KeyType) {
     // The prefix handler is not used for filtering (done in func below)
     // so we just return the key type dir
     return key_type_dir;
