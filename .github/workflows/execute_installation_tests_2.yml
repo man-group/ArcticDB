@@ -25,6 +25,7 @@ jobs:
         pip install arcticdb
         pip install wheel
         pip install setuptools
+        pip install pytest
 
     - name: Set persistent storage variables
       if: always()
