@@ -36,7 +36,7 @@ jobs:
         aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
         gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
         gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
-        persistent_storage: "${{ inputs.persistent_storage }}"
+        persistent_storage: "false"
         strategy_branch: "${{ env.distinguishing_name }}"        
 
     - name: Build protobuf
@@ -45,7 +45,9 @@ jobs:
 
     - name: Run tests
       run: |
-        pytest -s -m installation --log-file="tests.log" 
+        export ARCTICDB_STORAGE_GCP=1
+        export ARCTICDB_STORAGE_AWS_S3=1
+        pytest -s -rs -m installation --log-file="tests.log" 
 
     - name: Upload the logs
       if: always()
