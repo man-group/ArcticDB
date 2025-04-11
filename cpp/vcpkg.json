@@ -101,7 +101,18 @@
       "name": "arrow",
       "default-features": false
     },
-    "azure-core-cpp",
+    {
+      "name": "azure-core-cpp",
+      "default-features": false,
+      "features": [ "winhttp" ],
+      "platform": "windows"
+    },
+    {
+      "name": "azure-core-cpp",
+      "default-features": false,
+      "features": [ "curl" ],
+      "platform": "!windows"
+    },
     "azure-identity-cpp",
     "azure-storage-blobs-cpp",
     "benchmark"
