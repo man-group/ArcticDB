@@ -4,6 +4,7 @@ set -e
 tooling_dir="$(dirname $BASH_SOURCE)"
 project_dir=$PWD
 echo "Project dir: $project_dir"
+ls -al $project_dir
 echo Saving results to ${TEST_OUTPUT_DIR:="$(realpath "$tooling_dir/../cpp/out")"}
 [[ -d "$TEST_OUTPUT_DIR" ]] || mkdir -p "$TEST_OUTPUT_DIR"
 
