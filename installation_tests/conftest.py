@@ -17,10 +17,8 @@ import pytest
 
 import arcticdb as adb
 from arcticdb.version_store.library import Library
-
 from arcticdb.arctic import Arctic
-from tests.conftest import filter_out_unwanted_mark
-from tests.enduser.client_utils import StorageTypes, create_arctic_client
+from installation_tests.client_utils import StorageTypes, create_arctic_client
 
 
 @pytest.fixture()
@@ -33,7 +31,6 @@ def lib_name(request: "pytest.FixtureRequest") -> str:
 
 @pytest.fixture(scope="function", params=StorageTypes)
 def ac_client(request) -> Generator[Arctic, None, None]:
-    filter_out_unwanted_mark(request, request.param)
     extras = {}
     if hasattr(request, "param") and request.param:
         if isinstance(request.param, StorageTypes):

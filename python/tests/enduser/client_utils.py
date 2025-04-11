@@ -18,6 +18,7 @@ from arcticdb.storage_fixtures.lmdb import LmdbStorageFixture
 from arcticdb.storage_fixtures.s3 import real_gcp_from_environment_variables, real_s3_from_environment_variables
 from datetime import datetime
 from tests.util.mark import LOCAL_STORAGE_TESTS_ENABLED, REAL_GCP_TESTS_MARK, REAL_S3_TESTS_MARK
+from tests.util.storage_test import get_real_s3_uri, get_real_gcp_uri
 
 
 __temp_paths = []
@@ -62,22 +63,15 @@ def is_storage_enabled(storage_type: StorageTypes) -> bool:
 
 def create_arctic_client(storage: StorageTypes, **extras) -> Arctic:
     if storage == StorageTypes.LMDB and is_storage_enabled(storage):
-        return LmdbStorageFixture(get_temp_path()).create_arctic(**extras)
-        #LmdbStorageFixture
+        return Arctic("lmdb://" + str(get_temp_path()), **extras)
     elif storage == StorageTypes.REAL_GCP and is_storage_enabled(storage):
         global __ARCTIC_CLIENT_GPC
         if __ARCTIC_CLIENT_GPC is None:
-            factory = real_gcp_from_environment_variables(
-                shared_path=False,
-                additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",)
-            __ARCTIC_CLIENT_GPC = factory.create_fixture().create_arctic(**extras)
+            __ARCTIC_CLIENT_GPC = Arctic(get_real_gcp_uri(shared_path=False), **extras)
         return __ARCTIC_CLIENT_GPC
     elif storage == StorageTypes.REAL_AWS_S3 and is_storage_enabled(storage):
         global __ARCTIC_CLIENT_AWS_S3
         if __ARCTIC_CLIENT_AWS_S3 is None:
-            factory = real_s3_from_environment_variables(
-                shared_path=False,
-                additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",)
-            __ARCTIC_CLIENT_AWS_S3 = factory.create_fixture().create_arctic(**extras)
+            __ARCTIC_CLIENT_AWS_S3 = Arctic(get_real_s3_uri(shared_path=False), **extras)
         return __ARCTIC_CLIENT_AWS_S3
     return None
