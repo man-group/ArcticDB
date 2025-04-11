@@ -3,17 +3,18 @@ from multiprocessing import Queue, Process
 import pytest
 from arcticdb import LibraryOptions
 from arcticdb.encoding_version import EncodingVersion
+from arcticdb.storage_fixtures.azure import AzuriteStorageFixtureFactory
+from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, MotoNfsBackedS3StorageFixtureFactory, MotoGcpS3StorageFixtureFactory
+from arcticdb.storage_fixtures.utils import get_ephemeral_port
 from arcticdb.util.test import sample_dataframe, config_context_multi
 from arcticdb_ext.storage import KeyType
 import arcticdb_ext.cpp_async as adb_async
 
+from tests.util.mark import REAL_S3_TESTS_MARK
+
 
 @pytest.mark.storage
 def test_symbol_sizes(basic_store):
-    sizes = basic_store.version_store.scan_object_sizes_by_stream()
-    assert len(sizes) == 1
-    assert "__symbols__" in sizes
-
     sym_names = []
     for i in range(5):
         df = sample_dataframe(100, i)
@@ -29,6 +30,40 @@ def test_symbol_sizes(basic_store):
     assert sizes["sym_0"][KeyType.VERSION].compressed_size < 1000
     assert sizes["sym_0"][KeyType.TABLE_INDEX].compressed_size < 5000
     assert sizes["sym_0"][KeyType.TABLE_DATA].compressed_size < 15000
+
+
+@pytest.mark.storage
+def test_symbol_sizes_for_stream(basic_store):
+    sym_names = []
+    for i in range(5):
+        df = sample_dataframe(100, i)
+        sym = "sym_{}".format(i)
+        sym_names.append(sym)
+        basic_store.write(sym, df)
+
+    last_data_size = -1
+    for s in sym_names:
+        sizes = basic_store.version_store.scan_object_sizes_for_stream(s)
+        res = dict()
+        for size in sizes:
+            res[size.key_type] = (size.count, size.compressed_size)
+
+        assert res[KeyType.VERSION][0] == 1
+        assert res[KeyType.VERSION][1] < 1000
+        assert res[KeyType.TABLE_INDEX][1] < 5000
+        last_data_size = res[KeyType.TABLE_DATA][1]
+        assert last_data_size < 15000
+
+    # Write a symbol 10 times bigger than the ones above. Check that the size of its data key is plausible: roughly
+    # 10x larger than those of the smaller writes.
+    big_sym = "big_sym"
+    df = sample_dataframe(1000, 4)
+    basic_store.write(big_sym, df)
+    sizes = basic_store.version_store.scan_object_sizes_for_stream(big_sym)
+    big_data_sizes = [s.compressed_size for s in sizes if s.key_type == KeyType.TABLE_DATA]
+    assert len(big_data_sizes) == 1
+    big_data_size = big_data_sizes[0]
+    assert 0.8 * 10 * last_data_size < big_data_size < 1.2 * 10 * last_data_size
 
 
 @pytest.mark.storage
@@ -56,15 +91,12 @@ def test_symbol_sizes_big(basic_store):
     sizes = basic_store.version_store.scan_object_sizes_by_stream()
 
     assert sizes["sym"][KeyType.VERSION].compressed_size < 1000
-    assert sizes["sym"][KeyType.VERSION].uncompressed_size < 200
     assert sizes["sym"][KeyType.VERSION].count == 1
 
     assert sizes["sym"][KeyType.TABLE_INDEX].compressed_size < 5000
-    assert sizes["sym"][KeyType.TABLE_INDEX].uncompressed_size < 2500
     assert sizes["sym"][KeyType.TABLE_INDEX].count == 1
 
     assert 50_000 < sizes["sym"][KeyType.TABLE_DATA].compressed_size < 85_000
-    assert 60_000 < sizes["sym"][KeyType.TABLE_DATA].uncompressed_size < 150_000
     assert sizes["sym"][KeyType.TABLE_DATA].count == 1
 
 
@@ -79,7 +111,6 @@ def test_symbol_sizes_multiple_versions(basic_store):
     assert sizes["sym"][KeyType.VERSION].count == 2
     assert sizes["sym"][KeyType.TABLE_INDEX].count == 2
     assert sizes["sym"][KeyType.TABLE_DATA].count == 2
-    assert 100_000 < sizes["sym"][KeyType.TABLE_DATA].uncompressed_size < 250_000
 
 
 @pytest.mark.storage
@@ -95,7 +126,7 @@ def test_scan_object_sizes(arctic_client, lib_name):
 
     res = dict()
     for s in sizes:
-        res[s.key_type] = (s.count, s.compressed_size_bytes)
+        res[s.key_type] = (s.count, s.compressed_size)
 
     assert KeyType.VERSION in res
     assert KeyType.TABLE_INDEX in res
@@ -141,7 +172,7 @@ def test_scan_object_sizes_threading(request, storage, encoding_version_, lib_na
 
             res = dict()
             for s in sizes:
-                res[s.key_type] = (s.count, s.compressed_size_bytes)
+                res[s.key_type] = (s.count, s.compressed_size)
 
             assert KeyType.VERSION in res
             assert KeyType.TABLE_INDEX in res
@@ -228,3 +259,68 @@ def test_symbol_sizes_concurrent(reader_store, writer_store):
         reader.terminate()
 
     assert exceptions_in_reader.empty()
+
+
+@pytest.fixture(scope="function", params=[(MotoNfsBackedS3StorageFixtureFactory, 100),
+                                         (MotoS3StorageFixtureFactory, 101),
+                                         (MotoGcpS3StorageFixtureFactory, 102)])
+def s3_like_storage(request):
+    factory, seed = request.param
+    with factory(use_ssl=False, ssl_test_support=False, bucket_versioning=False, port=get_ephemeral_port(seed)) as f:
+        with f.create_fixture() as g:
+            yield g
+
+
+def test_symbol_sizes_matches_boto(s3_like_storage, lib_name):
+    bucket = s3_like_storage.get_boto_bucket()
+    ac = s3_like_storage.create_arctic(encoding_version=EncodingVersion.V1)
+    lib = ac.create_library(lib_name)._nvs
+
+    try:
+        df = sample_dataframe(100, 0)
+
+        lib.write("s", df)
+
+        sizes = lib.version_store.scan_object_sizes()
+        assert len(sizes) == 10
+        key_types = {s.key_type for s in sizes}
+        assert key_types == {KeyType.TABLE_DATA, KeyType.TABLE_INDEX, KeyType.VERSION, KeyType.VERSION_REF, KeyType.APPEND_DATA,
+                             KeyType.MULTI_KEY, KeyType.SNAPSHOT_REF, KeyType.LOG, KeyType.LOG_COMPACTED, KeyType.SYMBOL_LIST}
+
+        data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
+        data_keys = [o for o in bucket.objects.all() if "test_symbol_sizes_matches_boto" in o.key and "/tdata/" in o.key]
+        assert len(data_keys) == 1
+        assert len(data_keys) == data_size.count
+        assert data_keys[0].size == data_size.compressed_size
+    finally:
+        lib.version_store.clear()
+        assert lib.version_store.empty()
+
+
+@pytest.fixture(scope="function")
+def azure_storage_for_symbol_sizes():
+    with AzuriteStorageFixtureFactory(use_ssl=False, ssl_test_support=False, port=get_ephemeral_port(103)) as f:
+        with f.create_fixture() as g:
+            yield g
+
+
+def test_symbol_sizes_matches_azurite(azure_storage_for_symbol_sizes, lib_name):
+    factory = azure_storage_for_symbol_sizes.create_version_store_factory(lib_name)
+    df = sample_dataframe(100, 0)
+    lib = factory()
+    lib.write("s", df)
+
+    blobs = azure_storage_for_symbol_sizes.client.list_blobs()
+    total_size = 0
+    total_count = 0
+    for blob in blobs:
+        if lib_name.replace(".", "/") in blob.name and blob.container == azure_storage_for_symbol_sizes.container and "/tdata/" in blob.name:
+            total_size += blob.size
+            total_count += 1
+
+    sizes = lib.version_store.scan_object_sizes()
+
+    data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
+    assert total_count == 1
+    assert data_size.count == total_count
+    assert data_size.compressed_size == total_size
