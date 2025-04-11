@@ -17,7 +17,7 @@ set -o xtrace -o pipefail
 # Build a directory that's just the test assets, so can't access other Python source not in the wheel
 mkdir -p $PARALLEL_TEST_ROOT
 MSYS=winsymlinks:nativestrict ln -s "$(realpath "$tooling_dir/../python/tests")" $PARALLEL_TEST_ROOT/
-cd $PARALLEL_TEST_ROOT
+#cd $PARALLEL_TEST_ROOT
 
 export ARCTICDB_RAND_SEED=$RANDOM
 
