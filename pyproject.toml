@@ -48,11 +48,13 @@ exclude = '''
 '''
 
 [tool.pytest.ini_options]
+testpaths = ["python/tests"]
 markers = [
     "storage: marks a test as a test against real storage (deselect with: -m 'not storage')",
     "authentication: marks a test for authentication group (deselect with: -m 'not authentication')",
     "pipeline: Pipeline tests (deselect with: -m 'not pipeline')",
     "skip_fixture_params: will instruct fixture that supports excluding fixture values, which values to be excluded",
     "only_fixture_params: will instruct fixture supporting that to include only parameters from the list",
-    "bug_ids: allows specifying bug ids list the tests is based on or depends"
+    "bug_ids: allows specifying bug ids list the tests is based on or depends",
+    "installation: marks tests that will be executed on installed arcticd (not compiled)"
 ]
