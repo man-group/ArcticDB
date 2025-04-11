@@ -2,6 +2,8 @@
 set -e
 
 tooling_dir="$(dirname $BASH_SOURCE)"
+project_dir=$PWD
+echo "Project dir: $project_dir"
 echo Saving results to ${TEST_OUTPUT_DIR:="$(realpath "$tooling_dir/../cpp/out")"}
 [[ -d "$TEST_OUTPUT_DIR" ]] || mkdir -p "$TEST_OUTPUT_DIR"
 
@@ -34,6 +36,6 @@ else
         --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
         --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
         --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
-        --rootdir="$tooling_dir/.." \
+        --rootdir="$project_dir" \
         $PYTEST_ADD_TO_COMMAND_LINE $ARCTICDB_PYTEST_ARGS 2>&1
 fi
