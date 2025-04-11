@@ -105,10 +105,10 @@ TEST(Async, DeDupTest) {
 
     //The first key will be de-duped, second key will be fresh because indexes dont match
     ASSERT_EQ(2ULL, keys.size());
-    ASSERT_EQ(k, to_atom(keys[0]));
-    ASSERT_NE(k, to_atom(keys[1]));
-    ASSERT_NE(999, to_atom(keys[1]).creation_ts());
-    ASSERT_EQ(2, to_atom(keys[1]).version_id());
+    ASSERT_EQ(k, keys[0]);
+    ASSERT_NE(k, keys[1]);
+    ASSERT_NE(999, keys[1].creation_ts());
+    ASSERT_EQ(2, keys[1].version_id());
 }
 
 struct MaybeThrowTask : arcticdb::async::BaseTask {
