@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import pandas as pd
 import pytest
 
-from python.tests.enduser import execute_test_library_creation_deletion, execute_test_snapshots_and_deletes, execute_test_write_batch, execute_test_write_metadata_with_none
+from python.tests.enduser.shared_tests import execute_test_library_creation_deletion, execute_test_snapshots_and_deletes, execute_test_write_batch, execute_test_write_metadata_with_none
 
      
 
