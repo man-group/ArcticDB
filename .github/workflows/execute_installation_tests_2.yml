@@ -3,7 +3,7 @@ name: Run Installation Tests v2
 on:
   push:
     branches: 
-      - master
+      - installation_tests
   workflow_dispatch:
     inputs:
       os:
