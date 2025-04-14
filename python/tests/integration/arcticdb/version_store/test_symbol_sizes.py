@@ -261,19 +261,11 @@ def test_symbol_sizes_concurrent(reader_store, writer_store):
     assert exceptions_in_reader.empty()
 
 
-@pytest.fixture(scope="session", params=[(MotoNfsBackedS3StorageFixtureFactory, 100),
-                                         (MotoS3StorageFixtureFactory, 101),
-                                         (MotoGcpS3StorageFixtureFactory, 102)])
-def s3_like_storage(request):
-    factory, seed = request.param
-    with factory(use_ssl=False, ssl_test_support=False, bucket_versioning=False, port=get_ephemeral_port(seed)) as f:
-        with f.create_fixture() as g:
-            yield g
-
-
-def test_symbol_sizes_matches_boto(s3_like_storage, lib_name):
-    bucket = s3_like_storage.get_boto_bucket()
-    ac = s3_like_storage.create_arctic(encoding_version=EncodingVersion.V1)
+@pytest.mark.parametrize("storage", ["s3_storage", "gcp_storage", "nfs_backed_s3_storage"])
+def test_symbol_sizes_matches_boto(request, storage, lib_name):
+    s3_storage = request.getfixturevalue(storage)
+    bucket = s3_storage.get_boto_bucket()
+    ac = s3_storage.create_arctic(encoding_version=EncodingVersion.V1)
     lib = ac.create_library(lib_name)._nvs
 
     try:
@@ -297,24 +289,17 @@ def test_symbol_sizes_matches_boto(s3_like_storage, lib_name):
         assert lib.version_store.empty()
 
 
-@pytest.fixture(scope="session")
-def azure_storage_for_symbol_sizes():
-    with AzuriteStorageFixtureFactory(use_ssl=False, ssl_test_support=False, port=get_ephemeral_port(103)) as f:
-        with f.create_fixture() as g:
-            yield g
-
-
-def test_symbol_sizes_matches_azurite(azure_storage_for_symbol_sizes, lib_name):
-    factory = azure_storage_for_symbol_sizes.create_version_store_factory(lib_name)
+def test_symbol_sizes_matches_azurite(azurite_storage, lib_name):
+    factory = azurite_storage.create_version_store_factory(lib_name)
     df = sample_dataframe(100, 0)
     lib = factory()
     lib.write("s", df)
 
-    blobs = azure_storage_for_symbol_sizes.client.list_blobs()
+    blobs = azurite_storage.client.list_blobs()
     total_size = 0
     total_count = 0
     for blob in blobs:
-        if lib_name.replace(".", "/") in blob.name and blob.container == azure_storage_for_symbol_sizes.container and "/tdata/" in blob.name:
+        if lib_name.replace(".", "/") in blob.name and blob.container == azurite_storage.container and "/tdata/" in blob.name:
             total_size += blob.size
             total_count += 1
 
