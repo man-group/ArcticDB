@@ -9,6 +9,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 import pandas as pd
 import pytest
 
+from installation_tests.shared_tests import execute_test_library_creation_deletion, execute_test_snapshots_and_deletes, execute_test_write_batch
+
 @pytest.mark.installation
 def test_write_metadata_with_none(ac_library):
     lib = ac_library
@@ -27,3 +29,15 @@ def test_write_metadata_with_none(ac_library):
     assert read_symbol.data is None
     assert read_symbol.metadata == meta
     assert read_symbol.version == 0       
+
+@pytest.mark.installation
+def test_library_creation_deletion(ac_client, lib_name):
+    execute_test_library_creation_deletion(ac_client, lib_name)
+
+@pytest.mark.installation
+def test_write_batch(ac_library_factory):
+    execute_test_write_batch(ac_library_factory)    
+
+@pytest.mark.installation
+def test_snapshots_and_deletes(ac_library):
+    execute_test_snapshots_and_deletes(ac_library)
