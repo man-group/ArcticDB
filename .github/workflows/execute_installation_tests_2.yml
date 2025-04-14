@@ -70,7 +70,7 @@ jobs:
       uses: mamba-org/setup-micromamba@v2.0.0
       if: ${{ contains(matrix.os, 'macos') || contains(inputs.os, 'macos')}}
       with:
-        environment-file: python/installation_tests/environment_unix.yml
+        environment-file: installation_tests/environment_unix.yml
         environment-name: arcticdb
         init-shell: >-
           bash
@@ -85,8 +85,7 @@ jobs:
         aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
         gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
         gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
-        persistent_storage: "false"
-        strategy_branch: "${{ env.distinguishing_name }}"        
+        persistent_storage: "true"
 
     - name: Build protobuf
       shell: bash -l {0}      
