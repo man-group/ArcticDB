@@ -13,7 +13,6 @@
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/python/python_utils.hpp>
-#include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
 
@@ -123,7 +122,7 @@ private:
 
         ARCTICDB_SUBSAMPLE(WriteStringsToColumn, 0)
         auto [none_count, nan_count] = write_strings_to_destination(num_rows, source_column, py_strings, sparse_map);
-        increment_none_refcount(none_count);
+        increment_none_refcount(none_count, handler_data_.spin_lock());
         increment_nan_refcount(nan_count);
     }
 
@@ -175,7 +174,7 @@ private:
             }
         }
         auto [none_count, nan_count] = write_strings_to_destination(num_rows, source_column, allocated, source_column.opt_sparse_map());
-        increment_none_refcount(none_count);
+        python_util::increment_none_refcount(none_count, handler_data_.spin_lock());
         increment_nan_refcount(nan_count);
     }
 
@@ -200,13 +199,6 @@ private:
             }
         }
         return py_strings;
-    }
-
-    void increment_none_refcount(size_t none_count) {
-        std::lock_guard lock(handler_data_.spin_lock());
-        for(auto i = 0u; i < none_count; ++i) {
-            Py_INCREF(Py_None);
-        }
     }
 
     void increment_nan_refcount(size_t none_count) {

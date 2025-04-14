@@ -582,7 +582,6 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
 
     auto write_options = get_write_options();
     auto de_dup_map = get_de_dup_map(stream_id, maybe_prev, write_options);
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(PyGILState_Check(), "py::none object creation increases the refcount and must hold the GIL");
     for (auto i = 0u; i < sub_keys.size(); ++i) {
         version_ids.emplace_back(version_id);
         user_metas.emplace_back(py::none());

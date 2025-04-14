@@ -8,7 +8,6 @@
 
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/pipeline/frame_slice_map.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/python/python_handlers.hpp>
@@ -97,8 +96,7 @@ void DynamicStringReducer::finalize() {
         for (; row_ < total_rows_; ++row_, ++ptr_dest_) {
             *ptr_dest_ = Py_None;
         }
-
-        increment_none_refcount(diff);
+        python_util::increment_none_refcount(diff, handler_data_.spin_lock());
     }
 }
 

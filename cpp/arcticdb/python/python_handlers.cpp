@@ -17,11 +17,10 @@
 namespace arcticdb {
 
 static inline PyObject** fill_with_none(PyObject** ptr_dest, size_t count, SpinLock& spin_lock) {
-    std::lock_guard lock{spin_lock};
     for(auto i = 0U; i < count; ++i) {
         *ptr_dest++ = Py_None;
-        Py_INCREF(Py_None);
     }
+    python_util::increment_none_refcount(count, spin_lock);
     return ptr_dest;
 }
 

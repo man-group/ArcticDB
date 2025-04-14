@@ -16,10 +16,13 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/stream/stream_reader.hpp>
 #include <arcticdb/util/variant.hpp>
+#include <arcticdb/python/python_utils.hpp>
 
 namespace py = pybind11;
 
 namespace arcticdb::python_util {
+
+void increment_none_refcount(size_t amount, SpinLock& lock);
 
 class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
   PYBIND11_OBJECT_DEFAULT(PyRowRef, py::tuple, PyTuple_Check)
@@ -106,10 +109,8 @@ inline void prefill_with_none(
     std::fill_n(ptr_dest, num_rows, Py_None);
 
     if(inc_ref_count == IncrementRefCount::ON) {
-        std::lock_guard lock(spin_lock);
         auto none_count = num_rows - sparse_count;
-        for (auto j = 0U; j < none_count; ++j)
-            Py_INCREF(Py_None);
+        python_util::increment_none_refcount(none_count, spin_lock);
     }
 }
 
