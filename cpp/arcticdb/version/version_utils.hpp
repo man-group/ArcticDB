@@ -101,7 +101,7 @@ std::shared_ptr<VersionMapEntry> build_version_map_entry_with_predicate_iteratio
     for (auto key_type : key_types) {
         store->iterate_type(key_type,
             [&predicate, &read_keys, &store, &output, &perform_read_segment_with_keys](VariantKey&& vk) {
-                const AtomKey& key = to_atom(std::move(vk));
+                const auto& key = to_atom(std::move(vk));
                 if (!predicate(key))
                     return;
 

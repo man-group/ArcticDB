@@ -1625,7 +1625,7 @@ VersionedItem collate_and_write(
         for (const auto& key : folly::enumerate(keys)) {
             writer.add(to_atom(*key), slices[key.index]);
         }
-        folly::Future<AtomKey> index_key_fut =  writer.commit();
+        auto index_key_fut =  writer.commit();
         return VersionedItem{std::move(index_key_fut).get()};
     });
 }
