@@ -38,8 +38,23 @@ jobs:
       matrix:
         #os: [ubuntu-22.04, windows-latest, macos-latest]
         #python: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
-        os: [ubuntu-22.04, windows-latest, macos-13]
-        python: ["3.8", "3.12"]
+        #os: [ubuntu-22.04, windows-latest, macos-13]
+        #python: ["3.8", "3.12"]
+        include:
+          - os: ubuntu-22.04
+            python: "3.7"
+          - os: windows-latest
+            python: "3.8"
+          - os: macos-latest
+            python: "3.9"
+          - os: windows-latest
+            python: "3.10"
+          - os: macos-latest
+            python: "3.11"
+          - os: ubuntu-22.04
+            python: "3.12"
+          - os: ubuntu-22.04
+            python: "3.13"
       fail-fast: false  
     env:
       ARCTICDB_STORAGE_GCP: 1
