@@ -69,7 +69,7 @@ jobs:
       uses: mamba-org/setup-micromamba@v2.0.0
       if: ${{ contains(matrix.os, 'macos') || contains(inputs.os, 'macos')}}
       with:
-        environment-file: environment_unix.yml
+        environment-file: python/installation_tests/environment_unix.yml
         environment-name: arcticdb
         init-shell: >-
           bash
