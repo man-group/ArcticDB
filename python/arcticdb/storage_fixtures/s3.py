@@ -359,15 +359,18 @@ def real_s3_from_environment_variables(
 def real_gcp_from_environment_variables(
     shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""
 ) -> BaseGCPStorageFixtureFactory:
-    out = BaseGCPStorageFixtureFactory(native_config=native_config)
-    out.endpoint = os.getenv("ARCTICDB_REAL_GCP_ENDPOINT")
-    out.region = os.getenv("ARCTICDB_REAL_GCP_REGION")
-    out.default_bucket = os.getenv("ARCTICDB_REAL_GCP_BUCKET")
-    access_key = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
-    secret_key = os.getenv("ARCTICDB_REAL_GCP_SECRET_KEY")
-    out.default_key = Key(id=access_key, secret=secret_key, user_name="unknown user")
+    from arcticdb_ext.storage import NativeVariantStorage, GCPXMLSettings as NativeGCPXMLSettings
+    native_settings = NativeGCPXMLSettings()
+    native_settings.bucket = "aseaton_bucket"
+    native_settings.endpoint = "http://storage.googleapis.com"# os.getenv("ARCTICDB_REAL_GCP_ENDPOINT")
+    native_settings.access = "<redacted>"
+    native_settings.secret = "<redacted>"
+    out = BaseGCPStorageFixtureFactory(native_config=native_settings)
+    out.default_key = Key(id=native_settings.access, secret=native_settings.secret, user_name="unknown user")
     out.clean_bucket_on_fixture_exit = os.getenv("ARCTICDB_REAL_GCP_CLEAR", "1").lower() in ["true", "1"]
-    out.ssl = out.endpoint.startswith("https://") if out.endpoint is not None else False
+    out.ssl = native_settings.endpoint.startswith("https://") if native_settings.endpoint is not None else False
+    out.endpoint = native_settings.endpoint
+    out._test_only_is_nfs_layout = False
     if shared_path:
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
     else:
