@@ -6,12 +6,9 @@ import pandas as pd
 from arcticdb.exceptions import LibraryNotFound
 
 from arcticdb.options import LibraryOptions
-from arcticdb.util.test import random_strings_of_length
+from arcticdb.util.test import random_strings_of_length, assert_frame_equal, random_floats
 from arcticdb.version_store.library import WritePayload
-from benchmarks.bi_benchmarks import assert_frame_equal
 from arcticdb.version_store import VersionedItem as PythonVersionedItem
-
-from arcticdb.util.test import random_floats
 
 
 def generate_dataframe(columns, dt, num_days, num_rows_per_day):
@@ -103,3 +100,21 @@ def execute_test_snapshots_and_deletes(arctic_library):
     assert lib.list_snapshots() == {"snap_after_delete": None}
     assert lib.list_symbols() == ["my_symbol2"]        
        
+
+def execute_test_write_metadata_with_none(arctic_library):
+    lib = arctic_library
+    symbol = "symbol"
+    meta = {"meta_" + str(symbol): 0}
+
+    result_write = lib.write_metadata(symbol, meta)
+    assert result_write.version == 0
+
+    read_meta_symbol = lib.read_metadata(symbol)
+    assert read_meta_symbol.data is None
+    assert read_meta_symbol.metadata == meta
+    assert read_meta_symbol.version == 0
+
+    read_symbol = lib.read(symbol)
+    assert read_symbol.data is None
+    assert read_symbol.metadata == meta
+    assert read_symbol.version == 0                  
