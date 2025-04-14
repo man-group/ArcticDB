@@ -1,9 +1,9 @@
 name: Run Installation Tests v2
 
 on:
-#  push:
-#    branches: 
-#      - installation_tests
+  push:
+    branches: 
+      - master
   workflow_dispatch:
     inputs:
       os:
@@ -36,7 +36,7 @@ jobs:
     runs-on: ${{ inputs.os != 'all' && inputs.os || matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-22.04, windows-latest, macos-latest]
         python: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
       fail-fast: false  
 
