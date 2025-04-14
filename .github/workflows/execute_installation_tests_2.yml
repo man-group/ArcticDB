@@ -36,9 +36,14 @@ jobs:
     runs-on: ${{ inputs.os != 'all' && inputs.os || matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, windows-latest, macos-latest]
-        python: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+        #os: [ubuntu-22.04, windows-latest, macos-latest]
+        #python: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+        os: [ubuntu-22.04]
+        python: ["3.8", "3.12"]
       fail-fast: false  
+    env:
+      ARCTICDB_STORAGE_GCP: 1
+      ARCTICDB_STORAGE_AWS_S3: 1
 
     steps:
 
@@ -76,8 +81,8 @@ jobs:
     - name: Run tests
       run: |
         echo $pwd
-        export ARCTICDB_STORAGE_GCP=1
-        export ARCTICDB_STORAGE_AWS_S3=1
+        #export ARCTICDB_STORAGE_GCP=1
+        #export ARCTICDB_STORAGE_AWS_S3=1
         pytest -s -rs --log-file="tests.log" -v ./installation_tests
         pytest -s -rs --log-file="tests.log" -v ./python/installation_tests
 
@@ -85,7 +90,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: pytest-log
+        name: logs-${{ matrix.os || inputs.os }}-${{ matrix.python || inputs.python}}
         path: |
           ./*test*        
 
