@@ -1,23 +1,54 @@
 name: Run Installation Tests v2
 
 on:
-  push:
-    branches: 
-      - installation_tests
+#  push:
+#    branches: 
+#      - installation_tests
   workflow_dispatch:
-
+    inputs:
+      os:
+        description: 'Operating System to test'
+        required: false
+        default: 'ubuntu-22.04'
+        type: choice
+        options:
+          - all
+          - ubuntu-22.04
+          - windows-latest
+          - macos-latest
+      python:
+        description: 'Python Version to test'
+        required: false
+        default: '3.13'
+        type: choice
+        options:
+          - all
+          - "3.7"
+          - "3.8"
+          - "3.9"
+          - "3.10"
+          - "3.11"
+          - "3.12"
+          - "3.13"
 jobs:
+
   test:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ inputs.os != 'all' && inputs.os || matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+      fail-fast: false  
 
     steps:
+
     - name: Checkout code
       uses: actions/checkout@v3
 
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.11'
+        python-version: ${{ matrix.python }}
 
     - name: Install arcticdb and dependencies
       run: |
