@@ -47,7 +47,7 @@ class StorageTypes(Enum):
 
 
 def is_storage_enabled(storage_type: StorageTypes) -> bool:
-    persistent_storage = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS", "0") == 1
+    persistent_storage = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS", "0") == "1"
     if not persistent_storage:
         return False
     if storage_type == StorageTypes.LMDB:
@@ -56,12 +56,12 @@ def is_storage_enabled(storage_type: StorageTypes) -> bool:
         else:
             return False
     elif storage_type == StorageTypes.REAL_GCP:
-        if os.getenv("ARCTICDB_STORAGE_GCP", "0") == 1:        
+        if os.getenv("ARCTICDB_STORAGE_GCP", "0") == "1":        
             return True
         else:
             return False
     elif storage_type == StorageTypes.REAL_AWS_S3:
-        if os.getenv("ARCTICDB_STORAGE_AWS_S3", "0") == 1:        
+        if os.getenv("ARCTICDB_STORAGE_AWS_S3", "0") == "1":        
             return True
         else:
             return False
