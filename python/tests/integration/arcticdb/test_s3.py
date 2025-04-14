@@ -134,7 +134,7 @@ def test_racing_list_and_delete_nfs(nfs_backed_s3_storage, lib_name):
     assert exceptions_in_reader.empty()
 
 
-@pytest.fixture(scope="function", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
+@pytest.fixture(scope="session", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
 def s3_storage_dots_in_path(request):
     prefix = "some_path/.thing_with_a_dot/even.more.dots/end"
 
@@ -198,7 +198,7 @@ def test_prefix():
     return "test_bucket_prefix"
 
 
-@pytest.fixture(scope="function", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
+@pytest.fixture(scope="session", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
 def storage_bucket(test_prefix, request):
     with request.param(
         use_ssl=False, ssl_test_support=False, bucket_versioning=False, default_prefix=test_prefix
