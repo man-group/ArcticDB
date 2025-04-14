@@ -56,9 +56,6 @@ jobs:
           - os: ubuntu-22.04
             python: "3.13"
       fail-fast: false  
-    env:
-      ARCTICDB_STORAGE_GCP: 1
-      ARCTICDB_STORAGE_AWS_S3: 1
 
     steps:
 
@@ -106,6 +103,11 @@ jobs:
       shell: bash -l {0}      
       run: |
         python setup.py protoc --build-lib python        
+
+    - name: Set environment variables 
+      run: |
+        echo "ARCTICDB_STORAGE_GCP=1" >> $GITHUB_ENV        
+        echo "ARCTICDB_STORAGE_AWS_S3=1" >> $GITHUB_ENV        
 
     - name: Run tests
       shell: bash -l {0}      
