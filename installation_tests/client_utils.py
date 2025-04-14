@@ -47,14 +47,27 @@ class StorageTypes(Enum):
 
 
 def is_storage_enabled(storage_type: StorageTypes) -> bool:
+    persistent_storage = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS", "0") == 1
+    if not persistent_storage:
+        return False
     if storage_type == StorageTypes.LMDB:
-        return True
+        if os.getenv("ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED", "1") == "1":
+            return True
+        else:
+            return False
     elif storage_type == StorageTypes.REAL_GCP:
-        return False
+        if os.getenv("ARCTICDB_STORAGE_GCP", "0") == 1:        
+            return True
+        else:
+            return False
     elif storage_type == StorageTypes.REAL_AWS_S3:
-        return False
+        if os.getenv("ARCTICDB_STORAGE_AWS_S3", "0") == 1:        
+            return True
+        else:
+            return False
     else:
         raise ValueError(f"Invalid storage type: {storage_type}")
+    
 
 def real_s3_credentials(shared_path: bool = True):
     endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
