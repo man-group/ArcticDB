@@ -108,6 +108,7 @@ jobs:
       run: |
         echo "ARCTICDB_STORAGE_GCP=1" >> $GITHUB_ENV        
         echo "ARCTICDB_STORAGE_AWS_S3=1" >> $GITHUB_ENV        
+        echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
 
     - name: Run tests
       shell: bash -l {0}      
