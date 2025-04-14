@@ -105,6 +105,7 @@ jobs:
         python setup.py protoc --build-lib python        
 
     - name: Set environment variables 
+      shell: bash -l {0}      
       run: |
         echo "ARCTICDB_STORAGE_GCP=1" >> $GITHUB_ENV        
         echo "ARCTICDB_STORAGE_AWS_S3=1" >> $GITHUB_ENV        
