@@ -81,6 +81,8 @@ jobs:
         pip install wheel
         pip install setuptools
         pip install pytest
+        pip download arcticdb --only-binary=:all: -d .
+        pip install --force-reinstall $(ls arcticdb*.whl)[Testing] pytest-split        
 
     # Install conda environment
     - name: Install Conda environment from environment_unix.yml
