@@ -100,15 +100,15 @@ std::shared_ptr<VersionMapEntry> build_version_map_entry_with_predicate_iteratio
     std::vector<AtomKey> read_keys;
     for (auto key_type : key_types) {
         store->iterate_type(key_type,
-            [&predicate, &read_keys, &store, &output, &perform_read_segment_with_keys](VariantKey &&vk) {
-                const auto &key = to_atom(std::move(vk));
+            [&predicate, &read_keys, &store, &output, &perform_read_segment_with_keys](VariantKey&& vk) {
+                const auto& key = to_atom(std::move(vk));
                 if (!predicate(key))
                     return;
 
                 read_keys.push_back(key);
                 ARCTICDB_DEBUG(log::storage(), "Version map iterating key {}", key);
                 if (perform_read_segment_with_keys) {
-                    auto [kv, seg] = store->read_sync(to_atom(key));
+                    auto [kv, seg] = store->read_sync(key);
                     LoadProgress load_progress;
                     (void)read_segment_with_keys(seg, output, load_progress);
                 }

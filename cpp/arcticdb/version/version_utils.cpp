@@ -41,8 +41,8 @@ VariantKey write_multi_index_entry(
                                      std::forward<decltype(segment)>(segment)).wait();
     });
 
-    for (auto &key : keys) {
-        multi_index_agg.add_key(to_atom(key));
+    for (const auto& key : keys) {
+        multi_index_agg.add_key(key);
     }
     TimeseriesDescriptor timeseries_descriptor;
 

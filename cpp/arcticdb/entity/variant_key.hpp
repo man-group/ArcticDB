@@ -27,24 +27,16 @@ using IterateTypePredicate = std::function<bool(VariantKey &&key)>;
 /** Should be a SNAPSHOT_REF key or the legacy SNAPSHOT AtomKey. */
 using SnapshotVariantKey = VariantKey;
 
-inline AtomKey& to_atom(VariantKey& vk) {
-    return std::get<AtomKey>(vk);
+template<typename KeyType>
+requires std::same_as<std::decay_t<KeyType>, VariantKey>
+decltype(auto) to_atom(KeyType&& vk) {
+    return std::get<AtomKey>(std::forward<KeyType>(vk));
 }
 
-inline const AtomKey& to_atom(const VariantKey& vk) {
-    return std::get<AtomKey>(vk);
-}
-
-inline AtomKey to_atom(VariantKey&& vk) {
-    return std::get<AtomKey>(std::move(vk));
-}
-
-inline RefKey& to_ref(VariantKey& vk) {
-    return std::get<RefKey>(vk);
-}
-
-inline const RefKey& to_ref(const VariantKey& vk) {
-    return std::get<RefKey>(vk);
+template<typename KeyType>
+requires std::same_as<std::decay_t<KeyType>, VariantKey>
+decltype(auto) to_ref(KeyType&& vk) {
+    return std::get<RefKey>(std::forward<KeyType>(vk));
 }
 
 inline std::string_view variant_key_view(const VariantKey &vk) {

@@ -171,8 +171,7 @@ VersionedItem append_impl(
                                              options,
                                              validate_index,
                                              empty_types);
-    auto version_key = std::move(version_key_fut).get();
-    auto versioned_item = VersionedItem(to_atom(std::move(version_key)));
+    auto versioned_item = VersionedItem(std::move(version_key_fut).get());
     ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}", versioned_item.symbol(), update_info.next_version_id_);
     return versioned_item;
 }
@@ -296,8 +295,7 @@ VersionedItem delete_range_impl(
         using IndexType = decltype(idx);
         return pipelines::index::write_index<IndexType>(index_segment_reader.tsd(), std::move(flattened_slice_and_keys), IndexPartialKey{stream_id, update_info.next_version_id_}, store);
     });
-    auto version_key = std::move(version_key_fut).get();
-    auto versioned_item = VersionedItem(to_atom(std::move(version_key)));
+    auto versioned_item = VersionedItem(std::move(version_key_fut).get());
     ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
     return versioned_item;
 }
@@ -502,8 +500,7 @@ VersionedItem update_impl(
     WriteOptions&& options,
     bool dynamic_schema,
     bool empty_types) {
-    auto version_key = async_update_impl(store, update_info, query, frame, std::move(options), dynamic_schema, empty_types).get();
-    auto versioned_item = VersionedItem(to_atom(std::move(version_key)));
+    auto versioned_item = VersionedItem(async_update_impl(store, update_info, query, frame, std::move(options), dynamic_schema, empty_types).get());
     ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", frame->desc.id(), update_info.next_version_id_);
     return versioned_item;
 }
@@ -1625,11 +1622,11 @@ VersionedItem collate_and_write(
         for(auto sk = std::begin(pipeline_context->slice_and_keys_); sk < end; ++sk)
             writer.add(sk->key(), sk->slice());
 
-        for (auto key : folly::enumerate(keys)) {
+        for (const auto& key : folly::enumerate(keys)) {
             writer.add(to_atom(*key), slices[key.index]);
         }
-        auto index_key =  writer.commit();
-        return VersionedItem{to_atom(std::move(index_key).get())};
+        auto index_key_fut =  writer.commit();
+        return VersionedItem{std::move(index_key_fut).get()};
     });
 }
 
