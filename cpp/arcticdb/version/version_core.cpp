@@ -1395,6 +1395,7 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         row.set_string_pool(row.slice_and_key().segment(store).string_pool_ptr());
     }
 
+    // TODO: Duplicated with other case where we infer allocation type from output format
     const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
     auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
     return copy_segments_to_frame(store, pipeline_context, frame, handler_data, read_options.output_format()).thenValue([frame](auto&&){ return frame; });
@@ -1566,6 +1567,7 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
         util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query->row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
         mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema()), pipeline_context->bucketize_dynamic_);
+        // TODO: If we always use DETACHABLE with ARROW, why have two arguments to allocate_frame?
         const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
         auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
         util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
