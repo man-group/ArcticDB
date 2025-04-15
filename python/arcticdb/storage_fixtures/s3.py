@@ -103,6 +103,8 @@ class S3Bucket(StorageFixture):
             self.arctic_uri += f"&path_prefix={factory.default_prefix}"
         if factory.ssl:
             self.arctic_uri += "&ssl=True"
+        if factory._test_only_is_nfs_layout:
+            self.arctic_uri += "&_test_only_is_nfs_layout=True"
         if platform.system() == "Linux":
             if factory.client_cert_file:
                 self.arctic_uri += f"&CA_cert_path={self.factory.client_cert_file}"
@@ -202,17 +204,16 @@ class NfsS3Bucket(S3Bucket):
 
 
 class GcpS3Bucket(S3Bucket):
-
     def __init__(
         self,
         factory: "BaseGCPStorageFixtureFactory",
         bucket: str,
         native_config: Optional[NativeVariantStorage] = None,
     ):
-        if any(sub in factory.endpoint for sub in ["http:", "https:"])  :
+        if any(sub in factory.endpoint for sub in ["http:", "https:"]):
             super().__init__(factory, bucket, native_config=native_config)
             self.arctic_uri = self.arctic_uri.replace("s3", "gcpxml", 1)
-        else: 
+        else:
             StorageFixture.__init__(self)
             self.factory = factory
             self.bucket = bucket
@@ -246,10 +247,7 @@ class GcpS3Bucket(S3Bucket):
             with_prefix = False
 
         add_gcp_library_to_env(
-            cfg=cfg,
-            lib_name=lib_name,
-            env_name=Defaults.ENV,
-            with_prefix=with_prefix
+            cfg=cfg, lib_name=lib_name, env_name=Defaults.ENV, with_prefix=with_prefix
         )  # client_cert_dir is skipped on purpose; It will be tested manually in other tests
         return cfg, self.native_config
 
@@ -266,6 +264,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
     clean_bucket_on_fixture_exit = True
     use_mock_storage_for_testing = None  # If set to true allows error simulation
     use_internal_client_wrapper_for_testing = None  # If set to true uses the internal client wrapper for testing
+    _test_only_is_nfs_layout: bool = False
 
     def __init__(self, native_config: Optional[dict] = None):
         self.client_cert_file = None
@@ -692,6 +691,17 @@ def run_gcp_server(port, key_file, cert_file):
         ssl_context=(cert_file, key_file) if cert_file and key_file else None,
     )
 
+def create_bucket(s3_client, bucket_name, max_retries=15):
+    for i in range(max_retries):
+        try:
+            s3_client.create_bucket(Bucket=bucket_name)
+            return
+        except botocore.exceptions.EndpointConnectionError as e:
+            if i >= max_retries - 1:
+                raise
+            logger.warn(f"S3 create bucket failed. Retry {1}/{max_retries}")
+            time.sleep(1)   
+
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     default_key = Key(id="awd", secret="awd", user_name="dummy")
@@ -719,6 +729,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         use_mock_storage_for_testing: bool = False,
         use_internal_client_wrapper_for_testing: bool = False,
         native_config: Optional[NativeVariantStorage] = None,
+        _test_only_is_nfs_layout: bool = False,
     ):
         super().__init__(native_config)
         self.http_protocol = "https" if use_ssl else "http"
@@ -728,6 +739,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self.use_raw_prefix = use_raw_prefix
         self.use_mock_storage_for_testing = use_mock_storage_for_testing
         self.use_internal_client_wrapper_for_testing = use_internal_client_wrapper_for_testing
+        self._test_only_is_nfs_layout = _test_only_is_nfs_layout
         # This is needed because we might have multiple factory instances in the same test run
         # and we need to make sure the bucket names are unique
         # set the unique_id to the current UNIX timestamp to avoid conflicts
@@ -830,7 +842,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
 
     def create_fixture(self) -> S3Bucket:
         bucket = self.bucket_name("s3")
-        self._s3_admin.create_bucket(Bucket=bucket)
+        create_bucket(self._s3_admin, bucket)
         if self.bucket_versioning:
             self._s3_admin.put_bucket_versioning(Bucket=bucket, VersioningConfiguration={"Status": "Enabled"})
 
@@ -866,7 +878,7 @@ _PermissionCapableFactory = MotoS3StorageFixtureFactory
 class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
     def create_fixture(self) -> NfsS3Bucket:
         bucket = self.bucket_name("nfs")
-        self._s3_admin.create_bucket(Bucket=bucket)
+        create_bucket(self._s3_admin, bucket)
         out = NfsS3Bucket(self, bucket)
         self._live_buckets.append(out)
         return out
@@ -907,7 +919,8 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
 
     def create_fixture(self) -> GcpS3Bucket:
         bucket = self.bucket_name("gcp")
-        self._s3_admin.create_bucket(Bucket=bucket)
+        max_retries = 15
+        create_bucket(self._s3_admin, bucket)
         out = GcpS3Bucket(self, bucket)
         self._live_buckets.append(out)
         return out
