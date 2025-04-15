@@ -42,7 +42,7 @@ def get_ephemeral_port(seed=0):
     while port < 65535:
         try:
             with socketserver.TCPServer(("localhost", port), None):
-                time.sleep(20 if ARCTICDB_USING_CONDA else 10)  # Hold the port open for a while to improve the chance of collision detection
+                time.sleep(20)  # Hold the port open for a while to improve the chance of collision detection
                 return port
         except OSError as e:
             print(repr(e), file=sys.stderr)
