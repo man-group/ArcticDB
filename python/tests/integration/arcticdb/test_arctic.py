@@ -478,6 +478,7 @@ class TestAppendStagedData:
         assert_frame_equal(lib.read("sym").data, expected_df)
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_snapshots_and_deletes(arctic_library):
     lib = arctic_library
