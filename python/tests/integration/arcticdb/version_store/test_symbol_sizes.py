@@ -3,9 +3,6 @@ from multiprocessing import Queue, Process
 import pytest
 from arcticdb import LibraryOptions
 from arcticdb.encoding_version import EncodingVersion
-from arcticdb.storage_fixtures.azure import AzuriteStorageFixtureFactory
-from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, MotoNfsBackedS3StorageFixtureFactory, MotoGcpS3StorageFixtureFactory
-from arcticdb.storage_fixtures.utils import get_ephemeral_port
 from arcticdb.util.test import sample_dataframe, config_context_multi
 from arcticdb_ext.storage import KeyType
 import arcticdb_ext.cpp_async as adb_async
