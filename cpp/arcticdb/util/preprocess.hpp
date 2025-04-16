@@ -19,7 +19,13 @@
 #define ARCTICDB_UNLIKELY(condition) __builtin_expect(condition, 0)
 
 #else
+#ifdef ARCTICDB_USING_CONDA
+// TODO: Workaround for MSVC on conda-forge
 #define ARCTICDB_UNUSED
+#else
+#define ARCTICDB_UNUSED [[maybe_unused]]
+#endif
+
 #define ARCTICDB_UNREACHABLE __assume(0);
 #define ARCTICDB_VISIBILITY_HIDDEN
 #define ARCTICDB_VISIBILITY_DEFAULT
