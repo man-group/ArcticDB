@@ -197,16 +197,6 @@ void NfsBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts)
     s3::detail::do_remove_impl(std::span(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
-static std::string prefix_handler(const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor&, KeyType key_type) {
-    std::string new_prefix;
-    if(!prefix.empty()) {
-        uint32_t id = get_id_bucket(encode_item<StreamId, StringId, NumericId>(StringId{prefix}, is_ref_key_class(key_type)));
-        new_prefix = fmt::format("{:03}", id);
-    }
-
-    return !prefix.empty() ? fmt::format("{}/{}", key_type_dir, new_prefix) : key_type_dir;
-}
-
 // signature needs to match PrefixHandler in s3_storage.hpp
 static std::string iter_prefix_handler(const std::string&, const std::string& key_type_dir, const KeyDescriptor&, KeyType) {
     // The prefix handler is not used for filtering (done in func below)
@@ -240,8 +230,18 @@ bool NfsBackedStorage::supports_object_size_calculation() const {
     return true;
 }
 
-ObjectSizes NfsBackedStorage::do_get_object_sizes(KeyType key_type, const std::string& prefix) {
-    return s3::detail::do_calculate_sizes_for_type_impl(key_type, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, prefix_handler, prefix);
+void NfsBackedStorage::do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
+    const ObjectSizesVisitor func = [&v = visitor, prefix=prefix] (const VariantKey& k, CompressedSize size) {
+        auto key = unencode_object_id(k);
+        if (prefix.empty() || variant_key_view(key).find(prefix) != std::string::npos) {
+            v(key, size);
+        } else {
+            return;
+        }
+    };
+
+    s3::detail::do_visit_object_sizes_for_type_impl(
+        key_type, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, iter_prefix_handler, prefix, func);
 }
 
 } //namespace arcticdb::storage::nfs_backed

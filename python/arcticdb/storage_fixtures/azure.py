@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import re
 import shutil
+import uuid
 from typing import TYPE_CHECKING, Optional
 from tempfile import mkdtemp
 
@@ -30,7 +31,6 @@ class AzureContainer(StorageFixture):
         ArcticUriFields.CA_PATH: re.compile("[/;](CA_cert_path=)([^;]*)(;?)"),
         ArcticUriFields.PATH_PREFIX: re.compile("[/;](Path_prefix=)([^;]*)(;?)"),
     }
-    _sequence = 0
 
     container: str
     client: Optional["ContainerClient"]
@@ -54,8 +54,7 @@ class AzureContainer(StorageFixture):
     def __init__(self, factory: "AzuriteStorageFixtureFactory") -> None:
         super().__init__()
         self.factory = factory
-        self.container = f"container{AzureContainer._sequence}"
-        AzureContainer._sequence += 1
+        self.container = f"container{str(uuid.uuid1())[:8]}"
         self._set_uri_and_client(f"AccountName={factory.account_name};AccountKey={factory.account_key}")
 
         # __exit__() assumes this object owns the container, so always create and bail if exists:
