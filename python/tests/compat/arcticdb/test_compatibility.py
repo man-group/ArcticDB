@@ -9,7 +9,7 @@ import numpy as np
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.options import ModifiableEnterpriseLibraryOption
 from arcticdb.toolbox.library_tool import LibraryTool
-from tests.util.mark import ARCTICDB_USING_CONDA, ZONE_INFO_MARK
+from tests.util.mark import ARCTICDB_USING_CONDA, PYARROW_TESTS_MARK, ZONE_INFO_MARK
 from arcticdb_ext.tools import StorageMover
 
 from arcticdb.util.venv import CompatLibrary
@@ -290,6 +290,7 @@ lib._nvs.append("sym", df_2, incomplete=True)
             assert_frame_equal(read_df, df[["float_col", "str_col"]].iloc[4:9])
 
 
+@PYARROW_TESTS_MARK
 def test_storage_mover_clone_old_library(old_venv_and_arctic_uri, lib_name):
     old_venv, arctic_uri = old_venv_and_arctic_uri
     dst_lib_name = "local.extra"

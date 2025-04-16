@@ -106,6 +106,17 @@ SIM_NFS_TESTS_MARK = pytest.mark.skipif(
 """
 
 
+# PyArrow might not be installed on the system, so we need to skip the tests that use it.
+try:
+    import pyarrow
+    PYARROW_INSTALLED = True
+except ImportError:
+    PYARROW_INSTALLED = False
+
+PYARROW_TESTS_MARK = pytest.mark.skipif(
+    not PYARROW_INSTALLED,
+    reason="PyArrow is not installed on the system",
+)
 
 """Windows and MacOS have different handling of self-signed CA cert for test. 
 TODO: https://github.com/man-group/ArcticDB/issues/1394"""
