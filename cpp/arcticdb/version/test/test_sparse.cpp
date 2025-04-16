@@ -281,7 +281,8 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     read_query->row_filter = universal_range();
     auto handler_data = get_type_handler_data(OutputFormat::PANDAS);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame = read_result.frame_data.frame();;
+    const auto& frame = read_result.frame_data.frame();
+    apply_global_refcounts(handler_data, OutputFormat::PANDAS);
 
     ASSERT_EQ(frame.row_count(), 2);
     auto val1 = frame.scalar_at<PyObject*>(0, 1);
@@ -676,7 +677,8 @@ TEST_F(SparseTestStore, CompactWithStrings) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     auto handler_data = get_type_handler_data(OutputFormat::PANDAS);
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
+    auto read_result = test_store_->read_dataframe_version(stream_id, VersionQuery{}, read_query, read_options, handler_data);
+    apply_global_refcounts(handler_data, OutputFormat::PANDAS);
     const auto& frame = read_result.frame_data.frame();
     ASSERT_EQ(frame.row_count(), num_rows);
 
