@@ -72,4 +72,3 @@ jobs:
         uses: WyriHaximus/github-action-next-semvers@v1.2.1
         with:
           version: ${{ steps.get_increment_type.outputs.tag }}
-if: false

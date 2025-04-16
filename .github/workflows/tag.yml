@@ -55,4 +55,3 @@ jobs:
           # Remove the build status badge from a version tag
           sed -i 's#<img src="https://github.com/man-group/ArcticDB/actions/workflows/build.yml/badge.svg"/>##' README.md || true
           tag_and_push "Tagging" ${{inputs.version}} refs/tags/v${{inputs.version}} ${{inputs.overwrite && '-f' || ''}}
-if: false

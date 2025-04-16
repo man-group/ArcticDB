@@ -21,7 +21,9 @@ on:
 jobs:
 
   linux:
-    if: false
+    if: |
+      always() &&
+      !cancelled()
     runs-on: ubuntu-22.04
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
@@ -53,7 +55,6 @@ jobs:
           # Protocol buffers compilation require not using build isolation.
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
-          CMAKE_BUILD_PARALLEL_LEVEL: ${{ steps.cpu-cores.outputs.count }}
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
 
@@ -104,7 +105,6 @@ jobs:
 
 
   macos:
-    if: false
     strategy:
       matrix:
         include:

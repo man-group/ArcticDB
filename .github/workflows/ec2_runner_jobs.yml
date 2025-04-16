@@ -61,4 +61,3 @@ jobs:
           label: ${{ inputs.label }}
           ec2-instance-id: ${{ inputs.ec2-instance-id }}
         
-if: false
