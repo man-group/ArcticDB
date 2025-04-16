@@ -149,4 +149,3 @@ jobs:
       job_type: stop
       label: ${{ needs.start_ec2_runner.outputs.label }}
       ec2-instance-id: ${{ needs.start_ec2_runner.outputs.ec2-instance-id }}
-if: false

@@ -408,4 +408,3 @@ jobs:
   #       env:
   #         SLACK_WEBHOOK_URL: ${{ secrets.ARCTICDB_DEV_WEBHOOK_URL }}
   #         SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
-if: false

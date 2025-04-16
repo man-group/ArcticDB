@@ -118,4 +118,3 @@ jobs:
         run: |
           echo "Running cleanup for ${{ github.ref_name }}"
           python python/tests/util/storage_test.py --type cleanup
-if: false
