@@ -54,6 +54,8 @@ jobs:
           - os: ubuntu-22.04
             python: "3.13"
       fail-fast: false  
+    env:
+      conda_file: "environment_unix.yml"
 
     steps:
 
@@ -82,14 +84,17 @@ jobs:
       if: ${{ contains(matrix.os, 'macos') || contains(inputs.os, 'macos')}}
       shell: bash -l {0}
       run: |
-        echo "\n  - arcticdb" > environment_unix.yml
+        FILE=${{ env.conda_file }}
+        sed -i ':a;/^$/{$d;N;};/\n$/ba' $FILE
+        echo "\n  - arcticdb" > $FILE
+        cat $FILE
 
       # Install conda environment
     - name: Install Conda environment from environment_unix.yml
       uses: mamba-org/setup-micromamba@v2.0.0
       if: ${{ contains(matrix.os, 'macos') || contains(inputs.os, 'macos')}}
       with:
-        environment-file: environment_unix.yml
+        environment-file: ${{ env.conda_file }}
         environment-name: arcticdb
         init-shell: >-
           bash
@@ -124,7 +129,6 @@ jobs:
       shell: bash -l {0}      
       run: |
         echo $pwd
-        cd python
         ## pytest -rs -v --log-file="tests.log" -n auto -m installation
         ## For testing limit the run to first 3 tests
         pytest -m installation --collect-only -q > test_list.txt
