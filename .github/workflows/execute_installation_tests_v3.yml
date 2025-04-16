@@ -97,7 +97,7 @@ jobs:
       shell: bash -l {0}
       run: |
           micromamba activate arcticdb
-          micromamba install -c conda-forge <module-name>
+          micromamba install -c conda-forge arcticdb
   
     - name: Set persistent storage variables
       if: always()
