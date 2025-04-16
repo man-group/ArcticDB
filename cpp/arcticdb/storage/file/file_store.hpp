@@ -119,8 +119,10 @@ version_store::ReadVersionOutput read_dataframe_from_file_internal(
     using namespace arcticdb::storage;
     const auto data_end = single_file_storage->get_bytes() - sizeof(KeyData);
     auto key_data = *reinterpret_cast<KeyData*>(single_file_storage->read_raw(data_end, sizeof(KeyData)));
-
-    auto index_key = from_serialized_atom_key(single_file_storage->read_raw(key_data.key_offset_, key_data.key_size_), KeyType::TABLE_INDEX);
+    const auto key_offset = key_data.key_offset_;
+    const auto key_size = key_data.key_size_;
+    const auto serialized_key = single_file_storage->read_raw(key_offset, key_size);
+    auto index_key = from_serialized_atom_key(serialized_key, KeyType::TABLE_INDEX);
     VersionedItem versioned_item(index_key);
     const auto header_offset = key_data.key_offset_ + key_data.key_size_;
     ARCTICDB_DEBUG(log::storage(), "Got header offset at {}", header_offset);

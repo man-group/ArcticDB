@@ -76,6 +76,7 @@ uint64_t MappedFileStorage::get_data_offset(const Segment& seg) {
 }
 
 uint64_t MappedFileStorage::write_segment(Segment& segment) {
+    (void)segment.calculate_size();
     auto offset = get_data_offset(segment);
     auto* data = file_.data() + offset;
     ARCTICDB_SUBSAMPLE(FileStorageMemCpy, 0)
@@ -135,11 +136,12 @@ void MappedFileStorage::do_finalize(KeyData key_data)  {
                                           config_.codec_opts(),
                                           EncodingVersion{static_cast<uint16_t>(config_.encoding_version())});
     write_segment(header_segment);
-    auto pos = reinterpret_cast<KeyData*>(file_.data() + offset_);
-    *pos = key_data;
+    auto* pos = file_.data() + offset_;
+    memcpy(pos, &key_data, sizeof(KeyData));
+    auto size [[maybe_unused]] = reinterpret_cast<KeyData*>(pos)->key_size_;
     ARCTICDB_DEBUG(log::storage(), "Finalizing mapped file, writing key data {}", *pos);
     offset_ += sizeof(KeyData);
-    file_.truncate(offset_);
+   // file_.truncate(offset_);
 }
 
 uint8_t* MappedFileStorage::do_read_raw(size_t offset, size_t bytes) {
