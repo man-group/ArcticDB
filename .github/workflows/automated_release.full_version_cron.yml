@@ -20,7 +20,7 @@ jobs:
         with:
           repository: ${{ github.repository }}
           regex: ^v\d+\.\d+\.\d+\${{ vars.RC_SUFFIX }}\d+$
-
+      
       - name: Calculate next version
         id: calculate-next-version
         run: |
@@ -38,7 +38,7 @@ jobs:
     uses: ./.github/workflows/tag.yml
     needs: get_tag_name
     with:
-      version: ${{ needs.get_tag_name.outputs.next_version }}
+      version: ${{ needs.get_tag_name.outputs.next_version }}  
       from_branch: ${{ needs.get_tag_name.outputs.next_version }}
 
   create_next_release_branch:
@@ -48,4 +48,3 @@ jobs:
       contents: write
     secrets: inherit
     uses: ./.github/workflows/automated_release.create_release_branch.yml
-if: false

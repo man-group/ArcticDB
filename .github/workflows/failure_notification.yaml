@@ -22,4 +22,3 @@ jobs:
           footer: "Linked Repo <${{github.server_url}}/${{github.repository}}|${{github.repository}}> | <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.event.workflow_run.id}}|View Failure>"
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-if: false

@@ -55,7 +55,9 @@ on:
 jobs:
 
   linux:
-    if: false
+    if: |
+      always() &&
+      !cancelled()
     runs-on: ubuntu-22.04
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
@@ -95,7 +97,6 @@ jobs:
           # We should always retry due to instable nature of connections and environments
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
-          CMAKE_BUILD_PARALLEL_LEVEL: ${{ steps.cpu-cores.outputs.count }}
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
 

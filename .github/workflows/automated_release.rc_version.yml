@@ -52,4 +52,3 @@ jobs:
     with:
       version: ${{ needs.get_tag_name.outputs.next_version }}  
       from_branch: ${{ github.ref_name }}
-if: false
