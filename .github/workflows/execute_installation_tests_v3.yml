@@ -80,15 +80,6 @@ jobs:
         pip download arcticdb --only-binary=:all: -d .
         pip install --force-reinstall $(ls arcticdb*.whl)[Testing] pytest-split        
 
-    - name: Add arcticdb as conda dependency
-      if: ${{ contains(matrix.os, 'macos') || contains(inputs.os, 'macos')}}
-      shell: bash -l {0}
-      run: |
-        CONFIG_FILE=${{ env.conda_file }}
-        sed -i ':a;/^$/{$d;N;};/\n$/ba' "$CONFIG_FILE"
-        sed -i '/dependencies:/a\  - arcticdb' "$CONFIG_FILE"
-        cat $CONFIG_FILE
-
       # Install conda environment
     - name: Install Conda environment from environment_unix.yml
       uses: mamba-org/setup-micromamba@v2.0.0
@@ -101,6 +92,12 @@ jobs:
         cache-environment: true
         post-cleanup: 'all'
 
+    - name: Add arcticdb from conda-forge
+      if: ${{ contains(matrix.os, 'macos') || contains(inputs.os, 'macos')}}
+      shell: bash -l {0}
+      run: |
+        conda install -c conda-forge arcticdb
+  
     - name: Set persistent storage variables
       if: always()
       uses: ./.github/actions/set_persistent_storage_env_vars
