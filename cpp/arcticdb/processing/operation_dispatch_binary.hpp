@@ -79,7 +79,7 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
 
     util::BitSet output_bitset;
     constexpr auto sparse_missing_value_output = std::is_same_v<std::remove_reference_t<Func>, IsNotInOperator>;
-    details::visit_type(column_with_strings.column_->type().data_type(),[&] (auto col_tag) {
+    details::visit_type(column_with_strings.column_->type().data_type(),[&, sparse_missing_value_output] (auto col_tag) {
         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
         details::visit_type(value_set.base_type().data_type(), [&] (auto val_set_tag) {
             using val_set_type_info = ScalarTypeInfo<decltype(val_set_tag)>;
@@ -158,7 +158,7 @@ VariantData binary_comparator(const ColumnWithStrings& left, const ColumnWithStr
     util::BitSet output_bitset;
     constexpr auto sparse_missing_value_output = std::is_same_v<std::remove_reference_t<Func>, NotEqualsOperator>;
 
-    details::visit_type(left.column_->type().data_type(), [&](auto left_tag) {
+    details::visit_type(left.column_->type().data_type(), [&, sparse_missing_value_output](auto left_tag) {
         using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
         details::visit_type(right.column_->type().data_type(), [&](auto right_tag) {
             using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
@@ -212,7 +212,7 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
     util::BitSet output_bitset;
     constexpr auto sparse_missing_value_output = std::is_same_v<std::remove_reference_t<Func>, NotEqualsOperator>;
 
-    details::visit_type(column_with_strings.column_->type().data_type(), [&](auto col_tag) {
+    details::visit_type(column_with_strings.column_->type().data_type(), [&, sparse_missing_value_output](auto col_tag) {
         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
         details::visit_type(val.type().data_type(), [&](auto val_tag) {
             using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
