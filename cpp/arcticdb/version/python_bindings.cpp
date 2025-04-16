@@ -23,6 +23,8 @@
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 
+#include "python/python_handler_data.hpp"
+
 
 namespace arcticdb::version_store {
 
@@ -679,8 +681,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::call_guard<SingleThreadMutexHolder>(), "Write a specific  version of this dataframe to the store")
         .def("read_dataframe_version",
              [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options) {
-                auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
-                return adapt_read_df(v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data));
+                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
+                 py::list result = adapt_read_df(v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data));
+                 apply_global_refcounts(handler_data, read_options.output_format());
+                 return result;
               },
              py::call_guard<SingleThreadMutexHolder>(),
              "Read the specified version of the dataframe from the store")
@@ -778,7 +782,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                  std::vector<std::shared_ptr<ReadQuery>>& read_queries,
                  const ReadOptions& read_options){
                  auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
-                 return python_util::adapt_read_dfs(v.batch_read(stream_ids, version_queries, read_queries, read_options));
+                 py::list result = python_util::adapt_read_dfs(v.batch_read(stream_ids, version_queries, read_queries, read_options));
+                 apply_global_refcounts(handler_data, read_options.output_format());
+                 return result;
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
         .def("batch_read_keys",

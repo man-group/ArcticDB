@@ -20,9 +20,13 @@
 
 namespace py = pybind11;
 
+namespace arcticdb {
+    struct PythonHandlerData;
+}
+
 namespace arcticdb::python_util {
 
-void increment_none_refcount(size_t amount, SpinLock& lock);
+void increment_none_refcount(size_t amount);
 
 class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
   PYBIND11_OBJECT_DEFAULT(PyRowRef, py::tuple, PyTuple_Check)
@@ -95,24 +99,17 @@ class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
     RowRef row_ref_;
 };
 
-enum IncrementRefCount {
+enum class IncrementRefCount {
     ON,
     OFF
 };
 
-inline void prefill_with_none(
+void prefill_with_none(
     PyObject** ptr_dest,
     size_t num_rows,
     size_t sparse_count,
-    SpinLock& spin_lock,
-    IncrementRefCount inc_ref_count = IncrementRefCount::ON) {
-    std::fill_n(ptr_dest, num_rows, Py_None);
-
-    if(inc_ref_count == IncrementRefCount::ON) {
-        auto none_count = num_rows - sparse_count;
-        python_util::increment_none_refcount(none_count, spin_lock);
-    }
-}
+    PythonHandlerData& python_handler_data,
+    IncrementRefCount inc_ref_count = IncrementRefCount::ON);
 
 template<typename Msg>
 py::object pb_to_python(const Msg & out){

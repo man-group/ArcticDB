@@ -12,7 +12,6 @@
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/python_types.hpp>
-#include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
 namespace arcticdb::convert {

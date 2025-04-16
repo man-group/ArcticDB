@@ -24,12 +24,11 @@
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/codec/segment_identifier.hpp>
-#include <arcticdb/util/spinlock.hpp>
 #include <arcticdb/pipeline/string_reducers.hpp>
 #include <arcticdb/pipeline/read_query.hpp>
 
 #include <ankerl/unordered_dense.h>
-#include <folly/gen/Base.h>
+
 
 namespace arcticdb::pipelines {
 

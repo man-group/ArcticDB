@@ -10,9 +10,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/codec/segment_header.hpp>
-#include <arcticdb/util/lazy.hpp>
 #include <arcticdb/entity/output_format.hpp>
-#include <arcticdb/util/spinlock.hpp>
 
 #include <folly/Poly.h>
 
