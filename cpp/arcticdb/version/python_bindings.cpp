@@ -899,6 +899,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             util::raise_rte("Unknown sorted value: {}", static_cast<uint8_t>(sorted_value));
         }
     });
+
+version.def("write_dataframe_to_file", &write_dataframe_to_file);
+
+version.def("read_dataframe_from_file", &read_dataframe_from_file);
 }
 
 } //namespace arcticdb::version_store
