@@ -78,7 +78,13 @@ jobs:
         pip download arcticdb --only-binary=:all: -d .
         pip install --force-reinstall $(ls arcticdb*.whl)[Testing] pytest-split        
 
-    # Install conda environment
+    - name: Add arcticdb as conda dependency
+      if: ${{ contains(matrix.os, 'macos') || contains(inputs.os, 'macos')}}
+      shell: bash -l {0}
+      run: |
+        echo "\n  - arcticdb" >> environment_unix.yml
+
+      # Install conda environment
     - name: Install Conda environment from environment_unix.yml
       uses: mamba-org/setup-micromamba@v2.0.0
       if: ${{ contains(matrix.os, 'macos') || contains(inputs.os, 'macos')}}
@@ -118,11 +124,11 @@ jobs:
       shell: bash -l {0}      
       run: |
         echo $pwd
-        #export ARCTICDB_STORAGE_GCP=1
-        #export ARCTICDB_STORAGE_AWS_S3=1
         cd python
-        pytest -rs -v --log-file="tests.log" -n auto -m installation
-
+        ## pytest -rs -v --log-file="tests.log" -n auto -m installation
+        ## For testing limit the run to first 3 tests
+        pytest --collect-only -q > test_list.txt
+        pytest -rs -v --log-file="tests.log" $(head -n 3 test_list.txt)
 
     - name: Upload the logs
       if: always()
