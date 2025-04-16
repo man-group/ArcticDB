@@ -96,7 +96,8 @@ jobs:
       if: ${{ contains(matrix.os, 'macos') || contains(inputs.os, 'macos')}}
       shell: bash -l {0}
       run: |
-        conda install -c conda-forge arcticdb
+          micromamba activate arcticdb
+          micromamba install -c conda-forge <module-name>
   
     - name: Set persistent storage variables
       if: always()
