@@ -245,10 +245,12 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                 });
             } else if constexpr ((is_numeric_type(col_type_info::data_type) && is_numeric_type(val_type_info::data_type)) ||
                                  (is_bool_type(col_type_info::data_type) && is_bool_type(val_type_info::data_type))) {
+                using ColType = typename col_type_info::RawType;
+                using ValType = typename val_type_info::RawType;
                 using comp = std::conditional_t<arguments_reversed,
-                                                typename arcticdb::Comparable<typename val_type_info::RawType, typename col_type_info::RawType>,
-                                                typename arcticdb::Comparable<typename col_type_info::RawType, typename val_type_info::RawType>>;
-                auto value = static_cast<typename comp::right_type>(*reinterpret_cast<const typename val_type_info::RawType *>(val.data_));
+                                                typename arcticdb::Comparable<ValType, ColType>,
+                                                typename arcticdb::Comparable<ColType, ValType>>;
+                auto value = static_cast<typename comp::right_type>(*reinterpret_cast<const ValType *>(val.data_));
                 Column::transform<typename col_type_info::TDT>(
                         *column_with_strings.column_,
                         output_bitset,
