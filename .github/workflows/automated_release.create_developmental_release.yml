@@ -67,4 +67,3 @@ jobs:
     with:
       version: ${{ needs.calculate-next-version.outputs.version }}.dev${{ needs.get-dev-number.outputs.next_dev_number }}
       from_branch: master
-if: false
