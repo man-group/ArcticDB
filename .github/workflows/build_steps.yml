@@ -71,7 +71,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3.3.0
         with:
-          submodules: recursive # Just in case a dep has its own third-party deps
+          submodules: true
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
