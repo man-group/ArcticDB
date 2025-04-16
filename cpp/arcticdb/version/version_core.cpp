@@ -2114,12 +2114,13 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
         util::check(std::holds_alternative<IndexRange>(read_query.row_filter), "Streaming read requires date range filter");
         const auto& query_range = std::get<IndexRange>(read_query.row_filter);
         const auto existing_range = pipeline_context->index_range();
-        if(!existing_range.specified_ || query_range.end_ > existing_range.end_)
+        if(!existing_range.specified_ || query_range.end_ > existing_range.end_) {
             const ReadIncompletesFlags read_incompletes_flags {
                     .dynamic_schema=opt_false(read_options.dynamic_schema()),
                     .has_active_version = has_active_version
             };
             read_incompletes_to_pipeline(store, pipeline_context, read_query, read_options, read_incompletes_flags);
+        }
     }
 
     if(std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {
