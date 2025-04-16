@@ -25,6 +25,7 @@ from arcticdb.exceptions import (
     SortingException,
 )
 from arcticdb_ext.version_store import StreamDescriptorMismatch
+from tests.conftest import FixtureMarks
 from tests.util.date import DateRange
 from pandas import MultiIndex
 import arcticdb
@@ -737,6 +738,8 @@ class TestBatchUpdate:
         expected2 = pd.DataFrame({"b": range(104, 111)}, index=pd.date_range("2024-01-05", "2024-01-11"))
         assert_frame_equal(symbol2, expected2)
 
+    @pytest.mark.installation
+    @FixtureMarks.lmdb_storage_extend_for_installation
     def test_metadata(self, lmdb_library):
         lib = lmdb_library
         lib.write("symbol_1", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])), metadata={"meta": "data"})
@@ -785,6 +788,8 @@ class TestBatchUpdate:
         assert len(lib.list_versions("symbol_1")) == 2
         assert_frame_equal(symbol_1_vit.data, pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3)))
 
+    @pytest.mark.installation
+    @FixtureMarks.lmdb_storage_extend_for_installation
     def test_update_batch_upsert_creates_symbol(self, lmdb_library):
         lib = lmdb_library
         lib.write("symbol_1", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))

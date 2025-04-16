@@ -61,13 +61,13 @@ MONGO_TESTS_MARK = pytest.mark.skipif(
 
 REAL_S3_TESTS_MARK = pytest.mark.skipif(
     FAST_TESTS_ONLY or not PERSISTENT_STORAGE_TESTS_ENABLED or not STORAGE_AWS_S3,
-    reason="Can be used only when persistent storage is enabled",
+    reason="Real S3 can be used only when persistent storage is enabled",
 )
 """Mark on tests using the real (i.e. hosted by AWS as opposed to moto) S3.
 Currently controlled by the ARCTICDB_PERSISTENT_STORAGE_TESTS and ARCTICDB_FAST_TESTS_ONLY env vars."""
 REAL_GCP_TESTS_MARK = pytest.mark.skipif(
     FAST_TESTS_ONLY or not PERSISTENT_STORAGE_TESTS_ENABLED or not STORAGE_GCP,
-    reason="Can be used only when persistent storage is enabled",
+    reason="Real GCP can be used only when persistent storage is enabled",
 )
 """Mark on tests using the real GCP storage.
 """
@@ -75,13 +75,13 @@ REAL_GCP_TESTS_MARK = pytest.mark.skipif(
 """
 SIM_S3_TESTS_MARK = pytest.mark.skipif(
     not LOCAL_STORAGE_TESTS_ENABLED,
-    reason="Ability to disable local storages",
+    reason="Ability to disable local storages - simulates s3 is disabled",
 )
 """Mark on tests using GCP model storage.
 """
 SIM_GCP_TESTS_MARK = pytest.mark.skipif(
     not LOCAL_STORAGE_TESTS_ENABLED,
-    reason="Ability to disable local storages",
+    reason="Ability to disable local storages - simulated gcp is disabled",
 )
 """Mark on tests using the real GCP storage.
 """
@@ -89,19 +89,19 @@ SIM_GCP_TESTS_MARK = pytest.mark.skipif(
 """
 LMDB_TESTS_MARK = pytest.mark.skipif(
     not STORAGE_LMDB,
-    reason="Ability to disable local storages",
+    reason="Ability to disable local storages - lmdb storage is disabled",
 )
 """Mark on tests using the MEM storage.
 """
 MEM_TESTS_MARK = pytest.mark.skipif(
     not LOCAL_STORAGE_TESTS_ENABLED,
-    reason="Ability to disable local storages",
+    reason="Ability to disable local storages - mem storage is disabled",
 )
 """Mark on tests using the NFS model storage.
 """
 SIM_NFS_TESTS_MARK = pytest.mark.skipif(
     not LOCAL_STORAGE_TESTS_ENABLED,
-    reason="Ability to disable local storages",
+    reason="Ability to disable local storages - simulated nfs is disabled",
 )
 """Mark on tests using the real GCP storage.
 """
