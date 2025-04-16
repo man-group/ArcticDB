@@ -1181,6 +1181,7 @@ ReadResult read_dataframe_from_file(
         const ReadOptions& read_options,
         std::any& handler_data) {
 
+    auto release_gil = std::make_unique<py::gil_scoped_release>();
     auto opt_version_and_frame = read_dataframe_from_file_internal(
         stream_id,
         path,
