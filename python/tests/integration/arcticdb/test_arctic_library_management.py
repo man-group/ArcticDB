@@ -46,7 +46,7 @@ from tests.util.storage_test import get_s3_storage_config
 
 from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
 
-
+@pytest.mark.installation
 @pytest.mark.storage
 def test_library_creation_deletion(arctic_client, lib_name):
     ac = arctic_client
@@ -77,6 +77,7 @@ def test_library_creation_deletion(arctic_client, lib_name):
         ac.delete_library(lib_name)
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_get_library(arctic_client, lib_name):
     ac = arctic_client

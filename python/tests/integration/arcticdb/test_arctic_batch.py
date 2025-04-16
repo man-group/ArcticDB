@@ -61,6 +61,7 @@ def generate_dataframe(columns, dt, num_days, num_rows_per_day):
     return pd.concat(dataframes)
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_write_meta_batch_with_as_ofs(arctic_library):
     lib = arctic_library
@@ -336,6 +337,7 @@ def test_write_pickle_batch_duplicate_symbols(arctic_library):
     assert not lib.list_symbols()
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_write_pickle_batch_dataerror(library_factory):
     """Only way to trigger a DataError response with write_pickle_batch is to enable dedup and delete previous version's
@@ -372,6 +374,7 @@ def test_write_pickle_batch_dataerror(library_factory):
     assert vit.data == 4
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_write_batch(library_factory):
     """Should be able to write different size of batch of data."""
@@ -403,6 +406,7 @@ def test_write_batch(library_factory):
         assert_frame_equal(read_batch_result[sym].data, original_dataframe)
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_write_batch_dedup(library_factory):
     """Should be able to write different size of batch of data reusing deduplicated data from previous versions."""
@@ -497,6 +501,7 @@ def test_delete_batch(library_factory, sym):
     assert not lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_append_batch(library_factory):
     lib = library_factory(LibraryOptions(rows_per_segment=10))
@@ -588,6 +593,7 @@ def test_append_batch_missing_keys(arctic_library):
     assert_frame_equal(read_dataframe.data, pd.concat([df2_write, df2_append]))
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_read_batch_time_stamp(arctic_library):
     """Should be able to read data in batch mode using a timestamp."""
@@ -675,6 +681,7 @@ def test_read_batch_overall_query_builder(arctic_library):
     assert_frame_equal(batch[1].data, pd.DataFrame({"a": [4]}))
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_read_batch_per_symbol_query_builder(arctic_library):
     lib = arctic_library
@@ -754,6 +761,7 @@ def test_read_batch_date_ranges(arctic_library):
     )
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_read_batch_date_ranges_dates_not_times(arctic_library):
     lib = arctic_library
@@ -775,6 +783,7 @@ def test_read_batch_date_ranges_dates_not_times(arctic_library):
     )
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_read_batch_row_ranges(arctic_library):
     lib = arctic_library
@@ -1194,6 +1203,7 @@ def test_delete_version_with_snapshot_batch(arctic_library):
         assert isinstance(lib.get_description_batch([read_info_request])[0], DataError)
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_get_description_batch(arctic_library):
     lib = arctic_library
@@ -1369,6 +1379,7 @@ def test_get_description_batch_empty_nat(arctic_library):
         assert np.isnat(results_list[sym].date_range[1])
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_read_batch_mixed_with_snapshots(arctic_library):
     num_symbols = 10

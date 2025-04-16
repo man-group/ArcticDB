@@ -287,6 +287,7 @@ def test_sorted_roundtrip(arctic_library):
     assert desc.sorted == "ASCENDING"
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_basic_write_read_update_and_append(arctic_library):
     lib = arctic_library
@@ -331,6 +332,7 @@ def test_basic_write_read_update_and_append(arctic_library):
     assert read_metadata.version == 1
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_write_metadata_with_none(arctic_library):
     lib = arctic_library
@@ -352,6 +354,7 @@ def test_write_metadata_with_none(arctic_library):
 
 
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND))
+@pytest.mark.installation
 @pytest.mark.storage
 def test_staged_data(arctic_library, finalize_method):
     lib = arctic_library
@@ -401,6 +404,7 @@ def test_staged_data(arctic_library, finalize_method):
 
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
 @pytest.mark.parametrize("validate_index", (True, False, None))
+@pytest.mark.installation
 @pytest.mark.storage
 def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_method, validate_index):
     lib = arctic_library
@@ -569,6 +573,7 @@ def test_delete_version(arctic_library):
     assert lib["symbol"].metadata == {"very": "interesting"}
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_list_versions_write_append_update(arctic_library):
     lib = arctic_library
@@ -621,6 +626,7 @@ def test_delete_version_with_snapshot(arctic_library):
                 getattr(lib, method)(sym, as_of=as_of)
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_list_versions_with_snapshot(arctic_library):
     lib = arctic_library
@@ -665,6 +671,7 @@ def test_delete_version_that_does_not_exist(arctic_library):
         lib.delete("symbol", versions=1)
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_delete_date_range(arctic_library):
     lib = arctic_library
@@ -778,6 +785,7 @@ def test_write_non_native_frame_without_pickle_mode(arctic_library):
         lib.write("test_1", df)
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_write_with_unpacking(arctic_library):
     """Check the syntactic sugar that lets us unpack WritePayload in `write` calls using *."""
@@ -842,6 +850,7 @@ def test_append_documented_example(arctic_library):
     assert_frame_equal(lib.read("symbol", as_of=0).data, df)
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_append_prune_previous_versions(arctic_library):
     lib = arctic_library
@@ -883,6 +892,7 @@ def test_update_documented_example(arctic_library):
     assert_frame_equal(lib.read("symbol", as_of=0).data, df)
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_update_prune_previous_versions(arctic_library):
     """Test that updating and pruning previous versions does indeed clear previous versions."""
@@ -902,6 +912,7 @@ def test_update_prune_previous_versions(arctic_library):
     assert ("symbol", 1) in symbols
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_update_with_daterange(arctic_library):
     lib = arctic_library
@@ -1034,6 +1045,7 @@ def test_update_with_daterange_restrictive(arctic_library):
     assert_frame_equal(expected, result)
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_update_with_upsert(arctic_library):
     lib = arctic_library
@@ -1059,6 +1071,7 @@ def test_read_with_read_request_form(arctic_library):
     assert_frame_equal(result.data, pd.DataFrame({"A": [1, 2]}))
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_has_symbol(arctic_library):
     lib = arctic_library
@@ -1087,6 +1100,7 @@ def test_numpy_string_fails_on_windows(arctic_library):
         arctic_library.write("symbol", np.array(["ab", "cd", "efg"]))
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_get_description(arctic_library):
     lib = arctic_library
@@ -1184,6 +1198,7 @@ def test_tail(arctic_library):
     )
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_dedup(arctic_client, lib_name):
     ac = arctic_client
@@ -1203,6 +1218,7 @@ def test_dedup(arctic_client, lib_name):
     assert not errors, "errors occurred:\n" + "\n".join(errors)
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_segment_slicing(arctic_client, lib_name):
     ac = arctic_client
@@ -1264,8 +1280,11 @@ def test_reload_symbol_list(fixture, request):
         pytest.param("azurite_storage", marks=AZURE_TESTS_MARK),
         pytest.param("mongo_storage", marks=MONGO_TESTS_MARK),
         pytest.param("real_s3_storage", marks=REAL_S3_TESTS_MARK),
+        pytest.param("real_gcp_storage", marks=REAL_S3_TESTS_MARK),
     ],
 )
+@pytest.mark.installation
+@pytest.mark.storage
 def test_get_uri(fixture, request):
     storage_fixture: StorageFixture = request.getfixturevalue(fixture)
     ac = storage_fixture.create_arctic()

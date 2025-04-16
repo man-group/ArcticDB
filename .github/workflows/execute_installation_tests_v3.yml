@@ -38,8 +38,6 @@ jobs:
       matrix:
         #os: [ubuntu-22.04, windows-latest, macos-latest]
         #python: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
-        #os: [ubuntu-22.04, windows-latest, macos-13]
-        #python: ["3.8", "3.12"]
         include:
           - os: ubuntu-22.04
             python: "3.7"
@@ -81,6 +79,7 @@ jobs:
         pip install wheel
         pip install setuptools
         pip install pytest
+        pip install pytest-xdist
         pip download arcticdb --only-binary=:all: -d .
         pip install --force-reinstall $(ls arcticdb*.whl)[Testing] pytest-split        
 
@@ -114,8 +113,10 @@ jobs:
     - name: Set environment variables 
       shell: bash -l {0}      
       run: |
-        echo "ARCTICDB_STORAGE_GCP=1" >> $GITHUB_ENV        
+        echo "ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=0" >> $GITHUB_ENV
+        echo "ARCTICDB_STORAGE_LMDB=1" >> $GITHUB_ENV
         echo "ARCTICDB_STORAGE_AWS_S3=1" >> $GITHUB_ENV        
+        echo "ARCTICDB_STORAGE_GCP=0" >> $GITHUB_ENV        
         echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
 
     - name: Run tests
@@ -125,7 +126,7 @@ jobs:
         #export ARCTICDB_STORAGE_GCP=1
         #export ARCTICDB_STORAGE_AWS_S3=1
         cd python
-        pytest -s -rs --log-file="tests.log" -v -m installation
+        pytest -rs -v --log-file="tests.log"  -m installation
 
 
     - name: Upload the logs

@@ -198,10 +198,9 @@ def test_lazy_with_initial_query_builder(lmdb_library):
     assert_frame_equal(expected, received, check_dtype=False)
 
 
-@pytest.mark.installation
 @pytest.mark.storage
-def test_lazy_chaining(arctic_library):
-    lib = arctic_library
+def test_lazy_chaining(lmdb_library):
+    lib = lmdb_library
     sym = "test_lazy_chaining"
     idx = [0, 1, 2, 3, 1000, 1001]
     idx = np.array(idx, dtype="datetime64[ns]")
