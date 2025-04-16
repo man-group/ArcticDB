@@ -82,7 +82,7 @@ jobs:
       if: ${{ contains(matrix.os, 'macos') || contains(inputs.os, 'macos')}}
       shell: bash -l {0}
       run: |
-        echo "\n  - arcticdb" >> environment_unix.yml
+        echo "\n  - arcticdb" > environment_unix.yml
 
       # Install conda environment
     - name: Install Conda environment from environment_unix.yml
@@ -127,7 +127,7 @@ jobs:
         cd python
         ## pytest -rs -v --log-file="tests.log" -n auto -m installation
         ## For testing limit the run to first 3 tests
-        pytest --collect-only -q > test_list.txt
+        pytest -m installation --collect-only -q > test_list.txt
         pytest -rs -v --log-file="tests.log" $(head -n 3 test_list.txt)
 
     - name: Upload the logs
