@@ -18,14 +18,13 @@ import boto3
 import time
 import random
 from datetime import datetime
-import string
 
 import requests
 from typing import Optional, Any, Type
 
 import werkzeug
-from moto.moto_server.werkzeug_app import DomainDispatcherApplication, create_backend_app
 import botocore.exceptions
+from moto.server import DomainDispatcherApplication, create_backend_app
 
 from .api import *
 from .utils import (
@@ -36,7 +35,7 @@ from .utils import (
     get_ca_cert_for_testing,
 )
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
-from arcticdb.version_store.helper import add_s3_library_to_env
+from arcticdb.version_store.helper import add_gcp_library_to_env, add_s3_library_to_env
 from arcticdb_ext.storage import AWSAuthMethod, NativeVariantStorage
 
 
@@ -104,6 +103,8 @@ class S3Bucket(StorageFixture):
             self.arctic_uri += f"&path_prefix={factory.default_prefix}"
         if factory.ssl:
             self.arctic_uri += "&ssl=True"
+        if factory._test_only_is_nfs_layout:
+            self.arctic_uri += "&_test_only_is_nfs_layout=True"
         if platform.system() == "Linux":
             if factory.client_cert_file:
                 self.arctic_uri += f"&CA_cert_path={self.factory.client_cert_file}"
@@ -205,12 +206,50 @@ class NfsS3Bucket(S3Bucket):
 class GcpS3Bucket(S3Bucket):
     def __init__(
         self,
-        factory: "BaseS3StorageFixtureFactory",
+        factory: "BaseGCPStorageFixtureFactory",
         bucket: str,
         native_config: Optional[NativeVariantStorage] = None,
     ):
-        super().__init__(factory, bucket, native_config=native_config)
-        self.arctic_uri = self.arctic_uri.replace("s3", "gcpxml", 1)
+        if any(sub in factory.endpoint for sub in ["http:", "https:"]):
+            super().__init__(factory, bucket, native_config=native_config)
+            self.arctic_uri = self.arctic_uri.replace("s3", "gcpxml", 1)
+        else:
+            StorageFixture.__init__(self)
+            self.factory = factory
+            self.bucket = bucket
+            self.native_config = native_config
+
+            host, port = re.match(r"(?:gcpxml://)?([^:/]+)(?::(\d+))?", factory.endpoint).groups()
+            self.arctic_uri = f"gcpxml://{host}:{self.bucket}?"
+
+            self.key = factory.default_key
+
+            if factory.aws_auth == None or factory.aws_auth == AWSAuthMethod.DISABLED:
+                self.arctic_uri += f"access={self.key.id}&secret={self.key.secret}"
+            else:
+                self.arctic_uri += "aws_auth=default"
+            if port:
+                self.arctic_uri += f"&port={port}"
+            if factory.default_prefix:
+                self.arctic_uri += f"&path_prefix={factory.default_prefix}"
+            if factory.ssl:
+                self.arctic_uri += "&ssl=True"
+            if platform.system() == "Linux":
+                if factory.client_cert_file:
+                    self.arctic_uri += f"&CA_cert_path={self.factory.client_cert_file}"
+                # client_cert_dir is skipped on purpose; It will be tested manually in other tests
+
+    def create_test_cfg(self, lib_name: str) -> EnvironmentConfigsMap:
+        cfg = EnvironmentConfigsMap()
+        if self.factory.default_prefix:
+            with_prefix = f"{self.factory.default_prefix}/{lib_name}"
+        else:
+            with_prefix = False
+
+        add_gcp_library_to_env(
+            cfg=cfg, lib_name=lib_name, env_name=Defaults.ENV, with_prefix=with_prefix
+        )  # client_cert_dir is skipped on purpose; It will be tested manually in other tests
+        return cfg, self.native_config
 
 
 class BaseS3StorageFixtureFactory(StorageFixtureFactory):
@@ -225,6 +264,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
     clean_bucket_on_fixture_exit = True
     use_mock_storage_for_testing = None  # If set to true allows error simulation
     use_internal_client_wrapper_for_testing = None  # If set to true uses the internal client wrapper for testing
+    _test_only_is_nfs_layout: bool = False
 
     def __init__(self, native_config: Optional[dict] = None):
         self.client_cert_file = None
@@ -263,6 +303,40 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
             b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
 
 
+class BaseGCPStorageFixtureFactory(StorageFixtureFactory):
+    """Logic and fields common to real and mock S3"""
+
+    endpoint: str
+    region: str
+    default_key: Key
+    default_bucket: Optional[str] = None
+    default_prefix: Optional[str] = None
+    use_raw_prefix: bool = False
+    clean_bucket_on_fixture_exit = True
+    use_mock_storage_for_testing = None  # If set to true allows error simulation
+    use_internal_client_wrapper_for_testing = None  # If set to true uses the internal client wrapper for testing
+
+    def __init__(self, native_config: Optional[dict] = None):
+        self.client_cert_file = None
+        self.client_cert_dir = None
+        self.ssl = False
+        self.aws_auth = None
+        self.native_config = native_config
+
+    def __str__(self):
+        return f"{type(self).__name__}[{self.default_bucket or self.endpoint}]"
+
+    def create_fixture(self) -> GcpS3Bucket:
+        return GcpS3Bucket(self, self.default_bucket, self.native_config)
+
+    def cleanup_bucket(self, b: GcpS3Bucket):
+        # When dealing with a potentially shared bucket, we only clear our the libs we know about:
+        if not self.use_mock_storage_for_testing:
+            # We are not writing to buckets in this case
+            # and if we try to delete the bucket, it will fail
+            b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
+
+
 def real_s3_from_environment_variables(
     shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""
 ) -> BaseS3StorageFixtureFactory:
@@ -275,6 +349,25 @@ def real_s3_from_environment_variables(
     out.default_key = Key(id=access_key, secret=secret_key, user_name="unknown user")
     out.clean_bucket_on_fixture_exit = os.getenv("ARCTICDB_REAL_S3_CLEAR").lower() in ["true", "1"]
     out.ssl = out.endpoint.startswith("https://")
+    if shared_path:
+        out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
+    else:
+        out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "") + additional_suffix
+    return out
+
+
+def real_gcp_from_environment_variables(
+    shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""
+) -> BaseGCPStorageFixtureFactory:
+    out = BaseGCPStorageFixtureFactory(native_config=native_config)
+    out.endpoint = os.getenv("ARCTICDB_REAL_GCP_ENDPOINT")
+    out.region = os.getenv("ARCTICDB_REAL_GCP_REGION")
+    out.default_bucket = os.getenv("ARCTICDB_REAL_GCP_BUCKET")
+    access_key = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
+    secret_key = os.getenv("ARCTICDB_REAL_GCP_SECRET_KEY")
+    out.default_key = Key(id=access_key, secret=secret_key, user_name="unknown user")
+    out.clean_bucket_on_fixture_exit = os.getenv("ARCTICDB_REAL_GCP_CLEAR", "1").lower() in ["true", "1"]
+    out.ssl = out.endpoint.startswith("https://") if out.endpoint is not None else False
     if shared_path:
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
     else:
@@ -598,6 +691,17 @@ def run_gcp_server(port, key_file, cert_file):
         ssl_context=(cert_file, key_file) if cert_file and key_file else None,
     )
 
+def create_bucket(s3_client, bucket_name, max_retries=15):
+    for i in range(max_retries):
+        try:
+            s3_client.create_bucket(Bucket=bucket_name)
+            return
+        except botocore.exceptions.EndpointConnectionError as e:
+            if i >= max_retries - 1:
+                raise
+            logger.warn(f"S3 create bucket failed. Retry {1}/{max_retries}")
+            time.sleep(1)   
+
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     default_key = Key(id="awd", secret="awd", user_name="dummy")
@@ -625,6 +729,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         use_mock_storage_for_testing: bool = False,
         use_internal_client_wrapper_for_testing: bool = False,
         native_config: Optional[NativeVariantStorage] = None,
+        _test_only_is_nfs_layout: bool = False,
     ):
         super().__init__(native_config)
         self.http_protocol = "https" if use_ssl else "http"
@@ -634,6 +739,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self.use_raw_prefix = use_raw_prefix
         self.use_mock_storage_for_testing = use_mock_storage_for_testing
         self.use_internal_client_wrapper_for_testing = use_internal_client_wrapper_for_testing
+        self._test_only_is_nfs_layout = _test_only_is_nfs_layout
         # This is needed because we might have multiple factory instances in the same test run
         # and we need to make sure the bucket names are unique
         # set the unique_id to the current UNIX timestamp to avoid conflicts
@@ -736,7 +842,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
 
     def create_fixture(self) -> S3Bucket:
         bucket = self.bucket_name("s3")
-        self._s3_admin.create_bucket(Bucket=bucket)
+        create_bucket(self._s3_admin, bucket)
         if self.bucket_versioning:
             self._s3_admin.put_bucket_versioning(Bucket=bucket, VersioningConfiguration={"Status": "Enabled"})
 
@@ -772,7 +878,7 @@ _PermissionCapableFactory = MotoS3StorageFixtureFactory
 class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
     def create_fixture(self) -> NfsS3Bucket:
         bucket = self.bucket_name("nfs")
-        self._s3_admin.create_bucket(Bucket=bucket)
+        create_bucket(self._s3_admin, bucket)
         out = NfsS3Bucket(self, bucket)
         self._live_buckets.append(out)
         return out
@@ -813,7 +919,8 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
 
     def create_fixture(self) -> GcpS3Bucket:
         bucket = self.bucket_name("gcp")
-        self._s3_admin.create_bucket(Bucket=bucket)
+        max_retries = 15
+        create_bucket(self._s3_admin, bucket)
         out = GcpS3Bucket(self, bucket)
         self._live_buckets.append(out)
         return out

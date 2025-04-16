@@ -7,11 +7,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import enum
-from typing import Callable, Generator
+from typing import Callable, Generator, Union
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.version_store.library import Library
 import hypothesis
 import os
+import threading
 import pytest
 import pandas as pd
 import platform
@@ -19,6 +20,7 @@ import random
 import re
 import time
 import requests
+import uuid
 from datetime import datetime
 from functools import partial
 from tempfile import mkdtemp
@@ -28,12 +30,15 @@ from arcticdb.storage_fixtures.api import StorageFixture
 from arcticdb.storage_fixtures.azure import AzureContainer, AzuriteStorageFixtureFactory
 from arcticdb.storage_fixtures.lmdb import LmdbStorageFixture
 from arcticdb.storage_fixtures.s3 import (
+    BaseGCPStorageFixtureFactory,
     BaseS3StorageFixtureFactory,
+    GcpS3Bucket,
     MotoS3StorageFixtureFactory,
     MotoGcpS3StorageFixtureFactory,
     MotoNfsBackedS3StorageFixtureFactory,
     NfsS3Bucket,
     S3Bucket,
+    real_gcp_from_environment_variables,
     real_s3_from_environment_variables,
     mock_s3_with_error_simulation,
     real_s3_sts_from_environment_variables,
@@ -48,6 +53,12 @@ from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
 from arcticdb.arctic import Arctic
 from .util.mark import (
+    LMDB_TESTS_MARK,
+    MEM_TESTS_MARK,
+    SIM_GCP_TESTS_MARK,
+    SIM_NFS_TESTS_MARK,
+    SIM_S3_TESTS_MARK,
+    REAL_GCP_TESTS_MARK,
     WINDOWS,
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -88,7 +99,9 @@ def sym(request: "pytest.FixtureRequest"):
 @pytest.fixture()
 def lib_name(request: "pytest.FixtureRequest") -> str:
     name = re.sub(r"[^\w]", "_", request.node.name)[:30]
-    return f"{name}.{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+    pid = os.getpid()
+    thread_id = threading.get_ident()
+    return f"{name}.{random.randint(0, 9999999)}_{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}_{uuid.uuid4()}"
 
 
 @pytest.fixture
@@ -176,7 +189,9 @@ def wrapped_s3_storage_factory() -> Generator[MotoS3StorageFixtureFactory, None,
         use_ssl=False,
         ssl_test_support=False,
         bucket_versioning=False,
-        native_config=NativeVariantStorage(NativeS3Settings(AWSAuthMethod.DISABLED, "", True)), # True: use_internal_client_wrapper_for_testing
+        native_config=NativeVariantStorage(
+            NativeS3Settings(AWSAuthMethod.DISABLED, "", True)
+        ),  # True: use_internal_client_wrapper_for_testing
     ) as f:
         yield f
 
@@ -195,7 +210,9 @@ def s3_ssl_disabled_storage_factory() -> Generator[MotoS3StorageFixtureFactory, 
 
 @pytest.fixture(scope="session")
 def nfs_backed_s3_storage_factory() -> Generator[MotoNfsBackedS3StorageFixtureFactory, None, None]:
-    with MotoNfsBackedS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=False) as f:
+    with MotoNfsBackedS3StorageFixtureFactory(
+        use_ssl=False, ssl_test_support=False, bucket_versioning=False, _test_only_is_nfs_layout=True
+    ) as f:
         yield f
 
 
@@ -288,8 +305,33 @@ def real_s3_storage_factory() -> BaseS3StorageFixtureFactory:
 
 
 @pytest.fixture(scope="session")
+def real_gcp_storage_factory() -> BaseGCPStorageFixtureFactory:
+    return real_gcp_from_environment_variables(
+        shared_path=False,
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+    )
+
+
+@pytest.fixture(
+    scope="session",
+    params=[pytest.param("real_s3", marks=REAL_S3_TESTS_MARK), pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK)],
+)
+def real_storage_factory(request) -> Union[BaseGCPStorageFixtureFactory, BaseGCPStorageFixtureFactory]:
+    storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage_factory")
+    return storage_fixture
+
+
+@pytest.fixture(scope="session")
 def real_s3_shared_path_storage_factory() -> BaseS3StorageFixtureFactory:
     return real_s3_from_environment_variables(
+        shared_path=True,
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+    )
+
+
+@pytest.fixture(scope="session")
+def real_gcp_shared_path_storage_factory() -> BaseS3StorageFixtureFactory:
+    return real_gcp_from_environment_variables(
         shared_path=True,
         additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
     )
@@ -301,8 +343,19 @@ def real_s3_storage_without_clean_up(real_s3_shared_path_storage_factory) -> S3B
 
 
 @pytest.fixture(scope="session")
+def real_gcp_storage_without_clean_up(real_gcp_shared_path_storage_factory) -> S3Bucket:
+    return real_gcp_shared_path_storage_factory.create_fixture()
+
+
+@pytest.fixture(scope="session")
 def real_s3_storage(real_s3_storage_factory) -> Generator[S3Bucket, None, None]:
     with real_s3_storage_factory.create_fixture() as f:
+        yield f
+
+
+@pytest.fixture(scope="session")
+def real_gcp_storage(real_gcp_storage_factory) -> Generator[GcpS3Bucket, None, None]:
+    with real_gcp_storage_factory.create_fixture() as f:
         yield f
 
 
@@ -414,20 +467,49 @@ def mem_storage() -> Generator[InMemoryStorageFixture, None, None]:
 
 # endregion
 # region ==================================== `Arctic` API Fixtures ====================================
+
+
+def filter_out_unwanted_mark(request, current_param):
+    """Exclude specific fixture parameters or include only certain
+
+    Provides ability tp filter out unwanted fixture parameter
+    To do that add to test as many of the marks you want to stay using:
+
+      @pytest.mark.only_fixture_params([<fixture_param_names_list>], )
+
+    Or alternatively you can exclude as many as wanted:
+      @pytest.mark.skip_fixture_params([<fixture_param_names_list>], )
+    """
+    only_fixtures = request.node.get_closest_marker("only_fixture_params")
+    if only_fixtures:
+        # Only when defined at least one only_ mark evaluate what should stay
+        values_to_include = only_fixtures.args[0]
+        if not current_param in values_to_include:
+            pytest.skip(reason=f"Skipping {current_param} param as not included in test 'only_fixture_params' mark.")
+
+    skip_fixture_value_mark = request.node.get_closest_marker("skip_fixture_params")
+    if skip_fixture_value_mark:
+        values_to_skip = skip_fixture_value_mark.args[0]
+        if current_param in values_to_skip:
+            pytest.skip(reason=f"Skipping param: {current_param} as per 'skip_fixture_params' mark")
+
+
 @pytest.fixture(
     scope="function",
     params=[
-        "s3",
-        "nfs_backed_s3",
-        "gcp",
-        "lmdb",
-        "mem",
+        pytest.param("s3", marks=SIM_S3_TESTS_MARK),
+        pytest.param("nfs_backed_s3", marks=SIM_NFS_TESTS_MARK),
+        pytest.param("gcp", marks=SIM_GCP_TESTS_MARK),
+        pytest.param("lmdb", marks=LMDB_TESTS_MARK),
+        pytest.param("mem", marks=MEM_TESTS_MARK),
         pytest.param("azurite", marks=AZURE_TESTS_MARK),
         pytest.param("mongo", marks=MONGO_TESTS_MARK),
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
+        pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK),
     ],
 )
 def arctic_client(request, encoding_version) -> Arctic:
+    filter_out_unwanted_mark(request, request.param)
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
     ac = storage_fixture.create_arctic(encoding_version=encoding_version)
     return ac
@@ -436,17 +518,19 @@ def arctic_client(request, encoding_version) -> Arctic:
 @pytest.fixture(
     scope="function",
     params=[
-        "s3",
-        "nfs_backed_s3",
-        "gcp",
-        "lmdb",
-        "mem",
+        pytest.param("s3", marks=SIM_S3_TESTS_MARK),
+        pytest.param("nfs_backed_s3", marks=SIM_NFS_TESTS_MARK),
+        pytest.param("gcp", marks=SIM_GCP_TESTS_MARK),
+        pytest.param("lmdb", marks=LMDB_TESTS_MARK),
+        pytest.param("mem", marks=MEM_TESTS_MARK),
         pytest.param("azurite", marks=AZURE_TESTS_MARK),
         pytest.param("mongo", marks=MONGO_TESTS_MARK),
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
+        pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK),
     ],
 )
 def arctic_client_v1(request) -> Arctic:
+    filter_out_unwanted_mark(request, request.param)
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
     ac = storage_fixture.create_arctic(encoding_version=EncodingVersion.V1)
     return ac
@@ -455,14 +539,18 @@ def arctic_client_v1(request) -> Arctic:
 @pytest.fixture(
     scope="function",
     params=[
-        "s3",
-        "mem",
+        pytest.param("s3", marks=SIM_S3_TESTS_MARK),
+        pytest.param("nfs_backed_s3", marks=SIM_NFS_TESTS_MARK),
+        pytest.param("gcp", marks=SIM_GCP_TESTS_MARK),
+        pytest.param("mem", marks=MEM_TESTS_MARK),
         pytest.param("azurite", marks=AZURE_TESTS_MARK),
         pytest.param("mongo", marks=MONGO_TESTS_MARK),
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
+        pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK),
     ],
 )
 def arctic_client_no_lmdb(request, encoding_version) -> Arctic:
+    filter_out_unwanted_mark(request, request.param)
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
     ac = storage_fixture.create_arctic(encoding_version=encoding_version)
     return ac
@@ -506,12 +594,14 @@ def arctic_library_lmdb(arctic_client_lmdb, lib_name) -> Library:
 @pytest.fixture(
     scope="function",
     params=[
-        "lmdb",
-        "mem",
+        pytest.param("s3", marks=SIM_S3_TESTS_MARK),
+        pytest.param("mem", marks=MEM_TESTS_MARK),
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
+        pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK),
     ],
 )
 def basic_arctic_client(request, encoding_version) -> Arctic:
+    filter_out_unwanted_mark(request, request.param)
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
     ac = storage_fixture.create_arctic(encoding_version=encoding_version)
     return ac
@@ -576,6 +666,11 @@ def real_s3_store_factory(lib_name, real_s3_storage) -> Callable[..., NativeVers
 
 
 @pytest.fixture
+def real_gcp_store_factory(lib_name, real_gcp_storage) -> Callable[..., NativeVersionStore]:
+    return real_gcp_storage.create_version_store_factory(lib_name)
+
+
+@pytest.fixture
 def real_s3_sts_store_factory(lib_name, real_s3_sts_storage) -> NativeVersionStore:
     return real_s3_sts_storage.create_version_store_factory(lib_name)
 
@@ -605,6 +700,16 @@ def real_s3_version_store(real_s3_store_factory):
 @pytest.fixture
 def real_s3_version_store_dynamic_schema(real_s3_store_factory):
     return real_s3_store_factory(dynamic_strings=True, dynamic_schema=True)
+
+
+@pytest.fixture
+def real_gcp_version_store(real_gcp_store_factory):
+    return real_gcp_store_factory()
+
+
+@pytest.fixture
+def real_gcp_version_store_dynamic_schema(real_gcp_store_factory):
+    return real_gcp_store_factory(dynamic_strings=True, dynamic_schema=True)
 
 
 @pytest.fixture
@@ -664,9 +769,10 @@ def mongo_version_store(mongo_store_factory):
 @pytest.fixture(
     scope="function",
     params=[
-        "s3_store_factory",
+        pytest.param("s3_store_factory", marks=SIM_S3_TESTS_MARK),
         pytest.param("azure_store_factory", marks=AZURE_TESTS_MARK),
         pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
+        pytest.param("real_gcp_store_factory", marks=REAL_GCP_TESTS_MARK),
     ],
 )
 def object_store_factory(request) -> Callable[..., NativeVersionStore]:
@@ -726,23 +832,32 @@ def local_object_version_store_prune_previous(local_object_store_factory):
     return local_object_store_factory(prune_previous_version=True)
 
 
-@pytest.fixture(params=["version_store_factory", pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK)])
+@pytest.fixture(
+    params=[
+        pytest.param("version_store_factory", marks=LMDB_TESTS_MARK),
+        pytest.param("real_gcp_store_factory", marks=REAL_GCP_TESTS_MARK),
+        pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
+    ]
+)
 def version_store_and_real_s3_basic_store_factory(request):
     """
     Just the version_store and real_s3 specifically for the test test_interleaved_store_read
     where the in_memory_store_factory is not designed to have this functionality.
     """
+    filter_out_unwanted_mark(request, request.param)
     return request.getfixturevalue(request.param)
 
 
 @pytest.fixture(
     params=[
-        "version_store_factory",
-        "in_memory_store_factory",
+        pytest.param("version_store_factory", marks=LMDB_TESTS_MARK),
+        pytest.param("in_memory_store_factory", marks=MEM_TESTS_MARK),
         pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
+        pytest.param("real_gcp_store_factory", marks=REAL_GCP_TESTS_MARK),
     ]
 )
 def basic_store_factory(request) -> Callable[..., NativeVersionStore]:
+    filter_out_unwanted_mark(request, request.param)
     store_factory = request.getfixturevalue(request.param)
     return store_factory
 
@@ -1097,36 +1212,40 @@ def lmdb_version_store_static_and_dynamic(request):
 @pytest.fixture(
     scope="function",
     params=(
-        "lmdb_version_store_v1",
-        "lmdb_version_store_v2",
-        "s3_version_store_v1",
-        "s3_version_store_v2",
-        "in_memory_version_store",
+        pytest.param("lmdb_version_store_v1", marks=LMDB_TESTS_MARK),
+        pytest.param("lmdb_version_store_v2", marks=LMDB_TESTS_MARK),
+        pytest.param("s3_version_store_v1", marks=SIM_S3_TESTS_MARK),
+        pytest.param("s3_version_store_v2", marks=SIM_S3_TESTS_MARK),
+        pytest.param("in_memory_version_store", marks=MEM_TESTS_MARK),
         pytest.param("azure_version_store", marks=AZURE_TESTS_MARK),
         pytest.param("mongo_version_store", marks=MONGO_TESTS_MARK),
         pytest.param("real_s3_version_store", marks=REAL_S3_TESTS_MARK),
+        pytest.param("real_gcp_version_store", marks=REAL_GCP_TESTS_MARK),
     ),
 )
 def object_and_mem_and_lmdb_version_store(request):
     """
     Designed to test all supported stores
     """
+    filter_out_unwanted_mark(request, request.param)
     yield request.getfixturevalue(request.param)
 
 
 @pytest.fixture(
     scope="function",
     params=(
-        "lmdb_version_store_dynamic_schema_v1",
-        "lmdb_version_store_dynamic_schema_v2",
-        "s3_version_store_dynamic_schema_v1",
-        "s3_version_store_dynamic_schema_v2",
-        "in_memory_version_store_dynamic_schema",
+        pytest.param("lmdb_version_store_dynamic_schema_v1", marks=LMDB_TESTS_MARK),
+        pytest.param("lmdb_version_store_dynamic_schema_v2", marks=LMDB_TESTS_MARK),
+        pytest.param("s3_version_store_dynamic_schema_v1", marks=SIM_S3_TESTS_MARK),
+        pytest.param("s3_version_store_dynamic_schema_v2", marks=SIM_S3_TESTS_MARK),
+        pytest.param("in_memory_version_store_dynamic_schema", marks=MEM_TESTS_MARK),
         pytest.param("azure_version_store_dynamic_schema", marks=AZURE_TESTS_MARK),
         pytest.param("real_s3_version_store_dynamic_schema", marks=REAL_S3_TESTS_MARK),
+        pytest.param("real_gcp_version_store_dynamic_schema", marks=REAL_GCP_TESTS_MARK),
     ),
 )
 def object_and_mem_and_lmdb_version_store_dynamic_schema(request):
+    filter_out_unwanted_mark(request, request.param)
     """
     Designed to test all supported stores
     """
@@ -1216,5 +1335,3 @@ def old_venv_and_arctic_uri(old_venv, arctic_uri):
         pytest.skip("LMDB storage backed has a bug in versions before 5.0.0 which leads to flaky segfaults")
 
     yield old_venv, arctic_uri
-
-    old_venv.create_arctic(arctic_uri).cleanup()

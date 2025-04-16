@@ -36,27 +36,25 @@ jobs:
           releases-only: ${{ inputs.regex_match_only_releases }}
 
       - name: Get PRs between ${{ inputs.from_branch }} and ${{ steps.latest_tag.outputs.tag }}
-        uses: VanOns/get-merged-pull-requests-action@master
+        uses: VanOns/get-merged-pull-requests-action@v1.3.0
         id: pull_requests
         with:
           github_token: ${{ github.token }}
           current_tag: ${{ inputs.from_branch }}
           previous_tag: ${{ steps.latest_tag.outputs.tag }}
-          commit_limit: 40 # Limitation because this action outputs the PRs payload in an env variable and GH actions has a limit how large that can be. FUTURE: Find other action or create own implementation. 
-          return_type: "all"
 
       - name: Get labels of PRs and determine increment type
         id: get_increment_type
         env:
-          PULL_REQUESTS: ${{ steps.pull_requests.outputs.pull_requests }}
-          MAJOR_LABEL: "api break"
-          MINOR_LABEL: "enhancement"
-          PATCH_LABEL: "bug"
+          PULL_REQUESTS: ${{ steps.pull_requests.outputs.pull_requests_file }}
+          MAJOR_LABEL: "major"
+          MINOR_LABEL: "minor"
+          PATCH_LABEL: "patch"
         run: |
-          if [ -z "$PULL_REQUESTS" ]; then
+          if [ -z "$PULL_REQUESTS" ] || [ ! -f "$PULL_REQUESTS" ]; then
             echo "Error: No PRs found between branches" && exit 1
           fi
-          labels=$(echo "$PULL_REQUESTS" | jq -r '.[].labels[].name')
+          labels=$(jq -r '.[].labels[].name' "$PULL_REQUESTS")
           echo Labels: $labels
           increment_type="patch"
           case "$labels" in
@@ -67,7 +65,7 @@ jobs:
           esac
           echo "increment_type=$increment_type" >> $GITHUB_OUTPUT
           TAG=${{ steps.latest_tag.outputs.tag }}
-          echo "tag=${TAG%rc*}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG%${{ vars.RC_SUFFIX }}*}" >> $GITHUB_OUTPUT
 
       - name: Calculate next version. Increment type - ${{ steps.get_increment_type.outputs.increment_type }}
         id: get-next-version

@@ -36,6 +36,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+            token: ${{ secrets.TAGGING_TOKEN }}
             ref: v${{ steps.tag_name.outputs.tag }}
 
       - name: Create docs tag
@@ -49,6 +50,9 @@ jobs:
     needs: check-inputs
     name: "Build docs with version: ${{ needs.check-inputs.outputs.version }}, latest: ${{ needs.check-inputs.outputs.latest }}"
     uses: ./.github/workflows/docs_build.yml
+    secrets: inherit
+    permissions:
+       contents: write
     with:
       version: ${{ needs.check-inputs.outputs.version }}
       latest: ${{ needs.check-inputs.outputs.latest }}

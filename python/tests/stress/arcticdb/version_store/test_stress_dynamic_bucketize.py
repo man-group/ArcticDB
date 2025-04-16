@@ -16,6 +16,7 @@ from arcticdb.util.test import assert_frame_equal
     ["colnum", "rownum", "initial_col_width", "max_col_width", "total_rows"],
     [(10, 5, 20, 500, 20), (10, 5, 450, 500, 20), (10, 5, 200, 1000, 20), (128, 100000, 30000, 40000, 4)],
 )
+@pytest.mark.storage
 def test_dynamic_bucketize_append_variable_width(
     get_wide_df, sym, basic_store_factory, colnum, rownum, initial_col_width, max_col_width, total_rows
 ):

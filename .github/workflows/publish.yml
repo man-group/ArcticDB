@@ -53,7 +53,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           configuration: build_tooling/change_log.json
-          ignorePreReleases: "true"
 
       - name: Release
         uses: softprops/action-gh-release@v2
@@ -74,6 +73,7 @@ jobs:
   pypi:
     environment: ${{inputs.environment}}
     runs-on: ubuntu-22.04
+    if: ${{ contains(github.ref, vars.RC_SUFFIX) == false }}
     steps:
       - name: Gather wheels from run ${{ env.RUN_ID }}
         id: gather-wheels

@@ -53,7 +53,7 @@ private:
 
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
 
-    ObjectSizes do_get_object_sizes(KeyType key_type, const std::string& prefix) final;
+    void do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) final;
 
     bool do_key_exists(const VariantKey& key) final;
 

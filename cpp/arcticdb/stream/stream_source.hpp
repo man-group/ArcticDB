@@ -46,10 +46,13 @@ struct StreamSource {
         const entity::IterateTypeVisitor& func,
         const std::string &prefix = std::string{}) = 0;
 
-    [[nodiscard]] virtual folly::Future<storage::ObjectSizes> get_object_sizes(
+    [[nodiscard]] virtual folly::Future<std::shared_ptr<storage::ObjectSizes>> get_object_sizes(
         KeyType type,
-        const std::string& prefix
+        const std::optional<StreamId>& stream_id
     ) = 0;
+
+    [[nodiscard]] virtual folly::Future<folly::Unit> visit_object_sizes(
+        KeyType type, const std::optional<StreamId>& stream_id_opt, storage::ObjectSizesVisitor visitor) = 0;
 
     virtual bool scan_for_matching_key(
         KeyType key_type, const IterateTypePredicate& predicate) = 0;

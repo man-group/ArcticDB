@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import pytest
 import arcticdb as adb
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.storage import KeyType
@@ -8,6 +9,7 @@ from arcticdb_ext.version_store import SortedValue
 from arcticdb.util.test import random_strings_of_length
 
 
+@pytest.mark.storage
 def test_stage_finalize(arctic_library):
     symbol = "AAPL"
     sort_cols = ["timestamp", "col1"]
@@ -40,6 +42,7 @@ def test_stage_finalize(arctic_library):
     pd.testing.assert_frame_equal(result, expected)
 
 
+@pytest.mark.storage
 def test_stage_finalize_dynamic(arctic_library_dynamic):
     arctic_library = arctic_library_dynamic
     symbol = "AAPL"
@@ -75,6 +78,7 @@ def test_stage_finalize_dynamic(arctic_library_dynamic):
     pd.testing.assert_frame_equal(result, expected)
 
 
+@pytest.mark.storage
 def test_stage_finalize_strings(arctic_library):
     symbol = "AAPL"
     sort_cols = ["timestamp", "col1"]
@@ -109,6 +113,7 @@ def test_stage_finalize_strings(arctic_library):
     pd.testing.assert_frame_equal(result, expected)
 
 
+@pytest.mark.storage
 def test_stage_finalize_strings_dynamic(arctic_library_dynamic):
     arctic_library = arctic_library_dynamic
     symbol = "AAPL"
@@ -145,6 +150,7 @@ def test_stage_finalize_strings_dynamic(arctic_library_dynamic):
     pd.testing.assert_frame_equal(result, expected)
 
 
+@pytest.mark.storage
 def test_stage_finalize_sort_index(arctic_library):
     symbol = "AAPL"
     sort_cols = ["timestamp"]
@@ -239,6 +245,7 @@ def test_stage_with_sort_columns_not_ts(lmdb_version_store_v1):
     assert_frame_equal(df1, actual)
 
 
+@pytest.mark.storage
 def test_stage_finalize_dynamic_with_chunking(arctic_client, lib_name):
     lib_opts = adb.LibraryOptions(dynamic_schema=True, rows_per_segment=2, columns_per_segment=2)
     lib = arctic_client.get_library(lib_name, create_if_missing=True, library_options=lib_opts)
@@ -286,6 +293,7 @@ def test_stage_finalize_dynamic_with_chunking(arctic_client, lib_name):
     pd.testing.assert_frame_equal(result, expected)
 
 
+@pytest.mark.storage
 def test_stage_finalize_index_and_additional(arctic_library):
     symbol = "AAPL"
     sort_cols = ["col1"]

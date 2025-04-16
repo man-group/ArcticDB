@@ -7,7 +7,7 @@ from arcticdb.flattener import Flattener
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from arcticdb dynamically loads arcticc.pb2
 from arcticdb.exceptions import ArcticDbNotYetImplemented
-from arcticdb.util.venv import CurrentVersion
+from arcticdb.util.venv import CompatLibrary
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.storage import KeyType
 
@@ -41,6 +41,7 @@ def assert_vit_equals_except_data(left, right):
     assert left.timestamp == right.timestamp
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
+@pytest.mark.storage
 def test_recursively_written_data(basic_store, read):
     samples = [
         {"a": np.arange(5), "b": np.arange(8)},  # dict of np arrays
@@ -69,6 +70,7 @@ def test_recursively_written_data(basic_store, read):
 
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
+@pytest.mark.storage
 def test_recursively_written_data_with_metadata(basic_store, read):
     samples = [
         {"a": np.arange(5), "b": np.arange(8)},  # dict of np arrays
@@ -89,6 +91,7 @@ def test_recursively_written_data_with_metadata(basic_store, read):
 
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
+@pytest.mark.storage
 def test_recursively_written_data_with_nones(basic_store, read):
     sample = {"a": np.arange(5), "b": np.arange(8), "c": None}
     recursive_sym = "sym_recursive"
@@ -108,6 +111,7 @@ def test_recursively_written_data_with_nones(basic_store, read):
 
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
+@pytest.mark.storage
 def test_recursive_nested_data(basic_store, read):
     sym = "test_recursive_nested_data"
     sample_data = {"a": {"b": {"c": {"d": np.arange(24)}}}}
@@ -124,6 +128,7 @@ def test_recursive_nested_data(basic_store, read):
     assert read_vit.symbol == sym
     assert_vit_equals_except_data(read_vit, write_vit)
 
+@pytest.mark.storage
 def test_recursive_normalizer_with_custom_class():
     list_like_obj = AlmostAList([1, 2, 3])
     fl = Flattener()
@@ -134,6 +139,7 @@ def test_recursive_normalizer_with_custom_class():
     fl = Flattener()
     assert fl.is_normalizable_to_nested_structure(list_like_obj)
 
+@pytest.mark.storage
 def test_nested_custom_types(basic_store):
     data = AlmostAList([1, 2, 3, AlmostAList([5, np.arange(6)])])
     fl = Flattener()
@@ -149,6 +155,7 @@ def test_nested_custom_types(basic_store):
     assert_vit_equals_except_data(write_vit, read_vit)
     assert basic_store.get_info(sym)["type"] != "pickled"
 
+@pytest.mark.storage
 def test_data_directly_msgpackable(basic_store):
     data = {"a": [1, 2, 3], "b": {"c": 5}}
     fl = Flattener()
@@ -163,6 +170,7 @@ def test_data_directly_msgpackable(basic_store):
 
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
+@pytest.mark.storage
 def test_really_large_symbol_for_recursive_data(basic_store, read):
     sym = "s" * 100
     data = {"a" * 100: {"b" * 100: {"c" * 1000: {"d": np.arange(5)}}}}
@@ -190,43 +198,41 @@ def test_too_much_recursive_metastruct_data(monkeypatch, lmdb_version_store_v1):
 class TestRecursiveNormalizersCompat:
     def test_compat_write_old_read_new(self, old_venv_and_arctic_uri, lib_name):
         old_venv, arctic_uri = old_venv_and_arctic_uri
-        old_ac = old_venv.create_arctic(arctic_uri)
-        old_lib = old_ac.create_library(lib_name)
-        dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]}), "df_2": pd.DataFrame({"b": ["a", "b"]})}
-        sym = "sym"
-        old_lib.execute([
-            f"""
+        with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
+            dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]}), "df_2": pd.DataFrame({"b": ["a", "b"]})}
+            sym = "sym"
+            compat.old_lib.execute([
+                f"""
 from arcticdb_ext.storage import KeyType
 lib._nvs.write('sym', {{"a": df_1, "b": df_2}}, recursive_normalizers=True, pickle_on_failure=True)
 lib_tool = lib._nvs.library_tool()
 assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
-            """
-        ], dfs=dfs)
+"""
+            ], dfs=dfs)
 
-        with CurrentVersion(arctic_uri, lib_name) as curr:
-            data = curr.lib.read(sym).data
-            expected = {"a": dfs["df_1"], "b": dfs["df_2"]}
-            assert set(data.keys()) == set(expected.keys())
-            for key in data.keys():
-                assert_frame_equal(data[key], expected[key])
+            with compat.current_version() as curr:
+                data = curr.lib.read(sym).data
+                expected = {"a": dfs["df_1"], "b": dfs["df_2"]}
+                assert set(data.keys()) == set(expected.keys())
+                for key in data.keys():
+                    assert_frame_equal(data[key], expected[key])
 
     def test_write_new_read_old(self, old_venv_and_arctic_uri, lib_name):
         old_venv, arctic_uri = old_venv_and_arctic_uri
-        old_ac = old_venv.create_arctic(arctic_uri)
-        old_lib = old_ac.create_library(lib_name)
-        dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]}), "df_2": pd.DataFrame({"b": ["a", "b"]})}
-        with CurrentVersion(arctic_uri, lib_name) as curr:
-            curr.lib._nvs.write('sym', {"a": dfs["df_1"], "b": dfs["df_2"]}, recursive_normalizers=True, pickle_on_failure=True)
-            lib_tool = curr.lib._nvs.library_tool()
-            assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
+        with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
+            dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]}), "df_2": pd.DataFrame({"b": ["a", "b"]})}
+            with compat.current_version() as curr:
+                curr.lib._nvs.write('sym', {"a": dfs["df_1"], "b": dfs["df_2"]}, recursive_normalizers=True, pickle_on_failure=True)
+                lib_tool = curr.lib._nvs.library_tool()
+                assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
 
-        old_lib.execute([
-            """
+            compat.old_lib.execute([
+                """
 from pandas.testing import assert_frame_equal
 data = lib.read('sym').data
 expected = {'a': df_1, 'b': df_2}
 assert set(data.keys()) == set(expected.keys())
 for key in data.keys():
     assert_frame_equal(data[key], expected[key])
-            """
-        ], dfs=dfs)
+"""
+            ], dfs=dfs)

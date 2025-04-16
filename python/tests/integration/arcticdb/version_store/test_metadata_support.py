@@ -30,6 +30,7 @@ from tests.util.mark import ZONE_INFO_MARK
 # test_rt_df stands for roundtrip dataframe (implicitly pandas given file name)
 
 
+@pytest.mark.storage
 def test_rt_df_with_small_meta(object_and_mem_and_lmdb_version_store):
     lib = object_and_mem_and_lmdb_version_store
     #  type: (NativeVersionStore)->None
@@ -50,6 +51,7 @@ class A:
         return self.attrib == other.attrib
 
 
+@pytest.mark.storage
 def test_rt_df_with_custom_meta(object_and_mem_and_lmdb_version_store):
     lib = object_and_mem_and_lmdb_version_store
 
@@ -90,6 +92,7 @@ def test_pickled_metadata_warning_bad_config(lmdb_version_store_v1):
     assert_frame_equal(df, vit.metadata)
 
 
+@pytest.mark.storage
 def test_rt_df_with_humonguous_meta(object_and_mem_and_lmdb_version_store):
     with pytest.raises(ArcticDbNotYetImplemented):
         from arcticdb.version_store._normalization import _MAX_USER_DEFINED_META as MAX
@@ -103,6 +106,7 @@ def test_rt_df_with_humonguous_meta(object_and_mem_and_lmdb_version_store):
         assert meta == vit.metadata
 
 
+@pytest.mark.storage
 def test_read_metadata(object_and_mem_and_lmdb_version_store):
     lib = object_and_mem_and_lmdb_version_store
     original_data = [1, 2, 3]
@@ -114,6 +118,7 @@ def test_read_metadata(object_and_mem_and_lmdb_version_store):
     assert lib.read_metadata("test_symbol").metadata == metadata
 
 
+@pytest.mark.storage
 def test_read_metadata_by_version(object_and_mem_and_lmdb_version_store):
     lib = object_and_mem_and_lmdb_version_store
     data_v1 = [1, 2, 3]
@@ -129,6 +134,7 @@ def test_read_metadata_by_version(object_and_mem_and_lmdb_version_store):
     assert lib.read_metadata(symbol, 1).metadata == metadata_v1
 
 
+@pytest.mark.storage
 def test_read_metadata_by_snapshot(basic_store):
     original_data = [1, 2, 3]
     snap_name = "metadata_snap_1"
@@ -140,6 +146,7 @@ def test_read_metadata_by_snapshot(basic_store):
     assert basic_store.read_metadata(symbol, snap_name).metadata == metadata
 
 
+@pytest.mark.storage
 def test_read_metadata_by_timestamp(basic_store):
     symbol = "test_symbol"
 
@@ -182,6 +189,7 @@ def test_read_metadata_by_timestamp(basic_store):
     assert basic_store.read_metadata(symbol, as_of=brexit_almost_over).metadata == metadata_v3
 
 
+@pytest.mark.storage
 def test_write_metadata_first_write(basic_store, sym):
     metadata_v0 = {"something": 1}
     # basic_store.write(symbol, 1, metadata=metadata_v0)  # v0
@@ -192,6 +200,7 @@ def test_write_metadata_first_write(basic_store, sym):
     assert len(basic_store.list_versions(sym)) == 1
 
 
+@pytest.mark.storage
 def test_write_metadata_preexisting_symbol(basic_store, sym):
     lib = basic_store
     metadata_v0 = {"something": 1}
@@ -205,6 +214,7 @@ def test_write_metadata_preexisting_symbol(basic_store, sym):
     assert lib.read(sym).data == 1
 
 
+@pytest.mark.storage
 def test_write_metadata_preexisting_symbol_no_pruning(basic_store, sym):
     lib = basic_store
     metadata_v0 = {"something": 1}

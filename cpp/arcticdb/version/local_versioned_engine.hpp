@@ -24,6 +24,8 @@
 
 namespace arcticdb::version_store {
 
+using VersionedItemOrError = std::variant<VersionedItem, DataError>;
+
 /**
  * Implements the parent interface and provides additional methods not needed/suitable by a RemoteVersionedEngine.
  *
@@ -45,7 +47,6 @@ struct IndexKeyAndUpdateInfo{
 struct KeySizesInfo {
     size_t count;
     size_t compressed_size; // bytes
-    size_t uncompressed_size; // bytes
 };
 
 folly::Future<folly::Unit> delete_trees_responsibly(
@@ -109,6 +110,10 @@ public:
     void remove_incomplete(
         const StreamId& stream_id
     ) override;
+
+    void remove_incompletes(
+        const std::unordered_set<StreamId>& sids, const std::string& common_prefix
+        );
 
     std::optional<VersionedItem> get_latest_version(
         const StreamId &stream_id);
@@ -374,6 +379,8 @@ public:
         const WriteOptions& write_options);
 
     std::vector<storage::ObjectSizes> scan_object_sizes();
+
+    std::vector<storage::ObjectSizes> scan_object_sizes_for_stream(const StreamId& stream_id);
 
     std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> scan_object_sizes_by_stream();
 

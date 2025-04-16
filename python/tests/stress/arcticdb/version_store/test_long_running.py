@@ -9,6 +9,8 @@ from __future__ import print_function
 import random
 import gc
 
+import pytest
+
 from arcticdb.util.tasks import (
     write_and_append_simple_df,
     write_large_mixed_df,
@@ -40,6 +42,7 @@ SCENARIOS = [
 ]
 
 
+@pytest.mark.storage
 def test_random_scenario(basic_store_small_segment):
     basic_store_small_segment.version_store._set_validate_version_map()
     for iteration in range(ITERATIONS):

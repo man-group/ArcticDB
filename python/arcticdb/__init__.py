@@ -20,6 +20,7 @@ from arcticdb.version_store.library import (
     StagedDataFinalizeMethod,
     WriteMetadataPayload
 )
+from arcticdb.version_store.admin_tools import KeyType, Size
 
 set_config_from_env_vars(_os.environ)
 
