@@ -65,11 +65,6 @@ jobs:
       with:
         python-version: ${{ matrix.python || inputs.python}}
 
-    - name: Delete python/arcticdb folder
-      shell: bash -l {0}
-      run: |
-        rm -rf python/arcticdb
-
     - name: Install arcticdb and dependencies
       if: ${{ !(contains(matrix.os, 'macos') || contains(inputs.os, 'macos'))}}
       shell: bash -l {0}
@@ -88,7 +83,7 @@ jobs:
       uses: mamba-org/setup-micromamba@v2.0.0
       if: ${{ contains(matrix.os, 'macos') || contains(inputs.os, 'macos')}}
       with:
-        environment-file: installation_tests/python/environment_unix.yml
+        environment-file: environment_unix.yml
         environment-name: arcticdb
         init-shell: >-
           bash
@@ -126,7 +121,7 @@ jobs:
         #export ARCTICDB_STORAGE_GCP=1
         #export ARCTICDB_STORAGE_AWS_S3=1
         cd python
-        pytest -rs -v --log-file="tests.log"  -m installation
+        pytest -rs -v --log-file="tests.log" -n auto -m installation
 
 
     - name: Upload the logs
