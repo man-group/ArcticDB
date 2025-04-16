@@ -386,6 +386,7 @@ def test_force_compact_symbol_list(lmdb_version_store_v1):
     if 'lmdb' not in str(lib): num_syms = 50
     syms = [f"sym_{idx:03}" for idx in range(num_syms)]
     data = [1 for _ in range(num_syms)]
+    lib.batch_write(syms, data)
     symbol_list_keys = lib_tool.find_keys(KeyType.SYMBOL_LIST)
     assert len(symbol_list_keys) == num_syms
     assert lib.compact_symbol_list() == num_syms
