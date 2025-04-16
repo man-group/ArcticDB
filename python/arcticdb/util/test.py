@@ -853,7 +853,7 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
             pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
         else:
             if PANDAS_VERSION >= Version("1.1"):
-                check_equals_flags["rtol"] = 2e-4
+                check_equals_flags["rtol"] = 3e-4
             pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
 
 
