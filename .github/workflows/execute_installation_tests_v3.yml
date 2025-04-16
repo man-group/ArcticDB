@@ -84,10 +84,10 @@ jobs:
       if: ${{ contains(matrix.os, 'macos') || contains(inputs.os, 'macos')}}
       shell: bash -l {0}
       run: |
-        FILE=${{ env.conda_file }}
-        sed -i ':a;/^$/{$d;N;};/\n$/ba' $FILE
-        echo "\n  - arcticdb" > $FILE
-        cat $FILE
+        CONFIG_FILE=${{ env.conda_file }}
+        sed -i ':a;/^$/{$d;N;};/\n$/ba' "$CONFIG_FILE"
+        sed -i '/dependencies:/a\  - arcticdb' "$CONFIG_FILE"
+        cat $CONFIG_FILE
 
       # Install conda environment
     - name: Install Conda environment from environment_unix.yml
@@ -130,9 +130,7 @@ jobs:
       run: |
         echo $pwd
         ## pytest -rs -v --log-file="tests.log" -n auto -m installation
-        ## For testing limit the run to first 3 tests
-        pytest -m installation --collect-only -q > test_list.txt
-        pytest -rs -v --log-file="tests.log" $(head -n 3 test_list.txt)
+        pytest -rs -v --log-file="tests.log" python/tests/integration/arcticdb/test_arctic.py::test_append_prune_previous_versions
 
     - name: Upload the logs
       if: always()
