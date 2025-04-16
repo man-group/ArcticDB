@@ -536,6 +536,7 @@ def test_delete_non_existent_snapshot(arctic_library):
         lib.delete_snapshot("test")
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_prune_previous_versions(arctic_library):
     lib = arctic_library

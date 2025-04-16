@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import enum
-from typing import Callable, Generator, Union
+from typing import Callable, Generator, List, Union
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.version_store.library import Library
 import hypothesis
@@ -143,9 +143,29 @@ def lmdb_shared_storage(tmp_path_factory) -> Generator[LmdbStorageFixture, None,
 
 
 @pytest.fixture(scope="function")
-def lmdb_storage(tmp_path) -> Generator[LmdbStorageFixture, None, None]:
-    with LmdbStorageFixture(tmp_path) as f:
-        yield f
+def lmdb_storage(request, tmp_path) -> Generator[LmdbStorageFixture, None, None]:
+    """ Dynamically configurable fixture 
+    
+    By default returns only lmdb_storage, but can be extended by
+    """
+    def get_lmdb_fixture():
+        if LMDB_TESTS_MARK.args[0]:
+            pytest.skip("LMDB storage is not activated")
+        else:
+            return LmdbStorageFixture(tmp_path)
+
+    if hasattr(request, "param") and 'lmdb' not in request.param:
+        context = request.getfixturevalue(request.param).create_fixture()
+    else:
+        context = get_lmdb_fixture()
+
+    try:
+        obj = context.__enter__()  
+        yield obj
+    except Exception as e:
+        context.__exit__(type(e), e, e.__traceback__)  
+    finally:
+        context.__exit__(None, None, None)
 
 
 @pytest.fixture
@@ -1335,3 +1355,11 @@ def old_venv_and_arctic_uri(old_venv, arctic_uri):
         pytest.skip("LMDB storage backed has a bug in versions before 5.0.0 which leads to flaky segfaults")
 
     yield old_venv, arctic_uri
+
+
+class FixtureMarks:
+    lmdb_storage_extend_for_installation = pytest.mark.parametrize("lmdb_storage", 
+                                                                   # Due to the fact that we have default lmdb fixture 
+                                                                   # we need to provide "lmdb" as first option
+                                                                   ["lmdb", real_s3_storage_factory.__name__],
+                                                                   indirect=True)

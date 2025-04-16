@@ -147,6 +147,7 @@ def test_read_metadata_by_snapshot(basic_store):
 
 
 @pytest.mark.storage
+@pytest.mark.installation
 def test_read_metadata_by_timestamp(basic_store):
     symbol = "test_symbol"
 

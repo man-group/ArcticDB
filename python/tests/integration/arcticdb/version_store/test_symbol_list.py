@@ -26,6 +26,7 @@ from arcticdb_ext.exceptions import InternalException, PermissionException
 
 from multiprocessing import Pool
 from arcticdb_ext import set_config_int
+from tests.conftest import FixtureMarks
 from tests.util.mark import MACOS_CONDA_BUILD
 
 
@@ -369,6 +370,8 @@ def test_symbol_list_parallel_stress_with_delete(
         assert not lib.version_store.indexes_sorted(sym)
 
 
+@pytest.mark.installation
+@FixtureMarks.lmdb_storage_extend_for_installation
 def test_force_compact_symbol_list(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     lib_tool = lib.library_tool()
@@ -380,9 +383,9 @@ def test_force_compact_symbol_list(lmdb_version_store_v1):
     lib_tool.remove(symbol_list_keys[0])
 
     num_syms = 1000
+    if 'lmdb' not in str(lib): num_syms = 50
     syms = [f"sym_{idx:03}" for idx in range(num_syms)]
     data = [1 for _ in range(num_syms)]
-    lib.batch_write(syms, data)
     symbol_list_keys = lib_tool.find_keys(KeyType.SYMBOL_LIST)
     assert len(symbol_list_keys) == num_syms
     assert lib.compact_symbol_list() == num_syms

@@ -13,9 +13,10 @@ import pytest
 from arcticdb import col, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest
 from arcticdb.util.test import assert_frame_equal
 
+from tests.conftest import FixtureMarks
+
 
 pytestmark = pytest.mark.pipeline
-
 
 def test_lazy_read(lmdb_library):
     lib = lmdb_library
@@ -66,6 +67,8 @@ def test_lazy_filter(lmdb_library):
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.installation
+@FixtureMarks.lmdb_storage_extend_for_installation
 def test_lazy_head(lmdb_library):
     lib = lmdb_library
     sym = "test_lazy_head"
@@ -82,6 +85,8 @@ def test_lazy_head(lmdb_library):
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.installation
+@FixtureMarks.lmdb_storage_extend_for_installation
 def test_lazy_tail(lmdb_library):
     lib = lmdb_library
     sym = "test_lazy_tail"
@@ -179,6 +184,8 @@ def test_lazy_resample(lmdb_library):
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.installation
+@FixtureMarks.lmdb_storage_extend_for_installation
 def test_lazy_with_initial_query_builder(lmdb_library):
     lib = lmdb_library
     sym = "test_lazy_chaining"
@@ -198,7 +205,8 @@ def test_lazy_with_initial_query_builder(lmdb_library):
     assert_frame_equal(expected, received, check_dtype=False)
 
 
-@pytest.mark.storage
+@pytest.mark.installation
+@FixtureMarks.lmdb_storage_extend_for_installation
 def test_lazy_chaining(lmdb_library):
     lib = lmdb_library
     sym = "test_lazy_chaining"

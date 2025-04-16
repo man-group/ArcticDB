@@ -36,6 +36,8 @@ from arcticdb.util.test import config_context_multi
 
 import arcticdb_ext.cpp_async as adb_async
 
+from tests.conftest import FixtureMarks
+
 
 def get_append_keys(lib, sym):
     lib_tool = lib.library_tool()
@@ -356,6 +358,7 @@ def test_floats_to_nans(lmdb_version_store_dynamic_schema):
 )
 @pytest.mark.parametrize("prune_previous_versions", (True, False))
 @pytest.mark.storage
+@pytest.mark.installation
 def test_parallel_write_sort_merge(
     basic_store_tiny_segment,
     lib_name,

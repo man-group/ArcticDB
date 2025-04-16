@@ -13,6 +13,8 @@ import pytest
 
 from arcticdb_ext.exceptions import InternalException
 
+from tests.conftest import FixtureMarks
+
 
 pytestmark = pytest.mark.pipeline
 
@@ -80,6 +82,8 @@ def test_head_default_num_rows(lmdb_version_store_tiny_segment, one_col_df):
     assert np.array_equal(one_col_df().head(num_rows), lmdb_version_store_tiny_segment.head(symbol).data)
 
 
+@pytest.mark.installation
+@FixtureMarks.lmdb_storage_extend_for_installation
 def test_head_with_column_filter(lmdb_version_store_tiny_segment, three_col_df):
     symbol = "test_head_with_column_filter"
     lmdb_version_store_tiny_segment.write(symbol, three_col_df())
