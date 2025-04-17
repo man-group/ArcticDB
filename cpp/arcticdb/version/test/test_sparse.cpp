@@ -15,6 +15,7 @@
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/python/python_handlers.hpp>
+#include <arcticdb/python/python_types.hpp>
 #include <arcticdb/util/native_handler.hpp>
 
 struct SparseTestStore : arcticdb::TestStore {
@@ -292,8 +293,7 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     ASSERT_EQ(val2.value()[0], char{0});
 
     auto val3 = frame.scalar_at<PyObject*>(1, 1);
-    auto none = py::none{};
-    ASSERT_EQ(val3.value(), none.ptr());
+    ASSERT_TRUE(is_py_none(val3.value()));
     auto val4 = frame.string_at(1, 2);
     ASSERT_EQ(val4, "six");
 }
@@ -692,8 +692,7 @@ TEST_F(SparseTestStore, CompactWithStrings) {
         ASSERT_EQ(val2.value()[0], char{0});
 
         auto val3 = frame.scalar_at<PyObject*>(i + 1, 1);
-        auto none = py::none{};
-        ASSERT_EQ(val3.value(), none.ptr());
+        ASSERT_TRUE(is_py_none(val3.value()));
 
         auto val4 = frame.string_at(i + 1, 2);
 
