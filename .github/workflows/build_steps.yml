@@ -72,12 +72,17 @@ jobs:
         uses: actions/checkout@v3.3.0
         with:
           submodules: recursive
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Convert to Full Clone
         run: |
           git config --global --add safe.directory /__w/ArcticDB/ArcticDB
           git fetch --unshallow
+          git submodule update --init --recursive
+          cd cpp/vcpkg
+          git fetch --unshallow
+          git submodule update --init --recursive
+          cd ../..
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
