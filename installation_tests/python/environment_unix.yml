@@ -1,0 +1,8 @@
+name: arcticdb
+channels:
+  - conda-forge
+dependencies:
+  - pytest
+  - wheel
+  - arcticdb
+  - setuptools
