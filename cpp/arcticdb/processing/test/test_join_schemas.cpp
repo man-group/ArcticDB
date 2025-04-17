@@ -540,3 +540,23 @@ TEST(Join, DisJointColumnNames) {
     outer_join(res_outer, schemas);
     ASSERT_EQ(res_outer, expected_outer);
 }
+
+TEST(InnerJoin, MatchingNamesIncompatibleTypesOnUnusedColumns) {
+    StreamDescriptor first_input;
+    first_input.add_scalar_field(DataType::INT64, "first");
+    first_input.add_scalar_field(DataType::INT64, "second");
+    StreamDescriptor second_input;
+    second_input.add_scalar_field(DataType::INT64, "first");
+    second_input.add_scalar_field(DataType::UTF_DYNAMIC64, "second");
+    StreamDescriptor third_input;
+    third_input.add_scalar_field(DataType::INT64, "first");
+    std::vector<OutputSchema> schemas;
+    schemas.emplace_back(first_input.clone(), NormalizationMetadata());
+    schemas.emplace_back(second_input.clone(), NormalizationMetadata());
+    schemas.emplace_back(third_input.clone(), NormalizationMetadata());
+    StreamDescriptor res;
+    inner_join(res, schemas);
+    StreamDescriptor expected_res;
+    expected_res.add_scalar_field(DataType::INT64, "first");
+    ASSERT_EQ(res, expected_res);
+}

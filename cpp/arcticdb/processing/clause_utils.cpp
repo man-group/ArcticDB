@@ -385,12 +385,18 @@ void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_
     if (input_schemas.empty()) {
         return;
     }
-    ankerl::unordered_dense::map<std::string, DataType> columns_to_keep;
+    // Value must be optional to handle the case covered in MatchingNamesIncompatibleTypesOnUnusedColumns test in
+    // test_join_schemas.cpp
+    // i.e. There may be a column where the types between two input schemas to not match, but it doesn't matter, as the
+    // column is missing from another schema
+    ankerl::unordered_dense::map<std::string, std::optional<DataType>> columns_to_keep;
     bool first_element{true};
     for (auto& schema: input_schemas) {
         if (first_element) {
             // Start with the columns in the first element, and remove anything that isn't present in all other elements
-            columns_to_keep = schema.column_types();
+            for (const auto& [name, data_type]: schema.column_types()) {
+                columns_to_keep.emplace(name, data_type);
+            }
             first_element = false;
         } else {
             // Iterate through the columns we are currently planning to keep
@@ -400,14 +406,14 @@ void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_
                     // Current set of columns under consideration contains column_name, so ensure types are compatible
                     // and if necessary modify the columns_to_keep value to a type capable of representing all
                     auto& current_data_type = columns_to_keep_it->second;
-                    auto opt_common_type = has_valid_common_type(make_scalar_type(current_data_type),
-                                                                 make_scalar_type(it->second));
-                    if (opt_common_type.has_value()) {
-                        current_data_type = opt_common_type->data_type();
-                    } else {
-                        schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                                "No common type between {} and {} when joining schemas", current_data_type,
-                                it->second);
+                    if (current_data_type.has_value()) {
+                        auto opt_common_type = has_valid_common_type(make_scalar_type(*current_data_type),
+                                                                     make_scalar_type(it->second));
+                        if (opt_common_type.has_value()) {
+                            current_data_type = opt_common_type->data_type();
+                        } else {
+                            current_data_type.reset();
+                        }
                     }
                     ++columns_to_keep_it;
                 } else {
@@ -420,7 +426,10 @@ void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_
     for (const auto& field: input_schemas.front().stream_descriptor().fields()) {
         std::string column_name(field.name());
         if (auto it = columns_to_keep.find(column_name); it != columns_to_keep.end()) {
-            stream_desc.add_scalar_field(it->second, column_name);
+            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                    it->second.has_value(),
+                    "No common type for column {} when joining schemas", it->first);
+            stream_desc.add_scalar_field(it->second.value(), column_name);
         }
     }
 }
