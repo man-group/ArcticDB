@@ -22,4 +22,5 @@ void prefill_with_none(
         python_handler_data.increment_none_refcount(none_count);
     }
 }
+
 }

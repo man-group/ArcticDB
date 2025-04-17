@@ -29,6 +29,7 @@ import pandas as pd
 import numpy as np
 import logging
 from arcticdb.version_store._normalization import normalize_metadata
+from arcticdb.version_store.admin_tools import AdminTools
 
 logger = logging.getLogger(__name__)
 
@@ -2533,3 +2534,7 @@ class Library:
     def name(self):
         """The name of this library."""
         return self._nvs.name()
+
+    def admin_tools(self):
+        """Administrative utilities that operate on this library."""
+        return AdminTools(self._nvs)

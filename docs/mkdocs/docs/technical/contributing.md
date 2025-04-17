@@ -94,10 +94,10 @@ due to a linkage problems with libprotobuf.
 See: https://github.com/man-group/ArcticDB/pull/449**
 
  - [Install `mamba`](https://mamba.readthedocs.io/en/latest/installation.html)
- - Create the `arcticdb` environment from its specification (`environment_unix.yml`):
+ - Create the `arcticdb` environment from its specification (`environment-dev.yml`):
 
   ```bash
-  mamba env create -f environment_unix.yml
+  mamba env create -f environment-dev.yml
   ```
 
  - Activate the `arcticdb` environment (you will need to do this for every new shell session):

@@ -48,8 +48,7 @@ auto write_version_frame(
     auto wrapper = get_test_simple_frame(stream_id, rows, start_val);
     auto& frame = wrapper.frame_;
     auto store = pvs._test_get_store();
-    auto var_key = write_frame(std::move(pk), frame, slicing, store, de_dup_map).get();
-    auto key = to_atom(var_key); // Moves
+    auto key = write_frame(std::move(pk), frame, slicing, store, de_dup_map).get();
     if (update_version_map) {
         pvs.write_version_and_prune_previous(prune_previous, key, previous_key);
     }
