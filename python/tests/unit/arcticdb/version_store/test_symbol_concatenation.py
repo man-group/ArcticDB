@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 from arcticdb import col, concat, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest
-from arcticdb.exceptions import SchemaException
+from arcticdb.exceptions import NoSuchVersionException, SchemaException
 from arcticdb.options import LibraryOptions
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
 
@@ -571,6 +571,14 @@ def test_symbol_concat_symbols_with_different_indexes(lmdb_library, join):
 
     with pytest.raises(SchemaException):
         concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True), join).collect()
+
+
+def test_symbol_concat_non_existent_symbol(lmdb_library):
+    lib = lmdb_library
+    sym = "test_symbol_concat_non_existent_symbol"
+    lib.write(sym, pd.DataFrame({"col": [0]}))
+    with pytest.raises(NoSuchVersionException):
+        concat(lib.read_batch([sym, "non-existent symbol"], lazy=True)).collect()
 
 
 def test_symbol_concat_pickled_data(lmdb_library):
