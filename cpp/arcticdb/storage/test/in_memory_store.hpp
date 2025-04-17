@@ -326,8 +326,12 @@ public:
         }
     }
 
-    [[nodiscard]] folly::Future<storage::ObjectSizes> get_object_sizes(KeyType, const std::string&) override {
+    [[nodiscard]] folly::Future<std::shared_ptr<storage::ObjectSizes>> get_object_sizes(KeyType, const std::optional<StreamId>&) override {
         util::raise_rte("get_object_sizes not implemented for InMemoryStore");
+    }
+
+    [[nodiscard]] folly::Future<folly::Unit> visit_object_sizes(KeyType, const std::optional<StreamId>&, storage::ObjectSizesVisitor) override {
+        util::raise_rte("visit_object_sizes not implemented for InMemoryStore");
     }
 
     bool scan_for_matching_key(

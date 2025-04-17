@@ -27,8 +27,7 @@ static auto write_version_frame_with_three_segments(
     auto wrapper = get_test_simple_frame(stream_id, 30, 0);  // 30 rows -> 3 segments
     auto& frame = wrapper.frame_;
     auto store = pvs._test_get_store();
-    auto var_key = write_frame(std::move(pk), frame, slicing, store, de_dup_map).get();
-    auto key = to_atom(var_key);
+    auto key = write_frame(std::move(pk), frame, slicing, store, de_dup_map).get();
     pvs.write_version_and_prune_previous(true, key, std::nullopt);
     return key;
 }
