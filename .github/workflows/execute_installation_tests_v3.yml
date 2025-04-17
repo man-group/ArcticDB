@@ -42,6 +42,31 @@ on:
           - "5.1.2"
           - "5.0.0"
           - "4.4.7"
+      run_on_lmdb:
+        description: 'Execute tests on LMDB'
+        required: true
+        default: '1'
+        type: choice
+        options:
+          - "1"
+          - "0"
+      run_on_real_s3:
+        description: 'Execute tests on Amazon S3'
+        required: true
+        default: '0'
+        type: choice
+        options:
+          - "1"
+          - "0"
+      run_on_real_gcp:
+        description: 'Execute tests on GCP'
+        required: true
+        default: '0'
+        type: choice
+        options:
+          - "1"
+          - "0"          
+                  
 
 jobs:
 
@@ -69,7 +94,10 @@ jobs:
       fail-fast: false  
     env:
       conda_file: "environment_unix.yml"
-      arcticdb_version: ${{ inputs.arcticdb_version || '5.1.2' }}
+      arcticdb_version: ${{ inputs.arcticdb_version || '4.4.7' }}
+      lmdb: ${{ inputs.run_on_lmdb || '1' }}
+      real_s3: ${{ inputs.run_on_real_s3 || '0' }}
+      real_gcp: ${{ inputs.run_on_real_gcp || '0' }}
 
     steps:
 
@@ -158,9 +186,9 @@ jobs:
       shell: bash -l {0}      
       run: |
         echo "ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=0" >> $GITHUB_ENV
-        echo "ARCTICDB_STORAGE_LMDB=1" >> $GITHUB_ENV
-        echo "ARCTICDB_STORAGE_AWS_S3=0" >> $GITHUB_ENV        
-        echo "ARCTICDB_STORAGE_GCP=0" >> $GITHUB_ENV        
+        echo "ARCTICDB_STORAGE_LMDB=${{ env.lmdb }}" >> $GITHUB_ENV
+        echo "ARCTICDB_STORAGE_AWS_S3=${{ env.real_s3 }}"" >> $GITHUB_ENV        
+        echo "ARCTICDB_STORAGE_GCP=${{ env.real_gcp }}"" >> $GITHUB_ENV        
         echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
 
     - name: Run tests
