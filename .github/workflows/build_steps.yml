@@ -77,10 +77,8 @@ jobs:
       - name: Convert to Full Clone
         run: |
           git config --global --add safe.directory /__w/ArcticDB/ArcticDB
-          git fetch --unshallow
           git submodule update --init --recursive
           cd cpp/vcpkg
-          git fetch --unshallow
           git submodule update --init --recursive
           cd ../..
 
