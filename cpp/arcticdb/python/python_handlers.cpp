@@ -17,11 +17,9 @@
 namespace arcticdb {
 
 static PyObject** fill_with_none(PyObject** ptr_dest, size_t count, PythonHandlerData& handler_data) {
-    for(auto i = 0U; i < count; ++i) {
-        *ptr_dest++ = Py_None;
-    }
+    std::fill_n(ptr_dest, count, nullptr);
     handler_data.increment_none_refcount(count);
-    return ptr_dest;
+    return ptr_dest + count;
 }
 
 static PyObject** fill_with_none(ChunkedBuffer& buffer, size_t offset, size_t count, PythonHandlerData& handler_data) {
