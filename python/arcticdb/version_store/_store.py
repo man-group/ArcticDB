@@ -128,6 +128,17 @@ class VersionedItem:
 
 @dataclass
 class VersionedItemWithJoin:
+    """
+    Return type for operations that join multiple symbols together to produce a single output DataFrame.
+
+    Attributes
+    ----------
+    versions: List[VersionedItem]
+        The individual version information about the symbols that were joined together.
+        The data field of these versioned items will be None.
+    data: Any
+        The joined together data.
+    """
     versions: List[VersionedItem]
     data: Any
 
@@ -1133,8 +1144,95 @@ class NativeVersionStore:
             columns: Optional[List[List[str]]] = None,
             per_symbol_query_builders: Optional[Union[QueryBuilder, List[QueryBuilder]]] = None,
             **kwargs,
-    ):
-        implement_read_index = True
+    ) -> VersionedItemWithJoin:
+        """
+        Reads multiple symbols in a batch fashion, and then joins them together using the first clause in the
+        `query_builder` argument. If there are subsequent clauses in the `query_builder` argument, then these are
+        applied to the joined data.
+
+        Parameters
+        ----------
+        symbols: `List[str]`
+            List of symbols to read
+        query_builder: `QueryBuilder`
+            The first clause must be a multi-symbol join, such as `concat`. Any subsequent clauses must work on
+            individual dataframes, and will be applied to the joined data.
+        as_ofs: `Optional[List[VersionQueryInput]]`, default=None
+            List of version queries. See documentation of `read` method for more details.
+            i-th entry corresponds to i-th element of `symbols`.
+        date_ranges: `Optional[List[Optional[DateRangeInput]]]`, default=None
+            List of date ranges to filter the symbols.
+            i-th entry corresponds to i-th element of `symbols`.
+        row_ranges: `Optional[List[Optional[Tuple[int, int]]]]`, default=None
+            List of row ranges to filter the symbols.
+            i-th entry corresponds to i-th element of `symbols`.
+        columns: `List[List[str]]`, default=None
+            Which columns to return for a dataframe.
+            i-th entry restricts columns for the i-th element in `symbols`.
+        per_symbol_query_builders: `Optional[Union[QueryBuilder, List[QueryBuilder]]]`, default=None
+            Either a single QueryBuilder object to apply to all the symbols before they are joined, or a list of
+            QueryBuilder objects of the same length as the symbols list.
+            For more information see the documentation for the QueryBuilder class.
+            i-th entry corresponds to i-th element of `symbols`.
+
+        Examples
+        --------
+
+        Join 2 symbols together without any pre or post processing.
+
+        >>> df0 = pd.DataFrame(
+            {
+                "col1": [0.5],
+                "col2": [1],
+            },
+            index=[pd.Timestamp("2025-01-01")],
+        )
+        >>> df1 = pd.DataFrame(
+            {
+                "col3": ["hello"],
+                "col2": [2],
+            },
+            index=[pd.Timestamp("2025-01-02")],
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.concat("outer")
+        >>> lib.write("symbol0", df0)
+        >>> lib.write("symbol1", df1)
+        >>> lib.batch_read_and_join(["symbol0", "symbol1"], query_builder=q).data
+
+                                   col1     col2     col3
+            2025-01-01 00:00:00     0.5        1     None
+            2025-01-02 00:00:00     NaN        2  "hello"
+
+        >>> q = adb.QueryBuilder()
+        >>> q = q.concat("inner")
+        >>> lib.batch_read_and_join(["symbol0", "symbol1"], query_builder=q).data
+
+                                   col2
+            2025-01-01 00:00:00       1
+            2025-01-02 00:00:00       2
+
+        Returns
+        -------
+        VersionedItemWithJoin
+            Contains a .data field with the joined together data, and a list of VersionedItem objects describing the
+            version number, metadata, etc., of the symbols that were joined together.
+
+        Raises
+        -------
+        UserInputException
+            * If the first clause in `query_builder` is not a multi-symbol join
+            * If any subsequent clauses in `query_builder` are not single-symbol clauses
+            * If any of the specified symbols are recursively normalized
+        MissingDataException
+            * If a symbol or the version of symbol specified in as_ofs does not exist or has been deleted
+        SchemaException
+            * If the schema of symbols to be joined are incompatible. Examples of incompatible schemas include:
+                * Trying to join a Series to a DataFrame
+                * Different index types, including MultiIndexes with different numbers of levels
+                * Incompatible column types e.g. joining a string column to an integer column
+        """
+        implement_read_index = kwargs.get("implement_read_index", False)
         if columns:
             columns = [self._resolve_empty_columns(c, implement_read_index) for c in columns]
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)

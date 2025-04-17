@@ -582,3 +582,28 @@ def test_symbol_concat_pickled_data(lmdb_library):
 
     with pytest.raises(SchemaException):
         concat(lib.read_batch(["sym0", "sym1"], lazy=True)).collect()
+
+
+def test_symbol_concat_docstring_example(lmdb_library):
+    lib = lmdb_library
+    df0 = pd.DataFrame(
+        {
+            "col": [0, 1, 2, 3, 4],
+        },
+        index=pd.date_range("2025-01-01", freq="min", periods=5),
+    )
+    df1 = pd.DataFrame(
+        {
+            "col": [5, 6, 7, 8, 9],
+        },
+        index=pd.date_range("2025-01-01T00:05:00", freq="min", periods=5),
+    )
+    lib.write("symbol0", df0)
+    lib.write("symbol1", df1)
+    lazy_df0, lazy_df1 = lib.read_batch(["symbol0", "symbol1"], lazy=True).split()
+    lazy_df0 = lazy_df0[lazy_df0["col"] <= 2]
+    lazy_df1 = lazy_df1[lazy_df1["col"] <= 6]
+    lazy_df = concat([lazy_df0, lazy_df1])
+    lazy_df = lazy_df.resample("10min").agg({"col": "sum"})
+    received = lazy_df.collect().data
+    assert_frame_equal(pd.DataFrame({"col": [14]}, index=[pd.Timestamp("2025-01-01")]), received)

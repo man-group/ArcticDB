@@ -912,6 +912,66 @@ class QueryBuilder:
         return self
 
     def concat(self, join: str = "outer"):
+        """
+        Concatenate a list of symbols together. Should be the first clause in a QueryBuilder provided to either
+        NativeVersionStore.batch_read_and_join or Library.read_batch_and_join.
+
+        Parameters
+        ----------
+        join : str, default="outer"
+            Whether the columns of the input symbols should be inner or outer joined. Supported inputs are "inner" and
+            "outer".
+            * inner - Only columns present in ALL the input symbols will be present in the returned DataFrame.
+            * outer - Columns present in ANY of the input symbols will be present in the returned DataFrame. Columns
+              that are present in some input symbols but not in others will be backfilled according to their type using
+              the same rules as with dynamic schema.
+
+        Returns
+        -------
+        QueryBuilder
+            Modified QueryBuilder object.
+
+        Raises
+        -------
+        ArcticNativeException
+            The join argument is not one of "inner" or "outer"
+
+        Examples
+        --------
+        Join 2 symbols together without any pre or post processing.
+
+        >>> df0 = pd.DataFrame(
+            {
+                "col1": [0.5],
+                "col2": [1],
+            },
+            index=[pd.Timestamp("2025-01-01")],
+        )
+        >>> df1 = pd.DataFrame(
+            {
+                "col3": ["hello"],
+                "col2": [2],
+            },
+            index=[pd.Timestamp("2025-01-02")],
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.concat("outer")
+        >>> lib.write("symbol0", df0)
+        >>> lib.write("symbol1", df1)
+        >>> lib.batch_read_and_join(["symbol0", "symbol1"], query_builder=q).data
+
+                                   col1     col2     col3
+            2025-01-01 00:00:00     0.5        1     None
+            2025-01-02 00:00:00     NaN        2  "hello"
+
+        >>> q = adb.QueryBuilder()
+        >>> q = q.concat("inner")
+        >>> lib.batch_read_and_join(["symbol0", "symbol1"], query_builder=q).data
+
+                                   col2
+            2025-01-01 00:00:00       1
+            2025-01-02 00:00:00       2
+        """
         join_lowercase = join.lower()
         check(join_lowercase in ["outer", "inner"], f"concat 'join' argument must be one of 'outer' or 'inner', received {join}")
         self.clauses = self.clauses + [_ConcatClause(_JoinType.OUTER if join_lowercase == "outer" else _JoinType.INNER)]

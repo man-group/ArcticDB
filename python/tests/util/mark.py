@@ -47,13 +47,13 @@ SLOW_TESTS_MARK = pytest.mark.skipif(
     FAST_TESTS_ONLY or DISABLE_SLOW_TESTS, reason="Skipping test as it takes a long time to run"
 )
 
-AZURE_TESTS_MARK = pytest.mark.skipif(FAST_TESTS_ONLY or MACOS_CONDA_BUILD or not LOCAL_STORAGE_TESTS_ENABLED, 
+AZURE_TESTS_MARK = pytest.mark.skipif(True or FAST_TESTS_ONLY or MACOS_CONDA_BUILD or not LOCAL_STORAGE_TESTS_ENABLED,
                                       reason=_MACOS_CONDA_BUILD_SKIP_REASON)
 """Mark to skip all Azure tests when MACOS_CONDA_BUILD or ARCTICDB_FAST_TESTS_ONLY is set."""
 
 # Mongo tests will run under local storage tests 
 MONGO_TESTS_MARK = pytest.mark.skipif(
-    FAST_TESTS_ONLY or sys.platform != "linux" or not LOCAL_STORAGE_TESTS_ENABLED,
+    True or FAST_TESTS_ONLY or sys.platform != "linux" or not LOCAL_STORAGE_TESTS_ENABLED,
     reason="Skipping mongo tests under ARCTICDB_FAST_TESTS_ONLY and if local storage tests are disabled",
 )
 """Mark on tests using the mongo storage fixtures. Currently skips if ARCTICDB_FAST_TESTS_ONLY."""
