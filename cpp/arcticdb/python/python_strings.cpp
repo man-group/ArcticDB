@@ -94,7 +94,6 @@ void DynamicStringReducer::finalize() {
     if (row_ != total_rows_) {
         const auto diff = total_rows_ - row_;
         ptr_dest_ = python_util::fill_with_none(ptr_dest_, diff, handler_data_);
-        handler_data_.increment_none_refcount(diff);
         row_ = total_rows_;
     }
 }
