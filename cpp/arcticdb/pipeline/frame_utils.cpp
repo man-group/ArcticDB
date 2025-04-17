@@ -105,7 +105,10 @@ void adjust_slice_ranges(const std::shared_ptr<pipelines::PipelineContext>& pipe
         auto& slice = it->slice();
         if (std::next(it) != slice_and_keys.end()) {
             auto& next_slice = std::next(it)->slice();
-            increment_row_slice = next_slice.row_range.first != slice.row_range.first;
+            // Hash groupings produce slices that all have row ranges starting at 0 and the same col ranges, hence the
+            // second condition
+            increment_row_slice = next_slice.row_range.first != slice.row_range.first ||
+                                  next_slice.col_range.first == slice.col_range.first;
         } else {
             increment_row_slice = true;
         }
