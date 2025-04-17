@@ -74,6 +74,9 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
+      - name: Convert to Full Clone
+        run: git fetch --unshallow
+
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
