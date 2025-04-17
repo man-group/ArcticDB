@@ -35,6 +35,7 @@ from arcticdb.version_store.library import (
     ArcticInvalidApiUsageException,
 )
 
+from tests.conftest import FixtureMarks
 from tests.util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -46,7 +47,7 @@ from tests.util.storage_test import get_s3_storage_config
 
 from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
 
-
+@pytest.mark.installation
 @pytest.mark.storage
 def test_library_creation_deletion(arctic_client, lib_name):
     ac = arctic_client
@@ -77,6 +78,7 @@ def test_library_creation_deletion(arctic_client, lib_name):
         ac.delete_library(lib_name)
 
 
+@pytest.mark.installation
 @pytest.mark.storage
 def test_get_library(arctic_client, lib_name):
     ac = arctic_client
@@ -115,6 +117,8 @@ def test_get_library(arctic_client, lib_name):
         _ = ac.get_library(lib_name, create_if_missing=False, library_options=library_options)
 
 
+@pytest.mark.installation
+@FixtureMarks.lmdb_storage_extend_for_installation
 def test_create_library_enterprise_options_defaults(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
     lib = ac.create_library(lib_name)
@@ -166,7 +170,8 @@ def test_create_library_background_deletion_option_set_does_not_delete(lmdb_stor
 
     assert len(lt.find_keys(KeyType.TABLE_DATA))
 
-
+@pytest.mark.installation
+@FixtureMarks.lmdb_storage_extend_for_installation
 def test_modify_options_affect_in_memory_lib(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
     lib = ac.create_library(lib_name)
