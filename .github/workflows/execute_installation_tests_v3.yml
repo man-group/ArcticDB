@@ -69,7 +69,7 @@ jobs:
       fail-fast: false  
     env:
       conda_file: "environment_unix.yml"
-      arcticdb_version: ${{ inputs.arcticdb_version || '5.3.3' }}
+      arcticdb_version: ${{ inputs.arcticdb_version || '5.1.2' }}
 
     steps:
 
