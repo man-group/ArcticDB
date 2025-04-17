@@ -219,8 +219,6 @@ jobs:
         if: inputs.job_type == 'build-python-wheels'
         run: |
           if [ "${{matrix.os}}" = "macos" ]; then
-            # For macOS, we need to set up the build environment
-            brew install cmake ninja
             # Set up Python environment
             python3 -m pip install --upgrade pip
             pip3 install cibuildwheel==${{inputs.cibw_version}}
