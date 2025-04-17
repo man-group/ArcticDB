@@ -8,18 +8,15 @@
 #include <gtest/gtest.h>
 
 #include <arcticdb/version/version_store_api.hpp>
-#include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/util/allocator.hpp>
-#include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/util/native_handler.hpp>
 
-#include <filesystem>
 #include <chrono>
 #include <thread>
 

@@ -797,6 +797,7 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
                 }
                 );
     }
+    apply_global_refcounts(handler_data, read_options.output_format());
     return res;
 }
 

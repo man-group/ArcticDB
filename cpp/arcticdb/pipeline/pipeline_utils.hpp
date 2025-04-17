@@ -16,6 +16,8 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/type_handler.hpp>
 
+#include "python/python_handler_data.hpp"
+
 namespace arcticdb::pipelines {
 
 inline void apply_type_handlers(SegmentInMemory seg, std::any& handler_data, OutputFormat output_format) {
@@ -51,6 +53,7 @@ inline ReadResult read_result_from_single_frame(FrameAndDescriptor& frame_and_de
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
     reduce_and_fix_columns(pipeline_context, frame_and_desc.frame_, ReadOptions{}, handler_data).get();
     apply_type_handlers(frame_and_desc.frame_, handler_data, output_format);
+    apply_global_refcounts(handler_data, output_format);
     return create_python_read_result(VersionedItem{key}, output_format, std::move(frame_and_desc));
 }
 
