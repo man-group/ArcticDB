@@ -434,13 +434,13 @@ def test_symbol_concat_querybuilder_syntax(lmdb_library):
     lib.write("sym1", df_1)
     lib.write("sym2", df_2)
 
-    read_request_0 = ReadRequest("sym0")
+    sym_0 = "sym0"
     qb1 = QueryBuilder().date_range((pd.Timestamp(pd.Timestamp(3000)), None))
     read_request_1 = ReadRequest("sym1", query_builder=qb1)
     read_request_2 = ReadRequest("sym2", date_range=(None, pd.Timestamp(9000)))
 
     q = QueryBuilder().concat().resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
-    received = lib.read_batch_and_join([read_request_0, read_request_1, read_request_2], query_builder=q).data
+    received = lib.read_batch_and_join([sym_0, read_request_1, read_request_2], query_builder=q).data
 
     received = received.reindex(columns=sorted(received.columns))
     expected = pd.concat([df_0, df_1[1:], df_2[:4]]).resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
