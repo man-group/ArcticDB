@@ -69,7 +69,7 @@ jobs:
       fail-fast: false  
     env:
       conda_file: "environment_unix.yml"
-      arcticdb_version: ${{ inputs.arcticdb_version || 'latest' }}
+      arcticdb_version: ${{ inputs.arcticdb_version || '5.3.3' }}
 
     steps:
 
@@ -133,7 +133,7 @@ jobs:
             pip install your_module_name    
           elif [[ -n "$VER" ]]; then
             echo "Installing version $VER..."
-            pip install your_module_name==$VER  
+            micromamba install -n your_environment_name -c conda-forge your_module_name=$VAR
           else
             echo "Environment variable is not set or invalid!"
             exit 1  
