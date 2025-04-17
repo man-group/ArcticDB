@@ -91,7 +91,6 @@ jobs:
       - name: Setup macOS build environment
         if: matrix.os == 'macos'
         run: |
-          brew install cmake
           brew install sccache
           brew install bison   # required by thrift pulled via vcpkg
           echo "SCCACHE_DIR=/tmp/sccache" >> $GITHUB_ENV
