@@ -441,8 +441,7 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition
 }
 
 bool operator==(const SegmentInMemoryImpl& left, const SegmentInMemoryImpl& right) {
-    if(*left.descriptor_ != *right.descriptor_ ||
-       left.offset_ != right.offset_)
+    if(left.offset_ != right.offset_)
         return false;
 
     if(left.columns_.size() != right.columns_.size())

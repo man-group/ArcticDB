@@ -8,6 +8,8 @@
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/codec/compression/alp/constants.hpp>
 #include <arcticdb/codec/compression/alp/encoder.hpp>
+#include "alp_header.hpp"
+#include "fastlanes_common.hpp"
 
 namespace arcticdb {
 struct DeltaCompressData {
@@ -41,8 +43,7 @@ struct FFORCompressData {
 
 template <typename T>
 struct ALPCompressData {
-    alp::Scheme scheme_;
-    std::vector<alp::state<T>> states_;
+    alp::state<T> state_;
     size_t max_bit_width_ = 0UL;
     size_t max_exceptions_ = 0UL;
 };
@@ -55,7 +56,7 @@ struct FrequencyEncodingData {
     ValueContainer value_;
     int32_t count_ = 0;
     std::pair<ValueContainer, uint32_t> leader_;
-    std::optional<util::BitSet> bitset_;
+    std::shared_ptr<util::BitSet> bitset_;
     std::optional<size_t> expected_bytes_;
 };
 

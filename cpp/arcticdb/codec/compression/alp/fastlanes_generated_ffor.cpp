@@ -1,7 +1,7 @@
 #include "ffor.hpp"
 #include "macros.hpp"
 namespace fastlanes { namespace generated { namespace ffor::fallback { namespace scalar {
-void static ffor_0bit_8ow(const uint8_t* __restrict in, uint8_t* __restrict out, const uint8_t* __restrict a_base_p) {}
+void static ffor_0bit_8ow(const uint8_t* __restrict, uint8_t* __restrict, const uint8_t* __restrict) {}
 void static ffor_1bit_8ow(const uint8_t* __restrict in, uint8_t* __restrict out, const uint8_t* __restrict a_base_p) {
 	uint8_t tmp = 0U;
 	uint8_t src;
@@ -354,9 +354,9 @@ void static ffor_8bit_8ow(const uint8_t* __restrict in, uint8_t* __restrict out,
 		out -= 896;
 	}
 }
-void static ffor_0bit_16ow(const uint16_t* __restrict in,
-                           uint16_t* __restrict out,
-                           const uint16_t* __restrict a_base_p) {}
+void static ffor_0bit_16ow(const uint16_t* __restrict,
+                           uint16_t* __restrict,
+                           const uint16_t* __restrict) {}
 void static ffor_1bit_16ow(const uint16_t* __restrict in,
                            uint16_t* __restrict out,
                            const uint16_t* __restrict a_base_p) {
@@ -1773,9 +1773,9 @@ void static ffor_16bit_16ow(const uint16_t* __restrict in,
 		out -= 960;
 	}
 }
-void static ffor_0bit_32ow(const uint32_t* __restrict in,
-                           uint32_t* __restrict out,
-                           const uint32_t* __restrict a_base_p) {}
+void static ffor_0bit_32ow(const uint32_t* __restrict,
+                           uint32_t* __restrict,
+                           const uint32_t* __restrict) {}
 void static ffor_1bit_32ow(const uint32_t* __restrict in,
                            uint32_t* __restrict out,
                            const uint32_t* __restrict a_base_p) {
@@ -7376,9 +7376,9 @@ void static ffor_32bit_32ow(const uint32_t* __restrict in,
 		out -= 992;
 	}
 }
-void static ffor_0bit_64ow(const uint64_t* __restrict in,
-                           uint64_t* __restrict out,
-                           const uint64_t* __restrict a_base_p) {}
+void static ffor_0bit_64ow(const uint64_t* __restrict,
+                           uint64_t* __restrict,
+                           const uint64_t* __restrict) {}
 void static ffor_1bit_64ow(const uint64_t* __restrict in,
                            uint64_t* __restrict out,
                            const uint64_t* __restrict a_base_p) {

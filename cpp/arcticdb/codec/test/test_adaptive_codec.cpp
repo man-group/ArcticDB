@@ -5,44 +5,146 @@
 #include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/codec/scanner.hpp>
 
+#include <arcticdb/codec/test/encoding_test_common.hpp>
+
+#include <random>
+
 namespace arcticdb {
-/*
-TEST(AdaptiveCodec, SimpleRoundtrip) {
-    constexpr auto num_rows = 100 * 1024;
-    Column column{make_scalar_type(DataType::UINT64), num_rows, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
 
-    auto ptr = reinterpret_cast<uint64_t*>(column.buffer().data());
-    for(auto i = 0L; i < num_rows; ++i) {
-        ptr[i] = static_cast<uint64_t>(i % 1000);
+
+
+TEST(AdaptiveCodec, FFOR) {
+    constexpr auto num_rows =  100'000;
+    auto input = values_within_bitwidth<uint32_t>(20U, 7, 100'000);
+    constexpr auto data_type = DataType::UINT32;
+    auto column = std::make_shared<Column>(column_from_vector(input, make_scalar_type(data_type)));
+    SegmentInMemory seg;
+    FieldWrapper field_wrapper{make_scalar_type(data_type), "uints"};
+    seg.add_column(field_wrapper.field(), column);
+    seg.set_row_data(num_rows - 1);
+    seg.calculate_statistics();
+    auto scan_results = get_encodings(seg);
+    auto codec_opts = codec::default_adaptive_codec();
+    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
+    log::codec().info("Max compressed: {} Uncompressed: {} Encoded buffer: {}", max_compressed_size, uncompressed_size, encoded_buffer_size);
+    ASSERT_EQ(scan_results.value(0).first().type_, EncodingType::FFOR);
+    auto copy_seg = seg.clone();
+    auto encoded = encode_v2(std::move(seg), codec_opts);
+    auto decoded = decode_segment(encoded);
+    ASSERT_EQ(decoded, copy_seg);
+}
+
+TEST(AdaptiveCodec, BitPack) {
+    constexpr auto num_rows   =  100'000;
+    auto input = values_within_bitwidth<uint32_t>(0U, 7, 100'000);
+    constexpr auto data_type = DataType::UINT32;
+    auto column = std::make_shared<Column>(column_from_vector(input, make_scalar_type(data_type)));
+    SegmentInMemory seg;
+    FieldWrapper field_wrapper{make_scalar_type(data_type), "uints"};
+    seg.add_column(field_wrapper.field(), column);
+    seg.set_row_data(num_rows - 1);
+    seg.calculate_statistics();
+    auto scan_results = get_encodings(seg);
+    auto codec_opts = codec::default_adaptive_codec();
+    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
+    log::codec().info("Max compressed: {} Uncompressed: {} Encoded buffer: {}", max_compressed_size, uncompressed_size, encoded_buffer_size);
+    ASSERT_EQ(scan_results.value(0).first().type_, EncodingType::BITPACK);
+    auto copy_seg = seg.clone();
+    auto encoded = encode_v2(std::move(seg), codec_opts);
+    auto decoded = decode_segment(encoded);
+    ASSERT_EQ(decoded, copy_seg);
+}
+
+TEST(AdaptiveCodec, Delta) {
+    constexpr auto num_rows =  100'000;
+    auto input = delta_values<uint32_t>(1000U, 7, 100'000);
+    constexpr auto data_type = DataType::UINT32;
+    auto column = std::make_shared<Column>(column_from_vector(input, make_scalar_type(data_type)));
+    SegmentInMemory seg;
+    FieldWrapper field_wrapper{make_scalar_type(data_type), "uints"};
+    seg.add_column(field_wrapper.field(), column);
+    seg.set_row_data(num_rows - 1);
+    seg.calculate_statistics();
+    auto scan_results = get_encodings(seg);
+    auto codec_opts = codec::default_adaptive_codec();
+    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
+    log::codec().info("Max compressed: {} Uncompressed: {} Encoded buffer: {}", max_compressed_size, uncompressed_size, encoded_buffer_size);
+    ASSERT_EQ(scan_results.value(0).first().type_, EncodingType::DELTA);
+    auto copy_seg = seg.clone();
+    auto encoded = encode_v2(std::move(seg), codec_opts);
+    auto decoded = decode_segment(encoded);
+    ASSERT_EQ(decoded, copy_seg);
+}
+
+TEST(AdaptiveCodec, Constant) {
+    constexpr auto num_rows =  100'000;
+
+    std::vector<uint32_t> input;
+    input.reserve(num_rows);
+    for (std::size_t i = 0; i < num_rows; ++i) {
+        input.push_back(42);
     }
-    column.set_row_data(num_rows - 1);
 
-    using TDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
-
-    auto column_data = column.data();
-
-    AdaptiveEncoder<TypedBlockData, TDT> encoder;
-    auto scan_results = predicted_optimal_encodings(column_data);
-    SizeResult size_result;
-    select_encoding_for_column(column_data, scan_results, size_result);
-    Buffer compressed{size_result.max_compressed_bytes_};
-    std::ptrdiff_t pos = 0UL;
-    EncodedBlock encoded_block;
-
-    encoder.encode_data(column_data, compressed, pos, encoded_block, scan_results.first());
-
-    Column output{make_scalar_type(DataType::UINT64), num_rows, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
-    AdaptiveDecoder decoder;
-    decoder.decode_block(
-        uint32_t{1},
-        compressed.data(),
-        encoded_block.out_bytes(),
-        output.buffer().data(),
-        column.bytes()
-        );
-
-    output.set_row_data(num_rows - 1);
-    ASSERT_EQ(column, output);
+    constexpr auto data_type = DataType::UINT32;
+    auto column = std::make_shared<Column>(column_from_vector(input, make_scalar_type(data_type)));
+    SegmentInMemory seg;
+    FieldWrapper field_wrapper{make_scalar_type(data_type), "uints"};
+    seg.add_column(field_wrapper.field(), column);
+    seg.set_row_data(num_rows - 1);
+    seg.calculate_statistics();
+    auto scan_results = get_encodings(seg);
+    auto codec_opts = codec::default_adaptive_codec();
+    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
+    log::codec().info("Max compressed: {} Uncompressed: {} Encoded buffer: {}", max_compressed_size, uncompressed_size, encoded_buffer_size);
+    ASSERT_EQ(scan_results.value(0).first().type_, EncodingType::CONSTANT );
+    auto copy_seg = seg.clone();
+    auto encoded = encode_v2(std::move(seg), codec_opts);
+    auto decoded = decode_segment(encoded);
+    ASSERT_EQ(decoded, copy_seg);
 }
-*/
+
+
+TEST(AdaptiveCodec, Frequency) {
+    constexpr auto num_rows =  100'000;
+
+    auto input = values_with_duplicates<uint32_t>(num_rows, 0.97, 42);
+
+    constexpr auto data_type = DataType::UINT32;
+    auto column = std::make_shared<Column>(column_from_vector(input, make_scalar_type(data_type)));
+    SegmentInMemory seg;
+    FieldWrapper field_wrapper{make_scalar_type(data_type), "uints"};
+    seg.add_column(field_wrapper.field(), column);
+    seg.set_row_data(num_rows - 1);
+    seg.calculate_statistics();
+    auto scan_results = get_encodings(seg);
+    auto codec_opts = codec::default_adaptive_codec();
+    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
+    log::codec().info("Max compressed: {} Uncompressed: {} Encoded buffer: {}", max_compressed_size, uncompressed_size, encoded_buffer_size);
+    ASSERT_EQ(scan_results.value(0).first().type_, EncodingType::FREQUENCY);
+    auto copy_seg = seg.clone();
+    auto encoded = encode_v2(std::move(seg), codec_opts);
+    auto decoded = decode_segment(encoded);
+    ASSERT_EQ(decoded, copy_seg);
 }
+
+TEST(AdaptiveCodec, ALPRD) {
+    constexpr auto num_rows =  100'000;
+    auto input = random_doubles(100'000, -1000.0, 1000.0);
+    constexpr auto data_type = DataType::FLOAT64;
+    auto column = std::make_shared<Column>(column_from_vector(input, make_scalar_type(data_type)));
+    SegmentInMemory seg;
+    FieldWrapper field_wrapper{make_scalar_type(data_type), "uints"};
+    seg.add_column(field_wrapper.field(), column);
+    seg.set_row_data(num_rows - 1);
+    seg.calculate_statistics();
+    auto scan_results = get_encodings(seg);
+    auto codec_opts = codec::default_adaptive_codec();
+    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
+    log::codec().info("Max compressed: {} Uncompressed: {} Encoded buffer: {}", max_compressed_size, uncompressed_size, encoded_buffer_size);
+    ASSERT_EQ(scan_results.value(0).first().type_, EncodingType::ALP);
+    auto copy_seg = seg.clone();
+    auto encoded = encode_v2(std::move(seg), codec_opts);
+    auto decoded = decode_segment(encoded);
+    ASSERT_EQ(decoded, copy_seg);
+}
+} // namespace arcticdb

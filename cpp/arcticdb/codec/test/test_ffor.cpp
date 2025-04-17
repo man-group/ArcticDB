@@ -11,41 +11,43 @@ protected:
     static constexpr size_t values_per_block = 1024;
 
     template<typename T>
-    void verify_roundtrip(const std::vector<T>& original, TypeDescriptor type) {
+    void verify_roundtrip(const std::vector<T> &original, TypeDescriptor type) {
         ASSERT_FALSE(original.empty());
-
-        std::vector<T> compressed(original.size() + header_size_in_t<FForHeader<T>, T>());
-        std::vector<T> decompressed(original.size());
         auto wrapper = from_vector(original, type);
 
         auto ffor_data = FForCompressor<T>::reference_and_bitwidth(wrapper.data_);
+        size_t expected_size_bytes = FForCompressor<T>::compressed_size(ffor_data, original.size());
+        size_t expected_size_elems = expected_size_bytes / sizeof(T);
+
+        std::vector<T> compressed(expected_size_elems + 1, 0);
+        T guard_val = static_cast<T>(0xDEADBEEF);
+        compressed[expected_size_elems] = guard_val;
+
+        std::vector<T> decompressed(original.size());
+
         FForCompressor<T> ffor{ffor_data};
-        size_t compressed_size = ffor.compress(
+        size_t actual_compressed_bytes = ffor.compress(
             wrapper.data_,
             compressed.data(),
-            original.size()
+            expected_size_bytes
         );
+        ASSERT_EQ(actual_compressed_bytes, expected_size_bytes);
 
-        const auto header_size = header_size_in_t<FForHeader<T>, T>();
-        ASSERT_GE(compressed_size, header_size);
+        EXPECT_EQ(compressed[expected_size_elems], guard_val) << "Compression wrote beyond the reported boundaries";
 
-        const auto* header = reinterpret_cast<const FForHeader<T>*>(compressed.data());
+        const auto *header = reinterpret_cast<const FForHeader<T> *>(compressed.data());
         EXPECT_EQ(header->num_rows, original.size());
         EXPECT_LE(header->bits_needed, sizeof(T) * 8);
 
         T min_value = *std::min_element(original.begin(), original.end());
         EXPECT_EQ(header->reference, min_value);
 
-        auto result = FForDecompressor<T>::decompress(
-            compressed.data(),
-            decompressed.data()
-        );
+        auto result = FForDecompressor<T>::decompress(compressed.data(), decompressed.data());
         EXPECT_EQ(result.uncompressed_, original.size() * sizeof(T));
 
         for (size_t i = 0; i < original.size(); ++i) {
-            if(original[i] != decompressed[i])
+            if (original[i] != decompressed[i])
                 log::version().debug("poops");
-
             EXPECT_EQ(original[i], decompressed[i]) << "Mismatch at index " << i;
         }
     }
@@ -53,6 +55,12 @@ protected:
 
 TEST_F(FForCodecTest, SingleBlock) {
     std::vector<uint32_t> data(values_per_block);
+    std::iota(data.begin(), data.end(), 1000);
+    verify_roundtrip(data, make_scalar_type(DataType::UINT32));
+}
+
+TEST_F(FForCodecTest, VerySmallArray) {
+    std::vector<uint32_t> data(12);
     std::iota(data.begin(), data.end(), 1000);
     verify_roundtrip(data, make_scalar_type(DataType::UINT32));
 }

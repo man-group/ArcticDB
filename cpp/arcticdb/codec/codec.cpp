@@ -443,10 +443,8 @@ void decode_v2(const Segment& segment,
             util::check(data!=end, "Reached end of input block with {} fields to decode", fields_size-i);
             if(auto col_index = res.column_index(field_name)) {
                 auto& col = res.column(static_cast<position_t>(*col_index));
-
                 data += decode_field(res.field(*col_index).type(), *encoded_field, data, col, col.opt_sparse_map(), hdr.encoding_version());
                 col.set_statistics(encoded_field->get_statistics());
-
                 seg_row_count = std::max(seg_row_count, calculate_last_row(col));
             } else {
                 data += encoding_sizes::field_compressed_size(*encoded_field) + sizeof(ColumnMagic);

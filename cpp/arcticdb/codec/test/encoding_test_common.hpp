@@ -6,6 +6,7 @@
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/column_data.hpp>
+#include <arcticdb/column_store/column.hpp>
 
 namespace arcticdb {
 
@@ -101,6 +102,95 @@ ColumnDataWrapper from_vector(const std::vector<T>& data, TypeDescriptor type) {
     ChunkedBuffer buffer;
     buffer.add_external_block(reinterpret_cast<const uint8_t*>(data.data()), data.size() * sizeof(T), 0);
     return {std::move(buffer), type, data.size()};
+}
+
+
+template <typename T>
+Column column_from_vector(const std::vector<T>& data, TypeDescriptor type) {
+    Column column{type, data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+    const auto bytes =  data.size() * sizeof(T);
+    memcpy(column.ptr_cast<T>(0, bytes), data.data(), bytes);
+    return column;
+}
+
+
+template <typename T>
+std::vector<T> values_within_bitwidth(T start, unsigned int bitwidth, std::size_t count) {
+    T max_increment = static_cast<T>(1) << bitwidth;
+    T max_value = start + max_increment - 1;
+
+    util::check(max_value >= start, "Overflow detected: start value plus bitwidth exceeds type limits.");
+    util::check(max_value <= std::numeric_limits<T>::max(),"Bitwidth too large for given type");
+
+    std::random_device rd;
+    std::mt19937 engine(rd());
+    std::uniform_int_distribution<T> dist(start, max_value);
+
+    std::vector<T> output;
+    output.reserve(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        output.push_back(dist(engine));
+    }
+    return output;
+}
+
+template <typename T>
+std::vector<T> delta_values(T start, unsigned int bitwidth, std::size_t count) {
+    T max_increment = static_cast<T>(1) << bitwidth;
+
+    std::random_device rd;
+    std::mt19937 engine(rd());
+    std::uniform_int_distribution<T> dist(0, max_increment);
+
+    std::vector<T> output;
+    output.reserve(count);
+    T value = start;
+    for (std::size_t i = 0; i < count; ++i) {
+        output.push_back(value);
+        value += dist(engine);
+    }
+    return output;
+}
+
+template <typename T>
+std::vector<T> values_with_duplicates(
+    size_t count,
+    double percentage,
+    const T &duplicateValue) {
+    std::random_device rd;
+    std::mt19937 mt(rd());
+    std::uniform_int_distribution<int> dist(0, 100);
+
+    std::vector<T> vec(count);
+    for (size_t i = 0; i < count; ++i) {
+        vec[i] = dist(mt);
+    }
+
+    size_t repeats = static_cast<size_t>(std::round(count * percentage));
+    if (repeats > count) {
+        repeats = count;
+    }
+
+    std::vector<size_t> indices(count);
+    std::iota(indices.begin(), indices.end(), 0);
+    std::shuffle(indices.begin(), indices.end(), mt);
+
+    for (size_t i = 0; i < repeats; ++i) {
+        vec[indices[i]] = duplicateValue;
+    }
+
+    return vec;
+}
+
+inline std::vector<double> random_doubles(size_t num_rows = 1024, double min = 0.0, double max = 1000.0) {
+    std::default_random_engine generator(43);
+    auto dist = std::uniform_real_distribution<double>(min, max);
+    std::vector<double> data;
+    data.reserve(num_rows);
+    for(auto i = 0UL; i < num_rows; ++i) {
+        data.push_back(dist(generator));
+    }
+    return data;
 }
 
 } //namespace arcticdb

@@ -6,6 +6,7 @@
  */
 #include <gtest/gtest.h>
 #include <arcticdb/codec/compression/constant.hpp>
+#include <arcticdb/codec/test/encoding_test_common.hpp>
 
 #include <random>
 
@@ -18,8 +19,8 @@ TEST(ConstantEncoding, Basic) {
     auto estimated_size = encoder.max_required_bytes(data.data(), data.size());
     ASSERT_EQ(estimated_size.has_value(), true);
     std::vector<uint8_t> output(*estimated_size);
-
-    auto bytes = encoder.compress(data.data(), data.size(), output.data());
+    auto column_data = from_vector(data, make_scalar_type(DataType::UINT32));
+    auto bytes = encoder.compress(column_data.data_, reinterpret_cast<uint32_t*>(output.data()), *estimated_size);
     ASSERT_EQ(bytes, 12);
     std::vector<uint32_t> decompressed(data.size());
     auto result = ConstantDecompressor<InputType>::decompress(output.data(), decompressed.data());

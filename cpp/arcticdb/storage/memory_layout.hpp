@@ -64,7 +64,7 @@ struct PassthroughCodec {
 
 enum class EncodingType : uint16_t {
     PLAIN,
-    FFOR ,
+    FFOR,
     DELTA,
     FREQUENCY,
     CONSTANT,
@@ -73,6 +73,7 @@ enum class EncodingType : uint16_t {
     BITPACK,
     COUNT
 };
+
 
 struct AdaptiveCodec {
     static constexpr Codec type_ = Codec::ADAPTIVE;
@@ -86,6 +87,11 @@ struct AdaptiveCodec {
     EncodingType encoding_type_;
     uint16_t unused_ = 0;
     uint16_t padding_ = 0;
+};
+
+
+struct DeltaEncoding {
+
 };
 
 static_assert(sizeof(AdaptiveCodec) == encoding_size);
@@ -256,9 +262,6 @@ struct FrameDescriptor {
     FrameMetadataEncoding metadata_encoding_ = FrameMetadataEncoding::PROTOBUF;
 };
 
-// A SegmentDescriptor is present in every segment, and describes the
-// contents of this particular segment, rather than other segments
-// to which it refers
 struct SegmentDescriptor {
     SortedValue sorted_ = SortedValue::UNKNOWN;
     uint64_t compressed_bytes_ = 0UL;

@@ -107,7 +107,7 @@ size_t compress_delta_remainder(const T* input, size_t count, T* output, size_t 
 
     for (size_t i = 1; i < count; ++i) {
         std::make_unsigned_t<T> delta = input[i] - prev;
-        ARCTICDB_TRACE(log::codec(), "Value {}, delta = {}", input[i], delta);
+        //ARCTICDB_TRACE(log::codec(), "Value {}, delta = {}", input[i], delta);
         scalar_pack(delta, bit_width, bit_pos, current_word, data_out);
         prev = input[i];
     }
@@ -261,7 +261,7 @@ public:
             total_size += calc_remainder_size<T>(remainder_, remainder_bit_width_);
         }
         ARCTICDB_DEBUG(log::codec(), "Total size including remainder: {}", total_size);
-        return total_size;
+        return total_size * sizeof(T);
     }
 
     void block_compress(
@@ -282,7 +282,7 @@ public:
         );
     }
 
-    size_t compress(ColumnData data, T* output, size_t output_size) {
+    size_t compress(ColumnData data, T* output, size_t expected_bytes) {
         size_t output_offset = 0;
         util::check(simd_bit_width_ < h::num_bits, "Bit width is {}, no compression possible", h::num_bits);
 
@@ -320,8 +320,9 @@ public:
             );
         }
         ARCTICDB_DEBUG(log::codec(), "Compressed to {} bytes", output_offset);
-        util::check(output_offset <= output_size, "Buffer overflow on compression: {} > {}", output_offset, output_size);
-        return output_offset;
+        const auto output_bytes = output_offset * sizeof(T);
+        util::check(output_bytes <= expected_bytes, "Buffer overflow on compression: {} > {}", output_bytes, expected_bytes);
+        return output_bytes;
     }
 
     EncoderData data() {
@@ -333,7 +334,6 @@ template<typename T>
 class DeltaDecompressor {
     using Header = DeltaSize;
     using h = Helper<T>;
-    static constexpr size_t BLOCK_SIZE = 1024;
 
 private:
     const Header *header_;
@@ -387,7 +387,7 @@ public:
             );
         }
 
-        return {.compressed_ = input_offset, .uncompressed_ = header_->num_rows_ * sizeof(T)};
+        return {.compressed_ = input_offset * sizeof(T), .uncompressed_ = header_->num_rows_ * sizeof(T)};
     }
 
     static size_t compressed_size(const T* input) {
@@ -409,7 +409,25 @@ public:
 
             input_offset += calc_remainder_size<T>(remainder, remainder_metadata->bit_width);
         }
-        return input_offset;
+        return input_offset * sizeof(T);
+    }
+
+
+    static size_t compressed_size(const DeltaCompressData& data, size_t num_rows) {
+        const size_t full_blocks = num_rows / BLOCK_SIZE;
+        size_t total_size = 0;
+
+        if (full_blocks > 0) {
+            total_size = delta_header_size<T>() + full_blocks * calculate_block_size<T>(data.simd_bit_width_);
+        } else {
+            total_size = sizeof(DeltaSize) / sizeof(T);
+        }
+
+        const size_t remainder = num_rows % BLOCK_SIZE;
+        if (remainder > 0) {
+            total_size += calc_remainder_size<T>(remainder, data.remainder_bit_width_);
+        }
+        return total_size;
     }
 };
 

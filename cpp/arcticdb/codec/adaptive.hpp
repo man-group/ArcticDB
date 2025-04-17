@@ -22,7 +22,7 @@ inline EncodedBlock block_from_scan_result(const EncodingScanResult &scan_result
 
     block.in_bytes_ = static_cast<uint32_t>(scan_result.original_size_);
     block.out_bytes_ = static_cast<uint32_t>(scan_result.estimated_size_);
-    block.encoder_version_ = 1;
+    block.encoder_version_ = 2;
     block.is_shape_ = is_shape;
 
     BlockCodecImpl codec;
@@ -32,20 +32,20 @@ inline EncodedBlock block_from_scan_result(const EncodingScanResult &scan_result
     case EncodingType::PLAIN:break;
 
     case EncodingType::FFOR: {
-        util::check(std::holds_alternative<FFORCompressData>(scan_result.data_),
-                    "Expected FFOR compress data for codec type");
-        const auto &ffor = std::get<FFORCompressData>(scan_result.data_);
-        memcpy(codec.data_.data(), &ffor, sizeof(ffor));
+        util::check(std::holds_alternative<FFORCompressData>(scan_result.data_), "Expected FFOR compress data for codec type");
+        //const auto &ffor = std::get<FFORCompressData>(scan_result.data_);
+        //memcpy(codec.data_.data(), &ffor, sizeof(ffor));
         break;
     }
     case EncodingType::DELTA: {
         util::check(std::holds_alternative<DeltaCompressData>(scan_result.data_),
                     "Expected delta compress data for codec type");
-        const auto &delta = std::get<DeltaCompressData>(scan_result.data_);
-        memcpy(codec.data_.data(), &delta, std::min(BlockCodec::DataSize, sizeof(delta)));
+        //const auto &delta = std::get<DeltaCompressData>(scan_result.data_);
+        //memcpy(codec.data_.data(), &delta, std::min(BlockCodec::DataSize, sizeof(delta)));
         break;
     }
-    default:codec.type_ = Codec::UNKNOWN;
+    default:
+        //codec.type_ = Codec::UNKNOWN;
         break;
     }
 
@@ -111,31 +111,43 @@ struct AdaptiveEncoder {
             ColumnData column_data,
             Buffer &out,
             std::ptrdiff_t &pos,
-            EncodedBlock &output_block,
+            EncodedFieldImpl &field,
             EncodingScanResult &result) {
         using T = TD::DataTypeTag::raw_type;
-        output_block = block_from_scan_result(result, false);
+        auto output_block = field.mutable_ndarray()->add_values(EncodingVersion::V2);
+        *output_block = block_from_scan_result(result, false);
         if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
             if constexpr (std::is_unsigned_v<T>) {
                 switch (result.type_) {
+                case EncodingType::CONSTANT: {
+                    pos += ConstantCompressor<T>::compress(column_data, reinterpret_cast<T *>(out.data() + pos), result.estimated_size_);
+                    break;
+                }
                 case EncodingType::DELTA: {
                     DeltaCompressor<T> delta(std::get<DeltaCompressData>(result.data_));
                     pos += delta.compress(column_data, reinterpret_cast<T *>(out.data() + pos), result.estimated_size_);
+                    break;
                 }
                 case EncodingType::FFOR: {
                     FForCompressor<T> ffor(std::get<FFORCompressData>(result.data_));
                     pos += ffor.compress(column_data, reinterpret_cast<T *>(out.data() + pos), result.estimated_size_);
+                    break;
                 }
                 case EncodingType::BITPACK: {
                     BitPackCompressor<T> bitpack(std::get<BitPackData>(result.data_));
                     pos += bitpack.compress(column_data, reinterpret_cast<T *>(out.data() + pos), result.estimated_size_);
+                    break;
                 }
                 case EncodingType::PLAIN: {
                     pos += PlainCompressor<T>::compress(column_data, reinterpret_cast<T *>(out.data() + pos), result.estimated_size_);
+                    break;
                 }
                 case EncodingType::FREQUENCY: {
                     FrequencyCompressor<T> frequency(std::get<FrequencyEncodingData>(result.data_));
-                    pos += frequency.compress(column_data, result.original_size_ / sizeof(T), out.data() + pos, result.estimated_size_);
+                    const auto bytes = frequency.compress(column_data, result.original_size_ / sizeof(T), out.data() + pos, result.estimated_size_);
+                    output_block->set_out_bytes(bytes);
+                    pos += bytes;
+                    break;
                 }
                 default:
                     util::raise_rte("Unknown encoding type in adaptive integer encoding: {}", static_cast<uint16_t>(result.type_));
@@ -147,14 +159,18 @@ struct AdaptiveEncoder {
             switch (result.type_) {
             case EncodingType::ALP: {
                 ALPCompressor<T> compressor{std::move(std::get<ALPCompressData<T>>(result.data_))};
-                pos += compressor.compress(column_data, reinterpret_cast<T *>(out.data() + pos), result.estimated_size_);
+                const auto bytes = compressor.compress(column_data, reinterpret_cast<T *>(out.data() + pos), result.estimated_size_);
+                output_block->set_out_bytes(bytes);
+                pos += bytes;
             }
             case EncodingType::PLAIN: {
                 pos += PlainCompressor<T>::compress(column_data, reinterpret_cast<T *>(out.data() + pos), result.estimated_size_);
             }
             case EncodingType::FREQUENCY: {
                 FrequencyCompressor<T> frequency(std::get<FrequencyEncodingData>(result.data_));
-                pos += frequency.compress(column_data, result.original_size_ / sizeof(T), out.data() + pos, result.estimated_size_);
+                const auto bytes = frequency.compress(column_data, result.original_size_ / sizeof(T), out.data() + pos, result.estimated_size_);
+                output_block->set_out_bytes(bytes);
+                pos += bytes;
             }
             default:
                 util::raise_rte("Unknown encoding type in adaptive floating-point encoding: {}", static_cast<uint16_t>(result.type_));
@@ -167,7 +183,7 @@ struct AdaptiveEncoder {
 
 inline void check_result(EncodingType type, const DecompressResult &result, size_t in_bytes, size_t out_bytes) {
     util::check(result.uncompressed_ == out_bytes, "Uncompressed size mismatch in {} decoder: {} != {}", static_cast<uint16_t>(type), result.uncompressed_, out_bytes);
-    util::check(result.compressed_ == in_bytes, "Uncompressed size mismatch in {} decoder: {} != {}", static_cast<uint16_t>(type), result.compressed_, in_bytes);
+    util::check(result.compressed_ == in_bytes, "Compressed size mismatch in {} decoder: {} != {}", static_cast<uint16_t>(type), result.compressed_, in_bytes);
 }
 
 struct AdaptiveDecoder {

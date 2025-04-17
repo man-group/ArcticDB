@@ -18,8 +18,8 @@ static constexpr int TOO_SMALL_TO_COMPRESS = 32;
 class EncodingsList {
     uint64_t data_;
 
-    static constexpr uint8_t to_pos(EncodingType encoding) {
-        return 1 << (static_cast<uint8_t>(encoding));
+    static constexpr uint64_t to_pos(EncodingType encoding) {
+        return 1UL << (static_cast<uint64_t>(encoding));
     }
 
 public:
@@ -45,6 +45,7 @@ public:
 };
 
 constexpr EncodingsList IntegerEncodings {
+    EncodingType::BITPACK,
     EncodingType::CONSTANT,
     EncodingType::DELTA,
     EncodingType::FFOR,
@@ -93,6 +94,7 @@ inline EncodingsList viable_encodings(
 
 inline EncodingScanResultSet predicted_optimal_encodings(ColumnData column_data) {
     const auto data_type = column_data.type().data_type();
+    util::check(column_data.has_field_stats(), "Expected column statistics in adaptive endoding");
     const auto field_stats = column_data.field_stats();
     const auto row_count = column_data.row_count();
     const auto original_size = column_data.buffer().bytes();
@@ -102,7 +104,7 @@ inline EncodingScanResultSet predicted_optimal_encodings(ColumnData column_data)
     
     if(is_viable(EncodingType::CONSTANT, field_stats, data_type, row_count)) {
         auto size = deterministic_size(EncodingType::CONSTANT, field_stats, data_type, row_count);
-        results.try_emplace(create_scan_result(EncodingType::CONSTANT, *size, Constant::speed_factor(), original_size, true));
+        results.try_emplace(create_scan_result(EncodingType::CONSTANT, size->first, Constant::speed_factor(), original_size, true, std::move(size->second)));
         return results;
     }
 
@@ -114,7 +116,7 @@ inline EncodingScanResultSet predicted_optimal_encodings(ColumnData column_data)
         // Could potentially introduce a scaling factor for deterministic results vs estimated results, i.e. try
         // encodings with a guaranteed size unless the estimated size indicates it will be substantially smaller.
         if(auto exact_size = deterministic_size(type, column_data.field_stats(), data_type, column_data.row_count())) {
-            results.try_emplace(create_scan_result(type, *exact_size, speed_factor(type), original_size, true));
+            results.try_emplace(create_scan_result(type, exact_size->first, speed_factor(type), original_size, true, std::move(exact_size->second)));
         } else {
             auto scan_result = estimated_size(
                 type,
@@ -128,6 +130,7 @@ inline EncodingScanResultSet predicted_optimal_encodings(ColumnData column_data)
         }
     }
 
+    results.sort();
     return results;
 }
 
@@ -188,7 +191,7 @@ inline void select_encoding_for_column(const ColumnData& column_data, EncodingSc
         EncoderData encoder_data;
         auto scanned_result = max_compressed_size(encodings_set[i].type_, column_data.field_stats(), column_data.type().data_type(), column_data.row_count(), column_data, encoder_data);
         if(is_acceptable_result(scanned_result)) {
-            encodings_set.select(i);
+            encodings_set.select(i, std::move(scanned_result));
             result.max_compressed_bytes_ += encodings_set[i].estimated_size_;
             result.uncompressed_bytes_ += encodings_set[i].original_size_;
             found_encoding = true;
@@ -197,8 +200,9 @@ inline void select_encoding_for_column(const ColumnData& column_data, EncodingSc
     }
 
     if(!found_encoding) {
+        ARCTICDB_DEBUG(log::codec(), "Failed to find a successful encoding for column, using plain encoding");
         auto size = encodings_set[0].original_size_;
-        encodings_set[0] = create_scan_result(EncodingType::CONSTANT, size, speed_factor(EncodingType::CONSTANT), size, true);
+        encodings_set[0] = create_scan_result(EncodingType::CONSTANT, size, speed_factor(EncodingType::CONSTANT), size, true, std::monostate{});
         encodings_set.select(0);
     }
 }

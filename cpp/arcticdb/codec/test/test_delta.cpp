@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <arcticdb/codec/compression/delta.hpp>
+#include <arcticdb/codec/test/encoding_test_common.hpp>
 
 #include <vector>
 #include <random>
@@ -9,24 +10,7 @@
 
 namespace arcticdb {
 
-struct ColumnDataWrapper {
-    ColumnDataWrapper(ChunkedBuffer&& buffer, TypeDescriptor type, size_t row_count) :
-        buffer_(std::move(buffer)),
-        data_(&buffer_, nullptr, type, nullptr, nullptr, row_count) {
-    }
-
-    ChunkedBuffer buffer_;
-    ColumnData data_;
-};
-
-template <typename T>
-ColumnDataWrapper from_vector(const std::vector<T>& data, TypeDescriptor type) {
-    ChunkedBuffer buffer;
-    buffer.add_external_block(reinterpret_cast<const uint8_t*>(data.data()), data.size() * sizeof(T), 0);
-    return {std::move(buffer), type, data.size()};
-}
-
-class CompressionTest : public ::testing::Test {
+class DeltaCompressionTest : public ::testing::Test {
 protected:
     std::mt19937 rng{42};
 
@@ -59,50 +43,73 @@ protected:
         DeltaCompressor<T> compressor;
         DeltaDecompressor<T> decompressor{};
         auto wrapper = from_vector(input, type);
-        size_t compressed_size = compressor.scan(wrapper.data_, input.size());
-        std::vector<T> compressed(compressed_size);
 
-        std::vector<T> output(input.size());
-        compressor.compress(wrapper.data_, compressed.data(), compressed_size);
+        size_t expected_bytes = compressor.scan(wrapper.data_, input.size());
+        ASSERT_GT(expected_bytes, 0) << "Scan returned zero size";
+
+        ASSERT_EQ(expected_bytes % sizeof(T), 0) << "Scan returned size (" << expected_bytes << " bytes) is not a multiple of element size (" << sizeof(T) << ")";
+        size_t expected_elements = expected_bytes / sizeof(T);
+
+        // Choose a red zone value that fits in T.
+        T red_zone;
+        if constexpr (sizeof(T) == 1) {
+            red_zone = static_cast<T>(0xAD);
+        } else if constexpr (sizeof(T) == 2) {
+            red_zone = static_cast<T>(0xDEAD);
+        } else if constexpr (sizeof(T) == 4) {
+            red_zone = static_cast<T>(0xDEADBEEF);
+        } else {
+            red_zone = static_cast<T>(0xDEADBEEFDEADBEEFULL);
+        }
+        std::vector<T> compressed(expected_elements + 1, T{0});
+        compressed[expected_elements] = red_zone; // Write the red zone value
+
+        size_t compressed_bytes = compressor.compress(wrapper.data_, compressed.data(), expected_bytes);
+        ASSERT_EQ(compressed_bytes, expected_bytes)
+                        << "Actual compressed size (" << compressed_bytes * sizeof(T)
+                        << " bytes) does not match expected size (" << expected_bytes << " bytes)";
+
+        ASSERT_EQ(compressed[expected_elements], red_zone) << "Red zone overwritten";
 
         decompressor.init(compressed.data());
         ASSERT_EQ(decompressor.num_rows(), input.size());
+        std::vector<T> output(input.size());
         decompressor.decompress(compressed.data(), output.data());
         ASSERT_EQ(output, input);
     }
 };
 
-TEST_F(CompressionTest, SingleFullBlock) {
+TEST_F(DeltaCompressionTest, SingleFullBlock) {
     auto input = generate_data<uint16_t>(1024, 0, 1);
     verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
-TEST_F(CompressionTest, SinglePartialBlock) {
+TEST_F(DeltaCompressionTest, SinglePartialBlock) {
     auto input = generate_data<uint16_t>(500, 0, 1);
     verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
-TEST_F(CompressionTest, SmallPartialBlock) {
+TEST_F(DeltaCompressionTest, SmallPartialBlock) {
     auto input = generate_data<uint16_t>(10, 0, 1);
     verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
-TEST_F(CompressionTest, ThreeFullBlocks) {
+TEST_F(DeltaCompressionTest, ThreeFullBlocks) {
     auto input = generate_data<uint16_t>(1024 * 3, 0, 1);
     verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
-TEST_F(CompressionTest, BlocksPlusRemainder) {
+TEST_F(DeltaCompressionTest, BlocksPlusRemainder) {
     auto input = generate_data<uint16_t>(1024 * 2 + 500, 0, 1);
     verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
-TEST_F(CompressionTest, SimpleSmallBLock) {
+TEST_F(DeltaCompressionTest, SimpleSmallBLock) {
     std::vector<uint16_t> input{1, 2, 3, 63, 64, 65};
     verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
-TEST_F(CompressionTest, SmallSizes) {
+TEST_F(DeltaCompressionTest, SmallSizes) {
     for (size_t size : {1, 2, 3, 63, 64, 65}) {
         SCOPED_TRACE("Testing size: " + std::to_string(size));
         auto input = generate_data<uint16_t>(size, 0, 1);
@@ -110,7 +117,7 @@ TEST_F(CompressionTest, SmallSizes) {
     }
 }
 
-TEST_F(CompressionTest, DifferentTypes) {
+TEST_F(DeltaCompressionTest, DifferentTypes) {
     {
         auto input = generate_data<uint8_t>(4000, 0, 1);
         verify_roundtrip(input, make_scalar_type(DataType::UINT16));
@@ -132,12 +139,12 @@ TEST_F(CompressionTest, DifferentTypes) {
     }
 }
 
-TEST_F(CompressionTest, SmallRange) {
+TEST_F(DeltaCompressionTest, SmallRange) {
     auto input = generate_data<uint64_t>(2000, 0, 1);
     verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
-TEST_F(CompressionTest, DifferentRanges) {
+TEST_F(DeltaCompressionTest, DifferentRanges) {
     // Small deltas
     {
         auto input = generate_data<uint64_t>(2000, 0, 1);
@@ -157,57 +164,57 @@ TEST_F(CompressionTest, DifferentRanges) {
     }
 }
 
-TEST_F(CompressionTest, MonotonicSequences) {
+TEST_F(DeltaCompressionTest, MonotonicSequences) {
     std::vector<uint16_t> input(2000);
 
     std::iota(input.begin(), input.end(), 0);
     verify_roundtrip(input, make_scalar_type(DataType::UINT16));
 }
 
-TEST_F(CompressionTest, SingleFullBlockSignedInt16) {
+TEST_F(DeltaCompressionTest, SingleFullBlockSignedInt16) {
     auto input = generate_data<int16_t>(1024, -500, 1);
     verify_roundtrip(input, make_scalar_type(DataType::INT16));
 }
 
-TEST_F(CompressionTest, SinglePartialBlockSignedInt16) {
+TEST_F(DeltaCompressionTest, SinglePartialBlockSignedInt16) {
     auto input = generate_data<int16_t>(500, -500, 1);
     verify_roundtrip(input, make_scalar_type(DataType::INT16));
 }
 
-TEST_F(CompressionTest, ThreeFullBlocksSignedInt32) {
+TEST_F(DeltaCompressionTest, ThreeFullBlocksSignedInt32) {
     auto input = generate_data<int32_t>(1024 * 3, -100000, 5);
     verify_roundtrip(input, make_scalar_type(DataType::INT32));
 }
 
-TEST_F(CompressionTest, BlocksPlusRemainderSignedInt32) {
+TEST_F(DeltaCompressionTest, BlocksPlusRemainderSignedInt32) {
     auto input = generate_data<int32_t>(1024 * 2 + 500, -100000, 5);
     verify_roundtrip(input, make_scalar_type(DataType::INT32));
 }
 
-TEST_F(CompressionTest, SimpleSmallBlockSignedInt8) {
+TEST_F(DeltaCompressionTest, SimpleSmallBlockSignedInt8) {
     std::vector<int8_t> input{-120, -119, -118, -60, -59, -58};
     verify_roundtrip(input, make_scalar_type(DataType::INT8));
 }
 
-TEST_F(CompressionTest, NegativeStartSignedInt32) {
+TEST_F(DeltaCompressionTest, NegativeStartSignedInt32) {
     auto input = generate_data<int32_t>(2000, -10000, 10);
     verify_roundtrip(input, make_scalar_type(DataType::INT32));
 }
 
-TEST_F(CompressionTest, MonotonicSequencesSignedInt16) {
+TEST_F(DeltaCompressionTest, MonotonicSequencesSignedInt16) {
     std::vector<int16_t> input(2000);
     std::iota(input.begin(), input.end(), -500);
     verify_roundtrip(input, make_scalar_type(DataType::INT16));
 }
 
-TEST_F(CompressionTest, SmallSizesSignedInt32) {
+TEST_F(DeltaCompressionTest, SmallSizesSignedInt32) {
     for (size_t size : {1, 2, 3, 63, 64, 65}) {
         auto input = generate_data<int32_t>(size, -500, 1);
         verify_roundtrip(input, make_scalar_type(DataType::INT32));
     }
 }
 
-TEST_F(CompressionTest, DifferentRangesSignedInt32) {
+TEST_F(DeltaCompressionTest, DifferentRangesSignedInt32) {
     {
         auto input = generate_data<int32_t>(2000, -100000, 1);
         verify_roundtrip(input, make_scalar_type(DataType::INT32));
@@ -221,7 +228,7 @@ TEST_F(CompressionTest, DifferentRangesSignedInt32) {
         verify_roundtrip(input, make_scalar_type(DataType::INT32));
     }
 }
-TEST_F(CompressionTest, SizeEstimation) {
+TEST_F(DeltaCompressionTest, SizeEstimation) {
     auto input = generate_data<uint16_t>(2000, 0, 1);
 
     DeltaCompressor<uint16_t> compressor;
@@ -238,7 +245,7 @@ TEST_F(CompressionTest, SizeEstimation) {
     ASSERT_EQ(estimated_size, decompressor.compressed_size(compressed.data()));
 }
 
-TEST_F(CompressionTest, SizeEstimationPartial) {
+TEST_F(DeltaCompressionTest, SizeEstimationPartial) {
     auto input = generate_data<uint16_t>(500, 0, 1);
 
     DeltaCompressor<uint16_t> compressor;

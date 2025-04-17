@@ -143,10 +143,6 @@ struct DynamicRangeRandomAccessAdaptor {
     // Return a pointer to a contiguous segment of 'count' T elements,
     // starting at the logical row 'row'.
     const T* at(size_t row, size_t count) {
-        // Ensure our internal buffer is large enough.
-        if(buffer_.size() < count)
-            buffer_.resize(count);
-
         // byte offset corresponding to the row.
         const auto bytes_offset = t_size(row);
         auto block_and_offset = column_data_.buffer().block_and_offset(bytes_offset);
@@ -157,6 +153,10 @@ struct DynamicRangeRandomAccessAdaptor {
 
         if (block->bytes() >= block_pos + t_size(count))
             return reinterpret_cast<const T*>(block->data() + block_pos);
+
+        // Ensure our internal buffer is large enough.
+        if(buffer_.size() < count)
+            buffer_.resize(count);
 
         size_t dest_offset = 0;
         while (required > 0) {

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cstdint>
 #include <cstddef>
 
@@ -116,7 +118,7 @@ struct BitPackCompressor : public BitPackData {
         return BitPackData{std::bit_width(static_cast<std::make_unsigned_t<T>>(max_val))};
     }
 
-    static size_t compressed_size(size_t count, BitPackData bitpack_data) {
+    static size_t compressed_size(BitPackData bitpack_data, size_t count) {
         if (count == 0)
             return 0;
 
@@ -125,9 +127,7 @@ struct BitPackCompressor : public BitPackData {
 
         const size_t num_full_blocks = count / BLOCK_SIZE;
         const size_t remainder = count % BLOCK_SIZE;
-
-        const size_t full_block_size_in_t = round_up_in_t<T>(BLOCK_SIZE * bit_width);
-
+        const size_t full_block_size_in_t = round_up_bits_in_t<T>(BLOCK_SIZE * bit_width);
         size_t size_in_t = header_size + (num_full_blocks * full_block_size_in_t);
 
         if (remainder > 0) 
@@ -136,7 +136,8 @@ struct BitPackCompressor : public BitPackData {
         return size_in_t * sizeof(T);
     }
 
-    size_t compress(ColumnData data, T *__restrict out, size_t count) {
+    size_t compress(ColumnData data, T *__restrict out, size_t estimated_size) {
+        const auto count = data.row_count();
         if (count == 0)
             return 0;
 
@@ -192,8 +193,10 @@ struct BitPackCompressor : public BitPackData {
             );
         }
 
-        ARCTICDB_DEBUG(log::codec(), "Compressed size including remainder: {} from {} bytes", compressed_size * sizeof(T), count * sizeof(T));
-        return compressed_size * sizeof(T);
+        const auto compressed_bytes = compressed_size * sizeof(T);
+        ARCTICDB_DEBUG(log::codec(), "Compressed size including remainder: {} from {} bytes", compressed_bytes, count * sizeof(T));
+        util::check(compressed_bytes == estimated_size, "Size mismatch in bitpack: {} != {}", estimated_size, compressed_bytes);
+        return compressed_bytes;
     }
 };
 
@@ -238,7 +241,8 @@ struct BitPackDecompressor {
             );
         }
         ARCTICDB_DEBUG(log::codec(), "Decompressed {} remaining values, total count {}", remaining, count);
-        return {.compressed_ = input_offset, .uncompressed_ = count * sizeof(T)};
+        const auto decompressed_bytes = (input_offset + header_size_in_t<BitPackHeader<T>, T>()) * sizeof(T);
+        return {.compressed_ = decompressed_bytes, .uncompressed_ = count * sizeof(T)};
     }
 };
 

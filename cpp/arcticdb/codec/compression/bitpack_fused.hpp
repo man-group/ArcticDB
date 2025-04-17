@@ -395,7 +395,6 @@ size_t dispatch_bitwidth_fused(
 template<typename T>
 void scalar_pack(T value, size_t bit_width, size_t& bit_offset, T& current_word, T*& out) {  // out by reference
     static constexpr size_t bits_per_word = sizeof(T) * CHAR_BIT;
-    ARCTICDB_TRACE(log::codec(), "Packing value {} at word {}", value, current_word);
 
     if (bit_offset + bit_width > bits_per_word) {
         size_t bits_remaining = bits_per_word - bit_offset;
@@ -439,7 +438,6 @@ T scalar_unpack(size_t bit_width, size_t& bit_offset, T& current_word, const T*&
             bit_offset = 0;
         }
     }
-    ARCTICDB_TRACE(log::codec(), "Returning {} at word {}", value, current_word);
     return value;
 }
 

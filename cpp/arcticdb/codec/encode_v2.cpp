@@ -118,7 +118,7 @@ void ColumnEncoderV2::encode_blocks(
         ARCTICDB_TRACE(log::codec(), "Column data has {} blocks", column_data.num_blocks());
         if(scan_result) {
               using AdaptiveBlockEncoder = AdaptiveEncoder<TypedBlockData, TDT>;
-                AdaptiveBlockEncoder::encode_data(column_data, out, pos, field.shapes(0), *scan_result);
+              AdaptiveBlockEncoder::encode_data(column_data, out, pos, field, *scan_result);
         } else {
             using Encoder = TypedBlockEncoderImpl<TypedBlockData, TDT, EncodingVersion::V2>;
             while (auto block = column_data.next<TDT>()) {
@@ -357,6 +357,7 @@ static void encode_encoded_fields(
         in_mem_seg.set_metadata(std::move(any));
     }
 
+    auto non_data_codec_opts = codec::default_lz4_codec();
     SegmentHeader segment_header{EncodingVersion::V2};
     segment_header.set_compacted(in_mem_seg.compacted());
 
@@ -376,16 +377,16 @@ static void encode_encoded_fields(
     descriptor_data->uncompressed_bytes_ = uncompressed_size;
 
     write_magic<MetadataMagic>(*out_buffer, pos);
-    encode_metadata<EncodingPolicyV2>(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
+    encode_metadata<EncodingPolicyV2>(in_mem_seg, segment_header, non_data_codec_opts, *out_buffer, pos);
 
     write_magic<SegmentDescriptorMagic>(*out_buffer, pos);
     write_segment_descriptor(*out_buffer, pos, descriptor.data());
     write_identifier(*out_buffer, pos, descriptor.id());
     write_magic<DescriptorFieldsMagic>(*out_buffer, pos);
-    encode_field_descriptors(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
+    encode_field_descriptors(in_mem_seg, segment_header, non_data_codec_opts, *out_buffer, pos);
 
     write_magic<IndexMagic>(*out_buffer, pos);
-    encode_index_descriptors(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
+    encode_index_descriptors(in_mem_seg, segment_header, non_data_codec_opts, *out_buffer, pos);
 
     EncodedFieldCollection encoded_fields;
     ColumnEncoderV2 encoder;
@@ -414,8 +415,8 @@ static void encode_encoded_fields(
             }
         }
         write_magic<StringPoolMagic>(*out_buffer, pos);
-        encode_string_pool_v2<EncodingPolicyV2>(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
-        encode_encoded_fields(segment_header, codec_opts, *out_buffer, pos, std::move(encoded_fields));
+        encode_string_pool_v2<EncodingPolicyV2>(in_mem_seg, segment_header, non_data_codec_opts, *out_buffer, pos);
+        encode_encoded_fields(segment_header, non_data_codec_opts, *out_buffer, pos, std::move(encoded_fields));
     } else {
         segment_header.set_footer_offset(pos);
     }

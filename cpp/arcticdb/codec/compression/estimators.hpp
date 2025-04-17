@@ -128,71 +128,97 @@ struct DeltaEstimator {
     }
 };
 
+template <typename T>
+void process_alp_block(
+        const T* data,
+        ALPDecimalBlockHeader<T>* header,
+        alp::state<T>& state) {
+
+    std::array<T, BLOCK_SIZE> exceptions;
+    std::array<uint16_t, BLOCK_SIZE> exception_positions{};
+    uint16_t exception_count = 0;
+    std::array<typename StorageType<T>::signed_type , BLOCK_SIZE> encoded = {};
+    alp::encoder<double>::encode(
+        data,
+        exceptions.data(),
+        exception_positions.data(),
+        &exception_count,
+        encoded.data(),
+        state);
+
+    header->exception_count_ = exception_count;
+    header->exp_ = state.exp;
+    header->fac_ = state.fac;
+    alp::encoder<T>::analyze_ffor(encoded, state.bit_width, header->bases());
+    header->bit_width_ = state.bit_width;
+}
+
+template <typename T>
+void process_rd_block(
+    const T* data,
+    RealDoubleBlockHeader<T>* header,
+    alp::state<T>& state) {
+    std::array<uint16_t, alp::config::VECTOR_SIZE> exceptions{};
+    std::array<uint16_t, alp::config::VECTOR_SIZE> exception_positions{};
+    std::array<typename StorageType<T>::unsigned_type, alp::config::VECTOR_SIZE> right;
+    std::array<uint16_t, alp::config::VECTOR_SIZE> left{};
+    alp::rd_encoder<double>::encode(
+        data,
+        exceptions.data(),
+        exception_positions.data(),
+        &state.exceptions_count,
+        right.data(),
+        left.data(),
+        state);
+
+    header->exception_count_ = state.exceptions_count;
+}
 
 template <typename T>
 struct ALPEstimator {
+    alp::state<T> state_;
 
-    alp::Scheme scheme_;
-
-    static constexpr size_t overhead() {
-        return 0;
+    size_t overhead() {
+        if(state_.scheme == alp::Scheme::ALP) {
+            return 0;
+        } else {
+            RealDoubleColumnHeader<T> header{state_};
+            return header.total_size();
+        }
     }
 
-    explicit ALPEstimator(alp::Scheme scheme) :
-        scheme_(scheme) {
+    explicit ALPEstimator(alp::state<T> state) :
+        state_(state) {
     }
 
     CompressionSample operator()(
         FieldStatsImpl,
         const T* data,
-        size_t block_size) const {
-        alp::state<T> state;
-        state.scheme = scheme_;  //TODO necessary?
-        std::array<T, alp::config::VECTOR_SIZE> sample_buf;
+        size_t block_size) {
         if(block_size < alp::config::VECTOR_SIZE)
             return {.bits_needed_ = sizeof(T) * block_size * CHAR_BIT, .bit_width_ = 0, .exceptions_ = 0};
 
-        switch(scheme_) {
+        switch(state_.scheme) {
         case alp::Scheme::ALP_RD: {
-            std::array<uint16_t, alp::config::VECTOR_SIZE> exceptions{};
-            std::array<uint16_t, alp::config::VECTOR_SIZE> positions{};
-            std::array<uint16_t, alp::config::VECTOR_SIZE> excp_count{};
-            std::array<typename StorageType<T>::unsigned_type, alp::config::VECTOR_SIZE> right;
-            std::array<uint16_t, alp::config::VECTOR_SIZE> left{};
 
-            alp::rd_encoder<T>::init(data, 0UL, alp::config::VECTOR_SIZE, sample_buf.data(), state);
-            alp::rd_encoder<T>::encode(
-                data,
-                exceptions.data(),
-                positions.data(),
-                excp_count.data(),
-                right.data(),
-                left.data(),
-                state);
-
-            RealDoubleHeader<T> header{state};
+            RealDoubleColumnHeader<T> column_header{state_};
+            RealDoubleBlockHeader<T> block_header;
+            process_rd_block(data, &block_header, state_);
 
             return {
-                .bits_needed_ = header.total_size() * block_size,
-                .bit_width_ = std::max(state.right_bit_width, state.left_bit_width),
-                .exceptions_ = state.exceptions_count
+                .bits_needed_ = block_header.total_size(column_header.bit_widths()),
+                .bit_width_ = 0,
+                .exceptions_ = state_.exceptions_count
             };
         }
         case alp::Scheme::ALP: {
-            std::array<T, BLOCK_SIZE> exceptions;
-            std::array<uint16_t, BLOCK_SIZE> exception_positions{};
-            uint16_t exception_count = 0;
-            std::array<typename StorageType<T>::signed_type , BLOCK_SIZE> encoded = {};
-
-            alp::encoder<T>::init(data, 0, 1024, sample_buf.data(), state);
-            alp::encoder<T>::encode(data, exceptions.data(), exception_positions.data(), &exception_count, encoded.data(), state);
-
-            ALPDecimalHeader<T> header{state};
+            ALPDecimalBlockHeader<T> header;
+            process_alp_block(data, 0UL, &header, state_);
 
             return {
-                .bits_needed_ = header.total_size() * block_size,
-                .bit_width_ = state.bit_width,
-                .exceptions_ = state.exceptions_count
+                .bits_needed_ = header.total_size(),
+                .bit_width_ = state_.bit_width,
+                .exceptions_ = state_.exceptions_count
             };
         }
         case alp::Scheme::INVALID: {
@@ -224,6 +250,12 @@ struct FForEstimator {
     }
 };
 
+// Compute log2(n choose m) using lgamma for factorials.
+inline double estimate_bitset_size(size_t n, size_t m) {
+    util::check(m <= n, "Can't compute m > n in bitset size estimation");
+    return (std::lgamma(n + 1) - std::lgamma(m + 1) - std::lgamma(n - m + 1)) / std::log(2.0);
+}
+
 template<typename T>
 struct FrequencyEstimator {
     const double required_percentage_;
@@ -231,7 +263,11 @@ struct FrequencyEstimator {
     explicit FrequencyEstimator(double required_percentage = 90.0) :
         required_percentage_(required_percentage) {}
 
-    CompressionSample operator()(const T* data, size_t block_size) const {
+    static size_t overhead() {
+        return sizeof(FrequencyHeader<T>);
+    }
+
+    CompressionSample operator()(FieldStatsImpl, const T* data, size_t block_size) const {
         // First pass: find candidate for dominant value using Boyer-Moore majority vote
         T candidate{};
         int32_t count = 0;
@@ -259,11 +295,10 @@ struct FrequencyEstimator {
         if (percent > required_percentage_) {
             size_t num_exceptions = block_size - frequency;
 
-            size_t header_bits = sizeof(typename FrequencyCompressor<T>::Data) * 8;
-            size_t exception_bits = num_exceptions * sizeof(T) * 8;
-            size_t bitmap_bits = block_size + 64;  // Rough estimate of bitmap overhead
+            size_t exception_bits = num_exceptions * sizeof(T) * CHAR_BIT;
+            size_t bitmap_bits = estimate_bitset_size(block_size, num_exceptions);
 
-            auto required_size = (header_bits + exception_bits + bitmap_bits) / block_size;
+            auto required_size = exception_bits + bitmap_bits + sizeof(T);
             return {.bits_needed_ = required_size, .bit_width_ = 0, .exceptions_ = 0};
         }
 

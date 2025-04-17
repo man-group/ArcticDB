@@ -17,12 +17,14 @@ struct EncodingScanResult {
             size_t estimated_size,
             size_t original_size,
             EncodingType type,
-            bool is_deterministic) :
+            bool is_deterministic,
+            EncoderData&& data) :
         cost_(cost),
         estimated_size_(estimated_size),
         original_size_(original_size),
         type_(type),
-        is_deterministic_(is_deterministic) {
+        is_deterministic_(is_deterministic),
+        data_(std::move(data)) {
     }
 
     ARCTICDB_MOVE_COPY_DEFAULT(EncodingScanResult)
@@ -63,10 +65,11 @@ inline EncodingScanResult create_scan_result(
         size_t estimated_size,
         size_t speed,
         size_t original_size,
-        bool is_deterministic) {
+        bool is_deterministic,
+        EncoderData&& data) {
     static size_t weight = ConfigsMap::instance()->get_int("Scanner.SizeWeighting", 17);
     auto score = calculate_score(speed, estimated_size, original_size, weight);
-    return EncodingScanResult(score, estimated_size, original_size, encoding_type, is_deterministic);
+    return EncodingScanResult(score, estimated_size, original_size, encoding_type, is_deterministic, std::move(data));
 }
 
 constexpr size_t MAX_ENCODINGS = 3;
@@ -87,6 +90,12 @@ struct EncodingScanResultSet {
             if (result.cost_ < results_[max_pos].cost_)
                 results_[max_pos] = result;
         }
+    }
+
+    void sort() {
+        std::sort(std::begin(results_), std::begin(results_) + members_, [] (const auto& l, const auto& r) {
+            return std::tie(l.cost_, l.estimated_size_) < std::tie(r.cost_, r.estimated_size_);
+        });
     }
 
     [[nodiscard]] size_t size() const {
@@ -114,9 +123,18 @@ struct EncodingScanResultSet {
         members_ = 1;
     }
 
+    void select(size_t offset, EncodingScanResult&& result) {
+        util::check(offset < members_, "Out-of-bounds offset given to EncodingScanResultSet: {}", offset);
+        if(offset != 0)
+            std::swap(results_[0], results_[offset]);
+
+        results_[0] = std::move(result);
+        members_ = 1;
+    }
+
     void finalize() {
         std::sort(std::begin(results_), std::begin(results_) + members_, [] (const auto& l, const auto & r) {
-            return l.cost_ < r.cost_;
+            return std::tie(l.cost_, l.estimated_size_) < std::tie(r.cost_, r.estimated_size_);
         });
     }
 };
@@ -125,7 +143,7 @@ struct SegmentScanResults {
     ankerl::unordered_dense::map<position_t, EncodingScanResultSet> values_;
     ankerl::unordered_dense::map<position_t, EncodingScanResultSet> shapes_;
 
-    void add_value(position_t column_index, EncodingScanResultSet results) {
+    void add_value(position_t column_index, const EncodingScanResultSet& results) {
         values_.emplace(column_index, results);
     }
 

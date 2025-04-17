@@ -517,7 +517,13 @@ public:
     }
 
     ColumnData data() const {
-        return ColumnData(&data_.buffer(), &shapes_.buffer(), type_, sparse_map_ ? &*sparse_map_ : nullptr, nullptr, row_count());
+        return ColumnData(
+            &data_.buffer(),
+            &shapes_.buffer(),
+            type_,
+            sparse_map_ ? &*sparse_map_ : nullptr,
+            has_statistics() ? &stats_ : nullptr,
+            row_count());
     }
 
     const uint8_t* ptr() const {
