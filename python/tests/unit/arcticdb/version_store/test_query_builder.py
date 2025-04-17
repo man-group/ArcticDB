@@ -118,6 +118,10 @@ def test_querybuilder_pickling_all_clauses():
 
     assert pickle.loads(pickle.dumps(q)) == q
 
+    # PythonConcatClause
+    q = QueryBuilder().concat("INNER")
+    assert pickle.loads(pickle.dumps(q)) == q
+
 
 def test_reuse_querybuilder(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment

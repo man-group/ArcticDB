@@ -21,10 +21,10 @@ namespace arcticdb {
 
 struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
     ReadResult(
-            const VersionedItem& versioned_item,
+            const std::variant<VersionedItem, std::vector<VersionedItem>>& versioned_item,
             pipelines::PythonOutputFrame&& frame_data,
             const arcticdb::proto::descriptors::NormalizationMetadata& norm_meta,
-            const arcticdb::proto::descriptors::UserDefinedMetadata& user_meta,
+            const std::variant<arcticdb::proto::descriptors::UserDefinedMetadata, std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>& user_meta,
             const arcticdb::proto::descriptors::UserDefinedMetadata& multi_key_meta,
             std::vector<entity::AtomKey>&& multi_keys) :
             item(versioned_item),
@@ -35,10 +35,10 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
             multi_keys(std::move(multi_keys)) {
 
     }
-    VersionedItem item;
+    std::variant<VersionedItem, std::vector<VersionedItem>> item;
     pipelines::PythonOutputFrame frame_data;
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
-    arcticdb::proto::descriptors::UserDefinedMetadata user_meta;
+    std::variant<arcticdb::proto::descriptors::UserDefinedMetadata, std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>> user_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata multi_key_meta;
     std::vector <entity::AtomKey> multi_keys;
 
@@ -46,10 +46,17 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
 };
 
 inline ReadResult create_python_read_result(
-    const VersionedItem& version,
+    const std::variant<VersionedItem, std::vector<VersionedItem>>& version,
     OutputFormat output_format,
-    FrameAndDescriptor&& fd) {
+    FrameAndDescriptor&& fd,
+    std::optional<std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>&& user_meta = std::nullopt) {
     auto result = std::move(fd);
+
+    // If version is a vector then this was a multi-symbol join, so the user_meta vector should have a value
+    // Otherwise, there is a single piece of metadata on the frame descriptor
+    util::check(
+            std::holds_alternative<VersionedItem>(version) ^ user_meta.has_value(),
+            "Unexpected argument combination to create_python_read_result");
 
     // Very old (pre Nov-2020) PandasIndex protobuf messages had no "start" or "step" fields. If is_physically_stored
     // (renamed from is_not_range_index) was false, the index was always RangeIndex(num_rows, 1)
@@ -76,8 +83,14 @@ inline ReadResult create_python_read_result(
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
 
     const auto& desc_proto = result.desc_.proto();
+    std::variant<arcticdb::proto::descriptors::UserDefinedMetadata, std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>> metadata;
+    if (user_meta.has_value()) {
+        metadata = *user_meta;
+    } else {
+        metadata = desc_proto.user_meta();
+    }
     return {version, std::move(python_frame), desc_proto.normalization(),
-            desc_proto.user_meta(), desc_proto.multi_key_meta(), std::move(result.keys_)};
+            metadata, desc_proto.multi_key_meta(), std::move(result.keys_)};
 }
 
 } //namespace arcticdb
