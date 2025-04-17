@@ -75,7 +75,9 @@ jobs:
           fetch-depth: 1
 
       - name: Convert to Full Clone
-        run: git fetch --unshallow
+        run: |
+          git config --global --add safe.directory /__w/ArcticDB/ArcticDB
+          git fetch --unshallow
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
