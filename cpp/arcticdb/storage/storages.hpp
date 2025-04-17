@@ -280,7 +280,7 @@ inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path
                                                  decltype(std::declval<arcticc::pb2::storage_pb2::LibraryConfig>().storage_by_id())& storage_configs,
                                                  const NativeVariantStorage& native_storage_config) {
     Storages::StorageVector storages;
-    for (const auto& [storage_id, storage_config] : storage_configs) {
+    for (auto& [storage_id, storage_config] : storage_configs) {
         util::variant_match(native_storage_config.variant(),
                             [&storage_config, &storages, &library_path, mode](const s3::S3Settings& settings) {
                                 util::check(storage_config.config().Is<arcticdb::proto::s3_storage::Config>(),
