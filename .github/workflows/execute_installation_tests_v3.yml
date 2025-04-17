@@ -130,10 +130,10 @@ jobs:
           
           if [[ "$VER" == "latest" ]]; then
             echo "Installing the latest version..."
-            pip install your_module_name    
+            micromamba install -n your_environment_name -c conda-forge arcticdb
           elif [[ -n "$VER" ]]; then
             echo "Installing version $VER..."
-            micromamba install -n your_environment_name -c conda-forge your_module_name=$VAR
+            micromamba install -n your_environment_name -c conda-forge arcticdb=$VAR
           else
             echo "Environment variable is not set or invalid!"
             exit 1  
