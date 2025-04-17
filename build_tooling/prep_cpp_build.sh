@@ -1,19 +1,20 @@
 #!/bin/bash
 
-pushd $(realpath $(dirname $BASH_SOURCE))/../cpp/vcpkg
-
-if [[ -e "$VCPKG_INSTALLATION_ROOT" ]] ; then
-    git fetch --unshallow file://$VCPKG_INSTALLATION_ROOT
-elif [[ -n "$VCPKG_INSTALLATION_ROOT" && -e "/host$VCPKG_INSTALLATION_ROOT" ]] ; then
-    git fetch --unshallow file:///host$VCPKG_INSTALLATION_ROOT
-else
-    git fetch --unshallow origin master
-fi
-
-cd ..
 
 case `uname -a` in
 *Microsoft*|MINGW*)
+    pushd $(realpath $(dirname $BASH_SOURCE))/../cpp/vcpkg
+
+    if [[ -e "$VCPKG_INSTALLATION_ROOT" ]] ; then
+        git fetch --unshallow file://$VCPKG_INSTALLATION_ROOT
+    elif [[ -n "$VCPKG_INSTALLATION_ROOT" && -e "/host$VCPKG_INSTALLATION_ROOT" ]] ; then
+        git fetch --unshallow file:///host$VCPKG_INSTALLATION_ROOT
+    else
+        git fetch --unshallow origin master
+    fi
+
+    cd ..
+
     if [[ -n "$GITHUB_ACTION" ]] ; then
         # Redirect the build directory to the more spacious C: for the leader only
         # Do not redirect for the Windows followers
@@ -41,6 +42,6 @@ case `uname -a` in
         [[ ! -e out ]] || rm -rf out
         ln -s "$ARCTICDB_BUILD_DIR" out
     fi
+    popd
 esac
 
-popd
