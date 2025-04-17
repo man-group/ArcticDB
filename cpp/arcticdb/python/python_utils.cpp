@@ -23,4 +23,10 @@ void prefill_with_none(
     }
 }
 
+PyObject** fill_with_none(PyObject** ptr_dest, size_t count, PythonHandlerData& handler_data) {
+    std::fill_n(ptr_dest, count, nullptr);
+    handler_data.increment_none_refcount(count);
+    return ptr_dest + count;
+}
+
 }

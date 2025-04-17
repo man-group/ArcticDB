@@ -111,6 +111,8 @@ void prefill_with_none(
     PythonHandlerData& python_handler_data,
     IncrementRefCount inc_ref_count = IncrementRefCount::ON);
 
+PyObject** fill_with_none(PyObject** ptr_dest, size_t count, PythonHandlerData& handler_data);
+
 template<typename Msg>
 py::object pb_to_python(const Msg & out){
     std::string_view full_name = out.descriptor()->full_name();

@@ -16,15 +16,9 @@
 
 namespace arcticdb {
 
-static PyObject** fill_with_none(PyObject** ptr_dest, size_t count, PythonHandlerData& handler_data) {
-    std::fill_n(ptr_dest, count, nullptr);
-    handler_data.increment_none_refcount(count);
-    return ptr_dest + count;
-}
-
 static PyObject** fill_with_none(ChunkedBuffer& buffer, size_t offset, size_t count, PythonHandlerData& handler_data) {
     auto dest = buffer.ptr_cast<PyObject*>(offset, count * sizeof(PyObject*));
-    return fill_with_none(dest, count, handler_data);
+    return python_util::fill_with_none(dest, count, handler_data);
 }
 
 void PythonEmptyHandler::handle_type(
@@ -155,11 +149,11 @@ void PythonBoolHandler::convert_type(
         unsigned last_row = 0u;
         for (auto en = sparse_map->first(); en < sparse_map->end(); ++en, ++last_row) {
             const auto current_pos = *en;
-            ptr_dest = fill_with_none(ptr_dest, current_pos - last_row, handler_data);
+            ptr_dest = python_util::fill_with_none(ptr_dest, current_pos - last_row, handler_data);
             last_row = current_pos;
             *ptr_dest++ = py::bool_(static_cast<bool>(*ptr_src++)).release().ptr();
         }
-        fill_with_none(ptr_dest, mapping.num_rows_ - last_row, handler_data);
+        python_util::fill_with_none(ptr_dest, mapping.num_rows_ - last_row, handler_data);
     } else {
         ARCTICDB_TRACE(log::codec(), "Bool handler didn't find a sparse map. Assuming dense array.");
         std::transform(ptr_src, ptr_src + num_bools, ptr_dest, [](uint8_t value) {
