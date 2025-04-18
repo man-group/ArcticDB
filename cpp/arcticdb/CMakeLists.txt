@@ -47,6 +47,10 @@ if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
 endif()
 
+# Required for the macOS SDK to use all the latest features of libc++, for both vcpkg and conda-forge builds.
+# See: https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
+add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
+
 if(NOT ${ARCTICDB_USING_CONDA})
     find_package(unofficial-pcre REQUIRED)
     find_package(Libevent CONFIG REQUIRED)
@@ -58,8 +62,6 @@ else()
     # sources to be able to use dependencies via conda at compile time.
     # TODO: rely on CMake directives instead of `ARCTICDB_USING_CONDA`.
     add_compile_definitions(ARCTICDB_USING_CONDA)
-    # https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
-    add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
 
     SET(HIDE_LINKED_SYMBOLS OFF)
 
