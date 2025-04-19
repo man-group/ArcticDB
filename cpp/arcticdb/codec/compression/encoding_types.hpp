@@ -6,6 +6,7 @@
 #include <arcticdb/codec/compression/delta.hpp>
 #include <arcticdb/codec/compression/bitpack.hpp>
 #include <arcticdb/codec/compression/constant.hpp>
+#include <arcticdb/codec/compression/plain.hpp>
 
 #include <arcticdb/codec/compression/encoding_scan_result.hpp>
 
@@ -31,7 +32,7 @@ concept Encoder = requires(
 
 template <typename T>
 EncodingScanResult create_plain_result(size_t num_rows) {
-  return create_scan_result(EncodingType::PLAIN, num_rows * sizeof(T), 1, num_rows * sizeof(T), true, std::monostate{});
+  return create_scan_result(EncodingType::PLAIN, num_rows * sizeof(T) + PlainCompressor<T>::overhead(), 1, num_rows * sizeof(T), true, std::monostate{});
 }
 
 struct Ffor {
@@ -58,7 +59,8 @@ struct Ffor {
     static std::optional<std::pair<size_t, EncoderData>> deterministic_size(FieldStatsImpl field_stats, DataType data_type, size_t num_rows) {
         return make_scalar_type(data_type).visit_tag([field_stats, num_rows] (auto tag) -> std::optional<std::pair<size_t, EncoderData>> {
             using TagType = decltype(tag);
-            if constexpr(is_integer_type(TagType::DataTypeTag::data_type)) {
+            constexpr auto data_type = TagType::DataTypeTag::data_type;
+            if constexpr(is_integer_type(data_type) || is_sequence_type(data_type)) {
                 using RawType = TagType::DataTypeTag::raw_type;
                 auto ffor_data = FForCompressor<RawType>::data_fom_stats(field_stats);
                 const auto size = FForCompressor<RawType>::compressed_size(ffor_data, num_rows);
@@ -357,7 +359,7 @@ struct Alp {
                 auto sample_values = 0UL;
                 if(data.num_blocks() == 1) {
                     auto first_block = data.buffer().blocks()[0];
-                    sample_values = first_block->bytes() / sizeof(RawType),;
+                    sample_values = first_block->bytes() / sizeof(RawType);
                     alp::encoder<RawType>::init(
                         reinterpret_cast<RawType*>(first_block->data()),
                         0,
@@ -415,42 +417,21 @@ struct Alp {
     }
 
 
-    static EncodingScanResult max_compressed_size(FieldStatsImpl , DataType , size_t , ColumnData, EncoderData&) {
-        /*return TypeDescriptor{data_type, Dimension::Dim0}.visit_tag([&encoder_data, row_count, original_size] (auto tag) -> EncodingScanResult {
-            using TagType = typename decltype(tag)::DataTypeTag;
-            if constexpr (is_floating_point_type(TagType::data_type)) {
-                using RawType = typename TagType::raw_type;
-
-                const auto& alp_data = std::get<ALPCompressData<RawType>>(encoder_data);
-                switch(alp_data.scheme_) {
-                    alp::Scheme::ALP: {
-
-                        auto alp_data = ALPCompressData<RawType>{
-                            .scheme_=alp::Scheme::ALP,
-                            .states_={},
-                            .max_bit_width_ = max_bit_width_,
-                            .max_exceptions_ = estimate.max_exceptions_};
-
-                        return create_scan_result(EncodingType::ALP, size, speed_factor(), original_size, false, std::move(alp_data));
-                }
-                case alp::Scheme::ALP_RD {
-
-                auto alp_data = ALPCompressData<RawType>{
-                    .scheme_=alp::Scheme::ALP_RD,
-                    .states_={},
-                    .max_bit_width_ = estimate.max_bit_width_,
-                    .max_exceptions_ = estimate.max_exceptions_};
-
-                return create_scan_result(EncodingType::ALP, size, speed_factor(), original_size, false, std::move(alp_data));
-                    }
-                default:
-                    util::raise_rte("Unknown ALP encoding scheme {}", static_cast<int>())
-            } else {
-            util::raise_rte("Unsupported type for ALP encoding");
-        }
-    });
-         */
-        return {};
+    static EncodingScanResult max_compressed_size(FieldStatsImpl, DataType data_type, size_t num_rows, ColumnData, EncoderData& data) {
+        // We return the original size here as it is hard to determine what the actual maximum size
+        // for an ALP encoded column will be, but if it gets larger than the original size the compressor
+        // will fall back to a plain encoding
+        return make_scalar_type(data_type).visit_tag([&data, num_rows, data_type] (auto tag) {
+            using TagType = decltype(tag);
+            using RawType = TagType::DataTypeTag::raw_type;
+            return create_scan_result(
+                EncodingType::ALP,
+                num_rows * sizeof(RawType),
+                speed_factor(),
+                num_rows * get_type_size(data_type),
+                true,
+                std::move(data));
+        });
     }
 
 

@@ -117,8 +117,21 @@ void ColumnEncoderV2::encode_blocks(
         using TDT = decltype(type_desc_tag);
         ARCTICDB_TRACE(log::codec(), "Column data has {} blocks", column_data.num_blocks());
         if(scan_result) {
-              using AdaptiveBlockEncoder = AdaptiveEncoder<TypedBlockData, TDT>;
-              AdaptiveBlockEncoder::encode_data(column_data, out, pos, field, *scan_result);
+            using AdaptiveBlockEncoder = AdaptiveEncoder<TypedBlockData, TDT>;
+              try {
+                  AdaptiveBlockEncoder::encode_data(column_data, out, pos, field, *scan_result);
+              } catch(const CompressionOverflowException& ) {
+                  using RawType = TDT::DataTypeTag::raw_type;
+                  auto plain_result = create_plain_result<RawType>(column_data.row_count());
+                  auto& block = field.mutable_ndarray()->values(0);
+                  block.mutable_codec()->mutable_adaptive()->encoding_type_ = EncodingType::PLAIN;
+                  const auto size = PlainCompressor<RawType>::compress(
+                      column_data,
+                      reinterpret_cast<RawType*>(out.data() + pos),
+                      plain_result.estimated_size_);
+                  block.set_out_bytes(size);
+                  pos += size;
+              }
         } else {
             using Encoder = TypedBlockEncoderImpl<TypedBlockData, TDT, EncodingVersion::V2>;
             while (auto block = column_data.next<TDT>()) {

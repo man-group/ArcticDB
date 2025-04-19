@@ -151,8 +151,7 @@ void calc_string_pool_size(
 ) {
     if (in_mem_seg.has_string_pool()) {
         auto string_col = in_mem_seg.string_pool_data();
-        const auto [uncompressed, required] = EncodingPolicyType::ColumnEncoder::max_compressed_size(codec_opts,
-                                                                                                     string_col);
+        const auto [uncompressed, required] = EncodingPolicyType::ColumnEncoder::max_compressed_size(codec_opts, string_col);
         result.uncompressed_bytes_ += uncompressed;
         result.max_compressed_bytes_ += required;
         ARCTICDB_TRACE(log::codec(),

@@ -13,6 +13,11 @@ struct PlainCompressData {
 
 template<typename T>
 struct PlainCompressor {
+
+    constexpr static size_t overhead() {
+        return sizeof(PlainCompressData);
+    }
+
     static size_t compress(ColumnData data, T *__restrict out, size_t output_size) {
         auto *out_ptr = reinterpret_cast<uint8_t *>(out);
         PlainCompressData header = {0};

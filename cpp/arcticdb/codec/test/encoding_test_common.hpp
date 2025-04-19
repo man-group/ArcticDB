@@ -193,4 +193,19 @@ inline std::vector<double> random_doubles(size_t num_rows = 1024, double min = 0
     return data;
 }
 
+inline std::vector<double> random_decimal_floats(int64_t lower, int64_t upper, size_t decimal_places, size_t count) {
+    std::vector<double> result;
+    result.reserve(count);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(lower, upper);
+
+    for (auto i = 0UL; i < count; ++i) {
+        auto value = dis(gen);
+        result.push_back(static_cast<double>(value) / pow(10, decimal_places));
+    }
+
+    return result;
+}
 } //namespace arcticdb

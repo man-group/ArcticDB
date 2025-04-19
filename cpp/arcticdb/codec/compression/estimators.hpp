@@ -138,7 +138,7 @@ void process_alp_block(
     std::array<uint16_t, BLOCK_SIZE> exception_positions{};
     uint16_t exception_count = 0;
     std::array<typename StorageType<T>::signed_type , BLOCK_SIZE> encoded = {};
-    alp::encoder<double>::encode(
+    alp::encoder<T>::encode(
         data,
         exceptions.data(),
         exception_positions.data(),
@@ -149,7 +149,7 @@ void process_alp_block(
     header->exception_count_ = exception_count;
     header->exp_ = state.exp;
     header->fac_ = state.fac;
-    alp::encoder<T>::analyze_ffor(encoded, state.bit_width, header->bases());
+    alp::encoder<T>::analyze_ffor(encoded.data(), state.bit_width, header->bases());
     header->bit_width_ = state.bit_width;
 }
 
@@ -162,7 +162,7 @@ void process_rd_block(
     std::array<uint16_t, alp::config::VECTOR_SIZE> exception_positions{};
     std::array<typename StorageType<T>::unsigned_type, alp::config::VECTOR_SIZE> right;
     std::array<uint16_t, alp::config::VECTOR_SIZE> left{};
-    alp::rd_encoder<double>::encode(
+    alp::rd_encoder<T>::encode(
         data,
         exceptions.data(),
         exception_positions.data(),
@@ -201,7 +201,9 @@ struct ALPEstimator {
         switch(state_.scheme) {
         case alp::Scheme::ALP_RD: {
 
-            RealDoubleColumnHeader<T> column_header{state_};
+            RealDoubleColumnHeader<T> column_header;
+            column_header.dict_size_ = state_.actual_dictionary_size;
+            column_header.bit_widths_ = {state_.right_bit_width, state_.left_bit_width};
             RealDoubleBlockHeader<T> block_header;
             process_rd_block(data, &block_header, state_);
 
@@ -213,7 +215,7 @@ struct ALPEstimator {
         }
         case alp::Scheme::ALP: {
             ALPDecimalBlockHeader<T> header;
-            process_alp_block(data, 0UL, &header, state_);
+            process_alp_block(data, &header, state_);
 
             return {
                 .bits_needed_ = header.total_size(),

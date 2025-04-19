@@ -28,11 +28,11 @@ namespace arcticdb::version_store {
 template<class ClockType>
 LocalVersionedEngine::LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library,
-        const ClockType&,
-        const BlockCodecImpl& codec) :
-    store_(std::make_shared<async::AsyncStore<ClockType>>(library, codec, encoding_version(library->config()))),
-    symbol_list_(std::make_shared<SymbolList>(version_map_)),
-    block_codec_(codec) {
+        const ClockType&) :
+    encoding_version_(encoding_version(library->config())),
+    block_codec_(encoding_version_ == EncodingVersion::V1 ? codec::default_lz4_codec() : codec::default_adaptive_codec()),
+    store_(std::make_shared<async::AsyncStore<ClockType>>(library, block_codec_, encoding_version_)),
+    symbol_list_(std::make_shared<SymbolList>(version_map_)) {
         initialize(library);
 }
 
@@ -56,8 +56,8 @@ void LocalVersionedEngine::initialize(const std::shared_ptr<storage::Library>& l
 #endif
 }
 
-template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<storage::Library>& library, const util::SysClock&, const BlockCodecImpl&);
-template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<storage::Library>& library, const util::ManualClock&, const BlockCodecImpl&);
+template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<storage::Library>& library, const util::SysClock&);
+template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<storage::Library>& library, const util::ManualClock&);
 
 struct TransformBatchResultsFlags {
     /// If true processing of batch results will throw exception on the first error it observes and stop processing

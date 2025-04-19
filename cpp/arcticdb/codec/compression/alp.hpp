@@ -10,6 +10,7 @@
 #include <arcticdb/codec/compression/compressor.hpp>
 #include <arcticdb/codec/compression/compression_utils.hpp>
 #include <arcticdb/codec/compression/contiguous_range_adaptor.hpp>
+#include <arcticdb/util/configs_map.hpp>
 
 namespace arcticdb {
 
@@ -125,12 +126,15 @@ struct ALPCompressor {
             uint8_t *out_ptr,
             size_t &total_size,
             std::array<uint16_t, BLOCK_SIZE> &exception_positions) {
+        static const auto max_comp_ratio = ConfigsMap::instance()->get_double("Alp.MaxCompressRatio", 0.8);
+        const auto compress_limit = input.buffer().bytes() * max_comp_ratio;
         if (input.num_blocks() == 1) {
             auto ptr = reinterpret_cast<const T *>(input.buffer().data());
             for (auto i = 1UL; i < full_blocks_; ++i) {
                 std::array<T, BLOCK_SIZE> exceptions;
                 std::array<EncodedType, alp::config::VECTOR_SIZE> encoded;
                 write_decimal_data(ptr, exceptions, exception_positions, encoded, state, out_ptr, total_size);
+                codec::check<ErrorCode::E_ENCODING_OVERFLOW>(total_size < compress_limit, "Exceeded encoding limit");
             }
         } else {
             ContiguousRangeForwardAdaptor<T, BLOCK_SIZE> adaptor(input);
@@ -139,6 +143,7 @@ struct ALPCompressor {
                 std::array<T, BLOCK_SIZE> exceptions;
                 std::array<EncodedType, alp::config::VECTOR_SIZE> encoded;
                 write_decimal_data(ptr, exceptions, exception_positions, encoded, state, out_ptr, total_size);
+                codec::check<ErrorCode::E_ENCODING_OVERFLOW>(total_size < compress_limit, "Exceeded encoding limit");
             }
         }
         if (remainder_ > 0) {
@@ -167,12 +172,15 @@ struct ALPCompressor {
             size_t &total_size,
             std::array<uint16_t, BLOCK_SIZE> &exception_positions) {
         auto column_header = new (out_ptr) RealDoubleColumnHeader<T>(state);
+        static const auto max_comp_ratio = ConfigsMap::instance()->get_double("Alp.MaxCompressRatio", 0.8);
+        const auto compress_limit = input.buffer().bytes() * max_comp_ratio;
         auto bit_widths = column_header->bit_widths();
         if (input.num_blocks() == 1) {
             auto ptr = reinterpret_cast<const T *>(input.buffer().data());
             for (auto i = 1UL; i < full_blocks_; ++i) {
                 std::array<uint16_t, BLOCK_SIZE> exceptions{};
                 write_real_double_data(ptr, exceptions, exception_positions, state, out_ptr, total_size, bit_widths);
+                codec::check<ErrorCode::E_ENCODING_OVERFLOW>(total_size < compress_limit, "Exceeded encoding limit");
             }
         } else {
             ContiguousRangeForwardAdaptor<T, BLOCK_SIZE> adaptor(input);
@@ -180,6 +188,7 @@ struct ALPCompressor {
                 auto ptr = adaptor.next();
                 std::array<uint16_t, BLOCK_SIZE> exceptions{};
                 write_real_double_data(ptr, exceptions, exception_positions, state, out_ptr, total_size, bit_widths);
+                codec::check<ErrorCode::E_ENCODING_OVERFLOW>(total_size < compress_limit, "Exceeded encoding limit");
             }
         }
         if (remainder_ > 0) {

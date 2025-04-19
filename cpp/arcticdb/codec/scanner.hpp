@@ -137,7 +137,7 @@ inline EncodingScanResultSet predicted_optimal_encodings(ColumnData column_data)
 // For the time being an acceptable result is just one that achieves some degree of compression, however this could be
 // made more sophisticated if multiple results were to be evaluated together (see below)
 inline bool is_acceptable_result(const EncodingScanResult& result) {
-    return result.estimated_size_ < result.original_size_;
+    return result.estimated_size_ <= result.original_size_;
 }
 
 inline EncodingScanResult plain_result(size_t bytes) {
@@ -188,8 +188,7 @@ inline void select_encoding_for_column(const ColumnData& column_data, EncodingSc
             break;
         }
 
-        EncoderData encoder_data;
-        auto scanned_result = max_compressed_size(encodings_set[i].type_, column_data.field_stats(), column_data.type().data_type(), column_data.row_count(), column_data, encoder_data);
+        auto scanned_result = max_compressed_size(encodings_set[i].type_, column_data.field_stats(), column_data.type().data_type(), column_data.row_count(), column_data, encodings_set[i].data_);
         if(is_acceptable_result(scanned_result)) {
             encodings_set.select(i, std::move(scanned_result));
             result.max_compressed_bytes_ += encodings_set[i].estimated_size_;

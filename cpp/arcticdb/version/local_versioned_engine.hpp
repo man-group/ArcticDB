@@ -67,8 +67,7 @@ public:
     template<class ClockType = util::SysClock>
     explicit LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library,
-        const ClockType& = ClockType{},
-        const BlockCodecImpl& codec = codec::default_adaptive_codec());
+        const ClockType& = ClockType{});
 
     virtual ~LocalVersionedEngine() = default;
 
@@ -436,12 +435,13 @@ private:
     void initialize(const std::shared_ptr<storage::Library>& library);
     void add_to_symbol_list_on_compaction(const StreamId& stream_id, const CompactIncompleteOptions& options, const UpdateInfo& update_info);
 
+    EncodingVersion encoding_version_;
+    BlockCodecImpl block_codec_;
     std::shared_ptr<Store> store_;
     arcticdb::proto::storage::VersionStoreConfig cfg_;
     std::shared_ptr<VersionMap> version_map_ = std::make_shared<VersionMap>();
     std::shared_ptr<SymbolList> symbol_list_;
     std::optional<std::string> license_key_;
-    BlockCodecImpl block_codec_;
 };
 
 } // arcticdb::version_store

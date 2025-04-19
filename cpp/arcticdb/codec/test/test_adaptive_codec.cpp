@@ -147,4 +147,26 @@ TEST(AdaptiveCodec, ALPRD) {
     auto decoded = decode_segment(encoded);
     ASSERT_EQ(decoded, copy_seg);
 }
+
+TEST(AdaptiveCodec, ALP) {
+    constexpr auto num_rows =  100'000;
+    auto input = random_decimal_floats(0, 1000, 2, num_rows);
+    constexpr auto data_type = DataType::FLOAT64;
+    auto column = std::make_shared<Column>(column_from_vector(input, make_scalar_type(data_type)));
+    SegmentInMemory seg;
+    FieldWrapper field_wrapper{make_scalar_type(data_type), "uints"};
+    seg.add_column(field_wrapper.field(), column);
+    seg.set_row_data(num_rows - 1);
+    seg.calculate_statistics();
+    auto scan_results = get_encodings(seg);
+    auto codec_opts = codec::default_adaptive_codec();
+    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
+    log::codec().info("Max compressed: {} Uncompressed: {} Encoded buffer: {}", max_compressed_size, uncompressed_size, encoded_buffer_size);
+    ASSERT_EQ(scan_results.value(0).first().type_, EncodingType::ALP);
+    auto copy_seg = seg.clone();
+    auto encoded = encode_v2(std::move(seg), codec_opts);
+    auto decoded = decode_segment(encoded);
+    ASSERT_EQ(decoded, copy_seg);
+}
+
 } // namespace arcticdb

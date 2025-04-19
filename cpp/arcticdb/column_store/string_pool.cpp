@@ -106,8 +106,8 @@ StringPool& StringPool::operator=(StringPool &&that) noexcept {
 
 ColumnData StringPool::column_data() const {
     return {
-        &block_.buffer(),
-        &shapes_.buffer(),
+        &data(),
+        &shapes(),
         string_pool_descriptor().type(),
         nullptr,
         nullptr,
