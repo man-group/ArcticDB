@@ -53,8 +53,9 @@ def test_defrag_timeseries_col_sliced(version_store_factory):
     generic_defrag_test(lib, sym)
 
 
-def test_defrag_timeseries_partially_compacted(version_store_factory):
-    lib = version_store_factory(column_group_size=2, segment_row_size=10)
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+def test_defrag_timeseries_partially_compacted(version_store_factory, dynamic_schema):
+    lib = version_store_factory(dynamic_schema=dynamic_schema, column_group_size=2, segment_row_size=10)
     sym = "test_defrag_timeseries_partially_compacted"
     index_0 = pd.date_range("2025-01-01", periods=37)
     df_0 = pd.DataFrame(
@@ -81,6 +82,8 @@ def test_defrag_timeseries_partially_compacted(version_store_factory):
         lib.append(sym, df)
         start_date += pd.Timedelta(days=num_rows)
     generic_defrag_test(lib, sym)
+    index = lib.read_index(sym)
+    assert (index["version_id"].iloc[:3] == 0).all()
 
 
 @pytest.mark.parametrize("num_rows", [37, 40])
