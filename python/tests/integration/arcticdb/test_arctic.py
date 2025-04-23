@@ -18,6 +18,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import List
 from enum import Enum
+import multiprocessing
 
 from arcticdb_ext import get_config_int
 from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
@@ -1335,3 +1336,22 @@ def test_norm_failure_error_message(arctic_library):
         write_batch_exception.value
     )
     assert all("write_pickle" not in str(e.value) for e in [append_exception, append_batch_exception, update_exception])
+
+
+def create_library(uri, lib_name):
+    ac = Arctic(uri)
+    ac.create_library(lib_name)
+    assert lib_name in ac.list_libraries()
+
+
+@pytest.mark.parametrize("multiprocess", ["spawn", "fork"])
+def test_s3_checksum_off_by_env_var(s3_storage, lib_name, multiprocess):
+    create_library(s3_storage.arctic_uri, lib_name)
+    spawn_context = multiprocessing.get_context(multiprocess)
+    processes = []
+    for i in range(2):
+        p = spawn_context.Process(target=create_library, args=(s3_storage.arctic_uri, f"{lib_name}_{i}", ))
+        processes.append(p)
+        p.start()
+    for p in processes:
+        p.join()
