@@ -3,6 +3,7 @@ import os as _os
 
 # Since aws-sdk-cpp >= 1.11.486, it has turned on checksum integrity check `x-amz-checksum-mode: enabled`
 # This feature is not supported in many s3 implementation and causes error
+# Update environment variable before import arcticdb_ext to disable checksum validation
 if _os.getenv("AWS_RESPONSE_CHECKSUM_VALIDATION") == "when_supported" or _os.getenv("AWS_REQUEST_CHECKSUM_CALCULATION") == "when_supported":
     _logging.getLogger(__name__).warning(
         "Checksum validation has been specfically enabled by user, which the endpoint may not support and causes error."
