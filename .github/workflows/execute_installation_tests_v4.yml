@@ -93,7 +93,7 @@ jobs:
       fail-fast: false  
     env:
       conda_file: "python/installation_tests/environment_unix.yml"
-      arcticdb_version: ${{ inputs.arcticdb_version || '5.1.2' }}
+      arcticdb_version: ${{ inputs.arcticdb_version || '4.4.7' }}
       lmdb: ${{ inputs.run_on_lmdb || '1' }}
       real_s3: ${{ inputs.run_on_real_s3 || '1' }}
 
@@ -191,6 +191,7 @@ jobs:
       shell: bash -l {0}      
       run: |
         echo $pwd
+        echo "Running tests against arcticdb version: ${{ env.arcticdb_version }}"
         pytest -rs -v --log-file="tests.log" -n auto python/installation_tests/test_installation.py
         
         ## For testing
