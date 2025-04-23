@@ -42,7 +42,6 @@ on:
           - "5.1.2"
           - "5.0.0"
           - "4.5.1"
-          - "4.4.7"
           - "1.6.2"
       run_on_lmdb:
         description: 'Execute tests on LMDB'
@@ -95,7 +94,7 @@ jobs:
       fail-fast: false  
     env:
       conda_file: "python/installation_tests/environment_unix.yml"
-      arcticdb_version: ${{ inputs.arcticdb_version || '1.6.2' }}
+      arcticdb_version: ${{ inputs.arcticdb_version || '4.5.1' }}
       lmdb: ${{ inputs.run_on_lmdb || '1' }}
       real_s3: ${{ inputs.run_on_real_s3 || '1' }}
 
