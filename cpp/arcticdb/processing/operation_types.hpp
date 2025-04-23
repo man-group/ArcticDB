@@ -151,7 +151,7 @@ namespace arithmetic_promoted_type::details {
 }
 
 template <class VAL, class Func>
-struct unary_arithmetic_promoted_type {
+struct unary_operation_promoted_type {
     static constexpr size_t val_width = arithmetic_promoted_type::details::width_v<VAL>;
     using type = typename
         /* Unsigned ints promote to themselves for the abs operator, and to a signed int of double the width with the neg operator
@@ -164,7 +164,7 @@ struct unary_arithmetic_promoted_type {
 };
 
 template <class LHS, class RHS, class Func>
-struct type_arithmetic_promoted_type {
+struct binary_operation_promoted_type {
     static constexpr size_t max_width = arithmetic_promoted_type::details::max_width_v<LHS, RHS>;
     using type = typename
     std::conditional_t<std::is_same_v<Func, DivideOperator>,
@@ -232,8 +232,51 @@ struct type_arithmetic_promoted_type {
     >;
 };
 
+template <class LHS, class RHS>
+struct ternary_operation_promoted_type {
+    static constexpr size_t max_width = arithmetic_promoted_type::details::max_width_v<LHS, RHS>;
+    using type = typename
+    std::conditional_t<std::is_floating_point_v<LHS> || std::is_floating_point_v<RHS>,
+        // At least one of the types is floating point
+        std::conditional_t<std::is_floating_point_v<LHS> && std::is_floating_point_v<RHS>,
+            // If both types are floating point, promote to the type of the widest one
+            std::conditional_t<max_width == 8,
+                    double,
+                    float
+            >,
+            // Otherwise, if only one type is floating point, promote to this type
+            std::conditional_t<std::is_floating_point_v<LHS>,
+                    LHS,
+                    RHS
+            >
+        >,
+        // Otherwise, both types are integers
+        std::conditional_t<std::is_unsigned_v<LHS> && std::is_unsigned_v<RHS>,
+            // Both types are unsigned, promote to the type of the widest one
+            typename arithmetic_promoted_type::details::unsigned_width_t<max_width>,
+            std::conditional_t<std::is_signed_v<LHS> && std::is_signed_v<RHS>,
+                // Both types are signed integers (as we are in the "else" of the floating point checks), promote to the type of the widest one
+                typename arithmetic_promoted_type::details::signed_width_t<max_width>,
+                // We have one signed and one unsigned type
+                std::conditional_t<(std::is_signed_v<LHS> && sizeof(LHS) > sizeof(RHS)) || (std::is_signed_v<RHS> && sizeof(RHS) > sizeof(LHS)),
+                    // If the signed type is strictly larger than the unsigned type, then promote to the signed type
+                    typename arithmetic_promoted_type::details::signed_width_t<max_width>,
+                    // Otherwise, check if the unsigned one is the widest type we support
+                    std::conditional_t<std::is_same_v<LHS, uint64_t> || std::is_same_v<RHS, uint64_t>,
+                        // Unsigned type is as wide as we go, so no integer type can exactly represent both input types
+                        // So promote to float64
+                        double,
+                        // There should be a signed type wider than the unsigned type, so both can be exactly represented
+                        typename arithmetic_promoted_type::details::signed_width_t<2 * max_width>
+                    >
+                >
+            >
+        >
+    >;
+};
+
 struct AbsOperator {
-template<typename T, typename V = typename unary_arithmetic_promoted_type<T, AbsOperator>::type>
+template<typename T, typename V = typename unary_operation_promoted_type<T, AbsOperator>::type>
 V apply(T t) {
     if constexpr(std::is_unsigned_v<T>)
         return t;
@@ -243,7 +286,7 @@ V apply(T t) {
 };
 
 struct NegOperator {
-template<typename T, typename V = typename unary_arithmetic_promoted_type<T, NegOperator>::type>
+template<typename T, typename V = typename unary_operation_promoted_type<T, NegOperator>::type>
 V apply(T t) {
     return -static_cast<V>(t);
 }
@@ -286,28 +329,28 @@ bool apply(T t) {
 };
 
 struct PlusOperator {
-template<typename T, typename U, typename V = typename type_arithmetic_promoted_type<T, U, PlusOperator>::type>
+template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, PlusOperator>::type>
 V apply(T t, U u) {
     return static_cast<V>(t) + static_cast<V>(u);
 }
 };
 
 struct MinusOperator {
-template<typename T, typename U, typename V = typename type_arithmetic_promoted_type<T, U, MinusOperator>::type>
+template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, MinusOperator>::type>
 V apply(T t, U u) {
     return static_cast<V>(t) - static_cast<V>(u);
 }
 };
 
 struct TimesOperator {
-template<typename T, typename U, typename V = typename type_arithmetic_promoted_type<T, U, TimesOperator>::type>
+template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, TimesOperator>::type>
 V apply(T t, U u) {
     return static_cast<V>(t) * static_cast<V>(u);
 }
 };
 
 struct DivideOperator {
-template<typename T, typename U, typename V = typename type_arithmetic_promoted_type<T, U, DivideOperator>::type>
+template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, DivideOperator>::type>
 V apply(T t, U u) {
     return static_cast<V>(t) / static_cast<V>(u);
 }

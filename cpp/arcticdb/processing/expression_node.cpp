@@ -99,11 +99,11 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                     using type_info = ScalarTypeInfo<decltype(tag)>;
                     if constexpr (is_numeric_type(type_info::data_type)) {
                         if (operation_type_ == OperationType::ABS) {
-                            using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<AbsOperator>>::type;
+                            using TargetType = typename unary_operation_promoted_type<typename type_info::RawType, std::remove_reference_t<AbsOperator>>::type;
                             res = data_type_from_raw_type<TargetType>();
                         } else {
                             // operation_type_ == OperationType::NEG
-                            using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<NegOperator>>::type;
+                            using TargetType = typename unary_operation_promoted_type<typename type_info::RawType, std::remove_reference_t<NegOperator>>::type;
                             res = data_type_from_raw_type<TargetType>();
                         }
                     } else {
@@ -154,22 +154,22 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                         if constexpr (is_numeric_type(left_type_info::data_type) && is_numeric_type(right_type_info::data_type)) {
                             switch (operation_type_) {
                                 case OperationType::ADD: {
-                                    using TargetType = typename type_arithmetic_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<PlusOperator>>::type;
+                                    using TargetType = typename binary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<PlusOperator>>::type;
                                     res = data_type_from_raw_type<TargetType>();
                                     break;
                                 }
                                 case OperationType::SUB: {
-                                    using TargetType = typename type_arithmetic_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<MinusOperator>>::type;
+                                    using TargetType = typename binary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<MinusOperator>>::type;
                                     res = data_type_from_raw_type<TargetType>();
                                     break;
                                 }
                                 case OperationType::MUL: {
-                                    using TargetType = typename type_arithmetic_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<TimesOperator>>::type;
+                                    using TargetType = typename binary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<TimesOperator>>::type;
                                     res = data_type_from_raw_type<TargetType>();
                                     break;
                                 }
                                 case OperationType::DIV: {
-                                    using TargetType = typename type_arithmetic_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<DivideOperator>>::type;
+                                    using TargetType = typename binary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<DivideOperator>>::type;
                                     res = data_type_from_raw_type<TargetType>();
                                     break;
                                 }

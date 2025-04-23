@@ -10,49 +10,6 @@
 
 namespace arcticdb {
 
-template <class LHS, class RHS>
-struct ternary_promoted_type {
-    static constexpr size_t max_width = arithmetic_promoted_type::details::max_width_v<LHS, RHS>;
-    using type = typename
-    std::conditional_t<std::is_floating_point_v<LHS> || std::is_floating_point_v<RHS>,
-        // At least one of the types is floating point
-        std::conditional_t<std::is_floating_point_v<LHS> && std::is_floating_point_v<RHS>,
-            // If both types are floating point, promote to the type of the widest one
-            std::conditional_t<max_width == 8,
-                    double,
-                    float
-            >,
-            // Otherwise, if only one type is floating point, promote to this type
-            std::conditional_t<std::is_floating_point_v<LHS>,
-                    LHS,
-                    RHS
-            >
-        >,
-        // Otherwise, both types are integers
-        std::conditional_t<std::is_unsigned_v<LHS> && std::is_unsigned_v<RHS>,
-            // Both types are unsigned, promote to the type of the widest one
-            typename arithmetic_promoted_type::details::unsigned_width_t<max_width>,
-            std::conditional_t<std::is_signed_v<LHS> && std::is_signed_v<RHS>,
-                // Both types are signed integers (as we are in the "else" of the floating point checks), promote to the type of the widest one
-                typename arithmetic_promoted_type::details::signed_width_t<max_width>,
-                // We have one signed and one unsigned type
-                std::conditional_t<(std::is_signed_v<LHS> && sizeof(LHS) > sizeof(RHS)) || (std::is_signed_v<RHS> && sizeof(RHS) > sizeof(LHS)),
-                    // If the signed type is strictly larger than the unsigned type, then promote to the signed type
-                    typename arithmetic_promoted_type::details::signed_width_t<max_width>,
-                    // Otherwise, check if the unsigned one is the widest type we support
-                    std::conditional_t<std::is_same_v<LHS, uint64_t> || std::is_same_v<RHS, uint64_t>,
-                        // Unsigned type is as wide as we go, so no integer type can exactly represent both input types
-                        // So promote to float64
-                        double,
-                        // There should be a signed type wider than the unsigned type, so both can be exactly represented
-                        typename arithmetic_promoted_type::details::signed_width_t<2 * max_width>
-                    >
-                >
-            >
-        >
-    >;
-};
-
 template<bool arguments_reversed = false>
 inline std::string ternary_operation_column_name(std::string_view left, std::string_view right) {
     if constexpr (arguments_reversed) {
@@ -153,7 +110,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                 }
             } else if constexpr ((is_numeric_type(left_type_info::data_type) && is_numeric_type(right_type_info::data_type)) ||
                                  (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type))) {
-                using TargetType = typename ternary_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType>::type;
+                using TargetType = typename ternary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType>::type;
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 // TODO: Could this be more efficient?
@@ -225,7 +182,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                 }
             } else if constexpr ((is_numeric_type(col_type_info::data_type) && is_numeric_type(val_type_info::data_type)) ||
                                  (is_bool_type(col_type_info::data_type) && is_bool_type(val_type_info::data_type))) {
-                using TargetType = typename ternary_promoted_type<typename col_type_info::RawType, typename val_type_info::RawType>::type;
+                using TargetType = typename ternary_operation_promoted_type<typename col_type_info::RawType, typename val_type_info::RawType>::type;
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 auto value = static_cast<TargetType>(val.get<typename val_type_info::RawType>());
@@ -284,7 +241,7 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& left, c
                 }
             } else if constexpr ((is_numeric_type(left_type_info::data_type) && is_numeric_type(right_type_info::data_type)) ||
                                  (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type))) {
-                using TargetType = typename ternary_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType>::type;
+                using TargetType = typename ternary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType>::type;
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 auto left_value = static_cast<TargetType>(left.get<typename left_type_info::RawType>());
