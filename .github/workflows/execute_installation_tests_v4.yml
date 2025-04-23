@@ -119,16 +119,15 @@ jobs:
 
         if [[ "$VER" == "latest" ]]; then
           echo "Installing the latest version..."
-          pip install your_module_name    
+          pip install arcticdb    
         elif [[ -n "$VER" ]]; then
           echo "Installing version $VER..."
-          pip install your_module_name==$VER  
+          pip install arcticdb==$VER  
         else
           echo "Environment variable is not set or invalid!"
           exit 1  
         fi        
 
-        pip install arcticdb
         pip install wheel
         pip install setuptools
         pip install pytest
