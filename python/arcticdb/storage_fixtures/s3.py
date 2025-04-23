@@ -625,7 +625,6 @@ class HostDispatcherApplication(DomainDispatcherApplication):
         with self.lock:
             # Check for x-amz-checksum-mode header
             if environ.get('HTTP_X_AMZ_CHECKSUM_MODE') == 'enabled':
-                print(environ)
                 response_body = (
                     b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                     b'<Error><Code>MissingContentLength</Code>'
