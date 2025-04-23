@@ -4,6 +4,5 @@ channels:
 dependencies:
   - pytest
   - wheel
-  - arcticdb
   - setuptools
   - pytest-xdist
