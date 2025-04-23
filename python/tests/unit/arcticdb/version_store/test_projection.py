@@ -180,7 +180,7 @@ def test_project_ternary_fixed_width_strings(version_store_factory):
         {
             "conditional": [True, False, False, True, False, True],
             "width_1": ["a", "b", "c", "d", "e", "f"],
-            "width_2": ["g", "h", "i", "j", "k", "l"],
+            "width_2": ["gg", "hh", "ii", "jj", "kk", "ll"],
         },
         index=pd.date_range("2024-01-01", periods=6)
     )
