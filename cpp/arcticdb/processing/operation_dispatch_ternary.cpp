@@ -108,11 +108,23 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                             left.column_name_,
                             right.column_name_);
                 }
-            } else if constexpr ((is_numeric_type(left_type_info::data_type) && is_numeric_type(right_type_info::data_type)) ||
-                                 (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type))) {
+            } else if constexpr (is_numeric_type(left_type_info::data_type) && is_numeric_type(right_type_info::data_type)) {
                 using TargetType = typename ternary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType>::type;
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
+                // TODO: Could this be more efficient?
+                size_t idx{0};
+                Column::transform<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
+                        *(left.column_),
+                        *(right.column_),
+                        *output_column,
+                        [&condition, &idx](auto left_value, auto right_value) -> TargetType {
+                            return condition[idx++] ? static_cast<TargetType>(left_value) : static_cast<TargetType>(right_value);
+                        });
+            } else if constexpr (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type)) {
+                using TargetType = bool;
+                constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
+                output_column = std::make_unique<Column>(make_scalar_type(DataType::BOOL8), Sparsity::PERMITTED);
                 // TODO: Could this be more efficient?
                 size_t idx{0};
                 Column::transform<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(

@@ -257,10 +257,11 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unexpected data types {} {} input to {}",
                                                                                   left_type_info::data_type, right_type_info::data_type, operation_type_);
                         }
-                    } else if constexpr ((is_numeric_type(left_type_info::data_type) && is_numeric_type(right_type_info::data_type)) ||
-                                         (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type))) {
+                    } else if constexpr (is_numeric_type(left_type_info::data_type) && is_numeric_type(right_type_info::data_type)) {
                         using TargetType = typename ternary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType>::type;
                         res = data_type_from_raw_type<TargetType>();
+                    } else if constexpr (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type)) {
+                        res = DataType::BOOL8;
                     } else {
                         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unexpected data types {} {} input to {}",
                                                                               left_type_info::data_type, right_type_info::data_type, operation_type_);

@@ -1157,6 +1157,32 @@ def test_filter_ternary_bitset_column(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
+def test_filter_ternary_bool_columns(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_ternary_bool_columns"
+    df = pd.DataFrame(
+        {
+            "conditional": [True, False, False, True, False, True],
+            "col1": [True, True, True, True, False, False],
+            "col2": [True, False, True, False, True, False],
+        },
+        index=pd.date_range("2024-01-01", periods=6)
+    )
+    lib.write(symbol, df)
+
+    expected = df[np.where(df["conditional"].to_numpy(), df["col1"].to_numpy(), df["col2"].to_numpy())]
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col1"], q["col2"])]
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    expected = df[np.where(df["conditional"].to_numpy(), df["col2"].to_numpy(), df["col1"].to_numpy())]
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col2"], q["col1"])]
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+
 def test_filter_ternary_bitset_value(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     symbol = "test_filter_ternary_bitset_value"

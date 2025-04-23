@@ -932,7 +932,9 @@ class QueryBuilder:
         else:
             # This handles the case where the filtering is on a single boolean column
             # e.g. q = q[q["col"]]
-            if isinstance(item, ExpressionNode) and item.operator == COLUMN:
+            # or a single where statement where there are two bool input columns
+            # e.g. q = q[where(q["col"] == 0, q["bool_column_1"], q["bool_column_2"])]
+            if isinstance(item, ExpressionNode) and item.operator in [COLUMN, _OperationType.TERNARY]:
                 item = ExpressionNode.compose(item, _OperationType.IDENTITY, None)
             input_columns, expression_context = visit_expression(item)
             self_copy = copy.deepcopy(self)
