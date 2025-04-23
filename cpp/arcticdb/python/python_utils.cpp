@@ -2,12 +2,6 @@
 #include <arcticdb/python/python_handler_data.hpp>
 
 namespace arcticdb::python_util {
-void increment_none_refcount(size_t amount) {
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(PyGILState_Check(), "The thread incrementing None refcount must hold the GIL");
-    for(size_t i = 0; i < amount; ++i) {
-        Py_INCREF(Py_None);
-    }
-}
 
 void prefill_with_none(
     PyObject** ptr_dest,
@@ -24,7 +18,7 @@ void prefill_with_none(
 }
 
 PyObject** fill_with_none(PyObject** ptr_dest, size_t count, PythonHandlerData& handler_data) {
-    std::fill_n(ptr_dest, count, nullptr);
+    std::fill_n(ptr_dest, count, Py_None);
     handler_data.increment_none_refcount(count);
     return ptr_dest + count;
 }

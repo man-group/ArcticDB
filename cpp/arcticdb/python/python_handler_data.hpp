@@ -45,7 +45,10 @@ struct PythonHandlerData {
     /// can be used by other Python threads
     void apply_none_refcount() {
         const size_t cnt = none_refcount_->readFullAndReset();
-        python_util::increment_none_refcount(cnt);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(PyGILState_Check(), "The thread incrementing None refcount must hold the GIL");
+        for(size_t i = 0; i < cnt; ++i) {
+            Py_INCREF(Py_None);
+        }
     }
 
     /// There is no need to hold the GIL for this operation as this python object was created by the
@@ -66,8 +69,8 @@ struct PythonHandlerData {
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(nan_count == 0, "NaN refcount not applied. {} more to be applied", nan_count);
     }
 private:
-    std::shared_ptr<folly::ThreadCachedInt<size_t>> none_refcount_ = std::make_shared<folly::ThreadCachedInt<size_t>>();
-    std::shared_ptr<folly::ThreadCachedInt<size_t>> nan_refcount_ = std::make_shared<folly::ThreadCachedInt<size_t>>();
+    std::shared_ptr<folly::ThreadCachedInt<uint64_t>> none_refcount_ = std::make_shared<folly::ThreadCachedInt<uint64_t>>();
+    std::shared_ptr<folly::ThreadCachedInt<uint64_t>> nan_refcount_ = std::make_shared<folly::ThreadCachedInt<uint64_t>>();
     std::shared_ptr<py::handle> py_nan_;
 };
 

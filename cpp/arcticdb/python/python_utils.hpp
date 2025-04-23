@@ -26,8 +26,6 @@ namespace arcticdb {
 
 namespace arcticdb::python_util {
 
-void increment_none_refcount(size_t amount);
-
 class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
   PYBIND11_OBJECT_DEFAULT(PyRowRef, py::tuple, PyTuple_Check)
 
