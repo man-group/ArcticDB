@@ -42,7 +42,7 @@ def test_stress_all_strings_dynamic(lmdb_version_store_big_map):
 
 
 def dataframe_with_none_and_nan(rows: int, cols: int):
-    return pd.DataFrame(np.asfortranarray(np.random.choice([None, np.nan, str(np.random.randn())], size=(rows, cols))))
+    return pd.DataFrame(np.random.choice([None, np.nan, str(np.random.randn())], size=(rows, cols)))
 
 def alloc_nones_and_nans():
     nones = [None for _ in range(200_000)]
