@@ -433,7 +433,7 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
         },
         index=pd.date_range("2024-01-01", periods=2),
     )
-    lib.write(symbol, all_columns_df[:2])
+    lib.write(symbol, all_columns_df)
 
     base_update_df = pd.DataFrame(
         {
@@ -462,7 +462,7 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     with pytest.raises(UserInputException):
         lib.read(symbol, query_builder=q)
 
-    # left column missing
+    # right column missing
     update_df = base_update_df.drop(columns="col2")
     lib.update(symbol, update_df)
     q = QueryBuilder()

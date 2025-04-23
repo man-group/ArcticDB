@@ -1647,3 +1647,89 @@ def test_filter_unsupported_boolean_operators():
     with pytest.raises(UserInputException):
         q = QueryBuilder()
         q = q[not q["a"]]
+
+def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_filter_ternary_dynamic_missing_columns"
+    all_columns_df = pd.DataFrame(
+        {
+            "conditional": [True, False, True, False],
+            "col1": [1, 1, 2, 2],
+            "col2": [11, 11, 12, 12],
+        },
+        index=pd.date_range("2024-01-01", periods=4),
+    )
+    lib.write(symbol, all_columns_df)
+
+    base_update_df = pd.DataFrame(
+        {
+            "conditional": [True, False, True, False],
+            "col1": [2, 2, 1, 1],
+            "col2": [12, 12, 11, 11],
+        },
+        index=pd.date_range("2024-01-05", periods=4),
+    )
+
+    # conditional column missing
+    update_df = base_update_df.drop(columns="conditional")
+    lib.update(symbol, update_df)
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col1"] == 1, q["col2"] == 12)]
+    received = lib.read(symbol, query_builder=q).data
+    expected = pd.concat([all_columns_df, update_df]).fillna(False)
+    expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
+    assert_frame_equal(expected, received, check_dtype=False)
+
+    # left column missing
+    update_df = base_update_df.drop(columns="col1")
+    lib.update(symbol, update_df)
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col1"] == 1, q["col2"] == 12)]
+    received = lib.read(symbol, query_builder=q).data
+    expected = pd.concat([all_columns_df, update_df]).fillna(0)
+    expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
+    assert_frame_equal(expected, received, check_dtype=False)
+
+    # right column missing
+    update_df = base_update_df.drop(columns="col2")
+    lib.update(symbol, update_df)
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col1"] == 1, q["col2"] == 12)]
+    received = lib.read(symbol, query_builder=q).data
+    expected = pd.concat([all_columns_df, update_df]).fillna(0)
+    expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
+    assert_frame_equal(expected, received, check_dtype=False)
+
+    # conditional and left column missing
+    update_df = base_update_df.drop(columns=["conditional", "col1"])
+    lib.update(symbol, update_df)
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col1"] == 1, q["col2"] == 12)]
+    received = lib.read(symbol, query_builder=q).data
+    expected = pd.concat([all_columns_df, update_df])
+    expected["conditional"].fillna(False, inplace=True)
+    expected["col1"].fillna(0, inplace=True)
+    expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
+    assert_frame_equal(expected, received, check_dtype=False)
+
+    # conditional and right column missing
+    update_df = base_update_df.drop(columns=["conditional", "col2"])
+    lib.update(symbol, update_df)
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col1"] == 1, q["col2"] == 12)]
+    received = lib.read(symbol, query_builder=q).data
+    expected = pd.concat([all_columns_df, update_df])
+    expected["conditional"].fillna(False, inplace=True)
+    expected["col2"].fillna(0, inplace=True)
+    expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
+    assert_frame_equal(expected, received, check_dtype=False)
+
+    # left and right column missing
+    update_df = base_update_df.drop(columns=["col1", "col2"])
+    lib.update(symbol, update_df)
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col1"] == 1, q["col2"] == 12)]
+    received = lib.read(symbol, query_builder=q).data
+    expected = pd.concat([all_columns_df, update_df]).fillna(0)
+    expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
+    assert_frame_equal(expected, received, check_dtype=False)
