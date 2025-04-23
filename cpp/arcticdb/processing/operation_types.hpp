@@ -75,6 +75,7 @@ inline std::string_view operation_type_to_str(const OperationType ot) {
         TO_STR(AND)
         TO_STR(OR)
         TO_STR(XOR)
+        TO_STR(TERNARY)
 #undef TO_STR
         default:return std::string_view("UNKNOWN");
     }

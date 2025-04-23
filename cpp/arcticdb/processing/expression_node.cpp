@@ -135,8 +135,7 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
             default:
                 internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected unary operator {}", operation_type_);
         }
-    } else {
-        // Binary operation
+    } else if (is_binary_operation(operation_type_)) {
         ValueSetState right_value_set_state;
         auto right_type = child_return_type(right_, expression_context, column_types, right_value_set_state);
         switch (operation_type_) {
@@ -230,6 +229,57 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
             default:
                 internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected binary operator {}", operation_type_);
         }
+    } else {
+        // Ternary operation
+        ValueSetState condition_value_set_state;
+        auto condition_type = child_return_type(condition_, expression_context, column_types, condition_value_set_state);
+        ValueSetState right_value_set_state;
+        auto right_type = child_return_type(right_, expression_context, column_types, right_value_set_state);
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(condition_value_set_state == ValueSetState::NOT_A_SET &&
+                                                              right_value_set_state == ValueSetState::NOT_A_SET,
+                                                              "Unexpected value set input to {}", operation_type_);
+        if (!std::holds_alternative<BitSetTag>(condition_type)) {
+            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    std::get<DataType>(condition_type) == DataType::BOOL8,
+                    "Unexpected data type {} input as condition operand to {}",
+                    std::get<DataType>(condition_type), operation_type_);
+        }
+        if (std::holds_alternative<DataType>(left_type) && std::holds_alternative<DataType>(right_type)) {
+            details::visit_type(std::get<DataType>(left_type), [this, &res, right_type](auto left_tag) {
+                using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
+                details::visit_type(std::get<DataType>(right_type), [this, &res](auto right_tag) {
+                    using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
+                    if constexpr(is_sequence_type(left_type_info::data_type) && is_sequence_type(right_type_info::data_type)) {
+                        if constexpr(left_type_info::data_type == right_type_info::data_type && is_dynamic_string_type(left_type_info::data_type)) {
+                            res = left_type_info::data_type;
+                        } else {
+                            // Fixed width string columns
+                            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unexpected data types {} {} input to {}",
+                                                                                  left_type_info::data_type, right_type_info::data_type, operation_type_);
+                        }
+                    } else if constexpr ((is_numeric_type(left_type_info::data_type) && is_numeric_type(right_type_info::data_type)) ||
+                                         (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type))) {
+                        using TargetType = typename ternary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType>::type;
+                        res = data_type_from_raw_type<TargetType>();
+                    } else {
+                        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unexpected data types {} {} input to {}",
+                                                                              left_type_info::data_type, right_type_info::data_type, operation_type_);
+                    }
+                });
+            });
+        } else if (std::holds_alternative<DataType>(left_type)) {
+             // right_type holds a bitset, so left_type needs to be bool
+             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                     std::get<DataType>(left_type) == DataType::BOOL8,
+                     "Unexpected data types {}/bitset input to {}",
+                     std::get<DataType>(left_type), operation_type_);
+        } else if (std::holds_alternative<DataType>(right_type)) {
+            // left_type holds a bitset, so right_type needs to be bool
+            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    std::get<DataType>(right_type) == DataType::BOOL8,
+                    "Unexpected data types bitset/{} input to {}",
+                    std::get<DataType>(right_type), operation_type_);
+        } // else both hold bitsets, so the result will be a bitset
     }
     return res;
 }
