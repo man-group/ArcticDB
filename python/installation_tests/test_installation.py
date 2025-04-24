@@ -357,6 +357,8 @@ def test_stage_finalize_dynamic_with_chunking(ac_client, lib_name):
 
     lib_tool = lib._dev_tools.library_tool()
     data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
+    ## NOTE: Conditional on the version check.
+    ##       Reasons for failure of older version is not investigated
     if (arcticdb.__version__ >= "5.2.0"):
         assert len(data_keys) == 8
     else:
