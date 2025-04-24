@@ -12,6 +12,7 @@ import time
 import pandas as pd
 import numpy as np
 import pytest
+import arcticdb
 
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
@@ -356,7 +357,10 @@ def test_stage_finalize_dynamic_with_chunking(ac_client, lib_name):
 
     lib_tool = lib._dev_tools.library_tool()
     data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
-    assert len(data_keys) == 8
+    if (arcticdb.__version__ >= "5.2.0"):
+        assert len(data_keys) == 8
+    else:
+        assert len(data_keys) == 2
     for k in data_keys:
         df = lib_tool.read_to_dataframe(k)
         assert df.index.is_monotonic_increasing
