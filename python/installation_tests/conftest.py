@@ -18,7 +18,7 @@ import pytest
 import arcticdb as adb
 from arcticdb.version_store.library import Library
 from arcticdb.arctic import Arctic
-from installation_tests.client_utils import StorageTypes, create_arctic_client
+from client_utils import StorageTypes, create_arctic_client
 
 
 @pytest.fixture()
