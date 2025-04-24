@@ -14,6 +14,7 @@ import re
 import sys
 import platform
 from tempfile import mkdtemp
+from urllib.parse import urlparse
 import boto3
 import time
 import random
@@ -36,8 +37,7 @@ from .utils import (
 )
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_gcp_library_to_env, add_s3_library_to_env
-from arcticdb_ext.storage import AWSAuthMethod, NativeVariantStorage
-
+from arcticdb_ext.storage import AWSAuthMethod, NativeVariantStorage, GCPXMLSettings as NativeGCPXMLSettings
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 
@@ -355,19 +355,21 @@ def real_s3_from_environment_variables(
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "") + additional_suffix
     return out
 
-
 def real_gcp_from_environment_variables(
     shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""
 ) -> BaseGCPStorageFixtureFactory:
-    out = BaseGCPStorageFixtureFactory(native_config=native_config)
-    out.endpoint = os.getenv("ARCTICDB_REAL_GCP_ENDPOINT")
-    out.region = os.getenv("ARCTICDB_REAL_GCP_REGION")
-    out.default_bucket = os.getenv("ARCTICDB_REAL_GCP_BUCKET")
-    access_key = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
-    secret_key = os.getenv("ARCTICDB_REAL_GCP_SECRET_KEY")
-    out.default_key = Key(id=access_key, secret=secret_key, user_name="unknown user")
+    native_settings = NativeGCPXMLSettings()
+    native_settings.bucket = os.getenv("ARCTICDB_REAL_GCP_BUCKET")
+    native_settings.endpoint = os.getenv("ARCTICDB_REAL_GCP_ENDPOINT")
+    native_settings.access = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
+    native_settings.secret = os.getenv("ARCTICDB_REAL_GCP_SECRET_KEY")
+    out = BaseGCPStorageFixtureFactory(native_config=native_settings)
+    out.default_key = Key(id=native_settings.access, secret=native_settings.secret, user_name="unknown user")
+    out.default_bucket = native_settings.bucket
     out.clean_bucket_on_fixture_exit = os.getenv("ARCTICDB_REAL_GCP_CLEAR", "1").lower() in ["true", "1"]
-    out.ssl = out.endpoint.startswith("https://") if out.endpoint is not None else False
+    out.ssl = native_settings.endpoint.startswith("https://") if native_settings.endpoint is not None else False
+    out.endpoint = native_settings.endpoint
+    out._test_only_is_nfs_layout = False
     if shared_path:
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
     else:
