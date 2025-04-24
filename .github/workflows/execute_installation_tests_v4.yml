@@ -102,37 +102,36 @@ jobs:
     steps:
 
     - name: Check Unsupported Versions
+      shell: bash
       run: |
         echo "Check for not supported arcticdb-python versions"
-        declare -A unsupported_versions
-        unsupported_versions["3.13-5.1.2"]=1
-        unsupported_versions["3.13-5.0.0"]=1
-        unsupported_versions["3.13-4.5.1"]=1
-        unsupported_versions["3.13-1.6.2"]=1
+
+        UNSUPPORTED_COMBINATIONS=("3.13-5.1.2" "3.13-5.0.0" "3.13-4.5.1")
 
         CURRENT_COMBINATION="${{ matrix.python || inputs.python}}-${{ env.arcticdb_version }}"
         echo "Check for combination $CURRENT_COMBINATION"
-
-        if [[ ${unsupported_versions[$CURRENT_COMBINATION]} ]]; then
+        if [[ " ${UNSUPPORTED_COMBINATIONS[*]} " == *"$CURRENT_COMBINATION"* ]]; then
           echo "Skipping unsupported combination: $CURRENT_COMBINATION"
-          exit 0
-        fi  
+          echo "SKIP_JOB=true" >> $GITHUB_ENV
+        fi
 
     - name: Checkout code
+      if: ${{ env.SKIP_JOB != 'true' }}
       uses: actions/checkout@v3
 
     - name: Set up Python
+      if: ${{ env.SKIP_JOB != 'true' }}
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python || inputs.python}}
 
     - name: (pypi) Install arcticdb from requirements files 
-      if: ${{ !contains(matrix.use_conda, 'yes')}}
+      if: ${{ (env.SKIP_JOB != 'true') && (!contains(matrix.use_conda, 'yes'))}}
       run: |
         pip install -r "python/tests/compat/requirements-${{ env.arcticdb_version }}.txt"
 
     - name: (pypi) Install other prerequisites 
-      if: ${{ !contains(matrix.use_conda, 'yes')}}
+      if: ${{ (env.SKIP_JOB != 'true') && (!contains(matrix.use_conda, 'yes'))}}
       shell: bash -l {0}
       run: |
         python -m pip install --upgrade pip
@@ -145,7 +144,7 @@ jobs:
       # Install conda environment
     - name: (conda) Install arcticdb from conda-forge
       uses: mamba-org/setup-micromamba@v2.0.0
-      if: ${{ contains(matrix.use_conda, 'yes') }}
+      if: ${{ (env.SKIP_JOB != 'true') && (contains(matrix.use_conda, 'yes'))}}
       with:
         environment-file: "python/tests/compat/requirements-${{ env.arcticdb_version }}.yml" 
         environment-name: arcticdb
@@ -155,13 +154,14 @@ jobs:
         post-cleanup: 'all'
 
     - name: (conda) Install other dependencies ${{ env.conda_file }}
-      if: ${{ contains(matrix.use_conda, 'yes')}}
+      if: ${{ (env.SKIP_JOB != 'true') && (contains(matrix.use_conda, 'yes'))}}
       shell: bash -l {0}
       run: |
           micromamba activate arcticdb
           micromamba install --no-pin --file ${{ env.conda_file }}
   
     - name: Set persistent storage variables
+      if: ${{ env.SKIP_JOB != 'true' }}
       uses: ./.github/actions/set_persistent_storage_env_vars
       with:
         aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -171,16 +171,19 @@ jobs:
         persistent_storage: "true"
 
     - name: Delete python/arcticdb directory
+      if: ${{ env.SKIP_JOB != 'true' }}
       shell: bash -l {0}      
       run: |
         rm -rf python/arcticdb        
   
     - name: Build protobuf
+      if: ${{ env.SKIP_JOB != 'true' }}
       shell: bash -l {0}      
       run: |
         python setup.py protoc --build-lib python        
 
     - name: Set environment variables 
+      if: ${{ env.SKIP_JOB != 'true' }}
       shell: bash -l {0}      
       run: |
         echo "ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=0" >> $GITHUB_ENV
@@ -190,6 +193,7 @@ jobs:
         echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
 
     - name: Run tests
+      if: ${{ env.SKIP_JOB != 'true' }}
       shell: bash -l {0}      
       run: |
         echo $pwd
@@ -200,7 +204,7 @@ jobs:
         #pytest -v --log-file="tests.log" python/tests/integration/arcticdb/test_arctic.py::test_append_prune_previous_versions
 
     - name: Upload the logs
-      if: always()
+      if: ${{ env.SKIP_JOB != 'true' }}
       uses: actions/upload-artifact@v4
       with:
         name: logs-${{ matrix.os || inputs.os }}-${{ matrix.python || inputs.python}}
