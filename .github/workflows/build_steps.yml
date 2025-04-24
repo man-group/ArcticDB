@@ -363,7 +363,7 @@ jobs:
 
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             echo "Running on Linux - set filedescriptors"
-            ulimit -n 2000000
+            sudo ulimit -n 2000000
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
             echo "Running on macOS"
             sudo launchctl limit maxfiles 2000000 2000000
