@@ -25,7 +25,7 @@ jobs:
                 github.rest.actions.createWorkflowDispatch({
                   owner: "${{ github.repository_owner }}",
                   repo: "ArcticDB",
-                  workflow_id: "run-installation-tests.yml",
+                  workflow_id: "run_installation_tests.yml",
                   ref: "main",
                   inputs: {
                     arcticdb_version: versions[i]
