@@ -104,13 +104,19 @@ jobs:
     - name: Check Unsupported Versions
       run: |
         echo "Check for not supported arcticdb-python versions"
-        UNSUPPORTED_COMBINATIONS=$(yq eval '.unsupported[] | .product-version + "-" + .python-version' ./.github/workflows/unsupported_versions.yml)
-        CURRENT_COMBINATION="${{ env.arcticdb_version}}-${{ matrix.python || inputs.python}}"
-        
-        if echo "$UNSUPPORTED_COMBINATIONS" | grep -q "$CURRENT_COMBINATION"; then
-          echo "Combination $CURRENT_COMBINATION is unsupported. Skipping job."
+        declare -A unsupported_versions
+        unsupported_versions["3.13-5.1.2"]=1
+        unsupported_versions["3.13-5.0.0"]=1
+        unsupported_versions["3.13-4.5.1"]=1
+        unsupported_versions["3.13-1.6.2"]=1
+
+        CURRENT_COMBINATION="${{ matrix.python || inputs.python}}-${{ env.arcticdb_version }}"
+        echo "Check for combination $CURRENT_COMBINATION"
+
+        if [[ ${unsupported_versions[$CURRENT_COMBINATION]} ]]; then
+          echo "Skipping unsupported combination: $CURRENT_COMBINATION"
           exit 0
-        fi      
+        fi  
 
     - name: Checkout code
       uses: actions/checkout@v3
