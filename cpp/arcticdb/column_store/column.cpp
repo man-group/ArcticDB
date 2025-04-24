@@ -41,7 +41,10 @@ void initialise_output_column(const util::BitSet& condition, const Column& input
             output_sparse_map = ~output_sparse_map | input_column.sparse_map();
         }
         output_physical_rows = output_sparse_map.count();
-        output_column.set_sparse_map(std::move(output_sparse_map));
+        // Input column is sparse, but output column is dense
+        if (output_physical_rows != output_logical_rows) {
+            output_column.set_sparse_map(std::move(output_sparse_map));
+        }
     } else {
         output_physical_rows = input_column.row_count();
     }
