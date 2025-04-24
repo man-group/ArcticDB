@@ -279,6 +279,7 @@ class ReadRequest(NamedTuple):
     row_range: Optional[Tuple[int, int]] = None
     columns: Optional[List[str]] = None
     query_builder: Optional[QueryBuilder] = None
+    output_format: Optional[OutputFormat] = None
 
     def __repr__(self):
         res = f"ReadRequest(symbol={self.symbol}"
@@ -287,6 +288,7 @@ class ReadRequest(NamedTuple):
         res += f", row_range={self.row_range}" if self.row_range is not None else ""
         res += f", columns={self.columns}" if self.columns is not None else ""
         res += f", query_builder={self.query_builder}" if self.query_builder is not None else ""
+        res += f", output_format={self.output_format}" if self.output_format is not None else ""
         res += ")"
         return res
 
@@ -378,9 +380,12 @@ class LazyDataFrame(QueryBuilder):
         self.lib = lib
         self.read_request = read_request._replace(query_builder=None)
 
-    def _to_read_request(self) -> ReadRequest:
+    def _to_read_request(self, output_format=None) -> ReadRequest:
         """
         Convert this object into a ReadRequest, including any queries applied to this object since the read call.
+
+        output_format: OutputFormat, default="Library's output method":
+            What format to return the output in. One of PANDAS or ARROW.
 
         Returns
         -------
@@ -396,18 +401,23 @@ class LazyDataFrame(QueryBuilder):
             row_range=self.read_request.row_range,
             columns=self.read_request.columns,
             query_builder=q,
+            output_format=output_format,
         )
 
-    def collect(self) -> VersionedItem:
+    def collect(self, output_format=None) -> VersionedItem:
         """
         Read the data and execute any queries applied to this object since the read call.
+
+
+        output_format: OutputFormat, default="Library's output method":
+            What format to return the output in. One of PANDAS or ARROW.
 
         Returns
         -------
         VersionedItem
             Object that contains a .data and .metadata element.
         """
-        return self.lib.read(**self._to_read_request()._asdict())
+        return self.lib.read(**self._to_read_request(output_format=output_format)._asdict())
 
     def __str__(self) -> str:
         query_builder_repr = super().__str__()
@@ -1723,7 +1733,8 @@ class Library:
         row_range: Optional[Tuple[int, int]] = None,
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
-        lazy: bool = False,
+        output_format : Optional[OutputFormat] = None,
+        lazy: bool = False
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read data for the named symbol.  Returns a VersionedItem object with a data and metadata element (as passed into
@@ -1769,6 +1780,8 @@ class Library:
         query_builder: Optional[QueryBuilder], default=None
             A QueryBuilder object to apply to the dataframe before it is returned. For more information see the
             documentation for the QueryBuilder class (``from arcticdb import QueryBuilder; help(QueryBuilder)``).
+
+        TODO: Add docs
 
         lazy: bool, default=False:
             Defer query execution until `collect` is called on the returned `LazyDataFrame` object. See documentation

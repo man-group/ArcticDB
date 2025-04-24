@@ -583,6 +583,69 @@ class Normalizer(object):
 _IDX_PREFIX = "__idx__"
 _IDX_PREFIX_LEN = len(_IDX_PREFIX)
 
+class ArrowTableNormalizer(Normalizer):
+    def apply_pyarrow_operations(self, table, renames : Mapping[int, str], timezones: Mapping[int, str]):
+        import pyarrow as pa
+        new_columns = []
+        new_fields = []
+
+        for i, col in enumerate(table.columns):
+            field = table.field(i)
+            if i in renames:
+                field = field.with_name(renames[i])
+            if i in timezones:
+                timezone = timezones[i]
+                col = pa.compute.assume_timezone(col, timezone="UTC")
+                col = col.cast(pa.timestamp("ns", timezone))
+                field = field.with_type(pa.timestamp("ns", timezone))
+            new_columns.append(col)
+            new_fields.append(field)
+
+        return pa.Table.from_arrays(
+            new_columns,
+            schema=pa.schema(new_fields)
+        )
+    def normalize(self, item, **kwargs):
+        raise NotImplementedError("Arrow write is not yet implemented")
+
+    def denormalize(self, item, norm_meta):
+        # type: (pa.Table, NormalizationMetadata)->pa.Table
+        import pyarrow as pa
+        def apply_pyarrow_operations():
+            pass
+        renames_to_apply = {}
+        timezones_to_apply = {}
+        input_type = norm_meta.WhichOneof("input_type")
+        if input_type == "df":
+            pandas_meta = norm_meta.df.common
+            index_type = pandas_meta.WhichOneof("index_type")
+            if index_type == "index":
+                index_meta = pandas_meta.index
+                if index_meta.is_physically_stored and index_meta.tz:
+                    timezones_to_apply[0] = index_meta.tz
+                if index_meta.name:
+                    renames_to_apply[0] = index_meta.name
+            else:
+                # TODO: Figure out how to do renames
+                index_meta = pandas_meta.multi_index
+                print(index_meta)
+                for index_level_num in range(1, index_meta.field_count+1):
+                    index_col_idx = index_level_num - 1
+                    tz = index_meta.timezone.get(index_level_num, "")
+                    if tz != "":
+                        timezones_to_apply[index_col_idx] = tz
+
+
+        elif input_type == "series":
+            frame_meta = norm_meta.series
+            log.warn(f"No normalization was applied to series metadata when reading as arrow: {frame_meta}")
+        else:
+            raise ArcticNativeException(f"Expected dataframe or series input, actual: {input_type}")
+
+        if len(renames_to_apply) > 0 or len(timezones_to_apply) > 0:
+            item = self.apply_pyarrow_operations(item, renames_to_apply, timezones_to_apply)
+        return item
+
 
 class _PandasNormalizer(Normalizer):
     def _index_to_records(self, df, pd_norm, dynamic_strings, string_max_len, empty_types):

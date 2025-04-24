@@ -6,11 +6,11 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-from typing import Optional
-from enum import Enum
+from typing import Optional, Union
 
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb_ext.storage import ModifiableLibraryOption, ModifiableEnterpriseLibraryOption
+from arcticdb_ext.version_store import OutputFormat
 
 
 DEFAULT_ENCODING_VERSION = EncodingVersion.V1
@@ -144,6 +144,28 @@ class LibraryOptions:
             f" rows_per_segment={self.rows_per_segment}, columns_per_segment={self.columns_per_segment},"
             f" encoding_version={self.encoding_version if self.encoding_version is not None else 'Default'})"
         )
+
+
+class RuntimeOptions:
+    def __init__(
+        self,
+        *,
+        output_format: Union[OutputFormat, str] = OutputFormat.PANDAS,
+    ):
+        """
+        Parameters
+        ----------
+
+        output_format: Union[OutputFormat, str], default OutputFormat.PANDAS
+            Controls the output format of all operations returning a dataframe.
+
+            The default behavior (OutputFormat.PANDAS) is to return `pandas.DataFrame`s backed by numpy arrays.
+
+            The other option OutputFormat.ARROW will return all dataframes as `pyarrow.Table`s.
+
+            Also accepts strings i.e. "PANDAS" translates to `OutputFormat.PANDAS` and vice versa.
+        """
+        self.output_format=output_format
 
 
 class EnterpriseLibraryOptions:
