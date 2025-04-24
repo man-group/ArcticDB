@@ -106,7 +106,11 @@ jobs:
       run: |
         echo "Check for not supported arcticdb-python versions"
 
-        UNSUPPORTED_COMBINATIONS=("3.13-5.1.2" "3.13-5.0.0" "3.13-4.5.1")
+        UNSUPPORTED_COMBINATIONS=(
+          "3.13-5.1.2" 
+          "3.13-5.0.0" 
+          "3.13-4.5.1"
+        )
 
         CURRENT_COMBINATION="${{ matrix.python || inputs.python}}-${{ env.arcticdb_version }}"
         echo "Check for combination $CURRENT_COMBINATION"
