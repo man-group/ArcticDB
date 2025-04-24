@@ -165,27 +165,50 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                     output_column = std::make_unique<Column>(make_scalar_type(DataType::UTF_DYNAMIC64), Sparsity::PERMITTED);
                     string_pool = std::make_shared<StringPool>();
                     auto value_string = std::string(*val.str_data(), val.len());
-                    // TODO: Could this be more efficient?
-                    size_t idx{0};
-                    Column::transform<typename col_type_info::TDT, typename col_type_info::TDT>(
-                            *(col.column_),
-                            *output_column,
-                            [&condition, &idx, &string_pool, &col, &value_string](auto col_value) -> typename col_type_info::RawType {
-                                std::optional<std::string_view> string_at_offset;
-                                if constexpr (arguments_reversed) {
-                                    string_at_offset = condition[idx++] ? value_string : col.string_at_offset(col_value);
-                                } else {
-                                    string_at_offset = condition[idx++] ? col.string_at_offset(col_value) : value_string;
-                                }
-                                if (string_at_offset.has_value()) {
-                                    auto offset_string = string_pool->get(*string_at_offset);
-                                    return offset_string.offset();
-                                } else {
-                                    // string_at_offset will only be valueless if the condition was true and so was
-                                    // selected from the column
-                                    return col_value;
-                                }
-                            });
+
+                    // TODO: Remove code duplication with Column::ternary
+                    using output_tdt = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
+                    initialise_output_column<arguments_reversed>(condition, *col.column_, *output_column);
+                    auto output_data = output_column->data();
+                    if (output_column->is_sparse()) {
+                        auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+                        for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(); output_it != output_end_it; ++output_it) {
+                            auto idx = output_it->idx();
+                            std::optional<std::string_view> string_at_offset;
+                            if constexpr (arguments_reversed) {
+                                string_at_offset = condition.get_bit(idx) ? value_string : col.string_at_offset(*col.column_->scalar_at<int64_t>(idx));
+                            } else {
+                                string_at_offset = condition.get_bit(idx) ? col.string_at_offset(*col.column_->scalar_at<int64_t>(idx)) : value_string;
+                            }
+                            if (string_at_offset.has_value()) {
+                                auto offset_string = string_pool->get(*string_at_offset);
+                                output_it->value() = offset_string.offset();
+                            } else {
+                                // string_at_offset will only be valueless if the condition was true and so was
+                                // selected from the column
+                                output_it->value() = *col.column_->scalar_at<int64_t>(idx);
+                            }
+                        }
+                    } else {
+                        auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED>();
+                        for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it; ++output_it) {
+                            auto idx = output_it->idx();
+                            std::optional<std::string_view> string_at_offset;
+                            if constexpr (arguments_reversed) {
+                                string_at_offset = condition.get_bit(idx) ? value_string : col.string_at_offset(*col.column_->scalar_at<int64_t>(idx));
+                            } else {
+                                string_at_offset = condition.get_bit(idx) ? col.string_at_offset(*col.column_->scalar_at<int64_t>(idx)) : value_string;
+                            }
+                            if (string_at_offset.has_value()) {
+                                auto offset_string = string_pool->get(*string_at_offset);
+                                output_it->value() = offset_string.offset();
+                            } else {
+                                // string_at_offset will only be valueless if the condition was true and so was
+                                // selected from the column
+                                output_it->value() = *col.column_->scalar_at<int64_t>(idx);
+                            }
+                        }
+                    }
                 } else {
                     // Fixed width string column
                     schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
