@@ -95,7 +95,7 @@ jobs:
       fail-fast: false  
     env:
       conda_file: "python/installation_tests/environment_unix.yml"
-      arcticdb_version: ${{ inputs.arcticdb_version || '5.2.6' }}
+      arcticdb_version: ${{ inputs.arcticdb_version || '5.1.2' }}
       lmdb: ${{ inputs.run_on_lmdb || '1' }}
       real_s3: ${{ inputs.run_on_real_s3 || '1' }}
 
@@ -109,7 +109,12 @@ jobs:
       with:
         python-version: ${{ matrix.python || inputs.python}}
 
-    - name: Install prerequisites (pypi)
+    - name: (pypi) Install arcticdb from requirements files 
+      if: ${{ !contains(matrix.use_conda, 'yes')}}
+      run: |
+        pip install -r "python/tests/compat/requirements-${{ env.arcticdb_version }}.txt"
+
+    - name: (pypi) Install other prerequisites 
       if: ${{ !contains(matrix.use_conda, 'yes')}}
       shell: bash -l {0}
       run: |
@@ -120,13 +125,8 @@ jobs:
         pip install pytest
         pip install pytest-xdist
 
-    - name: Install arcticdb from requirements files (pypi)
-      if: ${{ !contains(matrix.use_conda, 'yes')}}
-      run: |
-        pip install -r "python/tests/compat/requirements-${{ env.arcticdb_version }}.txt"
-
       # Install conda environment
-    - name: Install conda environment from ${{ env.conda_file }}
+    - name: (conda) Install arcticdb from conda-forge
       uses: mamba-org/setup-micromamba@v2.0.0
       if: ${{ contains(matrix.use_conda, 'yes') }}
       with:
@@ -137,7 +137,7 @@ jobs:
         cache-environment: true
         post-cleanup: 'all'
 
-    - name: Add arcticdb from conda-forge
+    - name: (conda) Install other dependencies ${{ env.conda_file }}
       if: ${{ contains(matrix.use_conda, 'yes')}}
       shell: bash -l {0}
       run: |
