@@ -104,7 +104,7 @@ jobs:
     - name: Check Unsupported Versions
       run: |
         echo "Check for not supported arcticdb-python versions"
-        UNSUPPORTED_COMBINATIONS=$(yq eval '.unsupported[] | .product-version + "-" + .python-version' unsupported_versions.yml)
+        UNSUPPORTED_COMBINATIONS=$(yq eval '.unsupported[] | .product-version + "-" + .python-version' ./.github/workflows/unsupported_versions.yml)
         CURRENT_COMBINATION="${{ env.arcticdb_version}}-${{ matrix.python || inputs.python}}"
         
         if echo "$UNSUPPORTED_COMBINATIONS" | grep -q "$CURRENT_COMBINATION"; then
@@ -156,7 +156,6 @@ jobs:
           micromamba install --no-pin --file ${{ env.conda_file }}
   
     - name: Set persistent storage variables
-      if: always()
       uses: ./.github/actions/set_persistent_storage_env_vars
       with:
         aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
