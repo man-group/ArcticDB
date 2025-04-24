@@ -6,16 +6,15 @@
  */
 #pragma once
 
-#include <arcticdb/arrow/arrow_utils.hpp>
-
-#include <arcticdb/arrow/include_sparrow.hpp>
+#include <sparrow/sparrow.hpp>
+#include <sparrow/record_batch.hpp>
 
 #include <vector>
 #include <memory>
 
 namespace arcticdb {
-struct ArrowData;
 
+// C arrow representation of a record batch. Can be converted to a pyarrow.RecordBatch zero copy.
 struct RecordBatchData {
     RecordBatchData(ArrowArray array, ArrowSchema schema) :
         array_(array),
@@ -43,9 +42,8 @@ struct ArrowOutputFrame {
 
     std::shared_ptr<std::vector<sparrow::record_batch>> data_;
     std::vector<std::string> names_;
-    std::vector<sparrow::struct_array> struct_arrays_;
 
-    std::vector<RecordBatchData> record_batches();
+    std::vector<RecordBatchData> extract_record_batches();
 
     [[nodiscard]] std::vector<std::string> names() const;
 

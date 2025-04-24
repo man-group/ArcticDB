@@ -1858,7 +1858,7 @@ class NativeVersionStore:
         read_options = _PythonVersionStoreReadOptions()
         read_options.set_force_strings_to_object(_assume_false("force_string_to_object", kwargs))
         read_options.set_optimise_string_memory(_assume_false("optimise_string_memory", kwargs))
-        read_options.set_output_format(kwargs.get("output_format") or OutputFormat.PANDAS)
+        read_options.set_output_format(kwargs.get("_output_format") or OutputFormat.PANDAS)
         read_options.set_dynamic_schema(resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs))
         read_options.set_set_tz(resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
         read_options.set_allow_sparse(resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
@@ -1966,21 +1966,8 @@ class NativeVersionStore:
             **kwargs,
         )
 
-        if read_options.output_format == OutputFormat.ARROW:
-            vit, frame, meta = self.version_store.read_dataframe_version_arrow(
-                symbol, version_query, read_query, read_options
-            )
-            import pyarrow as pa
-
-            record_batches = []
-            for record_batch in frame.record_batches:
-                record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
-
-            return pa.Table.from_batches(record_batches)
-
-        else:
-            read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-            return self._post_process_dataframe(read_result, read_query, implement_read_index)
+        read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
+        return self._post_process_dataframe(read_result, read_query, implement_read_index)
 
     def head(
         self,
@@ -2056,6 +2043,9 @@ class NativeVersionStore:
         return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
 
     def _post_process_dataframe(self, read_result, read_query, implement_read_index=False, head=None, tail=None):
+        if read_result.output_format == OutputFormat.ARROW:
+            # Range filters for arrow are processed inside C++ layer. So we skip the post-processing in this case.
+            return self._adapt_read_res(read_result)
         index_type = read_result.norm.df.common.WhichOneof("index_type")
         index_is_rowcount = (
             index_type == "index"
@@ -2290,11 +2280,21 @@ class NativeVersionStore:
 
         return index_columns
 
-    def _adapt_read_res(self, read_result: ReadResult) -> Union[VersionedItem, VersionedItemWithJoin]:
-        frame_data = FrameData.from_cpp(read_result.frame_data)
-        data = self._normalizer.denormalize(frame_data, read_result.norm)
-        if read_result.norm.HasField("custom"):
-            data = self._custom_normalizer.denormalize(data, read_result.norm.custom)
+    def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
+        if read_result.output_format == OutputFormat.PANDAS:
+            frame_data = FrameData.from_cpp(read_result.frame_data)
+            data = self._normalizer.denormalize(frame_data, read_result.norm)
+            if read_result.norm.HasField("custom"):
+                data = self._custom_normalizer.denormalize(data, read_result.norm.custom)
+        elif read_result.output_format == OutputFormat.ARROW:
+            frame_data = read_result.frame_data
+            import pyarrow as pa
+            record_batches = []
+            for record_batch in frame_data.extract_record_batches():
+                record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
+            data = pa.Table.from_batches(record_batches)
+        else:
+            raise AssertionError("Invalid output format")
 
         if isinstance(read_result.version, list):
             versions = []

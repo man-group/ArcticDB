@@ -7,255 +7,264 @@
 
 #include <gtest/gtest.h>
 
+#include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/util/test/generators.hpp>
+#include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
-#include <arcticdb/arrow/arrow_data.hpp>
 #include <arcticdb/arrow/array_from_block.hpp>
+#include <arcticdb/arrow/arrow_handlers.hpp>
+#include <boost/multiprecision/detail/min_max.hpp>
 
+using namespace arcticdb;
 
-std::vector<sparrow::array> make_array_list(const std::size_t data_size)
-{
-    std::uint16_t* data = new std::uint16_t[data_size];
-    for (std::size_t i = 0; i < data_size; ++i)
-    {
-        data[i] = static_cast<std::uint16_t>(i);
-    }
-    sparrow::u8_buffer<std::uint16_t> buffer0(data, data_size);
-
-    sparrow::primitive_array<std::uint16_t> pr0(std::move(buffer0), "column0");
-    sparrow::primitive_array<std::int32_t> pr1(
-        std::ranges::iota_view{std::int32_t(4), 4 + std::int32_t(data_size)},
-        "column1"
-    );
-    sparrow::primitive_array<std::int32_t> pr2(
-        std::ranges::iota_view{std::int32_t(2), 2 + std::int32_t(data_size)},
-        "column2"
-    );
-
-    std::vector<sparrow::array> arr_list = {sparrow::array(std::move(pr0)), sparrow::array(std::move(pr1)), sparrow::array(std::move(pr2))};
-    return arr_list;
-}
-
-std::vector<std::string> make_name_list()
-{
-    std::vector<std::string> name_list = {"first", "second", "third"};
-    return name_list;
-}
-
-sparrow::record_batch make_record_batch(const std::size_t data_size)
-{
-    return sparrow::record_batch(make_name_list(), make_array_list(data_size));
-}
-
-TEST(Arrow, SparrowBasic) {
-    auto record_batch = make_record_batch(20);
-}
-
-TEST(Arrow, ConvertColumn) {
-    using namespace arcticdb;
-    constexpr size_t data_size = 20;
-    Column column(make_scalar_type(DataType::UINT64), data_size, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
-    auto ptr = reinterpret_cast<uint64_t*>(column.buffer().data());
-    for(auto i = 0UL; i < data_size; ++i) {
-        *ptr++ = i;
+template<typename RawType>
+void allocate_and_fill_chunked_column(Column& column, size_t num_rows, size_t chunk_size, std::optional<std::span<RawType>> values = std::nullopt) {
+    // Allocate column in chunks
+    for (size_t row = 0; row < num_rows; row+=chunk_size) {
+        auto data_size = data_type_size(column.type(), OutputFormat::ARROW, DataTypeMode::EXTERNAL);
+        auto current_block_size = std::min(chunk_size, num_rows - row);
+        auto bytes = current_block_size * data_size;
+        column.allocate_data(bytes);
+        column.advance_data(bytes);
     }
 
-    auto data = const_cast<uint64_t*>(column.data().next<ScalarTagType<DataTypeTag<DataType::UINT64>>>()->release());
-    sparrow::u8_buffer<std::uint64_t> buffer0(data, data_size);
-    sparrow::primitive_array<std::uint64_t> pr0(std::move(buffer0), "column0");
-    std::vector<sparrow::array> arr_list = {sparrow::array(std::move(pr0))};
-    std::vector<std::string> names{"column0"};
-    auto record_batch = sparrow::record_batch(std::move(names), std::move(arr_list));
-}
-
-TEST(Arrow, ArrayFromColumn) {
-    using namespace arcticdb;
-    constexpr size_t data_size = 20;
-    Column column(make_scalar_type(DataType::UINT64), data_size, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
-    auto ptr = reinterpret_cast<uint64_t*>(column.buffer().data());
-    for(auto i = 0UL; i < data_size; ++i) {
-        *ptr++ = i;
-    }
-    std::vector<sparrow::array> vec;
-    auto column_data = column.data();
-    std::string_view name{"column0"};
-    column.type().visit_tag([&vec, &column_data, name](auto &&impl) {
-        using TagType = std::decay_t<decltype(impl)>;
-        while (auto block = column_data.next<TagType>()) {
-            vec.emplace_back(arrow_array_from_block<TagType>(*block, name, std::nullopt));
+    // Actually fill the data
+    for (size_t row = 0; row < num_rows; ++row) {
+        if (values.has_value()) {
+            column.reference_at<RawType>(row) = values.value()[row];
+        } else {
+            column.reference_at<RawType>(row) = static_cast<RawType>(row);
         }
-    });
+    }
 }
 
-TEST(Arrow, RecordBatchFromColumn) {
-    using namespace arcticdb;
-    constexpr size_t data_size = 20;
-    Column column(make_scalar_type(DataType::UINT64), data_size, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
-    auto ptr = reinterpret_cast<uint64_t*>(column.buffer().data());
-    for(auto i = 0UL; i < data_size; ++i) {
-        *ptr++ = i;
+SegmentInMemory get_detachable_segment(StreamId symbol, std::span<const FieldRef> fields, size_t num_rows, size_t chunk_size) {
+    auto num_columns = fields.size();
+    SegmentInMemory segment(get_test_descriptor<stream::TimeseriesIndex>(symbol, fields), 0, AllocationType::DETACHABLE);
+
+    for (auto i=0u; i < num_columns+1; ++i) {
+        auto& column = segment.column(i);
+        column.type().visit_tag([&column, &num_rows, &chunk_size](auto &&impl) {
+            using TagType = std::decay_t<decltype(impl)>;
+            using RawType = typename TagType::DataTypeTag::raw_type;
+            allocate_and_fill_chunked_column<RawType>(column, num_rows, chunk_size);
+        });
     }
-    std::vector<sparrow::array> vec;
-    auto column_data = column.data();
-    std::string_view name{"column0"};
-    column.type().visit_tag([&vec, &column_data, name](auto &&impl) {
-        using TagType = std::decay_t<decltype(impl)>;
-        while (auto block = column_data.next<TagType>()) {
-            vec.emplace_back(arrow_array_from_block<TagType>(*block, name, std::nullopt));
+
+    return segment;
+}
+
+// Populates a column with strings as if using OutputFormat::ARROW. Assumes column is already allocated.
+void fill_chunked_string_column(Column& column, size_t num_rows, size_t chunk_size, std::shared_ptr<StringPool> string_pool, const std::vector<std::string>& values) {
+    auto num_chunks = num_rows / chunk_size + (num_rows % chunk_size != 0);
+
+    std::vector<position_t> string_pool_offsets;
+    for (auto& str : values) {
+        string_pool_offsets.push_back(string_pool->get(str).offset());
+    }
+
+    // Use arrow string handler to populate the column in arrow format chunk by chunk
+    auto handler = ArrowStringHandler();
+    auto source_type_desc = TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0};
+    auto dest_type_desc = TypeDescriptor{DataType::UTF_DYNAMIC32, Dimension::Dim0};
+    for (auto chunk=0u; chunk<num_chunks; ++chunk) {
+        auto row_count = std::min(chunk_size, num_rows - chunk*chunk_size);
+        // To use the `handler.convert_type` we prepare the source data for each chunk in `source_column`.
+        // We fill the column with pointers to the string pool.
+        auto source_column = Column(source_type_desc, row_count, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
+        for (auto row_in_chunk = 0u; row_in_chunk < row_count; ++row_in_chunk) {
+            auto global_row = chunk*chunk_size + row_in_chunk;
+            source_column.push_back(string_pool_offsets[global_row]);
         }
-    });
 
-    auto record_batch = sparrow::record_batch{};
-    record_batch.add_column(std::string{"name"}, std::move(vec[0]));
+        auto dest_size = data_type_size(dest_type_desc, OutputFormat::ARROW, DataTypeMode::EXTERNAL);
+        auto handler_data = std::any{};
+        auto column_mapping = ColumnMapping(
+            source_type_desc,
+            dest_type_desc,
+            FieldWrapper(dest_type_desc, "col").field(),
+            dest_size,
+            row_count,
+            chunk*chunk_size,
+            dest_size * chunk * chunk_size,
+            dest_size * row_count,
+            0);
+
+        handler.convert_type(source_column, column, column_mapping, DecodePathData{}, handler_data, string_pool);
+    }
 }
 
-sparrow::array add_column(std::string_view name) {
+TEST(Arrow, ColumnBasic) {
+    const size_t num_rows = 100;
+    const size_t chunk_size = 5;
+    const size_t num_chunks = num_rows / chunk_size;
+    auto column = Column(TypeDescriptor{DataType::FLOAT32, Dimension::Dim0}, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
+    allocate_and_fill_chunked_column<float>(column, num_rows, chunk_size);
+    auto arrow_arrays = arrow_arrays_from_column(column, "col");
+    EXPECT_EQ(arrow_arrays.size(), num_chunks);
+    for (const auto& arr : arrow_arrays) {
+        EXPECT_EQ(arr.name(), "col");
+    }
+    for (auto row=0u; row < num_rows; ++row) {
+        auto chunk = row / chunk_size;
+        auto pos = row % chunk_size;
+        EXPECT_EQ(std::get<sparrow::nullable<const float&>>(arrow_arrays[chunk][pos]).get(), static_cast<float>(row));
+    }
+}
 
-    using namespace arcticdb;
-    constexpr size_t data_size = 20;
-    Column column(make_scalar_type(DataType::UINT64), data_size, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
-    auto ptr = reinterpret_cast<uint64_t*>(column.buffer().data());
-    for(auto i = 0UL; i < data_size; ++i) {
-        *ptr++ = i;
+TEST(Arrow, ColumnString) {
+    const size_t num_rows = 100;
+    const size_t chunk_size = 5;
+    const size_t num_chunks = num_rows / chunk_size;
+    const std::vector<std::string> strings = {"test", "strings", "available", "!"};
+
+    std::vector<std::string> column_values;
+    column_values.reserve(num_rows);
+    for (auto i=0u; i < num_rows; ++i) {
+        column_values.push_back(strings[i % strings.size()]);
     }
 
-    auto column_data = column.data();
-    return column.type().visit_tag([&column_data, name](auto &&impl) {
-        using TagType = std::decay_t<decltype(impl)>;
-        auto block = column_data.next<TagType>();
-        return arrow_array_from_block<TagType>(*block, name, std::nullopt);
-    });
-}
+    // Populate string pool and column using arrow string handler
+    auto pool = std::make_shared<StringPool>();
+    auto type_desc = TypeDescriptor{DataType::UTF_DYNAMIC32, Dimension::Dim0};
+    auto column = Column(type_desc, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
+    allocate_and_fill_chunked_column<uint32_t>(column, num_rows, chunk_size);
+    fill_chunked_string_column(column, num_rows, chunk_size, pool, column_values);
 
-std::shared_ptr<std::vector<sparrow::record_batch>> vector_of_record_batch() {
-    std::vector<sparrow::array> arrays;
-    arrays.reserve(3);
-    for(auto i = 0UL; i < 3; ++i) {
-        arrays.emplace_back(add_column(fmt::format("column_{}", i)));
-    }
+    // Verify applying the string handler sets the correct external buffers
+    for (auto chunk=0u; chunk<num_chunks; ++chunk) {
+        auto dest_size = data_type_size(type_desc, OutputFormat::ARROW, DataTypeMode::EXTERNAL);
+        EXPECT_EQ(dest_size, 4); // We should be using 32-bit integer keys for arrow
 
-    auto output = std::make_shared<std::vector<sparrow::record_batch>>();
-    for(auto i = 0; i < 3; ++i)
-        output->emplace_back(sparrow::record_batch{});
+        // We should have attached offsets and string buffers to the corresponding offsets.
+        auto offset = chunk * chunk_size * dest_size;
+        EXPECT_TRUE(column.has_extra_buffer(offset, ExtraBufferType::OFFSET));
+        EXPECT_TRUE(column.has_extra_buffer(offset, ExtraBufferType::STRING));
+        auto& column_buffer = column.buffer();
+        auto& offset_buffer = column.get_extra_buffer(offset, ExtraBufferType::OFFSET);
+        auto& string_buffer = column.get_extra_buffer(offset, ExtraBufferType::STRING);
 
-    for(auto i = 0UL; i < 3; ++i) {
-       (*output)[0].add_column(fmt::format("column_{}", i), std::move(arrays[0]));
-    }
-
-    return output;
-}
-
-TEST(Arrow, ReturnVectorOfRecordBatch) {
-    auto ptr_to_vector = vector_of_record_batch();
-}
-
-TEST(Arrow, ConvertSegment) {
-    using namespace arcticdb;
-    auto desc = stream_descriptor(StreamId{"id"}, stream::RowCountIndex{}, {
-        scalar_field(DataType::UINT8, "uint8"),
-        scalar_field(DataType::UINT32, "uint32")});
-
-    SegmentInMemory segment(desc, 20, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, OutputFormat::ARROW, DataTypeMode::INTERNAL);
-
-    auto col1_ptr = segment.column(0).buffer().data();
-    auto col2_ptr = reinterpret_cast<uint32_t*>(segment.column(1).buffer().data());
-    for(auto j = 0; j < 20; ++j ) {
-        *col1_ptr++ = j;
-        *col2_ptr++ = j * 2;
-    }
-
-    auto vec = segment_to_arrow_data(segment);
-    ASSERT_EQ(vec->size(), 1);
-}
-
-using keys_type = uint32_t;
-using layout_type = sparrow::dictionary_encoded_array<keys_type>;
-
-sparrow::nullable<std::string_view> get_dict_value(layout_type::const_reference r) {
-    return std::get<sparrow::nullable<std::string_view>>(r);
-}
-
-TEST(StringDictionary, CreateFromStringPool) {
-    std::vector<uint32_t> offsets = {0, 1, 0, 2, 1};
-    std::vector<std::string_view> unique_strings = {"hello", "world", "test"};
-
-    sparrow::string_array dict_values(unique_strings);
-    sparrow::array dict_array(std::move(dict_values));
-
-    std::vector<size_t> null_positions;
-    sparrow::dictionary_encoded_array<uint32_t> dict_encoded(
-        sparrow::dictionary_encoded_array<uint32_t>::keys_buffer_type(offsets),
-        std::move(dict_array),
-        std::move(null_positions)
-    );
-
-    ASSERT_EQ(dict_encoded.size(), offsets.size());
-    ASSERT_EQ(get_dict_value(dict_encoded[0]).value(), "hello");
-    ASSERT_EQ(get_dict_value(dict_encoded[1]).value(), "world");
-    ASSERT_EQ(get_dict_value(dict_encoded[2]).value(), "hello");
-    ASSERT_EQ(get_dict_value(dict_encoded[3]).value(), "test");
-    ASSERT_EQ(get_dict_value(dict_encoded[4]).value(), "world");
-}
-
-TEST(StringDictionary, CreateFromStringPoolZeroCopy) {
-    using namespace arcticdb;
-    StringPool pool;
-    std::vector<uint32_t> string_offsets;  // indices into the pool
-    std::vector<position_t> unique_positions;  // positions of unique strings
-    ankerl::unordered_dense::map<std::string_view, uint32_t> unique_map;
-
-    for (const auto& str : {"hello", "world", "hello", "test", "world"}) {
-        auto offset_str = pool.get(str);
-        auto pos = offset_str.offset();
-
-        auto [it, inserted] = unique_map.try_emplace(
-            pool.get_const_view(pos),
-            static_cast<uint32_t>(unique_positions.size())
-        );
-
-        string_offsets.push_back(it->second);
-        if (inserted) {
-            unique_positions.push_back(pos);
+        for (auto row_in_chunk=0u; row_in_chunk < chunk_size; ++row_in_chunk) {
+            auto global_row = chunk*chunk_size + row_in_chunk;
+            auto id = column_buffer.cast<uint32_t>(global_row);
+            auto offset_begin = offset_buffer.cast<uint32_t>(id);
+            auto str_size = offset_buffer.cast<uint32_t>(id+1) - offset_begin;
+            auto str_in_column = std::string_view(
+                reinterpret_cast<char*>(string_buffer.bytes_at(offset_begin, str_size)),
+                str_size);
+            EXPECT_EQ(str_in_column, column_values[global_row]);
         }
     }
 
-    size_t total_size = 0;
-    for (auto pos : unique_positions) {
-        total_size += pool.get_const_view(pos).size();
+    // Convert to arrow dict arrays
+    auto arrow_arrays = arrow_arrays_from_column(column, "col");
+
+    // Verify the dict arrays
+    EXPECT_EQ(arrow_arrays.size(), num_chunks);
+    for (const auto& arr : arrow_arrays) {
+        EXPECT_EQ(arr.name(), "col");
     }
-
-    sparrow::u8_buffer<char> data_buffer(total_size);
-    sparrow::u8_buffer<int32_t> offset_buffer(unique_positions.size() + 1, 0);
-
-    size_t current_pos = 0;
-    offset_buffer[0] = 0;
-    for (size_t i = 0; i < unique_positions.size(); ++i) {
-        auto sv = pool.get_const_view(unique_positions[i]);
-        std::memcpy(data_buffer.data() + current_pos, sv.data(), sv.size());
-        current_pos += sv.size();
-        offset_buffer[i + 1] = current_pos;
+    for (auto row=0u; row < num_rows; ++row) {
+        auto chunk = row / chunk_size;
+        auto pos = row % chunk_size;
+        auto value = arrow_arrays[chunk][pos];
+        EXPECT_TRUE(value.has_value());
+        EXPECT_EQ(std::get<sparrow::nullable<std::string_view>>(value).get(), column_values[row]);
     }
-
-    sparrow::string_array dict_values(
-        std::move(data_buffer),
-        std::move(offset_buffer)
-    );
-    sparrow::array dict_array(std::move(dict_values));
-
-    sparrow::dictionary_encoded_array<uint32_t> dict_encoded(
-        sparrow::dictionary_encoded_array<uint32_t>::keys_buffer_type(string_offsets),
-        std::move(dict_array),
-        std::vector<size_t>{}
-    );
-
-    ASSERT_EQ(dict_encoded.size(), 5);
-    ASSERT_EQ(get_dict_value(dict_encoded[0]).value(), "hello");
-    ASSERT_EQ(get_dict_value(dict_encoded[1]).value(), "world");
-    ASSERT_EQ(get_dict_value(dict_encoded[2]).value(), "hello");
-    ASSERT_EQ(get_dict_value(dict_encoded[3]).value(), "test");
-    ASSERT_EQ(get_dict_value(dict_encoded[4]).value(), "world");
 }
 
+TEST(Arrow, ConvertSegmentBasic) {
+    const auto symbol = "symbol";
+    const auto num_rows = 100u;
+    const auto chunk_size = 10u;
+    const auto num_chunks = num_rows / chunk_size;
+    const auto fields = std::array{
+        scalar_field(DataType::UINT8, "smallints"),
+        scalar_field(DataType::INT64, "bigints"),
+        scalar_field(DataType::FLOAT64, "floats"),
+    };
+    auto segment = get_detachable_segment(symbol, fields, num_rows, chunk_size);
+    // Verify the index column has the expected number of chunks
+    EXPECT_EQ(segment.column(0).num_blocks(), num_chunks);
 
+    auto arrow_data = segment_to_arrow_data(segment);
+    // We expect to see num_chunks record batches
+    EXPECT_EQ(arrow_data->size(), num_chunks);
+    for (const auto& record_batch : *arrow_data) {
+        auto names = record_batch.names();
+        auto columns = record_batch.columns();
+        // Each record batch should have all columns for the row range (including the index)
+        EXPECT_EQ(names.size(), fields.size() + 1);
+        EXPECT_EQ(columns.size(), fields.size() + 1);
+        EXPECT_EQ(names[0], "time");
+        EXPECT_EQ(columns[0].data_type(), sparrow::data_type::INT64);
+        EXPECT_EQ(names[1], "smallints");
+        EXPECT_EQ(columns[1].data_type(), sparrow::data_type::UINT8);
+        EXPECT_EQ(names[2], "bigints");
+        EXPECT_EQ(columns[2].data_type(), sparrow::data_type::INT64);
+        EXPECT_EQ(names[3], "floats");
+        EXPECT_EQ(columns[3].data_type(), sparrow::data_type::DOUBLE);
+        for (const auto& col : columns) {
+            EXPECT_EQ(col.size(), chunk_size);
+        }
+    }
+}
 
+void assert_arrow_string_array_as_expected(const sparrow::array& arr, const std::span<std::string>& expected) {
+    EXPECT_EQ(arr.size(), expected.size());
+    for (auto i = 0u; i < arr.size(); i++) {
+        const auto& value = std::get<sparrow::nullable<std::string_view>>(arr[i]);
+        EXPECT_TRUE(value.has_value());
+        EXPECT_EQ(value.get(), std::string_view(expected[i]));
+    }
+}
 
+TEST(Arrow, ConvertSegmentMultipleStringColumns) {
+    const auto symbol = "symbol";
+    const auto num_rows = 100u;
+    const auto chunk_size = 19u;
+    const auto num_chunks = num_rows / chunk_size + (num_rows % chunk_size != 0);
+    const auto fields = std::array{
+        scalar_field(DataType::FLOAT64, "floats"),
+        scalar_field(DataType::UTF_DYNAMIC32, "str_1"),
+        scalar_field(DataType::UTF_DYNAMIC32, "str_2"),
+    };
+    // We populate string columns so they have 30 different and 70 common strings.
+    const auto str_id_offset = 30u;
+    std::vector<std::vector<std::string>> string_values(2);
+    for (auto row = 0u; row < num_rows; ++row) {
+        string_values[0].emplace_back(fmt::format("string_{}", row));
+        string_values[1].emplace_back(fmt::format("string_{}", str_id_offset + row));
+    }
+    auto segment = get_detachable_segment(symbol, fields, num_rows, chunk_size);
+    auto string_pool = std::make_shared<StringPool>();
+    fill_chunked_string_column(segment.column(2), num_rows, chunk_size, string_pool, string_values[0]);
+    fill_chunked_string_column(segment.column(3), num_rows, chunk_size, string_pool, string_values[1]);
+    segment.set_string_pool(string_pool);
+
+    // Convert to arrow
+    auto arrow_data = segment_to_arrow_data(segment);
+    EXPECT_EQ(arrow_data->size(), num_chunks);
+    for (auto i=0u; i < num_chunks; ++i) {
+        auto row_count = std::min(chunk_size, num_rows - i*chunk_size);
+        const auto& record_batch = (*arrow_data)[i];
+        auto names = record_batch.names();
+        auto columns = record_batch.columns();
+        // Each record batch should have all columns for the row range (including the index)
+        EXPECT_EQ(names.size(), fields.size() + 1);
+        EXPECT_EQ(columns.size(), fields.size() + 1);
+        EXPECT_EQ(names[0], "time");
+        EXPECT_EQ(columns[0].data_type(), sparrow::data_type::INT64);
+        EXPECT_EQ(names[1], "floats");
+        EXPECT_EQ(columns[1].data_type(), sparrow::data_type::DOUBLE);
+        EXPECT_EQ(names[2], "str_1");
+        EXPECT_EQ(columns[2].data_type(), sparrow::data_type::INT32); // The dict array keys are INT32s
+        assert_arrow_string_array_as_expected(columns[2], std::span(string_values[0]).subspan(i*chunk_size, row_count));
+        EXPECT_EQ(names[3], "str_2");
+        EXPECT_EQ(columns[3].data_type(), sparrow::data_type::INT32); // The dict array keys are INT32s
+        assert_arrow_string_array_as_expected(columns[3], std::span(string_values[1]).subspan(i*chunk_size, row_count));
+        for (const auto& col : columns) {
+            EXPECT_EQ(col.size(), row_count);
+        }
+    }
+}

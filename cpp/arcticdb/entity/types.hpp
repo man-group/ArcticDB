@@ -300,7 +300,7 @@ constexpr bool is_dynamic_string_type(DataType v) {
     return is_dynamic_string_type(slice_value_type(v));
 }
 
-constexpr bool is_output_only_type(DataType d) {
+constexpr bool is_arrow_output_only_type(DataType d) {
     return d == DataType::UTF_DYNAMIC32;
 }
 
@@ -501,6 +501,10 @@ constexpr bool is_object_type(TypeDescriptor td) {
     return is_dynamic_string_type(slice_value_type(td.data_type()))
     || is_bool_object_type(td.data_type())
     || is_array_type(td);
+}
+
+constexpr bool is_arrow_output_only_type(TypeDescriptor td) {
+    return is_arrow_output_only_type(td.data_type());
 }
 
 inline void set_data_type(DataType data_type, TypeDescriptor &type_desc) {

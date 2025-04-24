@@ -7,7 +7,6 @@
 
 
 #include <arcticdb/arrow/arrow_utils.hpp>
-#include <arcticdb/arrow/arrow_data.hpp>
 #include <arcticdb/arrow/arrow_output_frame.hpp>
 
 #include <vector>
@@ -28,7 +27,7 @@ size_t ArrowOutputFrame::num_blocks() const {
     return data_->size();
 }
 
-std::vector<RecordBatchData> ArrowOutputFrame::record_batches() {
+std::vector<RecordBatchData> ArrowOutputFrame::extract_record_batches() {
     std::vector<RecordBatchData> output;
     output.reserve(data_->size());
 
@@ -36,7 +35,7 @@ std::vector<RecordBatchData> ArrowOutputFrame::record_batches() {
         auto struct_array = sparrow::array{batch.extract_struct_array()};
         auto [arr, schema] = sparrow::extract_arrow_structures(std::move(struct_array));
 
-        output.push_back(RecordBatchData{arr, schema});
+        output.emplace_back(arr, schema);
     }
 
     return output;
