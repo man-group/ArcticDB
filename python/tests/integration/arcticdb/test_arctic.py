@@ -46,6 +46,7 @@ from ...util.mark import (
     SLOW_TESTS_MARK,
     SSL_TESTS_MARK,
     SSL_TEST_SUPPORTED,
+    FORK_SUPPORTED
 )
 
 logger = logging.getLogger(__name__)
@@ -1344,7 +1345,13 @@ def create_library(uri, lib_name):
     assert lib_name in ac.list_libraries()
 
 
-@pytest.mark.parametrize("multiprocess", ["spawn", "fork"])
+@pytest.mark.parametrize(
+    "multiprocess", [
+        "spawn",
+        pytest.param("fork", marks=FORK_SUPPORTED),
+        pytest.param("forkserver", marks=FORK_SUPPORTED),
+    ]
+)
 def test_s3_checksum_off_by_env_var(s3_storage, lib_name, multiprocess):
     create_library(s3_storage.arctic_uri, lib_name)
     spawn_context = multiprocessing.get_context(multiprocess)
