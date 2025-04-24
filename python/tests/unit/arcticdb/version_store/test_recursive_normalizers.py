@@ -7,7 +7,7 @@ from arcticdb.flattener import Flattener
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from arcticdb dynamically loads arcticc.pb2
 from arcticdb.exceptions import ArcticDbNotYetImplemented
-from arcticdb.util.venv import CurrentVersion
+from arcticdb.util.venv import CompatLibrary
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.storage import KeyType
 
@@ -198,43 +198,41 @@ def test_too_much_recursive_metastruct_data(monkeypatch, lmdb_version_store_v1):
 class TestRecursiveNormalizersCompat:
     def test_compat_write_old_read_new(self, old_venv_and_arctic_uri, lib_name):
         old_venv, arctic_uri = old_venv_and_arctic_uri
-        old_ac = old_venv.create_arctic(arctic_uri)
-        old_lib = old_ac.create_library(lib_name)
-        dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]}), "df_2": pd.DataFrame({"b": ["a", "b"]})}
-        sym = "sym"
-        old_lib.execute([
-            f"""
+        with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
+            dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]}), "df_2": pd.DataFrame({"b": ["a", "b"]})}
+            sym = "sym"
+            compat.old_lib.execute([
+                f"""
 from arcticdb_ext.storage import KeyType
 lib._nvs.write('sym', {{"a": df_1, "b": df_2}}, recursive_normalizers=True, pickle_on_failure=True)
 lib_tool = lib._nvs.library_tool()
 assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
-            """
-        ], dfs=dfs)
+"""
+            ], dfs=dfs)
 
-        with CurrentVersion(arctic_uri, lib_name) as curr:
-            data = curr.lib.read(sym).data
-            expected = {"a": dfs["df_1"], "b": dfs["df_2"]}
-            assert set(data.keys()) == set(expected.keys())
-            for key in data.keys():
-                assert_frame_equal(data[key], expected[key])
+            with compat.current_version() as curr:
+                data = curr.lib.read(sym).data
+                expected = {"a": dfs["df_1"], "b": dfs["df_2"]}
+                assert set(data.keys()) == set(expected.keys())
+                for key in data.keys():
+                    assert_frame_equal(data[key], expected[key])
 
     def test_write_new_read_old(self, old_venv_and_arctic_uri, lib_name):
         old_venv, arctic_uri = old_venv_and_arctic_uri
-        old_ac = old_venv.create_arctic(arctic_uri)
-        old_lib = old_ac.create_library(lib_name)
-        dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]}), "df_2": pd.DataFrame({"b": ["a", "b"]})}
-        with CurrentVersion(arctic_uri, lib_name) as curr:
-            curr.lib._nvs.write('sym', {"a": dfs["df_1"], "b": dfs["df_2"]}, recursive_normalizers=True, pickle_on_failure=True)
-            lib_tool = curr.lib._nvs.library_tool()
-            assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
+        with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
+            dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]}), "df_2": pd.DataFrame({"b": ["a", "b"]})}
+            with compat.current_version() as curr:
+                curr.lib._nvs.write('sym', {"a": dfs["df_1"], "b": dfs["df_2"]}, recursive_normalizers=True, pickle_on_failure=True)
+                lib_tool = curr.lib._nvs.library_tool()
+                assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
 
-        old_lib.execute([
-            """
+            compat.old_lib.execute([
+                """
 from pandas.testing import assert_frame_equal
 data = lib.read('sym').data
 expected = {'a': df_1, 'b': df_2}
 assert set(data.keys()) == set(expected.keys())
 for key in data.keys():
     assert_frame_equal(data[key], expected[key])
-            """
-        ], dfs=dfs)
+"""
+            ], dfs=dfs)

@@ -84,7 +84,7 @@ AtomKey write_table_index_tree_from_source_to_target(
             [](const auto&){});
     }
     // FUTURE: clean up already written keys if exception
-    return to_atom(writer.commit().get());
+    return writer.commit().get();
 }
 
 AtomKey copy_multi_key_from_source_to_target(

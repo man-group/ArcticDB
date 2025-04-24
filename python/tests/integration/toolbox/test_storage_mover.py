@@ -14,8 +14,6 @@ from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 import hypothesis
 import sys
 
-from arcticdb.util.venv import CurrentVersion
-
 # configure_test_logger("DEBUG")
 
 

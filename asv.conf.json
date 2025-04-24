@@ -75,7 +75,7 @@
     // "conda_channels": ["conda-forge", "defaults"],
 
     // A conda environment file that is used for environment creation.
-    // "conda_environment_file": "environment_unix.yml",
+    // "conda_environment_file": "environment-dev.yml",
 
     // The matrix of dependencies to test.  Each key of the "req"
     // requirements dictionary is the name of a package (in PyPI) and

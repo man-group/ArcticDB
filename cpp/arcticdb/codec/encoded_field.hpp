@@ -7,8 +7,8 @@
 #pragma once
 
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/entity/protobufs.hpp>
-#include "arcticdb/storage/memory_layout.hpp"
+#include <arcticdb/util/constructors.hpp>
+#include <arcticdb/storage/memory_layout.hpp>
 
 #include <utility>
 #include <boost/iterator/iterator_facade.hpp>

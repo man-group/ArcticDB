@@ -244,16 +244,20 @@ class ChunkedBufferImpl {
     // unlocks ColumnDataIterator usage (more performant than repeated calls to Column::push_back). Once the column is
     // created and the number of elements known, use this to drop unneeded blocks.
     void trim(size_t requested_size) {
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(requested_size <= bytes_,
-                                                        "Cannot trim ChunkedBuffer with {} bytes to {} bytes",
-                                                        bytes_,
-                                                        requested_size);
-        while (bytes_ - last_block().bytes() >= requested_size) {
-            bytes_ -= last_block().bytes();
-            free_last_block();
+        if (requested_size == 0) {
+            clear();
+        } else {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(requested_size <= bytes_,
+                                                            "Cannot trim ChunkedBuffer with {} bytes to {} bytes",
+                                                            bytes_,
+                                                            requested_size);
+            while (bytes_ - last_block().bytes() >= requested_size) {
+                bytes_ -= last_block().bytes();
+                free_last_block();
+            }
+            last_block().resize(last_block().bytes() - (bytes_ - requested_size));
+            bytes_ = requested_size;
         }
-        last_block().resize(last_block().bytes() - (bytes_ - requested_size));
-        bytes_ = requested_size;
     }
 
     struct BlockAndOffset {

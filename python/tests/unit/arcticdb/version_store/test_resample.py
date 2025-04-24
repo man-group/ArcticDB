@@ -369,6 +369,34 @@ def test_resampling_empty_bucket_in_range(lmdb_version_store_v1):
     )
 
 
+def test_resampling_row_slice_responsible_for_no_buckets(lmdb_version_store_tiny_segment):
+    # Covers a corner case where the date_range argument specifies that a row-slice is needed, but the bucket boundaries
+    # mean that all of the index values required fall into a bucket being handled by the previous row-slice, and so
+    # the call to ResampleClause::process produces a segment with no rows
+    # Magic numbers:
+    # Date range of 0-1500ns with frequency of 1 microsecond will generate bucket boundaries of [0, 1000, 2000] ns
+    # First row-slice (2 rows per slice with this fixture) will be responsible for bucket 0-1000, which includes the
+    # first index value (200) from the second row slice
+    # Therefore the only index value from the second row slice remaining to be processed is 3000ns. But this is outside
+    # the specified date range, and so this call to ResampleClause::process produces a segment with no rows
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_resampling_row_slice_responsible_for_no_buckets"
+    df = pd.DataFrame(
+        {
+            "to_sum": [0, 1, 2, 3],
+        },
+        index=[pd.Timestamp(0), pd.Timestamp(100), pd.Timestamp(200), pd.Timestamp(3000)],
+    )
+    lib.write(sym, df)
+    generic_resample_test(
+        lib,
+        sym,
+        "us",
+        {"to_sum": ("to_sum", "sum")},
+        (pd.Timestamp(0), pd.Timestamp(1500))
+    )
+
+
 @pytest.mark.parametrize("tz", (None, "Europe/London"))
 @pytest.mark.parametrize("named_levels", (True, False))
 def test_resample_multiindex(lmdb_version_store_v1, tz, named_levels):

@@ -159,7 +159,7 @@ inline entity::AtomKey read_key_row(const SegmentInMemory &seg, ssize_t i) {
     }
 }
 
-using KeyMemSegmentPair = std::pair<entity::VariantKey, SegmentInMemory>;
+using KeyMemSegmentPair = std::pair<VariantKey, SegmentInMemory>;
 
 class IndexRangeFilter {
   public:

@@ -319,10 +319,10 @@ std::vector<std::pair<SnapshotId, py::object>> PythonVersionStore::list_snapshot
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: list_snapshots");
     auto snap_ids = std::vector<std::pair<SnapshotId, py::object>>();
     auto fetch_metadata = opt_false(load_metadata);
-    iterate_snapshots(store(), [store=store(), &snap_ids, fetch_metadata](VariantKey &vk) {
+    iterate_snapshots(store(), [store=store(), &snap_ids, fetch_metadata](const VariantKey& vk) {
         auto snapshot_meta_as_pyobject = fetch_metadata ? get_metadata_for_snapshot(store, vk) : py::none{};
         auto snapshot_id = fmt::format("{}", variant_key_id(vk));
-        snap_ids.emplace_back(snapshot_id, snapshot_meta_as_pyobject);
+        snap_ids.emplace_back(std::move(snapshot_id), std::move(snapshot_meta_as_pyobject));
     });
 
     return snap_ids;
@@ -566,6 +566,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     ) {
     ARCTICDB_SAMPLE(WriteVersionedMultiKey, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_composite_data");
+
     auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
     auto version_id = get_next_version_from_key(maybe_prev);
     ARCTICDB_DEBUG(log::version(), "write_versioned_composite_data for stream_id: {} , version_id = {}", stream_id, version_id);
@@ -1066,19 +1067,17 @@ std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> Pytho
     auto metadatas_or_errors = batch_read_metadata_internal(stream_ids, version_queries, read_options);
 
     std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> results;
-    for (auto&& metadata_or_error: metadatas_or_errors) {
+    for (auto& metadata_or_error: metadatas_or_errors) {
         if (std::holds_alternative<std::pair<VariantKey, std::optional<google::protobuf::Any>>>(metadata_or_error)) {
             auto& [key, meta_proto] = std::get<std::pair<VariantKey, std::optional<google::protobuf::Any>>>(metadata_or_error);
-            VersionedItem version{std::move(to_atom(key))};
+            VersionedItem version{to_atom(std::move(key))};
             if(meta_proto.has_value()) {
-                auto res = std::make_pair(std::move(version), metadata_protobuf_to_pyobject(std::move(meta_proto)));
-                results.push_back(std::move(res));
+                results.emplace_back(std::pair{std::move(version), metadata_protobuf_to_pyobject(meta_proto)});
             }else{
-                auto res = std::make_pair(std::move(version), py::none());
-                results.push_back(std::move(res));   
+                results.emplace_back(std::pair{std::move(version), py::none()});
             }
         } else {
-            results.push_back(std::get<DataError>(std::move(metadata_or_error)));   
+            results.emplace_back(std::get<DataError>(std::move(metadata_or_error)));
         }
     }
     return results;

@@ -241,22 +241,22 @@ namespace
     };
 
     template <Extremum T>
-    inline void aggregate_impl(
+    void aggregate_impl(
         const std::optional<ColumnWithStrings>& input_column,
         const std::vector<size_t>& groups,
         size_t unique_values,
-        std::vector<uint8_t>& aggregated_,
-        std::optional<DataType>& data_type_
+        std::vector<uint8_t>& aggregated,
+        std::optional<DataType>& data_type
     ) {
-        if(data_type_.has_value() && *data_type_ != DataType::EMPTYVAL && input_column.has_value()) {
-            details::visit_type(*data_type_, [&aggregated_, &input_column, unique_values, &groups] (auto global_tag) {
+        if(data_type.has_value() && *data_type != DataType::EMPTYVAL && input_column.has_value()) {
+            details::visit_type(*data_type, [&aggregated, &input_column, unique_values, &groups] (auto global_tag) {
                 using global_type_info = ScalarTypeInfo<decltype(global_tag)>;
                 using GlobalRawType = typename global_type_info::RawType;
                 if constexpr(!is_sequence_type(global_type_info::data_type)) {
                     using MaybeValueType = MaybeValue<GlobalRawType, T>;
-                    auto prev_size = aggregated_.size() / sizeof(MaybeValueType);
-                    aggregated_.resize(sizeof(MaybeValueType) * unique_values);
-                    auto out_ptr = reinterpret_cast<MaybeValueType*>(aggregated_.data());
+                    auto prev_size = aggregated.size() / sizeof(MaybeValueType);
+                    aggregated.resize(sizeof(MaybeValueType) * unique_values);
+                    auto out_ptr = reinterpret_cast<MaybeValueType*>(aggregated.data());
                     std::fill(out_ptr + prev_size, out_ptr + unique_values, MaybeValueType{});
                     details::visit_type(input_column->column_->type().data_type(), [&input_column, &groups, &out_ptr] (auto col_tag) {
                         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
@@ -295,36 +295,47 @@ namespace
     }
 
     template <Extremum T>
-    inline SegmentInMemory finalize_impl(
+    SegmentInMemory finalize_impl(
             const ColumnName& output_column_name,
             bool dynamic_schema,
             size_t unique_values,
-            std::vector<uint8_t>& aggregated_,
-            std::optional<DataType>& data_type_
+            std::vector<uint8_t>& aggregated,
+            std::optional<DataType>& data_type
     ) {
         SegmentInMemory res;
-        if(!aggregated_.empty()) {
+        if(!aggregated.empty()) {
             constexpr auto dynamic_schema_data_type = DataType::FLOAT64;
             using DynamicSchemaTDT = ScalarTagType<DataTypeTag<dynamic_schema_data_type>>;
-            auto col = std::make_shared<Column>(make_scalar_type(dynamic_schema ? dynamic_schema_data_type: data_type_.value()), unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
+            const TypeDescriptor column_type = make_scalar_type(dynamic_schema ? dynamic_schema_data_type: data_type.value());
+            auto col = std::make_shared<Column>(column_type, unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
             auto column_data = col->data();
             col->set_row_data(unique_values - 1);
-            res.add_column(scalar_field(dynamic_schema ? dynamic_schema_data_type : data_type_.value(), output_column_name.value), col);
-            details::visit_type(*data_type_, [&aggregated_, &column_data, unique_values, dynamic_schema] (auto col_tag) {
+            res.add_column(scalar_field(col->type().data_type(), output_column_name.value), std::move(col));
+            details::visit_type(*data_type, [&] (auto col_tag) {
                 using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
                 using MaybeValueType = MaybeValue<typename col_type_info::RawType, T>;
                 if(dynamic_schema) {
-                    auto prev_size = aggregated_.size() / sizeof(MaybeValueType);
+                    if constexpr (dynamic_schema_data_type != col_type_info::data_type && is_integer_type(col_type_info::data_type)) {
+                        log::message().warn(
+                            "The column \"{}\" of type {} is a result of a {} aggregation and the library is configured"
+                            " to use dynamic schema. ArcticDB will promote the type to {} so that if a grouping bucket "
+                            "is empty, it will be assigned a value of NaN. This behavior will be deprecated with the "
+                            "release of ArcticDB v6.0.0 and will change as follows. If Arrow output format is used, "
+                            "empty grouping buckets will be use Arrow's missing value. If numpy output format is used "
+                            "all missing data will be backfilled with 0.",
+                            output_column_name.value, col_type_info::data_type, T == Extremum::MIN ? "MIN" : "MAX", dynamic_schema_data_type);
+                    }
+                    auto prev_size = aggregated.size() / sizeof(MaybeValueType);
                     auto new_size = sizeof(MaybeValueType) * unique_values;
-                    aggregated_.resize(new_size);
-                    auto in_ptr = reinterpret_cast<MaybeValueType *>(aggregated_.data());
+                    aggregated.resize(new_size);
+                    auto in_ptr = reinterpret_cast<MaybeValueType *>(aggregated.data());
                     std::fill(in_ptr + prev_size, in_ptr + unique_values, MaybeValueType{});
                     for (auto it = column_data.begin<DynamicSchemaTDT>(); it != column_data.end<DynamicSchemaTDT>(); ++it, ++in_ptr) {
                         *it = in_ptr->written_ ? static_cast<double>(in_ptr->value_)
                                                : std::numeric_limits<double>::quiet_NaN();
                     }
                 } else {
-                    auto in_ptr = reinterpret_cast<MaybeValueType*>(aggregated_.data());
+                    auto in_ptr = reinterpret_cast<MaybeValueType*>(aggregated.data());
                     for (auto it = column_data.begin<typename col_type_info::TDT>(); it != column_data.end<typename col_type_info::TDT>(); ++it, ++in_ptr) {
                         if constexpr (is_floating_point_type(col_type_info::data_type)) {
                             *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::quiet_NaN();

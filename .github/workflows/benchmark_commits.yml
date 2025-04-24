@@ -43,9 +43,7 @@ jobs:
           ref: ${{ inputs.run_on_pr_head && github.event.pull_request.head.sha || '' }}  # Note: This is dangerous if we run automatic CI on external PRs
         
       - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: "v0.4.0"
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Extra envs
         shell: bash -l {0}
@@ -65,6 +63,17 @@ jobs:
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
           strategy_branch: "${{ inputs.commit }}"
           shared_storage_prefix: "_github_runner_"
+
+      # Workaround for https://github.com/airspeed-velocity/asv/issues/1465
+      - name: Setup micromamba
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          micromamba-version: 2.1.0-0
+
+      - name: Install libmambapy
+        shell: bash -el {0}
+        run: |
+          micromamba install -y -c conda-forge "libmambapy<2"
 
       - name: Install ASV
         shell: bash -el {0}
