@@ -93,7 +93,7 @@ jobs:
       fail-fast: false  
     env:
       conda_file: "python/installation_tests/environment_unix.yml"
-      arcticdb_version: ${{ inputs.arcticdb_version || '5.1.2' }}
+      arcticdb_version: ${{ inputs.arcticdb_version || 'latest' }}
       lmdb: ${{ inputs.run_on_lmdb || '1' }}
       real_s3: ${{ inputs.run_on_real_s3 || '1' }}
 
@@ -152,6 +152,11 @@ jobs:
         gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
         persistent_storage: "true"
 
+    - name: Delete python/arcticdb directory
+      shell: bash -l {0}      
+      run: |
+        rm -rf python/arcticdb        
+  
     - name: Build protobuf
       shell: bash -l {0}      
       run: |
