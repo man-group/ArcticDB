@@ -360,6 +360,18 @@ jobs:
 
       - name: Run test
         run: |
+
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            echo "Running on Linux - set filedescriptors"
+            ulimit -n 2000000
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            echo "Running on macOS"
+            sudo launchctl limit maxfiles 2000000 2000000
+            sudo launchctl limit
+          else
+            echo "Windows OS"
+          fi
+
           build_tooling/parallel_test.sh tests/${{matrix.type}}
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
