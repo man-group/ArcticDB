@@ -130,7 +130,7 @@ jobs:
       uses: mamba-org/setup-micromamba@v2.0.0
       if: ${{ contains(matrix.use_conda, 'yes') }}
       with:
-        environment-file: ${{ env.conda_file }}
+        environment-file: "python/tests/compat/requirements-${{ env.arcticdb_version }}.yml" 
         environment-name: arcticdb
         init-shell: >-
           bash
@@ -142,7 +142,7 @@ jobs:
       shell: bash -l {0}
       run: |
           micromamba activate arcticdb
-          micromamba install --file "python/tests/compat/requirements-${{ env.arcticdb_version }}.yml" --no-pin
+          micromamba install --no-pin --file ${{ env.conda_file }}
   
     - name: Set persistent storage variables
       if: always()
