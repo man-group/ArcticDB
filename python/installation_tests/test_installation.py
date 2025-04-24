@@ -22,7 +22,7 @@ from arcticdb.toolbox.library_tool import KeyType
 from arcticdb.version_store.library import ReadRequest, StagedDataFinalizeMethod, WritePayload
 from arcticdb_ext.exceptions import SortingException 
 from arcticdb_ext.version_store import AtomKey, RefKey
-from arcticdb.options import ModifiableEnterpriseLibraryOption 
+
 
 from arcticdb.util.test import (
     assert_frame_equal,
@@ -141,6 +141,7 @@ def test_list_versions_write_append_update(ac_library):
     assert_frame_equal(lib.read("symbol").data, pd.concat([df.iloc[:-1], df_update, df_append.iloc[[2]]]))
     assert len(lib.list_versions("symbol")) == 3
 
+
 def test_read_batch_per_symbol_query_builder(ac_library):
     lib = ac_library
 
@@ -156,6 +157,7 @@ def test_read_batch_per_symbol_query_builder(ac_library):
     # Then
     assert_frame_equal(batch[0].data, pd.DataFrame({"a": [3]}))
     assert_frame_equal(batch[1].data, pd.DataFrame({"a": [4, 6]}))    
+
 
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
 @pytest.mark.parametrize("validate_index", (True, False, None))
@@ -204,6 +206,7 @@ def test_update_prune_previous_versions(ac_library):
     symbols = lib.list_versions("symbol")
     assert len(symbols) == 1
     assert ("symbol", 1) in symbols
+
 
 def test_read_batch_mixed_with_snapshots(ac_library):
     num_symbols = 10
@@ -378,8 +381,9 @@ def test_stage_finalize_dynamic_with_chunking(ac_client, lib_name):
     expected = pd.concat([df1, df2]).sort_values(sort_cols)
     pd.testing.assert_frame_equal(result, expected)
 
-
+@pytest.mark.skipif(arcticdb.__version__ < "4.0.0", reason = "ModifiableEnterpriseLibraryOption not present before")
 def test_modify_options_affect_persistent_lib_config(ac_client, lib_name):
+    from arcticdb.options import ModifiableEnterpriseLibraryOption 
     ac = ac_client
     lib = ac.create_library(lib_name)
 
