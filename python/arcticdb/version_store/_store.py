@@ -229,11 +229,11 @@ class NativeVersionStore:
     norm_failure_options_msg_append = "Data must be normalizable to be appended to existing data."
     norm_failure_options_msg_update = "Data must be normalizable to be used to update existing data."
 
-    def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE, native_cfg=None):
+    def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE, native_cfg=None, runtime_options=None):
         # type: (_Library, Optional[str], Optional[LibraryConfig], OpenMode)->None
         fail_on_missing = library.config.fail_on_missing_custom_normalizer if library.config is not None else False
         custom_normalizer = get_custom_normalizer(fail_on_missing)
-        self._initialize(library, env, lib_cfg, custom_normalizer, open_mode, native_cfg)
+        self._initialize(library, env, lib_cfg, custom_normalizer, open_mode, native_cfg, runtime_options)
 
     def _init_norm_failure_handler(self):
         # init normalization failure handler
@@ -252,7 +252,7 @@ class NativeVersionStore:
         else:
             raise ArcticDbNotYetImplemented("No other normalization failure handler")
 
-    def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode, native_cfg=None):
+    def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode, native_cfg=None, runtime_options=None):
         self._library = library
         self._cfg = library.config
         self.version_store = _PythonVersionStore(self._library)
@@ -262,6 +262,7 @@ class NativeVersionStore:
         self._init_norm_failure_handler()
         self._open_mode = open_mode
         self._native_cfg = native_cfg
+        self._runtime_options=runtime_options
 
     @classmethod
     def create_store_from_lib_config(cls, lib_cfg, env, open_mode=OpenMode.DELETE):
@@ -1713,7 +1714,10 @@ class NativeVersionStore:
         read_options = _PythonVersionStoreReadOptions()
         read_options.set_force_strings_to_object(_assume_false("force_string_to_object", kwargs))
         read_options.set_optimise_string_memory(_assume_false("optimise_string_memory", kwargs))
-        read_options.set_output_format(kwargs.get("output_format") or OutputFormat.PANDAS)
+        # TODO: Abstract common method for runtime options
+        kwargs_output_format = kwargs.get("output_format")
+        runtime_output_format = self._runtime_options.output_format if self._runtime_options else None
+        read_options.set_output_format(kwargs_output_format or runtime_output_format or OutputFormat.PANDAS)
         read_options.set_dynamic_schema(
             self.resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs)
         )
@@ -1746,10 +1750,18 @@ class NativeVersionStore:
         else:
             index = pd.DatetimeIndex([])
         meta = denormalize_user_metadata(read_result.udm, self._normalizer)
+
+        if read_result.output_format == OutputFormat.PANDAS:
+            data = pd.DataFrame({}, index=index)
+        elif read_result.output_format == OutputFormat.ARROW:
+            # TODO: Think what do we want to do with rowrange index and Arrow
+            import pyarrow as pa
+            data = pa.Table()
+
         return VersionedItem(
             symbol=read_result.version.symbol,
             library=self._library.library_path,
-            data=pd.DataFrame({}, index=index),
+            data=data,
             version=read_result.version.version,
             metadata=meta,
             host=self.env,
@@ -1765,6 +1777,7 @@ class NativeVersionStore:
         if not implement_read_index and is_columns_empty:
             columns = None
         return columns
+
 
     def read(
         self,
@@ -1900,9 +1913,8 @@ class NativeVersionStore:
         return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
 
     def _post_process_dataframe(self, read_result, read_query, implement_read_index=False, head=None, tail=None):
-        if read_result.output_format == OutputFormat.ARROW:
-            # For now we don't do any post processing for ARROW. Just directly return the pyarrow table
-            # TODO: In frontend PR this will be cleaned up
+        if read_result.output_format==OutputFormat.ARROW:
+            # TODO: Some of the below is useful: E.g. the read_query post processing stuff
             return self._adapt_read_res(read_result)
         index_type = read_result.norm.df.common.WhichOneof("index_type")
         index_is_rowcount = (
@@ -2138,6 +2150,34 @@ class NativeVersionStore:
 
         return index_columns
 
+
+    # TODO: Better nane
+    def _convert_dict_strings_and_index_type(self, table, norm):
+        # TODO: Investigate performance impact of this
+        import pyarrow as pa
+        new_columns = []
+        new_fields = []
+
+        index_physically_stored = norm.df.common.index.is_physically_stored
+
+        for i, col in enumerate(table.columns):
+            field = table.field(i)
+            if i==0 and index_physically_stored:
+                # TODO: This is hack
+                new_columns.append(col.cast(pa.timestamp('ns')))
+                new_fields.append(field.with_type(pa.timestamp('ns')))
+            elif pa.types.is_dictionary(col.type) and pa.types.is_string(col.type.value_type):
+                new_columns.append(col.cast(pa.string()))
+                new_fields.append(field.with_type(pa.string()))
+            else:
+                new_columns.append(col)
+                new_fields.append(field)
+
+        return pa.Table.from_arrays(
+            new_columns,
+            schema=pa.schema(new_fields)
+        )
+
     def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
         if read_result.output_format == OutputFormat.PANDAS:
             frame_data = FrameData.from_cpp(read_result.frame_data)
@@ -2150,7 +2190,12 @@ class NativeVersionStore:
             record_batches = []
             for record_batch in frame_data.record_batches:
                 record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
-            data = pa.Table.from_batches(record_batches)
+
+            if len(record_batches) > 0:
+                data = self._convert_dict_strings_and_index_type(pa.Table.from_batches(record_batches), read_result.norm)
+            else:
+                # TODO: Think more about this case
+                data = pa.Table.from_arrays([])
         else:
             raise AssertionError("Invalid output format")
 
@@ -2164,6 +2209,7 @@ class NativeVersionStore:
             host=self.env,
             timestamp=read_result.version.timestamp,
         )
+
 
     def list_versions(
         self,
