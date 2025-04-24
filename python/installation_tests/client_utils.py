@@ -51,7 +51,7 @@ def is_storage_enabled(storage_type: StorageTypes) -> bool:
     if not persistent_storage:
         return False
     if storage_type == StorageTypes.LMDB:
-        if os.getenv("ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED", "1") == "1":
+        if os.getenv("ARCTICDB_STORAGE_LMDB", "1") == "1":
             return True
         else:
             return False

@@ -31,6 +31,8 @@ on:
           - "3.12"
           - "3.13"
       arcticdb_version:
+        # NOTE that for all versions listed here there must be pip and conda 
+        #      requirements files at python/tests/compat folder!
         description: 'ArcticDB version to test'
         required: false
         default: 'latest'
@@ -93,7 +95,7 @@ jobs:
       fail-fast: false  
     env:
       conda_file: "python/installation_tests/environment_unix.yml"
-      arcticdb_version: ${{ inputs.arcticdb_version || 'latest' }}
+      arcticdb_version: ${{ inputs.arcticdb_version || '5.2.6' }}
       lmdb: ${{ inputs.run_on_lmdb || '1' }}
       real_s3: ${{ inputs.run_on_real_s3 || '1' }}
 
