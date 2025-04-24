@@ -5,4 +5,4 @@ dependencies:
   - arcticdb==4.5.1
   - numpy<2
   - pyarrow
-  - protobuf<5.27.5
+  - protobuf<=5.27.5

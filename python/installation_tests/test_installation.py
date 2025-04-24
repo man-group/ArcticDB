@@ -326,7 +326,7 @@ def test_read_batch_mixed_with_snapshots(ac_library):
     assert_frame_equal(vits[5].data, expected)
 
 
-@pytest.mark.skipif(arcticdb.__version__ < "5.0.0", "Library has no stage() method before ver 5.x")
+@pytest.mark.skipif(arcticdb.__version__ < "5.0.0", reason = "Library has no stage() method before ver 5.x")
 def test_stage_finalize_dynamic_with_chunking(ac_client, lib_name):
     lib_opts = LibraryOptions(dynamic_schema=True, rows_per_segment=2, columns_per_segment=2)
     lib = ac_client.get_library(lib_name, create_if_missing=True, library_options=lib_opts)
