@@ -41,7 +41,6 @@ on:
           - "latest"
           - "5.2.6"
           - "5.1.2"
-          - "5.0.0"
           - "4.5.1"
           - "1.6.2"
       run_on_lmdb:
@@ -94,8 +93,9 @@ jobs:
             python: "3.13"
       fail-fast: false  
     env:
-      conda_file: "python/installation_tests/environment_unix.yml"
-      arcticdb_version: ${{ inputs.arcticdb_version || '1.6.2' }}
+      install_tests_folder: "python/installation_tests"
+      conda_file: "environment_unix.yml"
+      arcticdb_version: ${{ inputs.arcticdb_version || '5.2.6' }}
       lmdb: ${{ inputs.run_on_lmdb || '1' }}
       real_s3: ${{ inputs.run_on_real_s3 || '1' }}
 
@@ -133,7 +133,7 @@ jobs:
     - name: (pypi) Install arcticdb from requirements files 
       if: ${{ (env.SKIP_JOB != 'true') && (!contains(matrix.use_conda, 'yes'))}}
       run: |
-        pip install -r "python/tests/compat/requirements-${{ env.arcticdb_version }}.txt"
+        pip install -r "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.txt"
 
     - name: (pypi) Install other prerequisites 
       if: ${{ (env.SKIP_JOB != 'true') && (!contains(matrix.use_conda, 'yes'))}}
@@ -151,7 +151,7 @@ jobs:
       uses: mamba-org/setup-micromamba@v2.0.0
       if: ${{ (env.SKIP_JOB != 'true') && (contains(matrix.use_conda, 'yes'))}}
       with:
-        environment-file: "python/tests/compat/requirements-${{ env.arcticdb_version }}.yml" 
+        environment-file: "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.yml" 
         environment-name: arcticdb
         init-shell: >-
           bash
@@ -163,7 +163,7 @@ jobs:
       shell: bash -l {0}
       run: |
           micromamba activate arcticdb
-          micromamba install --no-pin --file ${{ env.conda_file }}
+          micromamba install --no-pin --file "${{ env.install_tests_folder }}/${{ env.conda_file }}"
   
     - name: Set persistent storage variables
       if: ${{ env.SKIP_JOB != 'true' }}

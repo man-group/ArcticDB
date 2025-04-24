@@ -1285,7 +1285,7 @@ def old_venv(request, tmp_path_factory):
 
     venvs_dir = tmp_path_factory.mktemp("venvs")
     venv_dir = venvs_dir / version
-    requirements_file = os.path.join(os.path.dirname(__file__), "compat", f"requirements-{version}.txt")
+    requirements_file = os.path.join(os.path.dirname(__file__), "..", "installation_tests", f"requirements-{version}.txt")
 
     with Venv(venv_dir, requirements_file, version) as old_venv:
         yield old_venv
@@ -1298,7 +1298,7 @@ def pandas_v1_venv(request):
     tmp_path_factory = request.getfixturevalue("tmp_path_factory")
     venvs_dir = tmp_path_factory.mktemp("venvs")
     venv_dir = venvs_dir / version
-    requirements_file = os.path.join(os.path.dirname(__file__), "compat", f"requirements-{version}.txt")
+    requirements_file = os.path.join(os.path.dirname(__file__), "..", "installation_tests", f"requirements-{version}.txt")
 
     with Venv(venv_dir, requirements_file, version) as old_venv:
         yield old_venv
