@@ -220,6 +220,19 @@ jobs:
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
       pytest_args: ${{inputs.pytest_args}}
 
+  test-docs-linux:
+    # Build dev docs and push preview to netlify
+    # only need to do this once, currently for Python 3.13
+    name: 'Test docs and preview'
+    needs: [build-python-wheels-linux]
+    if: inputs.python3 == '313'
+    steps:
+      - name: Build docs (single version)
+        run: ./doc/mkdocs/mkdocs_build.sh
+
+      - name: Upload preview (single version)
+        run: 
+          
   cpp-test-windows:
     needs: [common_config]
     name: Windows C++ Tests

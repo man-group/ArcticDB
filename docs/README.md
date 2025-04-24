@@ -28,7 +28,7 @@ Dependencies
 
 Install
 ```
-pip3 install mkdocs-material mkdocs-jupyter 'mkdocstrings[python]' black pybind11-stubgen mike wheel
+pip3 install arcticdb[docs]
 ```
 or
 ```

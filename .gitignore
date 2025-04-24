@@ -42,6 +42,7 @@ CMakeUserPresets.json
 .DS_Store
 
 docs/mkdocs/site/
+docs/mkdocs/versioned_site/
 docs/mkdocs/docs/notebooks/.ipynb_checkpoints/
 
 # Ignore automatically generated stub files (*.pyi)

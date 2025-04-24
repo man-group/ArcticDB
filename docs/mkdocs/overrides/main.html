@@ -11,7 +11,8 @@
 {% if page.nb_url %}
 <p>
 <h1>{{page.file.name}}</h1>
-<a href="https://github.com/man-group/ArcticDB/blob/VERSION_PLACEHOLDER/docs/mkdocs/docs/{{page.file.src_uri}}">
+<a  id="github-notebook-link"
+    href="https://github.com/man-group/ArcticDB/blob/VERSION_PLACEHOLDER/docs/mkdocs/docs/{{page.file.src_uri}}">
     <span class="twemoji">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
             <title>github</title>
@@ -22,7 +23,7 @@
     View in Github
 </a>
 |
-<a
+<a  id="colab-notebook-link"
     href="https://colab.research.google.com/github/man-group/ArcticDB/blob/VERSION_PLACEHOLDER/docs/mkdocs/docs/{{page.file.src_uri}}">
     <span class="twemoji">
         <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" focusable="false" width="977" height="602"
@@ -47,7 +48,21 @@
 </a>
 <hr />
 </p>
+
+<script>
+window.addEventListener("DOMContentLoaded", function() {
+  // `base_url` comes from the base.html template in mkdocs
+  var abs_base_url = expandPath(base_url);
+  var current_version = abs_base_url.match(/\/([^\/]+)\/$/)[1];
+  if (current_version=='dev') current_version='master';
+  var github_link = document.getElementById("github-notebook-link");
+  github_link.href = github.href.replace("VERSION_PLACEHOLDER", current_version);
+  var colab_link = document.getElementById("colab-notebook-link");
+  colab_link.href = colab_link.href.replace("VERSION_PLACEHOLDER", current_version);
+});
+</script>
 {% endif %}
 
 {{ super() }}
+
 {% endblock content %}

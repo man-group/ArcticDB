@@ -1,4 +1,4 @@
-name: Docs Build
+name: Docs Build (multi-version - 'Mike' build)
 on:
   workflow_dispatch:
     inputs:
@@ -20,7 +20,7 @@ jobs:
       - name: Check inputs
         run: |
           if [ -z "${{ inputs.version }}" ] && ${{ inputs.latest }}; then
-            echo "Cannot label dev build as latest. Failing the job."
+            echo "Should not label dev build as latest. Failing the job."
             exit 1
           fi
       - name: Checkout
@@ -49,49 +49,17 @@ jobs:
           workflow_conclusion: success
           branch: ${{github.ref}}
 
-      - name: Install documentation dependencies (including ArcticDB)
-        run: |
-          set -x
-          pip3 install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen mike ${{inputs.version && format('arcticdb=={0}',inputs.version) || 'arcticdb-*.whl'}}
+      # fixme install wheel
 
-      - name: Rewrite the template so the links point to the correct version
-        if: ${{inputs.version}}
+      - name: mkdocs build
         run: |
           set -x
-          cd docs/mkdocs
-          sed -i "s/VERSION_PLACEHOLDER/v${{inputs.version}}/g" overrides/main.html
-          git config --global user.name "${GITHUB_ACTOR}"
-          git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
-          git add overrides/main.html
-          git commit -m "Update version placeholder to v${{inputs.version}}"
-
-      - name: Stubfile generation for arcticdb_ext
-        run: |
-          set -x
-          cd docs/mkdocs
-          # stubfiles will be generated into docs/mkdocs/arcticdb_ext and so imported as arcticdb_ext by mkdocs when it builds
-          # FIXME --ignore-all-errors may mask new errors and should be removed when we are compliant
-          pybind11-stubgen arcticdb_ext --ignore-all-errors -o .
-
-      - name: List docs versions before deploy
-        run: |
-          set -x
-          cd docs/mkdocs
-          mike list
-
-      - name: Versioned mkDocs build
-        run: |
-          set -x
-          cd docs/mkdocs
           # mike needs a git user to be set
           git config --global user.name "${GITHUB_ACTOR}"
           git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
-          git_hash=$(git rev-parse --short HEAD)
-          mike deploy ${{inputs.version || 'dev'}} ${{inputs.latest && 'latest' || ''}} --update-aliases --branch docs-pages ${{inputs.deploy && '--push' || ''}} --message "Deploying docs: ${{inputs.version || 'dev'}} $git_hash ${{inputs.latest && '[latest]' || ''}}"
-          mike set-default latest --branch docs-pages ${{inputs.deploy && '--push' || ''}}
-
-      - name: List docs versions after build
-        run: |
-          set -x
           cd docs/mkdocs
-          mike list
+          python mkdocs_build.py ${{inputs.latest && '--latest'}} ${{inputs.version}} 
+          
+      - name: Deploy
+        if: inputs.deploy
+        run: git push -- origin docs-pages
