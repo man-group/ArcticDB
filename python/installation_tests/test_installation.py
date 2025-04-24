@@ -19,9 +19,9 @@ from arcticdb.util.test import random_floats, random_strings_of_length
 from arcticdb.version_store import VersionedItem as PythonVersionedItem
 from arcticdb.toolbox.library_tool import KeyType
 from arcticdb.version_store.library import ReadRequest, StagedDataFinalizeMethod, WritePayload
-from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
+from arcticdb_ext.exceptions import SortingException 
 from arcticdb_ext.version_store import AtomKey, RefKey
-from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
+from arcticdb.options import ModifiableEnterpriseLibraryOption 
 
 from arcticdb.util.test import (
     assert_frame_equal,
