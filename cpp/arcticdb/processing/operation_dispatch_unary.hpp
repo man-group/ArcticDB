@@ -125,7 +125,7 @@ VariantData unary_comparator(const ColumnWithStrings& col, Func&& func) {
 
     util::BitSet output_bitset;
     constexpr auto sparse_missing_value_output = std::is_same_v<std::remove_reference_t<Func>, IsNullOperator>;
-    details::visit_type(col.column_->type().data_type(), [&](auto col_tag) {
+    details::visit_type(col.column_->type().data_type(), [&, sparse_missing_value_output](auto col_tag) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         // Non-explicit lambda capture due to a bug in LLVM: https://github.com/llvm/llvm-project/issues/34798
         Column::transform<typename type_info::TDT>(*(col.column_), output_bitset, sparse_missing_value_output, [&](auto input_value) -> bool {

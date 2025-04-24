@@ -2,7 +2,6 @@
 
 #include <arcticdb/util/spinlock.hpp>
 #include <pybind11/pybind11.h>
-#include <arcticdb/python/gil_lock.hpp>
 
 #include <memory>
 
