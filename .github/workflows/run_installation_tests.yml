@@ -1,9 +1,7 @@
 name: Run Installation Tests v4
 
 on:
-  push:
-    branches: 
-      - installation_tests_v4
+
   workflow_dispatch:
     inputs:
       os:
@@ -63,7 +61,7 @@ on:
 
 jobs:
 
-  test:
+  installation_test:
     runs-on: ${{ inputs.os != 'all' && inputs.os || matrix.os }}
     strategy:
       matrix:
@@ -100,11 +98,6 @@ jobs:
       real_s3: ${{ inputs.run_on_real_s3 || '1' }}
 
     steps:
-
-    - name: Get Repository Info
-      run: |
-        echo "Repo Owner: ${{ github.repository_owner }}"
-        echo "Repo Name: $(echo ${{ github.repository }} | cut -d'/' -f2)"      
 
     - name: Check Unsupported Versions
       shell: bash
