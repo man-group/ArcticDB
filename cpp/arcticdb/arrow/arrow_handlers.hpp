@@ -42,10 +42,6 @@ struct ArrowStringHandler {
         size_t byte_size,
         const DecodePathData& shared_data,
         std::any& handler_data) const;
-
-    size_t extra_rows() const {
-        return 1;
-    }
 };
 
 struct ArrowHandlerDataFactory  : public TypeHandlerDataFactory {
@@ -61,10 +57,10 @@ inline void register_arrow_handler_data_factory() {
 
 inline void register_arrow_string_types() {
     using namespace arcticdb;
-    constexpr std::array<DataType, 5> string_data_types = {
-        DataType::ASCII_DYNAMIC64, DataType::UTF_DYNAMIC64};
+    constexpr std::array<DataType, 4> dynamic_string_data_types = {
+        DataType::ASCII_DYNAMIC64, DataType::UTF_DYNAMIC64, DataType::ASCII_FIXED64, DataType::UTF_FIXED64};
 
-    for (auto data_type :string_data_types) {
+    for (auto data_type : dynamic_string_data_types) {
         TypeHandlerRegistry::instance()->register_handler(OutputFormat::ARROW, make_scalar_type(data_type), arcticdb::ArrowStringHandler{});
     }
 }

@@ -51,7 +51,7 @@ void ArrowStringHandler::convert_type(
     const DecodePathData&,
     std::any&,
     const std::shared_ptr<StringPool>& string_pool) const {
-    uint32_t bytes = 0;
+    size_t bytes = 0;
     using ArcticStringColumnTag = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
     auto dest_ptr = reinterpret_cast<uint32_t*>(dest_column.bytes_at(mapping.offset_bytes_, source_column.row_count() * sizeof(uint32_t)));
     auto input_data = source_column.data();
@@ -66,7 +66,7 @@ void ArrowStringHandler::convert_type(
     ankerl::unordered_dense::map<StringPool::offset_t, DictEntry> unique_offsets;
     uint32_t unique_string_count = 0U;
     while(pos != end) {
-        auto [entry, emplaced] = unique_offsets.try_emplace(*pos, DictEntry{unique_string_count, bytes});
+        auto [entry, emplaced] = unique_offsets.try_emplace(*pos, DictEntry{unique_string_count, static_cast<uint32_t>(bytes)});
         if(emplaced) {
             bytes += string_pool->get_const_view(*pos).size();
             ++unique_string_count;
@@ -75,6 +75,9 @@ void ArrowStringHandler::convert_type(
         *dest_ptr = entry->second.index_offset_;
         ++dest_ptr;
     }
+    util::check(bytes <= std::numeric_limits<uint32_t>::max(),
+        "Arrow string handler doesn't support total length of strings larger than uint32_t. Total string bytes: {}",
+        bytes);
     auto& data_buffer = dest_column.create_extra_buffer(mapping.offset_bytes_, ExtraBufferType::STRING, bytes, AllocationType::DETACHABLE);
     auto& offsets_buffer = dest_column.create_extra_buffer(mapping.offset_bytes_, ExtraBufferType::OFFSET, (unique_offsets.size() + 1) * sizeof(uint32_t), AllocationType::DETACHABLE);
 

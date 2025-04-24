@@ -1724,7 +1724,6 @@ class Library:
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
         lazy: bool = False,
-        output_format: OutputFormat = None,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read data for the named symbol.  Returns a VersionedItem object with a data and metadata element (as passed into
@@ -1822,7 +1821,6 @@ class Library:
                 query_builder=query_builder,
                 implement_read_index=True,
                 iterate_snapshots_if_tombstoned=False,
-                output_format=output_format,
             )
 
     def read_batch(

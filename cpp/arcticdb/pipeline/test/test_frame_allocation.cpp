@@ -37,6 +37,6 @@ TEST(OutputFrame, AllocateChunked) {
     });
 
     context->set_descriptor(desc);
-    auto frame = allocate_frame(context, OutputFormat::ARROW, AllocationType::DETACHABLE);
+    auto frame = allocate_frame(context, OutputFormat::ARROW);
     ASSERT_EQ(frame.row_count(), 720);
 }

@@ -501,27 +501,9 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
             get_descriptor_async(std::move(opt_index_key_fut), stream_ids[idx], version_queries[idx]));
     }
     auto descriptors = folly::collectAll(descriptor_futures).get();
-    std::vector<std::variant<DescriptorItem, DataError>> descriptors_or_errors;
-    descriptors_or_errors.reserve(descriptors.size());
-    for (auto&& [idx, descriptor]: folly::enumerate(descriptors)) {
-        if (descriptor.hasValue()) {
-            descriptors_or_errors.emplace_back(std::move(descriptor.value()));
-        } else {
-            if (*read_options.batch_throw_on_error()) {
-                descriptor.throwUnlessValue();
-            } else {
-                auto exception = descriptor.exception();
-                DataError data_error(stream_ids[idx], exception.what().toStdString(), version_queries[idx].content_);
-                if (exception.is_compatible_with<NoSuchVersionException>()) {
-                    data_error.set_error_code(ErrorCode::E_NO_SUCH_VERSION);
-                } else if (exception.is_compatible_with<storage::KeyNotFoundException>()) {
-                    data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
-                }
-                descriptors_or_errors.emplace_back(std::move(data_error));
-            }
-        }
-    }
-    return descriptors_or_errors;
+    TransformBatchResultsFlags flags;
+    flags.throw_on_error_ = *read_options.batch_throw_on_error();
+    return transform_batch_items_or_throw(std::move(descriptors), stream_ids, flags, version_queries);
 }
 
 void LocalVersionedEngine::flush_version_map() {
@@ -1177,28 +1159,10 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
         all_results.insert(all_results.end(), std::make_move_iterator(read_versions.begin()), std::make_move_iterator(read_versions.end()));
     }
 
-    std::vector<std::variant<ReadVersionOutput, DataError>> read_versions_or_errors;
-    read_versions_or_errors.reserve(all_results.size());
-    for (auto&& [idx, read_version]: folly::enumerate(all_results)) {
-        if (read_version.hasValue()) {
-            read_versions_or_errors.emplace_back(std::move(read_version.value()));
-        } else {
-            if (*read_options.batch_throw_on_error()) {
-                read_version.throwUnlessValue();
-            } else {
-                auto exception = read_version.exception();
-                DataError data_error(stream_ids[idx], exception.what().toStdString(), version_queries[idx].content_);
-                if (exception.is_compatible_with<NoSuchVersionException>()) {
-                    data_error.set_error_code(ErrorCode::E_NO_SUCH_VERSION);
-                } else if (exception.is_compatible_with<storage::KeyNotFoundException>() ||
-                           exception.is_compatible_with<storage::NoDataFoundException>()) {
-                    data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
-                }
-                read_versions_or_errors.emplace_back(std::move(data_error));
-            }
-        }
-    }
-    return read_versions_or_errors;
+    TransformBatchResultsFlags flags;
+    flags.convert_no_data_found_to_key_not_found_ = true;
+    flags.throw_on_error_ = *read_options.batch_throw_on_error();
+    return transform_batch_items_or_throw(std::move(all_results), stream_ids, flags, version_queries);
 }
 
 auto unpack_symbol_processing_results(std::vector<SymbolProcessingResult>&& symbol_processing_results) {

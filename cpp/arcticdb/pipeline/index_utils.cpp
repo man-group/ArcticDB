@@ -112,7 +112,8 @@ TimeseriesDescriptor get_merged_tsd(
             else if (is_sequence_type(result_type.data_type()) &&
                      is_sequence_type(new_type.data_type()) &&
                      !is_dynamic_string_type(result_type.data_type()) &&
-                     is_dynamic_string_type(new_type.data_type())) {
+                     is_dynamic_string_type(new_type.data_type()) &&
+                     !is_arrow_output_only_type(new_type.data_type())) {
                 result_type = new_type;
             }
         }

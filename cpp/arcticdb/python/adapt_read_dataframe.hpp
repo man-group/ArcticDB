@@ -14,9 +14,9 @@
 
 namespace arcticdb {
 
-inline py::tuple adapt_read_df(ReadResult&& ret, std::pair<std::any&, OutputFormat>* const handler) {
-    if (handler) {
-        apply_global_refcounts(handler->first, handler->second);
+inline py::tuple adapt_read_df(ReadResult&& ret, std::any* const handler_data) {
+    if (handler_data) {
+        apply_global_refcounts(*handler_data, ret.output_format);
     }
     auto pynorm = python_util::pb_to_python(ret.norm_meta);
     auto pyuser_meta = util::variant_match(
@@ -32,12 +32,7 @@ inline py::tuple adapt_read_df(ReadResult&& ret, std::pair<std::any&, OutputForm
                 return py_metadatas;
             });
     auto multi_key_meta = python_util::pb_to_python(ret.multi_key_meta);
-    return py::make_tuple(ret.item, std::move(ret.frame_data), pynorm, pyuser_meta, multi_key_meta, ret.multi_keys);
-};
-
-inline auto adapt_arrow_df = [](ArrowReadResult && ret) -> py::tuple{
-    auto pyuser_meta = python_util::pb_to_python(ret.user_meta_);
-    return py::make_tuple(ret.versioned_item_, std::move(ret.frame_), pyuser_meta);
+    return py::make_tuple(ret.item, std::move(ret.frame_data), ret.output_format, pynorm, pyuser_meta, multi_key_meta, ret.multi_keys);
 };
 
 }
