@@ -282,7 +282,9 @@ public:
 
         typename base_type::reference dereference() const {
             if constexpr (iterator_type == IteratorType::ENUMERATED) {
-                return data_;
+                // TODO: Find a cleaner way to do this that actually compiles
+                // Adding a non-const variant with requires based on the constant template parameter does not build
+                return *const_cast<typename base_type::value_type*>(&data_);
             } else {
                 debug::check<ErrorCode::E_ASSERTION_FAILURE>(data_.ptr_ != nullptr, "Dereferencing nullptr in ColumnDataIterator");
                 return *data_.ptr_;

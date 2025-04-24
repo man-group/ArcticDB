@@ -172,6 +172,7 @@ def test_project_ternary_column_value_numeric(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
+# TODO: Test None (and np.nan?) as the string value
 def test_project_ternary_column_value_strings(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     symbol = "test_project_ternary_column_value_strings"
@@ -370,6 +371,36 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     assert_frame_equal(expected, received, check_dtype=False)
 
 
+# TODO: Test cases where sparse map of result column is both all 0s and all 1s
+def test_project_ternary_sparse(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_project_ternary_sparse"
+    df = pd.DataFrame(
+        {
+            "condition": [   1.0,  0.0,  1.0,    0.0,    1.0,    0.0,    1.0,    0.0],
+            "col1":      [np.nan,  0.0,  1.0, np.nan, np.nan,    2.0,    3.0, np.nan],
+            "col2":      [np.nan, 10.0, 11.0,   12.0,   13.0, np.nan, np.nan, np.nan],
+        },
+        index=pd.date_range("2024-01-01", periods=8),
+    )
+    lib.write(sym, df, sparsify_floats=True)
+
+    # Col/val
+    expected = df
+    expected["projected"] = np.where((expected["condition"] == 1.0).to_numpy(), expected["col1"].to_numpy(), 5.0)
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["condition"] == 1.0, q["col1"], 5))
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    # Val/col
+    expected = df
+    expected["projected"] = np.where((expected["condition"] == 1.0).to_numpy(), 5.0, expected["col1"].to_numpy())
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["condition"] == 1.0, 5, q["col1"]))
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received)
+
 
 def test_filter_ternary_bitset_bitset(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
@@ -439,6 +470,18 @@ def test_filter_ternary_bool_columns(lmdb_version_store_v1):
     expected = df[np.where(df["conditional"].to_numpy(), df["col2"].to_numpy(), df["col1"].to_numpy())]
     q = QueryBuilder()
     q = q[where(q["conditional"], q["col2"], q["col1"])]
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    expected = df[np.where(df["conditional"].to_numpy(), df["col1"].to_numpy(), True)]
+    q = QueryBuilder()
+    q = q[where(q["conditional"], q["col1"], True)]
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    expected = df[np.where(df["conditional"].to_numpy(), False, df["col2"].to_numpy())]
+    q = QueryBuilder()
+    q = q[where(q["conditional"], False, q["col2"])]
     received = lib.read(symbol, query_builder=q).data
     assert_frame_equal(expected, received)
 

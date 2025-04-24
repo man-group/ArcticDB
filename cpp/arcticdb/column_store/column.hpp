@@ -82,6 +82,9 @@ void initialise_output_column(const Column& left_input_column, const Column& rig
 
 void initialise_output_bitset(const util::BitSet& input_bitset, bool sparse_missing_value_output, util::BitSet& output_bitset);
 
+template<bool arguments_reversed>
+void initialise_output_column(const util::BitSet& condition, const Column& input_column, Column& output_column);
+
 class Column {
 public:
     template<typename TDT, typename ValueType>
@@ -948,6 +951,40 @@ public:
             }
         }
         inserter.flush();
+    }
+
+    template <typename input_tdt, typename output_tdt, typename value_type, bool arguments_reversed>
+    static void ternary(const util::BitSet& condition, const Column& input_column, Column& output_column, value_type value) {
+        initialise_output_column<arguments_reversed>(condition, input_column, output_column);
+        // TODO: Consider optimisations
+        // e.g. If the result is mostly value, then fully initialise output column to value, and then just iterate
+        // true/false bits of condition as appropriate
+        auto output_data = output_column.data();
+        if (output_column.is_sparse()) {
+            auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+            for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(); output_it != output_end_it; ++output_it) {
+                auto idx = output_it->idx();
+                if constexpr (arguments_reversed) {
+                    output_it->value() = condition.get_bit(idx) ?
+                                         value : static_cast<typename output_tdt::DataTypeTag::raw_type>(*input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx));
+                } else {
+                    output_it->value() = condition.get_bit(idx) ?
+                                         static_cast<typename output_tdt::DataTypeTag::raw_type>(*input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx)) : value;
+                }
+            }
+        } else {
+            auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED>();
+            for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it; ++output_it) {
+                auto idx = output_it->idx();
+                if constexpr (arguments_reversed) {
+                    output_it->value() = condition.get_bit(idx) ?
+                                         value : static_cast<typename output_tdt::DataTypeTag::raw_type>(*input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx));
+                } else {
+                    output_it->value() = condition.get_bit(idx) ?
+                                         static_cast<typename output_tdt::DataTypeTag::raw_type>(*input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx)) : value;
+                }
+            }
+        }
     }
 
     void init_buffer() {

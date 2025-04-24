@@ -192,26 +192,28 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                             "Ternary operator does not support fixed width string columns '{}'",
                             col.column_name_);
                 }
-            } else if constexpr ((is_numeric_type(col_type_info::data_type) && is_numeric_type(val_type_info::data_type)) ||
-                                 (is_bool_type(col_type_info::data_type) && is_bool_type(val_type_info::data_type))) {
+            } else if constexpr (is_numeric_type(col_type_info::data_type) && is_numeric_type(val_type_info::data_type)) {
                 using TargetType = typename ternary_operation_promoted_type<typename col_type_info::RawType, typename val_type_info::RawType>::type;
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 auto value = static_cast<TargetType>(val.get<typename val_type_info::RawType>());
                 value_string = fmt::format("{}", value);
-                // TODO: Could this be more efficient?
-                size_t idx{0};
-                Column::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
+                Column::ternary<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>, TargetType, arguments_reversed>(
+                        condition,
                         *(col.column_),
                         *output_column,
-                        [&condition, &idx, value](auto col_value) -> TargetType {
-                            if constexpr (arguments_reversed) {
-                                return condition[idx++] ? value : static_cast<TargetType>(col_value);
-                            } else {
-                                return condition[idx++] ? static_cast<TargetType>(col_value) : value;
-                            }
-
-                        });
+                        value);
+            } else if constexpr (is_bool_type(col_type_info::data_type) && is_bool_type(val_type_info::data_type)) {
+                using TargetType = bool;
+                constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
+                output_column = std::make_unique<Column>(make_scalar_type(DataType::BOOL8), Sparsity::PERMITTED);
+                auto value = static_cast<TargetType>(val.get<typename val_type_info::RawType>());
+                value_string = fmt::format("{}", value);
+                Column::ternary<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>, TargetType, arguments_reversed>(
+                        condition,
+                        *(col.column_),
+                        *output_column,
+                        value);
             } else {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",
                                                                       ternary_operation_with_types_to_string<arguments_reversed>(

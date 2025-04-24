@@ -27,6 +27,31 @@ void initialise_output_column(const Column& input_column, Column& output_column)
     }
 }
 
+template<bool arguments_reversed>
+void initialise_output_column(const util::BitSet& condition, const Column& input_column, Column& output_column) {
+    util::check(&input_column != &output_column, "Cannot overwrite input column in ternary operator");
+    size_t output_physical_rows;
+    size_t output_logical_rows = input_column.last_row() + 1;
+    auto output_sparse_map = condition;
+    output_sparse_map.resize(output_logical_rows);
+    if (input_column.is_sparse()) {
+        if constexpr (arguments_reversed) {
+            output_sparse_map |= input_column.sparse_map();
+        } else {
+            output_sparse_map = ~output_sparse_map | input_column.sparse_map();
+        }
+        output_physical_rows = output_sparse_map.count();
+        output_column.set_sparse_map(std::move(output_sparse_map));
+    } else {
+        output_physical_rows = input_column.row_count();
+    }
+    output_column.allocate_data(output_physical_rows * get_type_size(output_column.type().data_type()));
+    output_column.set_row_data(output_logical_rows - 1);
+}
+
+template void initialise_output_column<true>(const util::BitSet& condition, const Column& input_column, Column& output_column);
+template void initialise_output_column<false>(const util::BitSet& condition, const Column& input_column, Column& output_column);
+
 void initialise_output_column(const Column& left_input_column, const Column& right_input_column, Column& output_column) {
     if (&left_input_column != &output_column && &right_input_column != &output_column) {
         size_t output_physical_rows;
@@ -71,6 +96,7 @@ void initialise_output_column(const Column& left_input_column, const Column& rig
 }
 
 void initialise_output_bitset(const util::BitSet& input_bitset, bool sparse_missing_value_output, util::BitSet& output_bitset) {
+    // TODO: Set size as well for consistency with other similar methods, whether sparse_missing_value_output is true or false
     if (sparse_missing_value_output) {
         output_bitset = input_bitset;
         output_bitset.flip();
