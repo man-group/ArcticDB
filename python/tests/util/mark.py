@@ -111,6 +111,8 @@ SIM_NFS_TESTS_MARK = pytest.mark.skipif(
 TODO: https://github.com/man-group/ArcticDB/issues/1394"""
 SSL_TEST_SUPPORTED = sys.platform == "linux"
 
+FORK_SUPPORTED = pytest.mark.skipif(WINDOWS, reason="Fork not supported on Windows")
+
 ## MEMRAY supports linux and macos and python 3.8 and above
 MEMRAY_SUPPORTED = (sys.version_info >= (3, 8)) and (MACOS or LINUX)
 MEMRAY_TESTS_MARK = pytest.mark.skipif(
