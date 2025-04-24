@@ -142,7 +142,7 @@ jobs:
       shell: bash -l {0}
       run: |
           micromamba activate arcticdb
-          micromamba install --file "python/tests/compat/requirements-${{ env.arcticdb_version }}.yml"
+          micromamba install --file "python/tests/compat/requirements-${{ env.arcticdb_version }}.yml" --no-pin
   
     - name: Set persistent storage variables
       if: always()

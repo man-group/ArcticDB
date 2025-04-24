@@ -79,7 +79,7 @@ def test_write_batch_dedup(ac_library_factory):
     for sym in range(num_symbols):
         data_key_version = lib._nvs.read_index("symbol_" + str(sym))["version_id"]
         for s in range(num_segments):
-            assert data_key_version[s] == 0
+            assert data_key_version.iloc[s] == 0
 
 
 def test_basic_write_read_update_and_append(ac_library):
@@ -101,12 +101,12 @@ def test_basic_write_read_update_and_append(ac_library):
     )
 
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
-    df.index = pd.date_range("2018-01-01", periods=3, freq="H")
+    df.index = pd.date_range("2018-01-01", periods=3, freq="h")
     lib.write("timeseries", df, metadata={"hello": "world"})
     assert lib["timeseries"].version == 0
 
     df = pd.DataFrame({"col1": [4, 5, 6], "col2": [7, 8, 9]})
-    df.index = pd.date_range("2018-01-01", periods=3, freq="H")
+    df.index = pd.date_range("2018-01-01", periods=3, freq="h")
     lib.update("timeseries", df)
     assert lib["timeseries"].version == 1
     df.index.freq = None
@@ -332,7 +332,7 @@ def test_stage_finalize_dynamic_with_chunking(ac_client, lib_name):
 
     df1 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-01", periods=7, freq="H"),
+            "timestamp": pd.date_range("2023-01-01", periods=7, freq="h"),
             "col1": np.arange(1, 8, dtype=np.uint8),
             "col2": [f"a{i:02d}" for i in range(1, 8)],
             "col3": np.arange(1, 8, dtype=np.int32),
@@ -341,7 +341,7 @@ def test_stage_finalize_dynamic_with_chunking(ac_client, lib_name):
 
     df2 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-04", periods=7, freq="H"),
+            "timestamp": pd.date_range("2023-01-04", periods=7, freq="h"),
             "col1": np.arange(8, 15, dtype=np.int32),
             "col2": [f"b{i:02d}" for i in range(8, 15)],
             "col3": np.arange(8, 15, dtype=np.uint16),
