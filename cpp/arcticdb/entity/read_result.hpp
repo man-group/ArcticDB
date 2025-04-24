@@ -14,21 +14,27 @@
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <arcticdb/pipeline/python_output_frame.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
+#include <arcticdb/arrow/arrow_utils.hpp>
 
 #include <vector>
 
 namespace arcticdb {
 
+// TODO: Rename the PythonOutputFrame to PandasOutputFrame
+using OutputFrame = std::variant<pipelines::PythonOutputFrame, ArrowOutputFrame>;
+
 struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
     ReadResult(
             const VersionedItem& versioned_item,
-            pipelines::PythonOutputFrame&& frame_data,
+            OutputFrame&& frame_data,
+            OutputFormat output_format,
             const arcticdb::proto::descriptors::NormalizationMetadata& norm_meta,
             const arcticdb::proto::descriptors::UserDefinedMetadata& user_meta,
             const arcticdb::proto::descriptors::UserDefinedMetadata& multi_key_meta,
             std::vector<entity::AtomKey>&& multi_keys) :
             item(versioned_item),
             frame_data(std::move(frame_data)),
+            output_format(output_format),
             norm_meta(norm_meta),
             user_meta(user_meta),
             multi_key_meta(multi_key_meta),
@@ -36,7 +42,8 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
 
     }
     VersionedItem item;
-    pipelines::PythonOutputFrame frame_data;
+    OutputFrame frame_data;
+    OutputFormat output_format;
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata multi_key_meta;
@@ -72,11 +79,18 @@ inline ReadResult create_python_read_result(
         }
     }
 
-    auto python_frame = pipelines::PythonOutputFrame{result.frame_, output_format};
+    // Is that the principal way to init a variant?
+    auto python_frame = [&]() -> OutputFrame {
+        if (output_format == OutputFormat::ARROW) {
+            return ArrowOutputFrame{segment_to_arrow_data(result.frame_), names_from_segment(result.frame_)};
+        } else {
+            return pipelines::PythonOutputFrame{result.frame_, output_format};
+        }
+    }();
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
 
     const auto& desc_proto = result.desc_.proto();
-    return {version, std::move(python_frame), desc_proto.normalization(),
+    return {version, std::move(python_frame), output_format, desc_proto.normalization(),
             desc_proto.user_meta(), desc_proto.multi_key_meta(), std::move(result.keys_)};
 }
 

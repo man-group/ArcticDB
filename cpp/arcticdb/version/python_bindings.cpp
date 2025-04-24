@@ -692,16 +692,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options) {
                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
                 return adapt_read_df(v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data));
-              },
+             },
              py::call_guard<SingleThreadMutexHolder>(),
              "Read the specified version of the dataframe from the store")
-            .def("read_dataframe_version_arrow",
-            [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options) {
-                auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
-                return adapt_arrow_df(v.read_dataframe_version_arrow(sid, version_query, read_query, read_options, handler_data));
-            },
-            py::call_guard<SingleThreadMutexHolder>(),
-            "Read the specified version of the dataframe from the store")
         .def("read_index",
              [&](PythonVersionStore& v, StreamId sid, const VersionQuery& version_query){
                  return adapt_read_df(v.read_index(sid, version_query));
@@ -757,6 +750,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                     vit,
                     PythonOutputFrame{
                         SegmentInMemory{tsd.as_stream_descriptor()},  read_options.output_format()},
+                        read_options.output_format(),
                         tsd_proto.normalization(),
                         tsd_proto.user_meta(),
                         tsd_proto.multi_key_meta(),
@@ -827,6 +821,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                      const auto& tsd_proto = tsd.proto();
                      ReadResult res{vit, PythonOutputFrame{
                          SegmentInMemory{tsd.as_stream_descriptor()}, read_options.output_format()},
+                                    read_options.output_format(),
                                     tsd_proto.normalization(),
                                     tsd_proto.user_meta(),
                                     tsd_proto.multi_key_meta(), {}};

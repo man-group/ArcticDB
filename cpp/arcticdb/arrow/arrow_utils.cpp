@@ -71,14 +71,5 @@ std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(Segmen
 
     return output;
 }
-ArrowReadResult create_arrow_read_result(
-    const VersionedItem& version,
-    FrameAndDescriptor&& fd) {
-    auto result = std::move(fd);
-    auto arrow_frame = ArrowOutputFrame{segment_to_arrow_data(result.frame_), names_from_segment(result.frame_)};
-
-    const auto& desc_proto = result.desc_.proto();
-    return {version, std::move(arrow_frame), desc_proto.user_meta()};
-}
 
 } // namespace arcticdb

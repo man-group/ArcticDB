@@ -40,11 +40,6 @@ struct ArrowReadResult {
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta_;
 };
 
-ArrowReadResult create_arrow_read_result(
-    const VersionedItem& version,
-    FrameAndDescriptor&& fd);
-
-
 std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(SegmentInMemory& segment);
 
 std::vector<std::string> names_from_segment(const SegmentInMemory& segment);

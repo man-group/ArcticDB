@@ -12,8 +12,23 @@ def test_basic(lmdb_version_store_v1):
     df = pd.DataFrame({"x": np.arange(10)})
     lib.write("arrow", df)
     vit = lib.read("arrow", output_format=OutputFormat.ARROW)
-    result = vit.to_pandas()
+    result = vit.data.to_pandas()
     assert_frame_equal(result, df)
+
+
+# TODO: Do this fix during normalization
+def fix_timeseries_index(df):
+    df["index"] = df["index"].apply(lambda x : pd.Timestamp(x))
+    return df
+
+
+def test_basic_with_index(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"x": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
+    lib.write("arrow", df)
+    vit = lib.read("arrow", output_format=OutputFormat.ARROW)
+    result = fix_timeseries_index(vit.data.to_pandas())
+    assert_frame_equal(result, df.reset_index())
 
 
 def test_basic_small_slices(lmdb_version_store_tiny_segment):
@@ -21,8 +36,17 @@ def test_basic_small_slices(lmdb_version_store_tiny_segment):
     df = pd.DataFrame({"x": np.arange(10)})
     lib.write("arrow", df)
     vit = lib.read("arrow", output_format=OutputFormat.ARROW)
-    result = vit.to_pandas()
+    result = vit.data.to_pandas()
     assert_frame_equal(result, df)
+
+
+def test_basic_small_slices_with_index(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    df = pd.DataFrame({"x": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
+    lib.write("arrow", df)
+    vit = lib.read("arrow", output_format=OutputFormat.ARROW)
+    result = fix_timeseries_index(vit.data.to_pandas())
+    assert_frame_equal(result, df.reset_index())
 
 
 def test_double_columns(lmdb_version_store_v1):
@@ -30,7 +54,7 @@ def test_double_columns(lmdb_version_store_v1):
     df = pd.DataFrame({"x": np.arange(10), "y": np.arange(10.0, 20.0)})
     lib.write("arrow", df)
     vit = lib.read("arrow", output_format=OutputFormat.ARROW)
-    result = vit.to_pandas()
+    result = vit.data.to_pandas()
     assert_frame_equal(result, df)
 
 
@@ -40,7 +64,7 @@ def test_column_filtering(lmdb_version_store_v1):
     lib.write("arrow", df)
     vit = lib.read("arrow", columns=['y'], output_format=OutputFormat.ARROW)
     df = df.drop('x', axis=1)
-    result = vit.to_pandas()
+    result = vit.data.to_pandas()
     assert_frame_equal(result, df)
 
 
@@ -68,8 +92,7 @@ def test_strings(lmdb_version_store_v1):
     df = pd.DataFrame({"x": ["mene", "mene", "tekel", "upharsin"]})
     lib.write("arrow", df)
     vit = lib.read("arrow", output_format=OutputFormat.ARROW)
-    result = convert_dict_strings_to_array(vit).to_pandas()
-
+    result = convert_dict_strings_to_array(vit.data).to_pandas()
     assert_frame_equal(result, df)
 
 
@@ -85,7 +108,7 @@ def test_date_range(lmdb_version_store_v1, start_offset, end_offset):
     query_end_ts = initial_timestamp + pd.DateOffset(end_offset)
 
     date_range = (query_start_ts, query_end_ts)
-    data_closed_table = lib.read(sym, date_range=date_range, output_format=OutputFormat.ARROW)
+    data_closed_table = lib.read(sym, date_range=date_range, output_format=OutputFormat.ARROW).data
     df = data_closed_table.to_pandas()
     df = df.set_index('index')
     assert query_start_ts == pd.Timestamp(df.index[0])
@@ -102,7 +125,7 @@ def test_with_querybuilder(lmdb_version_store_v1):
     lib.write("arrow", df)
     vit = lib.read("arrow", output_format=OutputFormat.ARROW, query_builder=q)
     expected = df[df["x"] < 5]
-    result = vit.to_pandas()
+    result = vit.data.to_pandas()
     assert_frame_equal(result, expected)
 
 
@@ -114,7 +137,7 @@ def test_dynamic_schema(lmdb_version_store_dynamic_schema):
     df2 = pd.DataFrame({"y": np.arange(20.0, 30.0), "z": np.arange(10.0, 20.0)})
     lib.append("arrow", df2)
     vit = lib.read("arrow", output_format=OutputFormat.ARROW)
-    result = vit.to_pandas()
+    result = vit.data.to_pandas()
     expected = pd.concat([df1, df2])
     expected.reset_index(drop=True, inplace=True)
     assert_frame_equal(result.astype(float).fillna(0), expected.fillna(0))
@@ -128,10 +151,7 @@ def test_dynamic_schema_column_change(lmdb_version_store_dynamic_schema):
     df2 = pd.DataFrame({"x": np.arange(20.0, 30.0)})
     lib.append("arrow", df2)
     vit = lib.read("arrow", output_format=OutputFormat.ARROW)
-    result = vit.to_pandas()
+    result = vit.data.to_pandas()
     expected = pd.concat([df1, df2])
     expected.reset_index(drop=True, inplace=True)
     assert_frame_equal(result.astype(float).fillna(0), expected.fillna(0))
-
-
-
