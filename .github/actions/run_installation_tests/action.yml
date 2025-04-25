@@ -81,6 +81,7 @@ runs:
 
     - name: Set Environment Variables
       if: ${{ env.SKIP_JOB != 'true' }}
+      shell: bash -l {0}
       run: |
         echo "ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=0" >> $GITHUB_ENV
         echo "ARCTICDB_STORAGE_LMDB=${{ inputs.run_on_lmdb }}" >> $GITHUB_ENV
