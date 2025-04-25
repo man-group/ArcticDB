@@ -313,7 +313,7 @@ def real_gcp_storage_factory() -> BaseGCPStorageFixtureFactory:
 
 
 @pytest.fixture(
-    #scope="session",
+    scope="session",
     params=[pytest.param("real_s3", marks=REAL_S3_TESTS_MARK), pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK)],
 )
 def real_storage_factory(request) -> Union[BaseGCPStorageFixtureFactory, BaseGCPStorageFixtureFactory]:
@@ -1285,7 +1285,7 @@ def old_venv(request, tmp_path_factory):
 
     venvs_dir = tmp_path_factory.mktemp("venvs")
     venv_dir = venvs_dir / version
-    requirements_file = os.path.join(os.path.dirname(__file__), "..", "compat", f"requirements-{version}.txt")
+    requirements_file = os.path.join(os.path.dirname(__file__), "compat", f"requirements-{version}.txt")
 
     with Venv(venv_dir, requirements_file, version) as old_venv:
         yield old_venv
