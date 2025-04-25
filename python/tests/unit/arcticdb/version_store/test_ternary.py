@@ -172,7 +172,6 @@ def test_project_ternary_column_value_numeric(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-# TODO: Test None (and np.nan?) as the string value
 def test_project_ternary_column_value_strings(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     symbol = "test_project_ternary_column_value_strings"
