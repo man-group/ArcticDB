@@ -46,7 +46,8 @@ from ...util.mark import (
     SLOW_TESTS_MARK,
     SSL_TESTS_MARK,
     SSL_TEST_SUPPORTED,
-    FORK_SUPPORTED
+    FORK_SUPPORTED,
+    ARCTICDB_USING_CONDA
 )
 
 logger = logging.getLogger(__name__)
@@ -1345,6 +1346,7 @@ def create_library(uri, lib_name):
     assert lib_name in ac.list_libraries()
 
 
+# moto will reject any checksum-enabled requests. Below test is to make sure the env var hack works in multiprocessing
 @pytest.mark.parametrize(
     "multiprocess", [
         "spawn",
@@ -1362,3 +1364,10 @@ def test_s3_checksum_off_by_env_var(s3_storage, lib_name, multiprocess):
         p.start()
     for p in processes:
         p.join()
+
+
+@pytest.mark.skipif(not ARCTICDB_USING_CONDA, reason="aws sdk on pypi is pinned at version which doesn't turn on checksumming by default")
+def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch):
+    monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
+    with pytest.raises(Exception):
+        create_library(s3_storage.arctic_uri, lib_name)

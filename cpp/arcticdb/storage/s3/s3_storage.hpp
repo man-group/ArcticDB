@@ -250,7 +250,8 @@ inline Aws::Client::ClientConfiguration get_proxy_config(Aws::Http::Scheme endpo
     }
 }
 // Since aws-sdk-cpp >= 1.11.486, it has turned on checksum integrity check `x-amz-checksum-mode: enabled`
-// This feature is not supported in many s3 implementation and causes error
+// This feature is not supported in many s3 implementations. SDK with this feature ON will reject responses from
+// s3 implementations that do not provide checksum, which leads to storage exception in arcticdb
 // Update environment variable before import arcticdb_ext to disable checksum validation
 inline void configure_s3_checksum_validation() {
     const char* response_checksum = std::getenv("AWS_RESPONSE_CHECKSUM_VALIDATION");
@@ -258,7 +259,9 @@ inline void configure_s3_checksum_validation() {
     
     if ((response_checksum && std::string(response_checksum) == "when_supported") || 
         (request_checksum && std::string(request_checksum) == "when_supported")) {
-        log::storage().warn("Checksum validation has been specifically enabled by user, which the endpoint may not support and causes error.");
+        log::storage().warn("S3 Checksum validation has been specifically enabled by user"
+                            "If endpoint doesn't support it, its response will not contain checksum"
+                            "which will be rejected by SDK and lead to storage exception in arcticdb");
     }
     else {
 #ifdef _WIN32
