@@ -50,13 +50,13 @@ def alloc_nones_and_nans():
 
 class TestConcurrentHandlingOfNoneAndNan:
     """
-    Tests the proper handling of the None refcount. None is a global static object that should never go away, however it
-    is refcounted. String columns in ArcticDB are allowed to have None values. ArcticDB must increment the refcount in
-    order to do so the GIL must be held. This creates a background job in a separate Python thread to constantly
-    allocate and deallocate None and NaN values and then runs multiple Python threads doing a reads. This way we test
-    that Arctic and the background allocation thread are not racing on the None refcount. Each symbol has multiple
-    string columns to also test that Arctic native threads are not racing on the None refcount. We also add NaN values
-    as their refcount is also managed by Arctic. Note that in contrast to None, NaN is not a global static.
+    Tests the proper handling of the None refcount. None is a global static object that should never go away; however, it
+    is refcounted. String columns in ArcticDB are allowed to have None values. ArcticDB must increment the refcount
+    to do so the GIL must be held. This creates a background job in a separate Python thread to constantly allocate and
+    deallocate None and NaN values and then runs multiple Python threads doing a reads. This way we test that Arctic and
+    the background allocation thread are not racing on the None refcount. Each symbol has multiple string columns to
+    also test that Arctic native threads are not racing on the None refcount. We also add NaN values as their refcount
+    is also managed by Arctic. Note that in contrast to None, NaN is not a global static variable.
     """
     def setup_method(self, method):
         self.done_reading = Event()
@@ -64,7 +64,7 @@ class TestConcurrentHandlingOfNoneAndNan:
     def spin_none_nan_creation(self):
         while not self.done_reading.is_set():
             alloc_nones_and_nans()
-    def test_stress_parallel_strings(self, s3_storage, lib_name):
+    def test_stress_parallel_strings_read(self, s3_storage, lib_name):
         ac = s3_storage.create_arctic()
         lib = ac.create_library(lib_name)
         symbol_count = 20
@@ -75,6 +75,21 @@ class TestConcurrentHandlingOfNoneAndNan:
         jobs = [payload for rep in range(5) for payload in write_payload]
         with ThreadPool(10) as pool:
             for _ in pool.imap_unordered(lambda payload: lib.read(payload.symbol).data, jobs):
+                pass
+            self.done_reading.set()
+        none_nan_background_creator.join()
+
+    def test_stress_parallel_strings_read_batch(self, s3_storage, lib_name):
+        ac = s3_storage.create_arctic()
+        lib = ac.create_library(lib_name)
+        symbol_count = 20
+        write_payload = [arcticdb.WritePayload(symbol=f"stringy{i}", data=dataframe_with_none_and_nan(150_000, 20)) for i in range(symbol_count)]
+        lib.write_batch(write_payload)
+        none_nan_background_creator = Thread(target=self.spin_none_nan_creation)
+        none_nan_background_creator.start()
+        jobs = [[payload.symbol for payload in write_payload]] * 15
+        with ThreadPool(10) as pool:
+            for _ in pool.imap_unordered(lambda symbol_list: lib.read_batch(symbol_list), jobs):
                 pass
             self.done_reading.set()
         none_nan_background_creator.join()
