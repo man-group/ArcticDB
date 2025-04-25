@@ -284,13 +284,31 @@ You may encounter a permission error like the following:
 arcticdb_ext.exceptions.PermissionException: E_PERMISSION Permission error: S3Error#15 AccessDenied: Access Denied for object '_arctic_cfg/cref/'
 ```
 
-#### Cause:
+#### Cause #1:
 This error indicates a problem with the configuration file. Specifically:
 - The **Role ARN** or **Base Profile** in the AWS configuration file is incorrect.
 
 #### Solution:
 - Double-check the `role_arn` and `source_profile` values in your AWS configuration file.
 - Ensure that the IAM Role has the necessary permissions to access the required S3 bucket and objects.
+
+#### Cause #2:
+A known [issue](https://github.com/aws/aws-sdk-cpp/issues/2920) in the AWS C++ SDK
+
+#### Affected users
+- **Use STS authentication, and**
+- **Use below opearting systems**
+  - **RHEL distributions with custom CA certificates**
+  - **Other Linux distributions**
+
+#### Workaround
+You need to create symbolic links for the CA certificate in use to the required `/etc/pki/tls/certs` directory. Below is an example of how to do this for the default CA certificate on Ubuntu:
+
+```bash
+ln -s /usr/lib/ssl/cert.pem /etc/pki
+ln -s /usr/lib/ssl/certs /etc/pki/tls/certs
+ln -s /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt
+```
 
 ---
 
@@ -312,26 +330,3 @@ This error occurs when:
 - Ensure that the S3 endpoint is reachable from your environment.
 
 A loss of network connectivity could trigger such an error. Note, that this error will appear after several attempts to re-establish the connection
-
-### 4. Custom CA cert support
-
-Workaround for STS Authentication with AWS C++ SDK on Certain Linux Distributions
-
-#### Cause:
-
-A known [issue](https://github.com/aws/aws-sdk-cpp/issues/2920) in the AWS C++ SDK
-
-#### Affected users
-- **Use STS authentication, and**
-- **Use below opearting systems**
-  - **RHEL distributions with custom CA certificates**
-  - **Other Linux distributions**
-
-#### Workaround
-You need to create symbolic links for the CA certificate in use to the required `/etc/pki/tls/certs` directory. Below is an example of how to do this for the default CA certificate on Ubuntu:
-
-```bash
-ln -s /usr/lib/ssl/cert.pem /etc/pki
-ln -s /usr/lib/ssl/certs /etc/pki/tls/certs
-ln -s /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt
-```
