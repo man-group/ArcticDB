@@ -7,6 +7,7 @@ from pandas.testing import assert_frame_equal
 import numpy as np
 from multiprocessing.pool import ThreadPool
 from threading import Thread, Event
+from arcticdb.version_store.processing import QueryBuilder
 
 
 def test_stress_all_strings(lmdb_version_store_big_map):
@@ -90,6 +91,26 @@ class TestConcurrentHandlingOfNoneAndNan:
         jobs = [[payload.symbol for payload in write_payload]] * 15
         with ThreadPool(10) as pool:
             for _ in pool.imap_unordered(lambda symbol_list: lib.read_batch(symbol_list), jobs):
+                pass
+            self.done_reading.set()
+        none_nan_background_creator.join()
+
+    def test_stress_parallel_strings_query_builder(self, s3_storage, lib_name):
+        ac = s3_storage.create_arctic()
+        lib = ac.create_library(lib_name)
+        symbol_count = 20
+        write_payload = [arcticdb.WritePayload(symbol=f"stringy{i}", data=dataframe_with_none_and_nan(150_000, 10)) for i in range(symbol_count)]
+        lib.write_batch(write_payload)
+        none_nan_background_creator = Thread(target=self.spin_none_nan_creation)
+        none_nan_background_creator.start()
+        jobs = [payload for rep in range(5) for payload in write_payload]
+        qb = QueryBuilder()
+        qb = qb[
+            qb["col_0"].isnull() | qb["col_1"].isnull() | qb["col_2"].isnull() | qb["col_3"].isnull() | qb["col_4"].isnull() |
+            qb["col_5"].isnull() | qb["col_6"].isnull() | qb["col_7"].isnull() | qb["col_8"].isnull() | qb["col_9"].isnull()
+        ]
+        with ThreadPool(10) as pool:
+            for _ in pool.imap_unordered(lambda payload: print(lib.read(payload.symbol, query_builder=qb).data), jobs):
                 pass
             self.done_reading.set()
         none_nan_background_creator.join()
