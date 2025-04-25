@@ -974,7 +974,6 @@ private:
     // Invalidates the cached undeleted entry if it got tombstoned either by a tombstone or by a tombstone_all
     void maybe_invalidate_cached_undeleted(VersionMapEntry& entry){
         if (entry.is_tombstoned(entry.load_progress_.oldest_loaded_undeleted_index_version_)){
-            entry.load_progress_.oldest_loaded_undeleted_index_version_ = std::numeric_limits<VersionId>::max();
             entry.load_progress_.earliest_loaded_undeleted_timestamp_ = std::numeric_limits<timestamp>::max();
         }
     }
