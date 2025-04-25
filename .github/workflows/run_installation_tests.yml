@@ -198,7 +198,7 @@ jobs:
         pytest -v --log-file="tests.log" -n auto python/installation_tests/test_installation.py
         
         ## For testing
-        #pytest -v --log-file="tests.log" python/tests/integration/arcticdb/test_arctic.py::test_append_prune_previous_versions
+        #pytest -v --log-file="tests.log" python/installation_tests/test_installation.py::test_append_prune_previous_versions
 
     - name: Upload the logs
       if: ${{ env.SKIP_JOB != 'true' }}
