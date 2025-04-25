@@ -48,12 +48,49 @@ void initialise_output_column(const util::BitSet& condition, const Column& input
     } else {
         output_physical_rows = input_column.row_count();
     }
-    output_column.allocate_data(output_physical_rows * get_type_size(output_column.type().data_type()));
+    if (output_physical_rows > 0) {
+        output_column.allocate_data(output_physical_rows * get_type_size(output_column.type().data_type()));
+    }
     output_column.set_row_data(output_logical_rows - 1);
 }
 
 template void initialise_output_column<true>(const util::BitSet& condition, const Column& input_column, Column& output_column);
 template void initialise_output_column<false>(const util::BitSet& condition, const Column& input_column, Column& output_column);
+
+void initialise_output_column(const util::BitSet& condition,
+                              const Column& left_input_column,
+                              const Column& right_input_column,
+                              Column& output_column) {
+    util::check(&left_input_column != &output_column && &right_input_column != &output_column,
+                "Cannot overwrite input column in ternary operator");
+    util::check(left_input_column.last_row() == right_input_column.last_row(), "Mismatching column lengths in ternary operator");
+    size_t output_logical_rows = left_input_column.last_row() + 1;
+    util::BitSet output_sparse_map;
+    if (left_input_column.is_sparse() && right_input_column.is_sparse()) {
+        output_sparse_map = (condition & left_input_column.sparse_map()) | ((~condition) & right_input_column.sparse_map());
+    } else if (left_input_column.is_sparse()) {
+        // right_input_column is dense
+        output_sparse_map = (condition & left_input_column.sparse_map()) | ~condition;
+    } else if (right_input_column.is_sparse()) {
+        // left_input_column is dense
+        output_sparse_map = (~condition & right_input_column.sparse_map()) | condition;
+    } else {
+        // Both input columns are dense
+        // Bit vectors default initialise all bits to zero
+        // TODO: Use optional as this is inefficient
+        output_sparse_map.flip();
+    }
+    output_sparse_map.resize(output_logical_rows);
+    auto output_physical_rows = output_sparse_map.count();
+    // Input columns may have been sparse, but output column is dense
+    if (output_physical_rows != output_logical_rows) {
+        output_column.set_sparse_map(std::move(output_sparse_map));
+    }
+    if (output_physical_rows > 0) {
+        output_column.allocate_data(output_physical_rows * get_type_size(output_column.type().data_type()));
+    }
+    output_column.set_row_data(output_logical_rows - 1);
+}
 
 void initialise_output_column(const Column& left_input_column, const Column& right_input_column, Column& output_column) {
     if (&left_input_column != &output_column && &right_input_column != &output_column) {

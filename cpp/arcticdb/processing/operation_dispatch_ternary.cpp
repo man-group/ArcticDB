@@ -112,28 +112,20 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                 using TargetType = typename ternary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType>::type;
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
-                // TODO: Could this be more efficient?
-                size_t idx{0};
-                Column::transform<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
+                Column::ternary<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
+                        condition,
                         *(left.column_),
                         *(right.column_),
-                        *output_column,
-                        [&condition, &idx](auto left_value, auto right_value) -> TargetType {
-                            return condition[idx++] ? static_cast<TargetType>(left_value) : static_cast<TargetType>(right_value);
-                        });
+                        *output_column);
             } else if constexpr (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type)) {
                 using TargetType = bool;
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(DataType::BOOL8), Sparsity::PERMITTED);
-                // TODO: Could this be more efficient?
-                size_t idx{0};
-                Column::transform<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
+                Column::ternary<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
+                        condition,
                         *(left.column_),
                         *(right.column_),
-                        *output_column,
-                        [&condition, &idx](auto left_value, auto right_value) -> TargetType {
-                            return condition[idx++] ? static_cast<TargetType>(left_value) : static_cast<TargetType>(right_value);
-                        });
+                        *output_column);
             } else {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",
                                                                       ternary_operation_with_types_to_string(
@@ -224,8 +216,8 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                 Column::ternary<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>, TargetType, arguments_reversed>(
                         condition,
                         *(col.column_),
-                        *output_column,
-                        value);
+                        value,
+                        *output_column);
             } else if constexpr (is_bool_type(col_type_info::data_type) && is_bool_type(val_type_info::data_type)) {
                 using TargetType = bool;
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
@@ -235,8 +227,8 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                 Column::ternary<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>, TargetType, arguments_reversed>(
                         condition,
                         *(col.column_),
-                        *output_column,
-                        value);
+                        value,
+                        *output_column);
             } else {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",
                                                                       ternary_operation_with_types_to_string<arguments_reversed>(

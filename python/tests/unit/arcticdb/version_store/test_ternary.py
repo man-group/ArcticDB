@@ -370,14 +370,13 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     assert_frame_equal(expected, received, check_dtype=False)
 
 
-# TODO: Add equivalent test with 2 columns, and test cases where sparse map of result column is both all 0s and all 1s
 def test_project_ternary_sparse_col_val(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_project_ternary_sparse_col_val"
     df = pd.DataFrame(
         {
             "condition": [   1.0,  0.0,  1.0,    0.0,    1.0,    0.0,    1.0,    0.0],
-            "col1":      [np.nan,  0.0,  1.0, np.nan, np.nan,    2.0,    3.0, np.nan],
+            "col":      [np.nan,  0.0,  1.0, np.nan, np.nan,    2.0,    3.0, np.nan],
         },
         index=pd.date_range("2024-01-01", periods=8),
     )
@@ -386,32 +385,94 @@ def test_project_ternary_sparse_col_val(lmdb_version_store_v1):
     # Col/val
     # Sparse output
     expected = df
-    expected["projected"] = np.where((expected["condition"] == 1.0).to_numpy(), expected["col1"].to_numpy(), 5.0)
+    expected["projected"] = np.where((expected["condition"] == 1.0).to_numpy(), expected["col"].to_numpy(), 5.0)
     q = QueryBuilder()
-    q = q.apply("projected", where(q["condition"] == 1.0, q["col1"], 5))
+    q = q.apply("projected", where(q["condition"] == 1.0, q["col"], 5))
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received)
     # Dense output
     expected = df
-    expected["projected"] = np.where((expected["col1"].notnull()).to_numpy(), expected["col1"].to_numpy(), 5.0)
+    expected["projected"] = np.where(expected["col"].notnull().to_numpy(), expected["col"].to_numpy(), 5.0)
     q = QueryBuilder()
-    q = q.apply("projected", where(q["col1"].notnull(), q["col1"], 5))
+    q = q.apply("projected", where(q["col"].notnull(), q["col"], 5))
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received)
 
     # Val/col
     # Sparse output
     expected = df
-    expected["projected"] = np.where((expected["condition"] == 1.0).to_numpy(), 5.0, expected["col1"].to_numpy())
+    expected["projected"] = np.where((expected["condition"] == 1.0).to_numpy(), 5.0, expected["col"].to_numpy())
     q = QueryBuilder()
-    q = q.apply("projected", where(q["condition"] == 1.0, 5, q["col1"]))
+    q = q.apply("projected", where(q["condition"] == 1.0, 5, q["col"]))
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received)
     # Dense output
     expected = df
-    expected["projected"] = np.where((expected["col1"].isnull()).to_numpy(), 5.0, expected["col1"].to_numpy())
+    expected["projected"] = np.where((expected["col"].isnull()).to_numpy(), 5.0, expected["col"].to_numpy())
     q = QueryBuilder()
-    q = q.apply("projected", where(q["col1"].isnull(), 5.0, q["col1"]))
+    q = q.apply("projected", where(q["col"].isnull(), 5.0, q["col"]))
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+
+def test_project_ternary_sparse_col_col(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_project_ternary_sparse_col_col"
+    df = pd.DataFrame(
+        {
+            "condition1": [   1.0,    0.0,    1.0,    0.0,    1.0,    0.0,    1.0,    0.0],
+            "condition2": [   1.0,    0.0,    0.0,    1.0,    1.0,    0.0,    0.0,    1.0],
+            "col1":       [np.nan,    0.0,    1.0, np.nan, np.nan,    2.0,    3.0, np.nan],
+            "col2":       [np.nan, np.nan,   10.0,   12.0,   13.0,   14.0, np.nan, np.nan],
+            "!col1":      [  20.0, np.nan, np.nan,   21.0,   22.0, np.nan, np.nan,   23.0],
+        },
+        index=pd.date_range("2024-01-01", periods=8),
+    )
+    lib.write(sym, df, sparsify_floats=True)
+
+    # Sparse output
+    # Both inputs sparse
+    expected = df
+    expected["projected"] = np.where((expected["condition1"] == 1.0).to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["condition1"] == 1.0, q["col1"], q["col2"]))
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received)
+    # Left input sparse, right input dense
+    expected = df
+    expected["projected"] = np.where((expected["condition1"] == 1.0).to_numpy(), expected["col1"].to_numpy(), expected["condition2"].to_numpy())
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["condition1"] == 1.0, q["col1"], q["condition2"]))
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received)
+    # Left input dense, right input sparse
+    expected = df
+    expected["projected"] = np.where((expected["condition1"] == 1.0).to_numpy(), expected["condition2"].to_numpy(), expected["col2"].to_numpy())
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["condition1"] == 1.0, q["condition2"], q["col2"]))
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received)
+    # Both inputs dense
+    expected = df
+    expected["projected"] = np.where((expected["condition1"] == 1.0).to_numpy(), expected["condition2"].to_numpy(), expected["condition2"].to_numpy())
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["condition1"] == 1.0, q["condition2"], q["condition2"]))
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    # Dense output
+    expected = df
+    expected["projected"] = np.where((expected["condition2"] == 0.0).to_numpy(), expected["col1"].to_numpy(), expected["!col1"].to_numpy())
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["condition2"] == 0.0, q["col1"], q["!col1"]))
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+    # Empty output
+    expected = df
+    expected["projected"] = np.where((expected["condition2"] == 1.0).to_numpy(), expected["col1"].to_numpy(), expected["!col1"].to_numpy())
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["condition2"] == 1.0, q["col1"], q["!col1"]))
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received)
 

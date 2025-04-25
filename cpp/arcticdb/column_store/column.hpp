@@ -85,6 +85,11 @@ void initialise_output_bitset(const util::BitSet& input_bitset, bool sparse_miss
 template<bool arguments_reversed>
 void initialise_output_column(const util::BitSet& condition, const Column& input_column, Column& output_column);
 
+void initialise_output_column(const util::BitSet& condition,
+                              const Column& left_input_column,
+                              const Column& right_input_column,
+                              Column& output_column);
+
 class Column {
 public:
     template<typename TDT, typename ValueType>
@@ -954,9 +959,10 @@ public:
     }
 
     template <typename input_tdt, typename output_tdt, typename value_type, bool arguments_reversed>
-    static void ternary(const util::BitSet& condition, const Column& input_column, Column& output_column, value_type value) {
+    static void ternary(const util::BitSet& condition, const Column& input_column, value_type value, Column& output_column) {
         initialise_output_column<arguments_reversed>(condition, input_column, output_column);
         // TODO: Consider optimisations
+        // Use std::transform when input_column is dense
         // e.g. If the result is mostly value, then fully initialise output column to value, and then just iterate
         // true/false bits of condition as appropriate
         auto output_data = output_column.data();
@@ -983,6 +989,33 @@ public:
                     output_it->value() = condition.get_bit(idx) ?
                                          static_cast<typename output_tdt::DataTypeTag::raw_type>(*input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx)) : value;
                 }
+            }
+        }
+    }
+
+    template <typename left_input_tdt, typename right_input_tdt, typename output_tdt>
+    static void ternary(const util::BitSet& condition, const Column& left_input_column, const Column& right_input_column, Column& output_column) {
+        initialise_output_column(condition, left_input_column, right_input_column, output_column);
+        // TODO: Consider optimisations
+        // Use std::transform when input_column is dense
+        // e.g. If the result is mostly value, then fully initialise output column to value, and then just iterate
+        // true/false bits of condition as appropriate
+        auto output_data = output_column.data();
+        if (output_column.is_sparse()) {
+            auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+            for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(); output_it != output_end_it; ++output_it) {
+                auto idx = output_it->idx();
+                output_it->value() = condition.get_bit(idx) ?
+                                     static_cast<typename output_tdt::DataTypeTag::raw_type>(*left_input_column.scalar_at<typename left_input_tdt::DataTypeTag::raw_type>(idx)) :
+                                     static_cast<typename output_tdt::DataTypeTag::raw_type>(*right_input_column.scalar_at<typename right_input_tdt::DataTypeTag::raw_type>(idx));
+            }
+        } else {
+            auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED>();
+            for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it; ++output_it) {
+                auto idx = output_it->idx();
+                output_it->value() = condition.get_bit(idx) ?
+                                     static_cast<typename output_tdt::DataTypeTag::raw_type>(*left_input_column.scalar_at<typename left_input_tdt::DataTypeTag::raw_type>(idx)) :
+                                     static_cast<typename output_tdt::DataTypeTag::raw_type>(*right_input_column.scalar_at<typename right_input_tdt::DataTypeTag::raw_type>(idx));
             }
         }
     }
