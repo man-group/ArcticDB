@@ -77,7 +77,7 @@ void initialise_output_column(const util::BitSet& condition,
     } else {
         // Both input columns are dense
         // Bit vectors default initialise all bits to zero
-        // TODO: Use optional as this is inefficient
+        // TODO: Use optional if this is inefficient
         output_sparse_map.flip();
     }
     output_sparse_map.resize(output_logical_rows);
