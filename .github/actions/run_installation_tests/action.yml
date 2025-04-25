@@ -1,0 +1,116 @@
+name: Run Installation Tests
+description: Executes installation tests for ArcticDB.
+
+inputs:
+  os:
+    description: 'Operating System to test'
+    required: true
+  python:
+    description: 'Python Version to test'
+    required: true
+  arcticdb_version:
+    description: 'ArcticDB version to test'
+    required: true
+  run_on_lmdb:
+    description: 'Execute tests on LMDB'
+    default: '1'
+    required: false
+  run_on_real_s3:
+    description: 'Execute tests on AWS S3'
+    default: '1'
+    required: false
+
+name: Run Installation Tests
+description: Executes installation tests for ArcticDB.
+
+inputs:
+  os:
+    required: true
+  python:
+    required: true
+  arcticdb_version:
+    required: true
+  run_on_lmdb:
+    required: true
+  run_on_real_s3:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Check Unsupported Versions
+      shell: bash
+      run: |
+        echo "Checking unsupported ArcticDB-python versions"
+
+        UNSUPPORTED_COMBINATIONS=(
+          "3.13-5.1.2" 
+          "3.13-5.0.0" 
+          "3.13-4.5.1"
+          "3.13-1.6.2"
+        )
+
+        CURRENT_COMBINATION="${{ inputs.python }}-${{ inputs.arcticdb_version }}"
+        echo "Checking for combination $CURRENT_COMBINATION"
+        if [[ " ${UNSUPPORTED_COMBINATIONS[*]} " == *"$CURRENT_COMBINATION"* ]]; then
+          echo "Skipping unsupported combination: $CURRENT_COMBINATION"
+          echo "SKIP_JOB=true" >> $GITHUB_ENV
+        fi
+
+    - name: Checkout code
+      if: ${{ env.SKIP_JOB != 'true' }}
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      if: ${{ env.SKIP_JOB != 'true' }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ inputs.python }}
+
+    - name: Install ArcticDB (PyPI)
+      if: ${{ env.SKIP_JOB != 'true' && inputs.use_conda == 'no' }}
+      run: pip install -r "python/tests/compat/requirements-${{ inputs.arcticdb_version }}.txt"
+
+    - name: Install Additional Dependencies
+      if: ${{ env.SKIP_JOB != 'true' && inputs.use_conda == 'no' }}
+      run: |
+        python -m pip install --upgrade pip
+        pip install wheel setuptools pytest pytest-xdist
+
+    - name: Install ArcticDB (Conda)
+      if: ${{ env.SKIP_JOB != 'true' && inputs.use_conda == 'yes' }}
+      uses: mamba-org/setup-micromamba@v2.0.0
+      with:
+        environment-file: "python/tests/compat/requirements-${{ inputs.arcticdb_version }}.yml"
+        environment-name: arcticdb
+        init-shell: bash
+        cache-environment: true
+        post-cleanup: 'all'
+
+    - name: Install Other Dependencies
+      if: ${{ env.SKIP_JOB != 'true' && inputs.use_conda == 'yes' }}
+      run: |
+        micromamba activate arcticdb
+        micromamba install --no-pin --file "python/tests/compat/environment_unix.yml"
+
+    - name: Set Environment Variables
+      if: ${{ env.SKIP_JOB != 'true' }}
+      run: |
+        echo "ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=0" >> $GITHUB_ENV
+        echo "ARCTICDB_STORAGE_LMDB=${{ inputs.run_on_lmdb }}" >> $GITHUB_ENV
+        echo "ARCTICDB_STORAGE_AWS_S3=${{ inputs.run_on_real_s3 }}" >> $GITHUB_ENV        
+        echo "ARCTICDB_STORAGE_GCP=0" >> $GITHUB_ENV        
+        echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
+
+    - name: Run Tests
+      if: ${{ env.SKIP_JOB != 'true' }}
+      run: |
+        echo "Running tests against ArcticDB version: ${{ inputs.arcticdb_version }}"
+        pytest -v --log-file="tests.log" -n auto python/installation_tests/test_installation.py
+
+    - name: Upload Logs
+      if: ${{ env.SKIP_JOB != 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: logs-${{ inputs.os }}-${{ inputs.python }}
+        path: ./*test*

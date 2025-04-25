@@ -1,0 +1,104 @@
+name: Run Installation Tests v5
+
+on:
+  push:
+    branches: 
+      - installation_tests_v4
+  workflow_dispatch:
+    inputs:
+      os:
+        description: 'Operating System to test'
+        required: false
+        default: 'ubuntu-22.04'
+        type: choice
+        options:
+          - all
+          - ubuntu-22.04
+          - windows-latest
+          - macos-latest
+      python:
+        description: 'Python Version to test'
+        required: false
+        default: '3.13'
+        type: choice
+        options:
+          - "all"
+          - "3.7"
+          - "3.8"
+          - "3.9"
+          - "3.10"
+          - "3.11"
+          - "3.12"
+          - "3.13"
+      arcticdb_version:
+        description: 'ArcticDB version to test'
+        required: true
+        default: 'latest'
+        type: choice
+        options:
+          - "latest"
+          - "5.2.6"
+          - "5.1.2"
+          - "4.5.1"
+          - "1.6.2"
+      run_on_lmdb:
+        description: 'Execute tests on LMDB'
+        required: true
+        default: '1'
+        type: choice
+        options:
+          - "1"
+          - "0"
+      run_on_real_s3:
+        description: 'Execute tests on Amazon S3'
+        required: true
+        default: '0'
+        type: choice
+        options:
+          - "1"
+          - "0"
+
+jobs:
+  test:
+    runs-on: ${{ inputs.os != 'all' && inputs.os || matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            python: "3.7"
+            use_conda: "no"
+          - os: windows-latest
+            python: "3.8"
+            use_conda: "no"
+          - os: macos-latest
+            python: "3.9"
+            use_conda: "yes"
+          - os: windows-latest
+            python: "3.10"
+            use_conda: "no"
+          - os: macos-latest
+            python: "3.11"
+            use_conda: "yes"
+          - os: ubuntu-22.04
+            python: "3.12"
+            use_conda: "yes"
+          - os: ubuntu-22.04
+            use_conda: "no"
+            python: "3.13"
+      fail-fast: false  
+    env:
+      install_tests_folder: "python/tests/compat"
+      conda_file: "environment_unix.yml"
+      arcticdb_version: ${{ inputs.arcticdb_version || '5.2.6' }}
+      lmdb: ${{ inputs.run_on_lmdb || '1' }}
+      real_s3: ${{ inputs.run_on_real_s3 || '1' }}
+
+    steps:
+      - name: Run reusable test action
+        uses: ./.github/actions/run_installation_tests
+        with:
+          os: ${{ matrix.os }}
+          python: ${{ matrix.python }}
+          arcticdb_version: ${{ env.arcticdb_version }}
+          run_on_lmdb: ${{ env.lmdb }}
+          run_on_real_s3: ${{ env.real_s3 }}
