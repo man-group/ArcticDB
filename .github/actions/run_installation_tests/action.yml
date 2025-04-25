@@ -20,21 +20,6 @@ inputs:
     default: '1'
     required: false
 
-name: Run Installation Tests
-description: Executes installation tests for ArcticDB.
-
-inputs:
-  os:
-    required: true
-  python:
-    required: true
-  arcticdb_version:
-    required: true
-  run_on_lmdb:
-    required: true
-  run_on_real_s3:
-    required: true
-
 runs:
   using: composite
   steps:
