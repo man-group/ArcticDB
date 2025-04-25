@@ -91,7 +91,7 @@ jobs:
             python: "3.13"
       fail-fast: false  
     env:
-      install_tests_folder: "python/installation_tests"
+      install_tests_folder: "python/tests/compat"
       conda_file: "environment_unix.yml"
       arcticdb_version: ${{ inputs.arcticdb_version || '5.2.6' }}
       lmdb: ${{ inputs.run_on_lmdb || '1' }}
