@@ -50,10 +50,13 @@ runs:
 
     - name: Install ArcticDB (PyPI)
       if: ${{ env.SKIP_JOB != 'true' && inputs.use_conda == 'no' }}
-      run: pip install -r "python/tests/compat/requirements-${{ inputs.arcticdb_version }}.txt"
+      shell: bash -l {0}
+      run: |
+        pip install -r "python/tests/compat/requirements-${{ inputs.arcticdb_version }}.txt"
 
     - name: Install Additional Dependencies
       if: ${{ env.SKIP_JOB != 'true' && inputs.use_conda == 'no' }}
+      shell: bash -l {0}      
       run: |
         python -m pip install --upgrade pip
         pip install wheel setuptools pytest pytest-xdist
@@ -64,12 +67,14 @@ runs:
       with:
         environment-file: "python/tests/compat/requirements-${{ inputs.arcticdb_version }}.yml"
         environment-name: arcticdb
-        init-shell: bash
+        init-shell: >-
+          bash
         cache-environment: true
         post-cleanup: 'all'
 
     - name: Install Other Dependencies
       if: ${{ env.SKIP_JOB != 'true' && inputs.use_conda == 'yes' }}
+      shell: bash -l {0}
       run: |
         micromamba activate arcticdb
         micromamba install --no-pin --file "python/tests/compat/environment_unix.yml"
@@ -85,6 +90,7 @@ runs:
 
     - name: Run Tests
       if: ${{ env.SKIP_JOB != 'true' }}
+      shell: bash -l {0}      
       run: |
         echo "Running tests against ArcticDB version: ${{ inputs.arcticdb_version }}"
         pytest -v --log-file="tests.log" -n auto python/installation_tests/test_installation.py
