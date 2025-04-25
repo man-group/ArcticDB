@@ -94,7 +94,11 @@ jobs:
       real_s3: ${{ inputs.run_on_real_s3 || '1' }}
 
     steps:
-      - name: Run reusable test action
+
+      - name: Checkout Repository
+        uses: actions/checkout@v3        
+
+      - name: Run tests for arcticdb version ${{ env.arcticdb_version }}
         uses: ./.github/actions/run_installation_tests
         with:
           os: ${{ matrix.os }}
