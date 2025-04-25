@@ -10,6 +10,8 @@ from arcticdb_ext import set_config_int
 from arcticdb.options import LibraryOptions
 import arcticdb.toolbox.library_tool
 
+from tests.conftest import FixtureMarks
+
 def get_append_keys(lib, sym):
     lib_tool = lib._nvs.library_tool()
     keys = lib_tool.find_keys_for_symbol(arcticdb.toolbox.library_tool.KeyType.APPEND_DATA, sym)
@@ -664,6 +666,8 @@ class TestSortMergeDynamicSchema:
         )
         assert_frame_equal(lib.read("sym").data, expected, check_dtype=True)
 
+@pytest.mark.installation
+@FixtureMarks.lmdb_storage_extend_for_installation
 def test_update_symbol_list(lmdb_library):
     lib = lmdb_library
     lib_tool = lmdb_library._nvs.library_tool()
@@ -704,6 +708,8 @@ def test_delete_staged_data(lmdb_library):
     assert len(get_append_keys(lib, "sym")) == 10
     assert_delete_staged_data_clears_append_keys(lib, "sym")
 
+@pytest.mark.installation
+@FixtureMarks.lmdb_storage_extend_for_installation
 @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
 def test_get_staged_symbols(lmdb_library, mode):
     lib = lmdb_library
