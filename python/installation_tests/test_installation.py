@@ -32,6 +32,10 @@ from arcticdb.util.test import (
 from arcticdb.version_store.processing import QueryBuilder
 
 
+CONDITION_1_X_NOT_SUPPORTED = arcticdb.__version__ < "4.0.0"
+CONDITION_4_X_NOT_SUPPORTED = arcticdb.__version__ < "5.0.0"
+
+
 def generate_dataframe(columns, dt, num_days, num_rows_per_day):
     dataframes = []
     for _ in range(num_days):
@@ -162,6 +166,7 @@ def test_read_batch_per_symbol_query_builder(ac_library):
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
 @pytest.mark.parametrize("validate_index", (True, False, None))
 @pytest.mark.storage
+@pytest.mark.skipif(CONDITION_1_X_NOT_SUPPORTED, reason = "finalize_staged_data has 2 arguments only in older ver")
 def test_parallel_writes_and_appends_index_validation(ac_library, finalize_method, validate_index):
     lib = ac_library
     sym = "test_parallel_writes_and_appends_index_validation"
@@ -208,6 +213,7 @@ def test_update_prune_previous_versions(ac_library):
     assert ("symbol", 1) in symbols
 
 
+@pytest.mark.skipif(CONDITION_1_X_NOT_SUPPORTED, reason = "batch operations with snapshots not avail")
 def test_read_batch_mixed_with_snapshots(ac_library):
     num_symbols = 10
     num_versions = 10
@@ -329,7 +335,7 @@ def test_read_batch_mixed_with_snapshots(ac_library):
     assert_frame_equal(vits[5].data, expected)
 
 
-@pytest.mark.skipif(arcticdb.__version__ < "5.0.0", reason = "Library has no stage() method before ver 5.x")
+@pytest.mark.skipif(CONDITION_4_X_NOT_SUPPORTED, reason = "Library has no stage() method before ver 5.x")
 def test_stage_finalize_dynamic_with_chunking(ac_client, lib_name):
     lib_opts = LibraryOptions(dynamic_schema=True, rows_per_segment=2, columns_per_segment=2)
     lib = ac_client.get_library(lib_name, create_if_missing=True, library_options=lib_opts)
@@ -381,7 +387,7 @@ def test_stage_finalize_dynamic_with_chunking(ac_client, lib_name):
     expected = pd.concat([df1, df2]).sort_values(sort_cols)
     pd.testing.assert_frame_equal(result, expected)
 
-@pytest.mark.skipif(arcticdb.__version__ < "4.0.0", reason = "ModifiableEnterpriseLibraryOption not present before")
+@pytest.mark.skipif(CONDITION_1_X_NOT_SUPPORTED, reason = "ModifiableEnterpriseLibraryOption not present before")
 def test_modify_options_affect_persistent_lib_config(ac_client, lib_name):
     from arcticdb.options import ModifiableEnterpriseLibraryOption 
     ac = ac_client
@@ -396,6 +402,7 @@ def test_modify_options_affect_persistent_lib_config(ac_client, lib_name):
     assert proto_options.sync_passive.enabled
     assert proto_options.delayed_deletes
 
+@pytest.mark.skipif(CONDITION_1_X_NOT_SUPPORTED, reason = "compact_symbol_list not present before")
 def test_force_compact_symbol_list(ac_library):
     lib = ac_library
     lib_tool = lib._nvs.library_tool()
@@ -434,3 +441,34 @@ def test_force_compact_symbol_list(ac_library):
     symbol_list_keys = lib_tool.find_keys(KeyType.SYMBOL_LIST)
     assert len(symbol_list_keys) == 1
     assert not len(lib.list_symbols())
+
+def sample_dataframe(start_date, *arr) -> pd.DataFrame:
+    """
+        Creates a dataframe based on arrays that are passed.
+        Arrays will be used as columns data of the dataframe.
+        The returned dataframe will be indexed with timestamp 
+        starting from the given date
+        Arrays must be numpy arrays of same size
+    """
+    date_range = pd.date_range(start=start_date, periods=len(arr[0]), freq='D') 
+    columns = {}
+    cnt = 0
+    for ar in arr:
+        columns[f"NUMBER{cnt}"] = ar    
+        cnt = cnt + 1
+    
+    return pd.DataFrame(columns, index=date_range)
+
+@pytest.mark.parametrize("mode" , [StagedDataFinalizeMethod.APPEND])
+def test_finalize_staged_data_mode_append(ac_library, mode):
+    lib = ac_library
+    symbol = "symbol"
+    df_initial = sample_dataframe('2020-1-1', [1,2,3], [4, 5, 6])
+    df_staged = sample_dataframe('2020-1-4', [7, 8, 9], [10, 11, 12])
+    lib.write(symbol, df_initial)
+    lib.write(symbol, df_staged, staged=True)
+    assert_frame_equal(lib.read(symbol).data, df_initial)
+
+    lib.finalize_staged_data(symbol="symbol", mode=mode)
+    expected = pd.concat([df_initial, df_staged])
+    assert_frame_equal(lib.read(symbol).data, expected)

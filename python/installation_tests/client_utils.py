@@ -9,12 +9,15 @@ As of the Change Date specified in that file, in accordance with the Business So
 import atexit
 from enum import Enum
 import os
-import random
 import shutil
 import tempfile
 
+import arcticdb
 from arcticdb.arctic import Arctic
 from datetime import datetime
+
+
+CONDITION_GCP_AVAILABLE = arcticdb.__version__ >= "5.3.0"
 
 
 __temp_paths = []
@@ -40,23 +43,33 @@ def __cleanup_temp_paths():
 atexit.register(__cleanup_temp_paths)    
 
 
-class StorageTypes(Enum):
-    LMDB = 1,
-    REAL_AWS_S3 = 2,
-    REAL_GCP = 3,
+if CONDITION_GCP_AVAILABLE:
+    print("VERSION with GCP")
+    class StorageTypes(Enum):
+        LMDB = 1,
+        REAL_AWS_S3 = 2,
+        REAL_GCP = 3,
+else:
+    print("NO GCP")
+    class StorageTypes(Enum):
+        LMDB = 1,
+        REAL_AWS_S3 = 2,
 
 
 def is_storage_enabled(storage_type: StorageTypes) -> bool:
     persistent_storage = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS", "0") == "1"
     if not persistent_storage:
         return False
+    
+    if arcticdb.__version__ >= "5.3.0":
+        if storage_type == StorageTypes.REAL_GCP:
+            if os.getenv("ARCTICDB_STORAGE_GCP", "0") == "1":        
+                return True
+            else:
+                return False
+        
     if storage_type == StorageTypes.LMDB:
         if os.getenv("ARCTICDB_STORAGE_LMDB", "1") == "1":
-            return True
-        else:
-            return False
-    elif storage_type == StorageTypes.REAL_GCP:
-        if os.getenv("ARCTICDB_STORAGE_GCP", "0") == "1":        
             return True
         else:
             return False
@@ -154,13 +167,17 @@ def get_real_gcp_uri(shared_path: bool = True):
 
 
 def create_arctic_client(storage: StorageTypes, **extras) -> Arctic:
+
+    if CONDITION_GCP_AVAILABLE:
+        if storage == StorageTypes.REAL_GCP and is_storage_enabled(storage):
+            global __ARCTIC_CLIENT_GPC
+            if __ARCTIC_CLIENT_GPC is None:
+                __ARCTIC_CLIENT_GPC = Arctic(get_real_gcp_uri(shared_path=False), **extras)
+            return __ARCTIC_CLIENT_GPC
+
+
     if storage == StorageTypes.LMDB and is_storage_enabled(storage):
         return Arctic("lmdb://" + str(get_temp_path()), **extras)
-    elif storage == StorageTypes.REAL_GCP and is_storage_enabled(storage):
-        global __ARCTIC_CLIENT_GPC
-        if __ARCTIC_CLIENT_GPC is None:
-            __ARCTIC_CLIENT_GPC = Arctic(get_real_gcp_uri(shared_path=False), **extras)
-        return __ARCTIC_CLIENT_GPC
     elif storage == StorageTypes.REAL_AWS_S3 and is_storage_enabled(storage):
         global __ARCTIC_CLIENT_AWS_S3
         if __ARCTIC_CLIENT_AWS_S3 is None:

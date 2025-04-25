@@ -37,6 +37,7 @@ def ac_client(request) -> Generator[Arctic, None, None]:
             storage = request.param
         else:
             storage, extras = request.param
+    print("CREATES ARCTIC:", storage)
     ac = create_arctic_client(storage, **extras)            
     if ac is None:
         pytest.skip("Storage not activated")
@@ -46,7 +47,9 @@ def ac_client(request) -> Generator[Arctic, None, None]:
 @pytest.fixture(scope="function")
 def ac_library_factory(request, ac_client, lib_name) -> Library:
     def create_library(library_options=None, name: str = lib_name):
-        return ac_client.create_library(name, library_options)
+        ac_client.create_library(name, library_options)
+        lib = ac_client.get_library(name)
+        return lib 
 
     return create_library
 
@@ -58,7 +61,9 @@ def ac_library(request, ac_client, lib_name) -> Generator[Library, None, None]:
         config = request.param
     ac: Arctic = ac_client
     if ac is None: pytest.skip()
-    yield ac.create_library(lib_name, **config)
+    ac.create_library(lib_name, **config)
+    lib = ac.get_library(lib_name)
+    yield lib
     ac.delete_library(lib_name)    
 
 
