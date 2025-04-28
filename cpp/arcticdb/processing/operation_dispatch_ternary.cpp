@@ -396,23 +396,19 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
                 return transform_to_placeholder(result);
             },
             [&c](const ColumnWithStrings &l, EmptyResult) -> VariantData {
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                        is_bool_type(l.column_->type().data_type()),
-                        "Ternary operator cannot combine column '{}' of type {} with a EmptyResult. This can be caused by dynamic schema when a row-slice has a necessary column missing.",
-                        l.column_name_,
-                        get_user_friendly_type_string(l.column_->type()));
-                auto bitset = std::get<util::BitSet>(transform_to_bitset(l));
-                auto result = ternary_operator(c, bitset, false);
+                // Hacky, tidy up
+                auto dummy_col = std::make_unique<Column>(l.column_->type(), Sparsity::PERMITTED);
+                dummy_col->set_row_data(l.column_->last_row());
+                ColumnWithStrings r(std::move(dummy_col), "dummy");
+                auto result = ternary_operator(c, l, r);
                 return transform_to_placeholder(result);
             },
             [&c](EmptyResult, const ColumnWithStrings &r) -> VariantData {
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                        is_bool_type(r.column_->type().data_type()),
-                        "Ternary operator cannot combine column '{}' of type {} with a EmptyResult. This can be caused by dynamic schema when a row-slice has a necessary column missing.",
-                        r.column_name_,
-                        get_user_friendly_type_string(r.column_->type()));
-                auto bitset = std::get<util::BitSet>(transform_to_bitset(r));
-                auto result = ternary_operator<true>(c, bitset, false);
+                // Hacky, tidy up
+                auto dummy_col = std::make_unique<Column>(r.column_->type(), Sparsity::PERMITTED);
+                dummy_col->set_row_data(r.column_->last_row());
+                ColumnWithStrings l(std::move(dummy_col), "dummy");
+                auto result = ternary_operator(c, l, r);
                 return transform_to_placeholder(result);
             },
             [&c](const std::shared_ptr<Value> &l, const std::shared_ptr<Value> &r) -> VariantData {
@@ -436,19 +432,19 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
                 return transform_to_placeholder(result);
             },
             [&c](const std::shared_ptr<Value> &l, EmptyResult) -> VariantData {
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(l->data_type_),
-                                                                      "Ternary operator expected bool value, received {}",
-                                                                      get_user_friendly_type_string(l->type()));
-                auto value = l->get<bool>();
-                auto result = ternary_operator(c, value, false);
+                // Hacky, tidy up
+                auto dummy_col = std::make_unique<Column>(make_scalar_type(l->data_type_), Sparsity::PERMITTED);
+                dummy_col->set_row_data(0);
+                ColumnWithStrings r(std::move(dummy_col), "dummy");
+                auto result = ternary_operator<true>(c, r, *l);
                 return transform_to_placeholder(result);
             },
             [&c](EmptyResult, const std::shared_ptr<Value> &r) -> VariantData {
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(r->data_type_),
-                                                                      "Ternary operator expected bool value, received {}",
-                                                                      get_user_friendly_type_string(r->type()));
-                auto value = r->get<bool>();
-                auto result = ternary_operator(c, false, value);
+                // Hacky, tidy up
+                auto dummy_col = std::make_unique<Column>(make_scalar_type(r->data_type_), Sparsity::PERMITTED);
+                dummy_col->set_row_data(0);
+                ColumnWithStrings l(std::move(dummy_col), "dummy");
+                auto result = ternary_operator(c, l, *r);
                 return transform_to_placeholder(result);
             },
             [](FullResult, FullResult) -> VariantData {

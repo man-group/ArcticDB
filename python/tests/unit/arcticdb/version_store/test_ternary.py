@@ -324,16 +324,20 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     lib.update(symbol, update_df)
     q = QueryBuilder()
     q = q.apply("new_col", where(q["conditional"], q["col1"], q["col2"]))
-    with pytest.raises(UserInputException):
-        lib.read(symbol, query_builder=q)
+    received = lib.read(symbol, query_builder=q).data
+    expected = pd.concat([all_columns_df, update_df]).fillna(0)
+    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    assert_frame_equal(expected, received, check_dtype=False)
 
     # right column missing
     update_df = base_update_df.drop(columns="col2")
     lib.update(symbol, update_df)
     q = QueryBuilder()
     q = q.apply("new_col", where(q["conditional"], q["col1"], q["col2"]))
-    with pytest.raises(UserInputException):
-        lib.read(symbol, query_builder=q)
+    received = lib.read(symbol, query_builder=q).data
+    expected = pd.concat([all_columns_df, update_df]).fillna(0)
+    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    assert_frame_equal(expected, received, check_dtype=False)
 
     # conditional and left columns missing
     update_df = base_update_df.drop(columns=["conditional", "col1"])

@@ -31,15 +31,15 @@ template<bool arguments_reversed>
 void initialise_output_column(const util::BitSet& condition, const Column& input_column, Column& output_column) {
     util::check(&input_column != &output_column, "Cannot overwrite input column in ternary operator");
     size_t output_physical_rows;
-    size_t output_logical_rows = input_column.last_row() + 1;
+    size_t output_logical_rows = condition.size();
     auto output_sparse_map = condition;
-    output_sparse_map.resize(output_logical_rows);
     if (input_column.is_sparse()) {
         if constexpr (arguments_reversed) {
             output_sparse_map |= input_column.sparse_map();
         } else {
             output_sparse_map = ~output_sparse_map | input_column.sparse_map();
         }
+        output_sparse_map.resize(output_logical_rows);
         output_physical_rows = output_sparse_map.count();
         // Input column is sparse, but output column is dense
         if (output_physical_rows != output_logical_rows) {
@@ -64,7 +64,7 @@ void initialise_output_column(const util::BitSet& condition,
     util::check(&left_input_column != &output_column && &right_input_column != &output_column,
                 "Cannot overwrite input column in ternary operator");
     util::check(left_input_column.last_row() == right_input_column.last_row(), "Mismatching column lengths in ternary operator");
-    size_t output_logical_rows = left_input_column.last_row() + 1;
+    size_t output_logical_rows = condition.size();
     util::BitSet output_sparse_map;
     if (left_input_column.is_sparse() && right_input_column.is_sparse()) {
         output_sparse_map = (condition & left_input_column.sparse_map()) | ((~condition) & right_input_column.sparse_map());
@@ -135,12 +135,12 @@ void initialise_output_column(const Column& left_input_column, const Column& rig
     }
 }
 
-void initialise_output_bitset(const util::BitSet& input_bitset, bool sparse_missing_value_output, util::BitSet& output_bitset) {
-    // TODO: Set size as well for consistency with other similar methods, whether sparse_missing_value_output is true or false
+void initialise_output_bitset(const Column& input_column, bool sparse_missing_value_output, util::BitSet& output_bitset) {
     if (sparse_missing_value_output) {
-        output_bitset = input_bitset;
+        output_bitset = input_column.sparse_map();
         output_bitset.flip();
     }
+    output_bitset.resize(input_column.last_row() + 1);
 }
 
 // Column operators
