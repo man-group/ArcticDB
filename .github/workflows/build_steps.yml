@@ -56,6 +56,9 @@ jobs:
       ARCTICDB_BUILD_DIR: ${{matrix.build_dir}}
       ARCTICDB_VCPKG_INSTALLED_DIR: ${{matrix.vcpkg_installed_dir}}
       ARCTICDB_VCPKG_PACKAGES_DIR: ${{matrix.vcpkg_packages_dir}}
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+      CMAKE_OSX_DEPLOYMENT_TARGET: "11.0"
+      OPENSSL_ROOT_DIR: "/usr/local/opt/openssl@3"
       CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN VCPKG_INSTALLATION_ROOT
         VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN
         CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
@@ -93,6 +96,9 @@ jobs:
         run: |
           brew install sccache
           brew install bison   # required by thrift pulled via vcpkg
+          brew install openssl@3
+          # Force universal build of OpenSSL
+          brew reinstall --build-from-source openssl@3
           echo "SCCACHE_DIR=/tmp/sccache" >> $GITHUB_ENV
           mkdir -p /tmp/sccache
 
