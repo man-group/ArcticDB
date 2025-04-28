@@ -8,6 +8,12 @@ import numpy as np
 from multiprocessing.pool import ThreadPool
 from threading import Thread, Event
 from arcticdb.version_store.processing import QueryBuilder
+from arcticdb_ext.storage import KeyType
+from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
+from arcticdb.version_store._custom_normalizers import(
+    register_normalizer,
+    clear_registered_normalizers)
+from arcticdb.util.test import CustomDictNormalizer, CustomDict
 
 
 def test_stress_all_strings(lmdb_version_store_big_map):
@@ -65,14 +71,20 @@ class TestConcurrentHandlingOfNoneAndNan:
     def spin_none_nan_creation(self):
         while not self.done_reading.is_set():
             alloc_nones_and_nans()
+    def start_background_thread(self):
+        none_nan_background_creator = Thread(target=self.spin_none_nan_creation)
+        none_nan_background_creator.start()
+        return none_nan_background_creator
+
+    def init_dataframe(self, lib, symbol_count):
+        write_payload = [arcticdb.WritePayload(symbol=f"stringy{i}", data=dataframe_with_none_and_nan(150_000, 20)) for i in range(symbol_count)]
+        lib.write_batch(write_payload)
+        return write_payload
     def test_stress_parallel_strings_read(self, s3_storage, lib_name):
         ac = s3_storage.create_arctic()
         lib = ac.create_library(lib_name)
-        symbol_count = 20
-        write_payload = [arcticdb.WritePayload(symbol=f"stringy{i}", data=dataframe_with_none_and_nan(150_000, 20)) for i in range(symbol_count)]
-        lib.write_batch(write_payload)
-        none_nan_background_creator = Thread(target=self.spin_none_nan_creation)
-        none_nan_background_creator.start()
+        write_payload = self.init_dataframe(lib, symbol_count=20)
+        none_nan_background_creator = self.start_background_thread()
         jobs = [payload for rep in range(5) for payload in write_payload]
         with ThreadPool(10) as pool:
             for _ in pool.imap_unordered(lambda payload: lib.read(payload.symbol).data, jobs):
@@ -83,11 +95,8 @@ class TestConcurrentHandlingOfNoneAndNan:
     def test_stress_parallel_strings_read_batch(self, s3_storage, lib_name):
         ac = s3_storage.create_arctic()
         lib = ac.create_library(lib_name)
-        symbol_count = 20
-        write_payload = [arcticdb.WritePayload(symbol=f"stringy{i}", data=dataframe_with_none_and_nan(150_000, 20)) for i in range(symbol_count)]
-        lib.write_batch(write_payload)
-        none_nan_background_creator = Thread(target=self.spin_none_nan_creation)
-        none_nan_background_creator.start()
+        write_payload = self.init_dataframe(lib, symbol_count=20)
+        none_nan_background_creator = self.start_background_thread()
         jobs = [[payload.symbol for payload in write_payload]] * 15
         with ThreadPool(10) as pool:
             for _ in pool.imap_unordered(lambda symbol_list: lib.read_batch(symbol_list), jobs):
@@ -98,11 +107,8 @@ class TestConcurrentHandlingOfNoneAndNan:
     def test_stress_parallel_strings_query_builder(self, s3_storage, lib_name):
         ac = s3_storage.create_arctic()
         lib = ac.create_library(lib_name)
-        symbol_count = 20
-        write_payload = [arcticdb.WritePayload(symbol=f"stringy{i}", data=dataframe_with_none_and_nan(150_000, 10)) for i in range(symbol_count)]
-        lib.write_batch(write_payload)
-        none_nan_background_creator = Thread(target=self.spin_none_nan_creation)
-        none_nan_background_creator.start()
+        write_payload = self.init_dataframe(lib, symbol_count=20)
+        none_nan_background_creator = self.start_background_thread()
         jobs = [payload for rep in range(5) for payload in write_payload]
         qb = QueryBuilder()
         qb = qb[
@@ -110,9 +116,37 @@ class TestConcurrentHandlingOfNoneAndNan:
             qb["col_5"].isnull() | qb["col_6"].isnull() | qb["col_7"].isnull() | qb["col_8"].isnull() | qb["col_9"].isnull()
         ]
         with ThreadPool(10) as pool:
-            for _ in pool.imap_unordered(lambda payload: print(lib.read(payload.symbol, query_builder=qb).data), jobs):
+            for _ in pool.imap_unordered(lambda payload: lib.read(payload.symbol, query_builder=qb), jobs):
                 pass
             self.done_reading.set()
         none_nan_background_creator.join()
 
+    def test_library_tool(self, s3_storage, lib_name):
+        ac = s3_storage.create_arctic()
+        lib = ac.create_library(lib_name)
+        write_payload = self.init_dataframe(lib, symbol_count=20)
+        none_nan_background_creator = self.start_background_thread()
+        lt = lib._dev_tools.library_tool()
+        keys = [key for payload in write_payload for key in lt.find_keys_for_symbol(KeyType.TABLE_DATA, payload.symbol)]
+        with ThreadPool(10) as pool:
+            for _ in pool.imap_unordered(lambda key: lt.read_to_read_result(key), keys):
+                pass
+            self.done_reading.set()
+        none_nan_background_creator.join()
 
+    def test_batch_read_keys(self, s3_storage, lib_name):
+        register_normalizer(CustomDictNormalizer())
+        ac = s3_storage.create_arctic()
+        lib = ac.create_library(lib_name)
+        symbol_count = 11
+        for sym_idx in range(symbol_count):
+            data = {f"data{i}": dataframe_with_none_and_nan(150_000, 11) for i in range(5)}
+            lib._nvs.write(f"sym{sym_idx}", data)
+
+        none_nan_background_creator = self.start_background_thread()
+        with ThreadPool(10) as pool:
+            for _ in pool.imap_unordered(lambda sym: lib._nvs.read(sym), [f"sym{i}" for i in range(symbol_count)]):
+                pass
+            self.done_reading.set()
+        none_nan_background_creator.join()
+        clear_registered_normalizers()

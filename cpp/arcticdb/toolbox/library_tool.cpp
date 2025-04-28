@@ -8,7 +8,6 @@
 #include <arcticdb/toolbox/library_tool.hpp>
 
 #include <arcticdb/async/async_store.hpp>
-#include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/types.hpp>
