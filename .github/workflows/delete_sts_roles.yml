@@ -24,5 +24,11 @@ jobs:
       - name: Install Dependencies
         run: pip install boto3
 
+      - name: Set persistent storage variables
+        uses: ./.github/actions/set_persistent_storage_env_vars
+        with:
+          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"        
+
       - name: Run Python Script
         run: python python/utils/s3_roles_delete.py
