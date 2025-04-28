@@ -4,6 +4,12 @@ on:
   push:
     branches: 
       - installation_tests_v4
+  schedule:
+    - cron: "0 1 * * *"
+    - cron: "0 2 * * *"
+    - cron: "0 3 * * *"
+    - cron: "0 4 * * *"
+    - cron: "0 5 * * *"      
   workflow_dispatch:
     inputs:
       os:
@@ -63,7 +69,7 @@ on:
 
 jobs:
 
-  test:
+  installation_test:
     runs-on: ${{ inputs.os != 'all' && inputs.os || matrix.os }}
     strategy:
       matrix:
@@ -93,7 +99,7 @@ jobs:
     env:
       install_tests_folder: "python/tests/compat"
       conda_file: "environment_unix.yml"
-      arcticdb_version: ${{ inputs.arcticdb_version || '5.2.6' }}
+      arcticdb_version: ${{ inputs.arcticdb_version || '1.6.2' }}
       lmdb: ${{ inputs.run_on_lmdb || '1' }}
       real_s3: ${{ inputs.run_on_real_s3 || '1' }}
 
@@ -117,6 +123,18 @@ jobs:
           echo "Skipping unsupported combination: $CURRENT_COMBINATION"
           echo "SKIP_JOB=true" >> $GITHUB_ENV
         fi
+
+    - name: When On Schedule - Override the arcticdb version based on hour of execution
+      if: github.event_name == 'schedule'
+      run: |
+        hour=$(date -u +"%H")
+        case $hour in
+          "01") echo "arcticdb_version='1.6.2'" >> $GITHUB_ENV;;
+          "02") echo "arcticdb_version='4.5.1'" >> $GITHUB_ENV;;
+          "03") echo "arcticdb_version='5.1.2'" >> $GITHUB_ENV;;
+          "04") echo "arcticdb_version='5.2.6'" >> $GITHUB_ENV;;
+          "05") echo "arcticdb_version='latest'" >> $GITHUB_ENV;;
+        esac        
 
     - name: Checkout code
       if: ${{ env.SKIP_JOB != 'true' }}
