@@ -1367,6 +1367,7 @@ def test_s3_checksum_off_by_env_var(s3_storage, lib_name, multiprocess):
 
 
 @pytest.mark.skipif(not ARCTICDB_USING_CONDA, reason="aws sdk on pypi is pinned at version which doesn't turn on checksumming by default")
+@pytest.mark.skip(reason="aws sdk is stuck at 1.11.449 on conda CI due to libarrow pin, which doesn't run checksumming by default")
 def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch):
     monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
     with pytest.raises(Exception):
