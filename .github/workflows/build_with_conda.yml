@@ -46,7 +46,7 @@ jobs:
           environment-file: environment-dev.yml
           init-shell: >-
             bash
-          # cache-environment: true
+          cache-environment: true
           post-cleanup: 'all'
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
