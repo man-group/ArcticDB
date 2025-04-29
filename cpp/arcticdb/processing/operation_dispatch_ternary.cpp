@@ -78,29 +78,48 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
             using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
             if constexpr(is_sequence_type(left_type_info::data_type) && is_sequence_type(right_type_info::data_type)) {
                 if constexpr(left_type_info::data_type == right_type_info::data_type && is_dynamic_string_type(left_type_info::data_type)) {
-                    output_column = std::make_unique<Column>(make_scalar_type(left_type_info::data_type), Sparsity::PERMITTED);
+                    output_column = std::make_unique<Column>(make_scalar_type(DataType::UTF_DYNAMIC64), Sparsity::PERMITTED);
                     string_pool = std::make_shared<StringPool>();
-                    // TODO: Could this be more efficient?
-                    size_t idx{0};
-                    Column::transform<typename left_type_info::TDT, typename right_type_info::TDT, typename left_type_info::TDT>(
-                            *(left.column_),
-                            *(right.column_),
-                            *output_column,
-                            [&condition, &idx, &string_pool, &left, &right](auto left_value, auto right_value) -> typename left_type_info::RawType {
-                                std::optional<std::string_view> string_at_offset;
-                                if (condition[idx]) {
-                                    string_at_offset = left.string_at_offset(left_value);
-                                } else {
-                                    string_at_offset = right.string_at_offset(right_value);
-                                }
-                                if (string_at_offset.has_value()) {
-                                    ++idx;
-                                    auto offset_string = string_pool->get(*string_at_offset);
-                                    return offset_string.offset();
-                                } else {
-                                    return condition[idx++] ? left_value : right_value;
-                                }
-                            });
+
+                    // TODO: Remove code duplication with Column::ternary
+                    using output_tdt = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
+                    initialise_output_column(condition, *left.column_, *right.column_, *output_column);
+                    auto output_data = output_column->data();
+                    if (output_column->is_sparse()) {
+                        auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+                        for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(); output_it != output_end_it; ++output_it) {
+                            auto idx = output_it->idx();
+                            std::optional<std::string_view> string_at_offset;
+                            string_at_offset = condition.get_bit(idx) ?
+                                    left.string_at_offset(*left.column_->scalar_at<int64_t>(idx)) :
+                                    right.string_at_offset(*right.column_->scalar_at<int64_t>(idx));
+                            if (string_at_offset.has_value()) {
+                                auto offset_string = string_pool->get(*string_at_offset);
+                                output_it->value() = offset_string.offset();
+                            } else {
+                                output_it->value() = condition.get_bit(idx) ?
+                                        *left.column_->scalar_at<int64_t>(idx):
+                                        *right.column_->scalar_at<int64_t>(idx);
+                            }
+                        }
+                    } else {
+                        auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED>();
+                        for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it; ++output_it) {
+                            auto idx = output_it->idx();
+                            std::optional<std::string_view> string_at_offset;
+                            string_at_offset = condition.get_bit(idx) ?
+                                               left.string_at_offset(*left.column_->scalar_at<int64_t>(idx)) :
+                                               right.string_at_offset(*right.column_->scalar_at<int64_t>(idx));
+                            if (string_at_offset.has_value()) {
+                                auto offset_string = string_pool->get(*string_at_offset);
+                                output_it->value() = offset_string.offset();
+                            } else {
+                                output_it->value() = condition.get_bit(idx) ?
+                                                     *left.column_->scalar_at<int64_t>(idx):
+                                                     *right.column_->scalar_at<int64_t>(idx);
+                            }
+                        }
+                    }
                 } else {
                     // Fixed width string columns
                     schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
@@ -294,6 +313,44 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& left, c
     return {ColumnWithStrings(std::move(output_column), string_pool, ternary_operation_column_name(left_string, right_string))};
 }
 
+template<bool arguments_reversed = false>
+VariantData ternary_operator(const util::BitSet& condition, const Value& val, EmptyResult) {
+    std::unique_ptr<Column> output_column;
+    std::shared_ptr<StringPool> string_pool;
+    std::string value_string;
+
+    details::visit_type(val.type().data_type(), [&](auto val_tag) {
+        using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
+        if constexpr(is_dynamic_string_type(val_type_info::data_type)) {
+            output_column = std::make_unique<Column>(val.type(), Sparsity::PERMITTED);
+            string_pool = std::make_shared<StringPool>();
+            auto value_string = std::string(*val.str_data(), val.len());
+            auto offset_string = string_pool->get(value_string);
+            Column::ternary<typename val_type_info::TDT, arguments_reversed>(
+                    condition,
+                    offset_string.offset(),
+                    *output_column);
+        } else if constexpr (is_numeric_type(val_type_info::data_type) || is_bool_type(val_type_info::data_type)) {
+            using TargetType = val_type_info::RawType;
+            output_column = std::make_unique<Column>(val.type(), Sparsity::PERMITTED);
+            auto value = static_cast<TargetType>(val.get<typename val_type_info::RawType>());
+            value_string = fmt::format("{}", value);
+            Column::ternary<typename val_type_info::TDT, arguments_reversed>(
+                    condition,
+                    value,
+                    *output_column);
+        } else {
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",
+                                                                  ternary_operation_with_types_to_string<arguments_reversed>(
+                                                                          val.to_string<typename val_type_info::RawType>(),
+                                                                          val.type(),
+                                                                          "",
+                                                                          {}));
+        }
+    });
+    return {ColumnWithStrings(std::move(output_column), string_pool, ternary_operation_column_name<arguments_reversed>(value_string, ""))};
+}
+
 VariantData ternary_operator(const util::BitSet& condition, bool left, bool right) {
     util::BitSet output_bitset;
     output_bitset.resize(condition.size());
@@ -431,20 +488,12 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
                 auto result = ternary_operator(c, true, value);
                 return transform_to_placeholder(result);
             },
-            [&c](const std::shared_ptr<Value> &l, EmptyResult) -> VariantData {
-                // Hacky, tidy up
-                auto dummy_col = std::make_unique<Column>(make_scalar_type(l->data_type_), Sparsity::PERMITTED);
-                dummy_col->set_row_data(0);
-                ColumnWithStrings r(std::move(dummy_col), "dummy");
-                auto result = ternary_operator<true>(c, r, *l);
+            [&c](const std::shared_ptr<Value>& l, const EmptyResult& r) -> VariantData {
+                auto result = ternary_operator(c, *l, r);
                 return transform_to_placeholder(result);
             },
-            [&c](EmptyResult, const std::shared_ptr<Value> &r) -> VariantData {
-                // Hacky, tidy up
-                auto dummy_col = std::make_unique<Column>(make_scalar_type(r->data_type_), Sparsity::PERMITTED);
-                dummy_col->set_row_data(0);
-                ColumnWithStrings l(std::move(dummy_col), "dummy");
-                auto result = ternary_operator(c, l, *r);
+            [&c](const EmptyResult& l, const std::shared_ptr<Value> &r) -> VariantData {
+                auto result = ternary_operator<true>(c, *r, l);
                 return transform_to_placeholder(result);
             },
             [](FullResult, FullResult) -> VariantData {

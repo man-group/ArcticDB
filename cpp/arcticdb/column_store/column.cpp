@@ -57,6 +57,28 @@ void initialise_output_column(const util::BitSet& condition, const Column& input
 template void initialise_output_column<true>(const util::BitSet& condition, const Column& input_column, Column& output_column);
 template void initialise_output_column<false>(const util::BitSet& condition, const Column& input_column, Column& output_column);
 
+template<bool arguments_reversed>
+void initialise_output_column(const util::BitSet& condition, Column& output_column) {
+    size_t output_physical_rows;
+    size_t output_logical_rows = condition.size();
+    auto output_sparse_map = condition;
+    if constexpr (arguments_reversed) {
+        output_sparse_map.flip();
+        output_sparse_map.resize(condition.size());
+    }
+    output_physical_rows = output_sparse_map.count();
+    if (output_physical_rows != output_logical_rows) {
+        output_column.set_sparse_map(std::move(output_sparse_map));
+    }
+    if (output_physical_rows > 0) {
+        output_column.allocate_data(output_physical_rows * get_type_size(output_column.type().data_type()));
+    }
+    output_column.set_row_data(output_logical_rows - 1);
+}
+
+template void initialise_output_column<true>(const util::BitSet& condition, Column& output_column);
+template void initialise_output_column<false>(const util::BitSet& condition, Column& output_column);
+
 void initialise_output_column(const util::BitSet& condition,
                               const Column& left_input_column,
                               const Column& right_input_column,

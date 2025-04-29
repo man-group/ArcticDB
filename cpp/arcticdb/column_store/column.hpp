@@ -85,6 +85,9 @@ void initialise_output_bitset(const Column& input_column, bool sparse_missing_va
 template<bool arguments_reversed>
 void initialise_output_column(const util::BitSet& condition, const Column& input_column, Column& output_column);
 
+template<bool arguments_reversed>
+void initialise_output_column(const util::BitSet& condition, Column& output_column);
+
 void initialise_output_column(const util::BitSet& condition,
                               const Column& left_input_column,
                               const Column& right_input_column,
@@ -961,6 +964,16 @@ public:
             }
         }
         inserter.flush();
+    }
+
+    template <typename value_tdt, bool arguments_reversed>
+    static void ternary(const util::BitSet& condition, value_tdt::DataTypeTag::raw_type value, Column& output_column) {
+        initialise_output_column<arguments_reversed>(condition, output_column);
+        auto output_data = output_column.data();
+        auto output_end_it = output_data.end<value_tdt>();
+        for (auto output_it = output_data.begin<value_tdt>(); output_it != output_end_it; ++output_it) {
+            *output_it = value;
+        }
     }
 
     template <typename input_tdt, typename output_tdt, typename value_type, bool arguments_reversed>
