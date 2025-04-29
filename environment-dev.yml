@@ -57,7 +57,7 @@ dependencies:
   # Build dependencies for tests
   # Use libarrow==18.0.0 only on Linux and MacOS (resolution problem on Windows)
   # TODO: Remove this when the issue is resolved
-  - sel(unix): libarrow==18.0.0
+  - sel(unix): libarrow
   - sel(win): libarrow
   # Python dependences
   - python >=3.12,<3.14
