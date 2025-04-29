@@ -966,6 +966,60 @@ public:
         inserter.flush();
     }
 
+    template <typename input_tdt, bool arguments_reversed>
+    static void ternary(const util::BitSet& condition, const Column& input_column, Column& output_column) {
+        util::check(&input_column != &output_column, "Cannot overwrite input column in ternary operator");
+        size_t output_physical_rows;
+        size_t output_logical_rows = condition.size();
+        util::BitSet output_sparse_map;
+        if (input_column.is_sparse()) {
+            if constexpr (arguments_reversed) {
+                output_sparse_map = ~condition & input_column.sparse_map();
+            } else {
+                output_sparse_map = condition & input_column.sparse_map();
+            }
+            output_sparse_map.resize(output_logical_rows);
+            output_physical_rows = output_sparse_map.count();
+            // Input column is sparse, but output column is dense
+            if (output_physical_rows != output_logical_rows) {
+                output_column.set_sparse_map(std::move(output_sparse_map));
+            }
+        } else {
+            if constexpr (arguments_reversed) {
+                output_physical_rows = output_logical_rows - condition.count();
+            } else {
+                output_physical_rows = condition.count();
+            }
+            if (output_physical_rows != output_logical_rows) {
+                if constexpr (arguments_reversed) {
+                    output_sparse_map = ~condition;
+                } else {
+                    output_sparse_map = condition;
+                }
+                output_sparse_map.resize(output_logical_rows);
+                output_column.set_sparse_map(std::move(output_sparse_map));
+            }
+        }
+        if (output_physical_rows > 0) {
+            output_column.allocate_data(output_physical_rows * get_type_size(output_column.type().data_type()));
+        }
+        output_column.set_row_data(output_logical_rows - 1);
+        auto output_data = output_column.data();
+        if (output_column.is_sparse()) {
+            auto output_end_it = output_data.end<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+            for (auto output_it = output_data.begin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(); output_it != output_end_it; ++output_it) {
+                auto idx = output_it->idx();
+                output_it->value() = static_cast<typename input_tdt::DataTypeTag::raw_type>(*input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx));
+            }
+        } else {
+            auto output_end_it = output_data.end<input_tdt, IteratorType::ENUMERATED>();
+            for (auto output_it = output_data.begin<input_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it; ++output_it) {
+                auto idx = output_it->idx();
+                output_it->value() = static_cast<typename input_tdt::DataTypeTag::raw_type>(*input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx));
+            }
+        }
+    }
+
     template <typename value_tdt, bool arguments_reversed>
     static void ternary(const util::BitSet& condition, value_tdt::DataTypeTag::raw_type value, Column& output_column) {
         initialise_output_column<arguments_reversed>(condition, output_column);

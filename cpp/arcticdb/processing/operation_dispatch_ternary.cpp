@@ -261,6 +261,105 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
     return {ColumnWithStrings(std::move(output_column), string_pool, ternary_operation_column_name<arguments_reversed>(col.column_name_, value_string))};
 }
 
+template<bool arguments_reversed = false>
+VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStrings& col, EmptyResult) {
+    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+            !is_empty_type(col.column_->type().data_type()),
+            "Empty column provided to ternary operator");
+    std::unique_ptr<Column> output_column;
+    std::shared_ptr<StringPool> string_pool;
+    std::string value_string;
+
+    details::visit_type(col.column_->type().data_type(), [&](auto col_tag) {
+        using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
+        if constexpr(is_dynamic_string_type(col_type_info::data_type)) {
+            output_column = std::make_unique<Column>(make_scalar_type(DataType::UTF_DYNAMIC64), Sparsity::PERMITTED);
+            string_pool = std::make_shared<StringPool>();
+
+            size_t output_physical_rows;
+            size_t output_logical_rows = condition.size();
+            util::BitSet output_sparse_map;
+            if (col.column_->is_sparse()) {
+                if constexpr (arguments_reversed) {
+                    output_sparse_map = ~condition & col.column_->sparse_map();
+                } else {
+                    output_sparse_map = condition & col.column_->sparse_map();
+                }
+                output_sparse_map.resize(output_logical_rows);
+                output_physical_rows = output_sparse_map.count();
+                // Input column is sparse, but output column is dense
+                if (output_physical_rows != output_logical_rows) {
+                    output_column->set_sparse_map(std::move(output_sparse_map));
+                }
+            } else {
+                if constexpr (arguments_reversed) {
+                    output_physical_rows = output_logical_rows - condition.count();
+                } else {
+                    output_physical_rows = condition.count();
+                }
+                if (output_physical_rows != output_logical_rows) {
+                    if constexpr (arguments_reversed) {
+                        output_sparse_map = ~condition;
+                    } else {
+                        output_sparse_map = condition;
+                    }
+                    output_sparse_map.resize(output_logical_rows);
+                    output_column->set_sparse_map(std::move(output_sparse_map));
+                }
+            }
+            if (output_physical_rows > 0) {
+                output_column->allocate_data(output_physical_rows * get_type_size(output_column->type().data_type()));
+            }
+            output_column->set_row_data(output_logical_rows - 1);
+            auto output_data = output_column->data();
+            using input_tdt = typename col_type_info::TDT;
+            if (output_column->is_sparse()) {
+                auto output_end_it = output_data.end<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+                for (auto output_it = output_data.begin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(); output_it != output_end_it; ++output_it) {
+                    auto idx = output_it->idx();
+                    auto string_at_offset = col.string_at_offset(*col.column_->scalar_at<int64_t>(idx));
+                    if (string_at_offset.has_value()) {
+                        auto offset_string = string_pool->get(*string_at_offset);
+                        output_it->value() = offset_string.offset();
+                    } else {
+                        // string_at_offset will only be valueless if the condition was true and so was
+                        // selected from the column
+                        output_it->value() = *col.column_->scalar_at<int64_t>(idx);
+                    }
+                }
+            } else {
+                auto output_end_it = output_data.end<input_tdt, IteratorType::ENUMERATED>();
+                for (auto output_it = output_data.begin<input_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it; ++output_it) {
+                    auto idx = output_it->idx();
+                    auto string_at_offset = col.string_at_offset(*col.column_->scalar_at<int64_t>(idx));
+                    if (string_at_offset.has_value()) {
+                        auto offset_string = string_pool->get(*string_at_offset);
+                        output_it->value() = offset_string.offset();
+                    } else {
+                        // string_at_offset will only be valueless if the condition was true and so was
+                        // selected from the column
+                        output_it->value() = *col.column_->scalar_at<int64_t>(idx);
+                    }
+                }
+            }
+        } else if constexpr (is_numeric_type(col_type_info::data_type) || is_bool_type(col_type_info::data_type)) {
+            output_column = std::make_unique<Column>(col.column_->type(), Sparsity::PERMITTED);
+            Column::ternary<typename col_type_info::TDT, arguments_reversed>(
+                    condition,
+                    *col.column_,
+                    *output_column);
+        } else {
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",
+                                                                  ternary_operation_with_types_to_string<arguments_reversed>(
+                                                                          col.column_name_,
+                                                                          col.column_->type(),
+                                                                          "",
+                                                                          {}));
+        }
+    });
+    return {ColumnWithStrings(std::move(output_column), string_pool, ternary_operation_column_name<arguments_reversed>(col.column_name_, value_string))};
+}
+
 VariantData ternary_operator(const util::BitSet& condition, const Value& left, const Value& right) {
     std::unique_ptr<Column> output_column;
     std::shared_ptr<StringPool> string_pool;
@@ -452,20 +551,12 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
                 auto result = ternary_operator<true>(c, bitset, true);
                 return transform_to_placeholder(result);
             },
-            [&c](const ColumnWithStrings &l, EmptyResult) -> VariantData {
-                // Hacky, tidy up
-                auto dummy_col = std::make_unique<Column>(l.column_->type(), Sparsity::PERMITTED);
-                dummy_col->set_row_data(l.column_->last_row());
-                ColumnWithStrings r(std::move(dummy_col), "dummy");
+            [&c](const ColumnWithStrings& l, const EmptyResult& r) -> VariantData {
                 auto result = ternary_operator(c, l, r);
                 return transform_to_placeholder(result);
             },
-            [&c](EmptyResult, const ColumnWithStrings &r) -> VariantData {
-                // Hacky, tidy up
-                auto dummy_col = std::make_unique<Column>(r.column_->type(), Sparsity::PERMITTED);
-                dummy_col->set_row_data(r.column_->last_row());
-                ColumnWithStrings l(std::move(dummy_col), "dummy");
-                auto result = ternary_operator(c, l, r);
+            [&c](const EmptyResult& l, const ColumnWithStrings& r) -> VariantData {
+                auto result = ternary_operator<true>(c, r, l);
                 return transform_to_placeholder(result);
             },
             [&c](const std::shared_ptr<Value> &l, const std::shared_ptr<Value> &r) -> VariantData {
