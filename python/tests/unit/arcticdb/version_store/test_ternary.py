@@ -7,12 +7,15 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import copy
 
+from hypothesis import assume, given, settings, strategies
+from hypothesis.extra.pandas import columns, data_frames
 import numpy as np
 import pandas as pd
 import pytest
 
 from arcticdb import QueryBuilder, where
 from arcticdb_ext.exceptions import InternalException, SchemaException, UserInputException
+from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.util.test import assert_frame_equal
 
 
@@ -586,6 +589,19 @@ def test_project_ternary_sparse_col_col(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
+def test_project_ternary_condition_empty(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_project_ternary_condition_empty"
+    df = pd.DataFrame({"condition": [0.0, 0.0, 0.0], "col1": [0.0, np.nan, np.nan], "col2": [0.0, np.nan, np.nan]}, index=pd.date_range("2024-01-01", periods=3))
+    lib.write(sym, df, sparsify_floats=True)
+    expected = df
+    expected["projected"] = np.where(expected["condition"].isnull().to_numpy(), expected["col1"].to_numpy(), 2000.0)
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["condition"].isnull(), q["col1"], 2000))
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received, check_dtype=False)
+
+
 def test_filter_ternary_bitset_bitset(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     symbol = "test_filter_ternary_bitset_bitset"
@@ -1046,4 +1062,48 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
     expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
+    assert_frame_equal(expected, received, check_dtype=False)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        columns(
+            ["condition", "col1", "col2"],
+            elements=strategies.floats(min_value=0, max_value=1000, allow_nan=False, allow_subnormal=False),
+            fill=strategies.just(np.nan)
+        ),
+    ),
+)
+def test_ternary_sparse_hypothesis(lmdb_version_store_v1, df):
+    assume(not df.empty and not df["condition"].isnull().all() and not df["col1"].isnull().all() and not df["col2"].isnull().all())
+    lib = lmdb_version_store_v1
+    sym = "test_ternary_sparse_hypothesis"
+
+    df.index = pd.date_range("2024-01-01", periods=len(df))
+
+    lib.write(sym, df, sparsify_floats=True)
+
+    # Projection
+    # col/col
+    expected = df
+    expected["projected"] = np.where(expected["condition"].isnull().to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["condition"].isnull(), q["col1"], q["col2"]))
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received, check_dtype=False)
+    # col/val
+    expected = df
+    expected["projected"] = np.where(expected["condition"].isnull().to_numpy(), expected["col1"].to_numpy(), 2000.0)
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["condition"].isnull(), q["col1"], 2000))
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received, check_dtype=False)
+    # val/col
+    expected = df
+    expected["projected"] = np.where(expected["condition"].isnull().to_numpy(), 2000.0, expected["col2"].to_numpy())
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["condition"].isnull(), 2000, q["col2"]))
+    received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received, check_dtype=False)

@@ -181,6 +181,41 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
                             add_column(proc, col);
                             output = push_entities(*component_manager_, std::move(proc));
                         },
+                        [&proc, &output, this](const std::shared_ptr<Value>& val) {
+                            auto rows = proc.segments_->back()->row_count();
+                            std::unique_ptr<Column> output_column;
+                            std::shared_ptr<StringPool> string_pool;
+                            details::visit_type(val->type().data_type(), [&](auto val_tag) {
+                                using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
+                                if constexpr(is_dynamic_string_type(val_type_info::data_type)) {
+                                    output_column = std::make_unique<Column>(val->type(), Sparsity::PERMITTED);
+                                    string_pool = std::make_shared<StringPool>();
+                                    auto value_string = std::string(*val->str_data(), val->len());
+                                    const auto offset_string = string_pool->get(value_string);
+                                    output_column->allocate_data(rows * get_type_size(output_column->type().data_type()));
+                                    output_column->set_row_data(rows);
+                                    auto output_data = output_column->data();
+                                    auto output_end_it = output_data.end<typename val_type_info::TDT>();
+                                    for (auto output_it = output_data.begin<typename val_type_info::TDT>(); output_it != output_end_it; ++output_it) {
+                                        *output_it = offset_string.offset();
+                                    }
+                                } else if constexpr (is_numeric_type(val_type_info::data_type) || is_bool_type(val_type_info::data_type)) {
+                                    using TargetType = val_type_info::RawType;
+                                    auto value = static_cast<TargetType>(val->get<typename val_type_info::RawType>());
+                                    output_column = std::make_unique<Column>(val->type(), Sparsity::PERMITTED);
+                                    output_column->allocate_data(rows * get_type_size(output_column->type().data_type()));
+                                    output_column->set_row_data(rows);
+                                    auto output_data = output_column->data();
+                                    auto output_end_it = output_data.end<typename val_type_info::TDT>();
+                                    for (auto output_it = output_data.begin<typename val_type_info::TDT>(); output_it != output_end_it; ++output_it) {
+                                        *output_it = value;
+                                    }
+                                }
+                            });
+                            ColumnWithStrings col(std::move(output_column), string_pool, "");
+                            add_column(proc, col);
+                            output = push_entities(*component_manager_, std::move(proc));
+                        },
                         [&proc, &output, this](const EmptyResult &) {
                             if (expression_context_->dynamic_schema_)
                                 output = push_entities(*component_manager_, std::move(proc));
