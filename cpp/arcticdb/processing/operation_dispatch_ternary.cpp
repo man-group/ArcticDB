@@ -423,15 +423,19 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& val, Em
 
 VariantData ternary_operator(const util::BitSet& condition, bool left, bool right) {
     util::BitSet output_bitset;
-    output_bitset.resize(condition.size());
-    util::BitSet::bulk_insert_iterator inserter(output_bitset);
-    for (size_t idx = 0; idx < condition.size(); ++idx) {
-        if (condition[idx] ? left : right) {
-            inserter = idx;
+    if (left && right) {
+        if (condition.size() > 0) {
+            output_bitset.set_range(0, condition.size() - 1);
         }
-    }
-    inserter.flush();
-    return VariantData{std::move(output_bitset)};
+    } else if (left) {
+        // right is false
+        output_bitset = condition;
+    } else if (right) {
+        // left is false
+        output_bitset = ~condition;
+    } // else left and right are false, the resize below will correctly initialise all bits to zero
+    output_bitset.resize(condition.size());
+    return output_bitset;
 }
 
 VariantData visit_ternary_operator(const VariantData& condition, const VariantData& left, const VariantData& right) {
