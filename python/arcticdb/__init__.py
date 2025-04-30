@@ -8,7 +8,7 @@ from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import VersionedItem
 import arcticdb.version_store.library as library
 from arcticdb.tools import set_config_from_env_vars
-from arcticdb_ext.version_store import DataError, VersionRequestType
+from arcticdb_ext.version_store import DataError, VersionRequestType, OutputFormat
 from arcticdb_ext.exceptions import ErrorCode, ErrorCategory
 from arcticdb.version_store.library import (
     WritePayload,
