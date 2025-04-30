@@ -259,9 +259,9 @@ inline void configure_s3_checksum_validation() {
     
     if ((response_checksum && std::string(response_checksum) == "when_supported") || 
         (request_checksum && std::string(request_checksum) == "when_supported")) {
-        log::storage().warn("S3 Checksum validation has been specifically enabled by user"
-                            "If endpoint doesn't support it, its response will not contain checksum"
-                            "which will be rejected by SDK and lead to storage exception in arcticdb");
+        log::storage().warn("S3 Checksum validation has been specifically enabled by user. "
+                            "If endpoint doesn't support it, 1. garbage could be siliently written "
+                            "2. Endpoint response will be rejected by SDK and lead to storage exception in arcticdb");
     }
     else {
 #ifdef _WIN32
@@ -275,7 +275,7 @@ inline void configure_s3_checksum_validation() {
 }
 
 template<typename ConfigType>
-auto get_s3_config(const ConfigType& conf) {
+auto get_s3_config_and_set_env_var(const ConfigType& conf) {
     configure_s3_checksum_validation();
 
     auto endpoint_scheme = conf.https() ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
