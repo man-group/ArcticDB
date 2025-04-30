@@ -397,18 +397,20 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& val, Em
             string_pool = std::make_shared<StringPool>();
             auto value_string = std::string(*val.str_data(), val.len());
             auto offset_string = string_pool->get(value_string);
-            ternary<typename val_type_info::TDT, arguments_reversed>(
+            ternary_transform<typename val_type_info::TDT, arguments_reversed>(
                     condition,
                     offset_string.offset(),
+                    EmptyResult{},
                     *output_column);
         } else if constexpr (is_numeric_type(val_type_info::data_type) || is_bool_type(val_type_info::data_type)) {
             using TargetType = val_type_info::RawType;
             output_column = std::make_unique<Column>(val.type(), Sparsity::PERMITTED);
             auto value = static_cast<TargetType>(val.get<typename val_type_info::RawType>());
             value_string = fmt::format("{}", value);
-            ternary<typename val_type_info::TDT, arguments_reversed>(
+            ternary_transform<typename val_type_info::TDT, arguments_reversed>(
                     condition,
                     value,
+                    EmptyResult{},
                     *output_column);
         } else {
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",

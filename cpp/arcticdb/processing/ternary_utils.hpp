@@ -202,7 +202,10 @@ static void ternary_transform(const util::BitSet& condition,
 }
 
 template <typename value_tdt, bool arguments_reversed>
-static void ternary(const util::BitSet& condition, typename value_tdt::DataTypeTag::raw_type value, Column& output_column) {
+static void ternary_transform(const util::BitSet& condition,
+                              typename value_tdt::DataTypeTag::raw_type value,
+                              ARCTICDB_UNUSED EmptyResult empty_result,
+                              Column& output_column) {
     initialise_output_column<arguments_reversed>(condition, output_column);
     auto output_data = output_column.data();
     auto output_end_it = output_data.end<value_tdt>();
