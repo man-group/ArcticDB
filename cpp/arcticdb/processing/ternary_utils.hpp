@@ -122,8 +122,12 @@ void ternary_transform(const util::BitSet& condition,
     }
 }
 
-template <typename input_tdt, typename output_tdt, typename value_type, bool arguments_reversed>
-static void ternary(const util::BitSet& condition, const Column& input_column, value_type value, Column& output_column) {
+template <typename input_tdt, typename output_tdt, typename value_type, bool arguments_reversed, typename functor>
+static void ternary_transform(const util::BitSet& condition,
+                              const Column& input_column,
+                              value_type value,
+                              Column& output_column,
+                              functor&& f) {
     initialise_output_column<arguments_reversed>(condition, input_column, output_column);
     // TODO: Consider optimisations
     // Use std::transform when input_column is dense
@@ -134,25 +138,13 @@ static void ternary(const util::BitSet& condition, const Column& input_column, v
         auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
         for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(); output_it != output_end_it; ++output_it) {
             auto idx = output_it->idx();
-            if constexpr (arguments_reversed) {
-                output_it->value() = condition.get_bit(idx) ?
-                                     value : static_cast<typename output_tdt::DataTypeTag::raw_type>(*input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx));
-            } else {
-                output_it->value() = condition.get_bit(idx) ?
-                                     static_cast<typename output_tdt::DataTypeTag::raw_type>(*input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx)) : value;
-            }
+            output_it->value() = f(condition.get_bit(idx), *input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx), value);
         }
     } else {
         auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED>();
         for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it; ++output_it) {
             auto idx = output_it->idx();
-            if constexpr (arguments_reversed) {
-                output_it->value() = condition.get_bit(idx) ?
-                                     value : static_cast<typename output_tdt::DataTypeTag::raw_type>(*input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx));
-            } else {
-                output_it->value() = condition.get_bit(idx) ?
-                                     static_cast<typename output_tdt::DataTypeTag::raw_type>(*input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx)) : value;
-            }
+            output_it->value() = f(condition.get_bit(idx), *input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx), value);
         }
     }
 }

@@ -151,50 +151,25 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                     output_column = std::make_unique<Column>(make_scalar_type(DataType::UTF_DYNAMIC64), Sparsity::PERMITTED);
                     string_pool = std::make_shared<StringPool>();
                     auto value_string = std::string(*val.str_data(), val.len());
-
-                    // TODO: Remove code duplication with ternary
-                    using output_tdt = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
-                    initialise_output_column<arguments_reversed>(condition, *col.column_, *output_column);
-                    auto output_data = output_column->data();
-                    if (output_column->is_sparse()) {
-                        auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
-                        for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(); output_it != output_end_it; ++output_it) {
-                            auto idx = output_it->idx();
-                            std::optional<std::string_view> string_at_offset;
-                            if constexpr (arguments_reversed) {
-                                string_at_offset = condition.get_bit(idx) ? value_string : col.string_at_offset(*col.column_->scalar_at<int64_t>(idx));
-                            } else {
-                                string_at_offset = condition.get_bit(idx) ? col.string_at_offset(*col.column_->scalar_at<int64_t>(idx)) : value_string;
-                            }
-                            if (string_at_offset.has_value()) {
-                                auto offset_string = string_pool->get(*string_at_offset);
-                                output_it->value() = offset_string.offset();
-                            } else {
-                                // string_at_offset will only be valueless if the condition was true and so was
-                                // selected from the column
-                                output_it->value() = *col.column_->scalar_at<int64_t>(idx);
-                            }
-                        }
-                    } else {
-                        auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED>();
-                        for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it; ++output_it) {
-                            auto idx = output_it->idx();
-                            std::optional<std::string_view> string_at_offset;
-                            if constexpr (arguments_reversed) {
-                                string_at_offset = condition.get_bit(idx) ? value_string : col.string_at_offset(*col.column_->scalar_at<int64_t>(idx));
-                            } else {
-                                string_at_offset = condition.get_bit(idx) ? col.string_at_offset(*col.column_->scalar_at<int64_t>(idx)) : value_string;
-                            }
-                            if (string_at_offset.has_value()) {
-                                auto offset_string = string_pool->get(*string_at_offset);
-                                output_it->value() = offset_string.offset();
-                            } else {
-                                // string_at_offset will only be valueless if the condition was true and so was
-                                // selected from the column
-                                output_it->value() = *col.column_->scalar_at<int64_t>(idx);
-                            }
-                        }
-                    }
+                    ternary_transform<typename col_type_info::TDT, typename col_type_info::TDT, std::string, arguments_reversed>(
+                            condition,
+                            *(col.column_),
+                            value_string,
+                            *output_column,
+                            [&string_pool, &col](bool cond, auto left_val, auto right_val) -> typename col_type_info::RawType {
+                                std::optional<std::string_view> string_at_offset;
+                                if constexpr (arguments_reversed) {
+                                    string_at_offset = cond ? right_val : col.string_at_offset(left_val);
+                                } else {
+                                    string_at_offset = cond ? col.string_at_offset(left_val) : right_val;
+                                }
+                                if (string_at_offset.has_value()) {
+                                    auto offset_string = string_pool->get(*string_at_offset);
+                                    return offset_string.offset();
+                                } else {
+                                    return left_val;
+                                }
+                            });
                 } else {
                     // Fixed width string column
                     schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
@@ -207,22 +182,34 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 auto value = static_cast<TargetType>(val.get<typename val_type_info::RawType>());
                 value_string = fmt::format("{}", value);
-                ternary<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>, TargetType, arguments_reversed>(
+                ternary_transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>, TargetType, arguments_reversed>(
                         condition,
                         *(col.column_),
                         value,
-                        *output_column);
+                        *output_column,
+                        [](bool condition, auto left_val, auto right_val) {
+                            if constexpr (arguments_reversed) {
+                                return condition ? right_val : left_val;
+                            } else {
+                                return condition ? left_val : right_val;
+                            }
+                        });
             } else if constexpr (is_bool_type(col_type_info::data_type) && is_bool_type(val_type_info::data_type)) {
-                using TargetType = bool;
-                constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(DataType::BOOL8), Sparsity::PERMITTED);
-                auto value = static_cast<TargetType>(val.get<typename val_type_info::RawType>());
+                auto value = val.get<bool>();
                 value_string = fmt::format("{}", value);
-                ternary<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>, TargetType, arguments_reversed>(
+                ternary_transform<typename col_type_info::TDT, typename col_type_info::TDT, bool, arguments_reversed>(
                         condition,
                         *(col.column_),
                         value,
-                        *output_column);
+                        *output_column,
+                        [](bool condition, auto left_val, auto right_val) {
+                            if constexpr (arguments_reversed) {
+                                return condition ? right_val : left_val;
+                            } else {
+                                return condition ? left_val : right_val;
+                            }
+                        });
             } else {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",
                                                                       ternary_operation_with_types_to_string<arguments_reversed>(
