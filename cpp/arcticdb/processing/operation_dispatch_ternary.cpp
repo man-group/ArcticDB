@@ -37,12 +37,9 @@ VariantData ternary_operator(const util::BitSet& condition, const util::BitSet& 
     util::BitSet output_bitset;
     auto output_size = condition.size();
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(left.size() == output_size && right.size() == output_size, "Mismatching bitset sizes");
-    output_bitset = right;
-    auto end_bit = condition.end();
-    for (auto set_bit = condition.first(); set_bit < end_bit; ++set_bit) {
-        output_bitset[*set_bit] = left[*set_bit];
-    }
-    return VariantData{std::move(output_bitset)};
+    output_bitset = (condition & left) | (~condition & right);
+    output_bitset.resize(output_size);
+    return output_bitset;
 }
 
 template<bool arguments_reversed = false>
