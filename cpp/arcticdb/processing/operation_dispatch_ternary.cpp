@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Man Group Operations Limited
+ * Copyright 2025 Man Group Operations Limited
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
@@ -47,8 +47,7 @@ VariantData ternary_operator(const util::BitSet& condition, const util::BitSet& 
 template<bool arguments_reversed = false>
 VariantData ternary_operator(const util::BitSet& condition, const util::BitSet& input_bitset, bool value) {
     util::BitSet output_bitset;
-    auto output_size = condition.size();
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(input_bitset.size() == output_size, "Mismatching bitset sizes");
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(input_bitset.size() == condition.size(), "Mismatching bitset sizes");
     if constexpr (arguments_reversed) {
         if (value) {
             output_bitset = condition | input_bitset;
@@ -62,6 +61,7 @@ VariantData ternary_operator(const util::BitSet& condition, const util::BitSet& 
             output_bitset = condition & input_bitset;
         }
     }
+    output_bitset.resize(condition.size());
     return VariantData{std::move(output_bitset)};
 }
 
@@ -386,13 +386,22 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& left, c
                 } else {
                     internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexepcted fixed-width string value in ternary operator");
                 }
-            } else if constexpr ((is_numeric_type(left_type_info::data_type) && is_numeric_type(right_type_info::data_type)) ||
-                                 (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type))) {
+            } else if constexpr (is_numeric_type(left_type_info::data_type) && is_numeric_type(right_type_info::data_type)) {
                 using TargetType = typename ternary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType>::type;
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 auto left_value = static_cast<TargetType>(left.get<typename left_type_info::RawType>());
                 auto right_value = static_cast<TargetType>(right.get<typename right_type_info::RawType>());
+                left_string = fmt::format("{}", left_value);
+                right_string = fmt::format("{}", right_value);
+                // TODO: Use ColumnDataIterator and more efficient bitset access
+                for (size_t idx = 0; idx < condition.size(); ++idx) {
+                    output_column->push_back(condition[idx] ? left_value : right_value);
+                }
+            } else if constexpr (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type)) {
+                output_column = std::make_unique<Column>(make_scalar_type(DataType::BOOL8), Sparsity::PERMITTED);
+                auto left_value = left.get<bool>();
+                auto right_value = right.get<bool>();
                 left_string = fmt::format("{}", left_value);
                 right_string = fmt::format("{}", right_value);
                 // TODO: Use ColumnDataIterator and more efficient bitset access
@@ -594,7 +603,10 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
                 return c;
             },
             [&c](EmptyResult, FullResult) -> VariantData {
-                return ~c;
+                auto res = c;
+                res.flip();
+                res.resize(c.size());
+                return res;
             },
             [](EmptyResult, EmptyResult) -> VariantData {
                 return EmptyResult{};

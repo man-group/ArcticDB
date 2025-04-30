@@ -22,6 +22,11 @@ from arcticdb.util.test import assert_frame_equal
 pytestmark = pytest.mark.pipeline
 
 
+# A lot of the tests in here are designed to test specific code paths in operation_dispatch_ternary.cpp. In particular,
+# references to FullResult, EmptyResult, bitset, value, and column are exercising those code paths with the variant
+# holding those particular types
+
+
 def test_project_ternary_condition_as_full_and_empty_result(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     symbol = "test_project_ternary_condition_as_full_and_empty_result"
