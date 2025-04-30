@@ -58,7 +58,6 @@ void initialise_output_column(const util::BitSet& condition,
     } else {
         // Both input columns are dense
         // Bit vectors default initialise all bits to zero
-        // TODO: Use optional if this is inefficient
         output_sparse_map.flip();
     }
     output_sparse_map.resize(output_logical_rows);
@@ -92,8 +91,12 @@ void initialise_output_column(const util::BitSet& condition, Column& output_colu
     output_column.set_row_data(output_logical_rows - 1);
 }
 
-template <typename left_input_tdt, typename right_input_tdt, typename output_tdt>
-void ternary(const util::BitSet& condition, const Column& left_input_column, const Column& right_input_column, Column& output_column) {
+template <typename left_input_tdt, typename right_input_tdt, typename output_tdt, typename functor>
+void ternary_transform(const util::BitSet& condition,
+                       const Column& left_input_column,
+                       const Column& right_input_column,
+                       Column& output_column,
+                       functor&& f) {
     initialise_output_column(condition, left_input_column, right_input_column, output_column);
     // TODO: Consider optimisations
     // Use std::transform when input_column is dense
@@ -104,17 +107,17 @@ void ternary(const util::BitSet& condition, const Column& left_input_column, con
         auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
         for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(); output_it != output_end_it; ++output_it) {
             auto idx = output_it->idx();
-            output_it->value() = condition.get_bit(idx) ?
-                                 static_cast<typename output_tdt::DataTypeTag::raw_type>(*left_input_column.scalar_at<typename left_input_tdt::DataTypeTag::raw_type>(idx)) :
-                                 static_cast<typename output_tdt::DataTypeTag::raw_type>(*right_input_column.scalar_at<typename right_input_tdt::DataTypeTag::raw_type>(idx));
+            output_it->value() = f(condition.get_bit(idx),
+                                   static_cast<typename output_tdt::DataTypeTag::raw_type>(*left_input_column.scalar_at<typename left_input_tdt::DataTypeTag::raw_type>(idx)),
+                                   static_cast<typename output_tdt::DataTypeTag::raw_type>(*right_input_column.scalar_at<typename right_input_tdt::DataTypeTag::raw_type>(idx)));
         }
     } else {
         auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED>();
         for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it; ++output_it) {
             auto idx = output_it->idx();
-            output_it->value() = condition.get_bit(idx) ?
-                                 static_cast<typename output_tdt::DataTypeTag::raw_type>(*left_input_column.scalar_at<typename left_input_tdt::DataTypeTag::raw_type>(idx)) :
-                                 static_cast<typename output_tdt::DataTypeTag::raw_type>(*right_input_column.scalar_at<typename right_input_tdt::DataTypeTag::raw_type>(idx));
+            output_it->value() = f(condition.get_bit(idx),
+                                   static_cast<typename output_tdt::DataTypeTag::raw_type>(*left_input_column.scalar_at<typename left_input_tdt::DataTypeTag::raw_type>(idx)),
+                                   static_cast<typename output_tdt::DataTypeTag::raw_type>(*right_input_column.scalar_at<typename right_input_tdt::DataTypeTag::raw_type>(idx)));
         }
     }
 }

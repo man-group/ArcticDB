@@ -81,46 +81,20 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                 if constexpr(left_type_info::data_type == right_type_info::data_type && is_dynamic_string_type(left_type_info::data_type)) {
                     output_column = std::make_unique<Column>(make_scalar_type(DataType::UTF_DYNAMIC64), Sparsity::PERMITTED);
                     string_pool = std::make_shared<StringPool>();
-
-                    // TODO: Remove code duplication with ternary
-                    using output_tdt = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
-                    initialise_output_column(condition, *left.column_, *right.column_, *output_column);
-                    auto output_data = output_column->data();
-                    if (output_column->is_sparse()) {
-                        auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
-                        for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(); output_it != output_end_it; ++output_it) {
-                            auto idx = output_it->idx();
-                            std::optional<std::string_view> string_at_offset;
-                            string_at_offset = condition.get_bit(idx) ?
-                                    left.string_at_offset(*left.column_->scalar_at<int64_t>(idx)) :
-                                    right.string_at_offset(*right.column_->scalar_at<int64_t>(idx));
-                            if (string_at_offset.has_value()) {
-                                auto offset_string = string_pool->get(*string_at_offset);
-                                output_it->value() = offset_string.offset();
-                            } else {
-                                output_it->value() = condition.get_bit(idx) ?
-                                        *left.column_->scalar_at<int64_t>(idx):
-                                        *right.column_->scalar_at<int64_t>(idx);
-                            }
-                        }
-                    } else {
-                        auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED>();
-                        for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it; ++output_it) {
-                            auto idx = output_it->idx();
-                            std::optional<std::string_view> string_at_offset;
-                            string_at_offset = condition.get_bit(idx) ?
-                                               left.string_at_offset(*left.column_->scalar_at<int64_t>(idx)) :
-                                               right.string_at_offset(*right.column_->scalar_at<int64_t>(idx));
-                            if (string_at_offset.has_value()) {
-                                auto offset_string = string_pool->get(*string_at_offset);
-                                output_it->value() = offset_string.offset();
-                            } else {
-                                output_it->value() = condition.get_bit(idx) ?
-                                                     *left.column_->scalar_at<int64_t>(idx):
-                                                     *right.column_->scalar_at<int64_t>(idx);
-                            }
-                        }
-                    }
+                    ternary_transform<typename left_type_info::TDT, typename right_type_info::TDT, typename left_type_info::TDT>(
+                            condition,
+                            *(left.column_),
+                            *(right.column_),
+                            *output_column,
+                            [&string_pool, &left, &right](bool cond, auto left_val, auto right_val) -> typename left_type_info::RawType {
+                                auto string_at_offset = cond ? left.string_at_offset((left_val)) : right.string_at_offset(right_val);
+                                if (string_at_offset.has_value()) {
+                                    auto offset_string = string_pool->get(*string_at_offset);
+                                    return offset_string.offset();
+                                } else {
+                                    return cond ? left_val : right_val;
+                                }
+                            });
                 } else {
                     // Fixed width string columns
                     schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
@@ -132,20 +106,20 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                 using TargetType = typename ternary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType>::type;
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
-                ternary<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
+                ternary_transform<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
                         condition,
                         *(left.column_),
                         *(right.column_),
-                        *output_column);
+                        *output_column,
+                        [](bool condition, auto left_val, auto right_val) { return condition ? left_val : right_val; });
             } else if constexpr (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type)) {
-                using TargetType = bool;
-                constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(DataType::BOOL8), Sparsity::PERMITTED);
-                ternary<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
+                ternary_transform<typename left_type_info::TDT, typename right_type_info::TDT, typename left_type_info::TDT>(
                         condition,
                         *(left.column_),
                         *(right.column_),
-                        *output_column);
+                        *output_column,
+                        [](bool condition, auto left_val, auto right_val) { return condition ? left_val : right_val; });
             } else {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",
                                                                       ternary_operation_with_types_to_string(
