@@ -11,33 +11,6 @@
 
 namespace arcticdb {
 
-template<bool arguments_reversed>
-void initialise_output_column(const util::BitSet& condition, const Column& input_column, Column& output_column) {
-    util::check(&input_column != &output_column, "Cannot overwrite input column in ternary operator");
-    size_t output_physical_rows;
-    size_t output_logical_rows = condition.size();
-    auto output_sparse_map = condition;
-    if (input_column.is_sparse()) {
-        if constexpr (arguments_reversed) {
-            output_sparse_map |= input_column.sparse_map();
-        } else {
-            output_sparse_map = ~output_sparse_map | input_column.sparse_map();
-        }
-        output_sparse_map.resize(output_logical_rows);
-        output_physical_rows = output_sparse_map.count();
-        // Input column is sparse, but output column is dense
-        if (output_physical_rows != output_logical_rows) {
-            output_column.set_sparse_map(std::move(output_sparse_map));
-        }
-    } else {
-        output_physical_rows = input_column.row_count();
-    }
-    if (output_physical_rows > 0) {
-        output_column.allocate_data(output_physical_rows * get_type_size(output_column.type().data_type()));
-    }
-    output_column.set_row_data(output_logical_rows - 1);
-}
-
 void initialise_output_column(const util::BitSet& condition,
                               const Column& left_input_column,
                               const Column& right_input_column,
@@ -65,6 +38,63 @@ void initialise_output_column(const util::BitSet& condition,
     // Input columns may have been sparse, but output column is dense
     if (output_physical_rows != output_logical_rows) {
         output_column.set_sparse_map(std::move(output_sparse_map));
+    }
+    if (output_physical_rows > 0) {
+        output_column.allocate_data(output_physical_rows * get_type_size(output_column.type().data_type()));
+    }
+    output_column.set_row_data(output_logical_rows - 1);
+}
+
+// TODO: requires FullResult or EmptyResult for first template arg
+template<typename FullOrEmpty, bool arguments_reversed>
+void initialise_output_column(const util::BitSet& condition,
+                              const Column& input_column,
+                              Column& output_column) {
+    util::check(&input_column != &output_column, "Cannot overwrite input column in ternary operator");
+    size_t output_physical_rows;
+    size_t output_logical_rows = condition.size();
+    util::BitSet output_sparse_map;
+    if (input_column.is_sparse()) {
+        if constexpr (std::is_same_v<FullOrEmpty, FullResult>) {
+            if constexpr (arguments_reversed) {
+                output_sparse_map = condition | input_column.sparse_map();
+            } else {
+                output_sparse_map = ~condition | input_column.sparse_map();
+            }
+        } else {
+            // EmptyResult
+            if constexpr (arguments_reversed) {
+                output_sparse_map = ~condition & input_column.sparse_map();
+            } else {
+                output_sparse_map = condition & input_column.sparse_map();
+            }
+        }
+        output_sparse_map.resize(output_logical_rows);
+        output_physical_rows = output_sparse_map.count();
+        // Input column is sparse, but output column is dense
+        if (output_physical_rows != output_logical_rows) {
+            output_column.set_sparse_map(std::move(output_sparse_map));
+        }
+    } else {
+        if constexpr (std::is_same_v<FullOrEmpty, FullResult>) {
+            output_physical_rows = input_column.row_count();
+        } else {
+            // EmptyResult
+            if constexpr (arguments_reversed) {
+                output_physical_rows = output_logical_rows - condition.count();
+            } else {
+                output_physical_rows = condition.count();
+            }
+            if (output_physical_rows != output_logical_rows) {
+                if constexpr (arguments_reversed) {
+                    output_sparse_map = ~condition;
+                } else {
+                    output_sparse_map = condition;
+                }
+                output_sparse_map.resize(output_logical_rows);
+                output_column.set_sparse_map(std::move(output_sparse_map));
+            }
+        }
     }
     if (output_physical_rows > 0) {
         output_column.allocate_data(output_physical_rows * get_type_size(output_column.type().data_type()));
@@ -128,7 +158,7 @@ static void ternary_transform(const util::BitSet& condition,
                               value_type value,
                               Column& output_column,
                               functor&& f) {
-    initialise_output_column<arguments_reversed>(condition, input_column, output_column);
+    initialise_output_column<FullResult, arguments_reversed>(condition, input_column, output_column);
     // TODO: Consider optimisations
     // Use std::transform when input_column is dense
     // e.g. If the result is mostly value, then fully initialise output column to value, and then just iterate
@@ -150,43 +180,11 @@ static void ternary_transform(const util::BitSet& condition,
 }
 
 template <typename input_tdt, bool arguments_reversed>
-static void ternary(const util::BitSet& condition, const Column& input_column, Column& output_column) {
-    util::check(&input_column != &output_column, "Cannot overwrite input column in ternary operator");
-    size_t output_physical_rows;
-    size_t output_logical_rows = condition.size();
-    util::BitSet output_sparse_map;
-    if (input_column.is_sparse()) {
-        if constexpr (arguments_reversed) {
-            output_sparse_map = ~condition & input_column.sparse_map();
-        } else {
-            output_sparse_map = condition & input_column.sparse_map();
-        }
-        output_sparse_map.resize(output_logical_rows);
-        output_physical_rows = output_sparse_map.count();
-        // Input column is sparse, but output column is dense
-        if (output_physical_rows != output_logical_rows) {
-            output_column.set_sparse_map(std::move(output_sparse_map));
-        }
-    } else {
-        if constexpr (arguments_reversed) {
-            output_physical_rows = output_logical_rows - condition.count();
-        } else {
-            output_physical_rows = condition.count();
-        }
-        if (output_physical_rows != output_logical_rows) {
-            if constexpr (arguments_reversed) {
-                output_sparse_map = ~condition;
-            } else {
-                output_sparse_map = condition;
-            }
-            output_sparse_map.resize(output_logical_rows);
-            output_column.set_sparse_map(std::move(output_sparse_map));
-        }
-    }
-    if (output_physical_rows > 0) {
-        output_column.allocate_data(output_physical_rows * get_type_size(output_column.type().data_type()));
-    }
-    output_column.set_row_data(output_logical_rows - 1);
+static void ternary_transform(const util::BitSet& condition,
+                              const Column& input_column,
+                              ARCTICDB_UNUSED EmptyResult empty_result,
+                              Column& output_column) {
+    initialise_output_column<EmptyResult, arguments_reversed>(condition, input_column, output_column);
     auto output_data = output_column.data();
     if (output_column.is_sparse()) {
         auto output_end_it = output_data.end<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();

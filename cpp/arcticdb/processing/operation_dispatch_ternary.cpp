@@ -306,9 +306,10 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
             }
         } else if constexpr (is_numeric_type(col_type_info::data_type) || is_bool_type(col_type_info::data_type)) {
             output_column = std::make_unique<Column>(col.column_->type(), Sparsity::PERMITTED);
-            ternary<typename col_type_info::TDT, arguments_reversed>(
+            ternary_transform<typename col_type_info::TDT, arguments_reversed>(
                     condition,
                     *col.column_,
+                    EmptyResult{},
                     *output_column);
         } else {
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",
