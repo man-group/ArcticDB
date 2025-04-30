@@ -270,6 +270,7 @@ set(arcticdb_srcs
         processing/expression_node.hpp
         processing/query_planner.hpp
         processing/sorted_aggregation.hpp
+        processing/ternary_utils.hpp
         processing/unsorted_aggregation.hpp
         storage/async_storage.hpp
         storage/constants.hpp
@@ -535,7 +536,8 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        storage/s3/ec2_utils.cpp)
+        storage/s3/ec2_utils.cpp
+        processing/ternary_utils.hpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 

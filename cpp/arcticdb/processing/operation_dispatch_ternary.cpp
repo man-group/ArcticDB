@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/processing/operation_dispatch_ternary.hpp>
+#include <arcticdb/processing/ternary_utils.hpp>
 
 namespace arcticdb {
 
@@ -81,7 +82,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                     output_column = std::make_unique<Column>(make_scalar_type(DataType::UTF_DYNAMIC64), Sparsity::PERMITTED);
                     string_pool = std::make_shared<StringPool>();
 
-                    // TODO: Remove code duplication with Column::ternary
+                    // TODO: Remove code duplication with ternary
                     using output_tdt = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
                     initialise_output_column(condition, *left.column_, *right.column_, *output_column);
                     auto output_data = output_column->data();
@@ -131,7 +132,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                 using TargetType = typename ternary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType>::type;
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
-                Column::ternary<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
+                ternary<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
                         condition,
                         *(left.column_),
                         *(right.column_),
@@ -140,7 +141,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                 using TargetType = bool;
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(DataType::BOOL8), Sparsity::PERMITTED);
-                Column::ternary<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
+                ternary<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
                         condition,
                         *(left.column_),
                         *(right.column_),
@@ -177,7 +178,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                     string_pool = std::make_shared<StringPool>();
                     auto value_string = std::string(*val.str_data(), val.len());
 
-                    // TODO: Remove code duplication with Column::ternary
+                    // TODO: Remove code duplication with ternary
                     using output_tdt = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
                     initialise_output_column<arguments_reversed>(condition, *col.column_, *output_column);
                     auto output_data = output_column->data();
@@ -232,7 +233,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 auto value = static_cast<TargetType>(val.get<typename val_type_info::RawType>());
                 value_string = fmt::format("{}", value);
-                Column::ternary<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>, TargetType, arguments_reversed>(
+                ternary<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>, TargetType, arguments_reversed>(
                         condition,
                         *(col.column_),
                         value,
@@ -243,7 +244,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                 output_column = std::make_unique<Column>(make_scalar_type(DataType::BOOL8), Sparsity::PERMITTED);
                 auto value = static_cast<TargetType>(val.get<typename val_type_info::RawType>());
                 value_string = fmt::format("{}", value);
-                Column::ternary<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>, TargetType, arguments_reversed>(
+                ternary<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>, TargetType, arguments_reversed>(
                         condition,
                         *(col.column_),
                         value,
@@ -344,7 +345,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
             }
         } else if constexpr (is_numeric_type(col_type_info::data_type) || is_bool_type(col_type_info::data_type)) {
             output_column = std::make_unique<Column>(col.column_->type(), Sparsity::PERMITTED);
-            Column::ternary<typename col_type_info::TDT, arguments_reversed>(
+            ternary<typename col_type_info::TDT, arguments_reversed>(
                     condition,
                     *col.column_,
                     *output_column);
@@ -434,7 +435,7 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& val, Em
             string_pool = std::make_shared<StringPool>();
             auto value_string = std::string(*val.str_data(), val.len());
             auto offset_string = string_pool->get(value_string);
-            Column::ternary<typename val_type_info::TDT, arguments_reversed>(
+            ternary<typename val_type_info::TDT, arguments_reversed>(
                     condition,
                     offset_string.offset(),
                     *output_column);
@@ -443,7 +444,7 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& val, Em
             output_column = std::make_unique<Column>(val.type(), Sparsity::PERMITTED);
             auto value = static_cast<TargetType>(val.get<typename val_type_info::RawType>());
             value_string = fmt::format("{}", value);
-            Column::ternary<typename val_type_info::TDT, arguments_reversed>(
+            ternary<typename val_type_info::TDT, arguments_reversed>(
                     condition,
                     value,
                     *output_column);
