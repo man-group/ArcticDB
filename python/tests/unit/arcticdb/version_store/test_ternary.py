@@ -1076,16 +1076,16 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
         ),
     ),
 )
-def test_ternary_sparse_hypothesis(lmdb_version_store_v1, df):
+def test_ternary_hypothesis(lmdb_version_store_v1, df):
     assume(not df.empty and not df["condition"].isnull().all() and not df["col1"].isnull().all() and not df["col2"].isnull().all())
-    print(df)
-    print(df.dtypes)
     lib = lmdb_version_store_v1
-    sym = "test_ternary_sparse_hypothesis"
+    dense_sym = "test_ternary_hypothesis_dense"
+    sparse_sym = "test_ternary_hypothesis_sparse"
 
     df.index = pd.date_range("2024-01-01", periods=len(df))
 
-    lib.write(sym, df, sparsify_floats=True)
+    lib.write(dense_sym, df)
+    lib.write(sparse_sym, df, sparsify_floats=True)
 
     # Projection
     # col/col
@@ -1093,49 +1093,35 @@ def test_ternary_sparse_hypothesis(lmdb_version_store_v1, df):
     expected["projected"] = np.where(expected["condition"].isnull().to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
     q = QueryBuilder()
     q = q.apply("projected", where(q["condition"].isnull(), q["col1"], q["col2"]))
-    received = lib.read(sym, query_builder=q).data
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, lib.read(dense_sym, query_builder=q).data, check_dtype=False)
+    assert_frame_equal(expected, lib.read(sparse_sym, query_builder=q).data, check_dtype=False)
     # col/val
     expected = df.copy(deep=True)
     expected["projected"] = np.where(expected["condition"].isnull().to_numpy(), expected["col1"].to_numpy(), 2000.0)
     q = QueryBuilder()
     q = q.apply("projected", where(q["condition"].isnull(), q["col1"], 2000))
-    received = lib.read(sym, query_builder=q).data
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, lib.read(dense_sym, query_builder=q).data, check_dtype=False)
+    assert_frame_equal(expected, lib.read(sparse_sym, query_builder=q).data, check_dtype=False)
     # val/col
     expected = df.copy(deep=True)
     expected["projected"] = np.where(expected["condition"].isnull().to_numpy(), 2000.0, expected["col2"].to_numpy())
     q = QueryBuilder()
     q = q.apply("projected", where(q["condition"].isnull(), 2000, q["col2"]))
-    received = lib.read(sym, query_builder=q).data
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, lib.read(dense_sym, query_builder=q).data, check_dtype=False)
+    assert_frame_equal(expected, lib.read(sparse_sym, query_builder=q).data, check_dtype=False)
     # val/val
     expected = df.copy(deep=True)
     expected["projected"] = np.where(expected["condition"].isnull().to_numpy(), 2000.0, 3000.0)
     q = QueryBuilder()
     q = q.apply("projected", where(q["condition"].isnull(), 2000, 3000))
-    received = lib.read(sym, query_builder=q).data
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, lib.read(dense_sym, query_builder=q).data, check_dtype=False)
+    assert_frame_equal(expected, lib.read(sparse_sym, query_builder=q).data, check_dtype=False)
 
     # Filters
-    # col/col
+    # Only test col/col, col/val etc can be achieved more efficiently without using the ternary operator
     expected = df.copy(deep=True)
     expected = expected[np.where(expected["condition"].isnull().to_numpy(), expected["col1"].isnull().to_numpy(), expected["col2"].isnull().to_numpy())]
     q = QueryBuilder()
     q = q[where(q["condition"].isnull(), q["col1"].isnull(), q["col2"].isnull())]
-    received = lib.read(sym, query_builder=q).data
-    assert_frame_equal(expected, received, check_dtype=False)
-    # col/val
-    expected = df.copy(deep=True)
-    expected = expected[np.where(expected["condition"].isnull().to_numpy(), expected["col1"].isnull().to_numpy(), True)]
-    q = QueryBuilder()
-    q = q[where(q["condition"].isnull(), q["col1"].isnull(), True)]
-    received = lib.read(sym, query_builder=q).data
-    assert_frame_equal(expected, received, check_dtype=False)
-    # val/col
-    expected = df.copy(deep=True)
-    expected = expected[np.where(expected["condition"].isnull().to_numpy(), False, expected["col2"].isnull().to_numpy())]
-    q = QueryBuilder()
-    q = q[where(q["condition"].isnull(), False, q["col2"].isnull())]
-    received = lib.read(sym, query_builder=q).data
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, lib.read(dense_sym, query_builder=q).data, check_dtype=False)
+    assert_frame_equal(expected, lib.read(sparse_sym, query_builder=q).data, check_dtype=False)
