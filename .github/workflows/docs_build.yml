@@ -54,11 +54,11 @@ jobs:
       - name: mkdocs build
         run: |
           set -x
-          # mike needs a git user to be set
+          # 'mike' needs a git user to be set
           git config --global user.name "${GITHUB_ACTOR}"
           git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
           cd docs/mkdocs
-          python mkdocs_build.py ${{inputs.latest && '--latest'}} ${{inputs.version}} 
+          python build.py ${{inputs.latest && '--latest'}} ${{inputs.version}} 
           
       - name: Deploy
         if: inputs.deploy
