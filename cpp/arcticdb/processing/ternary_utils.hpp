@@ -133,24 +133,51 @@ void ternary_transform(const util::BitSet& condition,
                        const Column& right_input_column,
                        Column& output_column,
                        functor&& f) {
-    initialise_output_column(condition, left_input_column, right_input_column, output_column);
-    auto output_data = output_column.data();
-    if (!left_input_column.is_sparse() && !right_input_column.is_sparse()) {
-        // Both inputs dense, implying output is also dense
-        auto left_data = left_input_column.data();
-        auto left_it = left_data.cbegin<left_input_tdt>();
-        auto left_end_it = left_data.cend<left_input_tdt>();
-        auto right_data = right_input_column.data();
-        auto right_it = right_data.cbegin<right_input_tdt>();
-        auto right_end_it = right_data.cend<right_input_tdt>();
-        auto output_it = output_data.begin<output_tdt>();
-        auto output_end_it = output_data.end<output_tdt>();
-        for (size_t idx = 0;
-             left_it != left_end_it && right_it != right_end_it && output_it != output_end_it;
-             ++idx, ++left_it, ++right_it, ++output_it) {
-            *output_it = f(condition.get_bit(idx), *left_it, *right_it);
+
+    auto left_percentage = static_cast<double>(condition.count()) / static_cast<double>(condition.size());
+    if (!left_input_column.is_sparse() && !right_input_column.is_sparse() &&
+        ((left_percentage >= 0.5 && left_input_column.type() == output_column.type()) ||
+        (left_percentage < 0.5 && right_input_column.type() == output_column.type()))) {
+        output_column = left_percentage >= 0.5 ? left_input_column.clone() : right_input_column.clone();
+        auto output_data = output_column.data();
+        auto output_accessor = random_accessor<output_tdt>(&output_data);
+        if (left_percentage >= 0.5) {
+            auto final_condition = ~condition;
+            final_condition.resize(condition.size());
+            final_condition.optimize();
+            auto right_data = right_input_column.data();
+            auto right_accessor = random_accessor<right_input_tdt>(&right_data);
+            auto end_bit = final_condition.end();
+            for (auto set_bit = final_condition.first(); set_bit < end_bit; ++set_bit) {
+                output_accessor.set(*set_bit, right_accessor.at(*set_bit));
+            }
+        } else {
+            auto final_condition = condition;
+            final_condition.optimize();
+            auto left_data = left_input_column.data();
+            auto left_accessor = random_accessor<left_input_tdt>(&left_data);
+            auto end_bit = condition.end();
+            for (auto set_bit = condition.first(); set_bit < end_bit; ++set_bit) {
+                output_accessor.set(*set_bit, left_accessor.at(*set_bit));
+            }
         }
+        // Both inputs dense, implying output is also dense
+//        auto left_data = left_input_column.data();
+//        auto left_it = left_data.cbegin<left_input_tdt>();
+//        const auto left_end_it = left_data.cend<left_input_tdt>();
+//        auto right_data = right_input_column.data();
+//        auto right_it = right_data.cbegin<right_input_tdt>();
+//        const auto right_end_it = right_data.cend<right_input_tdt>();
+//        auto output_it = output_data.begin<output_tdt>();
+//        const auto output_end_it = output_data.end<output_tdt>();
+//        for (size_t idx = 0;
+//             left_it != left_end_it && right_it != right_end_it && output_it != output_end_it;
+//             ++idx, ++left_it, ++right_it, ++output_it) {
+//            *output_it = f(condition.get_bit(idx), *left_it, *right_it);
+//        }
     } else {
+        initialise_output_column(condition, left_input_column, right_input_column, output_column);
+        auto output_data = output_column.data();
         // TODO: Consider optimisations
         // Use std::transform when input_column is dense
         // e.g. If the result is mostly value, then fully initialise output column to value, and then just iterate

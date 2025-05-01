@@ -25,10 +25,11 @@ struct IChunkedBufferRandomAccessor {
     template<class Base>
     struct Interface : Base {
         typename TDT::DataTypeTag::raw_type at(size_t idx) const { return folly::poly_call<0>(*this, idx); };
+        void set(size_t idx, typename TDT::DataTypeTag::raw_type value) { folly::poly_call<1>(*this, idx, value); }
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::at>;
+    using Members = folly::PolyMembers<&T::at, &T::set>;
 };
 
 template<typename TDT>
@@ -46,6 +47,10 @@ public:
 
     RawType at(size_t idx) const {
         return *(base_ptr_ + idx);
+    }
+
+    void set(size_t idx, RawType value) {
+        *(const_cast<RawType*>(base_ptr_) + idx) = value;
     }
 private:
     const RawType* base_ptr_;
@@ -70,6 +75,14 @@ public:
                                                      "ColumnData::at called with out of bounds index");
         return *(base_ptrs_[div.quot] + div.rem);
     }
+
+    void set(size_t idx, RawType value) {
+        // quot is the block index, rem is the offset within the block
+        auto div = std::div(static_cast<long long>(idx), values_per_block_);
+        debug::check<ErrorCode::E_ASSERTION_FAILURE>(div.quot < static_cast<long long>(base_ptrs_.size()),
+                                                     "ColumnData::at called with out of bounds index");
+        *(const_cast<RawType*>(base_ptrs_[div.quot]) + div.rem) = value;
+    }
 private:
     static constexpr auto values_per_block_ = BufferSize / sizeof(RawType);
     std::vector<const RawType*> base_ptrs_;
@@ -90,6 +103,14 @@ public:
         ptr += block_and_offset.offset_;
         return *reinterpret_cast<const RawType *>(ptr);
     }
+
+    void set(size_t idx, RawType value) {
+        auto pos_bytes = idx * sizeof(RawType);
+        auto block_and_offset = parent_->buffer().block_and_offset(pos_bytes);
+        auto ptr = block_and_offset.block_->data();
+        ptr += block_and_offset.offset_;
+        *reinterpret_cast<RawType *>(ptr) = value;
+    }
 private:
     ColumnData* parent_;
 };
@@ -99,10 +120,11 @@ struct IColumnDataRandomAccessor {
     template<class Base>
     struct Interface : Base {
         typename TDT::DataTypeTag::raw_type at(size_t idx) const { return folly::poly_call<0>(*this, idx); };
+        void set(size_t idx, typename TDT::DataTypeTag::raw_type value) { folly::poly_call<1>(*this, idx, value); };
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::at>;
+    using Members = folly::PolyMembers<&T::at, &T::set>;
 };
 
 template<typename TDT>
@@ -137,6 +159,18 @@ public:
         return chunked_buffer_random_accessor_.at(physical_offset);
     }
 
+    void set(size_t idx, RawType value) {
+        debug::check<ErrorCode::E_ASSERTION_FAILURE>(parent_->bit_vector(),
+                                                     "ColumnData::at called with sparse true, but bit_vector_ == nullptr");
+        debug::check<ErrorCode::E_ASSERTION_FAILURE>(parent_->bit_vector()->size() > idx,
+                                                     "ColumnData::at called with sparse true, but index is out of range");
+        debug::check<ErrorCode::E_ASSERTION_FAILURE>(parent_->bit_vector()->get_bit(idx),
+                                                     "ColumnData::at called with sparse true, but selected bit is false");
+        // This is the same as using rank_corrected, but we always require the idx bit to be true, so do the -1 ourselves for efficiency
+        auto physical_offset = parent_->bit_vector()->rank(idx, bit_index_) - 1;
+        chunked_buffer_random_accessor_.set(physical_offset, value);
+    }
+
 private:
     ChunkedBufferRandomAccessor<TDT> chunked_buffer_random_accessor_;
     ColumnData* parent_;
@@ -160,6 +194,10 @@ public:
 
     RawType at(size_t idx) const {
         return chunked_buffer_random_accessor_.at(idx);
+    }
+
+    void set(size_t idx, RawType value) {
+        chunked_buffer_random_accessor_.set(idx, value);
     }
 
 private:
