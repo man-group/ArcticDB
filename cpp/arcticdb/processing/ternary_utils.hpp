@@ -153,11 +153,11 @@ void ternary_transform(const util::BitSet& condition,
 }
 
 template <typename input_tdt, typename output_tdt, typename value_type, bool arguments_reversed, typename functor>
-static void ternary_transform(const util::BitSet& condition,
-                              const Column& input_column,
-                              value_type value,
-                              Column& output_column,
-                              functor&& f) {
+void ternary_transform(const util::BitSet& condition,
+                       const Column& input_column,
+                       value_type value,
+                       Column& output_column,
+                       functor&& f) {
     initialise_output_column<FullResult, arguments_reversed>(condition, input_column, output_column);
     // TODO: Consider optimisations
     // Use std::transform when input_column is dense
@@ -180,11 +180,11 @@ static void ternary_transform(const util::BitSet& condition,
 }
 
 template <typename input_tdt, bool arguments_reversed, typename functor>
-static void ternary_transform(const util::BitSet& condition,
-                              const Column& input_column,
-                              ARCTICDB_UNUSED EmptyResult empty_result,
-                              Column& output_column,
-                              functor&& f) {
+void ternary_transform(const util::BitSet& condition,
+                       const Column& input_column,
+                       ARCTICDB_UNUSED EmptyResult empty_result,
+                       Column& output_column,
+                       functor&& f) {
     initialise_output_column<EmptyResult, arguments_reversed>(condition, input_column, output_column);
     auto output_data = output_column.data();
     if (output_column.is_sparse()) {
@@ -202,11 +202,29 @@ static void ternary_transform(const util::BitSet& condition,
     }
 }
 
+template<typename output_tdt>
+void ternary_transform(const util::BitSet& condition,
+                       typename output_tdt::DataTypeTag::raw_type left_val,
+                       typename output_tdt::DataTypeTag::raw_type right_val,
+                       Column& output_column) {
+    auto output_rows = condition.size();
+    if (output_rows > 0) {
+        output_column.allocate_data(output_rows * get_type_size(output_column.type().data_type()));
+    }
+    output_column.set_row_data(output_rows - 1);
+    auto output_data = output_column.data();
+    auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED>();
+    for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it; ++output_it) {
+        auto idx = output_it->idx();
+        output_it->value() = condition[idx] ? left_val : right_val;
+    }
+}
+
 template <typename value_tdt, bool arguments_reversed>
-static void ternary_transform(const util::BitSet& condition,
-                              typename value_tdt::DataTypeTag::raw_type value,
-                              ARCTICDB_UNUSED EmptyResult empty_result,
-                              Column& output_column) {
+void ternary_transform(const util::BitSet& condition,
+                       typename value_tdt::DataTypeTag::raw_type value,
+                       ARCTICDB_UNUSED EmptyResult empty_result,
+                       Column& output_column) {
     initialise_output_column<arguments_reversed>(condition, output_column);
     auto output_data = output_column.data();
     auto output_end_it = output_data.end<value_tdt>();

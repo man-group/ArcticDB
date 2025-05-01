@@ -287,10 +287,7 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& left, c
                     // Put both possible strings in the pool for performance, it's possible one will be redundant if condition is all true or all false
                     auto left_offset = string_pool->get(left_string, false).offset();
                     auto right_offset = string_pool->get(right_string, false).offset();
-                    // TODO: Use ColumnDataIterator and more efficient bitset access
-                    for (size_t idx = 0; idx < condition.size(); ++idx) {
-                        output_column->push_back(condition[idx] ? left_offset : right_offset);
-                    }
+                    ternary_transform<typename left_type_info::TDT>(condition, left_offset, right_offset, *output_column);
                 } else {
                     internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexepcted fixed-width string value in ternary operator");
                 }
@@ -302,20 +299,14 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& left, c
                 auto right_value = static_cast<TargetType>(right.get<typename right_type_info::RawType>());
                 left_string = fmt::format("{}", left_value);
                 right_string = fmt::format("{}", right_value);
-                // TODO: Use ColumnDataIterator and more efficient bitset access
-                for (size_t idx = 0; idx < condition.size(); ++idx) {
-                    output_column->push_back(condition[idx] ? left_value : right_value);
-                }
+                ternary_transform<ScalarTagType<DataTypeTag<output_data_type>>>(condition, left_value, right_value, *output_column);
             } else if constexpr (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type)) {
                 output_column = std::make_unique<Column>(make_scalar_type(DataType::BOOL8), Sparsity::PERMITTED);
                 auto left_value = left.get<bool>();
                 auto right_value = right.get<bool>();
                 left_string = fmt::format("{}", left_value);
                 right_string = fmt::format("{}", right_value);
-                // TODO: Use ColumnDataIterator and more efficient bitset access
-                for (size_t idx = 0; idx < condition.size(); ++idx) {
-                    output_column->push_back(condition[idx] ? left_value : right_value);
-                }
+                ternary_transform<typename left_type_info::TDT>(condition, left_value, right_value, *output_column);
             } else {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",
                                                                       ternary_operation_with_types_to_string(
