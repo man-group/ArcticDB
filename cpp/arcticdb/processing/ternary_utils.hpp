@@ -134,26 +134,49 @@ void ternary_transform(const util::BitSet& condition,
                        Column& output_column,
                        functor&& f) {
     initialise_output_column(condition, left_input_column, right_input_column, output_column);
-    // TODO: Consider optimisations
-    // Use std::transform when input_column is dense
-    // e.g. If the result is mostly value, then fully initialise output column to value, and then just iterate
-    // true/false bits of condition as appropriate
     auto output_data = output_column.data();
-    if (output_column.is_sparse()) {
-        auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
-        for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(); output_it != output_end_it; ++output_it) {
-            auto idx = output_it->idx();
-            output_it->value() = f(condition.get_bit(idx),
-                                   *left_input_column.scalar_at<typename left_input_tdt::DataTypeTag::raw_type>(idx),
-                                   *right_input_column.scalar_at<typename right_input_tdt::DataTypeTag::raw_type>(idx));
+    if (!left_input_column.is_sparse() && !right_input_column.is_sparse()) {
+        // Both inputs dense, implying output is also dense
+        auto left_data = left_input_column.data();
+        auto left_it = left_data.cbegin<left_input_tdt>();
+        auto left_end_it = left_data.cend<left_input_tdt>();
+        auto right_data = right_input_column.data();
+        auto right_it = right_data.cbegin<right_input_tdt>();
+        auto right_end_it = right_data.cend<right_input_tdt>();
+        auto output_it = output_data.begin<output_tdt>();
+        auto output_end_it = output_data.end<output_tdt>();
+        for (size_t idx = 0;
+             left_it != left_end_it && right_it != right_end_it && output_it != output_end_it;
+             ++idx, ++left_it, ++right_it, ++output_it) {
+            *output_it = f(condition.get_bit(idx), *left_it, *right_it);
         }
     } else {
-        auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED>();
-        for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it; ++output_it) {
-            auto idx = output_it->idx();
-            output_it->value() = f(condition.get_bit(idx),
-                                   *left_input_column.scalar_at<typename left_input_tdt::DataTypeTag::raw_type>(idx),
-                                   *right_input_column.scalar_at<typename right_input_tdt::DataTypeTag::raw_type>(idx));
+        // TODO: Consider optimisations
+        // Use std::transform when input_column is dense
+        // e.g. If the result is mostly value, then fully initialise output column to value, and then just iterate
+        // true/false bits of condition as appropriate
+        if (output_column.is_sparse()) {
+            auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+            for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+                 output_it != output_end_it; ++output_it) {
+                auto idx = output_it->idx();
+                output_it->value() = f(condition.get_bit(idx),
+                                       *left_input_column.scalar_at<typename left_input_tdt::DataTypeTag::raw_type>(
+                                               idx),
+                                       *right_input_column.scalar_at<typename right_input_tdt::DataTypeTag::raw_type>(
+                                               idx));
+            }
+        } else {
+            auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED>();
+            for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>();
+                 output_it != output_end_it; ++output_it) {
+                auto idx = output_it->idx();
+                output_it->value() = f(condition.get_bit(idx),
+                                       *left_input_column.scalar_at<typename left_input_tdt::DataTypeTag::raw_type>(
+                                               idx),
+                                       *right_input_column.scalar_at<typename right_input_tdt::DataTypeTag::raw_type>(
+                                               idx));
+            }
         }
     }
 }
