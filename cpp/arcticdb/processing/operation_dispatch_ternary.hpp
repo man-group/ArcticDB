@@ -28,6 +28,8 @@
 
 namespace arcticdb {
 
+VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStrings& left, const ColumnWithStrings& right);
+
 VariantData dispatch_ternary(const VariantData& condition, const VariantData& left, const VariantData& right, OperationType operation);
 
 }
