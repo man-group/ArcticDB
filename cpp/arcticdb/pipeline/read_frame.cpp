@@ -234,7 +234,7 @@ void decode_index_field(
             auto offset = sz * (slice_and_key.slice_.row_range.first - frame.offset());
             auto tot_size = sz * slice_and_key.slice_.row_range.diff();
 
-            SliceDataSink sink(buffer.data() + offset, tot_size);
+            SliceDataSink sink(buffer.bytes_at(offset, tot_size), tot_size);
             ARCTICDB_DEBUG(log::storage(), "Creating index slice with total size {} ({} - {})", tot_size, sz,
                            slice_and_key.slice_.row_range.diff());
 
