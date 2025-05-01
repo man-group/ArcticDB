@@ -83,7 +83,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                             *(left.column_),
                             *(right.column_),
                             *output_column,
-                            [&string_pool, &left, &right](bool cond, auto left_val, auto right_val) -> typename left_type_info::RawType {
+                            [&string_pool, &left, &right](bool cond, entity::position_t left_val, entity::position_t right_val) -> typename entity::position_t {
                                 auto string_at_offset = cond ? left.string_at_offset((left_val)) : right.string_at_offset(right_val);
                                 if (string_at_offset.has_value()) {
                                     auto offset_string = string_pool->get(*string_at_offset);
@@ -108,7 +108,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                         *(left.column_),
                         *(right.column_),
                         *output_column,
-                        [](bool condition, auto left_val, auto right_val) { return condition ? left_val : right_val; });
+                        [](bool condition, TargetType left_val, TargetType right_val) { return condition ? left_val : right_val; });
             } else if constexpr (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type)) {
                 output_column = std::make_unique<Column>(make_scalar_type(DataType::BOOL8), Sparsity::PERMITTED);
                 ternary_transform<typename left_type_info::TDT, typename right_type_info::TDT, typename left_type_info::TDT>(
@@ -116,7 +116,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                         *(left.column_),
                         *(right.column_),
                         *output_column,
-                        [](bool condition, auto left_val, auto right_val) { return condition ? left_val : right_val; });
+                        [](bool condition, bool left_val, bool right_val) { return condition ? left_val : right_val; });
             } else {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",
                                                                       ternary_operation_with_types_to_string(
@@ -153,7 +153,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                             *(col.column_),
                             value_string,
                             *output_column,
-                            [&string_pool, &col](bool cond, auto left_val, auto right_val) -> typename col_type_info::RawType {
+                            [&string_pool, &col](bool cond, entity::position_t left_val, std::string right_val) -> entity::position_t {
                                 std::optional<std::string_view> string_at_offset;
                                 if constexpr (arguments_reversed) {
                                     string_at_offset = cond ? right_val : col.string_at_offset(left_val);
@@ -184,7 +184,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                         *(col.column_),
                         value,
                         *output_column,
-                        [](bool condition, auto left_val, auto right_val) {
+                        [](bool condition, TargetType left_val, TargetType right_val) {
                             if constexpr (arguments_reversed) {
                                 return condition ? right_val : left_val;
                             } else {
@@ -200,7 +200,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                         *(col.column_),
                         value,
                         *output_column,
-                        [](bool condition, auto left_val, auto right_val) {
+                        [](bool condition, bool left_val, bool right_val) {
                             if constexpr (arguments_reversed) {
                                 return condition ? right_val : left_val;
                             } else {
@@ -239,7 +239,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                     *col.column_,
                     EmptyResult{},
                     *output_column,
-                    [&string_pool, &col](auto val) -> typename col_type_info::RawType {
+                    [&string_pool, &col](entity::position_t val) -> entity::position_t {
                         auto string_at_offset = col.string_at_offset(val);
                         if (string_at_offset.has_value()) {
                             auto offset_string = string_pool->get(*string_at_offset);
@@ -255,7 +255,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                     *col.column_,
                     EmptyResult{},
                     *output_column,
-                    [](auto val) { return val; });
+                    [](typename col_type_info::RawType val) { return val; });
         } else {
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",
                                                                   ternary_operation_with_types_to_string<arguments_reversed>(

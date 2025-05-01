@@ -45,8 +45,8 @@ void initialise_output_column(const util::BitSet& condition,
     output_column.set_row_data(output_logical_rows - 1);
 }
 
-// TODO: requires FullResult or EmptyResult for first template arg
 template<typename FullOrEmpty, bool arguments_reversed>
+requires std::is_same_v<FullOrEmpty, FullResult> || std::is_same_v<FullOrEmpty, EmptyResult>
 void initialise_output_column(const util::BitSet& condition,
                               const Column& input_column,
                               Column& output_column) {
@@ -122,6 +122,12 @@ void initialise_output_column(const util::BitSet& condition, Column& output_colu
 }
 
 template <typename left_input_tdt, typename right_input_tdt, typename output_tdt, typename functor>
+requires std::is_invocable_r_v<
+        typename output_tdt::DataTypeTag::raw_type,
+        functor,
+        bool,
+        typename output_tdt::DataTypeTag::raw_type,
+        typename output_tdt::DataTypeTag::raw_type>
 void ternary_transform(const util::BitSet& condition,
                        const Column& left_input_column,
                        const Column& right_input_column,
@@ -138,21 +144,27 @@ void ternary_transform(const util::BitSet& condition,
         for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(); output_it != output_end_it; ++output_it) {
             auto idx = output_it->idx();
             output_it->value() = f(condition.get_bit(idx),
-                                   static_cast<typename output_tdt::DataTypeTag::raw_type>(*left_input_column.scalar_at<typename left_input_tdt::DataTypeTag::raw_type>(idx)),
-                                   static_cast<typename output_tdt::DataTypeTag::raw_type>(*right_input_column.scalar_at<typename right_input_tdt::DataTypeTag::raw_type>(idx)));
+                                   *left_input_column.scalar_at<typename left_input_tdt::DataTypeTag::raw_type>(idx),
+                                   *right_input_column.scalar_at<typename right_input_tdt::DataTypeTag::raw_type>(idx));
         }
     } else {
         auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED>();
         for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it; ++output_it) {
             auto idx = output_it->idx();
             output_it->value() = f(condition.get_bit(idx),
-                                   static_cast<typename output_tdt::DataTypeTag::raw_type>(*left_input_column.scalar_at<typename left_input_tdt::DataTypeTag::raw_type>(idx)),
-                                   static_cast<typename output_tdt::DataTypeTag::raw_type>(*right_input_column.scalar_at<typename right_input_tdt::DataTypeTag::raw_type>(idx)));
+                                   *left_input_column.scalar_at<typename left_input_tdt::DataTypeTag::raw_type>(idx),
+                                   *right_input_column.scalar_at<typename right_input_tdt::DataTypeTag::raw_type>(idx));
         }
     }
 }
 
 template <typename input_tdt, typename output_tdt, typename value_type, bool arguments_reversed, typename functor>
+requires std::is_invocable_r_v<
+        typename output_tdt::DataTypeTag::raw_type,
+        functor,
+        bool,
+        typename output_tdt::DataTypeTag::raw_type,
+        value_type>
 void ternary_transform(const util::BitSet& condition,
                        const Column& input_column,
                        value_type value,
@@ -180,6 +192,10 @@ void ternary_transform(const util::BitSet& condition,
 }
 
 template <typename input_tdt, bool arguments_reversed, typename functor>
+requires std::is_invocable_r_v<
+        typename input_tdt::DataTypeTag::raw_type,
+        functor,
+        typename input_tdt::DataTypeTag::raw_type>
 void ternary_transform(const util::BitSet& condition,
                        const Column& input_column,
                        ARCTICDB_UNUSED EmptyResult empty_result,
