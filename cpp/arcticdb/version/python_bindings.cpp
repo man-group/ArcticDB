@@ -240,21 +240,21 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     py::class_<FrameDataWrapper, std::shared_ptr<FrameDataWrapper>>(version, "FrameDataWrapper")
             .def_property_readonly("data", &FrameDataWrapper::data);
 
-    using PythonOutputFrame = arcticdb::pipelines::PythonOutputFrame;
-    py::class_<PythonOutputFrame>(version, "PythonOutputFrame")
+    using PandasOutputFrame = arcticdb::pipelines::PandasOutputFrame;
+    py::class_<PandasOutputFrame>(version, "PandasOutputFrame")
         //.def(py::init<const SegmentInMemory&, OutputFormat output_format, std::shared_ptr<BufferHolder>>())
         .def(py::init<>([](const SegmentInMemory& segment_in_memory, OutputFormat output_format) {
-            return PythonOutputFrame(segment_in_memory, output_format);
+            return PandasOutputFrame(segment_in_memory, output_format);
         }))
         .def_property_readonly("value", [](py::object & obj){
-            auto& fd = obj.cast<PythonOutputFrame&>();
+            auto& fd = obj.cast<PandasOutputFrame&>();
             return fd.arrays(obj);
         })
-        .def_property_readonly("offset", [](PythonOutputFrame& self) {
+        .def_property_readonly("offset", [](PandasOutputFrame& self) {
             return self.frame().offset(); })
-        .def_property_readonly("names", &PythonOutputFrame::names, py::return_value_policy::reference)
-        .def_property_readonly("index_columns", &PythonOutputFrame::index_columns, py::return_value_policy::reference)
-        .def_property_readonly("row_count", [](PythonOutputFrame& self) {
+        .def_property_readonly("names", &PandasOutputFrame::names, py::return_value_policy::reference)
+        .def_property_readonly("index_columns", &PandasOutputFrame::index_columns, py::return_value_policy::reference)
+        .def_property_readonly("row_count", [](PandasOutputFrame& self) {
             return self.frame().row_count();
         });
 
@@ -748,7 +748,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 const auto& tsd_proto = tsd.proto();
                 ReadResult res{
                     vit,
-                    PythonOutputFrame{
+                    PandasOutputFrame{
                         SegmentInMemory{tsd.as_stream_descriptor()},  read_options.output_format()},
                         read_options.output_format(),
                         tsd_proto.normalization(),
@@ -819,7 +819,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                  output.reserve(results.size());
                  for(auto& [vit, tsd] : results) {
                      const auto& tsd_proto = tsd.proto();
-                     ReadResult res{vit, PythonOutputFrame{
+                     ReadResult res{vit, PandasOutputFrame{
                          SegmentInMemory{tsd.as_stream_descriptor()}, read_options.output_format()},
                                     read_options.output_format(),
                                     tsd_proto.normalization(),

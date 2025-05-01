@@ -5,20 +5,20 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/pipeline/python_output_frame.hpp>
+#include <arcticdb/pipeline/pandas_output_frame.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/column_store/column_utils.hpp>
 
 namespace arcticdb::pipelines {
 
-PythonOutputFrame::PythonOutputFrame(const SegmentInMemory &frame, OutputFormat output_format) :
+PandasOutputFrame::PandasOutputFrame(const SegmentInMemory &frame, OutputFormat output_format) :
         module_data_(ModuleData::instance()),
         frame_(frame),
         names_(frame.fields().size() - frame.descriptor().index().field_count()),
         index_columns_(frame.descriptor().index().field_count()),
         output_format_(output_format) {
-    ARCTICDB_SAMPLE_DEFAULT(PythonOutputFrameCtor)
+    ARCTICDB_SAMPLE_DEFAULT(PandasOutputFrameCtor)
     const auto field_count = frame.descriptor().index().field_count();
     // works because we ensure that the index must be fetched
     for (std::size_t c = 0; c < field_count; ++c) {
@@ -29,7 +29,7 @@ PythonOutputFrame::PythonOutputFrame(const SegmentInMemory &frame, OutputFormat 
     }
 }
 
-PythonOutputFrame::~PythonOutputFrame() {
+PandasOutputFrame::~PandasOutputFrame() {
     if(frame_.is_null())
         return;
 
@@ -62,7 +62,7 @@ PythonOutputFrame::~PythonOutputFrame() {
     }
 }
 
-std::shared_ptr<FrameDataWrapper> PythonOutputFrame::arrays(py::object &ref) {
+std::shared_ptr<FrameDataWrapper> PandasOutputFrame::arrays(py::object &ref) {
     if(auto cached = arrays_.lock())
         return cached;
 
@@ -71,7 +71,7 @@ std::shared_ptr<FrameDataWrapper> PythonOutputFrame::arrays(py::object &ref) {
     return generated;
 }
 
-py::array PythonOutputFrame::array_at(std::size_t col_pos, py::object &anchor) {
+py::array PandasOutputFrame::array_at(std::size_t col_pos, py::object &anchor) {
     return arcticdb::detail::array_at(frame_, col_pos, output_format_, anchor);
 }
 
