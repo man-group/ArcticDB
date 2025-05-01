@@ -179,24 +179,25 @@ static void ternary_transform(const util::BitSet& condition,
     }
 }
 
-template <typename input_tdt, bool arguments_reversed>
+template <typename input_tdt, bool arguments_reversed, typename functor>
 static void ternary_transform(const util::BitSet& condition,
                               const Column& input_column,
                               ARCTICDB_UNUSED EmptyResult empty_result,
-                              Column& output_column) {
+                              Column& output_column,
+                              functor&& f) {
     initialise_output_column<EmptyResult, arguments_reversed>(condition, input_column, output_column);
     auto output_data = output_column.data();
     if (output_column.is_sparse()) {
         auto output_end_it = output_data.end<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
         for (auto output_it = output_data.begin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(); output_it != output_end_it; ++output_it) {
             auto idx = output_it->idx();
-            output_it->value() = static_cast<typename input_tdt::DataTypeTag::raw_type>(*input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx));
+            output_it->value() = f(*input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx));
         }
     } else {
         auto output_end_it = output_data.end<input_tdt, IteratorType::ENUMERATED>();
         for (auto output_it = output_data.begin<input_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it; ++output_it) {
             auto idx = output_it->idx();
-            output_it->value() = static_cast<typename input_tdt::DataTypeTag::raw_type>(*input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx));
+            output_it->value() = f(*input_column.scalar_at<typename input_tdt::DataTypeTag::raw_type>(idx));
         }
     }
 }
