@@ -16,7 +16,7 @@
 #include <arcticdb/pipeline/write_options.hpp>
 
 namespace arcticdb::pipelines {
-struct PythonOutputFrame;
+struct PandasOutputFrame;
 struct InputTensorFrame;
 using FilterRange = std::variant<std::monostate, IndexRange, RowRange>;
 }

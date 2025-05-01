@@ -12,7 +12,7 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
-#include <arcticdb/pipeline/python_output_frame.hpp>
+#include <arcticdb/pipeline/pandas_output_frame.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 
@@ -20,8 +20,7 @@
 
 namespace arcticdb {
 
-// TODO: Rename the PythonOutputFrame to PandasOutputFrame
-using OutputFrame = std::variant<pipelines::PythonOutputFrame, ArrowOutputFrame>;
+using OutputFrame = std::variant<pipelines::PandasOutputFrame, ArrowOutputFrame>;
 
 struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
     ReadResult(
@@ -84,7 +83,7 @@ inline ReadResult create_python_read_result(
         if (output_format == OutputFormat::ARROW) {
             return ArrowOutputFrame{segment_to_arrow_data(result.frame_), names_from_segment(result.frame_)};
         } else {
-            return pipelines::PythonOutputFrame{result.frame_, output_format};
+            return pipelines::PandasOutputFrame{result.frame_, output_format};
         }
     }();
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);

@@ -239,7 +239,7 @@ set(arcticdb_srcs
         pipeline/input_tensor_frame.hpp
         pipeline/pipeline_common.hpp
         pipeline/pipeline_utils.hpp
-        pipeline/python_output_frame.hpp
+        pipeline/pandas_output_frame.cpp
         pipeline/query.hpp
         pipeline/read_options.hpp
         pipeline/read_options.hpp
@@ -440,7 +440,7 @@ set(arcticdb_srcs
         pipeline/index_segment_reader.cpp
         pipeline/index_utils.cpp
         pipeline/pipeline_context.cpp
-        pipeline/python_output_frame.cpp
+        pipeline/pandas_output_frame.cpp
         pipeline/query.cpp
         pipeline/read_frame.cpp
         pipeline/slicing.cpp

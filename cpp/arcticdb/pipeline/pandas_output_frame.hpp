@@ -14,13 +14,13 @@ namespace arcticdb::pipelines {
 
 namespace py = pybind11;
 
-struct ARCTICDB_VISIBILITY_HIDDEN PythonOutputFrame {
+struct ARCTICDB_VISIBILITY_HIDDEN PandasOutputFrame {
 
-    PythonOutputFrame(const SegmentInMemory& frame, OutputFormat output_format);
+    PandasOutputFrame(const SegmentInMemory& frame, OutputFormat output_format);
 
-    ~PythonOutputFrame();
+    ~PandasOutputFrame();
 
-    ARCTICDB_MOVE_ONLY_DEFAULT(PythonOutputFrame)
+    ARCTICDB_MOVE_ONLY_DEFAULT(PandasOutputFrame)
 
     std::shared_ptr<FrameDataWrapper> arrays(py::object &ref);
 
