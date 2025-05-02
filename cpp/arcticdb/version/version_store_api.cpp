@@ -29,6 +29,7 @@
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <storage/file/file_store.hpp>
+#include <arcticdb/arrow/arrow_utils.hpp>
 
 #include <regex>
 

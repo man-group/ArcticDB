@@ -25,6 +25,14 @@
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/entity/read_result.hpp>
 
+namespace arcticdb {
+struct ArrowReadResult;
+}
+
+namespace arcticdb {
+struct ArrowReadResult;
+}
+
 namespace arcticdb::version_store {
 
 using namespace arcticdb::entity;

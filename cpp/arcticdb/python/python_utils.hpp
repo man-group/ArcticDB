@@ -251,7 +251,7 @@ inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&
                 auto pynorm = python_util::pb_to_python(read_result.norm_meta);
                 auto pyuser_meta = python_util::pb_to_python(read_result.user_meta);
                 auto multi_key_meta = python_util::pb_to_python(read_result.multi_key_meta);
-                lst.append(py::make_tuple(read_result.item, std::move(read_result.frame_data), pynorm, pyuser_meta, multi_key_meta,
+                lst.append(py::make_tuple(read_result.item, std::move(read_result.frame_data), read_result.output_format, pynorm, pyuser_meta, multi_key_meta,
                                           read_result.multi_keys));
             },
             [&lst] (DataError& data_error) {

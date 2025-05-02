@@ -22,6 +22,7 @@
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 
 
 namespace arcticdb::version_store {
@@ -213,7 +214,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
 
     py::enum_<OutputFormat>(version, "OutputFormat")
         .value("PANDAS", OutputFormat::PANDAS)
-        .value("ARROW", OutputFormat::ARROW);
+        .value("ARROW", OutputFormat::ARROW)
+        .value("PARQUET", OutputFormat::PARQUET);
 
     py::class_<ReadOptions>(version, "PythonVersionStoreReadOptions")
         .def(py::init())
@@ -238,22 +240,33 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     py::class_<FrameDataWrapper, std::shared_ptr<FrameDataWrapper>>(version, "FrameDataWrapper")
             .def_property_readonly("data", &FrameDataWrapper::data);
 
-    using PythonOutputFrame = arcticdb::pipelines::PythonOutputFrame;
-    py::class_<PythonOutputFrame>(version, "PythonOutputFrame")
+    using PandasOutputFrame = arcticdb::pipelines::PandasOutputFrame;
+    py::class_<PandasOutputFrame>(version, "PandasOutputFrame")
+        //.def(py::init<const SegmentInMemory&, OutputFormat output_format, std::shared_ptr<BufferHolder>>())
         .def(py::init<>([](const SegmentInMemory& segment_in_memory, OutputFormat output_format) {
-            return PythonOutputFrame(segment_in_memory, output_format);
+            return PandasOutputFrame(segment_in_memory, output_format);
         }))
         .def_property_readonly("value", [](py::object & obj){
-            auto& fd = obj.cast<PythonOutputFrame&>();
+            auto& fd = obj.cast<PandasOutputFrame&>();
             return fd.arrays(obj);
         })
-        .def_property_readonly("offset", [](PythonOutputFrame& self) {
+        .def_property_readonly("offset", [](PandasOutputFrame& self) {
             return self.frame().offset(); })
-        .def_property_readonly("names", &PythonOutputFrame::names, py::return_value_policy::reference)
-        .def_property_readonly("index_columns", &PythonOutputFrame::index_columns, py::return_value_policy::reference)
-        .def_property_readonly("row_count", [](PythonOutputFrame& self) {
+        .def_property_readonly("names", &PandasOutputFrame::names, py::return_value_policy::reference)
+        .def_property_readonly("index_columns", &PandasOutputFrame::index_columns, py::return_value_policy::reference)
+        .def_property_readonly("row_count", [](PandasOutputFrame& self) {
             return self.frame().row_count();
         });
+
+        py::class_<ArrowOutputFrame>(version, "ArrowOutputFrame")
+        .def_property_readonly("record_batches", &ArrowOutputFrame::record_batches)
+        .def_property_readonly("names", &ArrowOutputFrame::names)
+        ;
+
+        py::class_<RecordBatchData>(version, "RecordBatchData")
+            .def("array", &RecordBatchData::array)
+            .def("schema", &RecordBatchData::schema)
+        ;
 
     py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(
         Enum of possible version request types passed to as_of.
@@ -302,8 +315,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("error_code", &DataError::error_code)
             .def_property_readonly("error_category", &DataError::error_category)
             .def_property_readonly("exception_string", &DataError::exception_string)
-            .def("__str__", &DataError::to_string)
-            .def("__repr__", &DataError::to_string);
+            .def("__str__", &DataError::to_string);
 
     // TODO: add repr.
     py::class_<VersionedItem>(version, "VersionedItem")
@@ -680,10 +692,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options) {
                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
                 return adapt_read_df(v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data));
-              },
+             },
              py::call_guard<SingleThreadMutexHolder>(),
              "Read the specified version of the dataframe from the store")
-         .def("read_index",
+        .def("read_index",
              [&](PythonVersionStore& v, StreamId sid, const VersionQuery& version_query){
                  return adapt_read_df(v.read_index(sid, version_query));
              },
@@ -736,8 +748,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 const auto& tsd_proto = tsd.proto();
                 ReadResult res{
                     vit,
-                    PythonOutputFrame{
+                    PandasOutputFrame{
                         SegmentInMemory{tsd.as_stream_descriptor()},  read_options.output_format()},
+                        read_options.output_format(),
                         tsd_proto.normalization(),
                         tsd_proto.user_meta(),
                         tsd_proto.multi_key_meta(),
@@ -800,8 +813,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              &PythonVersionStore::batch_append,
              py::call_guard<SingleThreadMutexHolder>(), "Batch append to a list of symbols")
         .def("batch_update",
-             &PythonVersionStore::batch_update,
-             py::call_guard<SingleThreadMutexHolder>(), "Batch update a list of symbols")
+            &PythonVersionStore::batch_update,
+            py::call_guard<SingleThreadMutexHolder>(), "Batch update a list of symbols")
         .def("batch_restore_version",
              [&](PythonVersionStore& v, const std::vector<StreamId>& ids, const std::vector<VersionQuery>& version_queries, const ReadOptions& read_options){
                  auto results = v.batch_restore_version(ids, version_queries);
@@ -809,8 +822,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                  output.reserve(results.size());
                  for(auto& [vit, tsd] : results) {
                      const auto& tsd_proto = tsd.proto();
-                     ReadResult res{vit, PythonOutputFrame{
+                     ReadResult res{vit, PandasOutputFrame{
                          SegmentInMemory{tsd.as_stream_descriptor()}, read_options.output_format()},
+                                    read_options.output_format(),
                                     tsd_proto.normalization(),
                                     tsd_proto.user_meta(),
                                     tsd_proto.multi_key_meta(), {}};

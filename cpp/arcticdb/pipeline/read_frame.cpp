@@ -235,7 +235,7 @@ void decode_index_field(
             auto offset = sz * (slice_and_key.slice_.row_range.first - frame.offset());
             auto tot_size = sz * slice_and_key.slice_.row_range.diff();
 
-            SliceDataSink sink(buffer.data() + offset, tot_size);
+            SliceDataSink sink(buffer.bytes_at(offset, tot_size), tot_size);
             ARCTICDB_DEBUG(log::storage(), "Creating index slice with total size {} ({} - {})", tot_size, sz,
                            slice_and_key.slice_.row_range.diff());
 
@@ -266,6 +266,16 @@ void handle_truncation(
         Column& dest_column,
         const ColumnMapping& mapping) {
     handle_truncation(dest_column, mapping.truncate_);
+}
+
+void create_dense_bitmap(size_t offset, const util::BitSet& sparse_map, Column& dest_column, AllocationType allocation_type) {
+    auto& sparse_buffer = dest_column.create_extra_buffer(
+        offset,
+        ExtraBufferType::BITMAP,
+        bitset_unpacked_size(sparse_map.count() * sizeof(uint64_t)),
+        allocation_type);
+
+    bitset_to_packed_bits(sparse_map, reinterpret_cast<uint64_t*>(sparse_buffer.data()));
 }
 
 void decode_or_expand(
@@ -300,6 +310,10 @@ void decode_or_expand(
                 util::default_initialize<TagType>(dest, dest_bytes);
                 util::expand_dense_buffer_using_bitmap<RawType>(bv.value(), sparse.data(), dest);
             });
+
+            //TODO possibly register sparse handler on the TypeHandlerRegistry
+            if(output_format == OutputFormat::ARROW)
+                create_dense_bitmap(mapping.offset_bytes_, *bv, dest_column, AllocationType::DETACHABLE);
         } else {
             SliceDataSink sink(dest, dest_bytes);
             const auto &ndarray = encoded_field_info.ndarray();
@@ -486,6 +500,7 @@ void check_data_left_for_subsequent_fields(
     util::check(have_more_compressed_data || remaining_fields_empty(it, context),
                 "Reached end of input block with {} fields to decode", it.remaining_fields());
 }
+
 
 void decode_into_frame_static(
         SegmentInMemory &frame,

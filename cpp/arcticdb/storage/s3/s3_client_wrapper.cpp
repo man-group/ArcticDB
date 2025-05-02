@@ -136,7 +136,6 @@ folly::Future<S3Result<std::monostate>> S3ClientTestWrapper::delete_object(
     return actual_client_->delete_object(s3_object_name, bucket_name);
 }
 
-
 S3Result<ListObjectsOutput> S3ClientTestWrapper::list_objects(
         const std::string& name_prefix,
         const std::string& bucket_name,
