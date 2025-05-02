@@ -543,7 +543,7 @@ set(arcticdb_srcs
         pipeline/read_query.cpp
         pipeline/read_pipeline.cpp
         arrow/include_sparrow.hpp
-        arrow/array_from_block.hpp)
+        arrow/array_from_block.hpp arrow/table_to_tensor_frame.hpp arrow/table_to_tensor_frame.hpp arrow/test/test_arrow_slicing.cpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 

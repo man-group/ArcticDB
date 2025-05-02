@@ -113,6 +113,12 @@ public:
         bool validate_index
     ) = 0;
 
+    virtual VersionedItem write_arrow_dataframe_internal(
+        const StreamId& stream_id,
+        const std::shared_ptr<InputTensorFrame>& frame,
+        bool prune_previous_versions,
+    ) = 0;
+
     virtual VersionedItem write_individual_segment(
         const StreamId& stream_id,
         SegmentInMemory&& segment,

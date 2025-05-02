@@ -30,6 +30,30 @@ concept ValidIndex = is_any_of<
         stream::TableIndex,
         stream::EmptyIndex>;
 
+using VariantColumn = std::variant<entity::NativeTensor, ChunkedBuffer>;
+
+struct InputColumn {
+    VariantColumn column_;
+
+    template <typename T>
+    auto ptr_cast(size_t pos) {
+        return util::variant_match(column_,
+            [pos] (auto& col) {
+                return col.template ptr_cast<T>(pos);
+            });
+    }
+
+    template <typename T>
+    auto nbytes() const {
+        return util::variant_match(column_,
+           [] (NativeTensor& native_tensor) {
+               return native_tensor.nbytes();
+           },
+           [] (ChunkedBuffer& buffer) {
+               return buffer.bytes();
+           });
+    }
+};
 
 struct InputTensorFrame {
     InputTensorFrame() :
@@ -39,8 +63,8 @@ struct InputTensorFrame {
     mutable arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta;
     stream::Index index;
-    std::optional<entity::NativeTensor> index_tensor;
-    std::vector<entity::NativeTensor> field_tensors;
+    std::optional<InputColumn> index_tensor;
+    std::vector<InputColumn> field_tensors;
     IndexRange index_range;
     size_t num_rows = 0;
     mutable size_t offset = 0;

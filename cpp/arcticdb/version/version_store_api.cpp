@@ -619,6 +619,18 @@ VersionedItem PythonVersionStore::write_versioned_dataframe(
     return versioned_item;
 }
 
+
+VersionedItem PythonVersionStore::write_arrow_dataframe(
+    const StreamId& stream_id,
+    std::vector<uintptr_t> array_ptrs,
+    std::vector<uintptr_t> schema_ptr,
+    bool prune_previous_versions) {
+    ARCTICDB_SAMPLE(WriteArrowDataframe, 0)
+    auto versioned_item = write_versioned_dataframe_internal(stream_id, frame, prune_previous_versions);
+
+    return versioned_item;
+}
+
 VersionedItem PythonVersionStore::append(
     const StreamId& stream_id,
     const py::tuple &item,

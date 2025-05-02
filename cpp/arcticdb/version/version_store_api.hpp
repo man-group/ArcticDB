@@ -66,6 +66,12 @@ class PythonVersionStore : public LocalVersionedEngine {
         bool allow_sparse,
         bool validate_index);
 
+    VersionedItem write_arrow_dataframe(
+        const StreamId& stream_id,
+        uint64_t array_ptr,
+        uint64_t schema_ptr,
+        bool prune_previous_versions);
+
     VersionedItem write_versioned_composite_data(
         const StreamId& stream_id,
         const py::object &metastruct,
