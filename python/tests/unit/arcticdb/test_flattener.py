@@ -16,7 +16,7 @@ from arcticdb.version_store._custom_normalizers import (
 
 import numpy as np
 import pandas as pd
-from arcticdb.util.test import assert_frame_equal, assert_series_equal
+from arcticdb.util.test import assert_frame_equal, assert_series_equal, CustomDictNormalizer, CustomDict
 
 fl = Flattener()
 separator = fl.SEPARATOR
@@ -60,21 +60,6 @@ def test_compose_back_metast():
 
 
 def test_dict_like_structure():
-    # InteractiveData like structure.
-    class CustomDict(dict):
-        pass
-
-    class CustomDictNormalizer(CustomNormalizer):
-        NESTED_STRUCTURE = True
-
-        def normalize(self, item, **kwargs):
-            if not isinstance(item, CustomDict):
-                return None
-            return dict(item), NormalizationMetadata.CustomNormalizerMeta()
-
-        def denormalize(self, item, norm_meta):
-            return CustomDict(item)
-
     register_normalizer(CustomDictNormalizer())
     sample = CustomDict(
         {

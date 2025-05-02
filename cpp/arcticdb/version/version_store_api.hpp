@@ -146,7 +146,8 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     ReadResult read_column_stats_version(
         const StreamId& stream_id,
-        const VersionQuery& version_query);
+        const VersionQuery& version_query,
+        std::any& handler_data);
 
     ColumnStats get_column_stats_info_version(
         const StreamId& stream_id,
@@ -185,7 +186,9 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     ReadResult read_index(
         const StreamId& stream_id,
-        const VersionQuery& version_query);
+        const VersionQuery& version_query,
+        OutputFormat output_format,
+        std::any& handler_data);
 
     void delete_snapshot(
         const SnapshotId& snap_name);
@@ -285,7 +288,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
-        const ReadOptions& read_options);
+        const ReadOptions& read_options,
+        std::any& handler_data);
 
     std::vector<VersionedItemOrError> batch_update(
         const std::vector<StreamId>& stream_ids,
@@ -347,7 +351,8 @@ ReadResult read_dataframe_from_file(
     const StreamId &stream_id,
     const std::string& path,
     const std::shared_ptr<ReadQuery>& read_query,
-    const ReadOptions& read_options);
+    const ReadOptions& read_options,
+    std::any& handler_data);
 
 struct ManualClockVersionStore : PythonVersionStore {
     ManualClockVersionStore(const std::shared_ptr<storage::Library>& library) :
