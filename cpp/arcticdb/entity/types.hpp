@@ -10,9 +10,8 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/entity/output_format.hpp>
-#include "arcticdb/storage/memory_layout.hpp"
+#include <arcticdb/storage/memory_layout.hpp>
 
-#include <cstdint>
 #include <vector>
 #include <string>
 #include <type_traits>

@@ -1401,7 +1401,7 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         std::any& handler_data) {
     pipeline_context->clear_vectors();
     pipeline_context->slice_and_keys_ = std::move(items);
-	std::sort(std::begin(pipeline_context->slice_and_keys_), std::end(pipeline_context->slice_and_keys_), [] (const auto& left, const auto& right) {
+	ranges::sort(pipeline_context->slice_and_keys_, [] (const auto& left, const auto& right) {
 		return std::tie(left.slice_.row_range, left.slice_.col_range) < std::tie(right.slice_.row_range, right.slice_.col_range);
 	});
     adjust_slice_rowcounts(pipeline_context);

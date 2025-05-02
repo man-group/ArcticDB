@@ -10,9 +10,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/codec/segment_header.hpp>
-#include <arcticdb/util/lazy.hpp>
 #include <arcticdb/entity/output_format.hpp>
-#include <arcticdb/util/spinlock.hpp>
 
 #include <folly/Poly.h>
 
@@ -152,10 +150,6 @@ inline std::shared_ptr<TypeHandler> get_type_handler(OutputFormat output_format,
         return handler;
 
     return TypeHandlerRegistry::instance()->get_handler(output_format, target);
-}
-
-inline std::any get_type_handler_data(OutputFormat output_format) {
-    return TypeHandlerRegistry::instance()->get_handler_data(output_format);
 }
 
 

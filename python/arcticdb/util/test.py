@@ -372,10 +372,22 @@ class TestCustomNormalizer(CustomNormalizer):
             df = pd.DataFrame(index=item.custom_index, columns=item.custom_columns, data=item.custom_values)
             return df, norm_meta
 
-    def denormalize(self, item, norm_meta):
-        # type: (Any, CustomNormalizerMeta)->Any
+    def denormalize(self, item: Any, norm_meta: NormalizationMetadata.CustomNormalizerMeta) -> Any:
         return CustomThing(custom_index=item.index, custom_columns=item.columns, custom_values=item.values)
 
+class CustomDict(dict):
+    pass
+
+class CustomDictNormalizer(CustomNormalizer):
+    NESTED_STRUCTURE = True
+
+    def normalize(self, item, **kwargs):
+        if not isinstance(item, CustomDict):
+            return None
+        return dict(item), NormalizationMetadata.CustomNormalizerMeta()
+
+    def denormalize(self, item, norm_meta):
+        return CustomDict(item)
 
 def sample_dataframe(size=1000, seed=0):
     return get_sample_dataframe(size, seed)
