@@ -29,20 +29,17 @@ sparrow::primitive_array<T> create_primitive_array(
         T* data_ptr,
         size_t data_size,
         std::optional<sparrow::validity_bitmap> validity_bitmap) {
-    // TODO: Sparrow seems to have a bug with u8_buffer destruction after move. Using copying with a vector for now
-    // sparrow::u8_buffer<T> buffer(data_ptr, data_size);
-    std::vector<T> data(data_ptr, data_ptr + data_size);
+    sparrow::u8_buffer<T> buffer(data_ptr, data_size);
     if(validity_bitmap)
-        return sparrow::primitive_array<T>{std::move(data), std::move(*validity_bitmap)};
+        return sparrow::primitive_array<T>{std::move(buffer), std::move(*validity_bitmap)};
     else
-        return sparrow::primitive_array<T>{std::move(data)};
+        return sparrow::primitive_array<T>{std::move(buffer)};
 }
 
 template <typename T>
 sparrow::dictionary_encoded_array<T> create_dict_array(
     sparrow::array&& dict_array,
-    // TODO: Must use u8_buffer to do this no-copy
-    std::vector<T>&& string_offsets,
+    sparrow::u8_buffer<T>&& string_offsets,
     std::optional<sparrow::validity_bitmap>& validity_bitmap
     ) {
     if(validity_bitmap) {
@@ -69,34 +66,19 @@ sparrow::array string_dict_from_block(
     const auto offset = block.offset();
     auto &dict_keys = column.get_extra_buffer(offset, ExtraBufferType::OFFSET);
     const auto offset_buffer_size = dict_keys.block(0)->bytes() / sizeof(uint32_t);
-    // sparrow::u8_buffer<uint32_t> offset_buffer(reinterpret_cast<uint32_t *>(dict_keys.block(0)->release()), offset_buffer_size);
-    auto* offset_buffer_data = reinterpret_cast<uint32_t *>(dict_keys.block(0)->release());
+    sparrow::u8_buffer<uint32_t> offset_buffer(reinterpret_cast<uint32_t *>(dict_keys.block(0)->release()), offset_buffer_size);
 
     auto &dict_values = column.get_extra_buffer(offset, ExtraBufferType::STRING);
-    // const auto data_buffer_size = dict_values.block(0)->bytes();
-    // sparrow::u8_buffer<char> data_buffer(reinterpret_cast<char *>(dict_values.block(0)->release()), data_buffer_size);
-    auto* data_buffer_data = reinterpret_cast<char *>(dict_values.block(0)->release());
+    const auto data_buffer_size = dict_values.block(0)->bytes();
+    sparrow::u8_buffer<char> data_buffer(reinterpret_cast<char *>(dict_values.block(0)->release()), data_buffer_size);
 
     const auto block_size = block.row_count();
-    // sparrow::u8_buffer<uint32_t> string_offsets{reinterpret_cast<uint32_t *>(block.release()), block_size};
-    auto* string_offsets_data = reinterpret_cast<uint32_t *>(block.release());
-    auto string_offsets = std::vector<uint32_t>(string_offsets_data, string_offsets_data+block_size);
+    sparrow::u8_buffer<uint32_t> string_offsets{reinterpret_cast<uint32_t *>(block.release()), block_size};
 
-    // TODO: This still segfaults even when using a string offsets and an offset buffer as vectors
-    // sparrow::string_array arrow_dict(
-    //     std::move(data_buffer),
-    //     std::move(offset_buffer)
-    // );
-
-    // TODO: Instead of the above we do this terribly inefficient workaround
-    std::vector<std::string> words;
-    words.reserve(offset_buffer_size - 1);
-    for (auto i=0u; i<offset_buffer_size-1; i++) {
-        auto from = offset_buffer_data[i];
-        auto size = offset_buffer_data[i+1] - from;
-        words.emplace_back(std::string(data_buffer_data+from, size));
-    }
-    sparrow::string_array arrow_dict(std::move(words));
+    sparrow::string_array arrow_dict(
+        std::move(data_buffer),
+        std::move(offset_buffer)
+    );
 
     auto dict_encoded = create_dict_array<uint32_t>(
         sparrow::array{std::move(arrow_dict)},
