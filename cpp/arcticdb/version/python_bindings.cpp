@@ -818,6 +818,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("batch_append",
              &PythonVersionStore::batch_append,
              py::call_guard<SingleThreadMutexHolder>(), "Batch append to a list of symbols")
+        .def("batch_update",
+            &PythonVersionStore::batch_update,
+            py::call_guard<SingleThreadMutexHolder>(), "Batch update a list of symbols")
         .def("batch_restore_version",
              [&](PythonVersionStore& v, const std::vector<StreamId>& ids, const std::vector<VersionQuery>& version_queries, const ReadOptions& read_options){
                  auto results = v.batch_restore_version(ids, version_queries);
