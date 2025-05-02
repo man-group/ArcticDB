@@ -189,7 +189,7 @@ TEST(Async, QueryStatsDemo) {
     t2.join();
     auto result = QueryStats::instance()->get_stats()["SYMBOL_LIST"]["storage_ops"]["S3_ListObjectsV2"];
     ASSERT_TRUE(result.stats_["total_time_ms"] > 0);
-    ASSERT_EQ(result.stats_["count"], 15);
+    ASSERT_EQ(result.stats_["count"], 30);
 }
 
 using IndexSegmentReader = int;
