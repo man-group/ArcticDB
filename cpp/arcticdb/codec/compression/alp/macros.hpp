@@ -1,3 +1,7 @@
+/*
+ * Adapted from http;s://github.com/cwida/ALP. See attached LICENSE file for details
+ */
+
 #ifndef FASTLANES_MACROS_HPP
 #define FASTLANES_MACROS_HPP
 

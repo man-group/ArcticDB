@@ -1,8 +1,10 @@
 #pragma once
 
 #include <arcticdb/storage/memory_layout.hpp>
+#include <arcticdb/util/constructors.hpp>
 
 #include <ankerl/unordered_dense.h>
+
 
 #include <span>
 #include <algorithm>

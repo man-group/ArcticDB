@@ -1,5 +1,7 @@
 #pragma once
 
+#include <arcticdb/column_store/column_data.hpp>
+
 #include <cstddef>
 #include <climits>
 

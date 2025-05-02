@@ -369,6 +369,7 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_to_read(
     const StreamId &stream_id,
     const VersionQuery &version_query
     ) {
+    ARCTICDB_SAMPLE_DEFAULT(GetVersionToRead)
     return util::variant_match(version_query.content_,
        [&stream_id, &version_query, this](const SpecificVersionQuery &specific) {
             return get_specific_version(stream_id, specific.version_id_, version_query);
@@ -422,6 +423,7 @@ ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
     const ReadOptions& read_options,
     std::any& handler_data) {
     py::gil_scoped_release release_gil;
+    ARCTICDB_SAMPLE_DEFAULT(ReadDataFrameVersionInternal)
     auto version = get_version_to_read(stream_id, version_query);
     const auto identifier = get_version_identifier(stream_id, version_query, read_options, version);
     return read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();

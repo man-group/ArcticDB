@@ -271,7 +271,7 @@ TEST(BitPackFusedStress, Roundtrip) {
         return *(ptr + offset);
     };
 
-    volatile T checksum = 0;
+    T checksum = 0;
     auto start_pack = std::chrono::high_resolution_clock::now();
     for (size_t iter = 0; iter < num_iterations; iter++) {
         for (size_t b = 0; b < num_blocks; b++) {
@@ -288,7 +288,7 @@ TEST(BitPackFusedStress, Roundtrip) {
 
     std::cout << "Packing average time per block: " << pack_avg_time << " microseconds" << std::endl;
 
-    volatile size_t compressed = 0;
+    size_t compressed = 0;
     auto start_unpack = std::chrono::high_resolution_clock::now();
     for (size_t iter = 0; iter < num_iterations; iter++) {
         for (size_t b = 0; b < num_blocks; b++) {

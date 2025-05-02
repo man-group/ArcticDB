@@ -1,3 +1,7 @@
+/*
+ * Adapted from http;s://github.com/cwida/ALP. See attached LICENSE file for details
+ */
+
 #ifndef ALP_RD_HPP
 #define ALP_RD_HPP
 
@@ -10,7 +14,7 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wsign-conversion"
 #pragma GCC diagnostic ignored "-Wfloat-conversion"
-#pragma GCC diagnostic ignored "-Wimplicit-int-conversion"
+//#pragma GCC diagnostic ignored "-Wimplicit-int-conversion"
 
 namespace alp {
 

@@ -284,7 +284,7 @@ namespace arcticdb {
          * there are no windows alternatives.
          */
 #if defined(__linux__) && defined(__GLIBC__)
-        malloc_trim(0);
+        //malloc_trim(0);
 #endif
     }
 

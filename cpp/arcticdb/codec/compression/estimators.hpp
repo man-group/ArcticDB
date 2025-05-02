@@ -221,7 +221,6 @@ struct ALPEstimator {
 
         switch(state_.scheme) {
         case alp::Scheme::ALP_RD: {
-
             RealDoubleColumnHeader<T> column_header;
             column_header.dict_size_ = state_.actual_dictionary_size;
             column_header.bit_widths_ = {state_.right_bit_width, state_.left_bit_width};
@@ -247,6 +246,8 @@ struct ALPEstimator {
         case alp::Scheme::INVALID: {
             return {sizeof(T) * block_size, 0, 0};
         }
+        default:
+            util::raise_rte("Unknown ALP scheme in sampling");
         }
     }
 };

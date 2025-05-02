@@ -257,25 +257,20 @@ TEST(Fastlanes, OriginalPackUnpack32to11) {
     constexpr int totalInSize = blocksPerColumn * blockInSize;
     constexpr int totalPackedSize = blocksPerColumn * blockOutSize;
 
-    // Allocate and initialize input with deterministic data.
     std::vector<uint32_t> in(totalInSize);
     for (int i = 0; i < totalInSize; ++i) {
         in[i] = i & ((1 << 11) - 1); // ensure values fit in 11 bits
     }
 
-    // Allocate buffers for packed and unpacked data.
     std::vector<uint32_t> packed(totalPackedSize, 0);
     std::vector<uint32_t> unpacked(totalInSize, 0);
 
-    // --- Warm-up and stress test for the pack routine ---
-    // Warm-up: perform one pack over the entire column.
     for (int b = 0; b < blocksPerColumn; b++) {
         pack_11bit_32ow(in.data() + b * blockInSize, packed.data() + b * blockOutSize);
     }
 
-    // Stress test: pack the entire column 1e6 times.
     constexpr int iterations = 10000;
-    volatile uint32_t pack_checksum = 0; // volatile to prevent optimization
+    uint32_t pack_checksum = 0; // volatile to prevent optimization
     auto start_pack = std::chrono::high_resolution_clock::now();
     for (int iter = 0; iter < iterations; iter++) {
         for (int b = 0; b < blocksPerColumn; b++) {
@@ -294,15 +289,12 @@ TEST(Fastlanes, OriginalPackUnpack32to11) {
               << avgPackTimePerColumn << " ns\n";
     std::cout << "  Pack Checksum: " << pack_checksum << "\n\n";
 
-    // --- Warm-up and stress test for the unpack routine ---
-    // Warm-up: perform one unpack over the entire column.
     for (int b = 0; b < blocksPerColumn; b++) {
         unpack_11bw_32ow_32crw_1uf(packed.data() + b * blockOutSize,
                                    unpacked.data() + b * blockInSize);
     }
 
-    // Stress test: unpack the entire column 1e6 times.
-    volatile uint32_t unpack_checksum = 0;
+    uint32_t unpack_checksum = 0;
     auto start_unpack = std::chrono::high_resolution_clock::now();
     for (int iter = 0; iter < iterations; iter++) {
         for (int b = 0; b < blocksPerColumn; b++) {
@@ -635,22 +627,19 @@ TEST(FFORPerformanceTest, CompressionAndDecompressionTiming) {
     uint32_t base = 0;
     const uint32_t* base_ptr = &base;
 
-    // --- Warm-up compression ---
     for (int b = 0; b < blocksPerColumn; ++b) {
         ffor_11bit_32ow(in.data() + b * blockInSize,
                         packed.data() + b * blockOutSize,
                         base_ptr);
     }
 
-    // --- Performance test: FFOR pack (compression) ---
-    volatile uint32_t pack_checksum = 0;  // Volatile to avoid compiler optimization.
+    uint32_t pack_checksum = 0;  
     auto start_pack = std::chrono::high_resolution_clock::now();
     for (int iter = 0; iter < iterations; ++iter) {
         for (int b = 0; b < blocksPerColumn; ++b) {
             ffor_11bit_32ow(in.data() + b * blockInSize,
                             packed.data() + b * blockOutSize,
                             base_ptr);
-            // Accumulate a value to ensure the call is not optimized away.
             pack_checksum += packed[b * blockOutSize];
         }
     }
@@ -664,15 +653,13 @@ TEST(FFORPerformanceTest, CompressionAndDecompressionTiming) {
               << "  Average pack time per column: " << avg_pack_time << " ns\n"
               << "  Pack Checksum: " << pack_checksum << "\n";
 
-    // --- Warm-up decompression (unffor) ---
     for (int b = 0; b < blocksPerColumn; ++b) {
         unffor_11bw_32ow_32crw_1uf(packed.data() + b * blockOutSize,
                                    unpacked.data() + b * blockInSize,
                                    base_ptr);
     }
 
-    // --- Performance test: UnFFOR unpack (decompression) ---
-    volatile uint32_t unpack_checksum = 0;
+    uint32_t unpack_checksum = 0;
     auto start_unpack = std::chrono::high_resolution_clock::now();
     for (int iter = 0; iter < iterations; ++iter) {
         for (int b = 0; b < blocksPerColumn; ++b) {
@@ -692,7 +679,6 @@ TEST(FFORPerformanceTest, CompressionAndDecompressionTiming) {
               << "  Average unpack time per column: " << avg_unpack_time << " ns\n"
               << "  Unpack Checksum: " << unpack_checksum << "\n";
 
-    // Sanity check: ensure nonzero checksum values.
     EXPECT_NE(pack_checksum, 0u);
     EXPECT_NE(unpack_checksum, 0u);
 }

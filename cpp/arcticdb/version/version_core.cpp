@@ -500,7 +500,7 @@ VersionedItem update_impl(
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
     BlockCodecImpl block_codec) {
-    auto version_key = VersionedItem(async_update_impl(store, update_info, query, frame, options, block_codec).get());
+    auto versioned_item = VersionedItem(async_update_impl(store, update_info, query, frame, options, block_codec).get());
     ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", frame->desc.id(), update_info.next_version_id_);
     return versioned_item;
 }
@@ -2066,6 +2066,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<ReadQuery>& read_query ,
         const ReadOptions& read_options,
         std::any& handler_data) {
+    ARCTICDB_SAMPLE_DEFAULT(ReadFrameForVersion)
     using namespace arcticdb::pipelines;
     auto pipeline_context = std::make_shared<PipelineContext>();
     VersionedItem res_versioned_item;

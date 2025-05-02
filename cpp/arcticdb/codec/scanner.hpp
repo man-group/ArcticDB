@@ -196,7 +196,7 @@ inline void select_encoding_for_column(const ColumnData& column_data, EncodingSc
             encodings_set.select(i);
             result.max_compressed_bytes_ += encodings_set[0].estimated_size_;
             result.uncompressed_bytes_ += encodings_set[0].original_size_;
-            ARCTICDB_INFO(log::codec(), "Selected encoding {} with deterministic size {}, ratio {}", encodings_set[0].type_, encodings_set[0].estimated_size_, double(encodings_set[0].estimated_size_) / encodings_set[0].original_size_);
+            ARCTICDB_DEBUG(log::codec(), "Selected encoding {} with deterministic size {}, ratio {}", encodings_set[0].type_, encodings_set[0].estimated_size_, double(encodings_set[0].estimated_size_) / encodings_set[0].original_size_);
             found_encoding = true;
             break;
         }
@@ -206,7 +206,7 @@ inline void select_encoding_for_column(const ColumnData& column_data, EncodingSc
             encodings_set.select(i, std::move(scanned_result));
             result.max_compressed_bytes_ += encodings_set[0].estimated_size_;
             result.uncompressed_bytes_ += encodings_set[0].original_size_;
-            ARCTICDB_INFO(log::codec(), "Selected encoding {} with estimated size {}, ratio {}", encodings_set[0].type_, encodings_set[0].estimated_size_, double(encodings_set[0].estimated_size_) / encodings_set[0].original_size_);
+            ARCTICDB_DEBUG(log::codec(), "Selected encoding {} with estimated size {}, ratio {}", encodings_set[0].type_, encodings_set[0].estimated_size_, double(encodings_set[0].estimated_size_) / encodings_set[0].original_size_);
             found_encoding = true;
             break;
         }
@@ -232,12 +232,9 @@ inline void resolve_encodings_for_column(const ColumnData& column_data, position
 
 inline void resolve_adaptive_encodings_size(const SegmentInMemory& seg, SegmentScanResults& column_encodings, SizeResult& result) {
     util::check(column_encodings.values_size() == seg.num_columns(), "Expected equality of encoding scan results to columns: {} != {}", column_encodings.values_size(), seg.num_columns());
-    size_t total_size = 0;
     for (position_t column_index = 0; column_index < position_t(seg.num_columns()); ++column_index) {
         const auto& column_data = seg.column(column_index).data();
         resolve_encodings_for_column(column_data, column_index, column_encodings, result);
-        ARCTICDB_DEBUG(log::codec(), "Estimated {} size for column {} at position {} : {}", column_data.row_count() > 0 ? column_encodings.values_[column_index].first().type_ : EncodingType::PLAIN, column_index, result.max_compressed_bytes_, result.max_compressed_bytes_ - total_size);
-        total_size = result.max_compressed_bytes_;
     }
 }
 

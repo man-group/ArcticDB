@@ -1,3 +1,8 @@
+/*
+ * Adapted from http;s://github.com/cwida/ALP. See attached LICENSE file for details
+ */
+
+
 // generated!
 // NOLINTBEGIN
 #pragma GCC diagnostic push

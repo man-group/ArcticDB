@@ -1,3 +1,7 @@
+/*
+ * Adapted from http;s://github.com/cwida/ALP. See attached LICENSE file for details
+ */
+
 #ifndef ALP_ENCODER_HPP
 #define ALP_ENCODER_HPP
 
@@ -27,7 +31,7 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wsign-conversion"
 #pragma GCC diagnostic ignored "-Wfloat-conversion"
-#pragma GCC diagnostic ignored "-Wimplicit-int-conversion"
+//#pragma GCC diagnostic ignored "-Wimplicit-int-conversion"
 
 /*
  * ALP Encoding
@@ -84,7 +88,7 @@ struct encoder {
 	static ST encode_value(const PT value, const factor_idx_t factor_idx, const exponent_idx_t exponent_idx) {
 		PT tmp_encoded_value = value * Constants<PT>::EXP_ARR[exponent_idx] * Constants<PT>::FRAC_ARR[factor_idx];
 		if constexpr (SAFE) {
-			if (is_impossible_to_encode(tmp_encoded_value)) { return ENCODING_UPPER_LIMIT; }
+			if (is_impossible_to_encode(tmp_encoded_value)) { return static_cast<ST>(ENCODING_UPPER_LIMIT); }
 		}
 		tmp_encoded_value = tmp_encoded_value + Constants<PT>::MAGIC_NUMBER - Constants<PT>::MAGIC_NUMBER;
 		return static_cast<ST>(tmp_encoded_value);
@@ -336,7 +340,9 @@ struct encoder {
 			}
 		}
 
+#ifdef __clang__
 #pragma clang loop vectorize_width(64)
+#endif
 		for (size_t i {0}; i < config::VECTOR_SIZE; i++) {
 			auto const actual_value = VALUE_ARR_WITHOUT_SPECIALS[i];
 

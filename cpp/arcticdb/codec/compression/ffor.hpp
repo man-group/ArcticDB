@@ -73,7 +73,7 @@ size_t compress_ffor_remainder(const T* input, size_t count, T* output, size_t b
         {}
     };
 
-    ARCTICDB_INFO(log::codec(), "FFOR compressing {} values of remainder", count);
+    ARCTICDB_DEBUG(log::codec(), "FFOR compressing {} values of remainder", count);
     auto data_start = output + header_size_in_t<FForRemainderMetadata, T>();
     *data_start = reference;
     auto data_out = reinterpret_cast<MakeUnsignedType<T>*>(data_start);
@@ -129,7 +129,7 @@ struct FForCompressor : public FFORCompressData {
         auto max = stats.get_max<T>();
         auto max_delta = max - min;
         auto bits_needed = std::bit_width(static_cast<MakeUnsignedType<T>>(max_delta));
-        return {min, bits_needed};
+        return {min, static_cast<size_t>(bits_needed)};
     }
 
     static FFORCompressData reference_and_bitwidth(ColumnData data) {
@@ -214,7 +214,7 @@ struct FForCompressor : public FFORCompressData {
                 );
             }
         }
-        ARCTICDB_INFO(log::codec(), "Encoded {} full blocks to {} bytes", num_full_blocks, output_pos * sizeof(T));
+        ARCTICDB_DEBUG(log::codec(), "Encoded {} full blocks to {} bytes", num_full_blocks, output_pos * sizeof(T));
 
         size_t remaining = count % BLOCK_SIZE;
         ARCTICDB_DEBUG(log::codec(), "FFOR compressing {} remainder values", remaining);
@@ -231,7 +231,7 @@ struct FForCompressor : public FFORCompressData {
                 get_reference<T>()
             );
         }
-        ARCTICDB_INFO(log::codec(), "FFOR Compressed size including remainder: {} from {} bytes", output_pos * sizeof(T), count * sizeof(T));
+        ARCTICDB_DEBUG(log::codec(), "FFOR Compressed size including remainder: {} from {} bytes", output_pos * sizeof(T), count * sizeof(T));
         const auto compressed_bytes = output_pos * sizeof(T);
         util::check(compressed_bytes == estimated_size, "Size mismatch in expected exact ffor encoding: {} != {}", estimated_size, compressed_bytes);
         return compressed_bytes;
@@ -306,6 +306,15 @@ struct FForDecompressor {
             input_offset += num_full_blocks * BLOCK_SIZE;
         } else {
             for (size_t block = 0; block < num_full_blocks; ++block) {
+                if (block + 1 < num_full_blocks) {
+                    size_t next_block_start_bits = (block + 1) * BLOCK_SIZE * bits_needed;
+                    size_t next_block_start_bytes = round_up_bits(next_block_start_bits);
+                    size_t cache_lines_to_prefetch = (round_up_bits(BLOCK_SIZE * bits_needed) + 63) / 64;
+                    for (size_t i = 0; i < cache_lines_to_prefetch; ++i) {
+                        ARCTICDB_PREFETCH(in_ptr + next_block_start_bytes + i * 64);
+                    }
+                }
+
                 input_offset += dispatch_bitwidth_fused<T, BitUnpackFused>(
                     in_ptr + input_offset,
                     out + block * BLOCK_SIZE,
@@ -315,7 +324,7 @@ struct FForDecompressor {
             }
         }
 
-        ARCTICDB_INFO(log::codec(), "Decompressed {} full blocks to offset {}", num_full_blocks, input_offset);
+        ARCTICDB_DEBUG(log::codec(), "Decompressed {} full blocks to offset {}", num_full_blocks, input_offset);
         size_t remaining = count % BLOCK_SIZE;
         if (remaining > 0) {
             input_offset += decompress_ffor_remainder(
@@ -323,10 +332,10 @@ struct FForDecompressor {
                 out + num_full_blocks * BLOCK_SIZE
             );
         }
-        ARCTICDB_INFO(log::codec(), "Decompressed position: {} ({}) + header {} ({})", input_offset, round_up_bytes_in_t<T>(input_offset),
+        ARCTICDB_DEBUG(log::codec(), "Decompressed position: {} ({}) + header {} ({})", input_offset, round_up_bytes_in_t<T>(input_offset),
             header_size_in_t<FForHeader<T>, T>(), header_size_in_t<FForHeader<T>, T>() * sizeof(T));
         const auto decompressed_bytes = (input_offset + header_size_in_t<FForHeader<T>, T>()) * sizeof(T);
-        ARCTICDB_INFO(log::codec(), "Decompressed {} remaining values to offset {}", remaining, decompressed_bytes);
+        ARCTICDB_DEBUG(log::codec(), "Decompressed {} remaining values to offset {}", remaining, decompressed_bytes);
         return {.compressed_ = decompressed_bytes, .uncompressed_ = count * sizeof(T)};
     }
 };

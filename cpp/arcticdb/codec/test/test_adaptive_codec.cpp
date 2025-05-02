@@ -25,7 +25,7 @@ TEST(AdaptiveCodec, FFOR) {
     seg.calculate_statistics();
     auto scan_results = get_encodings(seg);
     auto codec_opts = codec::default_adaptive_codec();
-    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
+    [[maybe_unused]] auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
     ARCTICDB_DEBUG(log::codec(), "Max compressed: {} Uncompressed: {} Encoded buffer: {}", max_compressed_size, uncompressed_size, encoded_buffer_size);
     ASSERT_EQ(scan_results.value(0).first().type_, EncodingType::FFOR);
     auto copy_seg = seg.clone();
@@ -46,7 +46,7 @@ TEST(AdaptiveCodec, BitPack) {
     seg.calculate_statistics();
     auto scan_results = get_encodings(seg);
     auto codec_opts = codec::default_adaptive_codec();
-    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
+    [[maybe_unused]] auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
     ARCTICDB_DEBUG(log::codec(), "Max compressed: {} Uncompressed: {} Encoded buffer: {}", max_compressed_size, uncompressed_size, encoded_buffer_size);
     ASSERT_EQ(scan_results.value(0).first().type_, EncodingType::BITPACK);
     auto copy_seg = seg.clone();
@@ -67,7 +67,7 @@ TEST(AdaptiveCodec, Delta) {
     seg.calculate_statistics();
     auto scan_results = get_encodings(seg);
     auto codec_opts = codec::default_adaptive_codec();
-    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
+    [[maybe_unused]] auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
     ARCTICDB_DEBUG(log::codec(), "Max compressed: {} Uncompressed: {} Encoded buffer: {}", max_compressed_size, uncompressed_size, encoded_buffer_size);
     ASSERT_EQ(scan_results.value(0).first().type_, EncodingType::DELTA);
     auto copy_seg = seg.clone();
@@ -94,7 +94,7 @@ TEST(AdaptiveCodec, Constant) {
     seg.calculate_statistics();
     auto scan_results = get_encodings(seg);
     auto codec_opts = codec::default_adaptive_codec();
-    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
+    [[maybe_unused]] auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
     ARCTICDB_DEBUG(log::codec(), "Max compressed: {} Uncompressed: {} Encoded buffer: {}", max_compressed_size, uncompressed_size, encoded_buffer_size);
     ASSERT_EQ(scan_results.value(0).first().type_, EncodingType::CONSTANT );
     auto copy_seg = seg.clone();
@@ -118,7 +118,7 @@ TEST(AdaptiveCodec, Frequency) {
     seg.calculate_statistics();
     auto scan_results = get_encodings(seg);
     auto codec_opts = codec::default_adaptive_codec();
-    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
+    [[maybe_unused]] auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
     ARCTICDB_DEBUG(log::codec(), "Max compressed: {} Uncompressed: {} Encoded buffer: {}", max_compressed_size, uncompressed_size, encoded_buffer_size);
     ASSERT_EQ(scan_results.value(0).first().type_, EncodingType::FREQUENCY);
     auto copy_seg = seg.clone();
@@ -139,7 +139,7 @@ TEST(AdaptiveCodec, ALPRD) {
     seg.calculate_statistics();
     auto scan_results = get_encodings(seg);
     auto codec_opts = codec::default_adaptive_codec();
-    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
+    [[maybe_unused]] auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
     ARCTICDB_DEBUG(log::codec(), "Max compressed: {} Uncompressed: {} Encoded buffer: {}", max_compressed_size, uncompressed_size, encoded_buffer_size);
     ASSERT_EQ(scan_results.value(0).first().type_, EncodingType::ALP);
     auto copy_seg = seg.clone();
@@ -160,7 +160,7 @@ TEST(AdaptiveCodec, ALP) {
     seg.calculate_statistics();
     auto scan_results = get_encodings(seg);
     auto codec_opts = codec::default_adaptive_codec();
-    auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
+    [[maybe_unused]] auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
     ARCTICDB_DEBUG(log::codec(), "Max compressed: {} Uncompressed: {} Encoded buffer: {}", max_compressed_size, uncompressed_size, encoded_buffer_size);
     ASSERT_EQ(scan_results.value(0).first().type_, EncodingType::ALP);
     auto copy_seg = seg.clone();

@@ -215,6 +215,11 @@ struct BitUnpackFused : public BitPackHelper<MakeUnsignedType<T>, bit_width> {
 
     template<typename Kernel>
     static size_t go(const T* __restrict in, T* __restrict out, Kernel& kernel) {
+
+        //for (size_t i = 0; i < BLOCK_SIZE; i += 64 / sizeof(T)) { // Prefetch in cache-line-sized strides
+        //    __builtin_prefetch(&in[i], 0, 1); // 0 = read, 1 = low temporal locality
+        //}
+
         for (std::size_t lane = 0; lane < num_lanes; ++lane) {
             T src = in[lane];
             T tmp;

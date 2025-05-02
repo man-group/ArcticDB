@@ -288,7 +288,7 @@ TEST(DeltaCompressionStressTest, CompressDecompressSeparate) {
     std::vector<T> decompressed(numRows, 0);
 
     auto start_compress = std::chrono::high_resolution_clock::now();
-    volatile size_t total_comp_size = 0;
+    size_t total_comp_size = 0;
     for (size_t i = 0; i < iterations; i++) {
         DeltaCompressor<T> compressor;
         auto estimated_size = compressor.scan(wrapper.data_, input.size());
@@ -299,7 +299,7 @@ TEST(DeltaCompressionStressTest, CompressDecompressSeparate) {
     auto compress_duration = std::chrono::duration_cast<std::chrono::microseconds>(end_compress - start_compress).count();
     double avg_compress_time = static_cast<double>(compress_duration) / iterations;
     auto start_decompress = std::chrono::high_resolution_clock::now();
-    volatile size_t total_decomp_rows = 0;
+    size_t total_decomp_rows = 0;
     for (size_t i = 0; i < iterations; i++) {
         DeltaDecompressor<T> decompressor{};
         decompressor.init(compressed.data());

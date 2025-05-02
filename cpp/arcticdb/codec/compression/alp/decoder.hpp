@@ -1,3 +1,7 @@
+/*
+ * Adapted from http;s://github.com/cwida/ALP. See attached LICENSE file for details
+ */
+
 #ifndef ALP_DECODER_HPP
 #define ALP_DECODER_HPP
 
@@ -7,7 +11,7 @@
 // NOLINTBEGIN
 
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wimplicit-int-float-conversion"
+//#pragma GCC diagnostic ignored "-Wimplicit-int-float-conversion"
 
 namespace alp {
 

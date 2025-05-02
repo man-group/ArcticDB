@@ -38,7 +38,9 @@ void untranspose(const T* input, T* output) {
     using h = Helper<T>;
     constexpr size_t num_bits = h::num_bits;
     constexpr size_t num_lanes = h::num_lanes;
+#ifdef __clang__
 #pragma clang loop vectorize(enable)
+#endif
     for (size_t lane = 0; lane < num_lanes; ++lane) {
         T* target = output + lane * num_bits;
         for(size_t row = 0; row < num_bits; row += 8) {

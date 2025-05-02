@@ -1,3 +1,8 @@
+/*
+ * Adapted from http;s://github.com/cwida/ALP. See attached LICENSE file for details
+ */
+
+
 #ifndef ALP_FALP_HPP
 #define ALP_FALP_HPP
 
