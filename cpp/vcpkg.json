@@ -74,8 +74,7 @@
     "benchmark",
     {
       "name": "arcticdb-sparrow",
-      "version>=": "0.6.0",
-      "$version reason": "version 0.6.0 supports older compiler versions required for arcticdb manylinux builds"
+      "version>=": "0.7.0"
     }
   ],
   "overrides": [
