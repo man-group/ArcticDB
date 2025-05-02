@@ -17,6 +17,7 @@
 #include <arcticdb/stream/stream_reader.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/python/python_utils.hpp>
+#include <arcticdb/python/python_handler_data.hpp>
 
 namespace py = pybind11;
 
@@ -238,7 +239,7 @@ class PyTimestampRange {
     timestamp end_;
 };
 
-inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&& r) {
+inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&& r, std::pair<std::any&, OutputFormat>* const handler) {
     auto ret = std::move(r);
     py::list lst;
     for (auto &res: ret) {
@@ -255,6 +256,9 @@ inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&
                 lst.append(data_error);
             }
         );
+    }
+    if (handler) {
+        apply_global_refcounts(handler->first, handler->second);
     }
     return lst;
 }

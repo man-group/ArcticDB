@@ -2,7 +2,6 @@
 
 #include <pybind11/pybind11.h>
 #include <folly/ThreadCachedInt.h>
-#include <arcticdb/python/python_utils.hpp>
 
 #include <memory>
 
@@ -59,15 +58,6 @@ struct PythonHandlerData {
             Py_INCREF(py_nan_->ptr());
         }
     }
-
-    ~PythonHandlerData() {
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(none_refcount_, "None refcount must not be null");
-        const size_t none_count = none_refcount_->readFull();
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(none_count == 0, "None refcount not applied. {} more to be applied", none_count);
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(nan_refcount_, "None refcount must not be null");
-        const size_t nan_count = none_refcount_->readFull();
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(nan_count == 0, "NaN refcount not applied. {} more to be applied", nan_count);
-    }
 private:
     std::shared_ptr<folly::ThreadCachedInt<uint64_t>> none_refcount_ = std::make_shared<folly::ThreadCachedInt<uint64_t>>();
     std::shared_ptr<folly::ThreadCachedInt<uint64_t>> nan_refcount_ = std::make_shared<folly::ThreadCachedInt<uint64_t>>();
@@ -84,7 +74,7 @@ inline void apply_global_refcounts(std::any& handler_data, OutputFormat output_f
 
 struct PythonHandlerDataFactory  : public TypeHandlerDataFactory {
     std::any get_data() const override {
-        return std::any{PythonHandlerData()};
+        return {PythonHandlerData{}};
     }
 };
 

@@ -34,18 +34,17 @@ async::AsyncStore<>& LibraryTool::async_store() {
     return dynamic_cast<async::AsyncStore<>&>(*store());
 }
 
-ReadResult LibraryTool::read(const VariantKey& key) {
+ReadResult LibraryTool::read(const VariantKey& key, std::any& handler_data, OutputFormat output_format) {
     auto segment = read_to_segment(key);
     auto segment_in_memory = decode_segment(segment);
     auto frame_and_descriptor = frame_and_descriptor_from_segment(std::move(segment_in_memory));
-    auto atom_key = util::variant_match(
+    const auto& atom_key = util::variant_match(
             key,
             [](const AtomKey& key){return key;},
             // We construct a dummy atom key in case of a RefKey to be able to build the read_result
-            [](const RefKey& key){return AtomKeyBuilder().build<KeyType::VERSION_REF>(key.id());},
-            [](const auto&){});
+            [](const RefKey& key){return AtomKeyBuilder().build<KeyType::VERSION_REF>(key.id());});
 
-    return pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key, OutputFormat::PANDAS);
+    return pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key, handler_data, output_format);
 }
 
 Segment LibraryTool::read_to_segment(const VariantKey& key) {

@@ -152,9 +152,5 @@ inline std::shared_ptr<TypeHandler> get_type_handler(OutputFormat output_format,
     return TypeHandlerRegistry::instance()->get_handler(output_format, target);
 }
 
-inline std::any get_type_handler_data(OutputFormat output_format) {
-    return TypeHandlerRegistry::instance()->get_handler_data(output_format);
-}
-
 
 }

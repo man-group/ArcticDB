@@ -21,9 +21,6 @@
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/container_filter_wrapper.hpp>
 #include <arcticdb/util/allocation_tracing.hpp>
-#include <bitset>
-
-#include "python/python_handler_data.hpp"
 
 namespace arcticdb::version_store {
 
@@ -1109,22 +1106,15 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
     return versioned_item;
 }
 
-std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(const std::vector<AtomKey> &keys) {
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
-    std::vector<ReadVersionOutput> result;
-    {
-        py::gil_scoped_release release_gil;
-        std::vector<folly::Future<ReadVersionOutput>> read_futures;
-        read_futures.reserve(keys.size());
-        for (const auto& index_key: keys) {
-            read_futures.emplace_back(read_frame_for_version(store(), {index_key}, std::make_shared<ReadQuery>(), ReadOptions{}, handler_data));
-        }
-        Allocator::instance()->trim();
-        result = folly::collect(read_futures).get();
+std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(const std::vector<AtomKey> &keys, std::any& handler_data) {
+    std::vector<folly::Future<ReadVersionOutput>> res;
+    res.reserve(keys.size());
+    py::gil_scoped_release release_gil;
+    for (const auto& index_key: keys) {
+        res.emplace_back(read_frame_for_version(store(), {index_key}, std::make_shared<ReadQuery>(), ReadOptions{}, handler_data));
     }
-    apply_global_refcounts(handler_data, OutputFormat::PANDAS);
-    return result;
-
+    Allocator::instance()->trim();
+    return folly::collect(res).get();
 }
 
 std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::batch_read_internal(

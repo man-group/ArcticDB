@@ -9,10 +9,14 @@
 
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/entity/read_result.hpp>
+#include <arcticdb/python/python_handler_data.hpp>
 
 namespace arcticdb {
 
-inline auto adapt_read_df = [](ReadResult && ret) -> py::tuple{
+inline py::tuple adapt_read_df(ReadResult&& ret, std::pair<std::any&, OutputFormat>* const handler) {
+    if (handler) {
+        apply_global_refcounts(handler->first, handler->second);
+    }
     auto pynorm = python_util::pb_to_python(ret.norm_meta);
     auto pyuser_meta = python_util::pb_to_python(ret.user_meta);
     auto multi_key_meta = python_util::pb_to_python(ret.multi_key_meta);
