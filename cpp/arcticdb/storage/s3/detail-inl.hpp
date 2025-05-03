@@ -17,6 +17,7 @@
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/composite.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/s3/model/PutObjectRequest.h>
@@ -466,12 +467,12 @@ bool do_iterate_type_impl(
 
     auto continuation_token = std::optional<std::string>();
     do {
+        auto query_stat_operation_time = query_stats::add_task_count_and_time(key_type, query_stats::TaskType::S3_ListObjectsV2);
         auto list_objects_result = s3_client.list_objects(path_info.key_prefix_, bucket_name, continuation_token);
         if (list_objects_result.is_success()) {
             auto& output = list_objects_result.get_output();
 
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
-
             for (auto& s3_object_name : output.s3_object_names) {
                 auto key = s3_object_name.substr(path_info.path_to_key_size_);
                 ARCTICDB_TRACE(log::version(), "Got object_list: {}, key: {}", s3_object_name, key);

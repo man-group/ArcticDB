@@ -10,12 +10,13 @@
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/s3/s3_storage_tool.hpp>
-#include <arcticdb/toolbox/library_tool.hpp>
-#include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/version/symbol_list.hpp>
+#include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/util/storage_lock.hpp>
 #include <arcticdb/util/reliable_storage_lock.hpp>
+#include <arcticdb/toolbox/library_tool.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/toolbox/storage_mover.hpp>
 
 namespace arcticdb::toolbox::apy {
@@ -151,6 +152,27 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
             .def("lock_timeout", &StorageLockWrapper::lock_timeout)
             .def("try_lock", &StorageLockWrapper::try_lock)
             ;
-}
 
+    using namespace arcticdb::query_stats;
+    auto query_stats_module = tools.def_submodule("query_stats", "Query stats functionality");
+    
+    py::class_<QueryStats::OperationStatsOutput>(query_stats_module, "OperationStatsOutput")
+        .def_readonly("stats", &QueryStats::OperationStatsOutput::stats_);
+
+    query_stats_module.def("reset_stats", []() { 
+        QueryStats::instance()->reset_stats(); 
+    });
+    query_stats_module.def("enable", []() { 
+        QueryStats::instance()->enable(); 
+    });
+    query_stats_module.def("disable", []() { 
+        QueryStats::instance()->disable(); 
+    });
+    query_stats_module.def("is_enabled", []() { 
+        return QueryStats::instance()->is_enabled(); 
+    });
+    query_stats_module.def("get_stats", [](){ 
+        return QueryStats::instance()->get_stats(); 
+    });
+}
 } // namespace arcticdb::toolbox::apy
