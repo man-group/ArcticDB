@@ -70,6 +70,7 @@ from .util.mark import (
 from arcticdb.storage_fixtures.utils import safer_rmtree
 from packaging.version import Version
 from arcticdb.util.venv import Venv
+import arcticdb.toolbox.query_stats as query_stats
 
 
 # region =================================== Misc. Constants & Setup ====================================
@@ -1335,3 +1336,10 @@ def old_venv_and_arctic_uri(old_venv, arctic_uri):
         pytest.skip("LMDB storage backed has a bug in versions before 5.0.0 which leads to flaky segfaults")
 
     yield old_venv, arctic_uri
+
+    
+@pytest.fixture
+def clear_query_stats():
+    yield
+    query_stats.disable()
+    query_stats.reset_stats()

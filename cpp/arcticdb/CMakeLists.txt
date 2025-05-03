@@ -333,6 +333,7 @@ set(arcticdb_srcs
         stream/stream_writer.hpp
         toolbox/library_tool.hpp
         toolbox/storage_mover.hpp
+        toolbox/query_stats.hpp
         util/allocator.hpp
         util/allocation_tracing.hpp
         util/bitset.hpp
@@ -506,6 +507,7 @@ set(arcticdb_srcs
         stream/piloted_clock.cpp
         stream/protobuf_mappings.cpp
         toolbox/library_tool.cpp
+        toolbox/query_stats.cpp
         util/allocator.cpp
         util/allocation_tracing.cpp
         util/buffer_pool.cpp
