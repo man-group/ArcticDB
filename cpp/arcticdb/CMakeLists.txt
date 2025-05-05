@@ -52,6 +52,9 @@ if(NOT ${ARCTICDB_USING_CONDA})
     find_package(Libevent CONFIG REQUIRED)
     set(ARCTICDB_MONGO_LIBS $<IF:$<TARGET_EXISTS:mongo::mongocxx_static>,mongo::mongocxx_static,mongo::mongocxx_shared>)
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+    # Libraries baked into the internal and external Linux images are found by searching various paths
+    # On Windows, vcpkg will provide a "Config" which takes precedence
+    find_library(Pcre_LIBRARY NAMES pcre PATHS /usr/local/lib/libpcre.a REQUIRED)
 else()
 
     # ARCTICDB_USING_CONDA is used in header of the files including vendored
@@ -95,9 +98,6 @@ add_library(xxHash STATIC IMPORTED)
 set_target_properties(xxHash PROPERTIES IMPORTED_LOCATION ${xxHash_LIBRARY})
 set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_INCLUDE_DIR})
 
-# Libraries baked into the internal and external Linux images are found by searching various paths
-# On Windows, vcpkg will provide a "Config" which takes precedence
-find_library(Pcre_LIBRARY NAMES pcre PATHS /usr/local/lib/libpcre.a REQUIRED)
 if (WIN32)
     find_package(Iconv)
 else ()
@@ -160,11 +160,19 @@ if (NOT MSVC)
     add_compile_options("-fno-omit-frame-pointer")
 else()
     add_compile_options(
-        /WX
         /wd4250 # Suppress inherits via dominance warning
-        /we4189 # Unused local variable is an error
         /we4100 # Unused function parameter is an error
+        # For now, we do not want to treat warnings as errors for those builds.
+        # /WX
     )
+    if(NOT ${ARCTICDB_USING_CONDA})
+        # Some of the warnings are due to the protobuf library,
+        # observed for the conda-forge builds.
+        # See: https://github.com/protocolbuffers/protobuf/pull/20840
+        add_compile_options(
+            /we4189 # Unused local variable is an error
+        )
+    endif()
 endif ()
 
 ## Core library without python bindings ##
@@ -710,7 +718,7 @@ endif()
 if(${ARCTICDB_USING_CONDA})
 
     list (APPEND arcticdb_core_libraries
-        pcre
+        ${PCRE_LIBRARIES}
         msgpack-c
         ${LMDB_LIBRARIES}
     )
