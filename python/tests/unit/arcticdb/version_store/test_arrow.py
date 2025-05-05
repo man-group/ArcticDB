@@ -16,18 +16,12 @@ def test_basic(lmdb_version_store_v1):
     assert_frame_equal(result, df)
 
 
-# TODO: Do this fix during normalization
-def fix_timeseries_index(df):
-    df["index"] = df["index"].apply(lambda x : pd.Timestamp(x))
-    return df
-
-
 def test_basic_with_index(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"x": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
     lib.write("arrow", df)
     vit = lib.read("arrow", output_format=OutputFormat.ARROW)
-    result = fix_timeseries_index(vit.data.to_pandas())
+    result = vit.data.to_pandas()
     assert_frame_equal(result, df.reset_index())
 
 
@@ -45,7 +39,7 @@ def test_basic_small_slices_with_index(lmdb_version_store_tiny_segment):
     df = pd.DataFrame({"x": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
     lib.write("arrow", df)
     vit = lib.read("arrow", output_format=OutputFormat.ARROW)
-    result = fix_timeseries_index(vit.data.to_pandas())
+    result = vit.data.to_pandas()
     assert_frame_equal(result, df.reset_index())
 
 

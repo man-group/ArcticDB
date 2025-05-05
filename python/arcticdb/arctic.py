@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import logging
 from typing import List, Optional, Any, Union
 
-from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions, EnterpriseLibraryOptions
+from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions, EnterpriseLibraryOptions, RuntimeOptions
 from arcticdb_ext.storage import LibraryManager
 from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions
 from arcticdb.version_store.library import ArcticInvalidApiUsageException, Library
@@ -90,7 +90,7 @@ class Arctic:
         self._library_manager = LibraryManager(self._library_adapter.config_library)
         self._uri = uri
 
-    def __getitem__(self, name: str) -> Library:
+    def _get_library(self, name:str, runtime_options:Optional[RuntimeOptions]):
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
         if not self._library_manager.has_library(lib_mgr_name):
             raise LibraryNotFound(name)
@@ -100,11 +100,15 @@ class Arctic:
             self._library_manager.get_library(lib_mgr_name, storage_override, native_storage_config=self._library_adapter.native_config()),
             repr(self._library_adapter),
             lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
-            native_cfg=self._library_adapter.native_config()
+            native_cfg=self._library_adapter.native_config(),
+            runtime_options=runtime_options
         )
         if self._accessed_libs is not None:
             self._accessed_libs.append(lib)
         return Library(repr(self), lib)
+
+    def __getitem__(self, name: str) -> Library:
+        self._get_library(name, None)
 
     def __repr__(self):
         return "Arctic(config=%r)" % self._library_adapter
@@ -113,7 +117,7 @@ class Arctic:
         return self.has_library(name)
 
     def get_library(
-        self, name: str, create_if_missing: Optional[bool] = False, library_options: Optional[LibraryOptions] = None
+        self, name: str, create_if_missing: Optional[bool] = False, library_options: Optional[LibraryOptions] = None, runtime_options: Optional[RuntimeOptions] = None
     ) -> Library:
         """
         Returns the library named ``name``.
@@ -136,6 +140,9 @@ class Arctic:
             match these.
             Unused if create_if_missing is False.
 
+        runtime_options: Optional[RuntimeOptions], default = None
+            TODO
+
         Examples
         --------
         >>> arctic = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET')
@@ -152,7 +159,7 @@ class Arctic:
                 "In get_library, library_options must be falsey if create_if_missing is falsey"
             )
         try:
-            lib = self[name]
+            lib = self._get_library(name, runtime_options)
             if create_if_missing and library_options:
                 if library_options.encoding_version is None:
                     library_options.encoding_version = self._encoding_version

@@ -11,6 +11,7 @@ from enum import Enum
 
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb_ext.storage import ModifiableLibraryOption, ModifiableEnterpriseLibraryOption
+from arcticdb_ext.version_store import OutputFormat
 
 
 DEFAULT_ENCODING_VERSION = EncodingVersion.V1
@@ -144,6 +145,15 @@ class LibraryOptions:
             f" rows_per_segment={self.rows_per_segment}, columns_per_segment={self.columns_per_segment},"
             f" encoding_version={self.encoding_version if self.encoding_version is not None else 'Default'})"
         )
+
+
+class RuntimeOptions:
+    """
+    TODO: Docs
+    """
+
+    def __init__(self, output_format=OutputFormat.PANDAS):
+        self.output_format=output_format
 
 
 class EnterpriseLibraryOptions:
