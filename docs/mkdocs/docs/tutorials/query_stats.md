@@ -3,9 +3,9 @@
 > **Warning**: The Query Statistics API is unstable and not governed by ArcticDB's semantic versioning. It may change or be removed in future versions without notice.
 
 ArcticDB provides a Query Statistics API that allows you to collect and analyze performance metrics for operations performed on your data stores.
-This can be useful for debugging, performance optimization, and understanding the resource usage of your queries.
+This can be useful for debugging, performance optimization.
 The Query Statistics feature uses a global container to store all measurements. This means statistics from all Python threads in your application will be collected in the same structure. 
-For this reason, enabling or disabling Query Statistics in individual threads can lead to unpredictable results and should be avoided. It's best to treat Query Statistics as an application-wide setting rather than a thread-specific one.
+For this reason, enabling or disabling Query Statistics in multiple threads can lead to unpredictable results and should be avoided. It's best to treat Query Statistics as an application-wide setting rather than a thread-specific one.
 
 Currently only S3 backend is supported. Support for other storage backend is pending.
 
@@ -75,12 +75,12 @@ qs.disable()
 The statistics are returned as a nested dictionary organized by:
 - Key type (e.g., `SYMBOL_LIST`, `TABLE_DATA`, `VERSION_REF`)
 - Operation group (currently `storage_ops` only)
-- Task type (e.g., `S3_ListObjectsV2`, `Encode`, `Decode`)
+- Task type (e.g., `S3_ListObjectsV2`, `S3_PutObject`)
 
 Each task contains measurements like:
 - `count`: Number of times the operation was performed
 - `total_time_ms`: Total execution time in milliseconds
-- For data operations, additional metrics like `compressed_size_bytes` and `uncompressed_size_bytes`
+- For data operations, additional metric `size_bytes` for the size of data being transferred
 
 Example output:
 
@@ -98,12 +98,8 @@ Example output:
         "storage_ops": {
             "S3_GetObject": {
                 "total_time_ms": 50,
-                "count": 3
-            },
-            "Decode": {
                 "count": 3,
-                "uncompressed_size_bytes": 300,
-                "compressed_size_bytes": 1827
+                "size_bytes": 10
             }
         }
     }

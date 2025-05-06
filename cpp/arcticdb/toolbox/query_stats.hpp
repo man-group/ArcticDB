@@ -33,8 +33,7 @@ enum class TaskType : size_t {
 enum class StatType : size_t {
     TOTAL_TIME_MS = 0,
     COUNT = 1,
-    UNCOMPRESSED_SIZE_BYTES = 2,
-    COMPRESSED_SIZE_BYTES = 3,
+    SIZE_BYTES = 2,
     END
 };
 
@@ -54,10 +53,6 @@ private:
 //             "S3_ListObjectsV2": { <- OperationStats
 //                 "total_time_ms": 32,
 //                 "count": 2
-//             },
-//             "S3_GetObject": { <- OperationStats
-//                 "total_time_ms": 50,
-//                 "count": 3
 //             }
 //         }
 //     }
@@ -70,13 +65,11 @@ public:
     struct OperationStats{
         folly::ThreadCachedInt<timestamp> total_time_ns_;
         folly::ThreadCachedInt<uint32_t> count_;
-        folly::ThreadCachedInt<uint32_t> uncompressed_size_bytes_;
-        folly::ThreadCachedInt<uint32_t> compressed_size_bytes_;
+        folly::ThreadCachedInt<uint32_t> size_bytes_;
         void reset_stats(){
             total_time_ns_.set(0);
             count_.set(0);
-            uncompressed_size_bytes_.set(0);
-            compressed_size_bytes_.set(0);
+            size_bytes_.set(0);
         }
         OperationStats(){
             reset_stats(); 

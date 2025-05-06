@@ -140,11 +140,16 @@ void do_write_impl(
     auto& k = key_seg.variant_key();
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
     auto seg = key_seg.segment_ptr();
+    auto segment_size = seg->calculate_size();
+    auto key_type = key_seg.key_type();
 
-    auto query_stat_operation_time = query_stats::add_task_count_and_time(key_seg.key_type(), query_stats::TaskType::S3_PutObject);
+    auto query_stat_operation_time = query_stats::add_task_count_and_time(key_type, query_stats::TaskType::S3_PutObject);
     auto put_object_result = s3_client.put_object(s3_object_name, *seg, bucket_name);
 
-    if (!put_object_result.is_success()) {
+    if (put_object_result.is_success()) {
+        query_stats::add(key_type, query_stats::TaskType::S3_PutObject, query_stats::StatType::SIZE_BYTES, segment_size);
+    }
+    else{
         auto& error = put_object_result.get_error();
         // No DuplicateKeyException is thrown because S3 overwrites the given key if it already exists.
         raise_s3_exception(error, s3_object_name);
@@ -181,7 +186,9 @@ KeySegmentPair do_read_impl(
 
     if (get_object_result.is_success()) {
         ARCTICDB_SUBSAMPLE(S3StorageVisitSegment, 0)
-        return {VariantKey{unencoded_key}, std::move(get_object_result.get_output())};
+        auto segment = std::move(get_object_result.get_output());
+        query_stats::add(key_type, query_stats::TaskType::S3_GetObject, query_stats::StatType::SIZE_BYTES, segment.calculate_size());
+        return {VariantKey{unencoded_key}, std::move(segment)};
         ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(unencoded_key), variant_key_view(unencoded_key));
     } else {
         auto& error = get_object_result.get_error();
@@ -219,7 +226,9 @@ folly::Future<KeySegmentPair> do_async_read_impl(
         ] (auto&& result) mutable -> KeySegmentPair {
             auto query_stat_operation_time = query_stats::add_task_count_and_time(key_type, query_stats::TaskType::S3_GetObjectAsync, start);
             if(result.is_success()) {
-                return KeySegmentPair(std::move(vk), std::move(result.get_output()));
+                auto segment = std::move(result.get_output());
+                query_stats::add(key_type, query_stats::TaskType::S3_GetObjectAsync, query_stats::StatType::SIZE_BYTES, segment.calculate_size());
+                return KeySegmentPair(std::move(vk), std::move(segment));
             }
             else {
                 auto unencoded_key = decoder(std::move(vk));	
@@ -396,11 +405,15 @@ void do_write_if_none_impl(
             auto &k = kv.variant_key();
             auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
             auto& seg = *kv.segment_ptr();
+            auto segment_size = seg.calculate_size();
+            auto key_type = kv.key_type();
 
-            auto query_stat_operation_time = query_stats::add_task_count_and_time(kv.key_type(), query_stats::TaskType::S3_PutObject);
+            auto query_stat_operation_time = query_stats::add_task_count_and_time(key_type, query_stats::TaskType::S3_PutObject);
             auto put_object_result = s3_client.put_object(s3_object_name, seg, bucket_name, PutHeader::IF_NONE_MATCH);
 
-            if (!put_object_result.is_success()) {
+            if (put_object_result.is_success()) {
+                query_stats::add(key_type, query_stats::TaskType::S3_PutObject, query_stats::StatType::SIZE_BYTES, segment_size);
+            } {
                 auto& error = put_object_result.get_error();
                 raise_s3_exception(error, s3_object_name);
             }

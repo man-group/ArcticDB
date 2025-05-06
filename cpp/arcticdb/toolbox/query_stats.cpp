@@ -73,10 +73,8 @@ std::string stat_type_to_string(StatType stat_type) {
             return "total_time_ms";
         case StatType::COUNT:
             return "count";
-        case StatType::UNCOMPRESSED_SIZE_BYTES:
-            return "uncompressed_size_bytes";
-        case StatType::COMPRESSED_SIZE_BYTES:
-            return "compressed_size_bytes";
+        case StatType::SIZE_BYTES:
+            return "size_bytes";
         default:
             log::version().warn("Unknown stat type {}", static_cast<int>(stat_type));
             return "unknown";
@@ -104,6 +102,7 @@ QueryStats::QueryStatsOutput QueryStats::get_stats() const {
 
             OperationStatsOutput op_output;
             
+            bool has_non_zero_stats = op_stats.count_.readFull();
             for (size_t stat_idx = 0; stat_idx < static_cast<size_t>(StatType::END); ++stat_idx) {
                 StatType stat_type = static_cast<StatType>(stat_idx);
                 uint32_t value = 0;
@@ -114,16 +113,13 @@ QueryStats::QueryStatsOutput QueryStats::get_stats() const {
                     case StatType::COUNT:
                         value = op_stats.count_.readFull();
                         break;
-                    case StatType::UNCOMPRESSED_SIZE_BYTES:
-                        value = op_stats.uncompressed_size_bytes_.readFull();
-                        break;
-                    case StatType::COMPRESSED_SIZE_BYTES:
-                        value = op_stats.compressed_size_bytes_.readFull();
+                    case StatType::SIZE_BYTES:
+                        value = op_stats.size_bytes_.readFull();
                         break;
                     default:
                         continue;
                 }
-                if (value > 0) {
+                if (has_non_zero_stats) {
                     std::string stat_name = stat_type_to_string(stat_type);
                     op_output[stat_name] = value;
                 }
@@ -150,11 +146,8 @@ void QueryStats::add(entity::KeyType key_type, TaskType task_type, StatType stat
             case StatType::COUNT:
                 stats.count_.increment(value);
                 break;
-            case StatType::UNCOMPRESSED_SIZE_BYTES:
-                stats.uncompressed_size_bytes_.increment(value);
-                break;
-            case StatType::COMPRESSED_SIZE_BYTES:
-                stats.compressed_size_bytes_.increment(value);
+            case StatType::SIZE_BYTES:
+                stats.size_bytes_.increment(value);
                 break;
             default:
                 throw std::invalid_argument("Invalid stat type");
