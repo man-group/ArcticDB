@@ -81,7 +81,6 @@ Each task contains measurements like:
 - `count`: Number of times the operation was performed
 - `total_time_ms`: Total execution time in milliseconds
 - For data operations, additional metrics like `compressed_size_bytes` and `uncompressed_size_bytes`
-- For encode and decode taskss, additional metrics `key_type` correspond to the type and number of logical keys being comprised in
 
 Example output:
 
@@ -104,15 +103,7 @@ Example output:
             "Decode": {
                 "count": 3,
                 "uncompressed_size_bytes": 300,
-                "compressed_size_bytes": 1827,
-                "key_type": {
-                    "TABLE_INDEX": {
-                        "count": 3
-                    },
-                    "VERSION": {
-                        "count": 3
-                    }
-                }
+                "compressed_size_bytes": 1827
             }
         }
     }

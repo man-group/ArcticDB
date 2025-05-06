@@ -27,11 +27,6 @@ enum class TaskType : size_t {
     S3_GetObjectAsync = 3,
     S3_DeleteObjects = 4,
     S3_HeadObject = 5,
-    Encode = 6,
-    Decode = 7,
-    DecodeMetadata = 8,
-    DecodeTimeseriesDescriptor = 9,
-    DecodeMetadataAndDescriptor = 10,
     END
 };
 
@@ -56,26 +51,13 @@ private:
 // {
 //     "VERSION_REF": { <- STATS_BY_KEY_TYPE
 //         "storage_ops": { <- STATS_BY_OP_TYPE
-//             "S3_ListObjectsV2": { <- OperationStats::stats_
+//             "S3_ListObjectsV2": { <- OperationStats
 //                 "total_time_ms": 32,
 //                 "count": 2
 //             },
-//             "S3_GetObject": { <- OperationStats::stats_
+//             "S3_GetObject": { <- OperationStats
 //                 "total_time_ms": 50,
 //                 "count": 3
-//             },
-//             "Decode": { <- OperationStats::stats_
-//                 "count": 3,
-//                 "uncompressed_size_bytes": 300,
-//                 "compressed_size_bytes": 1827,
-//                 "key_type": { <- OperationStats::logical_key_counts_
-//                     "TABLE_INDEX": {
-//                         "count": 3
-//                     },
-//                     "VERSION": {
-//                         "count": 3
-//                     }
-//                 }
 //             }
 //         }
 //     }
@@ -86,7 +68,6 @@ private:
 class QueryStats {
 public:
     struct OperationStats{
-        std::array<folly::ThreadCachedInt<uint32_t>, static_cast<size_t>(entity::KeyType::UNDEFINED)> logical_key_counts_;
         folly::ThreadCachedInt<timestamp> total_time_ns_;
         folly::ThreadCachedInt<uint32_t> count_;
         folly::ThreadCachedInt<uint32_t> uncompressed_size_bytes_;
@@ -96,18 +77,12 @@ public:
             count_.set(0);
             uncompressed_size_bytes_.set(0);
             compressed_size_bytes_.set(0);
-            for (auto& logical_key_count : logical_key_counts_) {
-                logical_key_count.set(0);
-            }
         }
         OperationStats(){
             reset_stats(); 
         }
     };
-    struct OperationStatsOutput {
-        std::map<std::string, uint32_t> stats_;
-        std::map<std::string, std::map<std::string, uint32_t>> key_type_;
-    };
+    using OperationStatsOutput = std::map<std::string, uint32_t>;
     using QueryStatsOutput = std::map<std::string, std::map<std::string, std::map<std::string, OperationStatsOutput>>>;
     using STATS_BY_OP_TYPE = std::array<OperationStats, static_cast<size_t>(TaskType::END)>;
     using STATS_BY_KEY_TYPE = std::array<STATS_BY_OP_TYPE, static_cast<size_t>(entity::KeyType::UNDEFINED)>;
@@ -119,7 +94,6 @@ public:
     void disable();
     bool is_enabled() const;
     void add(entity::KeyType key_type, TaskType task_type, StatType stat_type, uint32_t value);
-    void add_logical_keys(entity::KeyType physical_key_type, TaskType task_type, const SegmentInMemory& segment);
     [[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(entity::KeyType key_type, TaskType task_type, std::optional<std::chrono::time_point<std::chrono::steady_clock>> start = std::nullopt);
     QueryStatsOutput get_stats() const;
     QueryStats();
@@ -133,6 +107,5 @@ private:
 };
 
 void add(entity::KeyType key_type, TaskType task_type, StatType stat_type, uint32_t value);
-void add_logical_keys(entity::KeyType physical_key_type, TaskType task_type, const SegmentInMemory& segment);
 [[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(entity::KeyType key_type, TaskType task_type, std::optional<std::chrono::time_point<std::chrono::steady_clock>> start = std::nullopt);
 }

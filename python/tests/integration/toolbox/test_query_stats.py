@@ -136,19 +136,6 @@ def test_query_stats_snapshot(s3_version_store_v1, clear_query_stats):
     #             "S3_GetObject": {
     #                 "total_time_ms": 50,
     #                 "count": 3
-    #             },
-    #             "Decode": {
-    #                 "count": 3,
-    #                 "uncompressed_size_bytes": 300,
-    #                 "compressed_size_bytes": 1827,
-    #                 "key_type": {
-    #                     "TABLE_INDEX": {
-    #                         "count": 3
-    #                     },
-    #                     "VERSION": {
-    #                         "count": 3
-    #                     }
-    #                 }
     #             }
     #         }
     #     },
@@ -156,9 +143,6 @@ def test_query_stats_snapshot(s3_version_store_v1, clear_query_stats):
     #         "storage_ops": {
     #             "S3_HeadObject": {
     #                 "total_time_ms": 13,
-    #                 "count": 2
-    #             },
-    #             "Encode": {
     #                 "count": 2
     #             }
     #         }
@@ -172,16 +156,6 @@ def test_query_stats_snapshot(s3_version_store_v1, clear_query_stats):
     #             "S3_HeadObject": {
     #                 "total_time_ms": 13,
     #                 "count": 2
-    #             },
-    #             "Encode": {
-    #                 "count": 2,
-    #                 "uncompressed_size_bytes": 100,
-    #                 "compressed_size_bytes": 1169,
-    #                 "key_type": {
-    #                     "TABLE_INDEX": {
-    #                         "count": 2
-    #                     }
-    #                 }
     #             }
     #         }
     #     }
@@ -199,15 +173,9 @@ def test_query_stats_snapshot(s3_version_store_v1, clear_query_stats):
     
     assert "S3_PutObject" in snapshot_ref_ops
     assert "S3_HeadObject" in snapshot_ref_ops
-    assert "Encode" in snapshot_ref_ops
     
     assert snapshot_ref_ops["S3_PutObject"]["count"] == 2
     assert snapshot_ref_ops["S3_HeadObject"]["count"] == 2
-    assert snapshot_ref_ops["Encode"]["count"] == 2
-    assert "uncompressed_size_bytes" in snapshot_ref_ops["Encode"]
-    assert "compressed_size_bytes" in snapshot_ref_ops["Encode"]
-    assert "key_type" in snapshot_ref_ops["Encode"]
-    assert "TABLE_INDEX" in snapshot_ref_ops["Encode"]["key_type"]
 
 
 def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
@@ -228,17 +196,6 @@ def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
     #             "S3_GetObject": {
     #                 "total_time_ms": 30,
     #                 "count": 2
-    #             },
-    #             "Encode": {
-    #                 "total_time_ms": 1,
-    #                 "count": 2,
-    #                 "uncompressed_size_bytes": 16,
-    #                 "compressed_size_bytes": 158
-    #             },
-    #             "Decode": {
-    #                 "count": 2,
-    #                 "uncompressed_size_bytes": 16,
-    #                 "compressed_size_bytes": 158
     #             }
     #         }
     #     },
@@ -251,26 +208,6 @@ def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
     #             "S3_GetObject": {
     #                 "total_time_ms": 30,
     #                 "count": 2
-    #             },
-    #             "Encode": {
-    #                 "count": 2,
-    #                 "uncompressed_size_bytes": 164,
-    #                 "compressed_size_bytes": 1991,
-    #                 "key_type": {
-    #                     "TABLE_DATA": {
-    #                         "count": 2
-    #                     }
-    #                 }
-    #             },
-    #             "Decode": {
-    #                 "count": 2,
-    #                 "uncompressed_size_bytes": 164,
-    #                 "compressed_size_bytes": 1990,
-    #                 "key_type": {
-    #                     "TABLE_DATA": {
-    #                         "count": 2
-    #                     }
-    #                 }
     #             }
     #         }
     #     },
@@ -283,19 +220,6 @@ def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
     #             "S3_GetObject": {
     #                 "total_time_ms": 34,
     #                 "count": 2
-    #             },
-    #             "Encode": {
-    #                 "count": 2,
-    #                 "uncompressed_size_bytes": 150,
-    #                 "compressed_size_bytes": 1192,
-    #                 "key_type": {
-    #                     "TABLE_INDEX": {
-    #                         "count": 2
-    #                     },
-    #                     "VERSION": {
-    #                         "count": 1
-    #                     }
-    #                 }
     #             }
     #         }
     #     },
@@ -304,11 +228,6 @@ def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
     #             "S3_PutObject": {
     #                 "total_time_ms": 32,
     #                 "count": 2
-    #             },
-    #             "Encode": {
-    #                 "count": 2,
-    #                 "uncompressed_size_bytes": 16,
-    #                 "compressed_size_bytes": 322
     #             }
     #         }
     #     },
@@ -321,74 +240,18 @@ def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
     #             "S3_GetObject": {
     #                 "total_time_ms": 66,
     #                 "count": 4
-    #             },
-    #             "Encode": {
-    #                 "count": 2,
-    #                 "uncompressed_size_bytes": 250,
-    #                 "compressed_size_bytes": 1241,
-    #                 "key_type": {
-    #                     "TABLE_INDEX": {
-    #                         "count": 3
-    #                     },
-    #                     "VERSION": {
-    #                         "count": 2
-    #                     }
-    #                 }
-    #             },
-    #             "Decode": {
-    #                 "count": 2,
-    #                 "uncompressed_size_bytes": 300,
-    #                 "compressed_size_bytes": 1264,
-    #                 "key_type": {
-    #                     "TABLE_INDEX": {
-    #                         "count": 4
-    #                     },
-    #                     "VERSION": {
-    #                         "count": 2
-    #                     }
-    #                 }
     #             }
     #         }
     #     }
     # }
     
     expected_keys = ["TABLE_DATA", "TABLE_INDEX", "VERSION", "SYMBOL_LIST", "VERSION_REF"]
-    required_ops = {
-        "TABLE_DATA": {"Encode", "Decode"},
-        "TABLE_INDEX": {"Encode", "Decode"},
-        "VERSION": {"Encode"},
-        "SYMBOL_LIST": {"Encode"},
-        "VERSION_REF": {"Encode", "Decode"}
-    }
     
     for key, stat in stats.items():
         assert key in expected_keys
         assert "storage_ops" in stats[key]
         storage_ops = stat["storage_ops"]
         
-        for op in required_ops[key]:
-            assert op in storage_ops
-            op_data = storage_ops[op]
-            assert "count" in op_data
-            assert op_data["count"] > 0
-            
-            if "uncompressed_size_bytes" in op_data:
-                assert op_data["uncompressed_size_bytes"] > 0
-            
-            if "compressed_size_bytes" in op_data:
-                assert op_data["compressed_size_bytes"] > 0
-            
-            if "key_type" in op_data:
-                assert isinstance(op_data["key_type"], dict)
-                assert len(op_data["key_type"]) > 0
-                
-                if key == "TABLE_INDEX" and op in ["Encode", "Decode"]:
-                    assert "TABLE_DATA" in op_data["key_type"]
-                
-                if key == "VERSION_REF" and op in ["Encode", "Decode"]:
-                    assert "TABLE_INDEX" in op_data["key_type"]
-                    assert "VERSION" in op_data["key_type"]
-
 
 def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
     qs.enable()
@@ -405,12 +268,6 @@ def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
     #             "S3_PutObject": {
     #                 "total_time_ms": 17,
     #                 "count": 1
-    #             },
-    #             "Encode": {
-    #                 "total_time_ms": 1,
-    #                 "count": 1,
-    #                 "uncompressed_size_bytes": 8,
-    #                 "compressed_size_bytes": 79
     #             }
     #         }
     #     },
@@ -423,27 +280,6 @@ def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
     #             "S3_GetObject": {
     #                 "total_time_ms": 47,
     #                 "count": 3
-    #             },
-    #             "Encode": {
-    #                 "total_time_ms": 1,
-    #                 "count": 2,
-    #                 "uncompressed_size_bytes": 164,
-    #                 "compressed_size_bytes": 2024,
-    #                 "key_type": {
-    #                     "TABLE_DATA": {
-    #                         "count": 2
-    #                     }
-    #                 }
-    #             },
-    #             "Decode": {
-    #                 "count": 1,
-    #                 "uncompressed_size_bytes": 82,
-    #                 "compressed_size_bytes": 1012,
-    #                 "key_type": {
-    #                     "TABLE_DATA": {
-    #                         "count": 1
-    #                     }
-    #                 }
     #             }
     #         }
     #     },
@@ -456,29 +292,6 @@ def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
     #             "S3_GetObject": {
     #                 "total_time_ms": 66,
     #                 "count": 4
-    #             },
-    #             "Encode": {
-    #                 "count": 2,
-    #                 "uncompressed_size_bytes": 150,
-    #                 "compressed_size_bytes": 1193,
-    #                 "key_type": {
-    #                     "TABLE_INDEX": {
-    #                         "count": 2
-    #                     },
-    #                     "VERSION": {
-    #                         "count": 1
-    #                     }
-    #                 }
-    #             },
-    #             "Decode": {
-    #                 "count": 1,
-    #                 "uncompressed_size_bytes": 50,
-    #                 "compressed_size_bytes": 582,
-    #                 "key_type": {
-    #                     "TABLE_INDEX": {
-    #                         "count": 1
-    #                     }
-    #                 }
     #             }
     #         }
     #     },
@@ -487,11 +300,6 @@ def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
     #             "S3_PutObject": {
     #                 "total_time_ms": 30,
     #                 "count": 2
-    #             },
-    #             "Encode": {
-    #                 "count": 2,
-    #                 "uncompressed_size_bytes": 16,
-    #                 "compressed_size_bytes": 322
     #             }
     #         }
     #     },
@@ -504,82 +312,17 @@ def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
     #             "S3_GetObject": {
     #                 "total_time_ms": 112,
     #                 "count": 7
-    #             },
-    #             "Encode": {
-    #                 "count": 2,
-    #                 "uncompressed_size_bytes": 250,
-    #                 "compressed_size_bytes": 1234,
-    #                 "key_type": {
-    #                     "TABLE_INDEX": {
-    #                         "count": 3
-    #                     },
-    #                     "VERSION": {
-    #                         "count": 2
-    #                     }
-    #                 }
-    #             },
-    #             "Decode": {
-    #                 "count": 4,
-    #                 "uncompressed_size_bytes": 500,
-    #                 "compressed_size_bytes": 2468,
-    #                 "key_type": {
-    #                     "TABLE_INDEX": {
-    #                         "count": 6
-    #                     },
-    #                     "VERSION": {
-    #                         "count": 4
-    #                     }
-    #                 }
     #             }
     #         }
     #     }
     # }
     
     expected_keys = ["TABLE_INDEX", "VERSION", "VERSION_REF"]
-    required_ops = {
-        "TABLE_INDEX": {"Encode", "Decode"},
-        "VERSION": {"Encode", "Decode"},
-        "VERSION_REF": {"Encode", "Decode"}
-    }
-    
-    expected_key_types = {
-        "TABLE_INDEX": {
-            "Encode": ["TABLE_DATA"],
-            "Decode": ["TABLE_DATA"]
-        },
-        "VERSION": {
-            "Encode": ["TABLE_INDEX", "VERSION"],
-            "Decode": ["TABLE_INDEX"]
-        },
-        "VERSION_REF": {
-            "Encode": ["TABLE_INDEX", "VERSION"],
-            "Decode": ["TABLE_INDEX", "VERSION"]
-        }
-    }
     
     for key in expected_keys:
         assert key in stats
         assert "storage_ops" in stats[key]
         storage_ops = stats[key]["storage_ops"]
-        
-        for op in required_ops[key]:
-            assert op in storage_ops
-            op_data = storage_ops[op]
-            assert "count" in op_data
-            assert op_data["count"] > 0
-            
-            if "uncompressed_size_bytes" in op_data:
-                assert op_data["uncompressed_size_bytes"] > 0
-            
-            if "compressed_size_bytes" in op_data:
-                assert op_data["compressed_size_bytes"] > 0
-            
-            if "key_type" in op_data:
-                assert isinstance(op_data["key_type"], dict)
-                assert len(op_data["key_type"]) > 0
-                
-                for expected_type in expected_key_types[key][op]:
-                    assert expected_type in op_data["key_type"]
 
 
 def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
@@ -606,17 +349,6 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
     #             "S3_GetObject": {
     #                 "total_time_ms": 61,
     #                 "count": 4
-    #             },
-    #             "Encode": {
-    #                 "total_time_ms": 2,
-    #                 "count": 4,
-    #                 "uncompressed_size_bytes": 128,
-    #                 "compressed_size_bytes": 986
-    #             },
-    #             "Decode": {
-    #                 "count": 4,
-    #                 "uncompressed_size_bytes": 128,
-    #                 "compressed_size_bytes": 986
     #             }
     #         }
     #     },
@@ -629,27 +361,6 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
     #             "S3_GetObject": {
     #                 "total_time_ms": 63,
     #                 "count": 4
-    #             },
-    #             "Encode": {
-    #                 "total_time_ms": 1,
-    #                 "count": 4,
-    #                 "uncompressed_size_bytes": 328,
-    #                 "compressed_size_bytes": 4288,
-    #                 "key_type": {
-    #                     "TABLE_DATA": {
-    #                         "count": 4
-    #                     }
-    #                 }
-    #             },
-    #             "Decode": {
-    #                 "count": 4,
-    #                 "uncompressed_size_bytes": 328,
-    #                 "compressed_size_bytes": 4288,
-    #                 "key_type": {
-    #                     "TABLE_DATA": {
-    #                         "count": 4
-    #                     }
-    #                 }
     #             }
     #         }
     #     },
@@ -662,29 +373,6 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
     #             "S3_GetObject": {
     #                 "total_time_ms": 97,
     #                 "count": 6
-    #             },
-    #             "Encode": {
-    #                 "count": 4,
-    #                 "uncompressed_size_bytes": 300,
-    #                 "compressed_size_bytes": 2493,
-    #                 "key_type": {
-    #                     "TABLE_INDEX": {
-    #                         "count": 4
-    #                     },
-    #                     "VERSION": {
-    #                         "count": 2
-    #                     }
-    #                 }
-    #             },
-    #             "Decode": {
-    #                 "count": 2,
-    #                 "uncompressed_size_bytes": 100,
-    #                 "compressed_size_bytes": 1203,
-    #                 "key_type": {
-    #                     "TABLE_INDEX": {
-    #                         "count": 2
-    #                     }
-    #                 }
     #             }
     #         }
     #     },
@@ -693,11 +381,6 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
     #             "S3_PutObject": {
     #                 "total_time_ms": 63,
     #                 "count": 4
-    #             },
-    #             "Encode": {
-    #                 "count": 4,
-    #                 "uncompressed_size_bytes": 32,
-    #                 "compressed_size_bytes": 680
     #             }
     #         }
     #     },
@@ -710,87 +393,13 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
     #             "S3_GetObject": {
     #                 "total_time_ms": 218,
     #                 "count": 12
-    #             },
-    #             "Encode": {
-    #                 "count": 4,
-    #                 "uncompressed_size_bytes": 500,
-    #                 "compressed_size_bytes": 2656,
-    #                 "key_type": {
-    #                     "TABLE_INDEX": {
-    #                         "count": 6
-    #                     },
-    #                     "VERSION": {
-    #                         "count": 4
-    #                     }
-    #                 }
-    #             },
-    #             "Decode": {
-    #                 "count": 8,
-    #                 "uncompressed_size_bytes": 900,
-    #                 "compressed_size_bytes": 5234,
-    #                 "key_type": {
-    #                     "TABLE_INDEX": {
-    #                         "count": 10
-    #                     },
-    #                     "VERSION": {
-    #                         "count": 8
-    #                     }
-    #                 }
     #             }
     #         }
     #     }
     # }
     
-    expected_keys = ["TABLE_DATA", "TABLE_INDEX", "VERSION", "SYMBOL_LIST", "VERSION_REF"]
-    required_ops = {
-        "TABLE_DATA": {"Encode", "Decode"},
-        "TABLE_INDEX": {"Encode", "Decode"},
-        "VERSION": {"Encode", "Decode"},
-        "SYMBOL_LIST": {"Encode"},
-        "VERSION_REF": {"Encode", "Decode"}
-    }
-    
-    expected_counts = {
-        "TABLE_DATA": {"Encode": 4, "Decode": 4},
-        "TABLE_INDEX": {"Encode": 4, "Decode": 4},
-        "VERSION": {"Encode": 4, "Decode": 2},
-        "SYMBOL_LIST": {"Encode": 4},
-        "VERSION_REF": {"Encode": 4, "Decode": 8}
-    }
-    
-    expected_key_types = {
-        "TABLE_INDEX": {
-            "Encode": ["TABLE_DATA"],
-            "Decode": ["TABLE_DATA"]
-        },
-        "VERSION": {
-            "Encode": ["TABLE_INDEX", "VERSION"],
-            "Decode": ["TABLE_INDEX"]
-        },
-        "VERSION_REF": {
-            "Encode": ["TABLE_INDEX", "VERSION"],
-            "Decode": ["TABLE_INDEX", "VERSION"]
-        }
-    }
-    
+    expected_keys = ["TABLE_DATA", "TABLE_INDEX", "VERSION", "SYMBOL_LIST", "VERSION_REF"]    
     for key in expected_keys:
         assert key in stats
         assert "storage_ops" in stats[key]
         storage_ops = stats[key]["storage_ops"]
-        
-        for op in required_ops[key]:
-            assert op in storage_ops
-            op_data = storage_ops[op]
-            assert "count" in op_data
-            assert op_data["count"] == expected_counts[key][op]
-            
-            if "uncompressed_size_bytes" in op_data:
-                assert op_data["uncompressed_size_bytes"] > 0
-            
-            if "compressed_size_bytes" in op_data:
-                assert op_data["compressed_size_bytes"] > 0
-            
-            if key in expected_key_types and op in expected_key_types[key]:
-                assert "key_type" in op_data
-                for expected_type in expected_key_types[key][op]:
-                    assert expected_type in op_data["key_type"]

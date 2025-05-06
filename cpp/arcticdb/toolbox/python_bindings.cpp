@@ -16,6 +16,7 @@
 #include <arcticdb/util/storage_lock.hpp>
 #include <arcticdb/util/reliable_storage_lock.hpp>
 #include <arcticdb/toolbox/library_tool.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/toolbox/storage_mover.hpp>
 
 namespace arcticdb::toolbox::apy {
@@ -155,10 +156,6 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
     using namespace arcticdb::query_stats;
     auto query_stats_module = tools.def_submodule("query_stats", "Query stats functionality");
     
-    py::class_<QueryStats::OperationStatsOutput>(query_stats_module, "OperationStatsOutput")
-        .def_readonly("stats", &QueryStats::OperationStatsOutput::stats_)
-        .def_readonly("key_type", &QueryStats::OperationStatsOutput::key_type_);
-
     query_stats_module.def("reset_stats", []() { 
         QueryStats::instance()->reset_stats(); 
     });

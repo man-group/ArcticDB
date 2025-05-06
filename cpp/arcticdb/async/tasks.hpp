@@ -28,7 +28,6 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/util/test/random_throw.hpp>
-#include <arcticdb/toolbox/query_stats.hpp>
 
 #include <type_traits>
 #include <ranges>
@@ -95,11 +94,7 @@ struct EncodeAtomTask : BaseTask {
     storage::KeySegmentPair encode() {
         ARCTICDB_DEBUG(log::codec(), "Encoding object with partial key {}", partial_key_);
         ARCTICDB_DEBUG_THROW(5)
-        query_stats::add(partial_key_.key_type, query_stats::TaskType::Encode, query_stats::StatType::UNCOMPRESSED_SIZE_BYTES, segment_.num_bytes());
-        query_stats::add_logical_keys(partial_key_.key_type, query_stats::TaskType::Encode, segment_);
-        auto query_stat_operation_time = query_stats::add_task_count_and_time(partial_key_.key_type, query_stats::TaskType::Encode);
         auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
-        query_stats::add(partial_key_.key_type, query_stats::TaskType::Encode, query_stats::StatType::COMPRESSED_SIZE_BYTES, enc_seg.calculate_size());
         auto content_hash = get_segment_hash(enc_seg);
 
         AtomKey k = partial_key_.build_key(creation_ts_, content_hash);
@@ -131,11 +126,7 @@ struct EncodeSegmentTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeSegmentTask)
 
     storage::KeySegmentPair encode() {
-        query_stats::add(variant_key_type(key_), query_stats::TaskType::Encode, query_stats::StatType::UNCOMPRESSED_SIZE_BYTES, segment_.num_bytes());
-        query_stats::add_logical_keys(variant_key_type(key_), query_stats::TaskType::Encode, segment_);
-        auto query_stat_operation_time = query_stats::add_task_count_and_time(variant_key_type(key_), query_stats::TaskType::Encode);
         auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
-        query_stats::add(variant_key_type(key_), query_stats::TaskType::Encode, query_stats::StatType::COMPRESSED_SIZE_BYTES, enc_seg.calculate_size());
         return {std::move(key_), std::move(enc_seg)};
     }
 
@@ -170,11 +161,7 @@ struct EncodeRefTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeRefTask)
 
     [[nodiscard]] storage::KeySegmentPair encode() {
-        query_stats::add(key_type_, query_stats::TaskType::Encode, query_stats::StatType::UNCOMPRESSED_SIZE_BYTES, segment_.num_bytes());
-        query_stats::add_logical_keys(key_type_, query_stats::TaskType::Encode, segment_);
-        auto query_stat_operation_time = query_stats::add_task_count_and_time(key_type_, query_stats::TaskType::Encode);
         auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
-        query_stats::add(key_type_, query_stats::TaskType::Encode, query_stats::StatType::COMPRESSED_SIZE_BYTES, enc_seg.calculate_size());
         auto k = RefKey{id_, key_type_};
         return {std::move(k), std::move(enc_seg)};
     }
@@ -444,14 +431,8 @@ struct DecodeSegmentTask : BaseTask {
         auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment with key {}",
                              variant_key_view(key_seg.variant_key()));
-        auto key_type = variant_key_type(key_seg.variant_key());
-        query_stats::add(key_type, query_stats::TaskType::Decode, query_stats::StatType::COMPRESSED_SIZE_BYTES, key_seg.segment_ptr()->size());
-        auto query_stat_operation_time = query_stats::add_task_count_and_time(key_type, query_stats::TaskType::Decode);
-        auto segment = decode_segment(*key_seg.segment_ptr());
-        query_stats::add(key_type, query_stats::TaskType::Decode, query_stats::StatType::UNCOMPRESSED_SIZE_BYTES, segment.num_bytes());
-        query_stats::add_logical_keys(key_type, query_stats::TaskType::Decode, segment);
 
-        return {key_seg.variant_key(), std::move(segment)};
+        return {key_seg.variant_key(), decode_segment(*key_seg.segment_ptr())};
     }
 };
 
@@ -471,13 +452,7 @@ struct DecodeSliceTask : BaseTask {
     pipelines::SegmentAndSlice operator()(storage::KeySegmentPair&& key_segment_pair) {
         ARCTICDB_SAMPLE(DecodeSliceTask, 0)
         ARCTICDB_DEBUG(log::memory(), "Decode into slice {}", key_segment_pair.variant_key());
-        auto key_type = variant_key_type(key_segment_pair.variant_key());
-        query_stats::add(key_type, query_stats::TaskType::Decode, query_stats::StatType::COMPRESSED_SIZE_BYTES, key_segment_pair.segment_ptr()->size());
-        auto query_stat_operation_time = query_stats::add_task_count_and_time(key_type, query_stats::TaskType::Decode);
-        auto result = decode_into_slice(std::move(key_segment_pair));
-        query_stats::add(key_type, query_stats::TaskType::Decode, query_stats::StatType::UNCOMPRESSED_SIZE_BYTES, result.segment_in_memory_.num_bytes());
-        query_stats::add_logical_keys(key_type, query_stats::TaskType::Decode, result.segment_in_memory_);
-        return result;
+        return decode_into_slice(std::move(key_segment_pair));
     }
 
 private:
@@ -543,9 +518,7 @@ struct DecodeMetadataTask : BaseTask {
     std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> operator()(storage::KeySegmentPair &&key_seg) const {
         ARCTICDB_SAMPLE(ReadMetadataTask, 0)
         ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeMetadataTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
-        auto query_stat_operation_time = query_stats::add_task_count_and_time(variant_key_type(key_seg.variant_key()), query_stats::TaskType::DecodeMetadata);
-        auto metadata = decode_metadata_from_segment(key_seg.segment());
-        return std::make_pair<>(key_seg.variant_key(), metadata);
+        return std::make_pair<>(key_seg.variant_key(), decode_metadata_from_segment(key_seg.segment()));
     }
 };
 
@@ -558,7 +531,6 @@ struct DecodeTimeseriesDescriptorTask : BaseTask {
         ARCTICDB_SAMPLE(DecodeTimeseriesDescriptorTask, 0)
         ARCTICDB_DEBUG(log::storage(), "DecodeTimeseriesDescriptorTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
 
-        auto query_stat_operation_time = query_stats::add_task_count_and_time(variant_key_type(key_seg.variant_key()), query_stats::TaskType::DecodeTimeseriesDescriptor);
         auto maybe_desc = decode_timeseries_descriptor(*key_seg.segment_ptr());
 
         util::check(static_cast<bool>(maybe_desc), "Failed to decode timeseries descriptor");
@@ -579,7 +551,6 @@ struct DecodeMetadataAndDescriptorTask : BaseTask {
         ARCTICDB_DEBUG_THROW(5)
         ARCTICDB_DEBUG(log::storage(), "DecodeMetadataAndDescriptorTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
 
-        auto query_stat_operation_time = query_stats::add_task_count_and_time(variant_key_type(key_seg.variant_key()), query_stats::TaskType::DecodeMetadataAndDescriptor);
         auto [any, descriptor] = decode_metadata_and_descriptor_fields(*key_seg.segment_ptr());
         return std::make_tuple(
             key_seg.variant_key(),

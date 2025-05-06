@@ -62,16 +62,6 @@ std::string task_type_to_string(TaskType task_type) {
         return "S3_DeleteObjects";
     case TaskType::S3_HeadObject:
         return "S3_HeadObject";
-    case TaskType::Encode:
-        return "Encode";
-    case TaskType::Decode:
-        return "Decode";
-    case TaskType::DecodeMetadata:
-        return "DecodeMetadata";
-    case TaskType::DecodeTimeseriesDescriptor:
-        return "DecodeTimeseriesDescriptor";
-    case TaskType::DecodeMetadataAndDescriptor:
-        return "DecodeMetadataAndDescriptor";
     default:
         log::version().warn("Unknown task type {}", static_cast<int>(task_type));
         return "Unknown";
@@ -112,7 +102,7 @@ QueryStats::QueryStatsOutput QueryStats::get_stats() const {
             std::string task_type_str = task_type_to_string(task_type);
 
             const auto& op_stats = stats_by_key_type_[key_idx][task_idx];
-            
+
             OperationStatsOutput op_output;
             
             for (size_t stat_idx = 0; stat_idx < static_cast<size_t>(StatType::END); ++stat_idx) {
@@ -136,21 +126,12 @@ QueryStats::QueryStatsOutput QueryStats::get_stats() const {
                 }
                 if (value > 0) {
                     std::string stat_name = stat_type_to_string(stat_type);
-                    op_output.stats_[stat_name] = value;
-                }
-            }
-
-            for (size_t logical_key_idx = 0; logical_key_idx < static_cast<size_t>(entity::KeyType::UNDEFINED); ++logical_key_idx) {
-                entity::KeyType logical_key = static_cast<entity::KeyType>(logical_key_idx);
-                uint32_t count = op_stats.logical_key_counts_[logical_key_idx].readFull();
-                if (count > 0) {
-                    std::string key_type_str = get_key_type_str(logical_key);
-                    op_output.key_type_[key_type_str]["count"] = count;
+                    op_output[stat_name] = value;
                 }
             }
             
             // Only non-zero stats will be added to the output
-            if (!op_output.stats_.empty() || !op_output.key_type_.empty()) {
+            if (!op_output.empty()) {
                 std::string key_type_str = get_key_type_str(key_type);
                 result[key_type_str]["storage_ops"][task_type_str] = std::move(op_output);
             }
@@ -182,27 +163,6 @@ void QueryStats::add(entity::KeyType key_type, TaskType task_type, StatType stat
     }
 }
 
-void QueryStats::add_logical_keys(entity::KeyType physical_key_type, TaskType task_type, const SegmentInMemory& segment) {
-    if (is_enabled()) {
-        if (physical_key_type == entity::KeyType::TABLE_INDEX ||
-            physical_key_type == entity::KeyType::VERSION_REF ||
-            physical_key_type == entity::KeyType::VERSION ||
-            physical_key_type == entity::KeyType::APPEND_REF ||
-            physical_key_type == entity::KeyType::MULTI_KEY ||
-            physical_key_type == entity::KeyType::SNAPSHOT_REF ||
-            physical_key_type == entity::KeyType::SNAPSHOT ||
-            physical_key_type == entity::KeyType::SNAPSHOT_TOMBSTONE ||
-            physical_key_type == entity::KeyType::BLOCK_VERSION_REF) {
-            for (size_t i = 0; i < segment.row_count(); ++i) {
-                auto physical_key_type_index = static_cast<size_t>(physical_key_type);
-                auto task_type_index = static_cast<size_t>(task_type);
-                auto logical_key_type_index = static_cast<size_t>(variant_key_type(stream::read_key_row(segment, i)));
-                stats_by_key_type_[physical_key_type_index][task_type_index].logical_key_counts_[logical_key_type_index].increment(1);
-            }
-        }
-    }
-}
-
 [[nodiscard]] std::optional<RAIIAddTime> QueryStats::add_task_count_and_time(
         entity::KeyType key_type, TaskType task_type, std::optional<std::chrono::time_point<std::chrono::steady_clock>> start
 ) {
@@ -226,10 +186,6 @@ RAIIAddTime::~RAIIAddTime() {
 
 void add(entity::KeyType key_type, TaskType task_type, StatType stat_type, uint32_t value) {
     QueryStats::instance()->add(key_type, task_type, stat_type, value);
-}
-
-void add_logical_keys(entity::KeyType physical_key_type, TaskType task_type, const SegmentInMemory& segment) {
-    QueryStats::instance()->add_logical_keys(physical_key_type, task_type, segment);
 }
 
 [[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(
