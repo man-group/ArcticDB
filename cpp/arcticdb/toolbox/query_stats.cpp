@@ -9,7 +9,6 @@
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/stream/stream_utils.hpp>
 
 namespace arcticdb::query_stats {
 
