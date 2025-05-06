@@ -774,8 +774,11 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
                                 }
             );
         }
-        auto aggregated_column = std::make_shared<Column>(aggregator.aggregate(input_index_columns, input_agg_columns, bucket_boundaries, *output_index_column, string_pool));
-        seg.add_column(scalar_field(aggregated_column->type().data_type(), aggregator.get_output_column_name().value), aggregated_column);
+        std::optional<Column> aggregated_column = aggregator.aggregate(input_index_columns, input_agg_columns, bucket_boundaries, *output_index_column, string_pool);
+        if (aggregated_column) {
+            auto aggregated_column_ptr = std::make_shared<Column>(std::move(*aggregated_column));
+            seg.add_column(scalar_field(aggregated_column_ptr->type().data_type(), aggregator.get_output_column_name().value), std::move(aggregated_column_ptr));
+        }
     }
     seg.set_row_data(output_index_column->row_count() - 1);
     return push_entities(*component_manager_, ProcessingUnit(std::move(seg), std::move(output_row_range)));

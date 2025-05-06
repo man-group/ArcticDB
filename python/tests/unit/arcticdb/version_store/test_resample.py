@@ -6,6 +6,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 from functools import partial
+from typing import Union, Optional
+
 import numpy as np
 import pandas as pd
 import datetime as dt
@@ -17,14 +19,90 @@ from arcticdb.util.test import assert_frame_equal, generic_resample_test
 from packaging.version import Version
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
 import itertools
+from pandas.api.types import (
+    is_float_dtype,
+    is_datetime64_ns_dtype as is_datetime_dtype,
+    is_integer_dtype,
+    is_string_dtype,
+    is_bool_dtype
+)
+import string
 
 pytestmark = pytest.mark.pipeline
 
 
-ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
+ALL_AGGREGATIONS = {"sum", "mean", "min", "max", "first", "last", "count"}
 
-def all_aggregations_dict(col):
-    return {f"to_{agg}": (col, agg) for agg in ALL_AGGREGATIONS}
+def rand_data(dtype, count):
+    rng = np.random.default_rng(12345)
+    if is_float_dtype(dtype) or is_integer_dtype(dtype) or is_datetime_dtype(dtype):
+        return rng.integers(0, 100, count).astype(dtype)
+    elif is_string_dtype(dtype):
+        return np.array([''.join(rng.choice(list(string.ascii_letters), size=10)) for _ in range(count)])
+    elif is_bool_dtype(dtype):
+        return rng.choice([True, False], size=count).astype(dtype)
+    else:
+        raise BaseException(f"Unknown dtype {dtype}")
+
+
+def all_aggregations(dtype: Union[np.dtype, str] = None) -> set:
+    """
+    Get a set of all aggregation operations supported for a given dtype.
+
+    Parameters
+    ----------
+    dtype : Union[np.dtype, str]
+        Dtype to generate supported aggregations for. If None returns all aggregation operations.
+    """
+
+    result = ALL_AGGREGATIONS.copy()
+    if dtype is None:
+        return result
+    elif is_datetime_dtype(dtype):
+        result.remove("sum")
+    elif is_string_dtype(dtype):
+        result.difference_update({"sum", "mean", "min", "max"})
+    return result
+
+def default_aggregation_value(aggregation: str, dtype: Union[np.dtype, str]):
+    """
+    Get the default value for an aggregation operation. This is used to back-fill Pandas dataframes when they are
+    compared against dynamic schema libraries. Dynamic schema allows for missing columns but Pandas does not. ArcticDB
+    will put these default values everywhere where we have an index value in a bucket but the segment does not contain
+    column data.
+    """
+
+    assert aggregation in ALL_AGGREGATIONS
+    if is_float_dtype(dtype):
+        return 0 if aggregation == "count" else np.nan
+    elif np.issubdtype(dtype, np.integer):
+        return np.nan if aggregation == "mean" else 0
+    elif np.issubdtype(dtype, np.datetime64):
+        return 0 if aggregation == "count" else pd.NaT
+    elif np.issubdtype(dtype, np.str_):
+        return 0 if aggregation == "count" else None
+    elif pd.api.types.is_bool_dtype(dtype):
+        return np.nan if aggregation == "mean" else 0
+    else:
+        raise "Unknown dtype"
+
+def all_aggregations_dict(col: str, dtype: Optional[Union[str, np.dtype]] = None):
+    """
+    Generate a dict that can be used as an argument to both QueryBuilder and Pandas resample methods. The dict will
+    contain all possible aggregation operations for a column
+
+    Parameters
+    ----------
+
+    col: str
+        The name of the column to create aggregation dict for
+    dtype: Optional[Union[str, np.dtype]]
+        The dtype of the column to create aggregation operations dict for. Some dtypes support only a subset of the
+        aggregations. If None it creates a dict with all possible aggregations.
+    """
+
+    aggregations = all_aggregations(dtype)
+    return {f"to_{agg}": (col, agg) for agg in aggregations}
 
 # Pandas recommended way to resample and exclude buckets with no index values, which is our behaviour
 # See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#sparse-resampling
@@ -125,7 +203,7 @@ class TestResamplingBucketInsideSegment:
         idx = [start + i * pd.Timedelta('1s') for i in range(0, 8)]
         df = pd.DataFrame({"mid": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]}, index=idx)
         lib.write(sym, df)
-    
+
         date_range = (dt.datetime(2023, 12, 7, 23, 59, 48), dt.datetime(2023, 12, 7, 23, 59, 52))
         generic_resample_test_with_empty_buckets(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range)
 
@@ -143,7 +221,7 @@ class TestResamplingBucketInsideSegment:
         ])
         df = pd.DataFrame({"mid": [1, 2, 3, 4, 5, 6]}, index=idx)
         lib.write(sym, df)
-    
+
         date_range = (dt.datetime(2023, 12, 7, 23, 59, 49), dt.datetime(2023, 12, 7, 23, 59, 50))
         generic_resample_test(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range, closed=closed)
 
@@ -162,10 +240,10 @@ class TestResamplingBucketInsideSegment:
         ])
         df = pd.DataFrame({"mid": [1, 2, 3, 4, 5, 6, 7]}, index=idx)
         lib.write(sym, df)
-    
+
         date_range = (dt.datetime(2023, 12, 7, 23, 59, 48), dt.datetime(2023, 12, 7, 23, 59, 49, 500000))
         generic_resample_test(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range, closed=closed)
-    
+
     def test_inner_buckets_are_empty(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
         sym = "test_inner_buckets_are_empty"
@@ -179,10 +257,10 @@ class TestResamplingBucketInsideSegment:
         ])
         df = pd.DataFrame({"mid": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]}, index=idx)
         lib.write(sym, df)
-    
+
         date_range = (dt.datetime(2023, 12, 7, 23, 59, 48), dt.datetime(2023, 12, 7, 23, 59, 55))
         generic_resample_test_with_empty_buckets(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range)
-        
+
 
 
 def test_resampling_timezones(lmdb_version_store_v1):
@@ -508,24 +586,6 @@ def test_resampling_unsupported_aggregation_type_combos(lmdb_version_store_v1):
         lib.read(sym, query_builder=q)
 
 
-def test_resampling_dynamic_schema_missing_column(lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
-    sym = "test_resampling_dynamic_schema_missing_column"
-
-    lib.write(sym, pd.DataFrame({"col_0": [0]}, index=[pd.Timestamp(0)]))
-    lib.append(sym, pd.DataFrame({"col_1": [1000]}, index=[pd.Timestamp(2000)]))
-
-    # Schema exception should be thrown regardless of whether there are any buckets that span segments or not
-    q = QueryBuilder()
-    q = q.resample("us").agg({"col_0": "sum"})
-    with pytest.raises(SchemaException):
-        lib.read(sym, query_builder=q)
-
-    q = QueryBuilder()
-    q = q.resample("s").agg({"col_1": "sum"})
-    with pytest.raises(SchemaException):
-        lib.read(sym, query_builder=q)
-
 
 def test_resampling_sparse_data(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
@@ -757,10 +817,10 @@ class TestResamplingOrigin:
         pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
     ])
     @pytest.mark.parametrize("date_range",
-        list(itertools.product(
-            [pd.Timestamp("2024-01-01") - pd.Timedelta(1), pd.Timestamp("2024-01-01") + pd.Timedelta(1)],
-            [pd.Timestamp("2024-01-02") - pd.Timedelta(1), pd.Timestamp("2024-01-02") + pd.Timedelta(1)]))
-    )
+                             list(itertools.product(
+                                 [pd.Timestamp("2024-01-01") - pd.Timedelta(1), pd.Timestamp("2024-01-01") + pd.Timedelta(1)],
+                                 [pd.Timestamp("2024-01-02") - pd.Timedelta(1), pd.Timestamp("2024-01-02") + pd.Timedelta(1)]))
+                             )
     def test_origin_off_by_one_on_boundary(self, lmdb_version_store_v1, closed, origin, date_range):
         lib = lmdb_version_store_v1
         sym = "test_origin_special_values"
@@ -872,3 +932,115 @@ def test_min_with_one_infinity_element(lmdb_version_store_v1):
     q = QueryBuilder()
     q = q.resample('1min').agg({"col_min":("col", "min")})
     assert np.isneginf(lib.read(sym, query_builder=q).data['col_min'][0])
+
+class TestDynamicSchema:
+    @pytest.mark.parametrize("dtype", [np.float32, np.float64, np.uint32, np.int32, np.int64, bool, "datetime64[ns]", str])
+    def test_missing_column_segment_does_not_cross_bucket(self, lmdb_version_store_dynamic_schema_v1, dtype):
+        lib = lmdb_version_store_dynamic_schema_v1
+        sym = "sym"
+
+        idx = pd.date_range(pd.Timestamp(0), periods=20, freq='ns')
+        initial_df = pd.DataFrame({"a": rand_data(dtype, len(idx))}, index=idx)
+        lib.write(sym, initial_df)
+
+        idx_to_append = pd.date_range(pd.Timestamp(40), periods=20, freq='ns')
+        data_to_append = {"a": rand_data(dtype, len(idx)), "b": rand_data(dtype, len(idx))}
+        df_to_append = pd.DataFrame(data_to_append, index=idx_to_append)
+        lib.append(sym, df_to_append)
+
+        q = QueryBuilder()
+        q = q.resample('10ns').agg(all_aggregations_dict("b", dtype))
+        arctic_resampled = lib.read(sym, query_builder=q).data
+        arctic_resampled = arctic_resampled.reindex(columns=sorted(arctic_resampled.columns))
+
+        expected_slice_with_missing_column_idx = [pd.Timestamp(0), pd.Timestamp(10)]
+        # Pandas has no equivalent of dynamic schema and expects that the column will always be there, thus for the
+        # buckets where the column is missing we have to place the values manually by back-filling the column using the
+        # default value based on the type and the aggregator
+        expected_slice_with_missing_column = pd.DataFrame({
+            f"to_{agg}": [default_aggregation_value(agg, dtype) for _ in expected_slice_with_missing_column_idx] for agg in all_aggregations(dtype)
+        }, index=expected_slice_with_missing_column_idx)
+        expected_slice_containing_column = df_to_append.resample('10ns').agg(None, **all_aggregations_dict("b", dtype))
+        expected = pd.concat([expected_slice_with_missing_column, expected_slice_containing_column])
+        expected = expected.reindex(columns=sorted(expected.columns))
+        assert_frame_equal(arctic_resampled, expected, check_dtype=False)
+
+    @pytest.mark.parametrize("dtype", [np.float32, np.float64, np.uint32, np.int32, np.int64, bool, "datetime64[ns]", str])
+    def test_bucket_spans_two_segments(self, lmdb_version_store_dynamic_schema_v1, dtype):
+        lib = lmdb_version_store_dynamic_schema_v1
+        sym = "sym"
+
+        idx = pd.date_range(pd.Timestamp(0), periods=5, freq='ns')
+        initial_df = pd.DataFrame({"a": rand_data(dtype, len(idx))}, index=idx)
+        lib.write(sym, initial_df)
+
+        idx_to_append = pd.date_range(pd.Timestamp(6), periods=4, freq='ns')
+        data_to_append = {"a": rand_data(dtype, len(idx_to_append)), "b": rand_data(dtype, len(idx_to_append))}
+        df_to_append = pd.DataFrame(data_to_append, index=idx_to_append)
+        lib.append(sym, df_to_append)
+
+        q = QueryBuilder()
+        q = q.resample('10ns').agg(all_aggregations_dict("b", dtype))
+        arctic_resampled = lib.read(sym, query_builder=q).data
+        arctic_resampled = arctic_resampled.reindex(columns=sorted(arctic_resampled.columns))
+
+        # Resampling is performed on column b which is introduced in the second segment. That is why pandas resampling
+        # is performed only on the second segment. Another option would be to read the whole dataframe and run pandas
+        # resampling on it. However, this breaks for integer dtypes as they get backfilled (when they are missing from
+        # a segment) pandas will then pick this 0 as existing value this might affect all aggregations e.g. (pandas will
+        # count it while ArcticDB will igrnore it in the count clause)
+        expected = df_to_append.resample('10ns').agg(None, **all_aggregations_dict("b", dtype))
+        expected = expected.reindex(columns=sorted(expected.columns))
+
+        assert_frame_equal(arctic_resampled, expected, check_dtype=False)
+
+    @pytest.mark.parametrize("dtype", [np.float32, np.float64, np.uint32, np.int32, np.int64, bool, "datetime64[ns]", str])
+    def test_bucket_spans_multiple_segments(self, lmdb_version_store_dynamic_schema_v1, dtype):
+        lib = lmdb_version_store_dynamic_schema_v1
+        sym = "sym"
+
+        data = [
+            pd.DataFrame({"a": rand_data(dtype, 1)}, index=pd.DatetimeIndex([pd.Timestamp(0)])),
+            pd.DataFrame({"b": rand_data(dtype, 1)}, index=pd.DatetimeIndex([pd.Timestamp(1)])),
+            pd.DataFrame({"a": rand_data(dtype, 1)}, index=pd.DatetimeIndex([pd.Timestamp(2)])),
+            pd.DataFrame({"a": rand_data(dtype, 1)}, index=pd.DatetimeIndex([pd.Timestamp(3)])),
+            pd.DataFrame({"b": rand_data(dtype, 1)}, index=pd.DatetimeIndex([pd.Timestamp(4)])),
+            pd.DataFrame({"b": rand_data(dtype, 1)}, index=pd.DatetimeIndex([pd.Timestamp(5)])),
+            pd.DataFrame({"a": rand_data(dtype, 3), "b": rand_data(dtype, 3)}, index=pd.date_range(pd.Timestamp(5), periods=3, freq='ns'))
+        ]
+        for df in data:
+            lib.append(sym, df)
+
+        pandas_to_resample = pd.concat(filter(lambda df: "b" in df, data))
+        expected = pandas_to_resample.resample('10ns').agg(None, **all_aggregations_dict("b", dtype))
+        expected = expected.reindex(columns=sorted(expected.columns))
+
+        q = QueryBuilder()
+        q = q.resample('10ns').agg(all_aggregations_dict("b", dtype))
+        arctic_resampled = lib.read(sym, query_builder=q).data
+        arctic_resampled = arctic_resampled.reindex(columns=sorted(arctic_resampled.columns))
+
+        assert_frame_equal(expected, arctic_resampled, check_dtype=False)
+
+    def test_type_promotion(self, lmdb_version_store_dynamic_schema_v1):
+        lib = lmdb_version_store_dynamic_schema_v1
+        sym = "sym"
+        data = [
+            pd.DataFrame({"a": rand_data(np.int16, 15)}, pd.date_range(pd.Timestamp(0), periods=15, freq='ns')),
+            pd.DataFrame({"a": rand_data(np.int8, 15)}, pd.date_range(pd.Timestamp(15), periods=15, freq='ns')),
+            pd.DataFrame({"a": rand_data(np.int32, 15)}, pd.date_range(pd.Timestamp(30), periods=15, freq='ns')),
+            pd.DataFrame({"a": rand_data(np.float64, 15)}, pd.date_range(pd.Timestamp(45), periods=15, freq='ns'))
+        ]
+        for df in data:
+            lib.append(sym, df)
+
+        q = QueryBuilder()
+        q = q.resample('10ns').agg(all_aggregations_dict("a"))
+        arctic_resampled = lib.read(sym, query_builder=q).data
+        arctic_resampled = arctic_resampled.reindex(columns=sorted(arctic_resampled.columns))
+
+        pandas_to_resample = lib.read(sym).data
+        expected = pandas_to_resample.resample('10ns').agg(None, **all_aggregations_dict("a"))
+        expected = expected.reindex(columns=sorted(expected.columns))
+
+        assert_frame_equal(arctic_resampled, expected, check_dtype=False)
