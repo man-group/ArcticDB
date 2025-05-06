@@ -52,22 +52,35 @@ private:
     std::chrono::time_point<std::chrono::steady_clock> start_;
 };
 
-// NOT REAL STRUCTURE. DEMO ONLY
+// Example output:
 // {
-//     "SYMBOL_LIST": { <- STATS_BY_KEY_TYPE
+//     "VERSION_REF": { <- STATS_BY_KEY_TYPE
 //         "storage_ops": { <- STATS_BY_OP_TYPE
 //             "S3_ListObjectsV2": { <- OperationStats::stats_
-//                 "total_time_ms": 83,
+//                 "total_time_ms": 32,
+//                 "count": 2
+//             },
+//             "S3_GetObject": { <- OperationStats::stats_
+//                 "total_time_ms": 50,
 //                 "count": 3
+//             },
+//             "Decode": { <- OperationStats::stats_
+//                 "count": 3,
+//                 "uncompressed_size_bytes": 300,
+//                 "compressed_size_bytes": 1827,
 //                 "key_type": { <- OperationStats::logical_key_counts_
 //                     "TABLE_INDEX": {
-//                         "count": 2
+//                         "count": 3
+//                     },
+//                     "VERSION": {
+//                         "count": 3
 //                     }
 //                 }
 //             }
 //         }
 //     }
 // }
+
 
 
 class QueryStats {

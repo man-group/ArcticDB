@@ -110,7 +110,9 @@ QueryStats::QueryStatsOutput QueryStats::get_stats() const {
         for (size_t task_idx = 0; task_idx < static_cast<size_t>(TaskType::END); ++task_idx) {
             TaskType task_type = static_cast<TaskType>(task_idx);
             std::string task_type_str = task_type_to_string(task_type);
+
             const auto& op_stats = stats_by_key_type_[key_idx][task_idx];
+            
             OperationStatsOutput op_output;
             
             for (size_t stat_idx = 0; stat_idx < static_cast<size_t>(StatType::END); ++stat_idx) {
