@@ -14,6 +14,7 @@ import pandas as pd
 
 from arcticdb.util.utils import DFGenerator, TimestampNumber
 from arcticdb.util.environment_setup import GeneralSetupLibraryWithSymbols, Storage
+import arcticdb.toolbox.query_stats as qs
 
 
 #region Setup classes
@@ -196,10 +197,10 @@ class AWSReadWrite(LMDBReadWrite):
     SETUP_CLASS = ReadWriteBenchmarkSettings(Storage.AMAZON, 
                                              # Define UNIQUE STRING for persistent libraries names 
                                              # as well as name of unique storage prefix
-                                             prefix="READ_WRITE").set_params([1_000_000, 2_000_000])
+                                             prefix="READ_WRITE").set_params([[1_000_000, 2_000_000], [True, False]])
 
     params = SETUP_CLASS.get_parameter_list()
-    param_names = LMDBReadWrite.param_names
+    param_names = LMDBReadWrite.param_names + ["use_query_stats"]
 
     def setup_cache(self):
         '''
@@ -211,4 +212,15 @@ class AWSReadWrite(LMDBReadWrite):
         '''
         aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment() 
         return aws_setup.get_storage_info()
+        
+    def setup(self, storage_info, num_rows, use_query_stats):
+        super().setup(storage_info, num_rows)
+        if use_query_stats:
+            qs.enable()
+
+    def teardown(self, storage_info, num_rows, use_query_stats):
+        super().teardown(storage_info, num_rows)
+        if use_query_stats:
+            qs.disable()
+
 
