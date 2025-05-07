@@ -13,6 +13,7 @@ import pandas as pd
 from arcticdb.options import LibraryOptions
 from arcticdb.util.environment_setup import DataFrameGenerator, TestLibraryManager, LibraryPopulationPolicy, LibraryType, Storage, get_console_logger, populate_library_if_missing
 from arcticdb.util.utils import DFGenerator, DataRangeUtils, TimestampNumber
+import arcticdb.toolbox.query_stats as qs
 from benchmarks.common import AsvBase
 
 
@@ -200,3 +201,16 @@ class AWSWideDataFrameTests(AWSReadWrite):
         # must implement setup_cache
         super().setup_cache()
 
+
+class AWSReadWriteWithQueryStats(AWSReadWrite):
+    """
+    This class inherits from AWSReadWrite and always runs with query_stats enabled
+    """
+        
+    def setup(self, storage_info, num_rows):
+        super().setup(storage_info, num_rows)
+        qs.enable()
+
+    def teardown(self, storage_info, num_rows):
+        qs.disable()
+        qs.reset_stats()
