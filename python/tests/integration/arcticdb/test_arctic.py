@@ -38,6 +38,8 @@ from arcticdb.version_store.library import (
     StagedDataFinalizeMethod,
 )
 
+from tests.enduser.shared_tests import execute_test_snapshots_and_deletes, execute_test_write_metadata_with_none
+
 from ...util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -333,22 +335,7 @@ def test_basic_write_read_update_and_append(arctic_library):
 
 @pytest.mark.storage
 def test_write_metadata_with_none(arctic_library):
-    lib = arctic_library
-    symbol = "symbol"
-    meta = {"meta_" + str(symbol): 0}
-
-    result_write = lib.write_metadata(symbol, meta)
-    assert result_write.version == 0
-
-    read_meta_symbol = lib.read_metadata(symbol)
-    assert read_meta_symbol.data is None
-    assert read_meta_symbol.metadata == meta
-    assert read_meta_symbol.version == 0
-
-    read_symbol = lib.read(symbol)
-    assert read_symbol.data is None
-    assert read_symbol.metadata == meta
-    assert read_symbol.version == 0
+    execute_test_write_metadata_with_none(arctic_library)
 
 
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND))
@@ -480,25 +467,7 @@ class TestAppendStagedData:
 
 @pytest.mark.storage
 def test_snapshots_and_deletes(arctic_library):
-    lib = arctic_library
-    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
-    lib.write("my_symbol", df)
-    lib.write("my_symbol2", df)
-
-    lib.snapshot("test1")
-
-    assert lib.list_snapshots() == {"test1": None}
-
-    assert_frame_equal(lib.read("my_symbol", as_of="test1").data, df)
-
-    lib.delete("my_symbol")
-    lib.snapshot("snap_after_delete")
-    assert sorted(lib.list_symbols("test1")) == ["my_symbol", "my_symbol2"]
-    assert lib.list_symbols("snap_after_delete") == ["my_symbol2"]
-
-    lib.delete_snapshot("test1")
-    assert lib.list_snapshots() == {"snap_after_delete": None}
-    assert lib.list_symbols() == ["my_symbol2"]
+    execute_test_snapshots_and_deletes(arctic_library)
 
 
 @pytest.mark.storage
