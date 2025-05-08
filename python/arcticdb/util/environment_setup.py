@@ -359,12 +359,25 @@ class TestLibraryManager:
 
     @classmethod
     def __remove_all_test_libs(cls, ac: Arctic, uri_str_to_confirm: str):
-        assert uri_str_to_confirm in ac.get_uri(), f"[{uri_str_to_confirm}] str in test uri"
+        assert uri_str_to_confirm in ac.get_uri(), f"Found [{uri_str_to_confirm}] string in uri"
         lib_names = set(ac.list_libraries())
         for to_delete in lib_names:
             ac.delete_library(to_delete)  
             get_console_logger().info(f"Delete library [{to_delete}] from storage space having [{uri_str_to_confirm}]")          
         assert len(ac.list_libraries()) == 0, f"All libs for storage space [{uri_str_to_confirm}] deleted"        
+
+    def remove_all_persistent_libs_for_this_test(self):
+        """
+        This will remove all persistent libraries for this test from the persistent storage
+        Therefore use wisely only when needed (like change of parameters for tests)
+        """
+        name_prefix = f"{LibraryType.value}_{self.name_benchmark}"
+        ac = self._get_arctic_client_persistent()
+        lib_names = set(ac.list_libraries())
+        for to_delete in lib_names:
+            if to_delete.startswith(name_prefix):
+                ac.delete_library(to_delete)  
+                get_console_logger().info(f"Delete library [{to_delete}]")          
 
 
 class DataFrameGenerator(ABC):
@@ -428,6 +441,11 @@ class LibraryPopulationPolicy:
         This configures generation of 10 symbols with 10 rows each. Also instructs that the symbol names will be constructed 
         with auto incrementing index - you can access each symbol using its index 0-9
     """
+
+    """
+        TODO: if this class needs to be inherited or changed significantly consider this task:9098760503
+    """
+    
 
     def __init__(self, logger: logging.Logger, df_generator: DataFrameGenerator = VariableSizeDataframe()):
         self.logger: logging.Logger = logger
@@ -624,6 +642,7 @@ class SequentialDataframesGenerator:
         last = self.get_first_and_last_timestamp(sequence_df_list)[1]
         next = TimestampNumber.from_timestamp(last, freq) + 1
         return next
+
 
 class TestsForTestLibraryManager:
     """

@@ -75,7 +75,7 @@ class AWSLargeAppendTests(AsvBase):
     def initialize_cache(self, warmup_time, params, num_cols, num_sequential_dataframes):
         # warmup will execute tests additional time and we do not want that at all for write
         # update and append tests. We want exact specified `number` of times to be executed between
-        assert warmup_time == 0, "warm up must be 0"
+        assert warmup_time == 0, "warm is expected to be 0. If not 0 all tests will be invalid or not working"
 
         num_sequential_dataframes += 1
         cache = CacheForModifiableTests()
