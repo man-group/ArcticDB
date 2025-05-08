@@ -33,7 +33,7 @@ def query_stats() -> Iterator[None]:
         This API is unstable and not governed by semantic versioning.
     """
     if qs.is_enabled():
-        raise UserInputException("Query Stats is already enabled")
+        raise UserInputException("Query Stats is already enabled") # This will prohibit recursion
     enable()
     yield
     disable()
@@ -70,18 +70,7 @@ def get_query_stats() -> Dict[str, Any]:
     .. warning::
         This API is unstable and not governed by semantic versioning.
     """
-    raw_stats = qs.get_stats()
-    result = {}
-    
-    for key_type, key_type_data in raw_stats.items():
-        result[key_type] = {}
-            
-        for op_group, op_group_data in key_type_data.items():
-            result[key_type][op_group] = {}
-            for task_type, task_data in op_group_data.items():                
-                result[key_type][op_group][task_type] = task_data.stats
-                
-    return result
+    return qs.get_stats()
 
 
 def reset_stats() -> None:
