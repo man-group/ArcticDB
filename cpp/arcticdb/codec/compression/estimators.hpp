@@ -145,7 +145,7 @@ struct DeltaEstimator {
         }
 
         const auto bit_width = std::bit_width(static_cast<std::make_unsigned_t<T>>(max_delta));
-        return {.bits_needed_ = bit_width * block_size, .bit_width_ = bit_width, .exceptions_ = 0};
+        return {.bits_needed_ = bit_width * block_size, .bit_width_ = static_cast<size_t>(bit_width), .exceptions_ = 0};
     }
 };
 
