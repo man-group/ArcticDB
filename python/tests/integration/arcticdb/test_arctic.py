@@ -1335,3 +1335,41 @@ def test_norm_failure_error_message(arctic_library):
         write_batch_exception.value
     )
     assert all("write_pickle" not in str(e.value) for e in [append_exception, append_batch_exception, update_exception])
+
+
+def test_resample_error(lmdb_library):
+    lib = lmdb_library
+    sym = "test_resample_error"
+    df_start = pd.Timestamp("2024-01-04 00:51:00")
+    df_end = pd.Timestamp("2025-01-03 18:16:00")
+    index = pd.read_csv("BBG_data_index.csv")["datetime"]
+    # index = pd.to_datetime(pd.read_csv("BBG_data_index.csv")["datetime"])
+    df_len = len(index)
+    rng = np.random.default_rng()
+    df = pd.DataFrame(
+        {
+            "open": rng.random(df_len, dtype=np.float64),
+            "high": rng.random(df_len, dtype=np.float64),
+            "low": rng.random(df_len, dtype=np.float64),
+            "close": rng.random(df_len, dtype=np.float64),
+            "volume": rng.integers(0, 100, df_len, dtype=np.int64),
+            "num_ticks": rng.integers(0, 100, df_len, dtype=np.int64),
+            "security": ["BBG0013LDZD1"] * df_len,
+            "pcs": ["CMPN"] * df_len,
+        },
+        index=index,
+    )
+    lib.write(sym, df)
+
+    start = pd.Timestamp("2024-01-04 00:00")
+    end = pd.Timestamp("2025-01-04 23:59")
+    rule = "1D"
+    q = QueryBuilder().date_range((start, end)).resample(rule).agg({"ticks": ("open", "count")})
+
+    info = lib.get_description(sym)
+    print(info)
+    read_df = lib.read(sym).data
+
+    resampled_df = lib.read(sym, query_builder=q).data
+
+    print("fin")
