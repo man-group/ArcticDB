@@ -75,6 +75,11 @@ jobs:
     runs-on: ${{ inputs.os != 'all' && inputs.os || matrix.os }}
     strategy:
       matrix:
+        # This matrix strategy will run limited set of combinations
+        # for each python version we support, matching it with combination of:
+        #  OS amd either pypi or conda
+        # This way we cover all python versions, OS-es and installation repos 
+        # in just 8 combinations
         include:
           - os: ubuntu-22.04
             python: "3.7"
@@ -127,7 +132,7 @@ jobs:
         fi
 
     - name: When On Schedule - Override the arcticdb version based on hour of execution
-      # Inly when executed on schedule this step will be triggered
+      # Only when executed on schedule this step will be triggered
       # Based on the hour of execution a specific version will be assigned
       # Only this version will be executed at that hour
       # Make sure this step is synchronized with the job schedule  
@@ -150,7 +155,7 @@ jobs:
       if: ${{ env.SKIP_JOB != 'true' }}
       uses: actions/setup-python@v4
       with:
-        python-version: ${{ matrix.python || inputs.python}}
+        python-version: ${{ inputs.python || matrix.python}}
 
     - name: (pypi) Install arcticdb from requirements files 
       if: ${{ (env.SKIP_JOB != 'true') && (!contains(matrix.use_conda, 'yes'))}}

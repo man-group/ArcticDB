@@ -61,7 +61,7 @@ def is_storage_enabled(storage_type: StorageTypes) -> bool:
     if not persistent_storage:
         return False
     
-    if arcticdb.__version__ >= "5.3.0":
+    if CONDITION_GCP_AVAILABLE:
         if storage_type == StorageTypes.REAL_GCP:
             if os.getenv("ARCTICDB_STORAGE_GCP", "0") == "1":        
                 return True
