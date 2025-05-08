@@ -1,10 +1,12 @@
-name: Run Installation Tests v4
+name: Installation Tests Execution
 
 on:
   push:
     branches: 
       - installation_tests_v4
   schedule:
+    # Execution overnight for each version of the arcticdb happens on 
+    # dedicated hour for each version (see later step "When on schedule ...")
     - cron: "0 1 * * *"
     - cron: "0 2 * * *"
     - cron: "0 3 * * *"
@@ -125,6 +127,10 @@ jobs:
         fi
 
     - name: When On Schedule - Override the arcticdb version based on hour of execution
+      # Inly when executed on schedule this step will be triggered
+      # Based on the hour of execution a specific version will be assigned
+      # Only this version will be executed at that hour
+      # Make sure this step is synchronized with the job schedule  
       if: github.event_name == 'schedule'
       run: |
         hour=$(date -u +"%H")
