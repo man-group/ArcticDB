@@ -42,10 +42,8 @@ TEST(LZ4StressTest, CompressDecompressSeparate) {
     double avg_compress_time = static_cast<double>(compress_duration) / iterations;
     int valid_comp_size = LZ4_compress_default(reinterpret_cast<const char*>(input.data()), compressed.data(), source_size, max_dest_size);
     auto start_decompress = std::chrono::high_resolution_clock::now();
-    int total_decomp_size = 0;
     for (size_t iter = 0; iter < iterations; iter++) {
-        int decompressed_size = LZ4_decompress_safe(compressed.data(), reinterpret_cast<char*>(decompressed.data()), valid_comp_size, source_size);
-        total_decomp_size += decompressed_size;
+        (void)LZ4_decompress_safe(compressed.data(), reinterpret_cast<char*>(decompressed.data()), valid_comp_size, source_size);
     }
 
     auto end_decompress = std::chrono::high_resolution_clock::now();
