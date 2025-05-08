@@ -197,10 +197,10 @@ class AWSReadWrite(LMDBReadWrite):
     SETUP_CLASS = ReadWriteBenchmarkSettings(Storage.AMAZON, 
                                              # Define UNIQUE STRING for persistent libraries names 
                                              # as well as name of unique storage prefix
-                                             prefix="READ_WRITE").set_params([[1_000_000, 2_000_000], [True, False]])
+                                             prefix="READ_WRITE").set_params([1_000_000, 2_000_000])
 
     params = SETUP_CLASS.get_parameter_list()
-    param_names = LMDBReadWrite.param_names + ["use_query_stats"]
+    param_names = LMDBReadWrite.param_names
 
     def setup_cache(self):
         '''
@@ -212,15 +212,17 @@ class AWSReadWrite(LMDBReadWrite):
         '''
         aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment() 
         return aws_setup.get_storage_info()
+
+
+class AWSReadWriteWithQueryStats(AWSReadWrite):
+    """
+    This class inherits from AWSReadWrite and always runs with query_stats enabled
+    """
         
-    def setup(self, storage_info, num_rows, use_query_stats):
+    def setup(self, storage_info, num_rows):
         super().setup(storage_info, num_rows)
-        if use_query_stats:
-            qs.enable()
+        qs.enable()
 
-    def teardown(self, storage_info, num_rows, use_query_stats):
-        super().teardown(storage_info, num_rows)
-        if use_query_stats:
-            qs.disable()
-
-
+    def teardown(self, storage_info, num_rows):
+        qs.disable()
+        qs.reset_stats()
