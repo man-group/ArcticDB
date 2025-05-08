@@ -150,13 +150,13 @@ void QueryStats::add(entity::KeyType key_type, TaskType task_type, StatType stat
                 stats.size_bytes_.increment(value);
                 break;
             default:
-                throw std::invalid_argument("Invalid stat type");
+                internal::raise<ErrorCode::E_INVALID_ARGUMENT>("Invalid stat type");
         }
     }
 }
 
 [[nodiscard]] std::optional<RAIIAddTime> QueryStats::add_task_count_and_time(
-        entity::KeyType key_type, TaskType task_type, std::optional<std::chrono::time_point<std::chrono::steady_clock>> start
+        entity::KeyType key_type, TaskType task_type, std::optional<TimePoint> start
 ) {
     if (is_enabled()) {
         auto& stats = stats_by_key_type_[static_cast<size_t>(key_type)][static_cast<size_t>(task_type)];
@@ -166,7 +166,7 @@ void QueryStats::add(entity::KeyType key_type, TaskType task_type, StatType stat
     return std::nullopt;
 }
 
-RAIIAddTime::RAIIAddTime(folly::ThreadCachedInt<timestamp>& time_var, std::chrono::time_point<std::chrono::steady_clock> start) :
+RAIIAddTime::RAIIAddTime(folly::ThreadCachedInt<timestamp>& time_var, TimePoint start) :
     time_var_(time_var),
     start_(start) {
 
@@ -181,7 +181,7 @@ void add(entity::KeyType key_type, TaskType task_type, StatType stat_type, uint3
 }
 
 [[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(
-    entity::KeyType key_type, TaskType task_type, std::optional<std::chrono::time_point<std::chrono::steady_clock>> start
+    entity::KeyType key_type, TaskType task_type, std::optional<TimePoint> start
 ) {
     return QueryStats::instance()->add_task_count_and_time(key_type, task_type, start);
 }

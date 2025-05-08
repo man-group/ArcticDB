@@ -3,9 +3,7 @@
 > **Warning**: The Query Statistics API is unstable and not governed by ArcticDB's semantic versioning. It may change or be removed in future versions without notice.
 
 ArcticDB provides a Query Statistics API that allows you to collect and analyze performance metrics for operations performed on your data stores.
-This can be useful for debugging, performance optimization.
-The Query Statistics feature uses a global container to store all measurements. This means statistics from all Python threads in your application will be collected in the same structure. 
-For this reason, enabling or disabling Query Statistics in multiple threads can lead to unpredictable results and should be avoided. It's best to treat Query Statistics as an application-wide setting rather than a thread-specific one.
+This can be useful for debugging code issues and optimizing performance in applications.
 
 Currently only S3 backend is supported. Support for other storage backend is pending.
 
@@ -16,7 +14,7 @@ There are two ways to enable query statistics collection:
 ### Using the Context Manager
 
 The context manager automatically enables statistics at the beginning of a block and disables them at the end.
-Please note that recursion is not supported:
+Please note that nested context managers is not supported:
 
 ```python
 import arcticdb as adb
@@ -80,7 +78,7 @@ The statistics are returned as a nested dictionary organized by:
 Each task contains measurements like:
 - `count`: Number of times the operation was performed
 - `total_time_ms`: Total execution time in milliseconds
-- For data operations, additional metric `size_bytes` for the size of data being transferred
+- For data operations, additional metric `size_bytes` for the size of compressed data being transferred
 
 Example output:
 
@@ -134,5 +132,8 @@ qs.reset_stats()
 This is useful when you want to isolate statistics for specific operations or when you're done with one phase of analysis and want to start fresh.
 
 ## Note
-Running an enormous number of operations with Query Statistics enabled risks overflowing the internal counters. To avoid this issue, please reset statistics periodically or keep sessions with Query Statistics enabled relatively short.
+1. The Query Statistics feature uses a global container to store all measurements. This means statistics from all Python threads in your application will be collected in the same structure. 
+For this reason, enabling or disabling Query Statistics in multiple threads can lead to unpredictable results and should be avoided. It's best to treat Query Statistics as an application-wide setting rather than a thread-specific one.
+
+2. Running an enormous number of operations with Query Statistics enabled risks overflowing the internal counters. To avoid this issue, please reset statistics periodically or keep sessions with Query Statistics enabled relatively short.
 ```

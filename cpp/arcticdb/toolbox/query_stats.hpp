@@ -37,13 +37,14 @@ enum class StatType : size_t {
     END
 };
 
+using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 class RAIIAddTime {
 public:
-    RAIIAddTime(folly::ThreadCachedInt<timestamp>& time_var, std::chrono::time_point<std::chrono::steady_clock> start);
+    RAIIAddTime(folly::ThreadCachedInt<timestamp>& time_var, TimePoint start);
     ~RAIIAddTime();
 private:
     folly::ThreadCachedInt<timestamp>& time_var_;
-    std::chrono::time_point<std::chrono::steady_clock> start_;
+    TimePoint start_;
 };
 
 // Example output:
@@ -87,7 +88,7 @@ public:
     void disable();
     bool is_enabled() const;
     void add(entity::KeyType key_type, TaskType task_type, StatType stat_type, uint32_t value);
-    [[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(entity::KeyType key_type, TaskType task_type, std::optional<std::chrono::time_point<std::chrono::steady_clock>> start = std::nullopt);
+    [[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(entity::KeyType key_type, TaskType task_type, std::optional<TimePoint> start = std::nullopt);
     QueryStatsOutput get_stats() const;
     QueryStats();
 
@@ -100,5 +101,5 @@ private:
 };
 
 void add(entity::KeyType key_type, TaskType task_type, StatType stat_type, uint32_t value);
-[[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(entity::KeyType key_type, TaskType task_type, std::optional<std::chrono::time_point<std::chrono::steady_clock>> start = std::nullopt);
+[[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(entity::KeyType key_type, TaskType task_type, std::optional<TimePoint> start = std::nullopt);
 }

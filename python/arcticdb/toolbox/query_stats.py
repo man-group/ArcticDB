@@ -33,7 +33,8 @@ def query_stats() -> Iterator[None]:
         This API is unstable and not governed by semantic versioning.
     """
     if qs.is_enabled():
-        raise UserInputException("Query Stats is already enabled") # This will prohibit recursion
+        # This will prohibit the unsupported nested context managers usage
+        raise UserInputException("Query Stats is already enabled")
     enable()
     yield
     disable()

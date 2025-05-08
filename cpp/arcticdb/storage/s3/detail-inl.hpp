@@ -189,7 +189,6 @@ KeySegmentPair do_read_impl(
         auto segment = std::move(get_object_result.get_output());
         query_stats::add(key_type, query_stats::TaskType::S3_GetObject, query_stats::StatType::SIZE_BYTES, segment.calculate_size());
         return {VariantKey{unencoded_key}, std::move(segment)};
-        ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(unencoded_key), variant_key_view(unencoded_key));
     } else {
         auto& error = get_object_result.get_error();
         raise_if_unexpected_error(error, s3_object_name);
@@ -413,7 +412,8 @@ void do_write_if_none_impl(
 
             if (put_object_result.is_success()) {
                 query_stats::add(key_type, query_stats::TaskType::S3_PutObject, query_stats::StatType::SIZE_BYTES, segment_size);
-            } {
+            }
+            else {
                 auto& error = put_object_result.get_error();
                 raise_s3_exception(error, s3_object_name);
             }
