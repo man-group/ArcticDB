@@ -18,6 +18,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import List
 from enum import Enum
+import multiprocessing
 
 from arcticdb_ext import get_config_int
 from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
@@ -45,6 +46,8 @@ from ...util.mark import (
     SLOW_TESTS_MARK,
     SSL_TESTS_MARK,
     SSL_TEST_SUPPORTED,
+    FORK_SUPPORTED,
+    ARCTICDB_USING_CONDA
 )
 
 logger = logging.getLogger(__name__)
@@ -1335,3 +1338,37 @@ def test_norm_failure_error_message(arctic_library):
         write_batch_exception.value
     )
     assert all("write_pickle" not in str(e.value) for e in [append_exception, append_batch_exception, update_exception])
+
+
+def create_library(uri, lib_name):
+    ac = Arctic(uri)
+    ac.create_library(lib_name)
+    assert lib_name in ac.list_libraries()
+
+
+# moto will reject any checksum-enabled requests. Below test is to make sure the env var hack works in multiprocessing
+@pytest.mark.parametrize(
+    "multiprocess", [
+        "spawn",
+        pytest.param("fork", marks=FORK_SUPPORTED),
+        pytest.param("forkserver", marks=FORK_SUPPORTED),
+    ]
+)
+def test_s3_checksum_off_by_env_var(s3_storage, lib_name, multiprocess):
+    create_library(s3_storage.arctic_uri, lib_name)
+    spawn_context = multiprocessing.get_context(multiprocess)
+    processes = []
+    for i in range(2):
+        p = spawn_context.Process(target=create_library, args=(s3_storage.arctic_uri, f"{lib_name}_{i}", ))
+        processes.append(p)
+        p.start()
+    for p in processes:
+        p.join()
+
+
+@pytest.mark.skipif(not ARCTICDB_USING_CONDA, reason="aws sdk on pypi is pinned at version which doesn't turn on checksumming by default")
+@pytest.mark.skip(reason="aws sdk is stuck at 1.11.449 on conda CI due to libarrow pin, which doesn't run checksumming by default")
+def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch):
+    monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
+    with pytest.raises(Exception):
+        create_library(s3_storage.arctic_uri, lib_name)
