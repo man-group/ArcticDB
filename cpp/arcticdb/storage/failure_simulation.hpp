@@ -23,6 +23,7 @@ namespace arcticdb {
 enum class FailureType : int {
     WRITE = 0,
     READ,
+    WRITE_SLOW,
     ITERATE,
     DELETE,
 };
@@ -64,8 +65,8 @@ struct FailureAction {
             description_(std::move(description)), proxy_(std::move(proxy)) {}
 
     template<typename Func>
-    FailureAction(Description description, Func func):
-            FailureAction(std::move(description), FunctionWrapper{func}.asSharedProxy()) {}
+    FailureAction(Description description, Func&& func):
+            FailureAction(std::move(description), FunctionWrapper{std::forward<Func>(func)}.asSharedProxy()) {}
 
     inline void operator()(FailureType type) const {
         proxy_(type);
@@ -77,29 +78,50 @@ inline std::ostream& operator<<(std::ostream& out, const FailureAction& action) 
     return out;
 }
 
-namespace action_factories { // To allow `using namespace`
+namespace action_factories {
+// To allow `using namespace`
 static inline const FailureAction no_op("no_op", [](FailureType){});
+
+static FailureAction::FunctionWrapper maybe_execute(double probability, FailureAction::FunctionWrapper&& func) {
+    util::check_arg(probability >= 0 && probability <= 1.0, "Bad probability: {}", probability);
+
+    return [probability, f = std::move(func)](FailureType type) mutable {
+        if (probability == 0) {
+            return;
+        }
+
+        if (probability == 1.0) {
+            std::invoke(std::move(f), type);
+            return;
+        }
+
+        thread_local std::once_flag flag;
+        std::call_once(flag, [seed = (uint64_t)(&type)]() { init_random(seed); });
+        auto nd = random_probability();
+        if (nd < probability) {
+            std::invoke(std::move(f), type);
+        }
+    };
+}
 
 /** Raises the given exception with the given probability. */
 template<class Exception = StorageException>
-static inline FailureAction fault(double probability = 1.0) {
-    util::check_arg(probability >= 0, "Bad probability: {}", probability);
-
-    if (probability >= 1.0) {
-        return {"raise",  [](FailureType failure_type) {
-            throw Exception(fmt::format("Simulating {} storage failure", failure_type));
-        }};
-    } else {
-        return {fmt::format("fault({})", probability),
-                [prob=probability](FailureType failure_type) {
-                    thread_local std::once_flag flag;
-                    std::call_once(flag, [seed = uint64_t(&failure_type)]() { init_random(seed); });
-                    if (random_probability() < prob) {
-                        throw Exception(fmt::format("Simulating {} storage failure", failure_type));
-                    }
-                }};
-    }
+static  FailureAction fault(double probability = 1.0) {
+    return {fmt::format("fault({})", probability), maybe_execute(probability, [](FailureType failure_type) {
+                throw Exception(fmt::format("Simulating {} storage failure", failure_type));
+    })};
 }
+
+static FailureAction slow_action(double probability, int slow_down_ms_min, int slow_down_ms_max) {
+    return {fmt::format("slow_down({})", probability), maybe_execute(probability, [slow_down_ms_min, slow_down_ms_max](FailureType) {
+        thread_local std::uniform_int_distribution<size_t> dist(slow_down_ms_min, slow_down_ms_max);
+        thread_local std::mt19937 gen(std::random_device{}());
+        int sleep_ms = dist(gen);
+        ARCTICDB_INFO(log::lock(), "Testing: Sleeping for {} ms", sleep_ms);
+        std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
+    })};
+}
+
 }
 
 /** Independent state for each FailureType. Thread-safe except for the c'tors. */
@@ -149,10 +171,16 @@ public:
 
     StorageFailureSimulator() : configured_(false) {}
 
-    void configure(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg)  {
-        configure({{FailureType::WRITE, {action_factories::fault(cfg.write_failure_prob())}},
-                   {FailureType::READ, {action_factories::fault(cfg.read_failure_prob())}}});
-    }
+    void configure(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) {
+        using enum arcticdb::FailureType;
+        Params default_actions = {
+            {WRITE, {action_factories::fault(cfg.write_failure_prob())}},
+            {READ, {action_factories::fault(cfg.read_failure_prob())}},
+            {WRITE_SLOW, {action_factories::slow_action(cfg.write_slowdown_prob(), cfg.slow_down_min_ms(), cfg.slow_down_max_ms())}}
+        };
+
+        configure(default_actions);
+    };
 
     void configure(const Params& params) {
         log::storage().info("Initializing storage failure simulator");

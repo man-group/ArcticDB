@@ -364,3 +364,57 @@ TEST(StorageLock, OptimisticForceReleaseLock) {
     // Clean up locks to avoid "mutex destroyed while active" errors on Windows debug build
     first_lock._test_release_local_lock();
 }
+
+class NoOpMutex {
+public:
+    void lock() {}
+    void unlock() {}
+    bool try_lock() { return true; }
+};
+/*
+Simulates two concurrent writes. Disables mutex.
+*/
+TEST(StorageLock, ConcurrentWrites) {
+    constexpr size_t num_writers = 5;
+    auto type = FailureType::WRITE;
+    init_random(reinterpret_cast<uint64_t>(&type));
+    auto rand_int = random_int();
+    std::cout << "Random number: " << rand_int << std::endl;
+    constexpr double write_slowdown_prob = 0.5;
+    constexpr uint32_t slow_down_min_ms = 1;
+    constexpr uint32_t slow_down_max_ms = 1;
+
+    auto lock_without_mutex = StorageLock<util::SysClock, NoOpMutex>("test");
+    auto store = std::make_shared<InMemoryStore>();
+    folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{num_writers};
+    proto::storage::VersionStoreConfig::StorageFailureSimulator cfg;
+    cfg.set_write_slowdown_prob(write_slowdown_prob);
+    cfg.set_slow_down_min_ms(slow_down_min_ms);
+    cfg.set_slow_down_max_ms(slow_down_max_ms);
+    StorageFailureSimulator::instance()->configure(cfg);
+    std::vector<Future<Unit>> futures;
+    std::vector<bool> writer_has_lock;
+    writer_has_lock.resize(num_writers);
+    for(size_t i = 0; i < num_writers; ++i) {
+        futures.emplace_back(exec.addFuture([&store, &lock_without_mutex, i, &writer_has_lock] {
+            writer_has_lock[i] = lock_without_mutex.try_lock(store);
+        }));
+    }
+    collect(futures).get();
+
+    const long have_lock = std::ranges::count(writer_has_lock, true);
+    ASSERT_EQ(have_lock, 1);
+}
+
+TEST(StorageLock, SlowWrites) {
+    constexpr double write_slowdown_prob = 1;
+    constexpr uint32_t slow_down_min_ms = 500;
+    constexpr uint32_t slow_down_max_ms = 1000;
+    proto::storage::VersionStoreConfig::StorageFailureSimulator cfg;
+    cfg.set_write_slowdown_prob(write_slowdown_prob);
+    cfg.set_slow_down_min_ms(slow_down_min_ms);
+    cfg.set_slow_down_max_ms(slow_down_max_ms);
+    StorageFailureSimulator::instance()->configure(cfg);
+    auto lock = StorageLock<>("test");
+    ASSERT_FALSE(lock.try_lock(std::make_shared<InMemoryStore>()));
+}
