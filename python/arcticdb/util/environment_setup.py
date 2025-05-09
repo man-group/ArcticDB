@@ -371,7 +371,7 @@ class TestLibraryManager:
         This will remove all persistent libraries for this test from the persistent storage
         Therefore use wisely only when needed (like change of parameters for tests)
         """
-        name_prefix = f"{LibraryType.value}_{self.name_benchmark}"
+        name_prefix = f"{LibraryType.PERSISTENT.value}_{self.name_benchmark}"
         ac = self._get_arctic_client_persistent()
         lib_names = set(ac.list_libraries())
         for to_delete in lib_names:

@@ -56,15 +56,9 @@ class AWSReadWrite(AsvBase):
     timeout = 1200
 
     param_names = ["num_rows"]
-    # NOTE: If you plan to make changes to parameters, consider that library already may exist created with different number
-    #       of rows. Therefore:
-    #  
-    #       1. make sure to use add set_test_mode() to instantiation of TestLibraryManager during tests. Like:
-    #              library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="READ_WRITE").set_test_mode()
-    #       2. Delete library from persistent storage once new parameters are ready to be committed 
-    #          and remove "set_test_mode()". To delete all libs for current test use:
-    #              library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="READ_WRITE")
-    #              library_manager.remove_all_persistent_libs_for_this_test()  
+    # NOTE: If you plan to make changes to parameters, consider that library already may exist symbols having different number
+    #       of rows than in the test. To resolve this problem check with documentation:
+    #           https://github.com/man-group/ArcticDB/wiki/ASV-Benchmarks:-Real-storage-tests
     params = [1_000_000, 2_000_000]
 
     library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="READ_WRITE")
