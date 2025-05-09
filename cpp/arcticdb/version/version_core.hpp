@@ -40,6 +40,13 @@ struct CompactIncompleteOptions {
     bool delete_staged_data_on_failure_{false};
 };
 
+struct SymbolProcessingResult {
+    VersionedItem versioned_item_;
+    arcticdb::proto::descriptors::UserDefinedMetadata metadata_;
+    OutputSchema output_schema_;
+    std::vector<EntityId> entity_ids_;
+};
+
 struct ReadVersionOutput {
     ReadVersionOutput() = delete;
     ReadVersionOutput(VersionedItem&& versioned_item, FrameAndDescriptor&& frame_and_descriptor):
@@ -49,6 +56,23 @@ struct ReadVersionOutput {
     ARCTICDB_MOVE_ONLY_DEFAULT(ReadVersionOutput)
 
     VersionedItem versioned_item_;
+    FrameAndDescriptor frame_and_descriptor_;
+};
+
+struct MultiSymbolReadOutput {
+    MultiSymbolReadOutput() = delete;
+    MultiSymbolReadOutput(
+            std::vector<VersionedItem>&& versioned_items,
+            std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>&& metadatas,
+            FrameAndDescriptor&& frame_and_descriptor):
+            versioned_items_(std::move(versioned_items)),
+            metadatas_(std::move(metadatas)),
+            frame_and_descriptor_(std::move(frame_and_descriptor)) {}
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(MultiSymbolReadOutput)
+
+    std::vector<VersionedItem> versioned_items_;
+    std::vector<arcticdb::proto::descriptors::UserDefinedMetadata> metadatas_;
     FrameAndDescriptor frame_and_descriptor_;
 };
 
@@ -140,6 +164,10 @@ folly::Future<ReadVersionOutput> read_multi_key(
     const SegmentInMemory& index_key_seg,
     std::any& handler_data);
 
+folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
+    std::vector<std::vector<EntityId>>&& entity_ids_vec_fut,
+    std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses);
+
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
     std::shared_ptr<ComponentManager> component_manager,
     std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
@@ -208,6 +236,14 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
     std::any& handler_data
 );
 
+folly::Future<SymbolProcessingResult> read_and_process(
+        const std::shared_ptr<Store>& store,
+        const std::variant<VersionedItem, StreamId>& version_info,
+        const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options,
+        std::shared_ptr<ComponentManager> component_manager
+);
+
 class DeleteIncompleteKeysOnExit {
 public:
     DeleteIncompleteKeysOnExit(
@@ -235,6 +271,13 @@ std::optional<DeleteIncompleteKeysOnExit> get_delete_keys_on_failure(
     const std::shared_ptr<PipelineContext>& pipeline_context,
     const std::shared_ptr<Store>& store,
     const CompactIncompleteOptions& options);
+
+folly::Future<SegmentInMemory> prepare_output_frame(
+        std::vector<SliceAndKey>&& items,
+        const std::shared_ptr<PipelineContext>& pipeline_context,
+        const std::shared_ptr<Store>& store,
+        const ReadOptions& read_options,
+        std::any& handler_data);
 
 } //namespace arcticdb::version_store
 

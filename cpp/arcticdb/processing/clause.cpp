@@ -750,6 +750,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     SegmentInMemory seg;
     RowRange output_row_range(row_slices.front().row_ranges_->at(0)->start(),
                               row_slices.front().row_ranges_->at(0)->start() + output_index_column->row_count());
+    ColRange output_col_range(1, aggregators_.size() + 1);
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, index_column_name), output_index_column);
     seg.descriptor().set_index(IndexDescriptorImpl(1, IndexDescriptor::Type::TIMESTAMP));
     auto& string_pool = seg.string_pool();
@@ -778,7 +779,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
         seg.add_column(scalar_field(aggregated_column->type().data_type(), aggregator.get_output_column_name().value), aggregated_column);
     }
     seg.set_row_data(output_index_column->row_count() - 1);
-    return push_entities(*component_manager_, ProcessingUnit(std::move(seg), std::move(output_row_range)));
+    return push_entities(*component_manager_, ProcessingUnit(std::move(seg), std::move(output_row_range), std::move(output_col_range)));
 }
 
 template<ResampleBoundary closed_boundary>
@@ -1328,6 +1329,65 @@ OutputSchema DateRangeClause::modify_schema(OutputSchema&& output_schema) const 
 
 std::string DateRangeClause::to_string() const {
     return fmt::format("DATE RANGE {} - {}", start_, end_);
+}
+
+ConcatClause::ConcatClause(JoinType join_type) {
+    clause_info_.input_structure_ = ProcessingStructure::MULTI_SYMBOL;
+    clause_info_.multi_symbol_ = true;
+    join_type_ = join_type;
+}
+
+std::vector<std::vector<EntityId>> ConcatClause::structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+    // Similar logic to RowRangeClause::structure_for_processing but as input row ranges come from multiple symbols it is slightly different
+    std::vector<RangesAndEntity> ranges_and_entities;
+    std::vector<std::shared_ptr<RowRange>> new_row_ranges;
+    bool first_range{true};
+    size_t prev_range_end{0};
+    for (const auto& entity_ids: entity_ids_vec) {
+        auto [old_row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
+        // Map from old row ranges WITHIN THIS SYMBOL to new ones
+        std::map<RowRange, RowRange> row_range_mapping;
+        for (const auto& row_range: old_row_ranges) {
+            // Value is same as key initially
+            row_range_mapping.insert({*row_range, *row_range});
+        }
+        for (auto& [old_range, new_range]: row_range_mapping) {
+            if (first_range) {
+                // Make the first row-range start from zero
+                new_range.first = 0;
+                new_range.second = old_range.diff();
+                first_range = false;
+            } else {
+                new_range.first = prev_range_end;
+                new_range.second = new_range.first + old_range.diff();
+            }
+            prev_range_end = new_range.second;
+        }
+
+        for (size_t idx=0; idx<entity_ids.size(); ++idx) {
+            auto new_row_range = std::make_shared<RowRange>(row_range_mapping.at(*old_row_ranges[idx]));
+            ranges_and_entities.emplace_back(entity_ids[idx], new_row_range, col_ranges[idx]);
+            new_row_ranges.emplace_back(std::move(new_row_range));
+        }
+    }
+    component_manager_->replace_entities<std::shared_ptr<RowRange>>(flatten_entities(std::move(entity_ids_vec)), new_row_ranges);
+    auto new_structure_offsets = structure_by_row_slice(ranges_and_entities);
+    return offsets_to_entity_ids(new_structure_offsets, ranges_and_entities);
+}
+
+std::vector<EntityId> ConcatClause::process(std::vector<EntityId>&& entity_ids) const {
+    return std::move(entity_ids);
+}
+
+OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& input_schemas) const {
+    util::check(!input_schemas.empty(), "Cannot join empty list of schemas");
+    auto [stream_desc, norm_meta] = join_indexes(input_schemas);
+    join_type_ == JoinType::INNER ? inner_join(stream_desc, input_schemas) : outer_join(stream_desc, input_schemas);
+    return {std::move(stream_desc), std::move(norm_meta)};
+}
+
+std::string ConcatClause::to_string() const {
+    return "CONCAT";
 }
 
 }

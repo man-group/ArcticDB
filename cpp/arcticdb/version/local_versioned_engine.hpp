@@ -297,6 +297,14 @@ public:
         const ReadOptions& read_options,
         std::any& handler_data);
 
+    MultiSymbolReadOutput batch_read_and_join_internal(
+            const std::vector<StreamId>& stream_ids,
+            const std::vector<VersionQuery>& version_queries,
+            std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+            const ReadOptions& read_options,
+            std::vector<std::shared_ptr<Clause>>&& clauses,
+            std::any& handler_data);
+
     std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor_internal(
             const std::vector<StreamId>& stream_ids,
             const std::vector<VersionQuery>& version_queries,
