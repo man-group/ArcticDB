@@ -5,7 +5,6 @@ import pandas as pd
 
 def verify_list_symbol_stats(list_symbol_call_counts):
     stats = qs.get_query_stats()
-    # """
     # Sample output:
     # {
     #     "storage_operations": {
@@ -35,8 +34,7 @@ def verify_list_symbol_stats(list_symbol_call_counts):
     #             "total_time_ms": 31
     #         }
     #     }
-    # }
-    # """    
+    # } 
     assert "storage_operations" in stats
     assert "S3_ListObjectsV2" in stats["storage_operations"]
     assert "count" in stats["storage_operations"]["S3_ListObjectsV2"]
