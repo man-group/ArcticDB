@@ -391,11 +391,11 @@ def real_s3_sts_from_environment_variables(
     # Create IAM user
     try:
         iam_client.create_user(UserName=user_name)
-        logger.info(f"User created successfully.")
+        logger.info(f"User [{user_name}] created successfully.")
     except iam_client.exceptions.EntityAlreadyExistsException:
-        logger.warning(f"User already exists.")
+        logger.warning(f"User [{user_name}] already exists.")
     except Exception as e:
-        logger.error(f"Error creating user: {e}")
+        logger.error(f"Error creating user [{user_name}]: {e}")
         raise e
     out.sts_test_key = Key(id=None, secret=None, user_name=user_name)
 
@@ -422,12 +422,12 @@ def real_s3_sts_from_environment_variables(
         )
         out.aws_role_arn = role_response["Role"]["Arn"]
         out.aws_role = role_name
-        logger.info("Role created successfully.")
+        logger.info(f"Role [{role_name}] created successfully.")
     except iam_client.exceptions.EntityAlreadyExistsException:
         out.aws_role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
-        logger.warn("Role already exists.")
+        logger.warning(f"Role [{role_name}] already exists.")
     except Exception as e:
-        logger.error(f"Error creating role: {e}")
+        logger.error(f"Error creating role [{role_name}]: {e}")
         raise e
 
     # Create a policy for S3 bucket access
@@ -451,7 +451,7 @@ def real_s3_sts_from_environment_variables(
         logger.info("Policy created successfully.")
     except iam_client.exceptions.EntityAlreadyExistsException:
         out.aws_policy_name = f"arn:aws:iam::{account_id}:policy/{policy_name}"
-        logger.warn("Policy already exists.")
+        logger.warning("Policy already exists.")
     except Exception as e:
         logger.error(f"Error creating policy: {e}")
         raise e
@@ -540,7 +540,7 @@ def real_s3_sts_resources_ready(factory: BaseS3StorageFixtureFactory):
             logger.info(f"S3 list objects test successful: {response['ResponseMetadata']['HTTPStatusCode']}")
             return
         except:
-            logger.warn(
+            logger.warning(
                 f"Assume role failed. Retrying in 1 second..."
             )  # Don't print the exception as it could contain sensitive information, e.g. user id
             time.sleep(1)
@@ -559,15 +559,15 @@ def real_s3_sts_clean_up(role_name: str, policy_name: str, user_name: str):
         for policy in iam_client.list_attached_role_policies(RoleName=role_name)["AttachedPolicies"]:
             iam_client.detach_role_policy(RoleName=role_name, PolicyArn=policy["PolicyArn"])
             iam_client.delete_policy(PolicyArn=policy["PolicyArn"])
-        logger.info("Policy deleted successfully.")
+        logger.info(f"Policy [{policy_name}] deleted successfully.")
     except Exception:
-        logger.error("Error deleting policy")
+        logger.error(f"Error deleting policy [{policy_name}]")
 
     try:
         iam_client.delete_role(RoleName=role_name)
-        logger.info("Role deleted successfully.")
+        logger.info(f"Role [{role_name}] deleted successfully.")
     except Exception:
-        logger.error("Error deleting role")  # Role could be non-existent as creation of it may fail
+        logger.error(f"Error deleting role [{role_name}]")  # Role could be non-existent as creation of it may fail
 
     try:
         for key in iam_client.list_access_keys(UserName=user_name)["AccessKeyMetadata"]:
@@ -583,9 +583,9 @@ def real_s3_sts_clean_up(role_name: str, policy_name: str, user_name: str):
 
         # Delete the user
         iam_client.delete_user(UserName=user_name)
-        logger.info("User deleted successfully.")
+        logger.info(f"User [{user_name}] deleted successfully.")
     except Exception:
-        logger.error("Error deleting user")  # User could be non-existent as creation of it may fail
+        logger.error(f"Error deleting user [{user_name}]")  # User could be non-existent as creation of it may fail
 
 
 def mock_s3_with_error_simulation():
@@ -701,7 +701,7 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
         except botocore.exceptions.EndpointConnectionError as e:
             if i >= max_retries - 1:
                 raise
-            logger.warn(f"S3 create bucket failed. Retry {1}/{max_retries}")
+            logger.warning(f"S3 create bucket failed. Retry {1}/{max_retries}")
             time.sleep(1)   
 
 
