@@ -364,3 +364,40 @@ TEST(StorageLock, OptimisticForceReleaseLock) {
     // Clean up locks to avoid "mutex destroyed while active" errors on Windows debug build
     first_lock._test_release_local_lock();
 }
+
+class NoOpMutex {
+public:
+    void lock() {}
+    void unlock() {}
+    bool try_lock() { return true; }
+};
+/*
+Simulates two concurrent writes. Disables mutex.
+*/
+TEST(StorageLock, ConcurrentWrites) {
+    constexpr size_t num_writers = 2;
+    constexpr double write_slowdown_prob = 1;
+    constexpr uint32_t slow_down_min_ms = 1;
+    constexpr uint32_t slow_down_max_ms = 0;
+
+    auto lock_without_mutex = StorageLock<util::SysClock, NoOpMutex>("test");
+    auto lock_data = LockData(num_writers);
+    folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{num_writers};
+    proto::storage::VersionStoreConfig::StorageFailureSimulator cfg;
+    cfg.set_write_slowdown_prob(write_slowdown_prob);
+    cfg.set_slow_down_min_ms(slow_down_min_ms);
+    cfg.set_slow_down_max_ms(slow_down_max_ms);
+    StorageFailureSimulator::instance()->configure(cfg);
+    std::vector<Future<Unit>> futures;
+    std::vector<bool> writer_has_lock;
+    writer_has_lock.resize(num_writers);
+    for(size_t i = 0; i < num_writers; ++i) {
+        futures.emplace_back(exec.addFuture([&lock_data, &lock_without_mutex, i, &writer_has_lock] {
+            writer_has_lock[i] = lock_without_mutex.try_lock(lock_data.store_);
+        }));
+    }
+    collect(futures).get();
+
+    const int have_lock = std::ranges::count(writer_has_lock, true);
+    ASSERT_EQ(have_lock, 1);
+}

@@ -12,6 +12,7 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
+#include <arcticdb/storage/failure_simulation.hpp>
 #include <arcticdb/util/configs_map.hpp>
 
 #include <fmt/std.h>
@@ -72,11 +73,11 @@ inline std::thread::id get_thread_id() noexcept {
 
 // This StorageLock is inherently unreliable. It does not use atomic operations and it is possible for two processes to acquire if the timing is right.
 // If you want a reliable alternative which is slower but uses atomic primitives you can look at the `ReliableStorageLock`.
-template <class ClockType = util::SysClock>
+template <class ClockType = util::SysClock, class MutexType = std::mutex>
 class StorageLock {
     // 1 Day
     static constexpr int64_t DEFAULT_TTL_INTERVAL = ONE_MINUTE * 60 * 24;
-    std::mutex mutex_;
+    MutexType mutex_;
     const StreamId name_;
     timestamp ts_ = 0;
 
@@ -120,7 +121,7 @@ class StorageLock {
         }};
         if(!ref_key_exists(store) || !ttl_not_expired(store)) {
             ts_= create_ref_key(store);
-            auto lock_sleep = ConfigsMap::instance()->get_int("StorageLock.WaitMs", 200);
+            auto lock_sleep = ConfigsMap::instance()->get_int("StorageLock.WaitMs", 1500);
             std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep));
             auto read_ts = read_timestamp(store);
             if(read_ts && *read_ts == ts_) {
@@ -184,6 +185,7 @@ class StorageLock {
 
     timestamp create_ref_key(const std::shared_ptr<Store>& store) {
         auto ts =  ClockType::nanos_since_epoch();
+        StorageFailureSimulator::instance()->go(FailureType::WRITE_SLOW);
         store->write_sync(KeyType::LOCK, name_, lock_segment(name_, ts));
         ARCTICDB_DEBUG(log::lock(), "Created lock with timestamp {}", ts);
         return ts;
