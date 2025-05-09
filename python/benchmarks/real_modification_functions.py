@@ -190,6 +190,9 @@ class AWS30kColsWideDFLargeAppendTests(AWSLargeAppendTests):
 
     number_columns = 3_000
 
+    def get_library_manager(self) -> TestLibraryManager:
+        return AWS30kColsWideDFLargeAppendTests.library_manager
+
     def setup_cache(self):
         return self.initialize_cache(AWS30kColsWideDFLargeAppendTests.warmup_time,
                                      AWS30kColsWideDFLargeAppendTests.params,

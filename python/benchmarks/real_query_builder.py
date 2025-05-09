@@ -12,7 +12,7 @@ from arcticdb.util.environment_setup import DataFrameGenerator, TestLibraryManag
 from arcticdb.version_store.library import Library
 from arcticdb.version_store.processing import QueryBuilder
 
-from benchmarks.common import  generate_benchmark_df
+from benchmarks.common import  AsvBase, generate_benchmark_df
 from benchmarks.local_query_builder import PARAMS_QUERY_BUILDER
 
 
@@ -28,7 +28,7 @@ class QueryBuilderGenerator(DataFrameGenerator):
     
 #endregion
 
-class AWSQueryBuilderFunctions:
+class AWSQueryBuilderFunctions(AsvBase):
     """
     This is same test as :LocalQueryBuilderFunctions:`LocalQueryBuilderFunctions`
 
