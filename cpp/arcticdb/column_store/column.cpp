@@ -70,11 +70,12 @@ void initialise_output_column(const Column& left_input_column, const Column& rig
     }
 }
 
-void initialise_output_bitset(const util::BitSet& input_bitset, bool sparse_missing_value_output, util::BitSet& output_bitset) {
+void initialise_output_bitset(const Column& input_column, bool sparse_missing_value_output, util::BitSet& output_bitset) {
     if (sparse_missing_value_output) {
-        output_bitset = input_bitset;
+        output_bitset = input_column.sparse_map();
         output_bitset.flip();
     }
+    output_bitset.resize(input_column.last_row() + 1);
 }
 
 // Column operators
@@ -406,6 +407,9 @@ void Column::set_row_data(size_t row_id) {
         backfill_sparse_map(last_stored_row);
     } else {
         last_physical_row_ = last_logical_row_;
+    }
+    if (sparse_map_) {
+        sparse_map_->resize(row_id + 1);
     }
     ARCTICDB_TRACE(log::version(), "Set row data: last_logical_row_: {}, last_physical_row_: {}", last_logical_row_, last_physical_row_);
 }

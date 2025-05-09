@@ -21,8 +21,6 @@
 #include <ankerl/unordered_dense.h>
 #include <ranges>
 
-
-
 namespace arcticdb {
 
 namespace ranges = std::ranges;
@@ -178,14 +176,37 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
     std::vector<EntityId> output;
     util::variant_match(variant_data,
                         [&proc, &output, this](ColumnWithStrings &col) {
-
-                            const auto data_type = col.column_->type().data_type();
-                            const std::string_view name = output_column_;
-
-                            proc.segments_->back()->add_column(scalar_field(data_type, name), col.column_);
-                            auto new_col_range = std::make_shared<ColRange>(*proc.col_ranges_->back());
-                            ++new_col_range->second;
-                            proc.col_ranges_->back() = std::move(new_col_range);
+                            add_column(proc, col);
+                            output = push_entities(*component_manager_, std::move(proc));
+                        },
+                        [&proc, &output, this](const std::shared_ptr<Value>& val) {
+                            // With the ternary operator, it is possible for the AST to produce a Value
+                            // Turn this Value into a dense column where all of the entries are the same as this value,
+                            // of the same length as the other segments in this processing unit
+                            auto rows = proc.segments_->back()->row_count();
+                            auto output_column = std::make_unique<Column>(val->type(), Sparsity::PERMITTED);
+                            auto output_bytes = rows * get_type_size(output_column->type().data_type());
+                            output_column->allocate_data(output_bytes);
+                            output_column->set_row_data(rows);
+                            auto string_pool = std::make_shared<StringPool>();
+                            details::visit_type(val->type().data_type(), [&](auto val_tag) {
+                                using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
+                                if constexpr(is_dynamic_string_type(val_type_info::data_type)) {
+                                    using TargetType = val_type_info::RawType;
+                                    const auto offset = string_pool->get(*val->str_data(), val->len()).offset();
+                                    auto data = output_column->ptr_cast<TargetType>(0, output_bytes);
+                                    std::fill_n(data, rows, offset);
+                                } else if constexpr (is_numeric_type(val_type_info::data_type) || is_bool_type(val_type_info::data_type)) {
+                                    using TargetType = val_type_info::RawType;
+                                    auto value = static_cast<TargetType>(val->get<typename val_type_info::RawType>());
+                                    auto data = output_column->ptr_cast<TargetType>(0, output_bytes);
+                                    std::fill_n(data, rows, value);
+                                } else {
+                                    util::raise_rte("Unexpected Value type in ProjectClause: {}", val->type().data_type());
+                                }
+                            });
+                            ColumnWithStrings col(std::move(output_column), string_pool, "");
+                            add_column(proc, col);
                             output = push_entities(*component_manager_, std::move(proc));
                         },
                         [&proc, &output, this](const EmptyResult &) {
@@ -211,6 +232,30 @@ OutputSchema ProjectClause::modify_schema(OutputSchema&& output_schema) const {
 
 [[nodiscard]] std::string ProjectClause::to_string() const {
     return expression_context_ ? fmt::format("PROJECT Column[\"{}\"] = {}", output_column_, expression_context_->root_node_name_.value) : "";
+}
+
+void ProjectClause::add_column(ProcessingUnit& proc, const ColumnWithStrings &col) const {
+    auto& last_segment = *proc.segments_->back();
+
+    auto seg = std::make_shared<SegmentInMemory>();
+    // Add in the same index fields as the last existing segment in proc
+    seg->descriptor().set_index(last_segment.descriptor().index());
+    for (uint32_t idx = 0; idx < last_segment.descriptor().index().field_count(); ++idx) {
+        seg->add_column(last_segment.field(idx), last_segment.column_ptr(idx));
+    }
+    // Add the column with its string pool and set the segment row data
+    seg->add_column(scalar_field(col.column_->type().data_type(), output_column_), col.column_);
+    seg->set_string_pool(col.string_pool_);
+    seg->set_row_data(last_segment.row_count() - 1);
+
+    // Calculate the row range and col range for the new segment
+    auto row_range = std::make_shared<RowRange>(*proc.row_ranges_->back());
+    auto last_col_idx = proc.col_ranges_->back()->second;
+    auto col_range = std::make_shared<ColRange>(last_col_idx, last_col_idx + 1);
+
+    proc.segments_->emplace_back(std::move(seg));
+    proc.row_ranges_->emplace_back(std::move(row_range));
+    proc.col_ranges_->emplace_back(std::move(col_range));
 }
 
 AggregationClause::AggregationClause(const std::string& grouping_column,
