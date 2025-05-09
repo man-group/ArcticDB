@@ -75,6 +75,7 @@ size_t compress_bitwidth_remainder(const T *input, size_t count, T *output, size
 template<typename T>
 size_t decompress_bitwidth_remainder(const T *input, T *output, uint32_t bit_width) {
     const auto *metadata = reinterpret_cast<const BitPackRemainderHeader *>(input);
+
     metadata->magic_.check();
     const uint32_t count = metadata->size;
 
@@ -216,10 +217,14 @@ struct BitPackDecompressor {
 
         const size_t num_full_blocks = count / BLOCK_SIZE;
         BitUnpackCompressKernel<T> kernel;
+        size_t remaining = count % BLOCK_SIZE;
 
         if (bits_needed == 0) {
-            std::fill(out, out + num_full_blocks * BLOCK_SIZE, static_cast<T>(0));
-            input_offset += num_full_blocks * BLOCK_SIZE;
+            std::fill(out, out + num_full_blocks * BLOCK_SIZE + remaining, static_cast<T>(0));
+            const size_t compressed_size = BitPackCompressor<T>::compressed_size(
+                BitPackData{bits_needed}, count
+            );
+            return {.compressed_ = compressed_size, .uncompressed_ = count * sizeof(T)};
         } else {
             for (size_t block = 0; block < num_full_blocks; ++block) {
                 input_offset += dispatch_bitwidth_fused<T, BitUnpackFused>(
@@ -229,18 +234,17 @@ struct BitPackDecompressor {
                     kernel
                 );
             }
-        }
 
-        ARCTICDB_DEBUG(log::codec(), "Decompressed {} full blocks to offset {}", num_full_blocks, input_offset);
-        size_t remaining = count % BLOCK_SIZE;
-        if (remaining > 0) {
-            input_offset += decompress_bitwidth_remainder(
-                in_ptr + input_offset,
-                out + num_full_blocks * BLOCK_SIZE,
-                bits_needed
-            );
+            ARCTICDB_DEBUG(log::codec(), "Decompressed {} full blocks to offset {}", num_full_blocks, input_offset);
+            if (remaining > 0) {
+                input_offset += decompress_bitwidth_remainder(
+                    in_ptr + input_offset,
+                    out + num_full_blocks * BLOCK_SIZE,
+                    bits_needed
+                );
+            }
+            ARCTICDB_DEBUG(log::codec(), "Decompressed {} remaining values, total count {}", remaining, count);
         }
-        ARCTICDB_DEBUG(log::codec(), "Decompressed {} remaining values, total count {}", remaining, count);
         const auto decompressed_bytes = (input_offset + header_size_in_t<BitPackHeader<T>, T>()) * sizeof(T);
         return {.compressed_ = decompressed_bytes, .uncompressed_ = count * sizeof(T)};
     }

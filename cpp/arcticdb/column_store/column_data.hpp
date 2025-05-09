@@ -500,8 +500,6 @@ private:
     size_t row_count_ = 0;
 };
 
-
-
 template <typename TagType>
 FieldStatsImpl generate_column_statistics(ColumnData column_data) {
     using DataTagType = typename TagType::DataTypeTag;
@@ -509,35 +507,64 @@ FieldStatsImpl generate_column_statistics(ColumnData column_data) {
     if constexpr(is_bool_type(DataTagType::data_type))
         return generate_bool_statistics();
 
-    if(column_data.num_blocks() == 1) {
-        auto block = column_data.next<TagType>();
-        const RawType* ptr = block->data();
-        const size_t count = block->row_count();
-        constexpr auto data_type = TagType::DataTypeTag::data_type;
-        if constexpr (is_numeric_type(data_type) || is_time_type(data_type)) {
-            return generate_numeric_statistics<RawType>(std::span{ptr, count});
-        } else if constexpr (is_sequence_type(data_type)) {
-            return generate_string_statistics(std::span{ptr, count});
-        } else {
-            util::raise_rte("Cannot generate statistics for data type");
-        }
-    } else {
-        FieldStatsImpl stats;
-        while (auto block = column_data.next<TagType>()) {
+    constexpr auto data_type = TagType::DataTypeTag::data_type;
+
+    if constexpr (is_numeric_type(data_type) || is_time_type(data_type)) {
+        // Create shared hashmap for unique values
+        ankerl::unordered_dense::set<RawType> unique;
+
+        if(column_data.num_blocks() == 1) {
+            auto block = column_data.next<TagType>();
             const RawType* ptr = block->data();
             const size_t count = block->row_count();
-            constexpr auto data_type = TagType::DataTypeTag::data_type;
-            if constexpr (is_numeric_type(data_type) || is_time_type(data_type)) {
-                auto local_stats = generate_numeric_statistics<RawType>(std::span{ptr, count});
-                stats.compose<RawType>(local_stats);
-            } else if constexpr (is_sequence_type(data_type)) {
-                auto local_stats = generate_string_statistics(std::span{ptr, count});
-                stats.compose<RawType>(local_stats);
-            } else {
-                util::raise_rte("Cannot generate statistics for data type");
+            return generate_numeric_statistics<RawType>(std::span{ptr, count}, unique);
+        } else {
+            FieldStatsImpl stats;
+            bool first = true;
+            while (auto block = column_data.next<TagType>()) {
+                const RawType* ptr = block->data();
+                const size_t count = block->row_count();
+                auto local_stats = generate_numeric_statistics<RawType>(std::span{ptr, count}, unique);
+                if (first) {
+                    stats = local_stats;
+                    first = false;
+                } else {
+                    stats.compose<RawType>(local_stats);
+                }
             }
+            // Update unique count with final total from shared hashmap
+            stats.set_unique(unique.size(), UniqueCountType::PRECISE);
+            return stats;
         }
-        return stats;
+    } else if constexpr (is_sequence_type(data_type)) {
+        // Create shared hashmap for unique values
+        ankerl::unordered_dense::set<uint64_t> unique;
+
+        if(column_data.num_blocks() == 1) {
+            auto block = column_data.next<TagType>();
+            const RawType* ptr = block->data();
+            const size_t count = block->row_count();
+            return generate_string_statistics(std::span{ptr, count}, unique);
+        } else {
+            FieldStatsImpl stats;
+            bool first = true;
+            while (auto block = column_data.next<TagType>()) {
+                const RawType* ptr = block->data();
+                const size_t count = block->row_count();
+                auto local_stats = generate_string_statistics(std::span{ptr, count}, unique);
+                if (first) {
+                    stats = local_stats;
+                    first = false;
+                } else {
+                    stats.compose<RawType>(local_stats);
+                }
+            }
+            // Update unique count with final total from shared hashmap
+            stats.set_unique(unique.size(), UniqueCountType::PRECISE);
+            return stats;
+        }
+    } else {
+        util::raise_rte("Cannot generate statistics for data type");
     }
 }
 

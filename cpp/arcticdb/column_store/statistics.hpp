@@ -151,37 +151,25 @@ struct FieldStatsImpl : public FieldStats {
             }
         }
 
-        if (other.has_unique()) {
-            if (!has_unique()) {
-                unique_count_ = other.unique_count_;
-                unique_count_precision_ = other.unique_count_precision_;
-                set_ |= static_cast<uint8_t>(FieldStatsValue::UNIQUE);
-            } else {
-                util::check(unique_count_precision_ == other.unique_count_precision_,
-                            "Mismatching unique count precision, {} != {}",
-                            uint8_t(unique_count_precision_), uint8_t(other.unique_count_precision_));
-
-                unique_count_ += other.unique_count_;
-            }
-        }
-
-        if(other.get_sorted() != SortedValue::ASCENDING || get_sorted() != SortedValue::ASCENDING)
+        if(other.get_sorted() != SortedValue::ASCENDING ||
+            get_sorted() != SortedValue::ASCENDING)
             sorted_ = SortedValue::UNKNOWN;
     }
 };
 
 template <typename T>
-FieldStatsImpl generate_numeric_statistics(std::span<const T> data) {
+FieldStatsImpl generate_numeric_statistics(
+    std::span<const T> data,
+    ankerl::unordered_dense::set<T>& unique) {  // Take hashmap as reference
     if(data.empty())
         return FieldStatsImpl{};
 
     auto [col_min, col_max] = std::minmax_element(std::begin(data), std::end(data));
-    ankerl::unordered_dense::set<T> unique;
+
     for(auto val : data) {
         unique.emplace(val);
     }
 
-    //TODO decide whether to check for sorted descending
     auto sorted_value = std::is_sorted(std::begin(data), std::end(data)) ? SortedValue::ASCENDING : SortedValue::UNKNOWN;
 
     FieldStatsImpl field_stats(*col_min, *col_max, unique.size(), UniqueCountType::PRECISE, sorted_value);
@@ -193,19 +181,18 @@ inline FieldStatsImpl generate_bool_statistics() {
     return field_stats;
 }
 
-inline FieldStatsImpl generate_string_statistics(std::span<const uint64_t> data) {
+inline FieldStatsImpl generate_string_statistics(
+    std::span<const uint64_t> data,
+    ankerl::unordered_dense::set<uint64_t>& unique) {
     if(data.empty())
         return FieldStatsImpl{};
 
-    auto [col_min, col_max] = std::minmax_element(std::begin(data), std::end(data));
-    ankerl::unordered_dense::set<uint64_t> unique;
     for(auto val : data) {
         unique.emplace(val);
     }
 
-    FieldStatsImpl field_stats(*col_min, *col_max, unique.size(), UniqueCountType::PRECISE, SortedValue::UNKNOWN);
+    FieldStatsImpl field_stats(unique.size(), UniqueCountType::PRECISE);
     return field_stats;
-
 }
 
 

@@ -300,10 +300,13 @@ struct FForDecompressor {
 
         const size_t num_full_blocks = count / BLOCK_SIZE;
         FForUncompressKernel<T> kernel(reference);
-
+        size_t remaining = count % BLOCK_SIZE;
         if (bits_needed == 0) {
-            std::fill(out, out + num_full_blocks * BLOCK_SIZE, reference);
-            input_offset += num_full_blocks * BLOCK_SIZE;
+            std::fill(out, out + num_full_blocks * BLOCK_SIZE + remaining, reference);
+            const size_t compressed_size = FForCompressor<T>::compressed_size(
+                FFORCompressData{T(0), bits_needed}, count
+            );
+            return {.compressed_ = compressed_size, .uncompressed_ = count * sizeof(T)};
         } else {
             for (size_t block = 0; block < num_full_blocks; ++block) {
                 if (block + 1 < num_full_blocks) {
@@ -325,7 +328,6 @@ struct FForDecompressor {
         }
 
         ARCTICDB_DEBUG(log::codec(), "Decompressed {} full blocks to offset {}", num_full_blocks, input_offset);
-        size_t remaining = count % BLOCK_SIZE;
         if (remaining > 0) {
             input_offset += decompress_ffor_remainder(
                 in_ptr + input_offset,

@@ -162,6 +162,31 @@ TEST_F(BitPackCodecTest, DifferentTypes) {
     }
 }
 
+TYPED_TEST(BitPackTest, ZeroBitWidth) {
+    using T = TypeParam;
+    const size_t size = 10000; // 10,000 rows
+    std::vector<T> input(size, static_cast<T>(0)); // All values are identical, bit-width should be 0.
+
+    auto wrapper = from_vector(input, type_desc_for_type<T>());
+
+    std::vector<T> compressed(8192, 0);
+
+    auto bitpack_data = BitPackCompressor<T>::compute_bitwidth(wrapper.data_);
+    EXPECT_EQ(bitpack_data.bits_needed_, 0); // Verify that the bit-width is zero.
+
+    auto expected_bytes = BitPackCompressor<T>::compressed_size(bitpack_data, input.size());
+    BitPackCompressor<T> bitpack(bitpack_data);
+    size_t compressed_size = bitpack.compress(wrapper.data_, compressed.data(), expected_bytes);
+    EXPECT_EQ(expected_bytes, compressed_size);
+
+    std::vector<T> output(input.size(), 0);
+    auto result = BitPackDecompressor<T>::decompress(compressed.data(), output.data());
+
+    EXPECT_EQ(output, input);
+    EXPECT_EQ(result.uncompressed_, input.size() * sizeof(T));
+    EXPECT_EQ(result.compressed_, compressed_size);
+}
+
 TEST_F(BitPackCodecTest, EdgeCases) {
     {
         std::vector<uint32_t> data(values_per_block);

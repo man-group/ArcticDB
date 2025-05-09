@@ -12,9 +12,9 @@
 
 TEST(FieldStatsTest, IntegralStatisticsBasic) {
     using namespace arcticdb;
-
     std::vector<int64_t> data{1, 2, 3, 2, 1, 4, 5, 3};
-    auto field_stats = generate_numeric_statistics<int64_t>(std::span(data));
+    ankerl::unordered_dense::set<int64_t> unique;
+    auto field_stats = generate_numeric_statistics<int64_t>(std::span(data), unique);
 
     EXPECT_TRUE(field_stats.has_min());
     EXPECT_TRUE(field_stats.has_max());
@@ -29,7 +29,8 @@ TEST(FieldStatsTest, IntegralStatisticsBasic) {
 TEST(FieldStatsTest, IntegralStatisticsSingleValue) {
     using namespace arcticdb;
     std::vector<int32_t> data{42, 42, 42, 42};
-    auto field_stats = generate_numeric_statistics<int32_t>(std::span(data));
+    ankerl::unordered_dense::set<int32_t> unique;
+    auto field_stats = generate_numeric_statistics<int32_t>(std::span(data), unique);
 
     EXPECT_TRUE(field_stats.has_min());
     EXPECT_TRUE(field_stats.has_max());
@@ -44,7 +45,8 @@ TEST(FieldStatsTest, IntegralStatisticsSingleValue) {
 TEST(FieldStatsTest, StringStatisticsBasic) {
     using namespace arcticdb;
     std::vector<uint64_t> data{0x123, 0x456, 0x123, 0x789};
-    auto field_stats = generate_string_statistics(std::span(data));
+    ankerl::unordered_dense::set<uint64_t> unique;
+    auto field_stats = generate_string_statistics(std::span(data), unique);
 
     EXPECT_FALSE(field_stats.has_min());
     EXPECT_FALSE(field_stats.has_max());
@@ -89,7 +91,8 @@ TEST(FieldStatsTest, FieldStatsImplFullConstruction) {
 TEST(FieldStatsTest, EmptyStringStatistics) {
     using namespace arcticdb;
     std::vector<uint64_t> data;
-    auto field_stats = generate_string_statistics(std::span(data));
+    ankerl::unordered_dense::set<uint64_t> unique;
+    auto field_stats = generate_string_statistics(std::span(data), unique);
 
     EXPECT_FALSE(field_stats.has_min());
     EXPECT_FALSE(field_stats.has_max());
@@ -102,7 +105,8 @@ TEST(FieldStatsTest, EmptyStringStatistics) {
 TEST(FieldStatsTest, EmptyIntegralStatistics) {
     using namespace arcticdb;
     std::vector<int64_t> data;
-    auto field_stats = generate_numeric_statistics<int64_t>(std::span(data));
+    ankerl::unordered_dense::set<int64_t> unique;
+    auto field_stats = generate_numeric_statistics<int64_t>(std::span(data), unique);
 
     EXPECT_FALSE(field_stats.has_min());
     EXPECT_FALSE(field_stats.has_max());
@@ -221,4 +225,42 @@ TEST(FieldStatsTest, ComposeMismatchingPrecisionTemplated) {
     stats2.set_unique(3, UniqueCountType::HYPERLOGLOG);
 
     EXPECT_THROW(stats1.compose<int32_t>(stats2), std::exception);
+}
+
+TEST(FieldStatsTest, MultiBlockIntegralStatistics) {
+    using namespace arcticdb;
+    std::vector<int64_t> data;
+    for(int64_t i = 0; i < 10000; ++i) {
+        data.push_back(i % 100);
+    }
+
+    ankerl::unordered_dense::set<int64_t> unique;
+    auto field_stats = generate_numeric_statistics<int64_t>(std::span(data), unique);
+
+    EXPECT_TRUE(field_stats.has_min());
+    EXPECT_TRUE(field_stats.has_max());
+    EXPECT_TRUE(field_stats.has_unique());
+
+    EXPECT_EQ(field_stats.get_min<int64_t>(), 0);
+    EXPECT_EQ(field_stats.get_max<int64_t>(), 99);
+    EXPECT_EQ(field_stats.unique_count_, 100);
+    EXPECT_EQ(field_stats.unique_count_precision_, UniqueCountType::PRECISE);
+}
+
+TEST(FieldStatsTest, MultiBlockStringStatistics) {
+    using namespace arcticdb;
+    std::vector<uint64_t> data;
+    for(uint64_t i = 0; i < 10000; ++i) {
+        data.push_back(0x123 + (i % 50));
+    }
+
+    ankerl::unordered_dense::set<uint64_t> unique;
+    auto field_stats = generate_string_statistics(std::span(data), unique);
+
+    EXPECT_TRUE(field_stats.has_min());
+    EXPECT_TRUE(field_stats.has_max());
+    EXPECT_TRUE(field_stats.has_unique());
+
+    EXPECT_EQ(field_stats.unique_count_, 50);
+    EXPECT_EQ(field_stats.unique_count_precision_, UniqueCountType::PRECISE);
 }
