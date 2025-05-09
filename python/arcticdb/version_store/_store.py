@@ -82,6 +82,51 @@ from packaging.version import Version
 IS_WINDOWS = sys.platform == "win32"
 
 
+def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
+    """
+    Precedence: existing_value > kwargs > env > proto_cfg > global_default
+
+    Parameters
+    ----------
+    param_name: str
+    proto_cfg
+        Gets the param_name attribute of this object
+        Most often is `self._write_options()` for the Protobuf write_options.
+    global_default
+        FUTURE: store this in a central location
+    existing_value:
+        The value already supplied to the caller
+    uppercase
+        If true (default), will look for `param_name.upper()` in OS environment variables; otherwise, the original
+        case.
+    kwargs
+        For passing through the caller's kwargs in which we look for `param_name`
+        *Deprecating: use `existing_value`*
+    """
+
+    if existing_value is not None:
+        return existing_value
+
+    param_value = kwargs.get(param_name)
+    if param_value is not None:
+        return param_value
+
+    env_name = param_name.upper() if uppercase else param_name
+    env_value = os.getenv(env_name)
+    if env_value is not None:
+        return env_value not in ("", "0") and not env_value.lower().startswith("f")
+
+    try:
+        if proto_cfg is not None:
+            config_value = getattr(proto_cfg, param_name)
+            if config_value is not None:
+                return config_value
+
+    except AttributeError:
+        pass
+
+    return global_default
+
 # auto_attribs=True breaks Cython-ising this code. As a result must manually create attr.ib instances.
 @attr.s(slots=True, auto_attribs=False)
 class VersionedItem:
@@ -363,10 +408,10 @@ class NativeVersionStore:
         norm_failure_options_msg="",
         **kwargs,
     ):
-        dynamic_schema = self.resolve_defaults(
+        dynamic_schema = resolve_defaults(
             "dynamic_schema", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
         )
-        empty_types = self.resolve_defaults("empty_types", self._lib_cfg.lib_desc.version.write_options, False)
+        empty_types = resolve_defaults("empty_types", self._lib_cfg.lib_desc.version.write_options, False)
         try:
             udm = normalize_metadata(metadata)
             opt_custom = self._custom_normalizer.normalize(dataframe)
@@ -438,50 +483,6 @@ class NativeVersionStore:
 
     def _write_options(self):
         return self._lib_cfg.lib_desc.version.write_options
-
-    @staticmethod
-    def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
-        """
-        Precedence: existing_value > kwargs > env > proto_cfg > global_default
-
-        Parameters
-        ----------
-        param_name: str
-        proto_cfg
-            Gets the param_name attribute of this object
-            Most often is `self._write_options()` for the Protobuf write_options.
-        global_default
-            FUTURE: store this in a central location
-        existing_value:
-            The value already supplied to the caller
-        uppercase
-            If true (default), will look for `param_name.upper()` in OS environment variables; otherwise, the original
-            case.
-        kwargs
-            For passing through the caller's kwargs in which we look for `param_name`
-            *Deprecating: use `existing_value`*
-        """
-
-        if existing_value is not None:
-            return existing_value
-
-        param_value = kwargs.get(param_name)
-        if param_value is not None:
-            return param_value
-
-        env_name = param_name.upper() if uppercase else param_name
-        env_value = os.getenv(env_name)
-        if env_value is not None:
-            return env_value not in ("", "0") and not env_value.lower().startswith("f")
-
-        try:
-            config_value = getattr(proto_cfg, param_name)
-            if config_value is not None:
-                return config_value
-        except AttributeError:
-            pass
-
-        return global_default
 
     def stage(
         self,
@@ -584,17 +585,17 @@ class NativeVersionStore:
 
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
 
-        pickle_on_failure = self.resolve_defaults(
+        pickle_on_failure = resolve_defaults(
             "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
         )
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
         )
-        recursive_normalizers = self.resolve_defaults(
+        recursive_normalizers = resolve_defaults(
             "recursive_normalizers", proto_cfg, global_default=False, uppercase=False, **kwargs
         )
-        parallel = self.resolve_defaults("parallel", proto_cfg, global_default=False, uppercase=False, **kwargs)
-        incomplete = self.resolve_defaults("incomplete", proto_cfg, global_default=False, uppercase=False, **kwargs)
+        parallel = resolve_defaults("parallel", proto_cfg, global_default=False, uppercase=False, **kwargs)
+        incomplete = resolve_defaults("incomplete", proto_cfg, global_default=False, uppercase=False, **kwargs)
 
         # TODO remove me when dynamic strings is the default everywhere
         if parallel:
@@ -630,7 +631,6 @@ class NativeVersionStore:
             coerce_columns,
             norm_failure_options_msg,
         )
-        # TODO: allow_sparse for write_parallel / recursive normalizers as well.
         if isinstance(item, NPDDataFrame):
             if parallel or incomplete:
                 self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
@@ -646,7 +646,7 @@ class NativeVersionStore:
 
     def _resolve_dynamic_strings(self, kwargs):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        dynamic_strings = self.resolve_defaults("dynamic_strings", proto_cfg, global_default=True, **kwargs)
+        dynamic_strings = resolve_defaults("dynamic_strings", proto_cfg, global_default=True, **kwargs)
         if IS_WINDOWS:
             # Fixed size strings not implemented yet for Windows as Py_UNICODE_SIZE is 2 whereas on Linux it is 4
             if not dynamic_strings:
@@ -739,7 +739,7 @@ class NativeVersionStore:
         coerce_columns = kwargs.get("coerce_columns", None)
 
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
         )
 
@@ -838,10 +838,10 @@ class NativeVersionStore:
         update_query = _PythonVersionStoreUpdateQuery()
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        dynamic_schema = self.resolve_defaults("dynamic_schema", proto_cfg, False, **kwargs)
+        dynamic_schema = resolve_defaults("dynamic_schema", proto_cfg, False, **kwargs)
         coerce_columns = kwargs.get("coerce_columns", None)
 
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
         )
 
@@ -904,7 +904,7 @@ class NativeVersionStore:
         for i in range(len(data_vector)):
             data_vector[i] = self._apply_date_range_to_update_query(data_vector[i], date_range_vector[i], update_queries[i])
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         # Batch update is available only via V2 Library API. Dynamic Strings are always on in it
@@ -1372,11 +1372,11 @@ class NativeVersionStore:
         **kwargs,
     ) -> List[VersionedItem]:
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
-        pickle_on_failure = self.resolve_defaults(
+        pickle_on_failure = resolve_defaults(
             "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
         )
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
@@ -1399,7 +1399,7 @@ class NativeVersionStore:
         self, symbols: List[str], metadata_vector: List[Any], prune_previous_version, throw_on_error
     ):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         normalized_meta = [normalize_metadata(metadata_vector[idx]) for idx in range(len(symbols))]
@@ -1516,7 +1516,7 @@ class NativeVersionStore:
         **kwargs,
     ):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
@@ -1714,11 +1714,11 @@ class NativeVersionStore:
         read_options.set_force_strings_to_object(_assume_false("force_string_to_object", kwargs))
         read_options.set_optimise_string_memory(_assume_false("optimise_string_memory", kwargs))
         read_options.set_dynamic_schema(
-            self.resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs)
+            resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs)
         )
-        read_options.set_set_tz(self.resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
-        read_options.set_allow_sparse(self.resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
-        read_options.set_incompletes(self.resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
+        read_options.set_set_tz(resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
+        read_options.set_allow_sparse(resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
+        read_options.set_incompletes(resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
         return read_options
 
     def _get_queries(self, as_of, date_range, row_range, columns=None, query_builder=None, **kwargs):
@@ -2112,7 +2112,7 @@ class NativeVersionStore:
         VersionedItem
             The data attribute will be None.
         """
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", self._write_options(), global_default=False, existing_value=prune_previous_version
         )
         udm = normalize_metadata(metadata)
@@ -2428,14 +2428,14 @@ class NativeVersionStore:
         """
         if date_range is not None:
             proto_cfg = self._lib_cfg.lib_desc.version.write_options
-            dynamic_schema = self.resolve_defaults("dynamic_schema", proto_cfg, False, **kwargs)
+            dynamic_schema = resolve_defaults("dynamic_schema", proto_cfg, False, **kwargs)
             # All other methods use prune_previous_version, but also support prune_previous_versions here in case
             # anyone is relying on it
             prune_previous_versions = _assume_false("prune_previous_versions", kwargs)
             if prune_previous_versions:
                 prune_previous_version = True
             else:
-                prune_previous_version = self.resolve_defaults(
+                prune_previous_version = resolve_defaults(
                     "prune_previous_version", proto_cfg, global_default=False, **kwargs
                 )
             update_query = _PythonVersionStoreUpdateQuery()
@@ -2981,7 +2981,7 @@ class NativeVersionStore:
         """
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
 
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         udm = normalize_metadata(metadata)
@@ -3084,7 +3084,7 @@ class NativeVersionStore:
 
         # All other methods use prune_previous_version, but also support prune_previous_versions here in case
         # anyone is relying on it
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_versions, **kwargs
         )
 
@@ -3104,3 +3104,18 @@ class NativeVersionStore:
 
     def library_tool(self) -> LibraryTool:
         return LibraryTool(self.library(), self)
+
+
+def resolve_dynamic_strings(kwargs):
+    dynamic_strings = resolve_defaults("dynamic_strings", None, global_default=True, **kwargs)
+    if IS_WINDOWS:
+        # Fixed size strings not implemented yet for Windows as Py_UNICODE_SIZE is 2 whereas on Linux it is 4
+        if not dynamic_strings:
+            log.debug(
+                "Windows only supports dynamic_strings=True, using dynamic strings despite configuration or kwarg"
+            )
+        dynamic_strings = True
+
+    return dynamic_strings
+
+
