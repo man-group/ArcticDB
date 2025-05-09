@@ -165,15 +165,10 @@ inline auto get_default_num_cpus([[maybe_unused]] const std::string& cgroup_fold
     #endif
 }
 
-/*
- * Possible areas of inprovement in the future:
- * 1/ Task/op decoupling: push task and then use strategy to implement smart batching to
- * amortize costs wherever possible
- * 2/ Worker thread Affinity - would better locality improve throughput by keeping hot structure in
- * hot cachelines and not jumping from one thread to the next (assuming thread/core affinity in hw too) ?
- * 3/ Priority: How to assign priorities to task in order to treat the most pressing first.
- * 4/ Throttling: (similar to priority) how to absorb work spikes and apply memory backpressure
- */
+inline int64_t default_io_thread_count(uint64_t cpu_count) {
+    return std::min(int64_t(100L), static_cast<int64_t>(static_cast<double>(cpu_count) * 1.5));
+}
+
 class TaskScheduler {
   public:
     using CPUSchedulerType = folly::FutureExecutor<folly::CPUThreadPoolExecutor>;

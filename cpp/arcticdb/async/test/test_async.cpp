@@ -42,12 +42,20 @@ TEST(Async, SinkBasic) {
 
     as::UserAuth au{"abc"};
     auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, au, as::NativeVariantStorage());
-    auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
+    auto block_codec = std::make_shared<BlockCodecImpl>();
     aa::TaskScheduler sched{1};
 
     auto seg = SegmentInMemory();
     aa::EncodeAtomTask enc{
-        entity::KeyType::GENERATION, entity::VersionId{6}, NumericId{123}, NumericId{456}, timestamp{457}, entity::NumericIndex{999}, std::move(seg), codec_opt, EncodingVersion::V2
+        entity::KeyType::GENERATION,
+        entity::VersionId{6},
+        NumericId{123},
+        NumericId{456},
+        timestamp{457},
+        entity::NumericIndex{999},
+        std::move(seg),
+        block_codec,
+        EncodingVersion::V2
     };
 
     auto v = sched.submit_cpu_task(std::move(enc)).via(&aa::io_executor()).thenValue(aa::WriteSegmentTask{lib}).get();
@@ -73,8 +81,8 @@ TEST(Async, DeDupTest) {
 
     as::UserAuth au{"abc"};
     auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, au, storage::NativeVariantStorage());
-    auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
-    aa::AsyncStore store(lib, *codec_opt, EncodingVersion::V2);
+    auto codec_opt = std::make_shared<BlockCodecImpl>();
+    aa::AsyncStore store(lib, codec::default_lz4_codec(), EncodingVersion::V2);
     auto seg = SegmentInMemory();
 
     std::vector<std::pair<ast::StreamSink::PartialKey, SegmentInMemory>> key_segments;
@@ -101,7 +109,7 @@ TEST(Async, DeDupTest) {
     for(const auto& slice_key : slice_keys)
         keys.emplace_back(slice_key.key());
 
-    //The first key will be de-duped, second key will be fresh because indexes dont match
+    //The first key will be de-duped, second key will be fresh because indexes don't match
     ASSERT_EQ(2ULL, keys.size());
     ASSERT_EQ(k, keys[0]);
     ASSERT_NE(k, keys[1]);
@@ -352,9 +360,9 @@ TEST(Async, NumCoresCgroupV2) {
 std::shared_ptr<arcticdb::Store> create_store(const storage::LibraryPath &library_path,
                   as::LibraryIndex &library_index,
                   const storage::UserAuth &user_auth,
-                  std::shared_ptr<proto::encoding::VariantCodec> &codec_opt) {
+                  BlockCodecImpl&& codec_opt) {
     auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, user_auth, storage::NativeVariantStorage());
-    auto store = aa::AsyncStore(lib, *codec_opt, EncodingVersion::V1);
+    auto store = aa::AsyncStore(lib, std::move(codec_opt), EncodingVersion::V1);
     return std::make_shared<aa::AsyncStore<>>(std::move(store));
 }
 
@@ -377,23 +385,23 @@ TEST(Async, CopyCompressedInterStore) {
     as::LibraryIndex library_index{environment_name, config_resolver};
 
     as::UserAuth user_auth{"abc"};
-    auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
 
-    auto source_store = create_store(library_path, library_index, user_auth, codec_opt);
+    auto source_store = create_store(library_path, library_index, user_auth, codec::default_passthrough_codec());
 
     // When - we write a key to the source and copy it
     const arcticdb::entity::RefKey& key = arcticdb::entity::RefKey{"abc", KeyType::VERSION_REF};
     auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
     auto row_count = segment_in_memory.row_count();
     ASSERT_GT(row_count, 0);
-    auto segment = encode_dispatch(std::move(segment_in_memory), *codec_opt, arcticdb::EncodingVersion::V1);
+    auto codec_opt = codec::default_passthrough_codec();
+    auto segment = encode_dispatch(std::move(segment_in_memory), codec_opt, arcticdb::EncodingVersion::V1);
     (void)segment.calculate_size();
     source_store->write_compressed_sync(as::KeySegmentPair{key, std::move(segment)});
 
     auto targets = std::vector<std::shared_ptr<arcticdb::Store>>{
-        create_store(library_path, library_index, user_auth, codec_opt),
-        create_store(library_path, library_index, user_auth, codec_opt),
-        create_store(library_path, library_index, user_auth, codec_opt)
+        create_store(library_path, library_index, user_auth, codec::default_passthrough_codec()),
+        create_store(library_path, library_index, user_auth, codec::default_passthrough_codec()),
+        create_store(library_path, library_index, user_auth, codec::default_passthrough_codec())
     };
 
     CopyCompressedInterStoreTask task{
@@ -444,17 +452,15 @@ TEST(Async, CopyCompressedInterStoreNoSuchKeyOnWrite) {
     as::LibraryIndex failed_library_index{environment_name, failed_config_resolver};
 
     as::UserAuth user_auth{"abc"};
-    auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
-
-    auto source_store = create_store(library_path, library_index, user_auth, codec_opt);
+    auto source_store = create_store(library_path, library_index, user_auth, codec::default_passthrough_codec());
 
     std::string failureSymbol = storage::s3::MockS3Client::get_failure_trigger("sym", storage::StorageOperation::WRITE, Aws::S3::S3Errors::NO_SUCH_KEY);
     
     // Prepare 2 targets to fail and 1 to succeed
     auto targets = std::vector<std::shared_ptr<arcticdb::Store>>{
-        create_store(library_path, library_index, user_auth, codec_opt),
-        create_store(library_path, failed_library_index, user_auth, codec_opt),
-        create_store(library_path, library_index, user_auth, codec_opt)
+        create_store(library_path, library_index, user_auth, codec::default_passthrough_codec()),
+        create_store(library_path, failed_library_index, user_auth, codec::default_passthrough_codec()),
+        create_store(library_path, library_index, user_auth, codec::default_passthrough_codec())
     };
 
     // When - we write a key to the source
@@ -462,7 +468,7 @@ TEST(Async, CopyCompressedInterStoreNoSuchKeyOnWrite) {
     auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
     auto row_count = segment_in_memory.row_count();
     ASSERT_GT(row_count, 0);
-    auto segment = encode_dispatch(std::move(segment_in_memory), *codec_opt, arcticdb::EncodingVersion::V1);
+    auto segment = encode_dispatch(std::move(segment_in_memory), codec::default_passthrough_codec(), arcticdb::EncodingVersion::V1);
     (void)segment.calculate_size();
     source_store->write_compressed_sync(as::KeySegmentPair{key, std::move(segment)});
 
