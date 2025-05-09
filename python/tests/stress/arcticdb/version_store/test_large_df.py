@@ -88,7 +88,7 @@ def test_write_large_df_in_chunks(lmdb_version_store_big_map):
 def test_write_read_time_large_df(lmdb_version_store_big_map):
     symbol = "timeseries_data"
     lib = lmdb_version_store_big_map
-    total_rows = 10000000
+    total_rows = 1000000000
     start_dt = pd.Timestamp("2020-01-01")
     df = pd.DataFrame({
         "bitpacked": np.random.randint(0, 5, total_rows),
