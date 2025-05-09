@@ -213,7 +213,6 @@ namespace arcticdb {
 #else
         std::free(p);
         free_count_of<TracingPolicy, ClockType>().increment(1);
-        maybe_trim();
 #endif
     }
 
@@ -284,7 +283,7 @@ namespace arcticdb {
          * there are no windows alternatives.
          */
 #if defined(__linux__) && defined(__GLIBC__)
-        //malloc_trim(0);
+        malloc_trim(0);
 #endif
     }
 
