@@ -359,7 +359,7 @@ class TestLibraryManager:
 
     @classmethod
     def __remove_all_test_libs(cls, ac: Arctic, uri_str_to_confirm: str):
-        assert uri_str_to_confirm in ac.get_uri(), f"Found [{uri_str_to_confirm}] string in uri"
+        assert uri_str_to_confirm in ac.get_uri(), f"Expected string [{uri_str_to_confirm}] not found in uri : {ac.get_uri()}"
         lib_names = set(ac.list_libraries())
         for to_delete in lib_names:
             ac.delete_library(to_delete)  
