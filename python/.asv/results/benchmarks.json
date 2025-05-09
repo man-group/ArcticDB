@@ -1281,7 +1281,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "local_query_builder:23",
+        "setup_cache_key": "local_query_builder:25",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1299,7 +1299,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "local_query_builder:23",
+        "setup_cache_key": "local_query_builder:25",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1317,7 +1317,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "local_query_builder:23",
+        "setup_cache_key": "local_query_builder:25",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1335,7 +1335,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "local_query_builder:23",
+        "setup_cache_key": "local_query_builder:25",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1353,7 +1353,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "local_query_builder:23",
+        "setup_cache_key": "local_query_builder:25",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1371,7 +1371,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "local_query_builder:23",
+        "setup_cache_key": "local_query_builder:25",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1389,7 +1389,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "local_query_builder:23",
+        "setup_cache_key": "local_query_builder:25",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1412,7 +1412,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "local_query_builder:23",
+        "setup_cache_key": "local_query_builder:25",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -1436,7 +1436,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "local_query_builder:23",
+        "setup_cache_key": "local_query_builder:25",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -1460,7 +1460,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "local_query_builder:23",
+        "setup_cache_key": "local_query_builder:25",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -1484,7 +1484,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "local_query_builder:23",
+        "setup_cache_key": "local_query_builder:25",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -1508,7 +1508,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "local_query_builder:23",
+        "setup_cache_key": "local_query_builder:25",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -1532,7 +1532,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "local_query_builder:23",
+        "setup_cache_key": "local_query_builder:25",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -1556,7 +1556,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "local_query_builder:23",
+        "setup_cache_key": "local_query_builder:25",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -1659,8 +1659,258 @@
         "version": "ed1d1ccb6458095a627788bfa2b53afa310ca8c8118a6405c91204724c865d6c",
         "warmup_time": -1
     },
+    "real_batch_functions.AWSBatchBasicFunctions.peakmem_read_batch": {
+        "code": "class AWSBatchBasicFunctions:\n    def peakmem_read_batch(self, storage_info, num_symbols, num_rows):\n        read_batch_result = self.lib.read_batch(self.read_reqs)\n        # Quick check all is ok (will not affect bemchmarks)\n        assert read_batch_result[0].data.shape[0] == num_rows\n        assert read_batch_result[-1].data.shape[0] == num_rows\n\n    def setup(self, storage_info, num_symbols, num_rows):\n        self.setup_env = SetupMultipleLibraries.from_storage_info(storage_info)\n    \n        self.lib: Library = self.setup_env.get_library(num_symbols)\n        self.setup_env.logger().info(f\"Library {self.lib}\")\n        self.setup_env.logger().debug(f\"Symbols {self.lib.list_symbols()}\")\n    \n        # Get generated symbol names\n        self.symbols = []\n        for num_symb_idx in range(num_symbols):\n            sym_name = self.setup_env.get_symbol_name(num_symb_idx, num_rows, self.setup_env.default_number_cols)\n            if not self.lib.has_symbol(sym_name):\n                self.setup_env.logger().error(f\"symbol not found {sym_name}\")\n            self.symbols.append(sym_name)\n    \n        #Construct read requests (will equal to number of symbols)\n        self.read_reqs = [ReadRequest(symbol) for symbol in self.symbols]\n    \n        #Construct read requests based on 2 colmns, not whole DF (will equal to number of symbols)\n        COLS = self.setup_env.generate_dataframe(0, self.setup_env.default_number_cols).columns[2:4]\n        self.read_reqs_with_cols = [ReadRequest(symbol, columns=COLS) for symbol in self.symbols]\n    \n        #Construct dataframe that will be used for write requests, not whole DF (will equal to number of symbols)\n        self.df: pd.DataFrame = self.setup_env.generate_dataframe(num_rows, self.setup_env.default_number_cols)\n    \n        #Construct read request with date_range\n        self.date_range = self.get_last_x_percent_date_range(num_rows, 0.05)\n        self.read_reqs_date_range = [ReadRequest(symbol, date_range=self.date_range) for symbol in self.symbols]\n    \n        ## Make sure each process has its own write library\n        self.fresh_lib: Library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        set_env = AWSBatchBasicFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_batch_functions.AWSBatchBasicFunctions.peakmem_read_batch",
+        "param_names": [
+            "num_symbols",
+            "num_rows"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ],
+            [
+                "25000",
+                "50000"
+            ]
+        ],
+        "setup_cache_key": "real_batch_functions:40",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "aa804a330b3a5cb458ed5e9c8bafb169c8e5a0e6fcc79496fa306675045f9d0e"
+    },
+    "real_batch_functions.AWSBatchBasicFunctions.peakmem_read_batch_with_columns": {
+        "code": "class AWSBatchBasicFunctions:\n    def peakmem_read_batch_with_columns(self, storage_info, num_symbols, num_rows):\n        read_batch_result = self.lib.read_batch(self.read_reqs_with_cols)\n        # Quick check all is ok (will not affect bemchmarks)\n        assert read_batch_result[0].data.shape[0] == num_rows\n        assert read_batch_result[-1].data.shape[0] == num_rows\n\n    def setup(self, storage_info, num_symbols, num_rows):\n        self.setup_env = SetupMultipleLibraries.from_storage_info(storage_info)\n    \n        self.lib: Library = self.setup_env.get_library(num_symbols)\n        self.setup_env.logger().info(f\"Library {self.lib}\")\n        self.setup_env.logger().debug(f\"Symbols {self.lib.list_symbols()}\")\n    \n        # Get generated symbol names\n        self.symbols = []\n        for num_symb_idx in range(num_symbols):\n            sym_name = self.setup_env.get_symbol_name(num_symb_idx, num_rows, self.setup_env.default_number_cols)\n            if not self.lib.has_symbol(sym_name):\n                self.setup_env.logger().error(f\"symbol not found {sym_name}\")\n            self.symbols.append(sym_name)\n    \n        #Construct read requests (will equal to number of symbols)\n        self.read_reqs = [ReadRequest(symbol) for symbol in self.symbols]\n    \n        #Construct read requests based on 2 colmns, not whole DF (will equal to number of symbols)\n        COLS = self.setup_env.generate_dataframe(0, self.setup_env.default_number_cols).columns[2:4]\n        self.read_reqs_with_cols = [ReadRequest(symbol, columns=COLS) for symbol in self.symbols]\n    \n        #Construct dataframe that will be used for write requests, not whole DF (will equal to number of symbols)\n        self.df: pd.DataFrame = self.setup_env.generate_dataframe(num_rows, self.setup_env.default_number_cols)\n    \n        #Construct read request with date_range\n        self.date_range = self.get_last_x_percent_date_range(num_rows, 0.05)\n        self.read_reqs_date_range = [ReadRequest(symbol, date_range=self.date_range) for symbol in self.symbols]\n    \n        ## Make sure each process has its own write library\n        self.fresh_lib: Library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        set_env = AWSBatchBasicFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_batch_functions.AWSBatchBasicFunctions.peakmem_read_batch_with_columns",
+        "param_names": [
+            "num_symbols",
+            "num_rows"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ],
+            [
+                "25000",
+                "50000"
+            ]
+        ],
+        "setup_cache_key": "real_batch_functions:40",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "3c95137c027eb474fcef309779362588b86db79f9a3c10f0f47f87abb973cc9b"
+    },
+    "real_batch_functions.AWSBatchBasicFunctions.peakmem_read_batch_with_date_ranges": {
+        "code": "class AWSBatchBasicFunctions:\n    def peakmem_read_batch_with_date_ranges(self, storage_info, num_symbols, num_rows):\n        read_batch_result = self.lib.read_batch(self.read_reqs_date_range)\n        # Quick check all is ok (will not affect bemchmarks)\n        assert read_batch_result[0].data.shape[0] > 2\n        assert read_batch_result[-1].data.shape[0] > 2\n\n    def setup(self, storage_info, num_symbols, num_rows):\n        self.setup_env = SetupMultipleLibraries.from_storage_info(storage_info)\n    \n        self.lib: Library = self.setup_env.get_library(num_symbols)\n        self.setup_env.logger().info(f\"Library {self.lib}\")\n        self.setup_env.logger().debug(f\"Symbols {self.lib.list_symbols()}\")\n    \n        # Get generated symbol names\n        self.symbols = []\n        for num_symb_idx in range(num_symbols):\n            sym_name = self.setup_env.get_symbol_name(num_symb_idx, num_rows, self.setup_env.default_number_cols)\n            if not self.lib.has_symbol(sym_name):\n                self.setup_env.logger().error(f\"symbol not found {sym_name}\")\n            self.symbols.append(sym_name)\n    \n        #Construct read requests (will equal to number of symbols)\n        self.read_reqs = [ReadRequest(symbol) for symbol in self.symbols]\n    \n        #Construct read requests based on 2 colmns, not whole DF (will equal to number of symbols)\n        COLS = self.setup_env.generate_dataframe(0, self.setup_env.default_number_cols).columns[2:4]\n        self.read_reqs_with_cols = [ReadRequest(symbol, columns=COLS) for symbol in self.symbols]\n    \n        #Construct dataframe that will be used for write requests, not whole DF (will equal to number of symbols)\n        self.df: pd.DataFrame = self.setup_env.generate_dataframe(num_rows, self.setup_env.default_number_cols)\n    \n        #Construct read request with date_range\n        self.date_range = self.get_last_x_percent_date_range(num_rows, 0.05)\n        self.read_reqs_date_range = [ReadRequest(symbol, date_range=self.date_range) for symbol in self.symbols]\n    \n        ## Make sure each process has its own write library\n        self.fresh_lib: Library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        set_env = AWSBatchBasicFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_batch_functions.AWSBatchBasicFunctions.peakmem_read_batch_with_date_ranges",
+        "param_names": [
+            "num_symbols",
+            "num_rows"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ],
+            [
+                "25000",
+                "50000"
+            ]
+        ],
+        "setup_cache_key": "real_batch_functions:40",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "b93cd64af05dfd5cc2e991034c8316d55374e7e583c2b6e613453150d9eb9403"
+    },
+    "real_batch_functions.AWSBatchBasicFunctions.peakmem_write_batch": {
+        "code": "class AWSBatchBasicFunctions:\n    def peakmem_write_batch(self, storage_info, num_symbols, num_rows):\n        payloads = [WritePayload(symbol, self.df) for symbol in self.symbols]\n        write_batch_result = self.fresh_lib.write_batch(payloads)\n        # Quick check all is ok (will not affect bemchmarks)\n        assert write_batch_result[0].symbol in self.symbols\n        assert write_batch_result[-1].symbol in self.symbols\n\n    def setup(self, storage_info, num_symbols, num_rows):\n        self.setup_env = SetupMultipleLibraries.from_storage_info(storage_info)\n    \n        self.lib: Library = self.setup_env.get_library(num_symbols)\n        self.setup_env.logger().info(f\"Library {self.lib}\")\n        self.setup_env.logger().debug(f\"Symbols {self.lib.list_symbols()}\")\n    \n        # Get generated symbol names\n        self.symbols = []\n        for num_symb_idx in range(num_symbols):\n            sym_name = self.setup_env.get_symbol_name(num_symb_idx, num_rows, self.setup_env.default_number_cols)\n            if not self.lib.has_symbol(sym_name):\n                self.setup_env.logger().error(f\"symbol not found {sym_name}\")\n            self.symbols.append(sym_name)\n    \n        #Construct read requests (will equal to number of symbols)\n        self.read_reqs = [ReadRequest(symbol) for symbol in self.symbols]\n    \n        #Construct read requests based on 2 colmns, not whole DF (will equal to number of symbols)\n        COLS = self.setup_env.generate_dataframe(0, self.setup_env.default_number_cols).columns[2:4]\n        self.read_reqs_with_cols = [ReadRequest(symbol, columns=COLS) for symbol in self.symbols]\n    \n        #Construct dataframe that will be used for write requests, not whole DF (will equal to number of symbols)\n        self.df: pd.DataFrame = self.setup_env.generate_dataframe(num_rows, self.setup_env.default_number_cols)\n    \n        #Construct read request with date_range\n        self.date_range = self.get_last_x_percent_date_range(num_rows, 0.05)\n        self.read_reqs_date_range = [ReadRequest(symbol, date_range=self.date_range) for symbol in self.symbols]\n    \n        ## Make sure each process has its own write library\n        self.fresh_lib: Library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        set_env = AWSBatchBasicFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_batch_functions.AWSBatchBasicFunctions.peakmem_write_batch",
+        "param_names": [
+            "num_symbols",
+            "num_rows"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ],
+            [
+                "25000",
+                "50000"
+            ]
+        ],
+        "setup_cache_key": "real_batch_functions:40",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "2e77f68e107bc61637f85a055d51366560eb73f6d709fef5b6c02471b0c84c26"
+    },
+    "real_batch_functions.AWSBatchBasicFunctions.time_read_batch": {
+        "code": "class AWSBatchBasicFunctions:\n    def time_read_batch(self, storage_info, num_symbols, num_rows):\n        read_batch_result = self.lib.read_batch(self.read_reqs)\n\n    def setup(self, storage_info, num_symbols, num_rows):\n        self.setup_env = SetupMultipleLibraries.from_storage_info(storage_info)\n    \n        self.lib: Library = self.setup_env.get_library(num_symbols)\n        self.setup_env.logger().info(f\"Library {self.lib}\")\n        self.setup_env.logger().debug(f\"Symbols {self.lib.list_symbols()}\")\n    \n        # Get generated symbol names\n        self.symbols = []\n        for num_symb_idx in range(num_symbols):\n            sym_name = self.setup_env.get_symbol_name(num_symb_idx, num_rows, self.setup_env.default_number_cols)\n            if not self.lib.has_symbol(sym_name):\n                self.setup_env.logger().error(f\"symbol not found {sym_name}\")\n            self.symbols.append(sym_name)\n    \n        #Construct read requests (will equal to number of symbols)\n        self.read_reqs = [ReadRequest(symbol) for symbol in self.symbols]\n    \n        #Construct read requests based on 2 colmns, not whole DF (will equal to number of symbols)\n        COLS = self.setup_env.generate_dataframe(0, self.setup_env.default_number_cols).columns[2:4]\n        self.read_reqs_with_cols = [ReadRequest(symbol, columns=COLS) for symbol in self.symbols]\n    \n        #Construct dataframe that will be used for write requests, not whole DF (will equal to number of symbols)\n        self.df: pd.DataFrame = self.setup_env.generate_dataframe(num_rows, self.setup_env.default_number_cols)\n    \n        #Construct read request with date_range\n        self.date_range = self.get_last_x_percent_date_range(num_rows, 0.05)\n        self.read_reqs_date_range = [ReadRequest(symbol, date_range=self.date_range) for symbol in self.symbols]\n    \n        ## Make sure each process has its own write library\n        self.fresh_lib: Library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        set_env = AWSBatchBasicFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_batch_functions.AWSBatchBasicFunctions.time_read_batch",
+        "number": 3,
+        "param_names": [
+            "num_symbols",
+            "num_rows"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ],
+            [
+                "25000",
+                "50000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_batch_functions:40",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "44c020785bfb38acadeb479a128014644873c5406b1145a72b1e237f1e44aea8",
+        "warmup_time": 0
+    },
+    "real_batch_functions.AWSBatchBasicFunctions.time_read_batch_with_columns": {
+        "code": "class AWSBatchBasicFunctions:\n    def time_read_batch_with_columns(self, storage_info, num_symbols, num_rows):\n        read_batch_result = self.lib.read_batch(self.read_reqs_with_cols)\n\n    def setup(self, storage_info, num_symbols, num_rows):\n        self.setup_env = SetupMultipleLibraries.from_storage_info(storage_info)\n    \n        self.lib: Library = self.setup_env.get_library(num_symbols)\n        self.setup_env.logger().info(f\"Library {self.lib}\")\n        self.setup_env.logger().debug(f\"Symbols {self.lib.list_symbols()}\")\n    \n        # Get generated symbol names\n        self.symbols = []\n        for num_symb_idx in range(num_symbols):\n            sym_name = self.setup_env.get_symbol_name(num_symb_idx, num_rows, self.setup_env.default_number_cols)\n            if not self.lib.has_symbol(sym_name):\n                self.setup_env.logger().error(f\"symbol not found {sym_name}\")\n            self.symbols.append(sym_name)\n    \n        #Construct read requests (will equal to number of symbols)\n        self.read_reqs = [ReadRequest(symbol) for symbol in self.symbols]\n    \n        #Construct read requests based on 2 colmns, not whole DF (will equal to number of symbols)\n        COLS = self.setup_env.generate_dataframe(0, self.setup_env.default_number_cols).columns[2:4]\n        self.read_reqs_with_cols = [ReadRequest(symbol, columns=COLS) for symbol in self.symbols]\n    \n        #Construct dataframe that will be used for write requests, not whole DF (will equal to number of symbols)\n        self.df: pd.DataFrame = self.setup_env.generate_dataframe(num_rows, self.setup_env.default_number_cols)\n    \n        #Construct read request with date_range\n        self.date_range = self.get_last_x_percent_date_range(num_rows, 0.05)\n        self.read_reqs_date_range = [ReadRequest(symbol, date_range=self.date_range) for symbol in self.symbols]\n    \n        ## Make sure each process has its own write library\n        self.fresh_lib: Library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        set_env = AWSBatchBasicFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_batch_functions.AWSBatchBasicFunctions.time_read_batch_with_columns",
+        "number": 3,
+        "param_names": [
+            "num_symbols",
+            "num_rows"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ],
+            [
+                "25000",
+                "50000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_batch_functions:40",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "cb600261c6d375805a32aed69aaf5d510fdaf7b822563b8df6ac2379bbae26f5",
+        "warmup_time": 0
+    },
+    "real_batch_functions.AWSBatchBasicFunctions.time_read_batch_with_date_ranges": {
+        "code": "class AWSBatchBasicFunctions:\n    def time_read_batch_with_date_ranges(self, storage_info, num_symbols, num_rows):\n        self.lib.read_batch(self.read_reqs_date_range)\n\n    def setup(self, storage_info, num_symbols, num_rows):\n        self.setup_env = SetupMultipleLibraries.from_storage_info(storage_info)\n    \n        self.lib: Library = self.setup_env.get_library(num_symbols)\n        self.setup_env.logger().info(f\"Library {self.lib}\")\n        self.setup_env.logger().debug(f\"Symbols {self.lib.list_symbols()}\")\n    \n        # Get generated symbol names\n        self.symbols = []\n        for num_symb_idx in range(num_symbols):\n            sym_name = self.setup_env.get_symbol_name(num_symb_idx, num_rows, self.setup_env.default_number_cols)\n            if not self.lib.has_symbol(sym_name):\n                self.setup_env.logger().error(f\"symbol not found {sym_name}\")\n            self.symbols.append(sym_name)\n    \n        #Construct read requests (will equal to number of symbols)\n        self.read_reqs = [ReadRequest(symbol) for symbol in self.symbols]\n    \n        #Construct read requests based on 2 colmns, not whole DF (will equal to number of symbols)\n        COLS = self.setup_env.generate_dataframe(0, self.setup_env.default_number_cols).columns[2:4]\n        self.read_reqs_with_cols = [ReadRequest(symbol, columns=COLS) for symbol in self.symbols]\n    \n        #Construct dataframe that will be used for write requests, not whole DF (will equal to number of symbols)\n        self.df: pd.DataFrame = self.setup_env.generate_dataframe(num_rows, self.setup_env.default_number_cols)\n    \n        #Construct read request with date_range\n        self.date_range = self.get_last_x_percent_date_range(num_rows, 0.05)\n        self.read_reqs_date_range = [ReadRequest(symbol, date_range=self.date_range) for symbol in self.symbols]\n    \n        ## Make sure each process has its own write library\n        self.fresh_lib: Library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        set_env = AWSBatchBasicFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_batch_functions.AWSBatchBasicFunctions.time_read_batch_with_date_ranges",
+        "number": 3,
+        "param_names": [
+            "num_symbols",
+            "num_rows"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ],
+            [
+                "25000",
+                "50000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_batch_functions:40",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "7d3415e542c7ad7e16015d608e7e12aa71e8080848e095c907c9d3c0b2f380f4",
+        "warmup_time": 0
+    },
+    "real_batch_functions.AWSBatchBasicFunctions.time_write_batch": {
+        "code": "class AWSBatchBasicFunctions:\n    def time_write_batch(self, storage_info, num_symbols, num_rows):\n        payloads = [WritePayload(symbol, self.df) for symbol in self.symbols]\n        write_batch_result = self.fresh_lib.write_batch(payloads)\n\n    def setup(self, storage_info, num_symbols, num_rows):\n        self.setup_env = SetupMultipleLibraries.from_storage_info(storage_info)\n    \n        self.lib: Library = self.setup_env.get_library(num_symbols)\n        self.setup_env.logger().info(f\"Library {self.lib}\")\n        self.setup_env.logger().debug(f\"Symbols {self.lib.list_symbols()}\")\n    \n        # Get generated symbol names\n        self.symbols = []\n        for num_symb_idx in range(num_symbols):\n            sym_name = self.setup_env.get_symbol_name(num_symb_idx, num_rows, self.setup_env.default_number_cols)\n            if not self.lib.has_symbol(sym_name):\n                self.setup_env.logger().error(f\"symbol not found {sym_name}\")\n            self.symbols.append(sym_name)\n    \n        #Construct read requests (will equal to number of symbols)\n        self.read_reqs = [ReadRequest(symbol) for symbol in self.symbols]\n    \n        #Construct read requests based on 2 colmns, not whole DF (will equal to number of symbols)\n        COLS = self.setup_env.generate_dataframe(0, self.setup_env.default_number_cols).columns[2:4]\n        self.read_reqs_with_cols = [ReadRequest(symbol, columns=COLS) for symbol in self.symbols]\n    \n        #Construct dataframe that will be used for write requests, not whole DF (will equal to number of symbols)\n        self.df: pd.DataFrame = self.setup_env.generate_dataframe(num_rows, self.setup_env.default_number_cols)\n    \n        #Construct read request with date_range\n        self.date_range = self.get_last_x_percent_date_range(num_rows, 0.05)\n        self.read_reqs_date_range = [ReadRequest(symbol, date_range=self.date_range) for symbol in self.symbols]\n    \n        ## Make sure each process has its own write library\n        self.fresh_lib: Library = self.setup_env.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        set_env = AWSBatchBasicFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_batch_functions.AWSBatchBasicFunctions.time_write_batch",
+        "number": 3,
+        "param_names": [
+            "num_symbols",
+            "num_rows"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ],
+            [
+                "25000",
+                "50000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_batch_functions:40",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "779c420ec49e8d30496968829b8e06e70b764fa68e2dc976aa6cc06d223b0d40",
+        "warmup_time": 0
+    },
+    "real_finalize_staged_data.AWSFinalizeStagedData.peakmem_finalize_staged_data": {
+        "code": "class AWSFinalizeStagedData:\n    def peakmem_finalize_staged_data(self, cache: CachedDFGenerator, param: int):\n        self.set_env.logger().info(f\"Library: {self.lib}\")\n        self.set_env.logger().info(f\"Symbol: {self.symbol}\")\n        assert self.symbol in self.lib.get_staged_symbols()\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache, num_chunks: int):\n        self.df_cache: CachedDFGenerator = cache[\"df_cache\"]\n        self.set_env = NoSetup.from_storage_info(cache[\"storage_info\"])\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(\n            0, self.df_cache.TIME_UNIT\n        )  # Synchronize index frequency\n    \n        df = self.df_cache.generate_dataframe_timestamp_indexed(200, 0, self.df_cache.TIME_UNIT)\n        list_of_chunks = [10000] * num_chunks\n        self.symbol = self.set_env.get_symbol_name_template(self.pid)\n    \n        self.lib.write(self.symbol, data=df, prune_previous_versions=True)\n        stage_chunks(self.lib, self.symbol, self.df_cache, INITIAL_TIMESTAMP, list_of_chunks)\n\n    def setup_cache(self):\n        # Preconditions for this test\n        assert AWSFinalizeStagedData.number == 1\n        assert AWSFinalizeStagedData.repeat == 1\n        assert AWSFinalizeStagedData.rounds == 1\n        assert AWSFinalizeStagedData.warmup_time == 0\n    \n        set_env = AWSFinalizeStagedData.SETUP_CLASS\n        info = set_env.get_storage_info()\n        set_env.logger().info(f\"storage info object: {info}\")\n        df_cache = CachedDFGenerator(500000, [5])\n        cache = {\n            \"storage_info\" : info,\n            \"df_cache\" : df_cache\n        }\n        return cache",
+        "name": "real_finalize_staged_data.AWSFinalizeStagedData.peakmem_finalize_staged_data",
+        "param_names": [
+            "num_chunks"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "real_finalize_staged_data:37",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "5bed0276b7424d57834edcca9b0831a368397e3666ac04e69f5eae4cead70e7a"
+    },
+    "real_finalize_staged_data.AWSFinalizeStagedData.time_finalize_staged_data": {
+        "code": "class AWSFinalizeStagedData:\n    def time_finalize_staged_data(self, cache: CachedDFGenerator, param: int):\n        self.set_env.logger().info(f\"Library: {self.lib}\")\n        self.set_env.logger().info(f\"Symbol: {self.symbol}\")\n        assert self.symbol in self.lib.get_staged_symbols()\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache, num_chunks: int):\n        self.df_cache: CachedDFGenerator = cache[\"df_cache\"]\n        self.set_env = NoSetup.from_storage_info(cache[\"storage_info\"])\n    \n        self.pid = os.getpid()\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(\n            0, self.df_cache.TIME_UNIT\n        )  # Synchronize index frequency\n    \n        df = self.df_cache.generate_dataframe_timestamp_indexed(200, 0, self.df_cache.TIME_UNIT)\n        list_of_chunks = [10000] * num_chunks\n        self.symbol = self.set_env.get_symbol_name_template(self.pid)\n    \n        self.lib.write(self.symbol, data=df, prune_previous_versions=True)\n        stage_chunks(self.lib, self.symbol, self.df_cache, INITIAL_TIMESTAMP, list_of_chunks)\n\n    def setup_cache(self):\n        # Preconditions for this test\n        assert AWSFinalizeStagedData.number == 1\n        assert AWSFinalizeStagedData.repeat == 1\n        assert AWSFinalizeStagedData.rounds == 1\n        assert AWSFinalizeStagedData.warmup_time == 0\n    \n        set_env = AWSFinalizeStagedData.SETUP_CLASS\n        info = set_env.get_storage_info()\n        set_env.logger().info(f\"storage info object: {info}\")\n        df_cache = CachedDFGenerator(500000, [5])\n        cache = {\n            \"storage_info\" : info,\n            \"df_cache\" : df_cache\n        }\n        return cache",
+        "min_run_count": 1,
+        "name": "real_finalize_staged_data.AWSFinalizeStagedData.time_finalize_staged_data",
+        "number": 1,
+        "param_names": [
+            "num_chunks"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_finalize_staged_data:37",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "4d489c848ae495cf287a6243efa88d3e795a661405fd4490ed5d8e8cecb8ca4e",
+        "warmup_time": 0
+    },
     "real_list_operations.AWSListSymbols.peakmem_list_symbols": {
-        "code": "class AWSListSymbols:\n    def peakmem_list_symbols(self, storage_info, num_syms):\n        self.lib.list_symbols()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws_setup = AWSListSymbols.SETUP_CLASS\n        if aws_setup.check_ok():\n            aws_setup.clear_symbols_cache()\n        else:\n            aws_setup.setup_all()\n        info = aws_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "code": "class AWSListSymbols:\n    def peakmem_list_symbols(self, storage_info, num_syms):\n        self.lib.list_symbols()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = SetupLibrariesWithVersionAndSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws_setup = AWSListSymbols.SETUP_CLASS\n        if aws_setup.check_ok():\n            aws_setup.clear_symbols_cache()\n        else:\n            aws_setup.setup_all()\n        info = aws_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws_setup.logger().info(f\"storage info object: {info}\")\n        return info",
         "name": "real_list_operations.AWSListSymbols.peakmem_list_symbols",
         "param_names": [
             "num_syms"
@@ -1675,10 +1925,10 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "a90567eacca263ebb46de7fdf55118d53eb6dc876e9255905d3a0b635b30fce9"
+        "version": "3319b539d388d613d9e46b3eb60c9d1f9b5eaeb871919bff74c5a2a8e370085b"
     },
     "real_list_operations.AWSListSymbols.time_has_symbol_nonexisting": {
-        "code": "class AWSListSymbols:\n    def time_has_symbol_nonexisting(self, storage_info, num_syms):\n        self.lib.has_symbol(\"250_sym\")\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws_setup = AWSListSymbols.SETUP_CLASS\n        if aws_setup.check_ok():\n            aws_setup.clear_symbols_cache()\n        else:\n            aws_setup.setup_all()\n        info = aws_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "code": "class AWSListSymbols:\n    def time_has_symbol_nonexisting(self, storage_info, num_syms):\n        self.lib.has_symbol(\"250_sym\")\n\n    def setup(self, storage_info, num_syms):\n        self.aws = SetupLibrariesWithVersionAndSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws_setup = AWSListSymbols.SETUP_CLASS\n        if aws_setup.check_ok():\n            aws_setup.clear_symbols_cache()\n        else:\n            aws_setup.setup_all()\n        info = aws_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws_setup.logger().info(f\"storage info object: {info}\")\n        return info",
         "min_run_count": 1,
         "name": "real_list_operations.AWSListSymbols.time_has_symbol_nonexisting",
         "number": 3,
@@ -1698,11 +1948,11 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "4b41ddcf6145b06ad7f80701da1523cf2f2947883fc4b07d92cef1c91ae93894",
+        "version": "cdbc7c1951b95b3b192162a6d768efe93268cb0e60c22f3a02527e88497b87f7",
         "warmup_time": 0
     },
     "real_list_operations.AWSListSymbols.time_list_symbols": {
-        "code": "class AWSListSymbols:\n    def time_list_symbols(self, storage_info, num_syms):\n        self.lib.list_symbols()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws_setup = AWSListSymbols.SETUP_CLASS\n        if aws_setup.check_ok():\n            aws_setup.clear_symbols_cache()\n        else:\n            aws_setup.setup_all()\n        info = aws_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "code": "class AWSListSymbols:\n    def time_list_symbols(self, storage_info, num_syms):\n        self.lib.list_symbols()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = SetupLibrariesWithVersionAndSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws_setup = AWSListSymbols.SETUP_CLASS\n        if aws_setup.check_ok():\n            aws_setup.clear_symbols_cache()\n        else:\n            aws_setup.setup_all()\n        info = aws_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws_setup.logger().info(f\"storage info object: {info}\")\n        return info",
         "min_run_count": 1,
         "name": "real_list_operations.AWSListSymbols.time_list_symbols",
         "number": 3,
@@ -1722,11 +1972,11 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "da598987df4d306401cb705b74e7ee9d9cf727ad60975249ac2b0f9b60b85200",
+        "version": "27b031f53ea226d004768f11a332b742bbd54db6b1fdbbb19845a193a595b3ce",
         "warmup_time": 0
     },
     "real_list_operations.AWSListSymbols.time_list_symbols_first_snapshot": {
-        "code": "class AWSListSymbols:\n    def time_list_symbols_first_snapshot(self, storage_info, num_syms):\n        self.lib.list_symbols(self.aws.first_snapshot)\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws_setup = AWSListSymbols.SETUP_CLASS\n        if aws_setup.check_ok():\n            aws_setup.clear_symbols_cache()\n        else:\n            aws_setup.setup_all()\n        info = aws_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "code": "class AWSListSymbols:\n    def time_list_symbols_first_snapshot(self, storage_info, num_syms):\n        self.lib.list_symbols(self.aws.first_snapshot)\n\n    def setup(self, storage_info, num_syms):\n        self.aws = SetupLibrariesWithVersionAndSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws_setup = AWSListSymbols.SETUP_CLASS\n        if aws_setup.check_ok():\n            aws_setup.clear_symbols_cache()\n        else:\n            aws_setup.setup_all()\n        info = aws_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws_setup.logger().info(f\"storage info object: {info}\")\n        return info",
         "min_run_count": 1,
         "name": "real_list_operations.AWSListSymbols.time_list_symbols_first_snapshot",
         "number": 3,
@@ -1746,11 +1996,11 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "e1a8191d64d59b0eb5d62ed65b922e13c3d0c20fd36bd050b8e55e6651b54d02",
+        "version": "ee8c711e24a9d590e62f438b04cef3fb9737c79af7177be3e594629d31bb93e0",
         "warmup_time": 0
     },
     "real_list_operations.AWSListSymbols.time_list_symbols_last_snapshot": {
-        "code": "class AWSListSymbols:\n    def time_list_symbols_last_snapshot(self, storage_info, num_syms):\n        self.lib.list_symbols(self.aws.last_snapshot)\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws_setup = AWSListSymbols.SETUP_CLASS\n        if aws_setup.check_ok():\n            aws_setup.clear_symbols_cache()\n        else:\n            aws_setup.setup_all()\n        info = aws_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws_setup.logger().info(f\"storage info object: {info}\")\n        return info",
+        "code": "class AWSListSymbols:\n    def time_list_symbols_last_snapshot(self, storage_info, num_syms):\n        self.lib.list_symbols(self.aws.last_snapshot)\n\n    def setup(self, storage_info, num_syms):\n        self.aws = SetupLibrariesWithVersionAndSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws_setup = AWSListSymbols.SETUP_CLASS\n        if aws_setup.check_ok():\n            aws_setup.clear_symbols_cache()\n        else:\n            aws_setup.setup_all()\n        info = aws_setup.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws_setup.logger().info(f\"storage info object: {info}\")\n        return info",
         "min_run_count": 1,
         "name": "real_list_operations.AWSListSymbols.time_list_symbols_last_snapshot",
         "number": 3,
@@ -1770,11 +2020,11 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "de7a1a4e6d575955a3edf0b414363fe0a72fa8710c9be747278abfa7b7f9abab",
+        "version": "8fbd5eeb85556e873438fcf56de77903cb55a0e174e5606b315c76c6daa21994",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.peakmem_list_versions": {
-        "code": "class AWSVersionSymbols:\n    def peakmem_list_versions(self, storage_info, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment()\n        info = aws.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws.logger().info(f\"storage info object: {info}\")\n        return info",
+        "code": "class AWSVersionSymbols:\n    def peakmem_list_versions(self, storage_info, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = SetupLibrariesWithVersionAndSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment()\n        info = aws.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws.logger().info(f\"storage info object: {info}\")\n        return info",
         "name": "real_list_operations.AWSVersionSymbols.peakmem_list_versions",
         "param_names": [
             "num_syms"
@@ -1789,10 +2039,10 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "e7c9ebfe5bcb25a0b5ba9d46c334cb6aa4f24fcde1b3edb9a8702b05a6e9dbab"
+        "version": "dd294717b7f867b5c35f91ee09e8975299ad85613c471fbcd3cd995ed217d9bb"
     },
     "real_list_operations.AWSVersionSymbols.time_list_versions": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions(self, storage_info, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment()\n        info = aws.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws.logger().info(f\"storage info object: {info}\")\n        return info",
+        "code": "class AWSVersionSymbols:\n    def time_list_versions(self, storage_info, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, storage_info, num_syms):\n        self.aws = SetupLibrariesWithVersionAndSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment()\n        info = aws.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws.logger().info(f\"storage info object: {info}\")\n        return info",
         "min_run_count": 1,
         "name": "real_list_operations.AWSVersionSymbols.time_list_versions",
         "number": 3,
@@ -1812,11 +2062,11 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "75b00fdd3f8f7697a2eb5d3bc9eb7952fc16fc1fca1bcb956c4e010b4ce495e8",
+        "version": "ee7125b224e596fca5be9ee65bdd6e821a92032c5dec736b92e1432add9f83b7",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.time_list_versions_latest_only": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions_latest_only(self, storage_info, num_syms):\n        self.lib.list_versions(latest_only=True)\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment()\n        info = aws.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws.logger().info(f\"storage info object: {info}\")\n        return info",
+        "code": "class AWSVersionSymbols:\n    def time_list_versions_latest_only(self, storage_info, num_syms):\n        self.lib.list_versions(latest_only=True)\n\n    def setup(self, storage_info, num_syms):\n        self.aws = SetupLibrariesWithVersionAndSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment()\n        info = aws.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws.logger().info(f\"storage info object: {info}\")\n        return info",
         "min_run_count": 1,
         "name": "real_list_operations.AWSVersionSymbols.time_list_versions_latest_only",
         "number": 3,
@@ -1836,11 +2086,11 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "77bb76dacb5466520ad09dc5359902e13a6425155bd1fd0dd1eb250f394d0ddb",
+        "version": "6e83699445b747bfa8b31b3964801713733b9f48c86ea2a8e1bddccb1867d005",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.time_list_versions_skip_snapshots": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions_skip_snapshots(self, storage_info, num_syms):\n        self.lib.list_versions(skip_snapshots=self.aws.last_snapshot)\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment()\n        info = aws.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws.logger().info(f\"storage info object: {info}\")\n        return info",
+        "code": "class AWSVersionSymbols:\n    def time_list_versions_skip_snapshots(self, storage_info, num_syms):\n        self.lib.list_versions(skip_snapshots=self.aws.last_snapshot)\n\n    def setup(self, storage_info, num_syms):\n        self.aws = SetupLibrariesWithVersionAndSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment()\n        info = aws.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws.logger().info(f\"storage info object: {info}\")\n        return info",
         "min_run_count": 1,
         "name": "real_list_operations.AWSVersionSymbols.time_list_versions_skip_snapshots",
         "number": 3,
@@ -1860,11 +2110,11 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "3f8aa1851aab45ed29160759afa95b81d140340729dc2cbaf3b04dda5800b833",
+        "version": "48dc4fafef0d20487e5d0d44c03930dc2dde0e649e09cac4b4c0747a92366196",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.time_list_versions_snapshot": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions_snapshot(self, storage_info, num_syms):\n        self.lib.list_versions(snapshot=self.aws.last_snapshot)\n\n    def setup(self, storage_info, num_syms):\n        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment()\n        info = aws.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws.logger().info(f\"storage info object: {info}\")\n        return info",
+        "code": "class AWSVersionSymbols:\n    def time_list_versions_snapshot(self, storage_info, num_syms):\n        self.lib.list_versions(snapshot=self.aws.last_snapshot)\n\n    def setup(self, storage_info, num_syms):\n        self.aws = SetupLibrariesWithVersionAndSnapshots.from_storage_info(storage_info)\n        self.lib = self.aws.get_library(num_syms)\n\n    def setup_cache(self):\n        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment()\n        info = aws.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        aws.logger().info(f\"storage info object: {info}\")\n        return info",
         "min_run_count": 1,
         "name": "real_list_operations.AWSVersionSymbols.time_list_versions_snapshot",
         "number": 3,
@@ -1884,7 +2134,757 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "2fc5d8c935ffb8a674f88c6645ca56370dfb61851afcdf0f80e60086979aba43",
+        "version": "2b38d99fb0568e7c405aac5103ac45b183ca9ea9870c20c1d1c7550cfbf42ab1",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_append_large": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_append_large(self, cache, num_rows):\n        large: pd.DataFrame = self.appends_list.pop(0)\n        self.lib.append(self.symbol, large)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                    AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                    AWS30kColsWideDFLargeAppendDataModify.params,\n                                    AWS30kColsWideDFLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_append_large",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:191",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "653458cec6d9e42875390670e1819907689f0dc5164906388665f71782f1aa6e",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_append_single": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_append_single(self, cache, num_rows):\n        self.lib.append(self.symbol, self.cache.append_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                    AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                    AWS30kColsWideDFLargeAppendDataModify.params,\n                                    AWS30kColsWideDFLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_append_single",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:191",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "95d8edc0f45d5cdcbdadaf4566e5f0c217f9f05acff34313081e2606ebb58048",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_full": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_full(self, cache, num_rows):\n        #self.lib.update(self.symbol, self.cache.update_full)\n        self.lib.update(self.symbol, self.cache.update_full_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                    AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                    AWS30kColsWideDFLargeAppendDataModify.params,\n                                    AWS30kColsWideDFLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_full",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:191",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "6a3da95bf035d01cbcc74594923cc3fc1740b5b1d8cb19c6c3cef92fc5da31b8",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_half": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_half(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_half_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                    AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                    AWS30kColsWideDFLargeAppendDataModify.params,\n                                    AWS30kColsWideDFLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_half",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:191",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "cbd02f7f1bab8287094cb1eeae021b83f9680fc076c76765ed5275aeca90af48",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_single": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_single(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                    AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                    AWS30kColsWideDFLargeAppendDataModify.params,\n                                    AWS30kColsWideDFLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_single",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:191",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "ee2be09c18485096253672b645bf4670bc4c84d7c30540e9db3c782590e75b63",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_upsert": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_upsert(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_upsert_dict[num_rows], upsert=True)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass AWS30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(AWS30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                    AWS30kColsWideDFLargeAppendDataModify.warmup_time,\n                                    AWS30kColsWideDFLargeAppendDataModify.params,\n                                    AWS30kColsWideDFLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWS30kColsWideDFLargeAppendDataModify.time_update_upsert",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:191",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "03ec8f084f6cdb31ab73ac9003eb9e325d2927b1eaeb7c24d894f4ce68e2bf37",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWSDeleteTestsFewLarge.time_delete": {
+        "code": "class AWSDeleteTestsFewLarge:\n    def time_delete(self, cache, num_rows):\n        self.lib.delete(self.symbol)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        writes_list = cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.setup_symbol(self.lib, writes_list)\n        assert self.lib.has_symbol\n\n    def setup_cache(self):\n        # warmup will execute tests additional time and we do not want that at all for write\n        # update and append tests. We want exact specified `number` of times to be executed between\n        assert AWSDeleteTestsFewLarge.warmup_time == 0, \"warm up must be 0\"\n        assert AWSDeleteTestsFewLarge.number == 1, \"delete works only once per setup=teardown\"\n    \n        set_env = AWSDeleteTestsFewLarge.SETUP_CLASS\n        num_sequenced_dataframes = AWSDeleteTestsFewLarge.number + 1\n        cache = LargeAppendDataModifyCache()\n    \n        for num_rows in AWSDeleteTestsFewLarge.params:\n            set_env.set_default_columns(20)\n            cache.write_and_append_dict[num_rows] = set_env.generate_chained_writes(\n                num_rows, num_sequenced_dataframes)\n    \n        #only create the library\n        set_env.remove_all_modifiable_libraries(True)\n    \n        set_env.logger().info(f\"Storage info: {set_env.get_storage_info()}\")\n        # With modifiable tests we do not prepare libraries here,\n        # but we do still return storage info as it has to be unique across processes\n        # We also leave each process to setup its initial library in setup\n        cache.storage_info = set_env.get_storage_info()\n        return cache",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWSDeleteTestsFewLarge.time_delete",
+        "number": 1,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "500000",
+                "1000000"
+            ]
+        ],
+        "repeat": 3,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:254",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "c8dfb6c3735cd72023c3e7793eb113a13da63a4ae744fd57ca7a55ac6d6123dd",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWSLargeAppendDataModify.time_append_large": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_append_large(self, cache, num_rows):\n        large: pd.DataFrame = self.appends_list.pop(0)\n        self.lib.append(self.symbol, large)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params,\n                                     AWSLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWSLargeAppendDataModify.time_append_large",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "500000",
+                "1000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:57",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "d964c7795e4db90dfe6f1c937a3674989a0587dc6f1e2c32940dad9a3e88c6f7",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWSLargeAppendDataModify.time_append_single": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_append_single(self, cache, num_rows):\n        self.lib.append(self.symbol, self.cache.append_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params,\n                                     AWSLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWSLargeAppendDataModify.time_append_single",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "500000",
+                "1000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:57",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "d6229bb95efe52c6d7a6da4fea03c131f61b7521da9567f35bff3791551e19e4",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWSLargeAppendDataModify.time_update_full": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_full(self, cache, num_rows):\n        #self.lib.update(self.symbol, self.cache.update_full)\n        self.lib.update(self.symbol, self.cache.update_full_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params,\n                                     AWSLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWSLargeAppendDataModify.time_update_full",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "500000",
+                "1000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:57",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "67c718ecf729f125d10f00cae0c33f911267ee2d6b9c66e7816368c9f97839f8",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWSLargeAppendDataModify.time_update_half": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_half(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_half_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params,\n                                     AWSLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWSLargeAppendDataModify.time_update_half",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "500000",
+                "1000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:57",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "f933aa20d59c7ffecb8aaa757d2f910955b0f33e40394814ebcdc4ba80e47a9c",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWSLargeAppendDataModify.time_update_single": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_single(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params,\n                                     AWSLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWSLargeAppendDataModify.time_update_single",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "500000",
+                "1000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:57",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "b5ea15458f3945869d79d4db67ca30c5487198893dd5dfa01fbdd87cac1fd705",
+        "warmup_time": 0
+    },
+    "real_modification_functions.AWSLargeAppendDataModify.time_update_upsert": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_upsert(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_upsert_dict[num_rows], upsert=True)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\n    def setup_cache(self):\n        return self.initialize_cache(AWSLargeAppendDataModify.SETUP_CLASS,\n                                     AWSLargeAppendDataModify.warmup_time,\n                                     AWSLargeAppendDataModify.params,\n                                     AWSLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.AWSLargeAppendDataModify.time_update_upsert",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "500000",
+                "1000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:57",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "1aa1d49b8348f0e53e66d9bfa0d37008ca56bc2b8ff4b55dd1647c5b95c1d670",
+        "warmup_time": 0
+    },
+    "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_append_large": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_append_large(self, cache, num_rows):\n        large: pd.DataFrame = self.appends_list.pop(0)\n        self.lib.append(self.symbol, large)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass LMDB30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(LMDB30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     LMDB30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     LMDB30kColsWideDFLargeAppendDataModify.params,\n                                     LMDB30kColsWideDFLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_append_large",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:221",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "5f10c2424180df5ae0e31672fea1c7eccb66376551eba905d45719bfa24cca67",
+        "warmup_time": 0
+    },
+    "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_append_single": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_append_single(self, cache, num_rows):\n        self.lib.append(self.symbol, self.cache.append_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass LMDB30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(LMDB30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     LMDB30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     LMDB30kColsWideDFLargeAppendDataModify.params,\n                                     LMDB30kColsWideDFLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_append_single",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:221",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "4ea3a8b2b1691e87c7b6db8de145b9e69fe3d275f0e52368e70f923b2c4e84ed",
+        "warmup_time": 0
+    },
+    "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_update_full": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_full(self, cache, num_rows):\n        #self.lib.update(self.symbol, self.cache.update_full)\n        self.lib.update(self.symbol, self.cache.update_full_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass LMDB30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(LMDB30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     LMDB30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     LMDB30kColsWideDFLargeAppendDataModify.params,\n                                     LMDB30kColsWideDFLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_update_full",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:221",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "3d94af3d94aa211db2d1203cdf107537df5d569dbded15d088d346e1187611f3",
+        "warmup_time": 0
+    },
+    "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_update_half": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_half(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_half_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass LMDB30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(LMDB30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     LMDB30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     LMDB30kColsWideDFLargeAppendDataModify.params,\n                                     LMDB30kColsWideDFLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_update_half",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:221",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "7328af07a4a5b7ec03dd33f4b2ecedcfdfdf65538a1c2bddbada599cf0ed7536",
+        "warmup_time": 0
+    },
+    "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_update_single": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_single(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_single_dict[num_rows])\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass LMDB30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(LMDB30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     LMDB30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     LMDB30kColsWideDFLargeAppendDataModify.params,\n                                     LMDB30kColsWideDFLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_update_single",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:221",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "dc0e025999d55f2139bf946bdd8c4bc6b038d1203b3930c4e711f0bf8cec9bac",
+        "warmup_time": 0
+    },
+    "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_update_upsert": {
+        "code": "class AWSLargeAppendDataModify:\n    def time_update_upsert(self, cache, num_rows):\n        self.lib.update(self.symbol, self.cache.update_upsert_dict[num_rows], upsert=True)\n\n    def setup(self, cache: LargeAppendDataModifyCache, num_rows):\n        self.set_env = AppendDataSetupUtils.from_storage_info(cache.storage_info)\n        self.cache = cache\n        writes_list = self.cache.write_and_append_dict[num_rows]\n    \n        self.pid = os.getpid()\n        self.set_env.remove_all_modifiable_libraries(True)\n        self.set_env.delete_modifiable_library(self.pid)\n        self.lib = self.set_env.get_modifiable_library(self.pid)\n    \n        self.symbol = self.set_env.get_symbol_name_template(f\"_pid-{self.pid}\")\n        self.lib.write(self.symbol, writes_list[0])\n    \n        self.appends_list = writes_list[1:]\n\nclass LMDB30kColsWideDFLargeAppendDataModify:\n    def setup_cache(self):\n        return self.initialize_cache(LMDB30kColsWideDFLargeAppendDataModify.SETUP_CLASS,\n                                     LMDB30kColsWideDFLargeAppendDataModify.warmup_time,\n                                     LMDB30kColsWideDFLargeAppendDataModify.params,\n                                     LMDB30kColsWideDFLargeAppendDataModify.number)",
+        "min_run_count": 1,
+        "name": "real_modification_functions.LMDB30kColsWideDFLargeAppendDataModify.time_update_upsert",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "2500",
+                "5000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_modification_functions:221",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "f1229306328de7efd8d174f000d8ea4979de61e6254447d0b2151633ef9b1395",
+        "warmup_time": 0
+    },
+    "real_query_builder.AWSQueryBuilderFunctions.peakmem_filtering_numeric": {
+        "code": "class AWSQueryBuilderFunctions:\n    def peakmem_filtering_numeric(self, storage_info, num_rows):\n        q = QueryBuilder()\n        # v3 is random floats between 0 and 100\n        q = q[q[\"v3\"] < 10.0]\n        data: pd.DataFrame = self.lib.read(self.symbol, columns=[\"v3\"], query_builder=q).data\n        assert data.shape[0] > 1\n\n    def setup(self, storage_info, num_rows):\n        ## Construct back from arctic url the object\n        self.setup_env = QueryBuilderFunctionsSettings.from_storage_info(storage_info)\n        self.lib: Library = self.setup_env.get_library()\n        self.symbol = self.setup_env.get_symbol_name(num_rows, None)\n\n    def setup_cache(self):\n        set_env = AWSQueryBuilderFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_query_builder.AWSQueryBuilderFunctions.peakmem_filtering_numeric",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "real_query_builder:62",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "c14183c58305c266b4fe17696b0b3cf02488d0e7d546aa4bccf9dea4343cd091"
+    },
+    "real_query_builder.AWSQueryBuilderFunctions.peakmem_filtering_string_isin": {
+        "code": "class AWSQueryBuilderFunctions:\n    def peakmem_filtering_string_isin(self,storage_info, num_rows):\n        # Selects about 1% of the rows\n        k = num_rows // 1000\n        string_set = [f\"id{str(i).zfill(3)}\" for i in range(1, k + 1)]\n        q = QueryBuilder()\n        q = q[q[\"id1\"].isin(string_set)]\n        data: pd.DataFrame = self.lib.read(self.symbol, columns=[\"v3\"], query_builder=q).data\n        assert data.shape[0] > 1\n\n    def setup(self, storage_info, num_rows):\n        ## Construct back from arctic url the object\n        self.setup_env = QueryBuilderFunctionsSettings.from_storage_info(storage_info)\n        self.lib: Library = self.setup_env.get_library()\n        self.symbol = self.setup_env.get_symbol_name(num_rows, None)\n\n    def setup_cache(self):\n        set_env = AWSQueryBuilderFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_query_builder.AWSQueryBuilderFunctions.peakmem_filtering_string_isin",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "real_query_builder:62",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "2bfa32d05bd31b7676f98ec63773b38c17e844a579e0c05a1fc7bb7874f6a379"
+    },
+    "real_query_builder.AWSQueryBuilderFunctions.peakmem_projection": {
+        "code": "class AWSQueryBuilderFunctions:\n    def peakmem_projection(self,storage_info, num_rows):\n        q = QueryBuilder()\n        q = q.apply(\"new_col\", q[\"v2\"] * q[\"v3\"])\n        data: pd.DataFrame = self.lib.read(self.symbol, columns=[\"new_col\"], query_builder=q).data\n        assert data.shape[0] > 1\n\n    def setup(self, storage_info, num_rows):\n        ## Construct back from arctic url the object\n        self.setup_env = QueryBuilderFunctionsSettings.from_storage_info(storage_info)\n        self.lib: Library = self.setup_env.get_library()\n        self.symbol = self.setup_env.get_symbol_name(num_rows, None)\n\n    def setup_cache(self):\n        set_env = AWSQueryBuilderFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_query_builder.AWSQueryBuilderFunctions.peakmem_projection",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "real_query_builder:62",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "d4c74f87ff07403ce0ee39562c0f59c663f16cb842430a875ec71a4eb2dc5431"
+    },
+    "real_query_builder.AWSQueryBuilderFunctions.peakmem_query_1": {
+        "code": "class AWSQueryBuilderFunctions:\n    def peakmem_query_1(self,storage_info, num_rows):\n        q = QueryBuilder()\n        q = q.groupby(\"id1\").agg({\"v1\": \"sum\"})\n        data: pd.DataFrame = self.lib.read(self.symbol, query_builder=q).data\n        assert data.shape[0] > 1\n\n    def setup(self, storage_info, num_rows):\n        ## Construct back from arctic url the object\n        self.setup_env = QueryBuilderFunctionsSettings.from_storage_info(storage_info)\n        self.lib: Library = self.setup_env.get_library()\n        self.symbol = self.setup_env.get_symbol_name(num_rows, None)\n\n    def setup_cache(self):\n        set_env = AWSQueryBuilderFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_query_builder.AWSQueryBuilderFunctions.peakmem_query_1",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "real_query_builder:62",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "7fb6275e1dba9b944aef941b6fb89270995ca3e16ca926836cd4346175071ef4"
+    },
+    "real_query_builder.AWSQueryBuilderFunctions.peakmem_query_3": {
+        "code": "class AWSQueryBuilderFunctions:\n    def peakmem_query_3(self,storage_info, num_rows):\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"sum\", \"v3\": \"sum\"})\n        data: pd.DataFrame = self.lib.read(self.symbol, query_builder=q).data\n        assert data.shape[0] > 1\n\n    def setup(self, storage_info, num_rows):\n        ## Construct back from arctic url the object\n        self.setup_env = QueryBuilderFunctionsSettings.from_storage_info(storage_info)\n        self.lib: Library = self.setup_env.get_library()\n        self.symbol = self.setup_env.get_symbol_name(num_rows, None)\n\n    def setup_cache(self):\n        set_env = AWSQueryBuilderFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_query_builder.AWSQueryBuilderFunctions.peakmem_query_3",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "real_query_builder:62",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "55bc9490d8cc6ded0a3c27f6a798f3f4a9592f8be53dde7d7d8285fd0d0b7cbe"
+    },
+    "real_query_builder.AWSQueryBuilderFunctions.peakmem_query_4": {
+        "code": "class AWSQueryBuilderFunctions:\n    def peakmem_query_4(self,storage_info, num_rows):\n        q = QueryBuilder()\n        q = q.groupby(\"id6\").agg({\"v1\": \"sum\", \"v2\": \"sum\"})\n        data: pd.DataFrame = self.lib.read(self.symbol, query_builder=q).data\n        assert data.shape[0] > 1\n\n    def setup(self, storage_info, num_rows):\n        ## Construct back from arctic url the object\n        self.setup_env = QueryBuilderFunctionsSettings.from_storage_info(storage_info)\n        self.lib: Library = self.setup_env.get_library()\n        self.symbol = self.setup_env.get_symbol_name(num_rows, None)\n\n    def setup_cache(self):\n        set_env = AWSQueryBuilderFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_query_builder.AWSQueryBuilderFunctions.peakmem_query_4",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "real_query_builder:62",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "1d947fb859c43a2572f0a257c7989409e89d0cb5aaf1638258f5a22f4979eb8f"
+    },
+    "real_query_builder.AWSQueryBuilderFunctions.peakmem_query_adv_query_2": {
+        "code": "class AWSQueryBuilderFunctions:\n    def peakmem_query_adv_query_2(self,storage_info, num_rows):\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"max\", \"v2\": \"min\"})\n        data: pd.DataFrame = self.lib.read(self.symbol, query_builder=q).data\n        assert data.shape[0] > 1\n\n    def setup(self, storage_info, num_rows):\n        ## Construct back from arctic url the object\n        self.setup_env = QueryBuilderFunctionsSettings.from_storage_info(storage_info)\n        self.lib: Library = self.setup_env.get_library()\n        self.symbol = self.setup_env.get_symbol_name(num_rows, None)\n\n    def setup_cache(self):\n        set_env = AWSQueryBuilderFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "name": "real_query_builder.AWSQueryBuilderFunctions.peakmem_query_adv_query_2",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "real_query_builder:62",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "a215293daf1f2c18720e09641f0c445d241e264d11b098ed954c1a61984195c8"
+    },
+    "real_query_builder.AWSQueryBuilderFunctions.time_filtering_numeric": {
+        "code": "class AWSQueryBuilderFunctions:\n    def time_filtering_numeric(self, storage_info, num_rows):\n        q = QueryBuilder()\n        # v3 is random floats between 0 and 100\n        q = q[q[\"v3\"] < 1.0]\n        data: pd.DataFrame = self.lib.read(self.symbol, columns=[\"v3\"], query_builder=q).data\n\n    def setup(self, storage_info, num_rows):\n        ## Construct back from arctic url the object\n        self.setup_env = QueryBuilderFunctionsSettings.from_storage_info(storage_info)\n        self.lib: Library = self.setup_env.get_library()\n        self.symbol = self.setup_env.get_symbol_name(num_rows, None)\n\n    def setup_cache(self):\n        set_env = AWSQueryBuilderFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_query_builder.AWSQueryBuilderFunctions.time_filtering_numeric",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_query_builder:62",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "0c9016c8d928bdb801d46f007a9f9eba0ffe014e720a52f947f5ed9a441f2527",
+        "warmup_time": 0
+    },
+    "real_query_builder.AWSQueryBuilderFunctions.time_filtering_string_isin": {
+        "code": "class AWSQueryBuilderFunctions:\n    def time_filtering_string_isin(self, storage_info, num_rows):\n        # Selects about 1% of the rows\n        k = num_rows // 1000\n        string_set = [f\"id{str(i).zfill(3)}\" for i in range(1, k + 1)]\n        q = QueryBuilder()\n        q = q[q[\"id1\"].isin(string_set)]\n        data: pd.DataFrame = self.lib.read(self.symbol, columns=[\"v3\"], query_builder=q).data\n\n    def setup(self, storage_info, num_rows):\n        ## Construct back from arctic url the object\n        self.setup_env = QueryBuilderFunctionsSettings.from_storage_info(storage_info)\n        self.lib: Library = self.setup_env.get_library()\n        self.symbol = self.setup_env.get_symbol_name(num_rows, None)\n\n    def setup_cache(self):\n        set_env = AWSQueryBuilderFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_query_builder.AWSQueryBuilderFunctions.time_filtering_string_isin",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_query_builder:62",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "6c4219a2c8f6e3fcd7af2acb2c851aa1758cd181ca3c543faa10b0d544d5ff95",
+        "warmup_time": 0
+    },
+    "real_query_builder.AWSQueryBuilderFunctions.time_projection": {
+        "code": "class AWSQueryBuilderFunctions:\n    def time_projection(self,storage_info, num_rows):\n        q = QueryBuilder()\n        q = q.apply(\"new_col\", q[\"v2\"] * q[\"v3\"])\n        data: pd.DataFrame = self.lib.read(self.symbol, columns=[\"new_col\"], query_builder=q).data\n\n    def setup(self, storage_info, num_rows):\n        ## Construct back from arctic url the object\n        self.setup_env = QueryBuilderFunctionsSettings.from_storage_info(storage_info)\n        self.lib: Library = self.setup_env.get_library()\n        self.symbol = self.setup_env.get_symbol_name(num_rows, None)\n\n    def setup_cache(self):\n        set_env = AWSQueryBuilderFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_query_builder.AWSQueryBuilderFunctions.time_projection",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_query_builder:62",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "05d4b33c6eae9c9f04ee056c6e4b4624887a42ed180f8e8ec1be996a93c06dd5",
+        "warmup_time": 0
+    },
+    "real_query_builder.AWSQueryBuilderFunctions.time_query_1": {
+        "code": "class AWSQueryBuilderFunctions:\n    def time_query_1(self,storage_info, num_rows):\n        q = QueryBuilder()\n        q = q.groupby(\"id1\").agg({\"v1\": \"sum\"})\n        data: pd.DataFrame = self.lib.read(self.symbol, query_builder=q).data\n\n    def setup(self, storage_info, num_rows):\n        ## Construct back from arctic url the object\n        self.setup_env = QueryBuilderFunctionsSettings.from_storage_info(storage_info)\n        self.lib: Library = self.setup_env.get_library()\n        self.symbol = self.setup_env.get_symbol_name(num_rows, None)\n\n    def setup_cache(self):\n        set_env = AWSQueryBuilderFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_query_builder.AWSQueryBuilderFunctions.time_query_1",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_query_builder:62",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "1240b1ef34fb89f945c4da918e3eb32771a945c340fdd253da9ac557a651934a",
+        "warmup_time": 0
+    },
+    "real_query_builder.AWSQueryBuilderFunctions.time_query_3": {
+        "code": "class AWSQueryBuilderFunctions:\n    def time_query_3(self,storage_info, num_rows):\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"sum\", \"v3\": \"sum\"})\n        data: pd.DataFrame = self.lib.read(self.symbol, query_builder=q).data\n\n    def setup(self, storage_info, num_rows):\n        ## Construct back from arctic url the object\n        self.setup_env = QueryBuilderFunctionsSettings.from_storage_info(storage_info)\n        self.lib: Library = self.setup_env.get_library()\n        self.symbol = self.setup_env.get_symbol_name(num_rows, None)\n\n    def setup_cache(self):\n        set_env = AWSQueryBuilderFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_query_builder.AWSQueryBuilderFunctions.time_query_3",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_query_builder:62",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "5e27d818fd2b109a643a1244218857137341d65cd3861446b5124480453eef40",
+        "warmup_time": 0
+    },
+    "real_query_builder.AWSQueryBuilderFunctions.time_query_4": {
+        "code": "class AWSQueryBuilderFunctions:\n    def time_query_4(self,storage_info, num_rows):\n        q = QueryBuilder()\n        q = q.groupby(\"id6\").agg({\"v1\": \"sum\", \"v2\": \"sum\"})\n        data: pd.DataFrame = self.lib.read(self.symbol, query_builder=q).data\n\n    def setup(self, storage_info, num_rows):\n        ## Construct back from arctic url the object\n        self.setup_env = QueryBuilderFunctionsSettings.from_storage_info(storage_info)\n        self.lib: Library = self.setup_env.get_library()\n        self.symbol = self.setup_env.get_symbol_name(num_rows, None)\n\n    def setup_cache(self):\n        set_env = AWSQueryBuilderFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_query_builder.AWSQueryBuilderFunctions.time_query_4",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_query_builder:62",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "06c96ca83d3c2279a4b5c044df1bd684534a84ead5c431be699e432e7387f05c",
+        "warmup_time": 0
+    },
+    "real_query_builder.AWSQueryBuilderFunctions.time_query_adv_query_2": {
+        "code": "class AWSQueryBuilderFunctions:\n    def time_query_adv_query_2(self,storage_info, num_rows):\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"max\", \"v2\": \"min\"})\n        data: pd.DataFrame = self.lib.read(self.symbol, query_builder=q).data\n\n    def setup(self, storage_info, num_rows):\n        ## Construct back from arctic url the object\n        self.setup_env = QueryBuilderFunctionsSettings.from_storage_info(storage_info)\n        self.lib: Library = self.setup_env.get_library()\n        self.symbol = self.setup_env.get_symbol_name(num_rows, None)\n\n    def setup_cache(self):\n        set_env = AWSQueryBuilderFunctions.SETUP_CLASS\n        set_env.setup_environment()\n        info = set_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        set_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "min_run_count": 1,
+        "name": "real_query_builder.AWSQueryBuilderFunctions.time_query_adv_query_2",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_query_builder:62",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "b5629b5773d3ae19558c56c917b0a27b556ff05859a9004f539568b9d07374d4",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.peakmem_read": {
@@ -2392,7 +3392,7 @@
         "warmup_time": 0
     },
     "real_read_write_wide.AWSWideDataFrameTests.peakmem_read_wide": {
-        "code": "class AWSWideDataFrameTests:\n    def peakmem_read_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.storage.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        setup_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "code": "class AWSWideDataFrameTests:\n    def peakmem_read_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.storage.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = SetupSingleLibrary.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        setup_env.logger().info(f\"storage info object: {info}\")\n        return info",
         "name": "real_read_write_wide.AWSWideDataFrameTests.peakmem_read_wide",
         "param_names": [
             "num_rows",
@@ -2412,10 +3412,10 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "8766de18cf0cc5aa01c0365d6a846b92f02c80650d4a5db0ada3ce92ed44a57d"
+        "version": "711629bac39291a1dc294303b915b8a4f027863efb570146b797780b00faea0c"
     },
     "real_read_write_wide.AWSWideDataFrameTests.peakmem_write_wide": {
-        "code": "class AWSWideDataFrameTests:\n    def peakmem_write_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.write_library.write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        setup_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "code": "class AWSWideDataFrameTests:\n    def peakmem_write_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.write_library.write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = SetupSingleLibrary.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        setup_env.logger().info(f\"storage info object: {info}\")\n        return info",
         "name": "real_read_write_wide.AWSWideDataFrameTests.peakmem_write_wide",
         "param_names": [
             "num_rows",
@@ -2435,10 +3435,10 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "3726fcc9e3e1a536d6101f2e669c4929ab8ce7a44dc430a565496fd809032f2c"
+        "version": "5f55a15a3a50e6f40b4d06c2c8dcd93b171afefdeafa6afecb2d8dadc71bd5df"
     },
     "real_read_write_wide.AWSWideDataFrameTests.time_read_wide": {
-        "code": "class AWSWideDataFrameTests:\n    def time_read_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.storage.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        setup_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "code": "class AWSWideDataFrameTests:\n    def time_read_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.storage.get_library().read(symbol=sym)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = SetupSingleLibrary.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        setup_env.logger().info(f\"storage info object: {info}\")\n        return info",
         "min_run_count": 1,
         "name": "real_read_write_wide.AWSWideDataFrameTests.time_read_wide",
         "number": 3,
@@ -2463,11 +3463,11 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "31f6dcdcaa4c32f8c80df9c9bb9351bce53cd20535e8b8eaeb7ac8e740206171",
+        "version": "f1d95c6d5de31c0576c488f40d29521795280cacd7fc1dd641235db6a9d5e979",
         "warmup_time": 0
     },
     "real_read_write_wide.AWSWideDataFrameTests.time_write_wide": {
-        "code": "class AWSWideDataFrameTests:\n    def time_write_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.write_library.write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = GeneralSetupLibraryWithSymbols.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        setup_env.logger().info(f\"storage info object: {info}\")\n        return info",
+        "code": "class AWSWideDataFrameTests:\n    def time_write_wide(self, storage_info, num_rows, num_cols):\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.write_library.write(symbol=sym, data=self.to_write_df)\n\n    def setup(self, storage_info, num_rows, num_cols):\n        '''\n        This setup method for read and writes can be executed only once\n        No need to be executed before each test. That is why we define\n        `repeat` as 1\n        '''\n        ## Construct back from arctic url the object\n        self.storage = SetupSingleLibrary.from_storage_info(storage_info)\n        sym = self.storage.get_symbol_name(num_rows, num_cols)\n        self.to_write_df = self.storage.get_library().read(symbol=sym).data\n        ##\n        ## Writing into library that has suffix same as process\n        ## will protect ASV processes from writing on one and same symbol\n        ## this way each one is going to have its unique library\n        self.write_library = self.storage.get_modifiable_library(os.getpid())\n\n    def setup_cache(self):\n        '''\n        Always provide implementation of setup_cache in\n        the child class\n    \n        And always return storage info which should\n        be first parameter for setup, tests and teardown\n        '''\n        setup_env = AWSWideDataFrameTests.SETUP_CLASS.setup_environment()\n        info = setup_env.get_storage_info()\n        # NOTE: use only logger defined by setup class\n        setup_env.logger().info(f\"storage info object: {info}\")\n        return info",
         "min_run_count": 1,
         "name": "real_read_write_wide.AWSWideDataFrameTests.time_write_wide",
         "number": 3,
@@ -2492,7 +3492,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "4506dee1fcb6a7cd973a259fabd00503773c550c962319d2305b7b9a135372b8",
+        "version": "d0980610380fb7a5989bc158ccc5a225513425591a688707ecdf48ca121eb892",
         "warmup_time": 0
     },
     "resample.Resample.peakmem_resample": {
