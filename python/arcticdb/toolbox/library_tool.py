@@ -14,7 +14,6 @@ from arcticdb_ext.stream import SegmentInMemory
 from arcticdb_ext.tools import LibraryTool as LibraryToolImpl
 from arcticdb_ext.version_store import AtomKey, PythonOutputFrame, RefKey
 from arcticdb.version_store._normalization import denormalize_dataframe, normalize_dataframe
-from arcticdb.version_store._store import resolve_defaults
 
 VariantKey = Union[AtomKey, RefKey]
 VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None]
@@ -163,6 +162,8 @@ class LibraryTool(LibraryToolImpl):
 
     def normalize_dataframe_with_nvs_defaults(self, df : pd.DataFrame):
         # TODO: Have a unified place where we resolve all the normalization parameters and use that here.
+
+        from arcticdb.version_store._store import resolve_defaults
         # Currently all these parameters are resolved in various places throughout the _store.py. This can result in
         # different defaults for different operations which is not desirable.
         write_options = self._nvs._lib_cfg.lib_desc.version.write_options
