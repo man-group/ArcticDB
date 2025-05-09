@@ -49,12 +49,10 @@ private:
 
 // Example output:
 // {
-//     "VERSION_REF": { <- STATS_BY_KEY_TYPE
-//         "storage_ops": { <- STATS_BY_OP_TYPE
-//             "S3_ListObjectsV2": { <- OperationStats
-//                 "total_time_ms": 32,
-//                 "count": 2
-//             }
+//     "storage_ops": { <- STATS_BY_STORAGE_OP_TYPE
+//         "S3_ListObjectsV2": { <- OperationStats
+//             "total_time_ms": 32,
+//             "count": 2
 //         }
 //     }
 // }
@@ -77,9 +75,9 @@ public:
         }
     };
     using OperationStatsOutput = std::map<std::string, uint32_t>;
-    using QueryStatsOutput = std::map<std::string, std::map<std::string, std::map<std::string, OperationStatsOutput>>>;
-    using STATS_BY_OP_TYPE = std::array<OperationStats, static_cast<size_t>(TaskType::END)>;
-    using STATS_BY_KEY_TYPE = std::array<STATS_BY_OP_TYPE, static_cast<size_t>(entity::KeyType::UNDEFINED)>;
+    using QueryStatsOutput = std::map<std::string, std::map<std::string, OperationStatsOutput>>;
+    using STATS_BY_STORAGE_OP_TYPE = std::array<OperationStats, static_cast<size_t>(TaskType::END)>;
+    using STATS_BY_KEY_TYPE = std::array<STATS_BY_STORAGE_OP_TYPE, static_cast<size_t>(entity::KeyType::UNDEFINED)>;
 
     ARCTICDB_NO_MOVE_OR_COPY(QueryStats);
     void reset_stats();
@@ -87,8 +85,8 @@ public:
     void enable();
     void disable();
     bool is_enabled() const;
-    void add(entity::KeyType key_type, TaskType task_type, StatType stat_type, uint32_t value);
-    [[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(entity::KeyType key_type, TaskType task_type, std::optional<TimePoint> start = std::nullopt);
+    void add(TaskType task_type, StatType stat_type, uint32_t value);
+    [[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(TaskType task_type, std::optional<TimePoint> start = std::nullopt);
     QueryStatsOutput get_stats() const;
     QueryStats();
 
@@ -97,9 +95,9 @@ private:
     static std::shared_ptr<QueryStats> instance_;
     std::atomic<bool> is_enabled_ = false;
 
-    STATS_BY_KEY_TYPE stats_by_key_type_;
+    STATS_BY_STORAGE_OP_TYPE stats_by_storage_op_type_;
 };
 
-void add(entity::KeyType key_type, TaskType task_type, StatType stat_type, uint32_t value);
-[[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(entity::KeyType key_type, TaskType task_type, std::optional<TimePoint> start = std::nullopt);
+void add(TaskType task_type, StatType stat_type, uint32_t value);
+[[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(TaskType task_type, std::optional<TimePoint> start = std::nullopt);
 }

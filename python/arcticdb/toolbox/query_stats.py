@@ -50,20 +50,15 @@ def get_query_stats() -> Dict[str, Any]:
             
     Example output:
     {
-        "SYMBOL_LIST": {
-            "storage_ops": {
-                "S3_ListObjectsV2": {
-                    "total_time_ms": 83,
-                    "count": 3
-                }
-            }
-        },
-        "VERSION_REF": {
-            "storage_ops": {
-                "S3_ListObjectsV2": {
-                    "total_time_ms": 21,
-                    "count": 1
-                }
+        "storage_operations": {
+            "S3_ListObjectsV2": {
+                "total_time_ms": 83,
+                "count": 3
+            },
+            "S3_GetObject": {
+                "total_time_ms": 50,
+                "count": 3,
+                "size_bytes": 10
             }
         }
     }

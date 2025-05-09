@@ -141,13 +141,12 @@ void do_write_impl(
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
     auto seg = key_seg.segment_ptr();
     auto segment_size = seg->calculate_size();
-    auto key_type = key_seg.key_type();
 
-    auto query_stat_operation_time = query_stats::add_task_count_and_time(key_type, query_stats::TaskType::S3_PutObject);
+    auto query_stat_operation_time = query_stats::add_task_count_and_time(query_stats::TaskType::S3_PutObject);
     auto put_object_result = s3_client.put_object(s3_object_name, *seg, bucket_name);
 
     if (put_object_result.is_success()) {
-        query_stats::add(key_type, query_stats::TaskType::S3_PutObject, query_stats::StatType::SIZE_BYTES, segment_size);
+        query_stats::add(query_stats::TaskType::S3_PutObject, query_stats::StatType::SIZE_BYTES, segment_size);
     }
     else{
         auto& error = put_object_result.get_error();
@@ -177,17 +176,16 @@ KeySegmentPair do_read_impl(
 	    KeyDecoder&& key_decoder,
         ReadKeyOpts opts) {
     ARCTICDB_SAMPLE(S3StorageRead, 0)
-    auto key_type = variant_key_type(variant_key);
-    auto key_type_dir = key_type_folder(root_folder, key_type);
+    auto key_type_dir = key_type_folder(root_folder, variant_key_type(variant_key));
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
-    auto query_stat_operation_time = query_stats::add_task_count_and_time(key_type, query_stats::TaskType::S3_GetObject);
+    auto query_stat_operation_time = query_stats::add_task_count_and_time(query_stats::TaskType::S3_GetObject);
     auto get_object_result = s3_client.get_object(s3_object_name, bucket_name);
     auto unencoded_key = key_decoder(std::move(variant_key));
 
     if (get_object_result.is_success()) {
         ARCTICDB_SUBSAMPLE(S3StorageVisitSegment, 0)
         auto segment = std::move(get_object_result.get_output());
-        query_stats::add(key_type, query_stats::TaskType::S3_GetObject, query_stats::StatType::SIZE_BYTES, segment.calculate_size());
+        query_stats::add(query_stats::TaskType::S3_GetObject, query_stats::StatType::SIZE_BYTES, segment.calculate_size());
         return {VariantKey{unencoded_key}, std::move(segment)};
     } else {
         auto& error = get_object_result.get_error();
@@ -214,19 +212,17 @@ folly::Future<KeySegmentPair> do_async_read_impl(
     KeyBucketizer&& bucketizer,
     KeyDecoder&& key_decoder,
     ReadKeyOpts) {
-    auto key_type = variant_key_type(variant_key);
-    auto key_type_dir = key_type_folder(root_folder, key_type);
+    auto key_type_dir = key_type_folder(root_folder, variant_key_type(variant_key));
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
     return s3_client.get_object_async(s3_object_name, bucket_name).thenValue([
             vk=std::move(variant_key), 
             decoder=std::forward<KeyDecoder>(key_decoder),
-            key_type,
             start = std::chrono::steady_clock::now()
         ] (auto&& result) mutable -> KeySegmentPair {
-            auto query_stat_operation_time = query_stats::add_task_count_and_time(key_type, query_stats::TaskType::S3_GetObjectAsync, start);
+            auto query_stat_operation_time = query_stats::add_task_count_and_time(query_stats::TaskType::S3_GetObjectAsync, start);
             if(result.is_success()) {
                 auto segment = std::move(result.get_output());
-                query_stats::add(key_type, query_stats::TaskType::S3_GetObjectAsync, query_stats::StatType::SIZE_BYTES, segment.calculate_size());
+                query_stats::add(query_stats::TaskType::S3_GetObjectAsync, query_stats::StatType::SIZE_BYTES, segment.calculate_size());
                 return KeySegmentPair(std::move(vk), std::move(segment));
             }
             else {
@@ -300,7 +296,7 @@ void do_remove_impl(
                 to_delete.emplace_back(std::move(s3_object_name));
 
                 if (to_delete.size() == delete_object_limit || k.index + 1 == group.size()) {
-                    auto query_stat_operation_time = query_stats::add_task_count_and_time(group.key(), query_stats::TaskType::S3_DeleteObjects);
+                    auto query_stat_operation_time = query_stats::add_task_count_and_time(query_stats::TaskType::S3_DeleteObjects);
                     auto delete_object_result = s3_client.delete_objects(to_delete, bucket_name);
                     if (delete_object_result.is_success()) {
                         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted {} objects, one of which with key '{}'",
@@ -405,13 +401,12 @@ void do_write_if_none_impl(
             auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
             auto& seg = *kv.segment_ptr();
             auto segment_size = seg.calculate_size();
-            auto key_type = kv.key_type();
 
-            auto query_stat_operation_time = query_stats::add_task_count_and_time(key_type, query_stats::TaskType::S3_PutObject);
+            auto query_stat_operation_time = query_stats::add_task_count_and_time(query_stats::TaskType::S3_PutObject);
             auto put_object_result = s3_client.put_object(s3_object_name, seg, bucket_name, PutHeader::IF_NONE_MATCH);
 
             if (put_object_result.is_success()) {
-                query_stats::add(key_type, query_stats::TaskType::S3_PutObject, query_stats::StatType::SIZE_BYTES, segment_size);
+                query_stats::add(query_stats::TaskType::S3_PutObject, query_stats::StatType::SIZE_BYTES, segment_size);
             }
             else {
                 auto& error = put_object_result.get_error();
@@ -492,7 +487,7 @@ bool do_iterate_type_impl(
 
     auto continuation_token = std::optional<std::string>();
     do {
-        auto query_stat_operation_time = query_stats::add_task_count_and_time(key_type, query_stats::TaskType::S3_ListObjectsV2);
+        auto query_stat_operation_time = query_stats::add_task_count_and_time(query_stats::TaskType::S3_ListObjectsV2);
         auto list_objects_result = s3_client.list_objects(path_info.key_prefix_, bucket_name, continuation_token);
         if (list_objects_result.is_success()) {
             auto& output = list_objects_result.get_output();
@@ -586,11 +581,10 @@ bool do_key_exists_impl(
     const S3ClientInterface& s3_client,
     KeyBucketizer&& b
 ) {
-    auto key_type = variant_key_type(key);
-    auto key_type_dir = key_type_folder(root_folder, key_type);
+    auto key_type_dir = key_type_folder(root_folder, variant_key_type(key));
     auto s3_object_name = object_path(b.bucketize(key_type_dir, key), key);
 
-    auto query_stat_operation_time = query_stats::add_task_count_and_time(key_type, query_stats::TaskType::S3_HeadObject);
+    auto query_stat_operation_time = query_stats::add_task_count_and_time(query_stats::TaskType::S3_HeadObject);
     auto head_object_result = s3_client.head_object(
         s3_object_name,
         bucket_name);

@@ -8,67 +8,42 @@ def verify_list_symbol_stats(list_symbol_call_counts):
     # """
     # Sample output:
     # {
-    #     "SYMBOL_LIST": {
-    #         "storage_ops": {
-    #             "S3_ListObjectsV2": {
-    #                 "total_time_ms": 50,
-    #                 "count": 3
-    #             },
-    #             "S3_PutObject": {
-    #                 "total_time_ms": 15,
-    #                 "count": 1
-    #             },
-    #             "S3_GetObject": {
-    #                 "total_time_ms": 15,
-    #                 "count": 1
-    #             },
-    #             "S3_DeleteObjects": {
-    #                 "total_time_ms": 17,
-    #                 "count": 1
-    #             }
-    #         }
-    #     },
-    #     "VERSION_REF": {
-    #         "storage_ops": {
-    #             "S3_ListObjectsV2": {
-    #                 "total_time_ms": 15,
-    #                 "count": 1
-    #             }
-    #         }
-    #     },
-    #     "LOCK": {
-    #         "storage_ops": {
-    #             "S3_PutObject": {
-    #                 "total_time_ms": 15,
-    #                 "count": 1
-    #             },
-    #             "S3_GetObject": {
-    #                 "total_time_ms": 31,
-    #                 "count": 2
-    #             },
-    #             "S3_DeleteObjects": {
-    #                 "total_time_ms": 15,
-    #                 "count": 1
-    #             },
-    #             "S3_HeadObject": {
-    #                 "total_time_ms": 4,
-    #                 "count": 1
-    #             }
+    #     "storage_operations": {
+    #         "S3_DeleteObjects": {
+    #             "count": 2,
+    #             "size_bytes": 0,
+    #             "total_time_ms": 33
+    #         },
+    #         "S3_GetObject": {
+    #             "count": 3,
+    #             "size_bytes": 517,
+    #             "total_time_ms": 46
+    #         },
+    #         "S3_HeadObject": {
+    #             "count": 1,
+    #             "size_bytes": 0,
+    #             "total_time_ms": 4
+    #         },
+    #         "S3_ListObjectsV2": {
+    #             "count": 4,
+    #             "size_bytes": 0,
+    #             "total_time_ms": 68
+    #         },
+    #         "S3_PutObject": {
+    #             "count": 2,
+    #             "size_bytes": 413,
+    #             "total_time_ms": 31
     #         }
     #     }
     # }
     # """    
-    assert "SYMBOL_LIST" in stats
-    keys_to_check = {"SYMBOL_LIST", "VERSION_REF"}
-    for key, key_type_map in stats.items():
-        if key in keys_to_check:
-            assert "storage_ops" in key_type_map
-            assert "S3_ListObjectsV2" in key_type_map["storage_ops"]
-            assert "count" in key_type_map["storage_ops"]["S3_ListObjectsV2"]
-            list_object_ststs = key_type_map["storage_ops"]["S3_ListObjectsV2"]
-            assert list_object_ststs["count"] == 1 if key == "VERSION_REF" else list_symbol_call_counts
-            assert list_object_ststs["total_time_ms"] > 1
-            assert list_object_ststs["total_time_ms"] < 600
+    assert "storage_operations" in stats
+    assert "S3_ListObjectsV2" in stats["storage_operations"]
+    assert "count" in stats["storage_operations"]["S3_ListObjectsV2"]
+    list_object_ststs = stats["storage_operations"]["S3_ListObjectsV2"]
+    assert list_object_ststs["count"] == list_symbol_call_counts + 2
+    assert list_object_ststs["total_time_ms"] > 1
+    assert list_object_ststs["total_time_ms"] < 600
 
 
 def test_query_stats(s3_version_store_v1, clear_query_stats):
@@ -111,108 +86,49 @@ def test_query_stats_snapshot(s3_version_store_v1, clear_query_stats):
         s3_version_store_v1.snapshot("abc2")
     stats = qs.get_query_stats()
     # {
-    #     "LOCK": {
-    #         "storage_ops": {
-    #             "S3_DeleteObjects": {
-    #                 "count": 1,
-    #                 "size_bytes": 0,
-    #                 "total_time_ms": 70
-    #             },
-    #             "S3_GetObject": {
-    #                 "count": 2,
-    #                 "size_bytes": 208,
-    #                 "total_time_ms": 115
-    #             },
-    #             "S3_HeadObject": {
-    #                 "count": 1,
-    #                 "size_bytes": 0,
-    #                 "total_time_ms": 53
-    #             },
-    #             "S3_PutObject": {
-    #                 "count": 1,
-    #                 "size_bytes": 104,
-    #                 "total_time_ms": 45
-    #             }
-    #         }
-    #     },
-    #     "SNAPSHOT": {
-    #         "storage_ops": {
-    #             "S3_ListObjectsV2": {
-    #                 "count": 2,
-    #                 "size_bytes": 0,
-    #                 "total_time_ms": 71
-    #             }
-    #         }
-    #     },
-    #     "SNAPSHOT_REF": {
-    #         "storage_ops": {
-    #             "S3_HeadObject": {
-    #                 "count": 2,
-    #                 "size_bytes": 0,
-    #                 "total_time_ms": 81
-    #             },
-    #             "S3_PutObject": {
-    #                 "count": 2,
-    #                 "size_bytes": 1171,
-    #                 "total_time_ms": 47
-    #             }
-    #         }
-    #     },
-    #     "SYMBOL_LIST": {
-    #         "storage_ops": {
-    #             "S3_DeleteObjects": {
-    #                 "count": 1,
-    #                 "size_bytes": 0,
-    #                 "total_time_ms": 65
-    #             },
-    #             "S3_GetObject": {
-    #                 "count": 1,
-    #                 "size_bytes": 309,
-    #                 "total_time_ms": 24
-    #             },
-    #             "S3_ListObjectsV2": {
-    #                 "count": 3,
-    #                 "size_bytes": 0,
-    #                 "total_time_ms": 172
-    #             },
-    #             "S3_PutObject": {
-    #                 "count": 1,
-    #                 "size_bytes": 309,
-    #                 "total_time_ms": 31
-    #             }
-    #         }
-    #     },
-    #     "VERSION_REF": {
-    #         "storage_ops": {
-    #             "S3_GetObject": {
-    #                 "count": 2,
-    #                 "size_bytes": 1218,
-    #                 "total_time_ms": 53
-    #             },
-    #             "S3_ListObjectsV2": {
-    #                 "count": 1,
-    #                 "size_bytes": 0,
-    #                 "total_time_ms": 47
-    #             }
+    #     "storage_operations": {
+    #         "S3_DeleteObjects": {
+    #             "count": 2,
+    #             "size_bytes": 0,
+    #             "total_time_ms": 32
+    #         },
+    #         "S3_GetObject": {
+    #             "count": 5,
+    #             "size_bytes": 1736,
+    #             "total_time_ms": 80
+    #         },
+    #         "S3_HeadObject": {
+    #             "count": 3,
+    #             "size_bytes": 0,
+    #             "total_time_ms": 15
+    #         },
+    #         "S3_ListObjectsV2": {
+    #             "count": 6,
+    #             "size_bytes": 0,
+    #             "total_time_ms": 98
+    #         },
+    #         "S3_PutObject": {
+    #             "count": 4,
+    #             "size_bytes": 1581,
+    #             "total_time_ms": 61
     #         }
     #     }
     # }
-    assert {"SNAPSHOT", "SNAPSHOT_REF", "SYMBOL_LIST", "LOCK", "VERSION_REF"} == stats.keys()
     
-    assert "storage_ops" in stats["SNAPSHOT"]
-    assert "S3_ListObjectsV2" in stats["SNAPSHOT"]["storage_ops"]
-    assert "total_time_ms" in stats["SNAPSHOT"]["storage_ops"]["S3_ListObjectsV2"]
-    assert "count" in stats["SNAPSHOT"]["storage_ops"]["S3_ListObjectsV2"]
-    assert stats["SNAPSHOT"]["storage_ops"]["S3_ListObjectsV2"]["count"] == 2
     
-    assert "storage_ops" in stats["SNAPSHOT_REF"]
-    snapshot_ref_ops = stats["SNAPSHOT_REF"]["storage_ops"]
+    assert "storage_operations" in stats
+    storage_ops = stats["storage_operations"]
+    assert "S3_ListObjectsV2" in storage_ops
+    assert "total_time_ms" in storage_ops["S3_ListObjectsV2"]
+    assert "count" in storage_ops["S3_ListObjectsV2"]
+    assert storage_ops["S3_ListObjectsV2"]["count"] == 6
     
-    assert "S3_PutObject" in snapshot_ref_ops
-    assert "S3_HeadObject" in snapshot_ref_ops
     
-    assert snapshot_ref_ops["S3_PutObject"]["count"] == 2
-    assert snapshot_ref_ops["S3_HeadObject"]["count"] == 2
+    assert "S3_PutObject" in storage_ops
+    assert "S3_HeadObject" in storage_ops
+    
+    assert storage_ops["S3_PutObject"]["count"] == 4
+    assert storage_ops["S3_HeadObject"]["count"] == 3
 
 
 def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
@@ -223,90 +139,32 @@ def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
         s3_version_store_v1.read("a")
         s3_version_store_v1.read("a")
     stats = qs.get_query_stats()
-#     {
-#     "SYMBOL_LIST": {
-#         "storage_ops": {
-#             "S3_PutObject": {
-#                 "count": 2,
-#                 "size_bytes": 322,
-#                 "total_time_ms": 120
-#             }
-#         }
-#     },
-#     "TABLE_DATA": {
-#         "storage_ops": {
-#             "S3_GetObject": {
-#                 "count": 2,
-#                 "size_bytes": 158,
-#                 "total_time_ms": 40
-#             },
-#             "S3_PutObject": {
-#                 "count": 2,
-#                 "size_bytes": 158,
-#                 "total_time_ms": 122
-#             }
-#         }
-#     },
-#     "TABLE_INDEX": {
-#         "storage_ops": {
-#             "S3_GetObject": {
-#                 "count": 2,
-#                 "size_bytes": 1992,
-#                 "total_time_ms": 73
-#             },
-#             "S3_PutObject": {
-#                 "count": 2,
-#                 "size_bytes": 1992,
-#                 "total_time_ms": 92
-#             }
-#         }
-#     },
-#     "VERSION": {
-#         "storage_ops": {
-#             "S3_GetObject": {
-#                 "count": 2,
-#                 "size_bytes": 0,
-#                 "total_time_ms": 42
-#             },
-#             "S3_PutObject": {
-#                 "count": 2,
-#                 "size_bytes": 1194,
-#                 "total_time_ms": 70
-#             }
-#         }
-#     },
-#     "VERSION_REF": {
-#         "storage_ops": {
-#             "S3_GetObject": {
-#                 "count": 4,
-#                 "size_bytes": 1266,
-#                 "total_time_ms": 99
-#             },
-#             "S3_PutObject": {
-#                 "count": 2,
-#                 "size_bytes": 1241,
-#                 "total_time_ms": 90
-#             }
-#         }
-#     }
-# }
+    # {
+    #     "storage_operations": {
+    #         "S3_GetObject": {
+    #             "count": 10,
+    #             "size_bytes": 3414,
+    #             "total_time_ms": 167
+    #         },
+    #         "S3_PutObject": {
+    #             "count": 10,
+    #             "size_bytes": 4905,
+    #             "total_time_ms": 157
+    #         }
+    #     }
+    # }
     
-    expected_keys = ["TABLE_DATA", "TABLE_INDEX", "VERSION", "SYMBOL_LIST", "VERSION_REF"]
-    
-    for key, stat in stats.items():
-        assert key in expected_keys
-        assert "storage_ops" in stats[key]
-        storage_ops = stat["storage_ops"]
-        if key != "SYMBOL_LIST":
-            assert "S3_GetObject" in storage_ops
-            assert storage_ops["S3_GetObject"]["count"] >= 2
-            assert storage_ops["S3_GetObject"]["total_time_ms"] > 0
-            assert "size_bytes" in storage_ops["S3_GetObject"]
-    
-        assert "S3_PutObject" in storage_ops
-        assert storage_ops["S3_PutObject"]["count"] >= 2
-        assert storage_ops["S3_PutObject"]["total_time_ms"] > 0
-        assert storage_ops["S3_PutObject"]["size_bytes"] > 50
+    assert "storage_operations" in stats
+    storage_operations = stats["storage_operations"]
+    assert "S3_GetObject" in storage_operations
+    assert storage_operations["S3_GetObject"]["count"] == 10
+    assert storage_operations["S3_GetObject"]["total_time_ms"] > 0
+    assert "size_bytes" in storage_operations["S3_GetObject"]
+
+    assert "S3_PutObject" in storage_operations
+    assert storage_operations["S3_PutObject"]["count"] == 10
+    assert storage_operations["S3_PutObject"]["total_time_ms"] > 0
+    assert storage_operations["S3_PutObject"]["size_bytes"] > 50
         
 
 def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
@@ -319,83 +177,31 @@ def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
         s3_version_store_v1.read_metadata("a")
     stats = qs.get_query_stats()
     # {
-    #     "SYMBOL_LIST": {
-    #         "storage_ops": {
-    #             "S3_PutObject": {
-    #                 "count": 2,
-    #                 "size_bytes": 322,
-    #                 "total_time_ms": 91
-    #             }
-    #         }
-    #     },
-    #     "TABLE_DATA": {
-    #         "storage_ops": {
-    #             "S3_PutObject": {
-    #                 "count": 1,
-    #                 "size_bytes": 79,
-    #                 "total_time_ms": 26
-    #             }
-    #         }
-    #     },
-    #     "TABLE_INDEX": {
-    #         "storage_ops": {
-    #             "S3_GetObject": {
-    #                 "count": 3,
-    #                 "size_bytes": 3036,
-    #                 "total_time_ms": 72
-    #             },
-    #             "S3_PutObject": {
-    #                 "count": 2,
-    #                 "size_bytes": 2024,
-    #                 "total_time_ms": 160
-    #             }
-    #         }
-    #     },
-    #     "VERSION": {
-    #         "storage_ops": {
-    #             "S3_GetObject": {
-    #                 "count": 4,
-    #                 "size_bytes": 582,
-    #                 "total_time_ms": 191
-    #             },
-    #             "S3_PutObject": {
-    #                 "count": 2,
-    #                 "size_bytes": 1191,
-    #                 "total_time_ms": 133
-    #             }
-    #         }
-    #     },
-    #     "VERSION_REF": {
-    #         "storage_ops": {
-    #             "S3_GetObject": {
-    #                 "count": 7,
-    #                 "size_bytes": 2466,
-    #                 "total_time_ms": 299
-    #             },
-    #             "S3_PutObject": {
-    #                 "count": 2,
-    #                 "size_bytes": 1233,
-    #                 "total_time_ms": 98
-    #             }
+    #     "storage_operations": {
+    #         "S3_GetObject": {
+    #             "count": 14,
+    #             "size_bytes": 6078,
+    #             "total_time_ms": 231
+    #         },
+    #         "S3_PutObject": {
+    #             "count": 9,
+    #             "size_bytes": 4845,
+    #             "total_time_ms": 142
     #         }
     #     }
-    # }    
-    expected_keys = ["TABLE_INDEX", "VERSION", "VERSION_REF"]
+    # }
+    assert "storage_operations" in stats
+    storage_operations = stats["storage_operations"]
     
-    for key in expected_keys:
-        assert key in stats
-        assert "storage_ops" in stats[key]
-        storage_ops = stats[key]["storage_ops"]
+    if "S3_GetObject" in storage_operations:
+        assert storage_operations["S3_GetObject"]["count"] > 0
+        assert storage_operations["S3_GetObject"]["size_bytes"] > 0
+        assert storage_operations["S3_GetObject"]["total_time_ms"] > 0
         
-        if "S3_GetObject" in storage_ops:
-            assert storage_ops["S3_GetObject"]["count"] > 0
-            assert storage_ops["S3_GetObject"]["size_bytes"] > 0
-            assert storage_ops["S3_GetObject"]["total_time_ms"] > 0
-            
-        if "S3_PutObject" in storage_ops:
-            assert storage_ops["S3_PutObject"]["count"] > 0
-            assert storage_ops["S3_PutObject"]["size_bytes"] > 0
-            assert storage_ops["S3_PutObject"]["total_time_ms"] > 0
+    if "S3_PutObject" in storage_operations:
+        assert storage_operations["S3_PutObject"]["count"] > 0
+        assert storage_operations["S3_PutObject"]["size_bytes"] > 0
+        assert storage_operations["S3_PutObject"]["total_time_ms"] > 0
 
 
 def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
@@ -413,84 +219,28 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
 
     stats = qs.get_query_stats()
     # {
-    #     "SYMBOL_LIST": {
-    #         "storage_ops": {
-    #             "S3_PutObject": {
-    #                 "count": 4,
-    #                 "size_bytes": 680,
-    #                 "total_time_ms": 202
-    #             }
-    #         }
-    #     },
-    #     "TABLE_DATA": {
-    #         "storage_ops": {
-    #             "S3_GetObject": {
-    #                 "count": 4,
-    #                 "size_bytes": 986,
-    #                 "total_time_ms": 114
-    #             },
-    #             "S3_PutObject": {
-    #                 "count": 4,
-    #                 "size_bytes": 986,
-    #                 "total_time_ms": 241
-    #             }
-    #         }
-    #     },
-    #     "TABLE_INDEX": {
-    #         "storage_ops": {
-    #             "S3_GetObject": {
-    #                 "count": 4,
-    #                 "size_bytes": 4286,
-    #                 "total_time_ms": 206
-    #             },
-    #             "S3_PutObject": {
-    #                 "count": 4,
-    #                 "size_bytes": 4286,
-    #                 "total_time_ms": 248
-    #             }
-    #         }
-    #     },
-    #     "VERSION": {
-    #         "storage_ops": {
-    #             "S3_GetObject": {
-    #                 "count": 6,
-    #                 "size_bytes": 1204,
-    #                 "total_time_ms": 215
-    #             },
-    #             "S3_PutObject": {
-    #                 "count": 4,
-    #                 "size_bytes": 2494,
-    #                 "total_time_ms": 123
-    #             }
-    #         }
-    #     },
-    #     "VERSION_REF": {
-    #         "storage_ops": {
-    #             "S3_GetObject": {
-    #                 "count": 12,
-    #                 "size_bytes": 5236,
-    #                 "total_time_ms": 502
-    #             },
-    #             "S3_PutObject": {
-    #                 "count": 4,
-    #                 "size_bytes": 2658,
-    #                 "total_time_ms": 200
-    #             }
+    #     "storage_operations": {
+    #         "S3_GetObject": {
+    #             "count": 26,
+    #             "size_bytes": 11708,
+    #             "total_time_ms": 436
+    #         },
+    #         "S3_PutObject": {
+    #             "count": 20,
+    #             "size_bytes": 11103,
+    #             "total_time_ms": 313
     #         }
     #     }
     # }
-    expected_keys = ["TABLE_DATA", "TABLE_INDEX", "VERSION", "SYMBOL_LIST", "VERSION_REF"]    
-    for key in expected_keys:
-        assert key in stats
-        assert "storage_ops" in stats[key]
-        storage_ops = stats[key]["storage_ops"]
+    assert "storage_operations" in stats
+    storage_operations = stats["storage_operations"]
+    
+    assert "S3_GetObject" in storage_operations
+    assert storage_operations["S3_GetObject"]["count"] > 0
+    assert storage_operations["S3_GetObject"]["size_bytes"] > 0
+    assert storage_operations["S3_GetObject"]["total_time_ms"] > 0
         
-        if "S3_GetObject" in storage_ops:
-            assert storage_ops["S3_GetObject"]["count"] > 0
-            assert storage_ops["S3_GetObject"]["size_bytes"] > 0
-            assert storage_ops["S3_GetObject"]["total_time_ms"] > 0
-            
-        if "S3_PutObject" in storage_ops:
-            assert storage_ops["S3_PutObject"]["count"] > 0
-            assert storage_ops["S3_PutObject"]["size_bytes"] > 0
-            assert storage_ops["S3_PutObject"]["total_time_ms"] > 0
+    assert "S3_PutObject" in storage_operations
+    assert storage_operations["S3_PutObject"]["count"] > 0
+    assert storage_operations["S3_PutObject"]["size_bytes"] > 0
+    assert storage_operations["S3_PutObject"]["total_time_ms"] > 0
