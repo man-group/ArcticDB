@@ -156,15 +156,11 @@ def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
     
     assert "storage_operations" in stats
     storage_operations = stats["storage_operations"]
-    assert "S3_GetObject" in storage_operations
-    assert storage_operations["S3_GetObject"]["count"] == 10
-    assert storage_operations["S3_GetObject"]["total_time_ms"] > 0
-    assert "size_bytes" in storage_operations["S3_GetObject"]
-
-    assert "S3_PutObject" in storage_operations
-    assert storage_operations["S3_PutObject"]["count"] == 10
-    assert storage_operations["S3_PutObject"]["total_time_ms"] > 0
-    assert storage_operations["S3_PutObject"]["size_bytes"] > 50
+    assert {"S3_GetObject", "S3_PutObject"} == storage_operations.keys()
+    for value in storage_operations.values():
+        assert value["count"] > 0
+        assert value["size_bytes"] > 50
+        assert value["total_time_ms"] > 0
         
 
 def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
@@ -193,15 +189,11 @@ def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
     assert "storage_operations" in stats
     storage_operations = stats["storage_operations"]
     
-    if "S3_GetObject" in storage_operations:
-        assert storage_operations["S3_GetObject"]["count"] > 0
-        assert storage_operations["S3_GetObject"]["size_bytes"] > 0
-        assert storage_operations["S3_GetObject"]["total_time_ms"] > 0
-        
-    if "S3_PutObject" in storage_operations:
-        assert storage_operations["S3_PutObject"]["count"] > 0
-        assert storage_operations["S3_PutObject"]["size_bytes"] > 0
-        assert storage_operations["S3_PutObject"]["total_time_ms"] > 0
+    assert {"S3_GetObject", "S3_PutObject"} == storage_operations.keys()
+    for value in storage_operations.values():
+        assert value["count"] > 0
+        assert value["size_bytes"] > 0
+        assert value["total_time_ms"] > 0
 
 
 def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
@@ -235,12 +227,68 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
     assert "storage_operations" in stats
     storage_operations = stats["storage_operations"]
     
-    assert "S3_GetObject" in storage_operations
-    assert storage_operations["S3_GetObject"]["count"] > 0
-    assert storage_operations["S3_GetObject"]["size_bytes"] > 0
-    assert storage_operations["S3_GetObject"]["total_time_ms"] > 0
-        
-    assert "S3_PutObject" in storage_operations
-    assert storage_operations["S3_PutObject"]["count"] > 0
+    assert {"S3_GetObject", "S3_PutObject"} == storage_operations.keys()
+    for value in storage_operations.values():
+        assert value["count"] > 0
+        assert value["size_bytes"] > 0
+        assert value["total_time_ms"] > 0
+
+
+def test_query_stats_staged_data(s3_version_store_v1, clear_query_stats, sym):
+    df_0 = pd.DataFrame({"col": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=pd.date_range("2024-01-03", periods=2))
+
+    qs.enable()
+    s3_version_store_v1.write(sym, df_0, parallel=True)
+    s3_version_store_v1.write(sym, df_1, parallel=True)
+
+    stats = qs.get_query_stats()
+    # {
+    #     "storage_operations": {
+    #         "S3_PutObject": {
+    #             "count": 2,
+    #             "size_bytes": 952,
+    #             "total_time_ms": 65
+    #         }
+    #     }
+    # }
+    assert "storage_operations" in stats
+    storage_operations = stats["storage_operations"]
+    assert {"S3_PutObject"} == storage_operations.keys()
+    assert storage_operations["S3_PutObject"]["count"] == 2
     assert storage_operations["S3_PutObject"]["size_bytes"] > 0
     assert storage_operations["S3_PutObject"]["total_time_ms"] > 0
+    s3_version_store_v1.compact_incomplete(sym, False, False)
+    stats = qs.get_query_stats()
+    # {
+    #     "storage_operations": {
+    #         "S3_DeleteObjects": {
+    #             "count": 1,
+    #             "size_bytes": 0,
+    #             "total_time_ms": 18
+    #         },
+    #         "S3_GetObject": {
+    #             "count": 8,
+    #             "size_bytes": 1900,
+    #             "total_time_ms": 133
+    #         },
+    #         "S3_ListObjectsV2": {
+    #             "count": 1,
+    #             "size_bytes": 0,
+    #             "total_time_ms": 52
+    #         },
+    #         "S3_PutObject": {
+    #             "count": 7,
+    #             "size_bytes": 4014,
+    #             "total_time_ms": 142
+    #         }
+    #     }
+    # }
+    assert "storage_operations" in stats
+    storage_operations = stats["storage_operations"]
+    assert {"S3_PutObject", "S3_DeleteObjects", "S3_GetObject", "S3_ListObjectsV2"} == storage_operations.keys()
+    for key, value in storage_operations.items():
+        assert value["count"] > 0
+        assert value["total_time_ms"] > 0
+        if key == "S3_PutObject" or key == "S3_GetObject":
+            assert value["size_bytes"] > 0
