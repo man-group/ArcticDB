@@ -12,6 +12,7 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
+#include <arcticdb/storage/failure_simulation.hpp>
 #include <arcticdb/util/configs_map.hpp>
 
 #include <fmt/std.h>
@@ -72,11 +73,13 @@ inline std::thread::id get_thread_id() noexcept {
 
 // This StorageLock is inherently unreliable. It does not use atomic operations and it is possible for two processes to acquire if the timing is right.
 // If you want a reliable alternative which is slower but uses atomic primitives you can look at the `ReliableStorageLock`.
-template <class ClockType = util::SysClock>
+template <class ClockType = util::SysClock, class MutexType = std::mutex>
 class StorageLock {
-    // 1 Day
-    static constexpr int64_t DEFAULT_TTL_INTERVAL = ONE_MINUTE * 60 * 24;
-    std::mutex mutex_;
+    static constexpr int64_t DEFAULT_TTL_INTERVAL = ONE_MINUTE * 60 * 24; // 1 Day
+    static constexpr int64_t DEFAULT_WAIT_MS = 1000; // 1 Second
+    static constexpr int64_t DEFAULT_INITIAL_WAIT_MS = 10;
+
+    MutexType mutex_;
     const StreamId name_;
     timestamp ts_ = 0;
 
@@ -118,11 +121,21 @@ class StorageLock {
         OnExit x{[that=this] () {
             that->mutex_.unlock();
         }};
+
+        auto start = ClockType::coarse_nanos_since_epoch();
         if(!ref_key_exists(store) || !ttl_not_expired(store)) {
             ts_= create_ref_key(store);
-            auto lock_sleep = ConfigsMap::instance()->get_int("StorageLock.WaitMs", 200);
-            std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep));
+            auto lock_sleep_ms = ConfigsMap::instance()->get_int("StorageLock.WaitMs", DEFAULT_WAIT_MS);
+            std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep_ms));
             auto read_ts = read_timestamp(store);
+            auto duration = ClockType::coarse_nanos_since_epoch() - start;
+            auto duration_in_ms = duration / ONE_MILLISECOND;
+            ARCTICDB_INFO(log::lock(), "Took {} ms", duration_in_ms);
+            ARCTICDB_INFO(log::lock(), "Max is {} ms", 1.5 * lock_sleep_ms);
+            if (duration > 1.5 * lock_sleep_ms * ONE_MILLISECOND) {
+                ARCTICDB_DEBUG(log::lock(), "Took too long to read and write the lock. Aborting.");
+                return false;
+            }
             if(read_ts && *read_ts == ts_) {
                 x.release();
                 ARCTICDB_DEBUG(log::lock(), "Storage lock: succeeded {}", get_thread_id());
@@ -145,7 +158,7 @@ class StorageLock {
   private:
     void do_lock(const std::shared_ptr<Store>& store, std::optional<size_t> timeout_ms = std::nullopt) {
         mutex_.lock();
-        size_t wait_ms = ConfigsMap::instance()->get_int("StorageLock.InitialWaitMs", 10);
+        size_t wait_ms = ConfigsMap::instance()->get_int("StorageLock.InitialWaitMs", DEFAULT_INITIAL_WAIT_MS);
         thread_local std::uniform_int_distribution<size_t> dist;
         thread_local std::minstd_rand gen(std::random_device{}());
         size_t total_wait = 0;
@@ -168,7 +181,7 @@ class StorageLock {
         }
         ts_ = create_ref_key(store);
         log::lock().info("{} Lock unlocked, trying to set lock", get_thread_id());
-        auto lock_sleep = ConfigsMap::instance()->get_int("StorageLock.WaitMs", 200);
+        auto lock_sleep = ConfigsMap::instance()->get_int("StorageLock.WaitMs", DEFAULT_WAIT_MS);
         std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep));
         auto read_ts = read_timestamp(store);
         if(!read_ts || *read_ts != ts_) {
@@ -184,6 +197,7 @@ class StorageLock {
 
     timestamp create_ref_key(const std::shared_ptr<Store>& store) {
         auto ts =  ClockType::nanos_since_epoch();
+        StorageFailureSimulator::instance()->go(FailureType::WRITE_SLOW);
         store->write_sync(KeyType::LOCK, name_, lock_segment(name_, ts));
         ARCTICDB_DEBUG(log::lock(), "Created lock with timestamp {}", ts);
         return ts;
