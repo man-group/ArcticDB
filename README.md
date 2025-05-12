@@ -23,7 +23,7 @@
 **ArcticDB** is a high performance, serverless **DataFrame database** built for the Python Data Science ecosystem.
 Launched in March 2023, it is the successor to [Arctic](https://github.com/man-group/arctic).
 
-Use of ArcticDB in production (including business or commercial environments) or for a Database Service requires a paid for license from ArcticDB Limited . Please contact info@arcticdb.io for further details.
+Use of ArcticDB in production (including business or commercial environments) or for a Database Service requires a paid license from ArcticDB Limited . Please contact info@arcticdb.io for further details.
 
 ArcticDB offers an intuitive Python-centric API enabling you to read and write Pandas DataFrames to S3 or LMDB utilising a fast C++ data-processing and compression engine.
 
