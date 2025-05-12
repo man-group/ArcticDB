@@ -378,7 +378,7 @@ size_t dispatch_bitwidth_fused(
 
     constexpr size_t max_bits_allowed = sizeof(T) * 8;
 
-    if (EXPECT(bit_width <= max_bits_allowed, 1)) {
+    if (ARCTICDB_LIKELY(bit_width <= max_bits_allowed)) {
         return dispatch_bitwidth_fused_impl<T, FusedType>(
             in,
             out,
