@@ -1,4 +1,6 @@
 name: Installation Tests Execution
+permissions:
+  contents: read
 
 on:
   push:
