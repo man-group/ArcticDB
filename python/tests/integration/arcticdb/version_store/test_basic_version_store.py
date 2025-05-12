@@ -1683,7 +1683,7 @@ def test_resolve_defaults(basic_store_factory):
 
     lib2 = basic_store_factory(dynamic_strings=True, reuse_name=True)
     proto_cfg = lib2._lib_cfg.lib_desc.version.write_options
-    assert lib2.resolve_defaults("dynamic_strings", proto_cfg, False) is True
+    assert resolve_defaults("dynamic_strings", proto_cfg, False) is True
     del os.environ["recursive_normalizers"]
 
 
