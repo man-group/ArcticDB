@@ -102,7 +102,7 @@ struct BitPackCompressor : public BitPackData {
         if (data.has_field_stats()) {
             auto stats = data.field_stats();
             auto max_val = stats.get_max<T>();
-            return BitPackData{std::bit_width(static_cast<std::make_unsigned_t<T>>(max_val))};
+            return BitPackData{static_cast<size_t>(std::bit_width(static_cast<std::make_unsigned_t<T>>(max_val)))};
         }
 
         T max_val = *data.buffer().ptr_cast<T>(0, sizeof(T));
