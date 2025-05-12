@@ -13,7 +13,7 @@ class MemoryMappedFile {
 private:
     HANDLE file_ = INVALID_HANDLE_VALUE;
     HANDLE map_ = nullptr;
-    size_t* length_ = nullptr;
+    uint64_t* length_ = nullptr;
     uint8_t* base_ = nullptr;
     uint8_t* data_ = nullptr;
     bool writeable_ = false;
@@ -59,7 +59,7 @@ public:
 
         auto header = reinterpret_cast<arcticdb::util::MagicNum<'A','r','c','t'>*>(base_);
         header->check();
-        length_ = reinterpret_cast<size_t*>(base_ + sizeof(uint64_t));
+        length_ = reinterpret_cast<uint64_t*>(base_ + sizeof(uint64_t));
         data_ = base_ + header_size;
     }
 
@@ -86,7 +86,7 @@ public:
         new (base_) arcticdb::util::MagicNum<'A','r','c','t'>();
         *reinterpret_cast<size_t*>(base_ + sizeof(uint64_t)) = size;
         data_ = base_ + header_size;
-        length_ = reinterpret_cast<size_t*>(base_ + sizeof(uint64_t));
+        length_ = reinterpret_cast<uint64_t*>(base_ + sizeof(uint64_t));
         *length_ = size;
         writeable_ = true;
         ARCTICDB_DEBUG(log::storage(), "Created memory mapped file at {} with size {}", filepath, *length_);
@@ -155,7 +155,7 @@ namespace arcticdb {
 class MemoryMappedFile {
 private:
     int fd_ = -1;
-    size_t* length_ = nullptr;
+    uint64_t* length_ = nullptr;
     uint8_t *base_ = nullptr;
     uint8_t *data_ = nullptr;
     static constexpr size_t header_size = sizeof(uint64_t) + sizeof(uint64_t);
