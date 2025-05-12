@@ -170,7 +170,7 @@ jobs:
       run: |
         echo "ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=0" >> $GITHUB_ENV
         echo "ARCTICDB_STORAGE_LMDB=${{ env.lmdb }}" >> $GITHUB_ENV
-        echo "USE_CONDA=${{ matrix.use_conda ||  }}" >> $GITHUB_ENV
+        echo "USE_CONDA=${{ inputs.use_conda || matrix.use_conda }}" >> $GITHUB_ENV
   
 
     - name: (pypi) Install other prerequisites 
