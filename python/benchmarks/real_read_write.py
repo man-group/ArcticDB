@@ -6,71 +6,157 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import os
-import time
-from typing import List
+from logging import Logger
 import numpy as np
 import pandas as pd
 
-from arcticdb.util.utils import DFGenerator, TimestampNumber
-from arcticdb.util.environment_setup import GeneralSetupLibraryWithSymbols, Storage
+from arcticdb.options import LibraryOptions
+from arcticdb.util.environment_setup import DataFrameGenerator, TestLibraryManager, LibraryPopulationPolicy, LibraryType, Storage, get_console_logger, populate_library_if_missing
+from arcticdb.util.utils import DFGenerator, DataRangeUtils, TimestampNumber
+from benchmarks.common import AsvBase
 
 
 #region Setup classes
+class AllColumnTypesGenerator(DataFrameGenerator):
 
-class ReadWriteBenchmarkSettings(GeneralSetupLibraryWithSymbols):
-    """
-    Setup Read Tests Library for different storages.
-    Its aim is to have at one place the responsibility for setting up any supported storage
-    with proper symbols.
 
-    It is also responsible for providing 2 libraries: 
-    - one that will hold persistent data across runs
-    - one that will will hold transient data for operations which data will be wiped out
-    """
-
-    START_DATE_INDEX = pd.Timestamp("2000-1-1")
-    INDEX_FREQ = 's'
-
-    def get_last_x_percent_date_range(self, row_num, percents):
-        """
-        Returns a date range selecting last X% of rows of dataframe
-        pass percents as 0.0-1.0
-        """
-        start = TimestampNumber.from_timestamp(
-            ReadWriteBenchmarkSettings.START_DATE_INDEX, ReadWriteBenchmarkSettings.INDEX_FREQ)
-        percent_5 = int(row_num * percents)
-        end_range = start + row_num
-        start_range = end_range - percent_5
-        range = pd.date_range(start=start_range.to_timestamp(), end=end_range.to_timestamp(), freq="s")
-        return range
-    
-    def generate_dataframe(self, row_num:int, col_num: int) -> pd.DataFrame:
-        """
-        Dataframe that will be used in read and write tests
-        """
-        st = time.time()
-        # NOTE: Use only setup environment logger!
-        self.logger().info("Dataframe generation started.")
-        df = (DFGenerator(row_num)
-            .add_int_col("int8", np.int8)
-            .add_int_col("int16", np.int16)
-            .add_int_col("int32", np.int32)
-            .add_int_col("int64", min=-26, max=31)
-            .add_int_col("uint64", np.uint64, min=100, max=199)
-            .add_float_col("float16",np.float32)
-            .add_float_col("float2",min=-100.0, max=200.0, round_at=4)
-            .add_string_col("string10", str_size=10)
-            .add_string_col("string20", str_size=20, num_unique_values=20000)
-            .add_bool_col("bool")
-            .add_timestamp_index("time", ReadWriteBenchmarkSettings.INDEX_FREQ, ReadWriteBenchmarkSettings.START_DATE_INDEX)
-            ).generate_dataframe()
-        self.logger().info(f"Dataframe {row_num} rows generated for {time.time() - st} sec")
+    def get_dataframe(self, number_rows, number_columns):
+        df = (DFGenerator(number_rows)
+              .add_int_col("int8", np.int8)
+              .add_int_col("int16", np.int16)
+              .add_int_col("int32", np.int32)
+              .add_int_col("int64", min=-26, max=31)
+              .add_int_col("uint64", np.uint64, min=100, max=199)
+              .add_float_col("float16",np.float32)
+              .add_float_col("float2",min=-100.0, max=200.0, round_at=4)
+              .add_string_col("string10", str_size=10)
+              .add_string_col("string20", str_size=20, num_unique_values=20000)
+              .add_bool_col("bool")
+              .add_timestamp_index("time", self.freq, self.initial_timestamp)
+              ).generate_dataframe()
         return df
+    
 
 #endregion
 
-class LMDBReadWrite:
+class AWSReadWrite(AsvBase):
+    """
+    This class is for general read write tests 
+
+    Uses 1 persistent library for read tests
+    Uses 1 modifiable library for write tests
+    """
+
+    rounds = 1
+    number = 3 # invokes 3 times the test runs between each setup-teardown 
+    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
+    min_run_count = 1
+    warmup_time = 0
+
+    timeout = 1200
+
+    param_names = ["num_rows"]
+    # NOTE: If you plan to make changes to parameters, consider that a library with previous definition 
+    #       may already exist. This means that symbols there will be having having different number
+    #       of rows than what you defined in the test. To resolve this problem check with documentation:
+    #           https://github.com/man-group/ArcticDB/wiki/ASV-Benchmarks:-Real-storage-tests
+    params = [1_000_000, 2_000_000]
+
+    library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="READ_WRITE")
+
+    def get_logger(self) -> Logger:
+        return get_console_logger(self)
+
+    def get_library_manager(self) -> TestLibraryManager:
+        return AWSReadWrite.library_manager
+    
+    def get_population_policy(self) -> LibraryPopulationPolicy:
+        lpp = LibraryPopulationPolicy(self.get_logger(), AllColumnTypesGenerator()).set_parameters(AWSReadWrite.params)
+        return lpp
+
+    def setup_cache(self):
+        '''
+        In setup_cache we only populate the persistent libraries if they are missing.
+        '''
+        manager = self.get_library_manager()
+        policy = self.get_population_policy()
+        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)
+        manager.log_info() # Logs info about ArcticURI - do always use last
+
+    def setup(self, num_rows):
+        self.population_policy = self.get_population_policy()
+        self.symbol = self.population_policy.get_symbol_name(num_rows)
+        # We use the same generator as the policy
+        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)
+        
+        # Functions operating on differetent date ranges to be moved in some shared utils
+        self.last_20 = self.get_last_x_percent_date_range(num_rows, 20)
+
+        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)
+        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)
+        # We could also populate the library like so (we don't need )
+        # populate_library(self.write_lib, )
+
+    def teardown(self, num_rows):
+        # We could clear the modifiable libraries we used
+        self.get_library_manager().clear_all_modifiable_libs_from_this_process()
+
+    def get_last_x_percent_date_range(self, num_rows, percents):
+        """
+        Returns a date range tuple selecting last X% of rows of dataframe
+        pass percents as 0.0-1.0
+        """
+        df_generator = self.population_policy.df_generator
+        freq = df_generator.freq
+        return DataRangeUtils.get_last_x_percent_date_range(initial_timestamp=df_generator.initial_timestamp,
+                                                            freq=freq, num_rows=num_rows, percents=percents)
+    
+    def time_read(self, num_rows):
+        self.read_lib.read(self.symbol)
+
+    def peakmem_read(self, num_rows):
+        self.read_lib.read(self.symbol)
+
+    def time_write(self, num_rows):
+        self.write_lib.write(self.symbol, self.to_write_df)
+
+    def peakmem_write(self, num_rows):
+        self.write_lib.write(self.symbol, self.to_write_df)
+
+    def time_read_with_column_float(self, num_rows):
+        COLS = ["float2"]
+        self.read_lib.read(symbol=self.symbol, columns=COLS).data
+
+    def peakmem_read_with_column_float(self, num_rows):
+        COLS = ["float2"]
+        self.read_lib.read(symbol=self.symbol, columns=COLS).data
+
+    def time_read_with_columns_all_types(self, num_rows):
+        COLS = ["float2","string10","bool", "int64","uint64"]
+        self.read_lib.read(symbol=self.symbol, columns=COLS).data
+
+    def peakmem_read_with_columns_all_types(self, num_rows):
+        COLS = ["float2","string10","bool", "int64","uint64"]
+        self.read_lib.read(symbol=self.symbol, columns=COLS).data
+
+    def time_write_staged(self, num_rows):
+        lib = self.write_lib
+        lib.write(self.symbol, self.to_write_df, staged=True)
+        lib._nvs.compact_incomplete(self.symbol, False, False)
+
+    def peakmem_write_staged(self, num_rows):
+        lib = self.write_lib
+        lib.write(self.symbol, self.to_write_df, staged=True)
+        lib._nvs.compact_incomplete(self.symbol, False, False)
+
+    def time_read_with_date_ranges_last20_percent_rows(self, num_rows):
+        self.read_lib.read(symbol=self.symbol, date_range=self.last_20).data
+
+    def peakmem_read_with_date_ranges_last20_percent_rows(self, num_rows):
+        self.read_lib.read(symbol=self.symbol, date_range=self.last_20).data
+
+
+class AWSWideDataFrameTests(AWSReadWrite):
     """
     This class is for general read write tests on LMDB
 
@@ -89,126 +175,28 @@ class LMDBReadWrite:
 
     timeout = 1200
 
-    SETUP_CLASS = ReadWriteBenchmarkSettings(Storage.LMDB).set_params([2_500_000, 5_000_000])
+    library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="READ_WRITE_WIDE",
+                                     library_options=LibraryOptions(rows_per_segment=1000, columns_per_segment=1000))
 
-    params = SETUP_CLASS.get_parameter_list()
-    param_names = ["num_rows"]
+    param_names = ["num_cols"]
+    # NOTE: If you plan to make changes to parameters, consider that a library with previous definition 
+    #       may already exist. This means that symbols there will be having having different number
+    #       of rows than what you defined in the test. To resolve this problem check with documentation:
+    #           https://github.com/man-group/ArcticDB/wiki/ASV-Benchmarks:-Real-storage-tests
+    params = [15000, 30000]
 
+    number_rows= 3000
+
+    def get_library_manager(self) -> TestLibraryManager:
+        return AWSWideDataFrameTests.library_manager
+    
+    def get_population_policy(self) -> LibraryPopulationPolicy:
+        lpp = LibraryPopulationPolicy(self.get_logger())
+        lpp.set_parameters(AWSWideDataFrameTests.number_rows, AWSWideDataFrameTests.params)
+        return lpp
+    
     def setup_cache(self):
-        '''
-        Always provide implementation of setup_cache in
-        the child class
-
-        And always return storage info which should 
-        be first parameter for setup, tests and teardowns
-        '''
-        lmdb_setup = LMDBReadWrite.SETUP_CLASS.setup_environment() 
-        info = lmdb_setup.get_storage_info()
-        # NOTE: use only logger defined by setup class
-        lmdb_setup.logger().info(f"storage info object: {info}")
-        return info
-
-    def setup(self, storage_info, num_rows):
-        '''
-        This setup method for read and writes can be executed only once
-        No need to be executed before each test. That is why we define 
-        `repeat` as 1
-        '''
-        ## Construct back from arctic url the object
-        self.setup_env: ReadWriteBenchmarkSettings = ReadWriteBenchmarkSettings.from_storage_info(storage_info)
-        sym = self.setup_env.get_symbol_name(num_rows, None)
-        self.to_write_df = self.setup_env.get_library().read(symbol=sym).data
-        self.last_20 = self.setup_env.get_last_x_percent_date_range(num_rows, 20)
-        ##
-        ## Writing into library that has suffix same as process
-        ## will protect ASV processes from writing on one and same symbol
-        ## this way each one is going to have its unique library
-        self.write_library = self.setup_env.get_modifiable_library(os.getpid())
-
-    def time_read(self, storage_info, num_rows):
-        sym = self.setup_env.get_symbol_name(num_rows, None)
-        self.setup_env.get_library().read(symbol=sym)
-
-    def peakmem_read(self, storage_info, num_rows):
-        sym = self.setup_env.get_symbol_name(num_rows, None)
-        self.setup_env.get_library().read(symbol=sym)
-
-    def time_write(self, storage_info, num_rows):
-        sym = self.setup_env.get_symbol_name(num_rows, None)
-        self.write_library.write(symbol=sym, data=self.to_write_df)
-
-    def peakmem_write(self, storage_info, num_rows):
-        sym = self.setup_env.get_symbol_name(num_rows, None)
-        self.write_library.write(symbol=sym, data=self.to_write_df)
-
-    def time_read_with_column_float(self, storage_info, num_rows):
-        COLS = ["float2"]
-        sym = self.setup_env.get_symbol_name(num_rows, None)
-        self.setup_env.get_library().read(symbol=sym, columns=COLS).data
-
-    def peakmem_read_with_column_float(self, storage_info, num_rows):
-        COLS = ["float2"]
-        sym = self.setup_env.get_symbol_name(num_rows, None)
-        self.setup_env.get_library().read(symbol=sym, columns=COLS).data           
-
-    def time_read_with_columns_all_types(self, storage_info, num_rows):
-        COLS = ["float2","string10","bool", "int64","uint64"]
-        sym = self.setup_env.get_symbol_name(num_rows, None)
-        self.setup_env.get_library().read(symbol=sym, columns=COLS).data
-
-    def peakmem_read_with_columns_all_types(self, storage_info, num_rows):
-        COLS = ["float2","string10","bool", "int64","uint64"]
-        sym = self.setup_env.get_symbol_name(num_rows, None)
-        self.setup_env.get_library().read(symbol=sym, columns=COLS).data           
-
-    def time_write_staged(self, storage_info, num_rows):
-        lib = self.write_library
-        lib.write(f"sym", self.to_write_df, staged=True)
-        lib._nvs.compact_incomplete(f"sym", False, False)
-
-    def peakmem_write_staged(self, storage_info, num_rows):
-        lib = self.write_library
-        lib.write(f"sym", self.to_write_df, staged=True)
-        lib._nvs.compact_incomplete(f"sym", False, False)
-
-    def time_read_with_date_ranges_last20_percent_rows(self, storage_info, num_rows):
-        sym = self.setup_env.get_symbol_name(num_rows, None)
-        self.setup_env.get_library().read(symbol=sym, date_range=self.last_20).data
-
-    def peakmem_read_with_date_ranges_last20_percent_rows(self, storage_info, num_rows):
-        sym = self.setup_env.get_symbol_name(num_rows, None)
-        self.setup_env.get_library().read(symbol=sym, date_range=self.last_20).data
-
-class AWSReadWrite(LMDBReadWrite):
-    """
-    This class is for general read write tests on AWS. It inherits its all tests from from
-    the LMDB class but makes sure it does its own setup for the environment 
-    """
-
-    rounds = 1
-    number = 3 # invoke X times the test runs between each setup-teardown 
-    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
-    min_run_count = 1
-    warmup_time = 0
-
-    timeout = 1200
-
-    SETUP_CLASS = ReadWriteBenchmarkSettings(Storage.AMAZON, 
-                                             # Define UNIQUE STRING for persistent libraries names 
-                                             # as well as name of unique storage prefix
-                                             prefix="READ_WRITE").set_params([1_000_000, 2_000_000])
-
-    params = SETUP_CLASS.get_parameter_list()
-    param_names = LMDBReadWrite.param_names
-
-    def setup_cache(self):
-        '''
-        Always provide implementation of setup_cache in
-        the child class
-
-        And always return storage info which should 
-        be first parameter for setup, tests and teardowns
-        '''
-        aws_setup = AWSReadWrite.SETUP_CLASS.setup_environment() 
-        return aws_setup.get_storage_info()
+        # Each class that has specific setup and inherits from another class,
+        # must implement setup_cache
+        super().setup_cache()
 
