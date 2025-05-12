@@ -6,6 +6,7 @@ if sys.version_info >= (3, 9):
 from packaging import version
 import pandas as pd
 import numpy as np
+from arcticdb import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.options import ModifiableEnterpriseLibraryOption
 from arcticdb.toolbox.library_tool import LibraryTool
@@ -313,3 +314,28 @@ def test_storage_mover_clone_old_library(old_venv_and_arctic_uri, lib_name):
 
         # Make sure that we can read the new lib with the old version
         compat.old_libs[dst_lib_name].assert_read(sym, df_2)
+
+
+def test_compat_resample_updated_data(old_venv_and_arctic_uri, lib_name):
+    # There was a bug where data written using update and old versions of ArcticDB produced data keys where the
+    # end_index value was not 1 nanosecond larger than the last index value in the segment (as it should be), but
+    # instead contained the start of the date_range passed into the update call. This violated an assumption in the
+    # ResampleClause that all calls to ResampleClause::process would have at least one bucket to process, as
+    # structure_for_processing assumed that the end_index value in a data key was accurate. This is a nonreg test to
+    # prove this is fixed
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
+        sym = "sym"
+        df_0 = pd.DataFrame({"col": [0, 0]}, index=[pd.Timestamp("2025-01-02 00:02:00"), pd.Timestamp("2025-01-03 00:01:00")])
+        df_1 = pd.DataFrame({"col": [1, 1]}, index=[pd.Timestamp("2025-01-03 00:04:00"), pd.Timestamp("2025-01-04 00:01:00")])
+        df_2 = pd.DataFrame({"col": [2, 2]}, index=[pd.Timestamp("2025-01-05 22:00:00"), pd.Timestamp("2025-01-05 23:00:00")])
+        # Write to library using old version
+        compat.old_lib.write(sym, df_0)
+        compat.old_lib.update(sym, df_1, '(pd.Timestamp("2025-01-03 00:01:00"), None)')
+        compat.old_lib.update(sym, df_2, '(pd.Timestamp("2025-01-04 00:01:00"), None)')
+
+        # Resample using current version
+        with compat.current_version() as curr:
+            q = QueryBuilder().date_range((pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-04 23:59"))).resample("1D").agg({"col": "sum"})
+            curr.lib.read(sym, query_builder=q)
+            # TODO: Check that result is correct

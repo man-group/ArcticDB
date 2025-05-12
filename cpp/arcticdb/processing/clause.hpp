@@ -727,6 +727,7 @@ struct DateRangeClause {
 
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
+    ProcessingConfig processing_config_;
     // Time range to keep, inclusive of start and end
     timestamp start_;
     timestamp end_;
@@ -752,8 +753,7 @@ struct DateRangeClause {
         return clause_info_;
     }
 
-    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {
-    }
+    void set_processing_config(const ProcessingConfig& processing_config);
 
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
         component_manager_ = component_manager;
