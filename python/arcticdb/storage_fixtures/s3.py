@@ -623,6 +623,18 @@ class HostDispatcherApplication(DomainDispatcherApplication):
         path_info: bytes = environ.get("PATH_INFO", "")
 
         with self.lock:
+            # Check for x-amz-checksum-mode header
+            if environ.get('HTTP_X_AMZ_CHECKSUM_MODE') == 'enabled':
+                response_body = (
+                    b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                    b'<Error><Code>MissingContentLength</Code>'
+                    b'<Message>You must provide the Content-Length HTTP header.</Message></Error>'
+                )
+                start_response(
+                    "411 Length Required", 
+                    [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
+                )
+                return [response_body]
             # Mock ec2 imds responses for testing
             if path_info in (
                 "/latest/dynamic/instance-identity/document",

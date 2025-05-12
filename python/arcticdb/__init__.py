@@ -1,5 +1,7 @@
-import arcticdb_ext as _ext
+import logging as _logging
 import os as _os
+
+import arcticdb_ext as _ext
 import sys as _sys
 
 from arcticdb.arctic import Arctic
