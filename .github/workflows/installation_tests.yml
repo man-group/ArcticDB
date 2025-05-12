@@ -30,7 +30,6 @@ on:
         default: '3.13'
         type: choice
         options:
-          - "all"
           - "3.7"
           - "3.8"
           - "3.9"
@@ -51,6 +50,14 @@ on:
           - "5.1.2"
           - "4.5.1"
           - "1.6.2"
+      use_conda:
+        description: 'Use conda (default PyPi will be used)'
+        required: false
+        default: 'no'
+        type: choice
+        options:
+          - "no"
+          - "yes"
       run_on_lmdb:
         description: 'Execute tests on LMDB'
         required: true
@@ -72,7 +79,7 @@ on:
 jobs:
 
   installation_test:
-    runs-on: ${{ inputs.os != 'all' && inputs.os || matrix.os }}
+    runs-on: ${{ inputs.os || matrix.os }}
     strategy:
       matrix:
         # This matrix strategy will run limited set of combinations
@@ -108,7 +115,7 @@ jobs:
       conda_file: "environment_unix.yml"
       arcticdb_version: ${{ inputs.arcticdb_version || '1.6.2' }}
       lmdb: ${{ inputs.run_on_lmdb || '1' }}
-      real_s3: ${{ inputs.run_on_real_s3 || '1' }}
+      real_s3: ${{ inputs.run_on_real_s3 || '0' }}
 
     steps:
 
@@ -157,13 +164,17 @@ jobs:
       with:
         python-version: ${{ inputs.python || matrix.python}}
 
-    - name: (pypi) Install arcticdb from requirements files 
-      if: ${{ (env.SKIP_JOB != 'true') && (!contains(matrix.use_conda, 'yes'))}}
+    - name: Set environment variables 
+      if: ${{ env.SKIP_JOB != 'true' }}
+      shell: bash -l {0}      
       run: |
-        pip install -r "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.txt"
+        echo "ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=0" >> $GITHUB_ENV
+        echo "ARCTICDB_STORAGE_LMDB=${{ env.lmdb }}" >> $GITHUB_ENV
+        echo "USE_CONDA=${{ matrix.use_conda ||  }}" >> $GITHUB_ENV
+  
 
     - name: (pypi) Install other prerequisites 
-      if: ${{ (env.SKIP_JOB != 'true') && (!contains(matrix.use_conda, 'yes'))}}
+      if: ${{ (env.SKIP_JOB != 'true') && (!contains(env.use_conda, 'yes'))}}
       shell: bash -l {0}
       run: |
         python -m pip install --upgrade pip
@@ -176,7 +187,7 @@ jobs:
       # Install conda environment
     - name: (conda) Install arcticdb from conda-forge
       uses: mamba-org/setup-micromamba@v2.0.0
-      if: ${{ (env.SKIP_JOB != 'true') && (contains(matrix.use_conda, 'yes'))}}
+      if: ${{ (env.SKIP_JOB != 'true') && (contains(env.use_conda, 'yes'))}}
       with:
         environment-file: "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.yml" 
         environment-name: arcticdb
@@ -186,7 +197,7 @@ jobs:
         post-cleanup: 'all'
 
     - name: (conda) Install other dependencies ${{ env.conda_file }}
-      if: ${{ (env.SKIP_JOB != 'true') && (contains(matrix.use_conda, 'yes'))}}
+      if: ${{ (env.SKIP_JOB != 'true') && (contains(env.use_conda, 'yes'))}}
       shell: bash -l {0}
       run: |
           micromamba activate arcticdb

@@ -15,9 +15,9 @@ import tempfile
 import arcticdb
 from arcticdb.arctic import Arctic
 from datetime import datetime
+from packaging import version
 
-
-CONDITION_GCP_AVAILABLE = arcticdb.__version__ >= "5.3.0"
+CONDITION_GCP_AVAILABLE = version.Version(arcticdb.__version__) >= version.Version("5.3.0")
 
 
 __temp_paths = []
