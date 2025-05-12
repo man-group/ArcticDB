@@ -1,94 +1,129 @@
-"""
-Copyright 2025 Man Group Operations Limited
-
-Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
-
-As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
-"""
-
+import copy
 from abc import ABC, abstractmethod
+from datetime import timedelta
 from enum import Enum
+import inspect
 import logging
+import multiprocessing
 import os
+import socket
 import tempfile
 import time
 import re
 import pandas as pd
 import numpy as np
-from typing import List, Union 
+from typing import Any, Dict, List, Union
 
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
 from arcticdb.storage_fixtures.s3 import BaseS3StorageFixtureFactory, real_s3_from_environment_variables
-from arcticdb.util.utils import DFGenerator, ListGenerators 
+from arcticdb.util.utils import DFGenerator, ListGenerators, TimestampNumber
 from arcticdb.version_store.library import Library
 
-#ASV captures console output thus we create console handler
-logLevel = logging.INFO
-logger = logging.getLogger(__name__)
-logger.setLevel(logLevel)
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logLevel)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
 
 ## Amazon s3 storage bucket dedicated for ASV performance tests
 AWS_S3_DEFAULT_BUCKET = 'arcticdb-asv-real-storage'
-
-## The tests will use shared/persistent storage with 3 different prefixes, creating 3 important STORAGE SPACES:
-## First - (PERSISTENT/PERMANENT STORAGE SPACE) This prefix is for production code - the libraries written there will 
-##    be SHARED across environments and product versions. Therefore there you place mainly READ ONLY libraries.
-##    Benefits:
-##       - created only once - no need to recreate them and waste time (this way we have time that is saved)
-##       - all read operations will be able ok to persist once their libraries
-##       - there is always a procedure that can recreate the store if needed
-##       - implicitly since those stores are generated ONCE we get coverage for risks of data not being 
-##         able to be read in future versions
-##       - as there should be always check data method we always assure things are there to recreate the storage
-##
-##    NOTE: What you should avoid is any modifications on his storage type
-##
-##    OPPORTUNITY: AGING TESTS - this is one class of tests that are now possible with shared store. The tests use
-##       the permanent store to append data each time they are executed, to add new symbols also. This gives 
-##       opportunity to have new writes, new appends in actual condition over time. Those types of tests will not 
-##       be flat line on graphs but will show how well or unwell we age on SPECIFIC environment - storage, because 
-##       the tests are always executed on same environment
-PERSISTENT_LIBS_PREFIX = "PERMANENT_LIBRARIES" 
+GCP_S3_DEFAULT_BUCKET = 'arcticdb-asv-real-storage'
 
 
-## Second - (MODIFIABLE STORAGE SPACE) When a test requires to write something to measure performance it needs
-##    a storage space different from the main permanent space. This is the modifyable space. There each test will
-##    need own library to run write and any other library modification tests.
-## 
-##    IMPORTANT: your test MIGHT run in several processes competing (or writing) for same library! As arcticdb has
-##          no locking or any other mechanism to prevent that you might end up with completely mixed results or
-##          or broken lib (which might go unnoticed also). Therefore you MUST:
-##            - create writable libraries for each process!
-##            - the test must reuse only the library of its own process!
-MODIFIABLE_LIBS_PREFIX = 'MODIFIABLE_LIBRARIES' 
+class GitHubSanitizingHandler(logging.StreamHandler):
+    """
+    The handler sanitizes messages only when execution is in GitHub
+    """
+
+    def emit(self, record: logging.LogRecord):
+        # Sanitize the message here
+        record.msg = self.sanitize_message(record.msg)
+        super().emit(record)
+
+    @staticmethod
+    def sanitize_message(message: str) -> str:
+        if (os.getenv("GITHUB_ACTIONS") == "true") and isinstance(message, str):
+            # Use regex to find and replace sensitive access keys
+            sanitized_message = re.sub(r'(secret=)[^\s&]+', r'\1***', message)
+            sanitized_message = re.sub(r'(access=)[^\s&]+', r'\1***', sanitized_message)
+            return sanitized_message
+        return message
 
 
-## Third - (MODIFIABLE STORAGE SPACE) How to test your test before going into production? How to experiment with 
-##    different values while debugging or researching safely without polluting or hurting the permanent libraries?
-##    this storage space resolves all such problems. A setup environment class in test mode will always write
-##    data to this storage space instead on permanent storage space. All that will be needed is to set 
-##    this class in test mode
-TEST_LIBS_PREFIX = 'TESTS_LIBRARIES' 
+loggers:Dict[str, logging.Logger] = {}
 
-class SetupConfig:
+
+def get_console_logger(bencmhark_cls: Union[str, Any] = None):
+    """
+    Creates logger instance with associated console handler.
+    The logger name can be either passed as string or class,
+    or if not automatically will assume the caller module name
+    """
+    logLevel = logging.INFO
+    if bencmhark_cls:
+        if isinstance(bencmhark_cls, str):
+            value = bencmhark_cls
+        else:
+            value = type(bencmhark_cls).__name__
+        name = value
+    else:
+        frame = inspect.stack()[1]
+        module = inspect.getmodule(frame[0])
+        name = module.__name__
+
+    logger = loggers.get(name, None)
+    if logger :
+        return logger
+    logger = logging.getLogger(name)    
+    logger.setLevel(logLevel)
+    console_handler = GitHubSanitizingHandler()
+    console_handler.setLevel(logLevel)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    loggers[name] = logger
+    return logger
+
+
+class Storage(Enum):
+    AMAZON = 1
+    LMDB = 2
+    GOOGLE = 3
+
+
+class StorageSpace(Enum):
+    """
+    Defines the type of storage space.
+    Will be used as prefixes to separate shared storage 
+
+    In the bucket this class defined through prefixes 2 shared spaces:
+     - persistent
+     - test
+    
+    then for each client machine there will be separate space for temporary
+    modifiable libraries, and the prefix will be machine id (see how it is produced below)
+    """
+    PERSISTENT = "PERMANENT_LIBRARIES"
+    MODIFIABLE = "MODIFIABLE_LIBRARIES"
+    TEST = "TESTS_LIBRARIES"
+
+
+class LibraryType(Enum):
+    # READ_ONLY or READ_WRITE
+    PERSISTENT = "PERMANENT"
+    MODIFIABLE = "MODIFIABLE"
+
+
+class StorageSetup:
     '''
     Defined special one time setup for real storages.
     Place here what is needed for proper initialization
     of each storage
+
+    Abstracts storage space allocation from how user access it
     '''
     _instance = None
     _aws_default_factory: BaseS3StorageFixtureFactory = None
-    _fixture_cache = {}
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
-            cls._instance = super(SetupConfig, cls).__new__(cls, *args, **kwargs)
+            cls._instance = super(StorageSetup, cls).__new__(cls, *args, **kwargs)
             cls._instance.value = "Initialized"
 
             ## AWS S3 variable setup
@@ -98,492 +133,441 @@ class SetupConfig:
             cls._aws_default_factory.default_prefix = None
             cls._aws_default_factory.default_bucket = AWS_S3_DEFAULT_BUCKET
             cls._aws_default_factory.clean_bucket_on_fixture_exit = False
+
+            # GCP initialization (quick&dirty)
+            cls._gcp_secret = os.getenv("ARCTICDB_REAL_GCP_SECRET_KEY")
+            cls._gcp_access = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
+            cls._gcp_bucket = GCP_S3_DEFAULT_BUCKET
    
-    def get_aws_enforced_prefix():
+    @classmethod
+    def get_machine_id(cls):
         """
-        Defined for test executors machines or individually
+        Returns machine id, or id specified through environments variable (for github)
         """
-        return os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX", None)
+        return os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX", socket.gethostname())
 
     @classmethod
-    def get_aws_s3_arctic_uri(cls, prefix: str = MODIFIABLE_LIBS_PREFIX, confirm_persistent_storage_need: bool = False) -> str:
-        """
-        Persistent libraries should be created in `prefix` None!
-        Temporary should be created in prexies other than None
-        """
-        assert cls._aws_default_factory, "Environment variables not initialized (ARCTICDB_REAL_S3_ACCESS_KEY,ARCTICDB_REAL_S3_SECRET_KEY)"
-        assert (prefix is not None) and (prefix.strip() != ""), "None or empty string prefix is not supported!"
-        if prefix == PERSISTENT_LIBS_PREFIX:
-            assert confirm_persistent_storage_need, f"Use of persistent store not confirmed!"
-        cls._aws_default_factory.default_prefix = prefix
-        return cls._aws_default_factory.create_fixture().arctic_uri
-
-
-class Storage(Enum):
-    AMAZON = 1
-    LMDB = 2
-
-
-class StorageInfo:    
-
-    def __init__(self, storage: Storage, uris_cache: List[str], library_options: LibraryOptions, prefix: str) :
-        self.storage: str = storage
-        self.uris_cache: List[str] = uris_cache
-        self.library_options: LibraryOptions = library_options
-        self.prefix: str = prefix
-
-    def __str__(self):
-        value = super().__str__()
-        for key, val in vars(self).items():
-            value = f"{value}\n {key}: {val}"
-        return value
-
-
-class EnvConfigurationBase(ABC):
-    """
-    Defines base class for benchmark scenario setup and teardown
-    You need to create your own class inheriting from this one for each ASV benchmark class.
-    It will be responsible for setting up environment and providing tear down
-
-    Override in child class:
-     (A) :func:`setup_all` - to setup required libraries and symbols (on empty storage that non exist/ do no deleted here)
-     (B) :func:`check_ok` - if the test will delete each time previous libraries and start from scratch 
-               then simply return False. Otherwise consider implementing logic that will check if needed
-               config exist on persistent store and if yes setup of configuration will be skipped
-     (C) OPTIONAL! :func:`setup_environment` this function should be used for `setup_cache` method of ASV test.
-               Should you need different behavior skip
-    
-    Use default :func:`setup_environment` for setup (primarily in setup_cache method of ASV class)
-
-    See :class:`GeneralSetupLibraryWithSymbols` for implementation of general logic 
-    See :class:`LMDBReadWrite` and :class:`AWSReadWrite` for test implementation and usage of environment configuration class
-
-    """
-
-    def __init__(self, storage: Storage, prefix: str = None, library_options: LibraryOptions = None, uris_cache: List[str] = None):
-        """
-        Should be initialized with type and arctic url
-        """
-        self.storage = storage
-        if uris_cache :
-            self.ac_cache = {keys: None for keys in uris_cache}
-        else:
-            self.ac_cache = {}
-        self.__storage_test_env_prefix: str = prefix
-        self.__libraries = set()
-        self.__library_options = library_options
-        self.__set_test_mode = False
-        SetupConfig()
-
-    def get_persistent_storage_prefix(self):
-        return PERSISTENT_LIBS_PREFIX # This should be same across environments - git, ec2, local etc
-
-    def get_modifiable_storage_prefix(self):
-        return self._combine_prefix(MODIFIABLE_LIBS_PREFIX)
-
-    def get_test_storage_prefix(self):
-        return self._combine_prefix(TEST_LIBS_PREFIX)
-
-    def _combine_prefix(self, type_prefix: str):
-        """
-        Constructs actual prefix based on enforced via 
-        environment variable + defined in the module type prefixes + defined by tests prefixes
-        all that makes unique combination
-        """
-        result = None
-        if SetupConfig.get_aws_enforced_prefix():
-            result = SetupConfig.get_aws_enforced_prefix()
-        if type_prefix:
-            if result is None:
-                result = type_prefix
-            else:
-                result = f"{result}_{type_prefix}"
-        if self.__storage_test_env_prefix:
-                result = f"{result}_{self.__storage_test_env_prefix}"
-        return result
-
-    def set_test_mode(self):
-        """
-        Makes the setup run in test mode. Will write data instead on the default persistent storage
-        in a separate test persistent storage space. This allows you to do test of production code 
-        and not pollute the default persistent store with unnecessary information and also protect data
-        there from deletion or corruption.
-        Always use test mode for new tests!
-        """
-        self.__set_test_mode=True
-        return self
-    
-    def is_test_mode(self) -> bool:
-        """
-        Checks if setup to work in test mode (in separate test storage space)
-        """
-        return TEST_LIBS_PREFIX in self.get_arctic_client_persistent().get_uri()
-
-    def logger(self) -> logging.Logger:
-        return logger
+    def _create_prefix(cls, storage_space: StorageSpace, add_to_prefix: str ) -> str:
+        def is_valid_string(s: str) -> bool:
+            return bool(s and s.strip())
         
-    @classmethod
-    def from_storage_info(cls, data: StorageInfo):
-        """
-        Constructs the class out of serialized data
-        """
-        return cls(storage=data.storage, uris_cache=data.uris_cache, library_options=data.library_options, prefix=data.prefix)
-    
-    def get_storage_info(self) -> StorageInfo:
-        """
-        Serializes the class information in order to be reconstructed back later
-        """
-        return StorageInfo(storage=self.storage, 
-                           uris_cache=list(self.ac_cache.keys()), library_options=self.__library_options, prefix=self.__storage_test_env_prefix)
-    
-    def _get_arctic_client(self, prefix, confirm_persistent_storage_need: bool = False):
-        """
-        Obtains specified client on specified persistent shared storage prefix,
-        allows creationg of test and modifiable etc clients
-        NOTE: prefix = `None` - the persistent storage where all persistent libraries will be created
-        """
-        if self.storage == Storage.AMAZON:
-            arctic_url = SetupConfig.get_aws_s3_arctic_uri(prefix, confirm_persistent_storage_need)
-        elif self.storage == Storage.LMDB:
-            ## We create fpr each object unique library in temp dir
-            arctic_url = f"lmdb://{tempfile.gettempdir()}/benchmarks_{prefix}" 
-            ## 
-            # Home dir will be shared dir and will not work well with LMDB actually
-            #home_dir = os.path.expanduser("~")
-            #self.ac = Arctic(f"lmdb://{home_dir}/benchmarks")
+        def create_prefix(mandatory_part:str, optional:str) -> str:
+            if is_valid_string(add_to_prefix):
+                return f"{mandatory_part}/{optional if optional is not None else ''}"
+            else:
+                return mandatory_part
+            
+        if storage_space == StorageSpace.MODIFIABLE:
+            return create_prefix(cls.get_machine_id(), add_to_prefix)
         else:
-            raise Exception("Unsupported storage type :", self.storage)
-        ac =  self.ac_cache.get(arctic_url, None)
+            return create_prefix(storage_space.value, add_to_prefix)   
+
+    
+    @classmethod
+    def _check_persistance_access_asked(cls, storage_space: StorageSpace, confirm_persistent_storage_need: bool = False) -> str:
+        assert cls._aws_default_factory, "Environment variables not initialized (ARCTICDB_REAL_S3_ACCESS_KEY,ARCTICDB_REAL_S3_SECRET_KEY)"
+        if storage_space == StorageSpace.PERSISTENT:
+            assert confirm_persistent_storage_need, f"Use of persistent store not confirmed!"
+    
+    @classmethod
+    def get_arctic_uri(cls, storage: Storage, storage_space: StorageSpace, add_to_prefix: str = None, 
+                       confirm_persistent_storage_need: bool = False) -> str:
+        StorageSetup._check_persistance_access_asked(storage_space, confirm_persistent_storage_need)
+        prefix = StorageSetup._create_prefix(storage_space, add_to_prefix)
+        if storage == Storage.AMAZON:
+            cls._aws_default_factory.default_prefix = prefix
+            return cls._aws_default_factory.create_fixture().arctic_uri
+        elif storage == Storage.LMDB:
+            return f"lmdb://{tempfile.gettempdir()}/benchmarks_{prefix}" 
+        elif storage == Storage.GOOGLE:
+            s = cls._gcp_secret
+            a = cls._gcp_access
+            return f"gcpxml://storage.googleapis.com:{cls._gcp_bucket}?access={a}&secret={s}&path_prefix={prefix}"
+        else:
+            raise Exception("Unsupported storage type :", storage)
+
+
+class TestLibraryManager:
+    """
+    This class is a thin wrapper around Arctic class. Its goal is to provide natural user
+    experience while hiding the specifics associated with management of a shared storage
+    space. It does that by separating a common storage in 2 main parts:
+
+     - persistent storage space - where all client have access to each other's libraries.
+       That is the space of shared libraries among all instances. We could refer it as production
+       space for libraries. As such it needs to be protected only for code that is production ready.
+       Therefore a persistent client can be set to be in test mode. In this mode the development
+       and troubleshooting process should happen. In that mode, the client will work not in
+       the production shared space but in test shared space which is having same characteristics with 
+       production one
+
+    - modifiable (or client private space). This space is a separate space from persistent one. In this 
+      space each physical machine has private subspace which isolates its work from others. Thus all work 
+      there is seen only by this machine. That allows easy management of this space - the machine can 
+      easily manage its data - creation and deletion of libraries. Still this machine space is shared among
+      different tests on the same machine. In order not to conflict with each other each test/benchmark can
+      and in fact should create its unique label. This label will be part of the prefix of the library.
+      Thus each test in fact should have access to only its libs. One test can spawn multiple process.
+      Thus each process needs isolation from other processes - create/access/delete its own libraries. 
+      Therefore the library prefix carries also process id. 
+
+    As this structure is build on one shared storage space there needs to be enough protection - such that
+    no client have access to other space unintentionally. Therefore this wrapper object provides
+    all basic operations for libraries. Some of arctic methods are hidden or not implemented intentionally 
+    as their would be no practical need of them yet. Once such need arises they would need to be implemented
+    providing same user experience and philosophy
+
+    The class provides limited set of functions which are more than enough to make any 
+    end2end tests with ASV or other frameworks. The only thing it discourages is use of
+    Arctic directly. That is with single goal to protect shared storage from unintentional damage.
+    All work could and should be done through `get_library` function. There are methods for setting 
+    library options, and additional `has_library` method that would eliminate the need of direct 
+    use of Arctic object.
+
+    As there could be very few cases that could require use of Arctic object directly, such protected 
+    methods do exist, but their use makes any test potentially either unsafe or one that should be 
+    handled with extra care
+
+    The class provides additional 2 class methods for removing data from storage, which should be handled 
+    with care. As they create always new connection any concurrent modifications with them and running 
+    tests would most probably end with errors. 
+
+    """
+
+    def __init__(self, storage: Storage, name_benchmark: str, library_options: LibraryOptions = None) :
+        """
+        Populate `name_benchamrk` to get separate modifiable space for each benchmark
+        """
+        self.storage: Storage = storage
+        self.library_options: LibraryOptions = library_options
+        self.name_benchmark: str = name_benchmark
+        self._test_mode = False
+        self._ac_cache = {}
+        StorageSetup()
+
+    def log_info(self):
+        logger = get_console_logger()
+        if len(self._ac_cache) < 2:
+            self._get_arctic_client_persistent() # Forces uri generation
+            self._get_arctic_client_modifiable() # Forces uri generation
+        mes = f"{self} arcticdb URI information for this test: \n"
+        for key in self._ac_cache.keys():
+            mes += f"arcticdb URI: {key}"
+        logger.info(mes) 
+
+    # Currently we're using the same arctic client for both persistant and modifiable libraries.
+    # We might decide that we want different arctic clients (e.g. different buckets) but probably not needed for now.
+    def _get_arctic_client_persistent(self) -> Arctic:
+        storage_space = StorageSpace.PERSISTENT
+        if self._test_mode == True:
+            storage_space = StorageSpace.TEST
+        return self.__get_arctic_client_internal(storage_space, 
+                                                  confirm_persistent_storage_need = True)
+
+    def _get_arctic_client_modifiable(self) -> Arctic:
+        return self.__get_arctic_client_internal(StorageSpace.MODIFIABLE, 
+                                                  confirm_persistent_storage_need = False)
+
+    def __get_arctic_client_internal(self, storage_space: StorageSpace, 
+                                     confirm_persistent_storage_need: bool = False) -> Arctic:
+        arctic_url = StorageSetup.get_arctic_uri(self.storage, storage_space, None, confirm_persistent_storage_need)
+        ac =  self._ac_cache.get(arctic_url, None)
         if ac is None:
             ac = Arctic(arctic_url)    
-        self.ac_cache[arctic_url] = ac
-        return ac
+        self._ac_cache[arctic_url] = ac
+        return ac    
     
-    def get_arctic_client_persistent(self) -> Arctic:
-        if self.__set_test_mode:
-            return self._get_arctic_client(self.get_test_storage_prefix())
-        return self._get_arctic_client(self.get_persistent_storage_prefix(), confirm_persistent_storage_need=True)
-    
-    def get_arctic_client_modifiable(self) -> Arctic:
-        if self.__storage_test_env_prefix is None:
-            return self._get_arctic_client(self.get_modifiable_storage_prefix())
+    def set_test_mode(self) -> 'TestLibraryManager':
+        self._test_mode = True
+        return self
+
+    def get_library_name(self, library_type: LibraryType, lib_name_suffix: str = ""):
+        if library_type == LibraryType.PERSISTENT:
+            return f"{library_type.value}_{self.name_benchmark}_{lib_name_suffix}"
+        if library_type == LibraryType.MODIFIABLE:
+            # We want the modifiable libraries to be unique per process/ benchmark class. We embed this deep in the name
+            return f"{library_type.value}_{self.name_benchmark}_{os.getpid()}_{lib_name_suffix}"
+
+    def get_library(self, library_type : LibraryType, lib_name_suffix : str = "") -> Library:
+        lib_name = self.get_library_name(library_type, lib_name_suffix)
+        if library_type == LibraryType.PERSISTENT:
+           # TODO comment to make the persistent library read only.
+           # It is possible to expose this from the C++ layer and it would make working with them much safer. 
+           # (We would only need to add an overwrite flag for populate_library_if_missing)
+           return self._get_arctic_client_persistent().get_library(lib_name, create_if_missing=True)
+        elif library_type == LibraryType.MODIFIABLE:
+           return self._get_arctic_client_modifiable().get_library(lib_name, create_if_missing=True, 
+                                                        library_options= self.library_options)
         else:
-            return self._get_arctic_client(self.get_modifiable_storage_prefix())
-    
-    def remove_all_modifiable_libraries(self, confirm=False):
-        """
-        Removes all libraries created on modifiable storage space
-        """
-        assert confirm, "Deletion of all libraries must be confirmed"
-        ac = self.get_arctic_client_modifiable()
-        libs = self.get_arctic_client_modifiable().list_libraries()
-        for lib in libs:
-            ac.delete_library(lib)
-    
-    def get_symbol_name_template(self, sym_suffix: Union[str, int]) -> List[str]:
-        """
-        Defines how the symbol name would be constructed
-        """
-        return f"sym_{sym_suffix}"
+            raise Exception(f"Unsupported library type: {library_type}")
 
-    def get_library_names(self, lib_suffix: Union[str, int] = None) -> List[str]:
-        """
-        Redefine the way the names of libraries are constructed.
-        `lib_suffix` can be None indicating no lib suffix added,
-        or number - for instance number of symbols in library,
-        or a composite string
-        """
-        if self.__storage_test_env_prefix is None:
-            lib_mid_part_name = self.__class__.__name__
-        else: 
-            lib_mid_part_name = self.__storage_test_env_prefix
-        lib_names = [f"PERM_{lib_mid_part_name}_{lib_suffix}", 
-                     f"MOD_{lib_mid_part_name}_{lib_suffix}"]        
-        return lib_names
-    
-    def _get_lib(self, ac: Arctic, lib_name: str) -> Library:
-        lib_opts = self.__library_options
-        self.__libraries.add(lib_name)
-        return ac.get_library(lib_name, create_if_missing=True, 
-                                library_options=lib_opts)
-    
-    def get_library(self, library_suffix: Union[str, int] = None) -> Library:
-        """
-        Returns one time setup library (permanent)
-        """
-        return self._get_lib(self.get_arctic_client_persistent(), 
-                             self.get_library_names(library_suffix)[0])
-    
-    def get_modifiable_library(self, library_suffix: Union[str, int] = None) -> Library:
-        """
-        Returns library to read write and delete after done.
-        """
-        return self._get_lib(self.get_arctic_client_modifiable(), 
-                             self.get_library_names(library_suffix)[1])
+    def has_library(self, library_type : LibraryType, lib_name_suffix : str = "") -> Library:
+        lib_name = self.get_library_name(library_type, lib_name_suffix)
+        if library_type == LibraryType.PERSISTENT:
+           return self._get_arctic_client_persistent().has_library(lib_name)
+        elif library_type == LibraryType.MODIFIABLE:
+           return self._get_arctic_client_modifiable().has_library(lib_name)        
+        else:
+            raise Exception(f"Unsupported library type: {library_type}")
 
-    def delete_modifiable_library(self, library_suffix: Union[str, int] = None):
+    def clear_all_modifiable_libs_from_this_process(self):
         """
-        Use this method to delete previously created library on modifiable storage 
-        space
-        NOTE: will assert if library is not delete
+        This method is the one to use primarily in `teardown` methods
         """
-        ac = self.get_arctic_client_modifiable()
-        name = self.get_library_names(library_suffix)[1]
-        logger.info(f"Deleting modifiable library {name}")
-        ac.delete_library(self.get_library_names(library_suffix)[1])
-        assert name not in ac.list_libraries(), f"Library successfully deleted {name}"
+        self.__clear_all_libs(f"{LibraryType.MODIFIABLE.value}_{self.name_benchmark}_{os.getpid()}_")
 
-    def set_params(self, params):
+    def clear_all_benchmark_libs(self):
         """
-        Sets parameters for environment generator class. 
-        The expectations for parameters is same as ASV class.
-        To be used in concrete classes
+        Clears only libraries for this benchmark.
+        Not advised to use in `teardown`, but very wise for `setup_cache`
         """
-        self._params = params
-        return self
+        self.__clear_all_libs()
 
-    def get_parameter_list(self):
-        """
-        Returns the parameter list. Use it to set the `params` variable of ASV test
-        """
-        return self._params
+    def __clear_all_libs(self, name_starts_with: str = None):
+        ac = self._get_arctic_client_modifiable()
+        libs_to_delete = set(ac.list_libraries())
+        if name_starts_with is not None:
+            libs_to_delete = [lib_name for lib_name in libs_to_delete 
+                      if lib_name.startswith(name_starts_with)]
+        for lib_name in libs_to_delete:
+            ac.delete_library(lib_name)
 
-    def is_multi_params_list(self):
-        """
-        Checks if the parameters are list of 2+ parameter lists
-        """
-        return all(isinstance(i, list) for i in self._params)
-
-    @abstractmethod
-    def check_ok() -> bool:
-        """
-        Define mechanism to check if permanent setup is available
-        to skip the inital setup
-        """
-        pass
-    
-    @abstractmethod
-    def setup_all(self) -> 'EnvConfigurationBase':
-        '''
-        Provide implementation that will setup needed data assuming storage does not contain 
-        any previous data for this scenario
-        '''
-        pass
-
-    def setup_environment(self, library_sufixes_list: List[Union[str | int]] = None) -> 'EnvConfigurationBase':
-        """
-        Responsible for setting up environment.
-        Will first delete any pre-existing modifiable libraries
-        Then will check if persistent environment is there
-        If absent will create it, deleting firs any libraries that might exist initially        
-        if test is creating multiple libraries, provide 
-        `library_sufixes_list` to make sure all previous libs are cleaned
-
-        Use at :func:`setup_cache` method of ASV test classes
-        """
-        indexes = [None] # by default there will be one lib
-        if library_sufixes_list:
-            indexes = library_sufixes_list
-        for i in indexes:
-            self.delete_modifiable_library(i)
-        if not self.check_ok():
-            ac = self.get_arctic_client_persistent()
-            ## Delete all PERSISTENT libraries before setting up them
-            for i in indexes:
-                lib = self.get_library_names(i)[0]
-                logger.info(f"REMOVING LIBRARY: {lib}")
-                ac.delete_library(lib)
-            self.setup_all()
-        return self
-    
     @classmethod
-    def get_parameter_from_string(cls, string: str, param_indx: int, param_type: Union[int, str] = int) -> Union[int, str]:
+    def remove_all_modifiable_libs_for_machine(cls, storage_type: Storage):
         """
-        A way to handle composite parameter list.
+        Eventually will be used for wiping out scripts after all tests on machine
 
-        Instead of having multiple sets of parameter we keep the parameter to just one list
-        of string with encoded several values for 2 or more parameters delimited with "__"
-
-        For example following value contains 3 parameters: "w180__h200__value1234"
-
-        We can treat first parameter either as string or as integer with description:
-        - get_parameter_from_string('w180__h200__value1234', 0, str) will return 'w180' string
-        - get_parameter_from_string('w180__h200__value1234', 0, int) will extract int and return '180' as int value
-
+        MOTE: Potentially dangerous operation, invoke only when no other
+              test processes run on the shared storage
         """
-        params = string.split("__")
-        value = params[param_indx]
-        if param_type is str:
-            pass
-        elif param_type is int:
-            match = re.search(r'\d+', value)
-            if match:
-                value = int(match.group())
+        lm = TestLibraryManager(storage_type, "not needed")
+        ac = lm._get_arctic_client_modifiable()
+        cls.__remove_all_test_libs(ac, StorageSetup.get_machine_id())
+            
+    @classmethod
+    def remove_all_test_libs(cls, storage_type: Storage):
+        """
+        A scheduled job for wiping out test storage space over weekends is good candidate 
+
+        MOTE: Potentially dangerous operation, invoke only when no other
+              test processes run on the shared storage
+        """
+        # The following call makes persistent library test library
+        lm = TestLibraryManager(storage_type, "not needed").set_test_mode() 
+        ac = lm._get_arctic_client_persistent()
+        cls.__remove_all_test_libs(ac, StorageSpace.TEST.value)
+
+    @classmethod
+    def __remove_all_test_libs(cls, ac: Arctic, uri_str_to_confirm: str):
+        assert uri_str_to_confirm in ac.get_uri(), f"Expected string [{uri_str_to_confirm}] not found in uri : {ac.get_uri()}"
+        lib_names = set(ac.list_libraries())
+        for to_delete in lib_names:
+            ac.delete_library(to_delete)  
+            get_console_logger().info(f"Delete library [{to_delete}] from storage space having [{uri_str_to_confirm}]")          
+        assert len(ac.list_libraries()) == 0, f"All libs for storage space [{uri_str_to_confirm}] deleted"        
+
+    def remove_all_persistent_libs_for_this_test(self):
+        """
+        This will remove all persistent libraries for this test from the persistent storage
+        Therefore use wisely only when needed (like change of parameters for tests)
+        """
+        name_prefix = f"{LibraryType.PERSISTENT.value}_{self.name_benchmark}"
+        ac = self._get_arctic_client_persistent()
+        lib_names = set(ac.list_libraries())
+        for to_delete in lib_names:
+            if to_delete.startswith(name_prefix):
+                ac.delete_library(to_delete)  
+                get_console_logger().info(f"Delete library [{to_delete}]")          
+
+
+class DataFrameGenerator(ABC):
+
+    def __init__(self):
+        super().__init__()
+        self.initial_timestamp = pd.Timestamp("1-1-2000")
+        self.freq = 's'
+
+    @abstractmethod
+    def get_dataframe(self, number_rows: int, number_columns:int, **kwargs) -> pd.DataFrame:
+        pass
+
+
+class VariableSizeDataframe(DataFrameGenerator):
+
+    def __init__(self):
+        super().__init__()
+        self.wide_dataframe_generation_threshold = 400
+        
+    def get_dataframe(self, number_rows:int, number_columns:int, 
+                            start_timestamp: pd.Timestamp = None,
+                            freq: Union[str , timedelta , pd.Timedelta , pd.DateOffset] = None, seed = 888):
+        start_timestamp = self.initial_timestamp if start_timestamp is None else start_timestamp
+        freq = self.freq if freq is None else freq
+        if number_columns < self.wide_dataframe_generation_threshold:
+            df = (DFGenerator.generate_normal_dataframe(num_rows=number_rows, num_cols=number_columns,
+                                                      freq = freq, start_time=start_timestamp, seed=seed))
         else:
-            raise Exception(f"Unsupported type {param_type}")
-        return value
-
-
-class GeneralSetupLibraryWithSymbols(EnvConfigurationBase):
-    """
-    This class provides abstract logic for generation of a set of symbols
-    that have certain number of rows and optionally columns.
-
-    You have to use :func:`set_params` to define the exact profile of the symbols
-    to be created. The expectations are same as with ASV `params`: 
-         - a) a list of 2 lists = desired rows sizes (first) and column sizes (second)
-         - b) a list of 1 list - desired rows sizes (default column size to be used)
-
-    While in default implementation this class will generate list of random column types,
-    you can override that behavior in parent classes for specific needs    
-
-    """
-
-    def set_params(self, params) -> 'GeneralSetupLibraryWithSymbols':
-        super().set_params(params)
-        return self
-
-    def generate_dataframe(self, rows: int, cols: int) -> pd.DataFrame:
-        """
-        Dataframe generator that will be used for wide dataframe generation
-        """
-        if cols is None:
-            cols = 1
-        st = time.time()
-        self.logger().info("Dataframe generation started.")
-        df: pd.DataFrame = DFGenerator.generate_random_dataframe(rows=rows, cols=cols)
-        self.logger().info(f"Dataframe rows {rows} cols {cols} generated for {time.time() - st} sec")
+            # The wider the dataframe the more time it needs to generate per row
+            # This algo is much better for speed with wide dataframes
+            df = (DFGenerator.generate_wide_dataframe(num_rows=number_rows, num_cols=number_columns,
+                                                      num_string_cols=200, 
+                                                      freq = freq, start_time=start_timestamp, seed=seed))
         return df
-    
-    def get_symbol_name(self, rows, cols) -> str:
-        '''
-        Maps rows and cols to proper symbol name
-        This method should be used in ASV tests obtain symbol name based on parameters
-        '''
-        sym_suffix = ""
-        if cols is None:
-            sym_suffix = f"rows{rows}"
-        else:
-            sym_suffix = f"rows{rows}_cols{cols}"
-        return self.get_symbol_name_template(sym_suffix)
-    
-    def _get_symbol_bounds(self):
-        """
-        Extracts rows and cols from the parameter structure
-        """
-
-        assert len(self._params) > 0, "No parameters defined"
-
-        if (self.is_multi_params_list()):
-            assert len(self._params) <= 2, "Supports 2 parameters maximum - rows and cols lists"
-            list_rows = self._params[0]
-            if len(self._params) == 2:
-                list_cols = self._params[1]
-            return (list_rows, list_cols)
-        else:
-            return (self._params, [ None ])
-
-    def setup_all(self) -> 'GeneralSetupLibraryWithSymbols':
-        """
-        Sets up in default library a number of symbols which is combination of parameters
-        for number of rows and columns
-        For each of symbols it will generate dataframe based on `generate_dataframe` function
-        """
-        (list_rows, list_cols) = self._get_symbol_bounds()
-        start = time.time()
-        lib = self.get_library()
-        self.logger().info(f"Library: {lib}")
-        for row in list_rows:
-            for col in list_cols:
-                st = time.time()
-                df = self.generate_dataframe(row, col)
-                symbol = self.get_symbol_name(row, col)
-                lib.write(symbol, df)
-                self.logger().info(f"Dataframe stored at {symbol} for {time.time() - st} sec")
-        self.logger().info(f"TOTAL TIME (setup of one library with specified rows and column symbols): {time.time() - start} sec")
-        return self
-    
-    def check_ok(self):
-        """
-        Checks if library contains all needed data to run tests.
-        if OK, setting things up can be skipped
-        """
-        (list_rows, list_cols) = self._get_symbol_bounds()
-        lib = self.get_library()
-        symbols = lib.list_symbols()
-        self.logger().info(f"Symbols {lib.list_symbols()}")
-        for rows in list_rows:
-            for cols in list_cols:
-                symbol = self.get_symbol_name(rows, cols)
-                self.logger().info(f"Check symbol {symbol}")
-                if not symbol in symbols:
-                    return False
-        return True
 
 
-class GeneralSetupSymbolsVersionsSnapshots(EnvConfigurationBase):
+class LibraryPopulationPolicy:
     """
-    Will create several libraries each containing specified number of symbols.
-    Each symbol will have by default 1 version (use `set_max_number_versions` and
-    `set_mean_number_versions_per_sym` to override that) and will have no metadata
-    (use `set_with_metadata_for_each_version` to override that).
+    By default library population policy uses a list of number of rows per symbol, where numbers would be unique. 
+    It will generate same number of symbols as the length of the list and each symbol will have the same number of 
+    rows as the index of the number.
 
-    By default no snapshot will be generated for each version. This can be overridden with
-    `set_with_snapshot_for_each_version`
+    It is possible to also define a custom DataFrameGenerator specific for test needs. Default one is generating dataframe 
+    with random data and you can specify any number of columns and rows
+
+    It is possible to also configure through methods snapshots and versions to be created and metadata to be set to them or not
+
+    Example A:
+        LibraryPopulationPolicy(some_logger).set_parameters([10,20], 5)
+        This configures generation of 2 symbols with 10 and 20 rows. The number of rows can later be used to get symbol name.
+        Note that this defined that all symbols will have fixed number of columns = 5
+
+    Example B:
+        LibraryPopulationPolicy(some_logger).set_parameters(3, [10,20]) - 
+        This configures generation of 2 symbols with 10 and 20 columns. The number columns can later be used to get symbol name.
+        Note that this defined that all symbols will have fixed number of rows = 3
+
+    Example C: Populating library with many identical symbols
+        LibraryPopulationPolicy(some_logger).use_auto_increment_index().set_parameters([10] * 10, 30) - 
+        This configures generation of 10 symbols with 10 rows each. Also instructs that the symbol names will be constructed 
+        with auto incrementing index - you can access each symbol using its index 0-9
     """
 
-    def __init__(self, storage, prefix = None, library_options = None, uris_cache = None):
-        super().__init__(storage, prefix, library_options, uris_cache)
-        self.with_metadata = False
-        self.versions_max = 1
-        self.mean = 1
-        self.with_snapshot = False
-        self.last_snapshot = None # Will hold the name of last snapshot created
-        self.first_snapshot = None # Will hold the name of first snapshot created
-        self.first_snapshot_taken = False
+    """
+        TODO: if this class needs to be inherited or changed significantly consider this task:9098760503
+    """
+    
 
-    def set_params(self, params) -> 'GeneralSetupSymbolsVersionsSnapshots':
-        super().set_params(params=params)
+    def __init__(self, logger: logging.Logger, df_generator: DataFrameGenerator = VariableSizeDataframe()):
+        self.logger: logging.Logger = logger
+        self.df_generator = df_generator
+        self.number_rows: Union[int, List[int]] = [10]
+        self.number_columns: Union[int, List[int]] = 10
+        self.with_metadata: bool = False
+        self.versions_max: int = 1
+        self.mean: int = 1
+        self.with_snapshot: bool = False
+        self.symbol_fixed_str: str = ""
+        self.index_is_auto_increment: bool = False
+
+    def set_parameters(self, number_rows: Union[int, List[int]], 
+                       number_columns: Union[int, List[int]] = 10) -> 'LibraryPopulationPolicy':
+        """
+        Set one of the parameter to a fixed value (rows or cols).
+        The other parameter should be list of the sizes (rows or cols) of each of the symbols
+        that will be created.
+        The number of symbols will be exactly the same as the length of the given list
+        """
+        assert isinstance(number_rows, list) ^ isinstance(number_columns, list), "Only one of parameters can be list"
+        self.number_rows = number_rows
+        self.number_columns = number_columns
         return self
 
-    def set_mean_number_versions_per_sym(self, mean) -> 'GeneralSetupSymbolsVersionsSnapshots':
+    def set_symbol_fixed_str(self, symbol_fixed_str: str) -> 'LibraryPopulationPolicy':
+        """
+        Whenever you want to use one library and have different policies creating symbols
+        in it specify unique meaningful fixed string that will become part of the name
+        of the generated symbol
+        """
+        self.symbol_fixed_str = symbol_fixed_str
+        return self
+
+    def generate_versions(self, versions_max: int, mean: int) -> 'LibraryPopulationPolicy':
+        """
+        For each symbol maximum `versions_max` version and mean value `mean`
+        """
+        self.versions_max = versions_max
         self.mean = mean
         return self
-
-    def set_max_number_versions(self, versions_max) -> 'GeneralSetupSymbolsVersionsSnapshots':
-        self.versions_max = versions_max
-        return self
-
-    def set_with_metadata_for_each_version(self, with_medatada: bool = True) -> 'GeneralSetupSymbolsVersionsSnapshots':
-        self.with_metadata = with_medatada
+    
+    def generate_snapshots(self) -> 'LibraryPopulationPolicy':
+        """
+        Will create snapshots for each symbol. For each version of a symbol 
+        will be added one snapshot
+        """
+        self.with_snapshot = True
         return self
     
-    def set_with_snapshot_for_each_version(self, with_snapshot: bool = True) -> 'GeneralSetupSymbolsVersionsSnapshots':
-        self.with_snapshot = with_snapshot
+    def generate_metadata(self) -> 'LibraryPopulationPolicy':
+        """
+        All snapshots and symbols will have metadata
+        """
+        self.with_metadata = True
+        return self
+    
+    def use_auto_increment_index(self) -> 'LibraryPopulationPolicy':
+        """
+            During population of symbols will use auto increment index
+            for symbol names instead of using the current value of the 
+            parameters list
+        """
+        self.index_is_auto_increment = True
         return self
 
-    def generate_dataframe(self, num_rows):
-        return DFGenerator.generate_random_dataframe(rows=num_rows, cols=20)
-    
-    def generate_metadata(self):
-        return DFGenerator.generate_random_dataframe(rows=3, cols=10).to_dict()
+    def get_symbol_name(self, index: int, optional_fixed_str: str = None) -> str:
+        """
+        This method is used during population and should be used by readers also
+        Normally the index will be one of:
+         - autoincrement - when many symbols of same size are generated
+         - number of rows (columns) - when parameters is list of row/column symbol sizes
+        """
+        fixed_part = self.symbol_fixed_str if optional_fixed_str is None else optional_fixed_str
+        return f"symbol_{fixed_part}_{index}"
 
-    def get_symbol_name(self, number_symbols: int, number_versions:int, with_metadata:bool, with_snapshot: bool) -> str:
-        '''
-        Maps rows and cols to proper symbol name
-        This method should be used in ASV tests obtain symbol name based on parameters
-        '''
-        if with_metadata:
-            meta = "with-meta"
+    def log(self, message):
+        if self.logger is not None:
+            self.logger.info(message)
+    
+    def populate_library(self, lib: Library):
+
+        def is_number_rows_list():
+            return isinstance(self.number_rows, list)
+
+        assert lib is not None
+        self.log(f"Populating library {lib}")
+        start_time = time.time()
+        df_generator = self.df_generator
+        meta = None if not self.with_metadata else self._generate_metadata()
+        if is_number_rows_list():
+            list_parameter =  self.number_rows
+            fixed_parameter = self.number_columns
         else:
-            meta = "no-meta"
-        if with_snapshot:
-            snap = "with-snap"
-        else:
-            snap = "no-snap"
-        return self.get_symbol_name_template(f"{number_symbols}_vers-{number_versions}_{meta}_{snap}")
-    
-    def get_versions_list(self, number_symbols: int) -> List[np.int64]:
+            list_parameter =  self.number_columns
+            fixed_parameter = self.number_rows
+        versions_list = self._get_versions_list(len(list_parameter))
+        for index, param_value in enumerate(list_parameter):
+            versions = versions_list[index]
+            
+            if self.index_is_auto_increment:
+                symbol = self.get_symbol_name(index)
+            else:
+                symbol = self.get_symbol_name(param_value)
+
+            if is_number_rows_list():
+                df = df_generator.get_dataframe(number_rows=param_value, number_columns=fixed_parameter)
+            else:
+                df = df_generator.get_dataframe(number_rows=fixed_parameter, number_columns=param_value)
+            self.log(f"Dataframe generated [{df.shape}]")
+
+            for ver in range(versions):
+                lib.write(symbol=symbol, data=df, metadata=meta)
+
+                if self.with_snapshot:
+                    snapshot_name = f"snap_{symbol}_{ver}"
+                    lib.snapshot(snapshot_name, metadata=meta)
+                
+        self.log(f"Population completed for: {time.time() - start_time}")
+
+    def _get_versions_list(self, number_symbols: int) -> List[np.int64]:
         if self.versions_max == 1:
             versions_list = [1] * number_symbols
         else:
@@ -594,159 +578,255 @@ class GeneralSetupSymbolsVersionsSnapshots(EnvConfigurationBase):
                 seed=365)
         return versions_list
 
-    def setup_library(self, number_symbols) -> 'GeneralSetupSymbolsVersionsSnapshots':
+    def _generate_metadata(self):
+        return DFGenerator.generate_random_dataframe(rows=3, cols=10).to_dict()                 
+
+
+def populate_library_if_missing(manager: TestLibraryManager, policy: LibraryPopulationPolicy, lib_type: LibraryType, lib_name_suffix: str = ""):
+    assert manager is not None
+    name = manager.get_library_name(lib_type, lib_name_suffix)
+    if not manager.has_library(lib_type, lib_name_suffix):
+        populate_library(manager=manager, policy=policy, lib_type=lib_type, lib_name_suffix=lib_name_suffix)
+    else:
+        policy.log(f"Existing library has been found {name}. Will be reused")      
+
+
+def populate_library(manager: TestLibraryManager, policy: LibraryPopulationPolicy, lib_type: LibraryType, lib_name_suffix: str = ""):
+    assert manager is not None
+    lib = manager.get_library(lib_type, lib_name_suffix)
+    policy.populate_library(lib)
+
+
+class SequentialDataframesGenerator:
+
+    def __init__(self, df_generator: DataFrameGenerator = VariableSizeDataframe()):
+        self.df_generator = df_generator
+
+    def generate_sequential_dataframes(self, 
+                               number_data_frames: int, 
+                               number_rows: int, 
+                               number_columns: int = 10,
+                               start_timestamp: pd.Timestamp = None,
+                               freq: str = 's') -> List[pd.DataFrame]:
         """
-        Sets a library with specified number of symbols with a snapshot and metadata if specified
+        Generates specified number of data frames each having specified number of rows and columns
+        The dataframes are in chronological order one after the other. Date range starts with the specified 
+        initial timestamp setup and frequency
         """
-        lib = self.get_library(number_symbols)
-        df = self.generate_dataframe(10)
-        meta = self.generate_metadata()
-        self.logger().info(f"METADATA: {meta}")
-        versions_list = self.get_versions_list(number_symbols)
-        index = 0
-        for sym_num in range(number_symbols):
-            versions = versions_list[index]
-            symbol = self.get_symbol_name(number_symbols=sym_num,
-                                       number_versions=versions,
-                                       with_metadata=self.with_metadata,
-                                       with_snapshot=self.with_snapshot)
-            self.logger().info(f"Generating symbol {symbol}.")
-            st = time.time()
-            for num in range(versions):
-                if self.with_metadata:
-                    lib.write(symbol, df, metadata=meta)
-                else:
-                    lib.write(symbol, df)
-            if self.with_snapshot:
-                snap = f"snap_{symbol}"
-                if self.with_metadata:
-                    lib.snapshot(snap, metadata=meta)
-                    self.last_snapshot = snap # Last snapshot created
-                    if not self.first_snapshot_taken:
-                        self.first_snapshot = snap # Remember first snapshot
-                        self.first_snapshot_taken = True
-                else: 
-                    lib.snapshot(snap)
-            self.logger().info(f"Generation of {symbol} symbol COMPLETED for :{time.time() - st} sec")
-            index += 1
-        return self
+        cache = []
+        timestamp_number = TimestampNumber.from_timestamp(start_timestamp, freq)
 
-    def setup_all(self):
-        assert not self.is_multi_params_list(), "One parameters list expected"
-        st = time.time()
-        for num_symbols in self.get_parameter_list():
-            self.setup_library(num_symbols)
-        self.logger().info(f"Total time {time.time() - st}")    
-
-    def check_ok(self) -> bool:
-
-        for num_symbols in self.get_parameter_list():
-            lib = self.get_library(num_symbols)
-            symbols = lib.list_symbols()
-            self.logger().info(f"Check library: {lib}")
-            versions_list = self.get_versions_list(num_symbols)
-            index = 0
-            for sym_num in range(num_symbols):
-                symbol = self.get_symbol_name(number_symbols=sym_num,
-                            number_versions=versions_list[index],
-                            with_metadata=self.with_metadata,
-                            with_snapshot=self.with_snapshot)
-                if not (symbol in symbols):
-                    self.logger().info(f"Symbol {symbol} not found")
-                    return False
-                index += 1
-
-        return True        
-    
-    def clear_symbols_cache(self):
-        for num_symbols in self.get_parameter_list():
-            lib = self.get_library(num_symbols)
-            lib._nvs.version_store._clear_symbol_list_keys()
-
-
-class GeneralSetupLibraryWithSymbolsTests:
-    """
-    This set of tests allows to test the setup / check / teardown logic of setup environment 
-    building block classes 
-    """
-
-    PREFIX_FOR_TEST = "SOME_PREFIX"
-
-    @classmethod
-    def get_general_modifyanle_client(cls):
-        setup = (GeneralSetupLibraryWithSymbols(Storage.AMAZON, 
-                                                prefix=GeneralSetupLibraryWithSymbolsTests.PREFIX_FOR_TEST))
-        assert GeneralSetupLibraryWithSymbolsTests.PREFIX_FOR_TEST in setup.get_arctic_client_modifiable().get_uri()
-        return setup
-
-
-    @classmethod
-    def get_general_setup_test_mode(cls):
-        setup = (GeneralSetupLibraryWithSymbols(Storage.LMDB)
-                 .set_test_mode())
-        assert setup.is_test_mode()
-        return setup
-
-    @classmethod
-    def delete_test_store(cls, setup: EnvConfigurationBase):
-        ac = setup.get_arctic_client_persistent()
-        assert setup.is_test_mode()
-        libs = ac.list_libraries()
-        for lib in libs:
-            ac.delete_library(lib)
-        libs = ac.list_libraries()
-        assert len(libs) < 1, f"All libs should be deleted: {libs}"
-
-    @classmethod
-    def test_setup_with_rows_and_cols(cls):
-        setup = cls.get_general_setup_test_mode()
-        setup.set_params([[20,30],[40,50]])
-        df = setup.generate_dataframe(10,20)
-        assert df.shape[0] == 10
-        assert df.shape[1] == 20
-        logger.info(df)
-        cls.delete_test_store(setup)
-        if not setup.check_ok():
-            setup.setup_all()
-        assert setup.check_ok()
-        cls.delete_test_store(setup)
-        setup.setup_environment()
-        assert setup.check_ok()
-        cls.delete_test_store(setup)
-
-    @classmethod
-    def test_modifiable_client_workflow(cls):
-        """
-        Test for general functions for obtaining and 
-        cleaning modifiable libraries
-        """
-        setup = cls.get_general_modifyanle_client()
-        symbol = "test_symbol"
-        lib = setup.get_modifiable_library()
-        lib.write(symbol, setup.generate_dataframe(10,10))
-        ac = setup.get_arctic_client_modifiable()
-        assert ac.get_library(setup.get_library_names()[1])
-        setup.delete_modifiable_library()
-        assert len(ac.list_libraries()) == 0
-        assert len(setup.get_arctic_client_modifiable().list_libraries()) == 0
-
-    @classmethod
-    def test_setup_versions_and_snapshots(cls):
-        setup = (GeneralSetupSymbolsVersionsSnapshots(storage=Storage.LMDB, prefix="LIST_SYMBOLS")
-        .set_with_metadata_for_each_version()
-        .set_with_snapshot_for_each_version()
-        .set_params([10, 20])
-        .set_test_mode())
-        assert setup.is_test_mode()
-
-    	#Delete-setup-all-check
-        cls.delete_test_store(setup)
-        setup.setup_environment()
-        assert setup.check_ok()
-
-        #Changing parameters should trigger not ok for setup
-        setup.set_with_metadata_for_each_version()
-        setup.set_with_snapshot_for_each_version()
-        setup.set_params([2, 3])
-        assert not setup.check_ok()
+        for i in range(number_data_frames):
+            df = self.df_generator.get_dataframe(number_rows=number_rows, number_columns=number_columns,
+                                                 start_timestamp= timestamp_number.to_timestamp(),
+                                                 freq = freq)
+            cache.append(df)
+            timestamp_number.inc(df.shape[0])
         
+        return cache
+    
+    def get_first_and_last_timestamp(self, sequence_df_list: List[pd.DataFrame]) -> List[pd.Timestamp]:
+        """
+        Returns first and last timestamp of the list of indexed dataframes
+        """
+        assert len(sequence_df_list) > 0
+        start = sequence_df_list[0].index[0]
+        last = sequence_df_list[-1].index[-1]
+        return (start, last)
+    
+    def get_next_timestamp_number(self, sequence_df_list: List[pd.DataFrame], freq: str) -> TimestampNumber:
+        """
+        Returns next timestamp after the last timestamp in passed sequence of 
+        indexed dataframes.
+        """
+        last = self.get_first_and_last_timestamp(sequence_df_list)[1]
+        next = TimestampNumber.from_timestamp(last, freq) + 1
+        return next
+
+
+class TestsForTestLibraryManager:
+    """
+    This class contains tests for the framework. All changes to the framework
+    should be done with running those tests at the end
+    """
+
+    @classmethod
+    def test_test_mode(cls):
+        """
+        Examines workflow of operations when test mode is set.
+        In that mode all persistent space storage requests are executed
+        in the test space, protecting persistent space from damage
+        """
+        symbol = "symbol"
+        storage = Storage.AMAZON
+        logger = get_console_logger()
+        tlm = TestLibraryManager(storage, "TEST_TEST_MODE").set_test_mode()
+        df = DFGenerator(10).add_int_col("int").generate_dataframe()
+        TestLibraryManager.remove_all_test_libs(storage)
+        TestLibraryManager.remove_all_modifiable_libs_for_machine(storage)
+        ac = tlm._get_arctic_client_persistent()
+        assert StorageSpace.TEST.value in ac.get_uri()
+        logger.info(f"Arctic uri: {ac.get_uri()}")
+        assert len(ac.list_libraries()) == 0
+        lib = tlm.get_library(LibraryType.PERSISTENT) # This is actually going to be test lib
+        lib.write(symbol, df)
+        assert symbol in lib.list_symbols()
+        # This is going to be modifiable lib.
+        assert len(tlm._get_arctic_client_modifiable().list_libraries()) == 0
+
+    @classmethod
+    def test_modifiable_access(cls):
+        """
+        Examines operations for modifiable workflow. When storage operation 
+        is requested there it is executed in special space unique for each machine/github runner
+        This space hosts the libraries created for all benchmarks and all process on that that machine
+        Part of name of each library is the name of benchmark and process that created it.
+        There are 2 operations to clear such libraries - to clear all libraries for
+        certain benchmark and to clear all libraries for certain benchmark and process
+        """
+        symbol = "symbol"
+        storage = Storage.AMAZON
+        logger = get_console_logger()
+        tlm = TestLibraryManager(storage, "TEST_MODIFIABLE_ACCESS").set_test_mode()
+        df = DFGenerator(10).add_int_col("int").generate_dataframe()
+
+        def create_lib(suffix : str = "") -> Library:
+            lib = tlm.get_library(LibraryType.MODIFIABLE, suffix) # This is actually going to be test lib
+            lib.write(symbol, df)
+            return (lib, tlm.get_library_name(LibraryType.MODIFIABLE, suffix))
+
+        ac = tlm._get_arctic_client_modifiable()
+        assert StorageSetup.get_machine_id() in ac.get_uri()
+        logger.info(f"Arctic uri: {ac.get_uri()}")
+        logger.info(f"Modifiable libraries {tlm._get_arctic_client_modifiable().list_libraries()}")
+        TestLibraryManager.remove_all_test_libs(storage)
+        TestLibraryManager.remove_all_modifiable_libs_for_machine(storage)
+        assert len(ac.list_libraries()) == 0, "No modifiable libs"
+        lib, lib_name = create_lib()
+        assert symbol in lib.list_symbols(), "Symbol created"
+        assert lib_name in ac.list_libraries(), "Library name found among others in modifiable space"
+        assert lib_name not in tlm._get_arctic_client_persistent().list_libraries(), "Library name not in persistent space"
+        # Following operation is unsafe as it creates another client
+        # Thus `tlm` object library manager will be out of sync. Therefore all new libraries that will create
+        # will be real new libraries
+        TestLibraryManager.remove_all_modifiable_libs_for_machine(storage)
+        assert lib_name not in ac.list_libraries(), "Library name not anymore in modifiable space"
+        # We could not create library with same suffix, because another client has deleted 
+        # the original and LibraryManager in original connection is not notified for that
+        # so we create library with different suffix
+        lib, lib_name = create_lib("2")
+        assert lib_name in ac.list_libraries(), "Library name found among others in modifiable space"
+        tlm.clear_all_benchmark_libs()
+        assert lib_name not in tlm._get_arctic_client_persistent().list_libraries(), "Library name not in persistent space"
+        assert lib_name not in ac.list_libraries(), "Library name not anymore in modifiable space"
+        # The creation of library with same suffix is now possible as client connections are cached
+        # for `tlm` object
+        lib, lib_name = create_lib("2") 
+        assert lib_name in ac.list_libraries(), "Library name found among others in modifiable space"
+        tlm.clear_all_modifiable_libs_from_this_process()
+        assert lib_name not in tlm._get_arctic_client_persistent().list_libraries(), "Library name not in persistent space"
+        assert lib_name not in ac.list_libraries(), "Library name not anymore in modifiable space"
+
+    @classmethod
+    def test_library_populator(cls):
+        storage = Storage.GOOGLE
+        logger = get_console_logger()
+        tlm = TestLibraryManager(storage, "Library_populator").set_test_mode()
+        lib_name_suffix = "mylib"
+
+        TestLibraryManager.remove_all_test_libs(storage)
+
+        policy = LibraryPopulationPolicy(None).set_parameters([2, 3], 5)
+        populate_library(tlm, policy, LibraryType.PERSISTENT, lib_name_suffix)
+        lib = tlm.get_library(LibraryType.PERSISTENT, lib_name_suffix)
+        df: pd.DataFrame = lib.read(policy.get_symbol_name(2)).data
+        logger.info(f"{df}")
+        assert df.shape[0] == 2
+        assert df.shape[1] == 5
+        df: pd.DataFrame = lib.read(policy.get_symbol_name(3)).data
+        logger.info(f"{df}")
+        assert df.shape[0] == 3
+        assert df.shape[1] == 5
+
+        policy = LibraryPopulationPolicy(None).set_parameters(10, [6, 7])
+        populate_library(tlm, policy, LibraryType.PERSISTENT, lib_name_suffix)
+        lib = tlm.get_library(LibraryType.PERSISTENT, lib_name_suffix)
+        df: pd.DataFrame = lib.read(policy.get_symbol_name(6)).data
+        logger.info(f"{df}")
+        assert df.shape[0] == 10
+        assert df.shape[1] == 6
+        df: pd.DataFrame = lib.read(policy.get_symbol_name(7)).data
+        logger.info(f"{df}")
+        assert df.shape[0] == 10
+        assert df.shape[1] == 7
+
+        policy = LibraryPopulationPolicy(None).set_parameters([10] * 3, 1).use_auto_increment_index()
+        populate_library(tlm, policy, LibraryType.PERSISTENT, lib_name_suffix)
+        lib = tlm.get_library(LibraryType.PERSISTENT, lib_name_suffix)
+        for i in range(3):
+            df: pd.DataFrame = lib.read(policy.get_symbol_name(i)).data
+            logger.info(f"{df}")
+            assert df.shape[0] == 10
+            assert df.shape[1] == 1
+
+        TestLibraryManager.remove_all_test_libs(storage)
+        assert len(tlm._get_arctic_client_persistent().list_libraries()) == 0
+
+    @classmethod
+    def test_multiprocessing(cls):
+        """
+        Do all process clear their modifiable storage space and do they 
+        clear only their data not other's?
+        """
+
+        num_processes = 7
+        storage = Storage.AMAZON
+        logger = get_console_logger()
+        benchmark_name = "MULTIPROCESSING"
+
+        df =  DFGenerator.generate_random_dataframe(10, 10)
+
+        def worker_process():
+
+            def string_list_has_number(strings, number):
+                target = str(number)  
+                for s in strings:
+                    if target in s:  
+                        return True
+                return False
+
+            symbol = "s"
+            tlm = TestLibraryManager(storage, benchmark_name)
+            lib = tlm.get_library(LibraryType.MODIFIABLE)
+            lib.write(symbol, df)
+            logger.info(f"Process [{os.getppid()}] written at library: {lib}")
+            assert string_list_has_number(tlm._get_arctic_client_modifiable().list_libraries(),
+                                          os.getpid()), "There is a library with that pid"
+            tlm.clear_all_modifiable_libs_from_this_process()
+            assert not string_list_has_number(tlm._get_arctic_client_modifiable().list_libraries(),
+                                          os.getpid()), "There is NO library with that pid"
+
+        tlm = TestLibraryManager(storage, benchmark_name)
+        ac = tlm._get_arctic_client_modifiable()
+        for lib in ac.list_libraries():
+            logger.info(f"Library delete: {lib}")
+            ac.delete_library(lib)
+
+        processes = []
+        manager = multiprocessing.Manager()
+        result_list = manager.list()
+
+        for _ in range(num_processes):
+            process = multiprocessing.Process(target=worker_process)
+            processes.append(process)
+            process.start()
+
+        for process in processes:
+            process.join()
+
+        for process in processes:
+            assert process.exitcode == 0, f"Process failed with exit code {process.exitcode}"                
+        
+        assert len(ac.list_libraries()) == 0, "All libraries from child processes deleted"
+
+        print("All processes completed successfully:", list(result_list))        
