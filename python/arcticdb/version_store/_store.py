@@ -264,8 +264,8 @@ class NativeVersionStore:
         self._native_cfg = native_cfg
 
     @classmethod
-    def create_store_from_lib_config(cls, lib_cfg, env, open_mode=OpenMode.DELETE):
-        lib = cls.create_lib_from_lib_config(lib_cfg, env, open_mode)
+    def create_store_from_lib_config(cls, lib_cfg, env, open_mode=OpenMode.DELETE, native_cfg=None):
+        lib = cls.create_lib_from_lib_config(lib_cfg, env, open_mode, native_cfg)
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
 
     @staticmethod
@@ -2789,6 +2789,9 @@ class NativeVersionStore:
 
     def lib_cfg(self):
         return self._lib_cfg
+    
+    def lib_native_cfg(self):
+        return self._native_cfg
 
     def open_mode(self):
         return self._open_mode
