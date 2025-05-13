@@ -54,7 +54,7 @@ VariantData unary_operator(const Value& val, Func&& func) {
                                                                   get_user_friendly_type_string(val.type()));
         }
         auto value = *reinterpret_cast<const typename type_info::RawType*>(val.data_);
-        using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
+        using TargetType = typename unary_operation_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
         output->data_type_ = data_type_from_raw_type<TargetType>();
         *reinterpret_cast<TargetType*>(output->data_) = func.apply(value);
     });
@@ -74,7 +74,7 @@ VariantData unary_operator(const ColumnWithStrings& col, Func&& func) {
     details::visit_type(col.column_->type().data_type(), [&](auto col_tag) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         if constexpr (is_numeric_type(type_info::data_type)) {
-            using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
+            using TargetType = typename unary_operation_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
             constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
             output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
             Column::transform<typename type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(*(col.column_),
