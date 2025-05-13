@@ -23,8 +23,8 @@ from tests.util.mark import SLOW_TESTS_MARK
 # set_log_level("DEBUG")
 
 
-def write_data(lib, sym, done, error):
-    set_config_int("VersionMap.ReloadInterval", 1)
+def write_data(lib, sym, done, error, interval):
+    set_config_int("VersionMap.ReloadInterval", interval)
     set_config_int("VersionMap.MaxReadRefTrials", 10)
     delete_version_id = 0
     number_of_writes = 0
@@ -33,9 +33,14 @@ def write_data(lib, sym, done, error):
             print("Iteration {}/10".format(idx1))
             for idx2 in range(20):
                 if idx2 % 4 == 3:
-                    lib.delete_version(sym, delete_version_id)
+                    # num_versions_to_delete = random.randint(1, 2)
+                    num_versions_to_delete = 1
+                    if num_versions_to_delete == 1:
+                        lib.delete_version(sym, delete_version_id)
+                    else:
+                        lib.delete_versions(sym, [delete_version_id, delete_version_id + 1])
                     print("Doing delete {}/{}".format(idx1, idx2))
-                    delete_version_id += 1
+                    delete_version_id += num_versions_to_delete
                 else:
                     number_of_writes += 1
                     print("Doing write {}/{}".format(idx1, idx2))
@@ -48,7 +53,7 @@ def write_data(lib, sym, done, error):
                 assert d_id not in vs
 
     except Exception as e:
-        print(e)
+        log.version.error(f"Error in writer: {e}")
         error.value = 1
 
     print("Setting done")
@@ -57,13 +62,13 @@ def write_data(lib, sym, done, error):
 
 def compact_data(lib, sym, done, error):
     set_config_int("VersionMap.MaxVersionBlocks", 1)
-    while not done.value or error.value:
+    while not done.value:
         lib.version_store._compact_version_map(sym)
         time.sleep(random.uniform(0, 0.05))
 
 
 def read_data(lib, sym, done, error):
-    while not done.value or error.value:
+    while not done.value:
         vs = lib.list_versions(sym)
         for idx in range(len(vs) - 1):
             assert vs[idx]["version"] == vs[idx + 1]["version"] + 1
@@ -77,32 +82,32 @@ def read_data(lib, sym, done, error):
         " around ~4 hours which is breaking the build"
     ),
 )
-def test_stress_version_map_compact(object_version_store, sym, capsys):
+@pytest.mark.parametrize("interval", [1, 10_000_000_000_000])
+def test_stress_version_map_compact(object_version_store, sym, interval):
     done = Value("b", 0)
     error = Value("b", 0)
     lib = object_version_store
     lib.version_store._set_validate_version_map()
-    with capsys.disabled():
-        try:
-            log.version.warn("Starting writer")
-            writer = Process(name="writer", target=write_data, args=(lib, sym, done, error))
-            writer.start()
-            log.version.info("Starting compacter")
-            compacter = Process(name="compacter", target=compact_data, args=(lib, sym, done, error))
-            compacter.start()
-            log.version.info("Starting reader")
-            reader = Process(name="reader", target=read_data, args=(lib, sym, done, error))
-            reader.start()
+    try:
+        log.version.warn("Starting writer")
+        writer = Process(name="writer", target=write_data, args=(lib, sym, done, error, interval))
+        writer.start()
+        log.version.info("Starting compacter")
+        compacter = Process(name="compacter", target=compact_data, args=(lib, sym, done, error))
+        compacter.start()
+        log.version.info("Starting reader")
+        reader = Process(name="reader", target=read_data, args=(lib, sym, done, error))
+        reader.start()
 
-            log.version.info("Joining writer")
-            writer.join()
-            log.version.info("Joining compacter")
-            compacter.join()
-            log.version.info("Joining reader")
-            reader.join()
-            assert error.value == 0
-            log.version.info("Done")
-        finally:
-            log.version.info("Clearing library")
-            lib.version_store.clear()
-            log.version.info("Finished")
+        log.version.info("Joining writer")
+        writer.join()
+        log.version.info("Joining compacter")
+        compacter.join()
+        log.version.info("Joining reader")
+        reader.join()
+        assert error.value == 0
+        log.version.info("Done")
+    finally:
+        log.version.info("Clearing library")
+        lib.version_store.clear()
+        log.version.info("Finished")
