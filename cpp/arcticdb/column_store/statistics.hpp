@@ -116,6 +116,17 @@ struct FieldStatsImpl : public FieldStats {
         set_sorted(sorted);
     }
 
+    template<typename T>
+    FieldStatsImpl(
+        T min,
+        T max,
+        uint32_t unique_count,
+        UniqueCountType unique_count_precision) {
+        set_min(min);
+        set_max(max);
+        set_unique(unique_count, unique_count_precision);
+    }
+
     FieldStatsImpl(
         uint32_t unique_count,
         UniqueCountType unique_count_precision) {
@@ -191,7 +202,9 @@ inline FieldStatsImpl generate_string_statistics(
         unique.emplace(val);
     }
 
-    FieldStatsImpl field_stats(unique.size(), UniqueCountType::PRECISE);
+    auto [col_min, col_max] = std::minmax_element(std::begin(data), std::end(data));
+
+    FieldStatsImpl field_stats(*col_min, *col_max, unique.size(), UniqueCountType::PRECISE);
     return field_stats;
 }
 
