@@ -7,7 +7,6 @@
 
 
 #include <arcticdb/arrow/arrow_utils.hpp>
-#include <arcticdb/arrow/arrow_data.hpp>
 #include <arcticdb/arrow/arrow_output_frame.hpp>
 
 #include <vector>

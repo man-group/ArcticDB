@@ -6,7 +6,6 @@
  */
 #pragma once
 
-#include <arcticdb/arrow/arrow_data.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 
@@ -30,29 +29,29 @@ sparrow::primitive_array<T> create_primitive_array(
         size_t data_size,
         std::optional<sparrow::validity_bitmap> validity_bitmap) {
     sparrow::u8_buffer<T> buffer(data_ptr, data_size);
-    if(validity_bitmap)
+    if(validity_bitmap) {
         return sparrow::primitive_array<T>{std::move(buffer), std::move(*validity_bitmap)};
-    else
+    } else {
         return sparrow::primitive_array<T>{std::move(buffer)};
+    }
 }
 
 template <typename T>
 sparrow::dictionary_encoded_array<T> create_dict_array(
-    sparrow::array&& dict_array,
-    sparrow::u8_buffer<T>&& string_offsets,
+    sparrow::array&& dict_values_array,
+    sparrow::u8_buffer<T>&& dict_keys_buffer,
     std::optional<sparrow::validity_bitmap>& validity_bitmap
     ) {
     if(validity_bitmap) {
         return sparrow::dictionary_encoded_array<T>{
-            typename sparrow::dictionary_encoded_array<T>::keys_buffer_type(std::move(string_offsets)),
-            std::move(dict_array),
+            typename sparrow::dictionary_encoded_array<T>::keys_buffer_type(std::move(dict_keys_buffer)),
+            std::move(dict_values_array),
             std::move(*validity_bitmap)
         };
     } else {
         return sparrow::dictionary_encoded_array<T>{
-            typename sparrow::dictionary_encoded_array<T>::keys_buffer_type(std::move(string_offsets)),
-            std::move(dict_array),
-            std::vector<size_t>{}
+            typename sparrow::dictionary_encoded_array<T>::keys_buffer_type(std::move(dict_keys_buffer)),
+            std::move(dict_values_array),
         };
     }
 }
@@ -64,27 +63,27 @@ sparrow::array string_dict_from_block(
         std::string_view name,
         std::optional<sparrow::validity_bitmap> maybe_bitmap) {
     const auto offset = block.offset();
-    auto &dict_keys = column.get_extra_buffer(offset, ExtraBufferType::OFFSET);
-    const auto offset_buffer_size = dict_keys.block(0)->bytes() / sizeof(uint32_t);
-    sparrow::u8_buffer<uint32_t> offset_buffer(reinterpret_cast<uint32_t *>(dict_keys.block(0)->release()), offset_buffer_size);
+    auto &string_offsets = column.get_extra_buffer(offset, ExtraBufferType::OFFSET);
+    const auto offset_buffer_size = string_offsets.block(0)->bytes() / sizeof(uint32_t);
+    sparrow::u8_buffer<uint32_t> offset_buffer(reinterpret_cast<uint32_t *>(string_offsets.block(0)->release()), offset_buffer_size);
 
-    auto &dict_values = column.get_extra_buffer(offset, ExtraBufferType::STRING);
-    const auto data_buffer_size = dict_values.block(0)->bytes();
-    sparrow::u8_buffer<char> data_buffer(reinterpret_cast<char *>(dict_values.block(0)->release()), data_buffer_size);
+    auto &strings = column.get_extra_buffer(offset, ExtraBufferType::STRING);
+    const auto strings_buffer_size = strings.block(0)->bytes();
+    sparrow::u8_buffer<char> strings_buffer(reinterpret_cast<char *>(strings.block(0)->release()), strings_buffer_size);
 
     const auto block_size = block.row_count();
-    sparrow::u8_buffer<uint32_t> string_offsets{reinterpret_cast<uint32_t *>(block.release()), block_size};
+    sparrow::u8_buffer<uint32_t> dict_keys_buffer{reinterpret_cast<uint32_t *>(block.release()), block_size};
 
-    sparrow::string_array arrow_dict(
-        std::move(data_buffer),
+    sparrow::string_array dict_values_array(
+        std::move(strings_buffer),
         std::move(offset_buffer)
     );
 
     auto dict_encoded = create_dict_array<uint32_t>(
-        sparrow::array{std::move(arrow_dict)},
-        std::move(string_offsets),
+        sparrow::array{std::move(dict_values_array)},
+        std::move(dict_keys_buffer),
         maybe_bitmap
-        );
+    );
 
     sparrow::array arr{std::move(dict_encoded)};
     arr.set_name(name);
@@ -98,12 +97,12 @@ sparrow::array arrow_array_from_block(
         std::optional<sparrow::validity_bitmap> maybe_bitmap) {
     using DataTagType = typename TagType::DataTypeTag;
     using RawType = typename DataTagType::raw_type;
-        auto *data_ptr = block.release();
-        const auto data_size = block.row_count();
-        auto primitive_array = create_primitive_array<RawType>(data_ptr, data_size, maybe_bitmap);
-        auto arr = sparrow::array{std::move(primitive_array)};
-        arr.set_name(name);
-        return arr;
+    auto *data_ptr = block.release();
+    const auto data_size = block.row_count();
+    auto primitive_array = create_primitive_array<RawType>(data_ptr, data_size, maybe_bitmap);
+    auto arr = sparrow::array{std::move(primitive_array)};
+    arr.set_name(name);
+    return arr;
 }
 
 }

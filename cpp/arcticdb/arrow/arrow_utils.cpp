@@ -7,7 +7,6 @@
 
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/arrow/array_from_block.hpp>
-#include <arcticdb/arrow/arrow_data.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 

@@ -242,7 +242,6 @@ set(arcticdb_srcs
         pipeline/pandas_output_frame.cpp
         pipeline/query.hpp
         pipeline/read_options.hpp
-        pipeline/read_options.hpp
         pipeline/read_pipeline.hpp
         pipeline/slicing.hpp
         pipeline/string_pool_utils.hpp
@@ -535,17 +534,16 @@ set(arcticdb_srcs
         storage/s3/ec2_utils.cpp
         arrow/arrow_utils.hpp
         arrow/arrow_output_frame.hpp
-        arrow/arrow_data.hpp
         arrow/arrow_utils.cpp
         arrow/arrow_output_frame.cpp
         arrow/arrow_handlers.hpp
+        arrow/include_sparrow.hpp
+        arrow/array_from_block.hpp
         arrow/arrow_handlers.cpp
         pipeline/read_query.hpp
         pipeline/read_query.cpp
-        pipeline/read_query.cpp
         pipeline/read_pipeline.cpp
-        arrow/include_sparrow.hpp
-        arrow/array_from_block.hpp)
+        )
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -700,7 +698,6 @@ set (arcticdb_core_libraries
         Azure::azure-identity
         Azure::azure-storage-blobs
         sparrow::sparrow
-        CURL::libcurl
 )
 
 if(${ARCTICDB_COUNT_ALLOCATIONS})
@@ -774,8 +771,8 @@ if (SSL_LINK)
     find_package(OpenSSL REQUIRED)
     list(APPEND arcticdb_core_libraries OpenSSL::SSL)
     if (NOT WIN32)
-        #list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
-        #list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
+        list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
+        list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
     endif()
 endif ()
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
@@ -1087,7 +1084,8 @@ if(${TEST})
     set(benchmark_srcs
             stream/test/stream_test_common.cpp
             column_store/test/benchmark_memory_segment.cpp
-            processing/test/benchmark_clause.cpp)
+            processing/test/benchmark_clause.cpp
+            version/test/benchmark_write.cpp)
 
     add_executable(benchmarks ${benchmark_srcs})
 

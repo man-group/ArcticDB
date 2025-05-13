@@ -14,7 +14,6 @@
 #include <memory>
 
 namespace arcticdb {
-struct ArrowData;
 
 struct RecordBatchData {
     RecordBatchData(ArrowArray array, ArrowSchema schema) :

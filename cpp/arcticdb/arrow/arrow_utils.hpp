@@ -17,7 +17,6 @@
 namespace arcticdb {
 
 class SegmentInMemory;
-struct ArrowData;
 struct FrameAndDescriptor;
 struct DecodePathData;
 class Column;
