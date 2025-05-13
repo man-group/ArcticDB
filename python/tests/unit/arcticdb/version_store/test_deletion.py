@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import sys
 import numpy as np
 import pandas as pd
@@ -196,6 +197,25 @@ def test_tombstones_deleted_data_keys_version_delete(lmdb_version_store_prune_pr
         assert len(data_keys) == 2 - id
 
 
+@pytest.mark.parametrize("versions_to_delete", [[0, 1], [1, 0], [0, 2], [1, 2], [2, 0], [2, 1]])
+def test_tombstones_deleted_data_keys_delete_versions(lmdb_version_store_prune_previous, sym, versions_to_delete):
+    lib = lmdb_version_store_prune_previous
+    assert lib._lib_cfg.lib_desc.version.write_options.use_tombstones is True
+    assert lib._lib_cfg.lib_desc.version.write_options.delayed_deletes is False
+
+    lib.write(sym, 1)
+    lib.write(sym, 2, prune_previous_version=False)
+    lib.write(sym, 3, prune_previous_version=False)
+
+    lib_tool = lib.library_tool()
+    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    assert len(data_keys) == 3
+
+    lib.delete_versions(sym, versions_to_delete)
+    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    assert len(data_keys) == 3 - len(versions_to_delete)
+
+
 def test_tombstones_deleted_data_keys_snapshot(lmdb_version_store_prune_previous, sym):
     lib = lmdb_version_store_prune_previous
     assert lib._lib_cfg.lib_desc.version.write_options.prune_previous_version is True
@@ -216,6 +236,36 @@ def test_tombstones_deleted_data_keys_snapshot(lmdb_version_store_prune_previous
 
     data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
     assert len(data_keys) == 2
+
+    lib.delete_snapshot("mysnap1")
+
+    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    assert len(data_keys) == 1
+
+
+def test_tombstones_multiple_deleted_data_keys_snapshot(lmdb_version_store, sym):
+    lib = lmdb_version_store
+    assert lib._lib_cfg.lib_desc.version.write_options.prune_previous_version is False
+
+    lib.write(sym, 1)
+    lib.snapshot("mysnap1")
+    lib.write(sym, 2)
+    lib.snapshot("mysnap2")
+    lib.write(sym, 3)
+
+    lib_tool = lib.library_tool()
+    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    assert len(data_keys) == 3
+
+    lib.delete_versions(sym, [2, 1])
+
+    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    assert len(data_keys) == 2
+
+    lib.delete_snapshot("mysnap2")
+
+    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    assert len(data_keys) == 1
 
     lib.delete_snapshot("mysnap1")
 
@@ -263,6 +313,51 @@ def test_tombstone_of_non_existing_version(lmdb_version_store_tombstone, sym):
 
     with pytest.raises(Exception):
         lib.delete_version(sym, 6)
+
+
+def test_tombstone_of_non_existing_version_multiple_deletes(lmdb_version_store_tombstone, sym):
+    def write_specific_version(data, version):
+        udm, item, norm_meta = lib._try_normalize(sym, data, None, False, False, None)
+        if isinstance(item, NPDDataFrame):
+            lib.version_store.write_dataframe_specific_version(sym, item, norm_meta, udm, version)
+
+    lib = lmdb_version_store_tombstone
+    assert lib._lib_cfg.lib_desc.version.write_options.prune_previous_version is False
+    assert lib._lib_cfg.lib_desc.version.write_options.use_tombstones is True
+    assert lib._lib_cfg.lib_desc.version.write_options.delayed_deletes is False
+
+    write_specific_version(0, 0)
+    write_specific_version(1, 1)
+    write_specific_version(3, 3)
+    write_specific_version(5, 5)
+
+    # cant tombstone beyond latest
+    with pytest.raises(Exception):
+        lib.delete_versions(sym, [5, 6])
+
+    with pytest.raises(Exception):
+        lib.delete_versions(sym, [10, 11])
+
+    lib.delete_versions(sym, [2, 1, 4, 5])
+
+    assert lib.has_symbol(sym, 0) is True
+    assert lib.has_symbol(sym, 1) is False
+    assert lib.has_symbol(sym, 2) is False
+    assert lib.has_symbol(sym, 3) is True
+    assert lib.has_symbol(sym, 4) is False
+    assert lib.has_symbol(sym, 5) is False
+
+    with pytest.raises(Exception):
+        lib.delete_versions(sym, [3, 5])
+
+    with pytest.raises(Exception):
+        lib.delete_versions(sym, [4, 5])
+
+    with pytest.raises(Exception):
+        lib.delete_versions(sym, [5, 6])
+
+    with pytest.raises(Exception):
+        lib.delete_versions(sym, [10, 11])
 
 
 def test_delete_date_range_pickled_symbol(lmdb_version_store):

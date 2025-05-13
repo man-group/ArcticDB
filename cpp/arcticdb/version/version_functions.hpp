@@ -147,45 +147,45 @@ inline std::unordered_map<VersionId, bool> get_all_tombstoned_versions(
     return result;
 }
 
-inline version_store::TombstoneVersionResult tombstone_version(
+inline version_store::TombstoneVersionResult tombstone_versions(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id,
-    VersionId version_id,
+    const std::vector<VersionId>& version_ids,
     bool allow_tombstoning_beyond_latest_version=false,
     const std::optional<timestamp>& creation_ts=std::nullopt) {
-    ARCTICDB_DEBUG(log::version(), "Tombstoning version {} for stream {}", version_id, stream_id);
+    ARCTICDB_DEBUG(log::version(), "Tombstoning versions {} for stream {}", version_ids, stream_id);
+
     LoadStrategy load_strategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     // Might as well do the previous/next version check while we find the required version_id.
     // But if entry is empty, it's possible the load failed (since iterate_on_failure=false above), so set the flag
     // to defer the check to delete_tree() (instead of reloading in case eager delete is disabled).
     version_store::TombstoneVersionResult res(entry->empty());
-    get_matching_prev_and_next_versions(entry, version_id,
-            [&res](auto& matching){res.keys_to_delete.push_back(matching);},
-            [&res](auto& prev){res.could_share_data.emplace(prev);},
-            [&res](auto& next){res.could_share_data.emplace(next);},
+    auto latest_key = get_latest_version(store, version_map, stream_id).first;
+
+    for (auto version_id: version_ids) {
+        get_matching_prev_and_next_versions(entry, version_id,
+                [&res](auto& matching){res.keys_to_delete.push_back(matching);},
+                [&res](auto& prev){res.could_share_data.emplace(prev);},
+                [&res](auto& next){res.could_share_data.emplace(next);},
             is_live_index_type_key // Entry could be cached with deleted keys even if LOAD_UNDELETED
             );
 
-    if (res.keys_to_delete.empty()) {
         // It is possible to have a tombstone key without a corresponding index_key
         // This scenario can happen in case of DR sync
         if (entry->is_tombstoned(version_id)) {
             util::raise_rte("Version {} for symbol {} is already deleted", version_id, stream_id);
         } else {
             if (!allow_tombstoning_beyond_latest_version) {
-                auto latest_key = get_latest_version(store, version_map, stream_id).first;
                 if (!latest_key || latest_key->version_id() < version_id)
                     util::raise_rte("Can't delete version {} for symbol {} - it's higher than the latest version",
                             stream_id, version_id);
             }
-            // We will write a tombstone key even when the index_key is not found
-            version_map->write_tombstone(store, version_id, stream_id, entry, creation_ts);
         }
-    } else {
-        version_map->write_tombstone(store, res.keys_to_delete[0], stream_id, entry, creation_ts);
     }
+    // We will write a tombstone key even when the index_key is not found
+    version_map->write_tombstone_multiple(store, version_ids, stream_id, entry, creation_ts);
 
     if (version_map->validate())
         entry->validate();
@@ -193,6 +193,16 @@ inline version_store::TombstoneVersionResult tombstone_version(
     res.no_undeleted_left = !entry->get_first_index(false).first.has_value();
     res.latest_version_ = entry->get_first_index(true).first->version_id();
     return res;
+}
+
+inline version_store::TombstoneVersionResult tombstone_version(
+    const std::shared_ptr<Store> &store,
+    const std::shared_ptr<VersionMap> &version_map,
+    const StreamId &stream_id,
+    VersionId version_id,
+    bool allow_tombstoning_beyond_latest_version=false,
+    const std::optional<timestamp>& creation_ts=std::nullopt) {
+    return tombstone_versions(store, version_map, stream_id, {version_id}, allow_tombstoning_beyond_latest_version, creation_ts);
 }
 
 inline std::optional<AtomKey> get_index_key_from_time(

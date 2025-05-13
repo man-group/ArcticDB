@@ -1025,16 +1025,17 @@ def test_list_versions_deleted_flag(basic_store):
     basic_store.write("symbol", pd.DataFrame(), metadata=2, prune_previous_version=False)
     basic_store.write("symbol", pd.DataFrame(), metadata=3, prune_previous_version=False)
     basic_store.snapshot("snapshot")
+    basic_store.write("symbol", pd.DataFrame(), metadata=4, prune_previous_version=False)
 
     versions = basic_store.list_versions("symbol")
-    assert len(versions) == 3
+    assert len(versions) == 4
     versions = sorted(versions, key=lambda v: v["version"])
     assert not versions[2]["deleted"]
     assert versions[2]["snapshots"] == ["snapshot"]
 
     basic_store.delete_version("symbol", 2)
     versions = basic_store.list_versions("symbol")
-    assert len(versions) == 3
+    assert len(versions) == 4
     versions = sorted(versions, key=lambda v: v["version"])
 
     assert not versions[0]["deleted"]
@@ -1043,6 +1044,20 @@ def test_list_versions_deleted_flag(basic_store):
     assert not versions[1]["snapshots"]
     assert versions[2]["deleted"]
     assert versions[2]["snapshots"] == ["snapshot"]
+    assert not versions[3]["deleted"]
+    assert not versions[3]["snapshots"]
+
+    # Test that deleting a set of versions doesn't affect the other versions
+    basic_store.delete_versions("symbol", [0, 1])
+    versions = basic_store.list_versions("symbol")
+    assert len(versions) == 2
+    versions = sorted(versions, key=lambda v: v["version"])
+    assert versions[0]["version"] == 2
+    assert versions[0]["deleted"]
+    assert versions[0]["snapshots"] == ["snapshot"]
+    assert versions[1]["version"] == 3
+    assert not versions[1]["deleted"]
+    assert not versions[1]["snapshots"]
 
 
 @pytest.mark.storage
@@ -1606,6 +1621,7 @@ def test_coercion_to_str_with_dynamic_strings(basic_store):
         # This should skip the sample deduction
         lib.write("sym_coerced", df, dynamic_strings=True, coerce_columns={"col": str})
         sample_mock.assert_not_called()
+
 
 @pytest.mark.storage
 def test_find_version(lmdb_version_store_v1):
@@ -2648,9 +2664,8 @@ def test_version_chain_cache(basic_store, use_caching):
             lib.read(symbol, as_of=pd.Timestamp(0))
 
         # Delete specific versions
-        delete_versions = {1, 3, 7, 9}
-        for version in delete_versions:
-            lib.delete_version(symbol, version)
+        delete_versions = [1, 3, 7, 9]
+        lib.delete_versions(symbol, delete_versions)
         for i in range(num_of_versions):
             assert_correct_dataframe(i, delete_versions)
 

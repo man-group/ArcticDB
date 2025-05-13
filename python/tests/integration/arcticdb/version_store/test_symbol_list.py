@@ -170,6 +170,16 @@ def test_symbol_list_delete_incremental(basic_store):
 
 
 @pytest.mark.storage
+def test_symbol_list_delete_multiple_versions(basic_store):
+    lib = basic_store
+    lib.write("a", 1)
+    lib.write("a", 2, prune_previous=False)
+    lib.write("b", 1)
+    lib.delete_versions("a", [0, 1])
+    assert lib.list_symbols() == ["b"]
+
+
+@pytest.mark.storage
 def test_deleted_symbol_with_tombstones(basic_store_tombstones_no_symbol_list):
     lib = basic_store_tombstones_no_symbol_list
     lib.write("a", 1)

@@ -560,15 +560,20 @@ def test_do_not_prune_previous_versions_by_default(arctic_library):
 
 
 @pytest.mark.storage
-def test_delete_version(arctic_library):
+@pytest.mark.parametrize("versions", [1, (1, 2)])
+def test_delete_version(arctic_library, versions):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("symbol", df, metadata={"very": "interesting"})
     lib.write("symbol", df, metadata={"muy": "interesante"}, prune_previous_versions=False)
     lib.write("symbol", df, metadata={"tres": "interessant"}, prune_previous_versions=False)
-    lib.delete("symbol", versions=(1, 2))
-    assert lib["symbol"].version == 0
-    assert lib["symbol"].metadata == {"very": "interesting"}
+    lib.delete("symbol", versions=versions)
+    if isinstance(versions, int):
+        assert lib["symbol"].version == 2
+        assert lib["symbol"].metadata == {"tres": "interessant"}
+    else:
+        assert lib["symbol"].version == 0
+        assert lib["symbol"].metadata == {"very": "interesting"}
 
 
 @pytest.mark.storage
@@ -661,10 +666,18 @@ def test_delete_version_that_does_not_exist(arctic_library):
     with pytest.raises(InternalException):
         lib.delete("symbol", versions=0)
 
+    # symbol does not exist
+    with pytest.raises(InternalException):
+        lib.delete("symbol", versions=[1, 2])
+
     # version does not exist
     lib.write("symbol", pd.DataFrame())
     with pytest.raises(InternalException):
         lib.delete("symbol", versions=1)
+
+    # symbol does not exist
+    with pytest.raises(InternalException):
+        lib.delete("symbol", versions=[2, 3])
 
 
 @pytest.mark.storage
