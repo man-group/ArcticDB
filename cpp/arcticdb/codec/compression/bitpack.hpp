@@ -116,7 +116,7 @@ struct BitPackCompressor : public BitPackData {
             }
         }
 
-        return BitPackData{std::bit_width(static_cast<std::make_unsigned_t<T>>(max_val))};
+        return BitPackData{static_cast<size_t>(std::bit_width(static_cast<std::make_unsigned_t<T>>(max_val)))};
     }
 
     static size_t compressed_size(BitPackData bitpack_data, size_t count) {
