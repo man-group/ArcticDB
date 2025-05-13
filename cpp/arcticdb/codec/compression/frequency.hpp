@@ -49,7 +49,7 @@ struct FrequencyCompressor : public FrequencyEncodingData {
     }
 
     void scan(ColumnData data) {
-        T value;
+        T value = T();
         for (auto block_num = 0UL; block_num < data.num_blocks(); ++block_num) {
             auto block = data.buffer().blocks()[block_num];
             size_t num_rows = block->bytes() / sizeof(T);
