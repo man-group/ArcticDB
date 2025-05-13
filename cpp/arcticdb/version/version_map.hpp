@@ -400,6 +400,38 @@ public:
         return journal_key;
     }
 
+
+    VariantKey journal_multiple_keys(
+        std::shared_ptr<Store> store,
+        const VersionId& version_id,
+        const std::vector<AtomKey>& keys,
+        const StreamId& stream_id,
+         std::optional<AtomKey> prev_journal_key) {
+        ARCTICDB_SAMPLE(WriteJournalEntry, 0)
+        ARCTICDB_DEBUG(log::version(), "Version map writing version for keys {}", keys);
+
+        VariantKey journal_key;
+        IndexAggregator<RowCountIndex> journal_agg(stream_id, [&store, &journal_key, &version_id, &stream_id](auto &&segment) {
+            stream::StreamSink::PartialKey pk{
+                    KeyType::VERSION,
+                    version_id,
+                    stream_id,
+                    IndexValue(NumericIndex{0}),
+                    IndexValue(NumericIndex{0})
+            };
+
+            journal_key = store->write_sync(pk, std::forward<decltype(segment)>(segment));
+        });
+        for (auto &key : keys) {
+            journal_agg.add_key(key);
+        }
+        if (prev_journal_key)
+            journal_agg.add_key(*prev_journal_key);
+
+        journal_agg.finalize();
+        return journal_key;
+    }
+
     AtomKey update_version_key(
         std::shared_ptr<Store> store,
         const VariantKey& version_key,
@@ -525,6 +557,23 @@ public:
         return previous_index;
     }
 
+    std::optional<AtomKey> do_write_multiple(
+        std::shared_ptr<Store> store,
+        const VersionId& version_id,
+        const std::vector<AtomKey>& keys,
+        const std::shared_ptr<VersionMapEntry> &entry) {
+        if (validate_)
+            entry->validate();
+        
+        auto journal_key = journal_multiple_keys(store, version_id, keys, entry->head_.value().id(), entry->head_);
+        auto atom_journal_key = to_atom(journal_key);
+        for (const auto& key : keys) {
+            write_to_entry(entry, key, atom_journal_key);
+        }
+        auto previous_index = entry->get_second_undeleted_index();
+        return previous_index;
+    }
+
     AtomKey write_tombstone(
         std::shared_ptr<Store> store,
         const std::variant<AtomKey, VersionId>& key,
@@ -534,6 +583,17 @@ public:
         auto tombstone = write_tombstone_internal(store, key, stream_id, entry, creation_ts);
         write_symbol_ref(store, tombstone, std::nullopt, entry->head_.value());
         return tombstone;
+    }
+
+    AtomKey write_tombstone_multiple(
+        std::shared_ptr<Store> store,
+        const std::vector<VersionId>& version_ids,
+        const StreamId& stream_id,
+        const std::shared_ptr<VersionMapEntry>& entry,
+        const std::optional<timestamp>& creation_ts=std::nullopt) {
+        auto ver_key = write_tombstone_multiple_internal(store, version_ids, stream_id, entry, creation_ts);
+        write_symbol_ref(store, ver_key, std::nullopt, entry->head_.value());
+        return ver_key;
     }
 
     void remove_entry_version_keys(
@@ -1009,6 +1069,38 @@ private:
             log_tombstone(store, tombstone.id(), tombstone.version_id());
 
         return tombstone;
+    }
+
+    AtomKey write_tombstone_multiple_internal(
+            std::shared_ptr<Store> store,
+            const std::vector<VersionId>& version_ids,
+            const StreamId& stream_id,
+            const std::shared_ptr<VersionMapEntry>& entry,
+            const std::optional<timestamp>& creation_ts=std::nullopt) {
+        if (validate_)
+            entry->validate();
+
+        std::vector<AtomKey> tombstones;
+
+        for (const auto& version_id : version_ids) {
+            tombstones.emplace_back(index_to_tombstone(version_id, stream_id, creation_ts.value_or(store->current_timestamp())));
+        }
+
+        // It doesn't matter which version id we use here
+        // as long as it is one of the version ids in the keys
+        // tombstone keys use already existing version ids instead of creating new ones
+        // It IS important that we log with the same version id as the tombstone key
+        // for backwards compatibility with older replication logic
+        auto tombstone_version_id = tombstones[0].version_id();
+        do_write_multiple(store, tombstone_version_id, tombstones,  entry);
+        for (const auto& tombstone : tombstones) {
+            entry->tombstones_.try_emplace(tombstone.version_id(), tombstone);
+        }
+        maybe_invalidate_cached_undeleted(*entry);
+        if(log_changes_)
+            log_tombstone(store, tombstones[0].id(), tombstone_version_id);
+
+        return tombstones[0];
     }
 };
 
