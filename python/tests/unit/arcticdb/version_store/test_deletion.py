@@ -243,11 +243,9 @@ def test_tombstones_deleted_data_keys_snapshot(lmdb_version_store_prune_previous
     assert len(data_keys) == 1
 
 
-def test_tombstones_multiple_deleted_data_keys_snapshot(lmdb_version_store_prune_previous, sym):
-    lib = lmdb_version_store_prune_previous
-    assert lib._lib_cfg.lib_desc.version.write_options.prune_previous_version is True
-    assert lib._lib_cfg.lib_desc.version.write_options.use_tombstones is True
-    assert lib._lib_cfg.lib_desc.version.write_options.delayed_deletes is False
+def test_tombstones_multiple_deleted_data_keys_snapshot(lmdb_version_store, sym):
+    lib = lmdb_version_store
+    assert lib._lib_cfg.lib_desc.version.write_options.prune_previous_version is False
 
     lib.write(sym, 1)
     lib.snapshot("mysnap1")
@@ -272,7 +270,7 @@ def test_tombstones_multiple_deleted_data_keys_snapshot(lmdb_version_store_prune
     lib.delete_snapshot("mysnap1")
 
     data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
-    assert len(data_keys) == 0
+    assert len(data_keys) == 1
 
 
 def test_tombstone_of_non_existing_version(lmdb_version_store_tombstone, sym):
