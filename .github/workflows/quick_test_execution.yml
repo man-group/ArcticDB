@@ -1,0 +1,46 @@
+name: Quick Test Execution
+
+on:
+  push:
+    branches: 
+      - nfs_backed_storage
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install arcticdb and dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install arcticdb
+        pip install wheel
+        pip install setuptools
+        pip download arcticdb --only-binary=:all: -d .
+        pip install --force-reinstall $(ls arcticdb*.whl)[Testing] 
+
+    - name: Build protobuf
+      run: |
+        python setup.py protoc --build-lib python        
+
+    - name: Run tests
+      run: |
+        pytest -n auto --log-file="tests.log" 
+
+    - name: Upload the logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: pytest-log
+        path: |
+          ./*test*        
+

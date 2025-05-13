@@ -667,6 +667,11 @@ def real_s3_store_factory(lib_name, real_s3_storage) -> Callable[..., NativeVers
 
 
 @pytest.fixture
+def nfs_backed_s3_store_factory(lib_name, nfs_backed_s3_storage) -> NativeVersionStore:
+    return nfs_backed_s3_storage.create_version_store_factory(lib_name)
+
+
+@pytest.fixture
 def real_gcp_store_factory(lib_name, real_gcp_storage) -> Callable[..., NativeVersionStore]:
     return real_gcp_storage.create_version_store_factory(lib_name)
 
@@ -729,6 +734,18 @@ def mock_s3_store_with_mock_storage_exception(s3_store_factory_mock_storage_exce
 
 
 @pytest.fixture
+def nfs_backed_s3_version_store_v1(nfs_backed_s3_store_factory):
+    return nfs_backed_s3_store_factory(dynamic_strings=True)
+
+
+@pytest.fixture
+def nfs_backed_s3_version_store_v2(nfs_backed_s3_store_factory, lib_name):
+    library_name = lib_name + "_v2"
+    return nfs_backed_s3_store_factory(dynamic_strings=True, 
+                                       encoding_version=int(EncodingVersion.V2), name=library_name)
+
+
+@pytest.fixture
 def s3_version_store_v1(s3_store_factory):
     return s3_store_factory(dynamic_strings=True)
 
@@ -759,8 +776,31 @@ def s3_version_store(s3_version_store_v1, s3_version_store_v2, encoding_version)
     elif encoding_version == EncodingVersion.V2:
         return s3_version_store_v2
     else:
-        raise ValueError(f"Unexoected encoding version: {encoding_version}")
+        raise ValueError(f"Unexpected encoding version: {encoding_version}")
 
+
+@pytest.fixture
+def nfs_backed_s3_version_store_dynamic_schema_v1(nfs_backed_s3_store_factory):
+    return nfs_backed_s3_store_factory(dynamic_strings=True, dynamic_schema=True)
+
+
+@pytest.fixture
+def nfs_backed_s3_version_store_dynamic_schema_v2(nfs_backed_s3_store_factory, lib_name):
+    library_name = lib_name + "_v2"
+    return nfs_backed_s3_store_factory(
+        dynamic_strings=True, dynamic_schema=True, encoding_version=int(EncodingVersion.V2), name=library_name
+    )
+
+
+@pytest.fixture
+def nfs_backed_s3_version_store(nfs_backed_s3_version_store_v1, nfs_backed_s3_version_store_v2, encoding_version):
+    if encoding_version == EncodingVersion.V1:
+        return nfs_backed_s3_version_store_v1
+    elif encoding_version == EncodingVersion.V2:
+        return nfs_backed_s3_version_store_v2
+    else:
+        raise ValueError(f"Unexpected encoding version: {encoding_version}")
+    
 
 @pytest.fixture(scope="function")
 def mongo_version_store(mongo_store_factory):
@@ -771,6 +811,7 @@ def mongo_version_store(mongo_store_factory):
     scope="function",
     params=[
         pytest.param("s3_store_factory", marks=SIM_S3_TESTS_MARK),
+        pytest.param("nfs_backed_s3_store_factory", marks=SIM_NFS_TESTS_MARK),
         pytest.param("azure_store_factory", marks=AZURE_TESTS_MARK),
         pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
         pytest.param("real_gcp_store_factory", marks=REAL_GCP_TESTS_MARK),
@@ -1218,6 +1259,8 @@ def lmdb_version_store_static_and_dynamic(request):
         pytest.param("s3_version_store_v1", marks=SIM_S3_TESTS_MARK),
         pytest.param("s3_version_store_v2", marks=SIM_S3_TESTS_MARK),
         pytest.param("in_memory_version_store", marks=MEM_TESTS_MARK),
+        pytest.param("nfs_backed_s3_version_store_v1", marks=SIM_NFS_TESTS_MARK),
+        pytest.param("nfs_backed_s3_version_store_v2", marks=SIM_NFS_TESTS_MARK),
         pytest.param("azure_version_store", marks=AZURE_TESTS_MARK),
         pytest.param("mongo_version_store", marks=MONGO_TESTS_MARK),
         pytest.param("real_s3_version_store", marks=REAL_S3_TESTS_MARK),
@@ -1237,6 +1280,8 @@ def object_and_mem_and_lmdb_version_store(request):
     params=(
         pytest.param("lmdb_version_store_dynamic_schema_v1", marks=LMDB_TESTS_MARK),
         pytest.param("lmdb_version_store_dynamic_schema_v2", marks=LMDB_TESTS_MARK),
+        pytest.param("nfs_backed_s3_version_store_dynamic_schema_v1", marks=SIM_NFS_TESTS_MARK),
+        pytest.param("nfs_backed_s3_version_store_dynamic_schema_v2", marks=SIM_NFS_TESTS_MARK),
         pytest.param("s3_version_store_dynamic_schema_v1", marks=SIM_S3_TESTS_MARK),
         pytest.param("s3_version_store_dynamic_schema_v2", marks=SIM_S3_TESTS_MARK),
         pytest.param("in_memory_version_store_dynamic_schema", marks=MEM_TESTS_MARK),
