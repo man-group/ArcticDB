@@ -319,10 +319,10 @@ std::vector<std::pair<SnapshotId, py::object>> PythonVersionStore::list_snapshot
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: list_snapshots");
     auto snap_ids = std::vector<std::pair<SnapshotId, py::object>>();
     auto fetch_metadata = opt_false(load_metadata);
-    iterate_snapshots(store(), [store=store(), &snap_ids, fetch_metadata](VariantKey &vk) {
+    iterate_snapshots(store(), [store=store(), &snap_ids, fetch_metadata](const VariantKey& vk) {
         auto snapshot_meta_as_pyobject = fetch_metadata ? get_metadata_for_snapshot(store, vk) : py::none{};
         auto snapshot_id = fmt::format("{}", variant_key_id(vk));
-        snap_ids.emplace_back(snapshot_id, snapshot_meta_as_pyobject);
+        snap_ids.emplace_back(std::move(snapshot_id), std::move(snapshot_meta_as_pyobject));
     });
 
     return snap_ids;
@@ -566,6 +566,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     ) {
     ARCTICDB_SAMPLE(WriteVersionedMultiKey, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_composite_data");
+
     auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
     auto version_id = get_next_version_from_key(maybe_prev);
     ARCTICDB_DEBUG(log::version(), "write_versioned_composite_data for stream_id: {} , version_id = {}", stream_id, version_id);
@@ -694,10 +695,11 @@ void PythonVersionStore::drop_column_stats_version(
 
 ReadResult PythonVersionStore::read_column_stats_version(
     const StreamId& stream_id,
-    const VersionQuery& version_query) {
+    const VersionQuery& version_query,
+    std::any& handler_data) {
     ARCTICDB_SAMPLE(ReadColumnStats, 0)
     auto [versioned_item, frame_and_descriptor] = read_column_stats_version_internal(stream_id, version_query);
-    return read_result_from_single_frame(frame_and_descriptor, versioned_item.key_, OutputFormat::PANDAS);
+    return read_result_from_single_frame(frame_and_descriptor, versioned_item.key_, handler_data, OutputFormat::PANDAS);
 }
 
 ColumnStats PythonVersionStore::get_column_stats_info_version(
@@ -778,8 +780,8 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
     std::vector<std::shared_ptr<ReadQuery>>& read_queries,
-    const ReadOptions& read_options) {
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
+    const ReadOptions& read_options,
+    std::any& handler_data) {
 
     auto read_versions_or_errors = batch_read_internal(stream_ids, version_queries, read_queries, read_options, handler_data);
     std::vector<std::variant<ReadResult, DataError>> res;
@@ -1066,19 +1068,17 @@ std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> Pytho
     auto metadatas_or_errors = batch_read_metadata_internal(stream_ids, version_queries, read_options);
 
     std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> results;
-    for (auto&& metadata_or_error: metadatas_or_errors) {
+    for (auto& metadata_or_error: metadatas_or_errors) {
         if (std::holds_alternative<std::pair<VariantKey, std::optional<google::protobuf::Any>>>(metadata_or_error)) {
             auto& [key, meta_proto] = std::get<std::pair<VariantKey, std::optional<google::protobuf::Any>>>(metadata_or_error);
-            VersionedItem version{std::move(to_atom(key))};
+            VersionedItem version{to_atom(std::move(key))};
             if(meta_proto.has_value()) {
-                auto res = std::make_pair(std::move(version), metadata_protobuf_to_pyobject(std::move(meta_proto)));
-                results.push_back(std::move(res));
+                results.emplace_back(std::pair{std::move(version), metadata_protobuf_to_pyobject(meta_proto)});
             }else{
-                auto res = std::make_pair(std::move(version), py::none());
-                results.push_back(std::move(res));   
+                results.emplace_back(std::pair{std::move(version), py::none()});
             }
         } else {
-            results.push_back(std::get<DataError>(std::move(metadata_or_error)));   
+            results.emplace_back(std::get<DataError>(std::move(metadata_or_error)));
         }
     }
     return results;
@@ -1101,7 +1101,9 @@ std::vector<std::variant<DescriptorItem, DataError>> PythonVersionStore::batch_r
 
 ReadResult PythonVersionStore::read_index(
     const StreamId& stream_id,
-    const VersionQuery& version_query
+    const VersionQuery& version_query,
+    OutputFormat output_format,
+    std::any& handler_data
     ) {
     ARCTICDB_SAMPLE(ReadIndex, 0)
 
@@ -1110,7 +1112,7 @@ ReadResult PythonVersionStore::read_index(
         throw NoDataFoundException(fmt::format("read_index: version not found for symbol '{}'", stream_id));
 
     auto res = read_index_impl(store(), *version);
-    return read_result_from_single_frame(res, version->key_, OutputFormat::PANDAS);
+    return read_result_from_single_frame(res, version->key_, handler_data, output_format);
 }
 
 std::vector<AtomKey> PythonVersionStore::get_version_history(const StreamId& stream_id) {
@@ -1176,9 +1178,10 @@ ReadResult read_dataframe_from_file(
         const StreamId &stream_id,
         const std::string& path,
         const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options) {
+        const ReadOptions& read_options,
+        std::any& handler_data) {
 
-    auto handler_data = get_type_handler_data(read_options.output_format());
+    auto release_gil = std::make_unique<py::gil_scoped_release>();
     auto opt_version_and_frame = read_dataframe_from_file_internal(
         stream_id,
         path,

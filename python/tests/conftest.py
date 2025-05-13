@@ -70,6 +70,7 @@ from .util.mark import (
 from arcticdb.storage_fixtures.utils import safer_rmtree
 from packaging.version import Version
 from arcticdb.util.venv import Venv
+import arcticdb.toolbox.query_stats as query_stats
 
 
 # region =================================== Misc. Constants & Setup ====================================
@@ -1359,9 +1360,17 @@ def old_venv_and_arctic_uri(old_venv, arctic_uri):
     yield old_venv, arctic_uri
 
 
+@pytest.fixture
+def clear_query_stats():
+    yield
+    query_stats.disable()
+    query_stats.reset_stats()
+    
+
 class FixtureMarks:
     lmdb_storage_extend_for_installation = pytest.mark.parametrize("lmdb_storage", 
                                                                    # Due to the fact that we have default lmdb fixture 
                                                                    # we need to provide "lmdb" as first option
                                                                    ["lmdb", real_s3_storage_factory.__name__],
                                                                    indirect=True)
+

@@ -8,7 +8,6 @@
 
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/pipeline/frame_slice_map.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/python/python_handlers.hpp>
@@ -68,8 +67,8 @@ DynamicStringReducer::DynamicStringReducer(
         handler_data_(handler_data),
         ptr_dest_(ptr_dest),
         total_rows_(total_rows) {
-    util::check(static_cast<bool>(handler_data_.py_nan_), "Got null nan in string reducer");
-    util::check(is_py_nan(handler_data_.py_nan_->ptr()), "Got the wrong value in global nan");
+    util::check(handler_data_.is_nan_initialized(), "Got null nan in string reducer");
+    util::check(is_py_nan(handler_data_.non_owning_nan_handle()), "Got the wrong value in global nan");
 }
 
 void DynamicStringReducer::reduce(const Column& source_column,
@@ -93,13 +92,9 @@ void DynamicStringReducer::reduce(const Column& source_column,
 
 void DynamicStringReducer::finalize() {
     if (row_ != total_rows_) {
-        auto none = GilSafePyNone::instance();;
         const auto diff = total_rows_ - row_;
-        for (; row_ < total_rows_; ++row_, ++ptr_dest_) {
-            *ptr_dest_ = none->ptr();
-        }
-
-        increment_none_refcount(diff, none);
+        ptr_dest_ = python_util::fill_with_none(ptr_dest_, diff, handler_data_);
+        row_ = total_rows_;
     }
 }
 

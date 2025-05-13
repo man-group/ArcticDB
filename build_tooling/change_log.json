@@ -17,5 +17,12 @@
 "template": "${{CHANGELOG}}\n\n\n${{UNCATEGORIZED}}",
 "ignore_labels": [
     "no-release-notes"
-]
+],
+"tag_resolver": {
+    "method": "semver",
+    "filter": {
+        "pattern": ".*(rc|man).*"
+    }
+}
+
 }

@@ -6,6 +6,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+from abc import ABC, abstractmethod
+from logging import Logger
 import urllib.parse
 import pandas as pd
 import numpy as np
@@ -13,6 +15,8 @@ import numpy as np
 import os
 import bz2
 import urllib.request
+
+from arcticdb.util.environment_setup import TestLibraryManager, LibraryPopulationPolicy, get_console_logger
 
 ## You can now define SLOW ASV tests
 ## To run those tests also you have to set following OS variable
@@ -226,3 +230,21 @@ def process_city(fileloc:str) -> pd.DataFrame :
     name = decompress_bz2_file(fileloc)
     df : pd.DataFrame = read_city(name)
     return df
+
+
+class AsvBase(ABC):
+    """
+    Abstract base class for all benchmarks with real storage backing
+    """
+    
+    def get_logger(self) -> Logger:
+        return get_console_logger(self)    
+    
+    @abstractmethod
+    def get_library_manager(self) -> TestLibraryManager:
+        pass
+    
+    @abstractmethod
+    def get_population_policy(self) -> LibraryPopulationPolicy:
+        pass
+    

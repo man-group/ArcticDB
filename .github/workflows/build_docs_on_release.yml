@@ -9,6 +9,7 @@ jobs:
   check-inputs:
     name: Check inputs
     runs-on: ubuntu-latest
+    environment: TestPypi  # For TAGGING_TOKEN secret
     outputs:
         version: ${{ steps.tag_name.outputs.tag }}
         latest: ${{ github.event.release.tag_name == steps.latest_tag.outputs.tag }}
@@ -36,6 +37,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+            token: ${{ secrets.TAGGING_TOKEN }}
             ref: v${{ steps.tag_name.outputs.tag }}
 
       - name: Create docs tag

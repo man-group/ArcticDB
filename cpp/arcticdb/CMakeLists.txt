@@ -252,6 +252,7 @@ set(arcticdb_srcs
         pipeline/write_options.hpp
         python/python_strings.hpp
         python/python_handler_data.hpp
+        python/python_utils.hpp
         pipeline/string_reducers.hpp
         processing/aggregation_utils.hpp
         processing/component_manager.hpp
@@ -332,6 +333,7 @@ set(arcticdb_srcs
         stream/stream_writer.hpp
         toolbox/library_tool.hpp
         toolbox/storage_mover.hpp
+        toolbox/query_stats.hpp
         util/allocator.hpp
         util/allocation_tracing.hpp
         util/bitset.hpp
@@ -382,7 +384,6 @@ set(arcticdb_srcs
         util/lazy.hpp
         util/type_traits.hpp
         util/variant.hpp
-        util/gil_safe_py_none.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
         version/schema_checks.hpp
@@ -451,6 +452,7 @@ set(arcticdb_srcs
         pipeline/write_frame.cpp
         python/normalization_checks.cpp
         python/python_strings.cpp
+        python/python_utils.cpp
         processing/processing_unit.cpp
         processing/aggregation_utils.cpp
         processing/clause.cpp
@@ -505,6 +507,7 @@ set(arcticdb_srcs
         stream/piloted_clock.cpp
         stream/protobuf_mappings.cpp
         toolbox/library_tool.cpp
+        toolbox/query_stats.cpp
         util/allocator.cpp
         util/allocation_tracing.cpp
         util/buffer_pool.cpp
@@ -522,7 +525,6 @@ set(arcticdb_srcs
         util/type_handler.cpp
         version/key_block.hpp
         version/key_block.cpp
-        util/gil_safe_py_none.cpp
         version/local_versioned_engine.cpp
         version/schema_checks.cpp
         version/op_log.cpp
