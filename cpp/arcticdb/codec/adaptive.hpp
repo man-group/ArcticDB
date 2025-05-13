@@ -273,6 +273,8 @@ struct AdaptiveDecoder {
             break;
             default:util::raise_rte("Unknown encoding type: {}", static_cast<uint16_t>(type));
             }
+        } else {
+            util::raise_rte("Unknown type in decoding");
         }
     }
 };
