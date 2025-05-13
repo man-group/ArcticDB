@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <vector>
 #include <random>
+#include <algorithm>
 
 #include <arcticdb/util/min_max_float.hpp>
 

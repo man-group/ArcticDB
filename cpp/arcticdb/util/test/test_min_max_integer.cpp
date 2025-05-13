@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <random>
 #include <limits>
+#include <algorithm>
 #include <arcticdb/util/min_max_integer.hpp>
 
 namespace arcticdb {
