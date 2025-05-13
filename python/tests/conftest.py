@@ -102,7 +102,8 @@ def lib_name(request: "pytest.FixtureRequest") -> str:
     name = re.sub(r"[^\w]", "_", request.node.name)[:30]
     pid = os.getpid()
     thread_id = threading.get_ident()
-    return f"{name}.{random.randint(0, 9999999)}_{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}_{uuid.uuid4()}"
+    # There is limit to the name length
+    return f"{name}_{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_')}_{uuid.uuid4()}"
 
 
 @pytest.fixture

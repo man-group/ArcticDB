@@ -84,7 +84,7 @@ def test_get_library(arctic_client, lib_name):
     with pytest.raises(LibraryNotFound):
         _ = ac.get_library(lib_name)
     # Creates library with default options if just create_if_missing set to True
-    lib = ac.get_library(f"{lib_name}_default_options", create_if_missing=True)
+    lib = ac.get_library(f"{lib_name}_do", create_if_missing=True)
 
     assert lib.options() == LibraryOptions(encoding_version=ac._encoding_version)
     # Creates library with the specified options if create_if_missing set to True and options provided
@@ -96,7 +96,7 @@ def test_get_library(arctic_client, lib_name):
         encoding_version=EncodingVersion.V1 if ac._encoding_version == EncodingVersion.V2 else EncodingVersion.V2,
     )
     lib = ac.get_library(
-        f"{lib_name}_specified_options",
+        f"{lib_name}_so", # specific options
         create_if_missing=True,
         library_options=library_options,
     )
@@ -106,7 +106,7 @@ def test_get_library(arctic_client, lib_name):
     library_options.dynamic_schema = False
     with pytest.raises(MismatchingLibraryOptions):
         _ = ac.get_library(
-            f"{lib_name}_specified_options",
+            f"{lib_name}_so", # specific options
             create_if_missing=True,
             library_options=library_options,
         )
@@ -338,8 +338,9 @@ def test_do_not_persist_s3_details(s3_storage):
 @pytest.mark.storage
 def test_library_options(arctic_client, lib_name):
     ac = arctic_client
-    ac.create_library(f"{lib_name}_default_options")
-    lib = ac[f"{lib_name}_default_options"]
+    lib_name_do = lib_name_do # default options
+    ac.create_library(lib_name_do)
+    lib = ac[lib_name_do]
     assert lib.options() == LibraryOptions(encoding_version=ac._encoding_version)
     write_options = lib._nvs._lib_cfg.lib_desc.version.write_options
     assert not write_options.dynamic_schema
@@ -355,11 +356,12 @@ def test_library_options(arctic_client, lib_name):
         columns_per_segment=3,
         encoding_version=EncodingVersion.V2,
     )
+    lib_name_eo = f"{lib_name}_explicit_options" # explicit options
     ac.create_library(
-        f"{lib_name}_explicit_options",
+        lib_name_eo,
         library_options,
     )
-    lib = ac[f"{lib_name}_explicit_options"]
+    lib = ac[lib_name_eo]
     assert lib.options() == library_options
     write_options = lib._nvs._lib_cfg.lib_desc.version.write_options
     assert write_options.dynamic_schema
