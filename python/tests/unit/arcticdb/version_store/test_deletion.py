@@ -317,10 +317,7 @@ def test_tombstone_of_non_existing_version(lmdb_version_store_tombstone, sym):
 
 def test_tombstone_of_non_existing_version_multiple_deletes(lmdb_version_store_tombstone, sym):
     def write_specific_version(data, version):
-        proto_cfg = lib._lib_cfg.lib_desc.version.write_options
-        dynamic_strings = lib.resolve_defaults("dynamic_strings", proto_cfg, False)
-        pickle_on_failure = lib.resolve_defaults("pickle_on_failure", proto_cfg, False)
-        udm, item, norm_meta = lib._try_normalize(sym, data, None, pickle_on_failure, dynamic_strings, None)
+        udm, item, norm_meta = lib._try_normalize(sym, data, None, False, False, None)
         if isinstance(item, NPDDataFrame):
             lib.version_store.write_dataframe_specific_version(sym, item, norm_meta, udm, version)
 
