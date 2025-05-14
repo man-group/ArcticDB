@@ -177,7 +177,7 @@ jobs:
         echo "ARCTICDB_STORAGE_LMDB=${{ env.lmdb }}" >> $GITHUB_ENV
         echo "USE_CONDA=${{ inputs.use_conda || matrix.use_conda }}" >> $GITHUB_ENV
   
-    - name: (pypi) Install arcticdb from requirements files 
+    - name: (pypi) Install arcticdb (${{ env.arcticdb_version }}) from requirements files 
       if: ${{ (env.SKIP_JOB != 'true') && (!contains(env.USE_CONDA, 'yes'))}}
       run: |
         pip install -r "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.txt"
@@ -194,7 +194,7 @@ jobs:
         pip install pytest-xdist
 
       # Install conda environment
-    - name: (conda) Install arcticdb from conda-forge
+    - name: (conda) Install arcticdb (${{ env.arcticdb_version }}) from conda-forge
       uses: mamba-org/setup-micromamba@v2.0.0
       if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes'))}}
       with:
