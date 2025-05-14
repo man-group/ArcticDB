@@ -17,7 +17,7 @@ using namespace google::protobuf::util;
 
 TEST(OutputSchema, NonModifyingClauses) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
-    stream_desc.set_index({1, IndexDescriptor::Type::TIMESTAMP});
+    stream_desc.set_index({IndexDescriptor::Type::TIMESTAMP, 1});
     stream_desc.add_scalar_field(DataType::NANOSECONDS_UTC64, "timestamp");
     stream_desc.add_scalar_field(DataType::INT64, "col");
 
@@ -68,7 +68,7 @@ TEST(OutputSchema, NonModifyingClauses) {
 
 TEST(OutputSchema, DateRangeClauseRequiresTimeseries) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
-    stream_desc.set_index({0, IndexDescriptor::Type::ROWCOUNT});
+    stream_desc.set_index({IndexDescriptor::Type::ROWCOUNT, 0});
     stream_desc.add_scalar_field(DataType::INT64, "col");
 
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
@@ -82,7 +82,7 @@ TEST(OutputSchema, DateRangeClauseRequiresTimeseries) {
 
 TEST(OutputSchema, MergeClauseRequiresTimeseries) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
-    stream_desc.set_index({0, IndexDescriptor::Type::ROWCOUNT});
+    stream_desc.set_index({IndexDescriptor::Type::ROWCOUNT, 0});
     stream_desc.add_scalar_field(DataType::INT64, "col");
 
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
@@ -96,7 +96,7 @@ TEST(OutputSchema, MergeClauseRequiresTimeseries) {
 
 TEST(OutputSchema, FilterClauseColumnPresence) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
-    stream_desc.set_index({0, IndexDescriptor::Type::ROWCOUNT});
+    stream_desc.set_index({IndexDescriptor::Type::ROWCOUNT, 0});
     stream_desc.add_scalar_field(DataType::INT64, "col1");
     stream_desc.add_scalar_field(DataType::INT64, "col2");
     stream_desc.add_scalar_field(DataType::INT64, "col3");
@@ -135,7 +135,7 @@ TEST(OutputSchema, FilterClauseColumnPresence) {
 
 TEST(OutputSchema, ProjectClauseColumnPresence) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
-    stream_desc.set_index({0, IndexDescriptor::Type::ROWCOUNT});
+    stream_desc.set_index({IndexDescriptor::Type::ROWCOUNT, 0});
     stream_desc.add_scalar_field(DataType::INT64, "col1");
     stream_desc.add_scalar_field(DataType::INT64, "col2");
     stream_desc.add_scalar_field(DataType::INT64, "col3");
@@ -176,7 +176,7 @@ TEST(OutputSchema, ProjectClauseColumnPresence) {
 TEST(OutputSchema, PartitionClause) {
     using GroupByClause = PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer>;
     StreamDescriptor stream_desc(StreamId("test symbol"));
-    stream_desc.set_index({0, IndexDescriptor::Type::ROWCOUNT});
+    stream_desc.set_index({IndexDescriptor::Type::ROWCOUNT, 0});
     stream_desc.add_scalar_field(DataType::INT64, "col");
 
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
@@ -197,7 +197,7 @@ TEST(OutputSchema, PartitionClause) {
 
 TEST(OutputSchema, AggregationClauseColumnPresence) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
-    stream_desc.set_index({0, IndexDescriptor::Type::ROWCOUNT});
+    stream_desc.set_index({IndexDescriptor::Type::ROWCOUNT, 0});
     stream_desc.add_scalar_field(DataType::INT64, "to_group");
     stream_desc.add_scalar_field(DataType::INT64, "to_agg");
 
@@ -226,7 +226,7 @@ TEST(OutputSchema, AggregationClauseColumnPresence) {
 
 TEST(OutputSchema, ResampleClauseRequiresTimeseries) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
-    stream_desc.set_index({0, IndexDescriptor::Type::ROWCOUNT});
+    stream_desc.set_index({IndexDescriptor::Type::ROWCOUNT, 0});
     stream_desc.add_scalar_field(DataType::INT64, "to_agg");
 
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
@@ -240,7 +240,7 @@ TEST(OutputSchema, ResampleClauseRequiresTimeseries) {
 
 TEST(OutputSchema, ResampleClauseColumnPresence) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
-    stream_desc.set_index({1, IndexDescriptor::Type::TIMESTAMP});
+    stream_desc.set_index({IndexDescriptor::Type::TIMESTAMP, 1});
     stream_desc.add_scalar_field(DataType::NANOSECONDS_UTC64, "timestamp");
     stream_desc.add_scalar_field(DataType::INT64, "to_agg");
 
@@ -264,7 +264,7 @@ TEST(OutputSchema, ResampleClauseColumnPresence) {
 
 TEST(OutputSchema, ResampleClauseMultiindex) {
     StreamDescriptor stream_desc(StreamId("test symbol"));
-    stream_desc.set_index({2, IndexDescriptor::Type::TIMESTAMP});
+    stream_desc.set_index({IndexDescriptor::Type::TIMESTAMP, 2});
     stream_desc.add_scalar_field(DataType::NANOSECONDS_UTC64, "timestamp");
     stream_desc.add_scalar_field(DataType::INT64, "second_level_index");
     stream_desc.add_scalar_field(DataType::INT64, "to_agg");
@@ -276,7 +276,7 @@ TEST(OutputSchema, ResampleClauseMultiindex) {
     // Aggregating non-index column
     auto resample_clause = generate_resample_clause({{"sum", "to_agg", "aggregated"}});
     auto output_schema = resample_clause.modify_schema({stream_desc.clone(), norm_meta});
-    ASSERT_EQ(output_schema.stream_descriptor().index(), IndexDescriptorImpl(1, IndexDescriptor::Type::TIMESTAMP));
+    ASSERT_EQ(output_schema.stream_descriptor().index(), IndexDescriptorImpl(IndexDescriptor::Type::TIMESTAMP, 1));
     ASSERT_EQ(output_schema.stream_descriptor().field(0), stream_desc.field(0));
     ASSERT_EQ(output_schema.stream_descriptor().field(1).name(), "aggregated");
     ASSERT_TRUE(output_schema.norm_metadata_.df().common().has_index());
@@ -287,7 +287,7 @@ TEST(OutputSchema, ResampleClauseMultiindex) {
     // Aggregating secondary index column
     resample_clause = generate_resample_clause({{"sum", "second_level_index", "aggregated"}});
     output_schema = resample_clause.modify_schema({stream_desc.clone(), norm_meta});
-    ASSERT_EQ(output_schema.stream_descriptor().index(), IndexDescriptorImpl(1, IndexDescriptor::Type::TIMESTAMP));
+    ASSERT_EQ(output_schema.stream_descriptor().index(), IndexDescriptorImpl(IndexDescriptor::Type::TIMESTAMP, 1));
     ASSERT_EQ(output_schema.stream_descriptor().field(0), stream_desc.field(0));
     ASSERT_EQ(output_schema.stream_descriptor().field(1).name(), "aggregated");
     ASSERT_TRUE(output_schema.norm_metadata_.df().common().has_index());

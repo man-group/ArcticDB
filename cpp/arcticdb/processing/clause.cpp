@@ -270,7 +270,7 @@ std::vector<std::vector<EntityId>> AggregationClause::structure_for_processing(s
     // Experimentation shows flattening the entities into a single vector and a single call to
     // component_manager_->get is faster than not flattening and making multiple calls
     auto entity_ids = flatten_entities(std::move(entity_ids_vec));
-    auto [buckets] = component_manager_->get_entities<bucket_id>(entity_ids, false);
+    auto [buckets] = component_manager_->get_entities<bucket_id>(entity_ids);
     for (auto [idx, entity_id]: folly::enumerate(entity_ids)) {
         res[buckets[idx]].emplace_back(entity_id);
     }
@@ -440,7 +440,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
     auto index_col = std::make_shared<Column>(make_scalar_type(grouping_data_type), grouping_map.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
 
     seg.add_column(scalar_field(grouping_data_type, grouping_column_), index_col);
-    seg.descriptor().set_index(IndexDescriptorImpl(0, IndexDescriptorImpl::Type::ROWCOUNT));
+    seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
 
     details::visit_type(grouping_data_type, [&grouping_map, &index_col](auto data_type_tag) {
         using col_type_info = ScalarTypeInfo<decltype(data_type_tag)>;
@@ -476,7 +476,7 @@ OutputSchema AggregationClause::modify_schema(OutputSchema&& output_schema) cons
     const auto& input_stream_desc = output_schema.stream_descriptor();
     StreamDescriptor stream_desc(input_stream_desc.id());
     stream_desc.add_field(input_stream_desc.field(*input_stream_desc.find_field(grouping_column_)));
-    stream_desc.set_index({0, IndexDescriptorImpl::Type::ROWCOUNT});
+    stream_desc.set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
 
     for (const auto& agg: aggregators_){
         const auto& input_column_name = agg.get_input_column_name().value;
@@ -534,7 +534,7 @@ OutputSchema ResampleClause<closed_boundary>::modify_schema(OutputSchema&& outpu
     const auto& input_stream_desc = output_schema.stream_descriptor();
     StreamDescriptor stream_desc(input_stream_desc.id());
     stream_desc.add_field(input_stream_desc.field(0));
-    stream_desc.set_index(IndexDescriptorImpl(1, IndexDescriptor::Type::TIMESTAMP));
+    stream_desc.set_index(IndexDescriptorImpl(IndexDescriptor::Type::TIMESTAMP, 1));
 
     for (const auto& agg: aggregators_){
         const auto& input_column_name = agg.get_input_column_name().value;
@@ -663,7 +663,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
         return {};
     }
     ARCTICDB_RUNTIME_DEBUG(log::memory(), "ResampleClause: structure for processing 2");
-    auto [segments, row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
+    auto [segments, row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids);
     std::vector<RangesAndEntity> ranges_and_entities;
     ranges_and_entities.reserve(entity_ids.size());
     timestamp min_start_ts{std::numeric_limits<timestamp>::max()};
@@ -752,7 +752,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
                               row_slices.front().row_ranges_->at(0)->start() + output_index_column->row_count());
     ColRange output_col_range(1, aggregators_.size() + 1);
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, index_column_name), output_index_column);
-    seg.descriptor().set_index(IndexDescriptorImpl(1, IndexDescriptor::Type::TIMESTAMP));
+    seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptor::Type::TIMESTAMP, 1));
     auto& string_pool = seg.string_pool();
 
     ARCTICDB_DEBUG_THROW(5)
@@ -1143,7 +1143,7 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
     end_index_col->set_row_data(0);
 
     SegmentInMemory seg;
-    seg.descriptor().set_index(IndexDescriptorImpl(0, IndexDescriptorImpl::Type::ROWCOUNT));
+    seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_index_col);
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_index_col);
     for (const auto& agg_data: folly::enumerate(aggregators_data)) {
@@ -1166,7 +1166,7 @@ std::vector<std::vector<EntityId>> RowRangeClause::structure_for_processing(std:
     if (entity_ids.empty()) {
         return {};
     }
-    auto [segments, old_row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
+    auto [segments, old_row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids);
 
     // Map from old row ranges to new ones
     std::map<RowRange, RowRange> row_range_mapping;
@@ -1344,7 +1344,7 @@ std::vector<std::vector<EntityId>> ConcatClause::structure_for_processing(std::v
     bool first_range{true};
     size_t prev_range_end{0};
     for (const auto& entity_ids: entity_ids_vec) {
-        auto [old_row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
+        auto [old_row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids);
         // Map from old row ranges WITHIN THIS SYMBOL to new ones
         std::map<RowRange, RowRange> row_range_mapping;
         for (const auto& row_range: old_row_ranges) {

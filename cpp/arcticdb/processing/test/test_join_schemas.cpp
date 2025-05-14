@@ -17,11 +17,11 @@ using NormalizationMetadata = arcticdb::proto::descriptors::NormalizationMetadat
 
 class GenerateIndexDescriptorTest : public testing::Test {
 protected:
-    IndexDescriptorImpl timestamp_2_index{2, IndexDescriptor::Type::TIMESTAMP};
-    OutputSchema rowcount_0{{{}, IndexDescriptorImpl{0, IndexDescriptor::Type::ROWCOUNT}}, {}};
-    OutputSchema timestamp_1{{{}, IndexDescriptorImpl{1, IndexDescriptor::Type::TIMESTAMP}}, {}};
+    IndexDescriptorImpl timestamp_2_index{IndexDescriptor::Type::TIMESTAMP, 2};
+    OutputSchema rowcount_0{{{}, IndexDescriptorImpl{IndexDescriptor::Type::ROWCOUNT, 0}}, {}};
+    OutputSchema timestamp_1{{{}, IndexDescriptorImpl{IndexDescriptor::Type::TIMESTAMP, 1}}, {}};
     OutputSchema timestamp_2{{{}, timestamp_2_index}, {}};
-    OutputSchema string_1{{{}, IndexDescriptorImpl{1, IndexDescriptor::Type::STRING}}, {}};
+    OutputSchema string_1{{{}, IndexDescriptorImpl{IndexDescriptor::Type::STRING, 1}}, {}};
 };
 
 TEST_F(GenerateIndexDescriptorTest, SingleDescriptor) {
@@ -73,8 +73,8 @@ protected:
         one_datetime_one_string_field.add_scalar_field(DataType::UTF_DYNAMIC64, "level2");
     }
 
-    StreamDescriptor one_index_field{{}, IndexDescriptorImpl{1, IndexDescriptor::Type::TIMESTAMP}};
-    StreamDescriptor two_index_fields{{}, IndexDescriptorImpl{2, IndexDescriptor::Type::TIMESTAMP}};
+    StreamDescriptor one_index_field{{}, IndexDescriptorImpl{IndexDescriptor::Type::TIMESTAMP, 1}};
+    StreamDescriptor two_index_fields{{}, IndexDescriptorImpl{IndexDescriptor::Type::TIMESTAMP, 2}};
     StreamDescriptor one_datetime_field;
     StreamDescriptor one_datetime_field_rename;
     StreamDescriptor one_float_field;

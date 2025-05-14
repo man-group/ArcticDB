@@ -18,7 +18,7 @@ using namespace proto::descriptors;
 
 std::vector<std::vector<EntityId>> structure_by_row_slice(ComponentManager& component_manager, std::vector<std::vector<EntityId>>&& entity_ids_vec) {
     auto entity_ids = flatten_entities(std::move(entity_ids_vec));
-    auto [row_ranges, col_ranges] = component_manager.get_entities<std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
+    auto [row_ranges, col_ranges] = component_manager.get_entities<std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids);
     std::vector<RangesAndEntity> ranges_and_entities;
     ranges_and_entities.reserve(entity_ids.size());
     for (size_t idx=0; idx<entity_ids.size(); ++idx) {
@@ -213,7 +213,7 @@ IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& i
                     "Mismatching IndexDescriptor in schema join");
         }
     }
-    return {*index_desc_field_count, *index_type};
+    return {*index_type, *index_desc_field_count};
 }
 
 std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas) {

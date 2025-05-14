@@ -1943,9 +1943,9 @@ class Library:
             query_builder: QueryBuilder,
     ) -> VersionedItemWithJoin:
         """
-        Reads multiple symbols in a batch fashion, and then joins them together using the first clause in the
-        `query_builder` argument. If there are subsequent clauses in the `query_builder` argument, then these are
-        applied to the joined data.
+        Reads multiple symbols in a batch, and then joins them together using the first clause in the `query_builder`
+        argument. If there are subsequent clauses in the `query_builder` argument, then these are applied to the joined
+        data.
 
         Parameters
         ----------

@@ -549,7 +549,7 @@ struct IndexDescriptorImpl : public IndexDescriptor {
 
     IndexDescriptorImpl() = default;
 
-    IndexDescriptorImpl(uint32_t field_count, Type type) :
+    IndexDescriptorImpl(Type type, uint32_t field_count) :
         IndexDescriptor(type, field_count) {
     }
 

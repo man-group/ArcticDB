@@ -124,7 +124,7 @@ struct StreamDescriptor {
 
     explicit StreamDescriptor(const StreamId& id) {
         set_id(id);
-        set_index({0, IndexDescriptor::Type::ROWCOUNT});
+        set_index({IndexDescriptor::Type::ROWCOUNT, 0});
     }
 
     void add_scalar_field(DataType data_type, std::string_view name) {

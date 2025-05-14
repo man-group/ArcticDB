@@ -920,10 +920,10 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
     // i.e. if the first processing unit needs ranges_and_keys[0] and ranges_and_keys[1], and the second needs ranges_and_keys[2] and ranges_and_keys[3]
     // then the structure will be {{0, 1}, {2, 3}}
     std::vector<std::vector<size_t>> processing_unit_indexes;
-    if (!read_query->clauses_.empty()) {
-        processing_unit_indexes = read_query->clauses_[0]->structure_for_processing(ranges_and_keys);
-    } else {
+    if (read_query->clauses_.empty()) {
         processing_unit_indexes = structure_by_row_slice(ranges_and_keys);
+    } else {
+        processing_unit_indexes = read_query->clauses_[0]->structure_for_processing(ranges_and_keys);
     }
 
     // Start reading as early as possible
@@ -2194,6 +2194,8 @@ folly::Future<SymbolProcessingResult> read_and_process(
         return SymbolProcessingResult{std::move(res_versioned_item), {}, {}, {}};
     }
 
+    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(!pipeline_context->is_pickled(),"Cannot perform multi-symbol join on pickled data");
+
     StreamDescriptor output_stream_descriptor;
     if (read_query->columns.has_value()) {
         output_stream_descriptor = StreamDescriptor(
@@ -2210,7 +2212,6 @@ folly::Future<SymbolProcessingResult> read_and_process(
 
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
 
-    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(!pipeline_context->is_pickled(),"Cannot perform multi-symbol join on pickled data");
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
     .thenValueInline([res_versioned_item = std::move(res_versioned_item), pipeline_context, output_schema = std::move(output_schema)](auto&& entity_ids) mutable {
         // Pipeline context user metadata is not populated in the case that only incomplete segments exist for a symbol, no indexed versions
