@@ -102,8 +102,9 @@ def lib_name(request: "pytest.FixtureRequest") -> str:
     name = re.sub(r"[^\w]", "_", request.node.name)[:30]
     pid = os.getpid()
     thread_id = threading.get_ident()
-    # There is limit to the name length
-    return f"{name}_{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_')}_{uuid.uuid4()}"
+    # There is limit to the name length, and note that without 
+    # the dot (.) in the name mongo will not work!
+    return f"{name}.{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_')}_{uuid.uuid4()}"
 
 
 @pytest.fixture
