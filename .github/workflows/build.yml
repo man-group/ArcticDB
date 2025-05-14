@@ -128,7 +128,8 @@ jobs:
       windows_matrix: ${{toJson(matrix.windows_matrix)}}
 
   pre_seed_cleanup:
-    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage != 'no'}}
+    # When schedulled it will be S3 run, when not only through workflow_dispatch can be selected S3
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' && inputs.persistent_storage != 'no'}}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
@@ -137,7 +138,8 @@ jobs:
 
   persistent_storage_seed_linux:
     needs: [common_config, pre_seed_cleanup]
-    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage != 'no'}}
+    # When schedulled it will be S3 run, when not only through workflow_dispatch can be selected S3
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' && inputs.persistent_storage != 'no'}}
     strategy:
       fail-fast: false
       matrix:
@@ -159,7 +161,8 @@ jobs:
 
   persistent_storage_seed_windows:
     needs: [common_config, pre_seed_cleanup]
-    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage != 'no'}}
+    # When schedulled it will be S3 run, when not only through workflow_dispatch can be selected S3
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' && inputs.persistent_storage != 'no'}}
     strategy:
       fail-fast: false
       matrix:
@@ -227,7 +230,7 @@ jobs:
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
       # When scheduled job persistence storage will be AWS
-      persistent_storage: ${{ inputs.persistent_storage || 'AWS_S3'}} 
+      persistent_storage: ${{ inputs.persistent_storage || github.event_name == 'schedule' && 'AWS_S3'|| github.event_name != 'workflow_dispatch' && 'no'}} 
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
       pytest_args: ${{inputs.pytest_args || ''}}
 
@@ -259,13 +262,14 @@ jobs:
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{needs.common_config.outputs.windows_matrix}}
       # When scheduled job persistence storage will be AWS
-      persistent_storage: ${{ inputs.persistent_storage || 'AWS_S3'}}
+      persistent_storage: ${{ inputs.persistent_storage || github.event_name == 'schedule' && 'AWS_S3'|| github.event_name != 'workflow_dispatch' && 'no'}} 
       pytest_xdist_mode: "-n auto"
       pytest_args: ${{inputs.pytest_args || ''}}
 
   persistent_storage_verify_linux:
     needs: [common_config, build-python-wheels-linux, build-python-wheels-windows]
-    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage != 'no'}}
+    # When schedulled it will be S3 run, when not only through workflow_dispatch can be selected S3
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' && inputs.persistent_storage != 'no'}}
     strategy:
       fail-fast: false
       matrix:
@@ -287,7 +291,8 @@ jobs:
 
   persistent_storage_verify_windows:
     needs: [common_config, build-python-wheels-windows, build-python-wheels-linux]
-    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage != 'no'}}
+    # When schedulled it will be S3 run, when not only through workflow_dispatch can be selected S3
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' && inputs.persistent_storage != 'no'}}
     strategy:
       fail-fast: false
       matrix:
@@ -309,7 +314,8 @@ jobs:
     
   post_verify_cleanup:
     needs: [persistent_storage_verify_windows, persistent_storage_verify_linux]
-    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage != 'no'}}
+    # When schedulled it will be S3 run, when not only through workflow_dispatch can be selected S3
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' && inputs.persistent_storage != 'no'}}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
