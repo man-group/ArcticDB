@@ -365,39 +365,61 @@ TEST(StorageLock, OptimisticForceReleaseLock) {
     first_lock._test_release_local_lock();
 }
 
-class NoOpMutex {
-public:
-    void lock() {}
-    void unlock() {}
-    bool try_lock() { return true; }
-};
-/*
-Simulates two concurrent writes. Disables mutex.
-*/
 TEST(StorageLock, ConcurrentWrites) {
-    constexpr size_t num_writers = 5;
-    auto type = FailureType::WRITE;
-    init_random(reinterpret_cast<uint64_t>(&type));
-    auto rand_int = random_int();
-    std::cout << "Random number: " << rand_int << std::endl;
-    constexpr double write_slowdown_prob = 0.5;
-    constexpr uint32_t slow_down_min_ms = 1;
-    constexpr uint32_t slow_down_max_ms = 1;
+    log::lock().set_level(spdlog::level::debug);
+    const StorageFailureSimulator::ParamActionSequence SLOW_ON_2ND_CALL = {
+        action_factories::slow_action(1, 10, 10), action_factories::slow_action(1, 1700, 1700)
+    };
+    constexpr size_t num_writers = 2;
 
-    auto lock_without_mutex = StorageLock<util::SysClock, NoOpMutex>("test");
+    using StorageLockType = StorageLock<>;
+    std::vector<std::unique_ptr<StorageLockType>> locks;
+    locks.reserve(num_writers);
+    while (locks.size() < num_writers) { locks.emplace_back(std::make_unique<StorageLockType>("test")); }
     auto store = std::make_shared<InMemoryStore>();
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{num_writers};
-    proto::storage::VersionStoreConfig::StorageFailureSimulator cfg;
-    cfg.set_write_slowdown_prob(write_slowdown_prob);
-    cfg.set_slow_down_min_ms(slow_down_min_ms);
-    cfg.set_slow_down_max_ms(slow_down_max_ms);
-    StorageFailureSimulator::instance()->configure(cfg);
+    StorageFailureSimulator::instance()->configure({{FailureType::WRITE_SLOW, SLOW_ON_2ND_CALL}});
     std::vector<Future<Unit>> futures;
     std::vector<bool> writer_has_lock;
     writer_has_lock.resize(num_writers);
     for(size_t i = 0; i < num_writers; ++i) {
-        futures.emplace_back(exec.addFuture([&store, &lock_without_mutex, i, &writer_has_lock] {
-            writer_has_lock[i] = lock_without_mutex.try_lock(store);
+        futures.emplace_back(exec.addFuture([&store, &lock = locks[i], i, &writer_has_lock] {
+            writer_has_lock[i] = lock->try_lock(store);
+        }));
+    }
+    collect(futures).get();
+
+    const long have_lock = std::ranges::count(writer_has_lock, true);
+    ASSERT_EQ(have_lock, 0); // Both should fail
+}
+
+TEST(StorageLock, ConcurrentWrites2) {
+    log::lock().set_level(spdlog::level::debug);
+    log::lock().set_level(spdlog::level::debug);
+    const StorageFailureSimulator::ParamActionSequence SLOW_ON_2ND_CALL = {
+        action_factories::slow_action(1, 10, 10), action_factories::slow_action(1, 500, 600)
+    };
+    constexpr size_t num_writers = 2;
+
+    using StorageLockType = StorageLock<>;
+    std::vector<std::unique_ptr<StorageLockType>> locks;
+    locks.reserve(num_writers);
+    while (locks.size() < num_writers) { locks.emplace_back(std::make_unique<StorageLockType>("test")); }
+    auto store = std::make_shared<InMemoryStore>();
+    folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{num_writers};
+    StorageFailureSimulator::instance()->configure({{FailureType::WRITE_SLOW, SLOW_ON_2ND_CALL}});
+    std::vector<Future<Unit>> futures;
+    std::vector<bool> writer_has_lock;
+    writer_has_lock.resize(num_writers);
+    for(size_t i = 0; i < num_writers; ++i) {
+        futures.emplace_back(exec.addFuture([&store, &lock = locks[i], i, &writer_has_lock] {
+            try {
+                lock->lock_timeout(store, 2000);
+                writer_has_lock[i] = true;
+            }
+            catch(const StorageLockTimeout&) {
+                writer_has_lock[i] = false;
+            }
         }));
     }
     collect(futures).get();
@@ -406,15 +428,44 @@ TEST(StorageLock, ConcurrentWrites) {
     ASSERT_EQ(have_lock, 1);
 }
 
+
 TEST(StorageLock, SlowWrites) {
-    constexpr double write_slowdown_prob = 1;
-    constexpr uint32_t slow_down_min_ms = 500;
-    constexpr uint32_t slow_down_max_ms = 1000;
-    proto::storage::VersionStoreConfig::StorageFailureSimulator cfg;
-    cfg.set_write_slowdown_prob(write_slowdown_prob);
-    cfg.set_slow_down_min_ms(slow_down_min_ms);
-    cfg.set_slow_down_max_ms(slow_down_max_ms);
-    StorageFailureSimulator::instance()->configure(cfg);
-    auto lock = StorageLock<>("test");
+    const auto current_lock_sleep_wait_ms = ConfigsMap::instance()->get_int("StorageLock.WaitMs", StorageLock<>::DEFAULT_WAIT_MS);
+    const auto min_ms = current_lock_sleep_wait_ms * 1.5;
+    const auto max_ms = current_lock_sleep_wait_ms * 2;
+    const StorageFailureSimulator::ParamActionSequence SLOW_WRITE = {
+        action_factories::slow_action(1, min_ms, max_ms)
+    };
+    StorageFailureSimulator::instance()->configure({{FailureType::WRITE_SLOW, SLOW_WRITE}});
+    auto lock = StorageLock("test");
     ASSERT_FALSE(lock.try_lock(std::make_shared<InMemoryStore>()));
+}
+
+TEST(StorageLock, DISABLED_LockSameTimestamp) { // Not yet implemented
+    log::lock().set_level(spdlog::level::debug);
+    const StorageFailureSimulator::ParamActionSequence SLOW_ON_2ND_CALL = {
+        action_factories::slow_action(1, 10, 10), action_factories::slow_action(1, 10, 10)
+    };
+    constexpr size_t num_writers = 2;
+
+    using StorageLockType = StorageLock<util::ManualClock>;
+    util::ManualClock::time_ = 1;
+    std::vector<std::unique_ptr<StorageLockType>> locks;
+    locks.reserve(num_writers);
+    while (locks.size() < num_writers) { locks.emplace_back(std::make_unique<StorageLockType>("test")); };
+    auto store = std::make_shared<InMemoryStore>();
+    folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{num_writers};
+    StorageFailureSimulator::instance()->configure({{FailureType::WRITE_SLOW, SLOW_ON_2ND_CALL}});
+    std::vector<Future<Unit>> futures;
+    std::vector<bool> writer_has_lock;
+    writer_has_lock.resize(num_writers);
+    for(size_t i = 0; i < num_writers; ++i) {
+        futures.emplace_back(exec.addFuture([&store, &lock = locks[i], i, &writer_has_lock] {
+            writer_has_lock[i] = lock->try_lock(store);
+        }));
+    }
+    collect(futures).get();
+
+    const long have_lock = std::ranges::count(writer_has_lock, true);
+    ASSERT_EQ(have_lock, 1);
 }
