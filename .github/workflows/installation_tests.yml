@@ -37,7 +37,7 @@ on:
       run_on_real_s3:
         description: 'Execute tests on Amazon S3 (optional as test)'
         required: true
-        default: '0'
+        default: '1'
         type: choice
         options:
           - "1"
@@ -119,7 +119,7 @@ jobs:
       conda_file: "environment_unix.yml"
       arcticdb_version: ${{ inputs.arcticdb_version || '1.6.2' }}
       lmdb: ${{ inputs.run_on_lmdb || '1' }}
-      real_s3: ${{ inputs.run_on_real_s3 || '0' }}
+      real_s3: ${{ inputs.run_on_real_s3 || '1' }}
 
     steps:
 
