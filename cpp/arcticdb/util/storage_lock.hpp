@@ -73,17 +73,17 @@ inline std::thread::id get_thread_id() noexcept {
 
 // This StorageLock is inherently unreliable. It does not use atomic operations and it is possible for two processes to acquire if the timing is right.
 // If you want a reliable alternative which is slower but uses atomic primitives you can look at the `ReliableStorageLock`.
-template <class ClockType = util::SysClock, class MutexType = std::mutex>
+template <class ClockType = util::SysClock>
 class StorageLock {
-    static constexpr int64_t DEFAULT_TTL_INTERVAL = ONE_MINUTE * 60 * 24; // 1 Day
-    static constexpr int64_t DEFAULT_WAIT_MS = 1000; // 1 Second
-    static constexpr int64_t DEFAULT_INITIAL_WAIT_MS = 10;
-
-    MutexType mutex_;
+    std::mutex mutex_;
     const StreamId name_;
     timestamp ts_ = 0;
 
   public:
+    static constexpr int64_t DEFAULT_TTL_INTERVAL = ONE_MINUTE * 60 * 24; // 1 Day
+    static constexpr int64_t DEFAULT_WAIT_MS = 1000; // 1 Second
+    static constexpr int64_t DEFAULT_INITIAL_WAIT_MS = 10;
+
     static void force_release_lock(const StreamId& name, const std::shared_ptr<Store>& store) {
         do_remove_ref_key(store, name);
     }
@@ -112,7 +112,7 @@ class StorageLock {
     }
 
     bool try_lock(const std::shared_ptr<Store>& store) {
-       ARCTICDB_DEBUG(log::lock(), "Storage lock: try lock {}", get_thread_id());
+        ARCTICDB_DEBUG(log::lock(), "Storage lock: try lock {}", get_thread_id());
         if(!mutex_.try_lock()) {
             ARCTICDB_DEBUG(log::lock(), "Storage lock: failed local lock {}", get_thread_id());
             return false;
@@ -122,33 +122,12 @@ class StorageLock {
             that->mutex_.unlock();
         }};
 
-        auto start = ClockType::coarse_nanos_since_epoch();
-        if(!ref_key_exists(store) || !ttl_not_expired(store)) {
-            ts_= create_ref_key(store);
-            auto lock_sleep_ms = ConfigsMap::instance()->get_int("StorageLock.WaitMs", DEFAULT_WAIT_MS);
-            std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep_ms));
-            auto read_ts = read_timestamp(store);
-            auto duration = ClockType::coarse_nanos_since_epoch() - start;
-            auto duration_in_ms = duration / ONE_MILLISECOND;
-            ARCTICDB_INFO(log::lock(), "Took {} ms", duration_in_ms);
-            ARCTICDB_INFO(log::lock(), "Max is {} ms", 1.5 * lock_sleep_ms);
-            if (duration > 1.5 * lock_sleep_ms * ONE_MILLISECOND) {
-                ARCTICDB_DEBUG(log::lock(), "Took too long to read and write the lock. Aborting.");
-                return false;
-            }
-            if(read_ts && *read_ts == ts_) {
-                x.release();
-                ARCTICDB_DEBUG(log::lock(), "Storage lock: succeeded {}", get_thread_id());
-                return true;
-            } else {
-                ARCTICDB_DEBUG(log::lock(), "Storage lock: pre-empted {}", get_thread_id());
-                ts_ = 0;
-                return false;
-            }
-        } else {
-            ARCTICDB_DEBUG(log::lock(), "Storage lock: failed {}", get_thread_id());
-            return false;
+        const bool try_lock = try_acquire_lock(store);
+        if (try_lock) {
+            x.release();
         }
+
+        return try_lock;
     }
 
     void _test_release_local_lock() {
@@ -162,32 +141,50 @@ class StorageLock {
         thread_local std::uniform_int_distribution<size_t> dist;
         thread_local std::minstd_rand gen(std::random_device{}());
         size_t total_wait = 0;
-        do_wait:
-        while (ref_key_exists(store)) {
+
+        while (!try_acquire_lock(store)) {
             wait_ms += dist(gen, decltype(dist)::param_type{0, wait_ms / 2});
             log::lock().info("Didn't get lock, waiting {}", wait_ms);
             sleep_ms(wait_ms);
             total_wait += wait_ms;
             wait_ms *= 2;
-            auto read_ts = ttl_not_expired(store);
-            if (!read_ts)
-                break;
             if (timeout_ms && total_wait > *timeout_ms) {
                 ts_ = 0;
                 log::lock().info("Lock timed out, giving up after {}", wait_ms);
                 mutex_.unlock();
-                throw StorageLockTimeout{fmt::format("Storage lock {} timeout out after {} ms. Lock held since {} (UTC)", name_, total_wait, date_and_time(*read_ts))};
+                throw StorageLockTimeout{fmt::format("Storage lock {} timeout out after {} ms. Lock held since {} (UTC)", name_, total_wait, date_and_time(ts_/**read_ts*/))};
             }
         }
-        ts_ = create_ref_key(store);
-        log::lock().info("{} Lock unlocked, trying to set lock", get_thread_id());
-        auto lock_sleep = ConfigsMap::instance()->get_int("StorageLock.WaitMs", DEFAULT_WAIT_MS);
-        std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep));
-        auto read_ts = read_timestamp(store);
-        if(!read_ts || *read_ts != ts_) {
-            log::lock().info("Lock preempted, expected timestamp {} but got {}", ts_, read_ts.value_or(0));
-            ts_ = 0;
-            goto do_wait;
+    }
+
+    bool try_acquire_lock(const std::shared_ptr<Store>& store) {
+        auto start = ClockType::coarse_nanos_since_epoch();
+        if(!ref_key_exists(store) || !ttl_not_expired(store)) {
+            ts_= create_ref_key(store);
+            auto lock_sleep_ms = ConfigsMap::instance()->get_int("StorageLock.WaitMs", DEFAULT_WAIT_MS);
+            ARCTICDB_DEBUG(log::lock(), "Waiting for {} ms, thread id: {}", lock_sleep_ms, std::this_thread::get_id());
+            std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep_ms));
+            ARCTICDB_DEBUG(log::lock(), "Waited for {} ms, thread id: {}", lock_sleep_ms, std::this_thread::get_id());
+            auto read_ts = read_timestamp(store);
+            auto duration = ClockType::coarse_nanos_since_epoch() - start;
+            auto duration_in_ms = duration / ONE_MILLISECOND;
+            ARCTICDB_INFO(log::lock(), "Took {} ms", duration_in_ms);
+            ARCTICDB_INFO(log::lock(), "Max is {} ms", 1.5 * lock_sleep_ms);
+            if (duration > 1.5 * lock_sleep_ms * ONE_MILLISECOND) {
+                ARCTICDB_DEBUG(log::lock(), "Took too long to read and write the lock. Aborting.");
+                return false;
+            }
+            if(read_ts && *read_ts == ts_) {
+                ARCTICDB_DEBUG(log::lock(), "Storage lock: succeeded {}, written_timestamp: {} current_timestamp: {}", get_thread_id(), ts_, read_ts);
+                return true;
+            } else {
+                ARCTICDB_DEBUG(log::lock(), "Storage lock: pre-empted {}, written_timestamp: {} current_timestamp: {}", get_thread_id(), ts_, read_ts);
+                ts_ = 0;
+                return false;
+            }
+        } else {
+            ARCTICDB_DEBUG(log::lock(), "Storage lock: failed {}", get_thread_id());
+            return false;
         }
     }
 
