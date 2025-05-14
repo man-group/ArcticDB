@@ -3,9 +3,6 @@ permissions:
   contents: read
 
 on:
-  push:
-    branches: 
-      - installation_tests_v4
   schedule:
     # Execution overnight for each version of the arcticdb happens on 
     # dedicated hour for each version (see later step "When on schedule ...")
@@ -16,29 +13,6 @@ on:
     - cron: "0 5 * * *"      
   workflow_dispatch:
     inputs:
-      os:
-        description: 'Operating System to test'
-        required: false
-        default: 'ubuntu-22.04'
-        type: choice
-        options:
-          - all
-          - ubuntu-22.04
-          - windows-latest
-          - macos-latest
-      python:
-        description: 'Python Version to test'
-        required: false
-        default: '3.13'
-        type: choice
-        options:
-          - "3.7"
-          - "3.8"
-          - "3.9"
-          - "3.10"
-          - "3.11"
-          - "3.12"
-          - "3.13"
       arcticdb_version:
         # NOTE that for all versions listed here there must be pip and conda 
         #      requirements files at python/tests/compat folder!
@@ -52,14 +26,6 @@ on:
           - "5.1.2"
           - "4.5.1"
           - "1.6.2"
-      use_conda:
-        description: 'Use conda (default PyPi will be used)'
-        required: false
-        default: 'no'
-        type: choice
-        options:
-          - "no"
-          - "yes"
       run_on_lmdb:
         description: 'Execute tests on LMDB'
         required: true
@@ -69,13 +35,49 @@ on:
           - "1"
           - "0"
       run_on_real_s3:
-        description: 'Execute tests on Amazon S3'
+        description: 'Execute tests on Amazon S3 (optional as test)'
         required: true
         default: '0'
         type: choice
         options:
           - "1"
           - "0"
+      ## TODO:
+      ## Matrix job does already spawn combinations of OS-Python-Repo
+      ## Therefore next selection does not make sense in that context
+      ## and will be needed only if single job is implemented also.
+      ## That is something to be done as enhancement in future perhaps
+      #os:
+      #  description: 'Operating System to test'
+      #  required: false
+      #  default: 'ubuntu-22.04'
+      #  type: choice
+      #  options:
+      #    - all
+      #    - ubuntu-22.04
+      #    - windows-latest
+      #    - macos-latest
+      #python:
+      #  description: 'Python Version to test'
+      #  required: false
+      #  default: '3.13'
+      #  type: choice
+      #  options:
+      #    - "3.7"
+      #    - "3.8"
+      #    - "3.9"
+      #    - "3.10"
+      #    - "3.11"
+      #    - "3.12"
+      #    - "3.13"
+      #use_conda:
+      #  description: 'Use conda (default PyPi will be used)'
+      #  required: false
+      #  default: 'no'
+      #  type: choice
+      #  options:
+      #    - "no"
+      #    - "yes"
                   
 
 jobs:
@@ -146,14 +148,15 @@ jobs:
       # Only this version will be executed at that hour
       # Make sure this step is synchronized with the job schedule  
       if: github.event_name == 'schedule'
+      shell: bash -l {0} 
       run: |
         hour=$(date -u +"%H")
         case $hour in
-          "01") echo "arcticdb_version='1.6.2'" >> $GITHUB_ENV;;
-          "02") echo "arcticdb_version='4.5.1'" >> $GITHUB_ENV;;
-          "03") echo "arcticdb_version='5.1.2'" >> $GITHUB_ENV;;
-          "04") echo "arcticdb_version='5.2.6'" >> $GITHUB_ENV;;
-          "05") echo "arcticdb_version='latest'" >> $GITHUB_ENV;;
+          "01") echo "arcticdb_version=1.6.2" >> $GITHUB_ENV;;
+          "02") echo "arcticdb_version=4.5.1" >> $GITHUB_ENV;;
+          "03") echo "arcticdb_version=5.1.2" >> $GITHUB_ENV;;
+          "04") echo "arcticdb_version=5.2.6" >> $GITHUB_ENV;;
+          "05") echo "arcticdb_version=latest" >> $GITHUB_ENV;;
         esac        
 
     - name: Checkout code
