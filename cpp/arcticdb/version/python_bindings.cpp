@@ -830,8 +830,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                              }
                      );
                  }
-                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
-                 return adapt_read_df(v.batch_read_and_join(stream_ids, version_queries, read_queries, read_options, std::move(_clauses), handler_data));
+                 const OutputFormat output_format = read_options.output_format();
+                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
+                 std::pair<std::any&, OutputFormat> handler{handler_data, output_format};
+                 return adapt_read_df(v.batch_read_and_join(stream_ids, version_queries, read_queries, read_options, std::move(_clauses), handler_data), &handler);
              },
              py::call_guard<SingleThreadMutexHolder>(), "Join multiple symbols from the store")
         .def("batch_read_keys",
