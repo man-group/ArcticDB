@@ -37,7 +37,7 @@ def write_data(lib, sym, done, error, interval):
                     if num_versions_to_delete == 1:
                         lib.delete_version(sym, delete_version_id)
                     else:
-                        lib.delete_versions(sym, [delete_version_id, delete_version_id - 1])
+                        lib.delete_versions(sym, [delete_version_id, delete_version_id + 1])
                     print("Doing delete {}/{}".format(idx1, idx2))
                     delete_version_id += num_versions_to_delete
                 else:
