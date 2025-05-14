@@ -389,7 +389,8 @@ void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_
     // test_join_schemas.cpp
     // i.e. There may be a column where the types between two input schemas to not match, but it doesn't matter, as the
     // column is missing from another schema
-    ankerl::unordered_dense::map<std::string, std::optional<DataType>> columns_to_keep;
+    // Cannot use ankerl::unordered_dense as iterators are not stable on erase
+    std::unordered_map<std::string, std::optional<DataType>> columns_to_keep;
     bool first_element{true};
     for (auto& schema: input_schemas) {
         if (first_element) {
@@ -478,7 +479,7 @@ void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_
                         // This column is new, add it in
                         auto [_, inserted] = columns_to_keep.emplace(column_name, data_type);
                         util::check(inserted, "Adding same column name to map twice in outer_join");
-                        column_names_to_keep.emplace_back(column_name);
+                        column_names_to_keep.emplace_back(std::move(column_name));
                     }
                 }
             }

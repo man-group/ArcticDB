@@ -85,9 +85,9 @@ inline ReadResult create_python_read_result(
     const auto& desc_proto = result.desc_.proto();
     std::variant<arcticdb::proto::descriptors::UserDefinedMetadata, std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>> metadata;
     if (user_meta.has_value()) {
-        metadata = *user_meta;
+        metadata = std::move(*user_meta);
     } else {
-        metadata = desc_proto.user_meta();
+        metadata = std::move(desc_proto.user_meta());
     }
     return {version, std::move(python_frame), desc_proto.normalization(),
             metadata, desc_proto.multi_key_meta(), std::move(result.keys_)};

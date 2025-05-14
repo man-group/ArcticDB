@@ -1182,7 +1182,7 @@ auto unpack_symbol_processing_results(std::vector<SymbolProcessingResult>&& symb
     entity_ids.reserve(symbol_processing_results.size());
     res_versioned_items->reserve(symbol_processing_results.size());
     res_metadatas->reserve(symbol_processing_results.size());
-    for (const auto& symbol_processing_result: symbol_processing_results) {
+    for (auto& symbol_processing_result: symbol_processing_results) {
         input_schemas.emplace_back(std::move(symbol_processing_result.output_schema_));
         entity_ids.emplace_back(std::move(symbol_processing_result.entity_ids_));
         res_versioned_items->emplace_back(std::move(symbol_processing_result.versioned_item_));
@@ -1225,7 +1225,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
                                                         read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
                                                         idx,
                                                         &read_options,
-                                                        &component_manager](auto&& opt_index_key) mutable {
+                                                        &component_manager](std::optional<AtomKey>&& opt_index_key) mutable {
                     auto version_info = get_version_identifier(
                             stream_ids[idx],
                             version_queries[idx],
@@ -1240,7 +1240,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
     }
     auto clauses_ptr = std::make_shared<std::vector<std::shared_ptr<Clause>>>(std::move(clauses));
     return folly::collect(symbol_processing_result_futs).via(&async::io_executor())
-    .thenValueInline([this, &handler_data, clauses_ptr, component_manager](auto&& symbol_processing_results) mutable {
+    .thenValueInline([this, &handler_data, clauses_ptr, component_manager](std::vector<SymbolProcessingResult>&& symbol_processing_results) mutable {
         auto [input_schemas, entity_ids, res_versioned_items, res_metadatas] = unpack_symbol_processing_results(std::move(symbol_processing_results));
         auto pipeline_context = setup_join_pipeline_context(std::move(input_schemas), *clauses_ptr);
         return schedule_remaining_iterations(std::move(entity_ids), clauses_ptr)

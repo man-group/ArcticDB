@@ -130,7 +130,7 @@ size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey> & slice_and_ke
 		return 0u;
 
     auto offset = 0;
-	auto diff = slice_and_keys[0].slice_.row_range.diff();
+    auto diff = slice_and_keys[0].slice_.row_range.diff();
     auto col_begin = slice_and_keys[0].slice_.col_range.first;
 	
 	for(auto it = slice_and_keys.begin(); it != slice_and_keys.end(); ++it) {

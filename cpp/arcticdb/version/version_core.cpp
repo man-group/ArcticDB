@@ -677,7 +677,7 @@ folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
             auto next_units_of_work = clauses->front()->structure_for_processing(std::move(entity_id_vectors));
 
             std::vector<folly::Future<std::vector<EntityId>>> work_futures;
-            for(auto&& unit_of_work : next_units_of_work) {
+            for(auto& unit_of_work : next_units_of_work) {
                 ARCTICDB_RUNTIME_DEBUG(log::memory(), "Scheduling work for entity ids: {}", unit_of_work);
                 work_futures.emplace_back(async::submit_cpu_task(async::MemSegmentProcessingTask{*clauses, std::move(unit_of_work)}));
             }
@@ -685,10 +685,7 @@ folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
             return folly::collect(work_futures).via(&async::io_executor());
         });
     }
-
-    return std::move(entity_ids_vec_fut).thenValueInline([](std::vector<std::vector<EntityId>>&& entity_id_vectors) {
-        return flatten_entities(std::move(entity_id_vectors));
-    });
+    return std::move(entity_ids_vec_fut).thenValueInline(flatten_entities);
 }
 
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
@@ -947,9 +944,8 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
  * processing unit collected into a single ProcessingUnit. Slices contained within a single ProcessingUnit are processed
  * within a single thread.
  *
- * The processing of a ProcessingUnit is scheduled via the Async Store. Within a single thread, the
- * segments will be retrieved from storage and decompressed before being passed to a MemSegmentProcessingTask which
- * will process all clauses up until a clause that requires a repartition.
+ * Where possible (generally, when there is no column slicing), clauses are processed in the same folly thread as the
+ * decompression without context switching to try and optimise cache access.
  */
 folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
         const std::shared_ptr<Store>& store,
@@ -964,11 +960,10 @@ folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
                         std::shared_ptr<RowRange>,
                         std::shared_ptr<ColRange>>(*component_manager, processed_entity_ids);
 
-                if (std::any_of(read_query->clauses_.begin(),
-                                read_query->clauses_.end(),
-                                [](const std::shared_ptr<Clause>& clause) {
-                                    return clause->clause_info().modifies_output_descriptor_;
-                                })) {
+                if (std::ranges::any_of(read_query->clauses_,
+                                        [](const std::shared_ptr<Clause>& clause) {
+                                            return clause->clause_info().modifies_output_descriptor_;
+                                        })) {
                     set_output_descriptors(proc, read_query->clauses_, pipeline_context);
                 }
                 return collect_segments(std::move(proc));

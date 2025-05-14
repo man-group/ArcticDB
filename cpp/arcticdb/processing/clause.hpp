@@ -799,7 +799,7 @@ struct ConcatClause {
         return clause_info_;
     }
 
-    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {
+    void set_processing_config(const ProcessingConfig&) {
     }
 
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
