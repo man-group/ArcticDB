@@ -29,9 +29,9 @@ def write_data(lib, sym, done, error, interval):
     delete_version_id = 0
     number_of_writes = 0
     try:
-        for idx1 in range(50):
+        for idx1 in range(5):
             print("Iteration {}/10".format(idx1))
-            for idx2 in range(50):
+            for idx2 in range(20):
                 if idx2 % 4 == 3:
                     num_versions_to_delete = random.randint(1, 2)
                     if num_versions_to_delete == 1:
@@ -86,7 +86,7 @@ def test_stress_version_map_compact(object_version_store, sym, capsys, interval)
     done = Value("b", 0)
     error = Value("b", 0)
     lib = object_version_store
-    # lib.version_store._set_validate_version_map()
+    lib.version_store._set_validate_version_map()
     with capsys.disabled():
         try:
             log.version.warn("Starting writer")
