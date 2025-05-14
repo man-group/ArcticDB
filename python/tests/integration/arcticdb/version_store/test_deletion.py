@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import sys
 import numpy as np
 import pandas as pd
@@ -82,12 +83,12 @@ def test_delete_version_basic(s3_version_store, idx, sym):
     object_version_store.delete_version(symbol, idx)
 
     with pytest.raises(NoDataFoundException):
-       object_version_store.read(symbol, idx)
+        object_version_store.read(symbol, idx)
     assert len(object_version_store.list_versions(symbol)) == 2
     if idx != 2:
-       assert_frame_equal(object_version_store.read(symbol).data, df3)
+        assert_frame_equal(object_version_store.read(symbol).data, df3)
     else:
-       assert_frame_equal(object_version_store.read(symbol).data, df2)
+        assert_frame_equal(object_version_store.read(symbol).data, df2)
 
     assert_frame_equal(object_version_store.read(symbol, (idx - 1) % 3).data, dfs[(idx - 1) % 3])
     assert_frame_equal(object_version_store.read(symbol, (idx - 2) % 3).data, dfs[(idx - 2) % 3])
@@ -114,6 +115,31 @@ def test_delete_version_basic(s3_version_store, idx, sym):
     with pytest.raises(NoDataFoundException):
         object_version_store.read(symbol, idx)
     assert len(object_version_store.list_versions(symbol)) == 0
+
+
+@pytest.mark.parametrize("versions", [[0, 1], [1, 2], [0, 2], [0, 1, 2]])
+def test_delete_versions_basic(s3_version_store, versions, sym):
+    object_version_store = s3_version_store
+    symbol = sym
+    df1 = pd.DataFrame({"x": np.arange(10, dtype=np.int64)})
+    object_version_store.write(symbol, df1)
+    df2 = pd.DataFrame({"y": np.arange(10, dtype=np.int32)})
+    object_version_store.write(symbol, df2)
+    df3 = pd.DataFrame({"z": np.arange(10, dtype=np.uint64)})
+    object_version_store.write(symbol, df3)
+    vit = object_version_store.read(symbol)
+    assert_frame_equal(vit.data, df3)
+
+    dfs = [df1, df2, df3]
+
+    assert len(object_version_store.list_versions(symbol)) == 3
+
+    object_version_store.delete_versions(symbol, versions)
+
+    for idx in versions:
+        with pytest.raises(NoDataFoundException):
+            object_version_store.read(symbol, idx)
+    assert len(object_version_store.list_versions(symbol)) == len(dfs) - len(versions)
 
 
 @pytest.mark.storage
@@ -188,6 +214,34 @@ def test_delete_version_with_append(object_version_store, idx, sym):
         expected = pd.concat([df1, df3])
         assert_frame_equal(vit.data, expected)
         assert vit.version == 2
+
+
+@pytest.mark.parametrize("versions", [[0, 1], [1, 2], [0, 2], [0, 1, 2], [2, 3], [0, 3]])
+@pytest.mark.storage
+def test_delete_versions_with_append(object_version_store, versions, sym):
+    symbol = sym
+    dfs = []
+    for i in range(4):
+        idx = np.arange(i * 1000000, (i + 1) * 1000000)
+        d = {"x": np.arange(i * 1000000, (i + 1) * 1000000, dtype=np.int64)}
+        df = pd.DataFrame(data=d, index=idx)
+        object_version_store.append(symbol, df)
+        dfs.append(df)
+        vit = object_version_store.read(symbol)
+        assert_frame_equal(vit.data, pd.concat(dfs))
+
+    object_version_store.delete_versions(symbol, versions)
+    assert len(object_version_store.list_versions(symbol)) == len(dfs) - len(versions)
+
+    if versions == [2, 3]:
+        # The data from the recent versions should be deleted
+        assert_frame_equal(object_version_store.read(symbol).data, pd.concat(dfs[:-2]))
+    elif versions == [0, 3]:
+        # only the the data from the latest version should be deleted
+        assert_frame_equal(object_version_store.read(symbol).data, pd.concat(dfs[:-1]))
+    else:
+        # data from the past versions is should still be present
+        assert_frame_equal(object_version_store.read(symbol).data, pd.concat(dfs))
 
 
 @pytest.mark.storage
@@ -384,6 +438,34 @@ def test_delete_version_with_snapshot(map_timeout, object_and_mem_and_lmdb_versi
         lib.delete_version(symbol, 0)
         assert len([ver for ver in lib.list_versions(symbol) if not ver["deleted"]]) == 1
 
+        assert_frame_equal(lib.read(symbol, "delete_version_snap_1").data, df1)
+
+
+@pytest.mark.parametrize("map_timeout", MAP_TIMEOUTS)
+@pytest.mark.storage
+def test_delete_versions_with_snapshot(map_timeout, object_and_mem_and_lmdb_version_store, sym):
+    with config_context("VersionMap.ReloadInterval", map_timeout):
+        lib = object_and_mem_and_lmdb_version_store
+        symbol = sym
+        df1 = pd.DataFrame({"x": np.arange(10, dtype=np.int64)})
+        lib.write(symbol, df1)
+        lib.snapshot("delete_version_snap_1")
+
+        df2 = pd.DataFrame({"y": np.arange(10, dtype=np.int32)})
+        lib.write(symbol, df2)
+        lib.snapshot("delete_version_snap_2")
+
+        df3 = pd.DataFrame({"z": np.arange(10, dtype=np.uint64)})
+        lib.write(symbol, df3)
+        vit = lib.read(symbol)
+        assert_frame_equal(vit.data, df3)
+
+        assert len(lib.list_versions(symbol)) == 3
+
+        lib.delete_versions(symbol, [0, 1])
+        assert len([ver for ver in lib.list_versions() if not ver["deleted"]]) == 1
+
+        assert_frame_equal(lib.read(symbol, "delete_version_snap_2").data, df2)
         assert_frame_equal(lib.read(symbol, "delete_version_snap_1").data, df1)
 
 
