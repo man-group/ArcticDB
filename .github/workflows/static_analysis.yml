@@ -28,7 +28,7 @@
         - name: Setup build dependencies
           run: |
             sudo apt-get update
-            sudo apt-get install -y gcc-10 g++-10 make mono-complete libkrb5-dev libsasl2-dev
+            sudo apt-get install -y gcc-11 g++-11 make mono-complete libkrb5-dev libsasl2-dev
 
         - name: Setup VCPKG cache
           run: |
@@ -44,12 +44,12 @@
         - name: CMake configure
           uses: lukka/run-cmake@v10
           env:
-            CC: "gcc-10"
-            CXX: "g++-10"
+            CC: "gcc-11"
+            CXX: "g++-11"
           with:
             cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
             configurePreset: linux-release
-            configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DCMAKE_C_COMPILER=gcc-10', '-DCMAKE_CXX_COMPILER=g++-10']"
+            configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DCMAKE_C_COMPILER=gcc-11', '-DCMAKE_CXX_COMPILER=g++-11']"
 
         - name: Copy Coverity config
           run: cp ${{github.workspace}}/coverity.yaml ${{github.workspace}}/cpp/out/linux-release-build
