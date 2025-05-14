@@ -230,7 +230,7 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
       persistent_storage: ${{env.PERSISTENT_STORAGE}}
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
-      pytest_args: ${{inputs.pytest_args || ""}}
+      pytest_args: ${{inputs.pytest_args || ''}}
 
   cpp-test-windows:
     needs: [common_config]
@@ -261,7 +261,7 @@ jobs:
       matrix: ${{needs.common_config.outputs.windows_matrix}}
       persistent_storage: ${{ env.PERSISTENT_STORAGE }}
       pytest_xdist_mode: "-n auto"
-      pytest_args: ${{inputs.pytest_args || ""}}
+      pytest_args: ${{inputs.pytest_args || ''}}
 
   persistent_storage_verify_linux:
     needs: [common_config, build-python-wheels-linux, build-python-wheels-windows]
