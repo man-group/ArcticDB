@@ -41,7 +41,7 @@ concurrency:
   cancel-in-progress: true
 env:
   # For scheduled tests always select real s3 storage
-  PERSISTENT_STORAGE = ${{ github.event_name == 'schedule' && 'AWS_S3' || inputs.persistent_storage }}
+  PERSISTENT_STORAGE: ${{ github.event_name == 'schedule' && 'AWS_S3' || inputs.persistent_storage }}
 
 jobs:
   cibw_docker_image:
