@@ -123,6 +123,23 @@ jobs:
 
     steps:
 
+    - name: When On Schedule - Override the arcticdb version based on hour of execution
+      # Only when executed on schedule this step will be triggered
+      # Based on the hour of execution a specific version will be assigned
+      # Only this version will be executed at that hour
+      # Make sure this step is synchronized with the job schedule  
+      if: github.event_name == 'schedule'
+      shell: bash -l {0} 
+      run: |
+        hour=$(date -u +"%H")
+        case $hour in
+          "01") echo "arcticdb_version=1.6.2" >> $GITHUB_ENV;;
+          "02") echo "arcticdb_version=4.5.1" >> $GITHUB_ENV;;
+          "03") echo "arcticdb_version=5.1.2" >> $GITHUB_ENV;;
+          "04") echo "arcticdb_version=5.2.6" >> $GITHUB_ENV;;
+          "05") echo "arcticdb_version=latest" >> $GITHUB_ENV;;
+        esac        
+
     - name: Check Unsupported Versions
       shell: bash
       run: |
@@ -141,23 +158,6 @@ jobs:
           echo "Skipping unsupported combination: $CURRENT_COMBINATION"
           echo "SKIP_JOB=true" >> $GITHUB_ENV
         fi
-
-    - name: When On Schedule - Override the arcticdb version based on hour of execution
-      # Only when executed on schedule this step will be triggered
-      # Based on the hour of execution a specific version will be assigned
-      # Only this version will be executed at that hour
-      # Make sure this step is synchronized with the job schedule  
-      if: github.event_name == 'schedule'
-      shell: bash -l {0} 
-      run: |
-        hour=$(date -u +"%H")
-        case $hour in
-          "01") echo "arcticdb_version=1.6.2" >> $GITHUB_ENV;;
-          "02") echo "arcticdb_version=4.5.1" >> $GITHUB_ENV;;
-          "03") echo "arcticdb_version=5.1.2" >> $GITHUB_ENV;;
-          "04") echo "arcticdb_version=5.2.6" >> $GITHUB_ENV;;
-          "05") echo "arcticdb_version=latest" >> $GITHUB_ENV;;
-        esac        
 
     - name: Checkout code
       if: ${{ env.SKIP_JOB != 'true' }}
