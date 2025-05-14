@@ -33,7 +33,8 @@ def write_data(lib, sym, done, error, interval):
             print("Iteration {}/10".format(idx1))
             for idx2 in range(20):
                 if idx2 % 4 == 3:
-                    num_versions_to_delete = random.randint(1, 2)
+                    # num_versions_to_delete = random.randint(1, 2)
+                    num_versions_to_delete = 1
                     if num_versions_to_delete == 1:
                         lib.delete_version(sym, delete_version_id)
                     else:
@@ -57,6 +58,7 @@ def write_data(lib, sym, done, error, interval):
 
     print("Setting done")
     done.value = 1
+    error.value = 0
 
 
 def compact_data(lib, sym, done, error):
