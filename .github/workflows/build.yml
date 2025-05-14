@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: ["**"]
   schedule:
+    # IMPORTANT: For scheduled job we execute AWS_S3
     - cron: '0 6 * * 1,4' # Mon and Thu at 6 am
   workflow_dispatch:
     inputs:
@@ -39,9 +40,6 @@ run-name: Building ${{github.ref_name}} on ${{github.event_name}} by ${{github.a
 concurrency:
   group: ${{github.ref}}
   cancel-in-progress: true
-env:
-  # For scheduled tests always select real s3 storage
-  PERSISTENT_STORAGE: ${{ github.event_name == 'schedule' && 'AWS_S3' || inputs.persistent_storage }}
 
 jobs:
   cibw_docker_image:
@@ -130,7 +128,7 @@ jobs:
       windows_matrix: ${{toJson(matrix.windows_matrix)}}
 
   pre_seed_cleanup:
-    if: env.PERSISTENT_STORAGE != 'no'
+    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage != 'no'}}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
@@ -139,7 +137,7 @@ jobs:
 
   persistent_storage_seed_linux:
     needs: [common_config, pre_seed_cleanup]
-    if: env.PERSISTENT_STORAGE != 'no'
+    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage != 'no'}}
     strategy:
       fail-fast: false
       matrix:
@@ -161,7 +159,7 @@ jobs:
 
   persistent_storage_seed_windows:
     needs: [common_config, pre_seed_cleanup]
-    if: env.PERSISTENT_STORAGE != 'no'
+    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage != 'no'}}
     strategy:
       fail-fast: false
       matrix:
@@ -228,7 +226,8 @@ jobs:
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
-      persistent_storage: ${{env.PERSISTENT_STORAGE}}
+      # When scheduled job persistence storage will be AWS
+      persistent_storage: ${{ inputs.persistent_storage || 'AWS_S3'}} 
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
       pytest_args: ${{inputs.pytest_args || ''}}
 
@@ -259,13 +258,14 @@ jobs:
       cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{needs.common_config.outputs.windows_matrix}}
-      persistent_storage: ${{ env.PERSISTENT_STORAGE }}
+      # When scheduled job persistence storage will be AWS
+      persistent_storage: ${{ inputs.persistent_storage || 'AWS_S3'}}
       pytest_xdist_mode: "-n auto"
       pytest_args: ${{inputs.pytest_args || ''}}
 
   persistent_storage_verify_linux:
     needs: [common_config, build-python-wheels-linux, build-python-wheels-windows]
-    if: env.PERSISTENT_STORAGE != 'no' 
+    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage != 'no'}}
     strategy:
       fail-fast: false
       matrix:
@@ -287,7 +287,7 @@ jobs:
 
   persistent_storage_verify_windows:
     needs: [common_config, build-python-wheels-windows, build-python-wheels-linux]
-    if: env.PERSISTENT_STORAGE != 'no' 
+    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage != 'no'}}
     strategy:
       fail-fast: false
       matrix:
@@ -309,7 +309,7 @@ jobs:
     
   post_verify_cleanup:
     needs: [persistent_storage_verify_windows, persistent_storage_verify_linux]
-    if: env.PERSISTENT_STORAGE != 'no' 
+    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage != 'no'}}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
