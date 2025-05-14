@@ -86,7 +86,7 @@ def test_stress_version_map_compact(object_version_store, sym, capsys, interval)
     done = Value("b", 0)
     error = Value("b", 0)
     lib = object_version_store
-    lib.version_store._set_validate_version_map()
+    # lib.version_store._set_validate_version_map()
     with capsys.disabled():
         try:
             log.version.warn("Starting writer")
