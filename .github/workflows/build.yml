@@ -230,7 +230,7 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
       persistent_storage: ${{env.PERSISTENT_STORAGE}}
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
-      pytest_args: ${{inputs.pytest_args | ""}}
+      pytest_args: ${{inputs.pytest_args || ""}}
 
   cpp-test-windows:
     needs: [common_config]
