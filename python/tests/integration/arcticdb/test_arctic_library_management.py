@@ -338,7 +338,7 @@ def test_do_not_persist_s3_details(s3_storage):
 @pytest.mark.storage
 def test_library_options(arctic_client, lib_name):
     ac = arctic_client
-    lib_name_do = lib_name_do # default options
+    lib_name_do = f"{lib_name}_do" # default options
     ac.create_library(lib_name_do)
     lib = ac[lib_name_do]
     assert lib.options() == LibraryOptions(encoding_version=ac._encoding_version)
@@ -356,7 +356,7 @@ def test_library_options(arctic_client, lib_name):
         columns_per_segment=3,
         encoding_version=EncodingVersion.V2,
     )
-    lib_name_eo = f"{lib_name}_explicit_options" # explicit options
+    lib_name_eo = f"{lib_name}_eo" # explicit options
     ac.create_library(
         lib_name_eo,
         library_options,
