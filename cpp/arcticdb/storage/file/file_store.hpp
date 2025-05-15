@@ -81,9 +81,13 @@ void write_dataframe_to_file_internal(
                  frame->index,
                  options,
                  block_codec
-                 ));
+                 )).thenValueInline([] (auto&& result) {
+                     std::get<1>(result).calculate_statistics();
+                     return result;
+                 });
          },
          write_window_size())).via(&async::io_executor());
+
     auto segments = std::move(key_seg_futs).get();
 
     auto data_size = max_data_size(segments, block_codec, encoding_version);
