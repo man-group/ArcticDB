@@ -1189,7 +1189,7 @@ void write_dataframe_to_file(
         const py::object& user_meta) {
     ARCTICDB_SAMPLE(WriteDataframeToFile, 0)
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, false);
-    write_dataframe_to_file_internal(stream_id, frame, path, WriteOptions{}, codec::default_lz4_codec(), EncodingVersion::V2);
+    write_dataframe_to_file_internal(stream_id, frame, path, WriteOptions{}, codec::default_adaptive_codec(), EncodingVersion::V2);
 }
 
 ReadResult read_dataframe_from_file(

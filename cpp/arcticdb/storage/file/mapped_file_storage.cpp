@@ -23,7 +23,8 @@ namespace arcticdb::storage::file {
 
 MappedFileStorage::MappedFileStorage(const LibraryPath &lib, OpenMode mode, Config conf) :
     SingleFileStorage(lib, mode),
-    config_(std::move(conf)) {
+    config_(std::move(conf)),
+    codec_(codec::default_adaptive_codec()) {
     init();
 }
 
@@ -144,9 +145,10 @@ bool MappedFileStorage::do_fast_delete() {
 
 void MappedFileStorage::do_finalize(KeyData key_data)  {
     multi_segment_header_.sort();
-    auto header_segment = encode_dispatch(multi_segment_header_.detach_segment(),
-                                          codec_,
-                                          EncodingVersion{static_cast<uint16_t>(config_.encoding_version())});
+    SegmentScanResults scan_results;
+
+    const auto encoding_version = EncodingVersion{static_cast<uint16_t>(config_.encoding_version())};
+    auto header_segment = encode_dispatch(multi_segment_header_.detach_segment(), codec_, encoding_version);
     write_segment(header_segment);
     auto* pos = file_.data() + offset_;
     memcpy(pos, &key_data, sizeof(KeyData));
