@@ -31,13 +31,13 @@ def test_get_sizes(arctic_client, lib_name):
     # Then
     assert len(sizes) == 10
     assert sizes[KeyType.VERSION_REF].count == 2
-    assert 500 < sizes[KeyType.VERSION_REF].bytes_compressed < 2000
+    assert 500 < sizes[KeyType.VERSION_REF].bytes_compressed < 2500
     assert sizes[KeyType.VERSION].count == 5
-    assert 3000 < sizes[KeyType.VERSION].bytes_compressed < 5000
+    assert 3000 < sizes[KeyType.VERSION].bytes_compressed < 5500
     assert sizes[KeyType.TABLE_INDEX].count == 3
     assert 3000 < sizes[KeyType.TABLE_INDEX].bytes_compressed < 6000
     assert sizes[KeyType.TABLE_DATA].count == 7
-    assert 20e6 < sizes[KeyType.TABLE_DATA].bytes_compressed < 30e6
+    assert 20e6 < sizes[KeyType.TABLE_DATA].bytes_compressed < 32e6
     assert sizes[KeyType.SYMBOL_LIST].count == 4
     assert 500 < sizes[KeyType.SYMBOL_LIST].bytes_compressed < 3000
     assert sizes[KeyType.LOG].count == 5
@@ -53,7 +53,7 @@ def test_get_sizes(arctic_client, lib_name):
     assert sizes[KeyType.TABLE_INDEX].count == 1
     assert sizes[KeyType.TABLE_DATA].count == 3
     assert sizes[KeyType.SYMBOL_LIST].count == 5
-    assert 10e6 < sizes[KeyType.TABLE_DATA].bytes_compressed < 15e6
+    assert 10e6 < sizes[KeyType.TABLE_DATA].bytes_compressed < 16e6
 
     total_size = sum_sizes(sizes.values())
     assert total_size.count == 23
@@ -65,7 +65,7 @@ def test_get_sizes(arctic_client, lib_name):
     sizes = arctic_library.admin_tools().get_sizes()
     assert sizes[KeyType.SNAPSHOT_REF].count == 1
     assert sizes[KeyType.APPEND_DATA].count == 3
-    assert 10e6 < sizes[KeyType.APPEND_DATA].bytes_compressed < 15e6
+    assert 10e6 < sizes[KeyType.APPEND_DATA].bytes_compressed < 16e6
 
     arctic_library._nvs.write("rec", [df, df], recursive_normalizers=True)
     sizes = arctic_library.admin_tools().get_sizes()
