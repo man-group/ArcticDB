@@ -81,7 +81,7 @@ SIM_S3_TESTS_MARK = pytest.mark.skipif(
 """
 SIM_GCP_TESTS_MARK = pytest.mark.skipif(
     not LOCAL_STORAGE_TESTS_ENABLED,
-    reason="Ability to disable local storages - simulated gcp is disabled",
+    reason="Ability to disable local storages - simulates gcp is disabled",
 )
 """Mark on tests using the real GCP storage.
 """
