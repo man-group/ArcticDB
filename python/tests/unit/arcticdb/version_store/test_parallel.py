@@ -358,7 +358,7 @@ def test_floats_to_nans(lmdb_version_store_dynamic_schema):
 )
 @pytest.mark.parametrize("prune_previous_versions", (True, False))
 @pytest.mark.storage
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 def test_parallel_write_sort_merge(
     basic_store_tiny_segment,
     lib_name,

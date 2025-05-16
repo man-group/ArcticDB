@@ -67,7 +67,7 @@ def test_lazy_filter(lmdb_library):
     assert_frame_equal(expected, received)
 
 
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 @FixtureMarks.lmdb_storage_extend_for_installation
 def test_lazy_head(lmdb_library):
     lib = lmdb_library
@@ -85,7 +85,7 @@ def test_lazy_head(lmdb_library):
     assert_frame_equal(expected, received)
 
 
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 @FixtureMarks.lmdb_storage_extend_for_installation
 def test_lazy_tail(lmdb_library):
     lib = lmdb_library
@@ -184,7 +184,7 @@ def test_lazy_resample(lmdb_library):
     assert_frame_equal(expected, received)
 
 
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 @FixtureMarks.lmdb_storage_extend_for_installation
 def test_lazy_with_initial_query_builder(lmdb_library):
     lib = lmdb_library
@@ -205,7 +205,7 @@ def test_lazy_with_initial_query_builder(lmdb_library):
     assert_frame_equal(expected, received, check_dtype=False)
 
 
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 @FixtureMarks.lmdb_storage_extend_for_installation
 def test_lazy_chaining(lmdb_library):
     lib = lmdb_library

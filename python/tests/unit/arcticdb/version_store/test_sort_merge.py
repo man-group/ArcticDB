@@ -666,7 +666,7 @@ class TestSortMergeDynamicSchema:
         )
         assert_frame_equal(lib.read("sym").data, expected, check_dtype=True)
 
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 @FixtureMarks.lmdb_storage_extend_for_installation
 def test_update_symbol_list(lmdb_library):
     lib = lmdb_library
@@ -708,7 +708,7 @@ def test_delete_staged_data(lmdb_library):
     assert len(get_append_keys(lib, "sym")) == 10
     assert_delete_staged_data_clears_append_keys(lib, "sym")
 
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 @FixtureMarks.lmdb_storage_extend_for_installation
 @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
 def test_get_staged_symbols(lmdb_library, mode):

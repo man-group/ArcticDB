@@ -47,7 +47,7 @@ from tests.util.storage_test import get_s3_storage_config
 
 from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
 
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 @pytest.mark.storage
 def test_library_creation_deletion(arctic_client, lib_name):
     ac = arctic_client
@@ -78,7 +78,7 @@ def test_library_creation_deletion(arctic_client, lib_name):
         ac.delete_library(lib_name)
 
 
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 @pytest.mark.storage
 def test_get_library(arctic_client, lib_name):
     ac = arctic_client
@@ -86,7 +86,7 @@ def test_get_library(arctic_client, lib_name):
     with pytest.raises(LibraryNotFound):
         _ = ac.get_library(lib_name)
     # Creates library with default options if just create_if_missing set to True
-    lib = ac.get_library(f"{lib_name}_default_options", create_if_missing=True)
+    lib = ac.get_library(f"{lib_name}_do", create_if_missing=True)
 
     assert lib.options() == LibraryOptions(encoding_version=ac._encoding_version)
     # Creates library with the specified options if create_if_missing set to True and options provided
@@ -98,7 +98,7 @@ def test_get_library(arctic_client, lib_name):
         encoding_version=EncodingVersion.V1 if ac._encoding_version == EncodingVersion.V2 else EncodingVersion.V2,
     )
     lib = ac.get_library(
-        f"{lib_name}_specified_options",
+        f"{lib_name}_so",
         create_if_missing=True,
         library_options=library_options,
     )
@@ -108,7 +108,7 @@ def test_get_library(arctic_client, lib_name):
     library_options.dynamic_schema = False
     with pytest.raises(MismatchingLibraryOptions):
         _ = ac.get_library(
-            f"{lib_name}_specified_options",
+            f"{lib_name}_so",
             create_if_missing=True,
             library_options=library_options,
         )
@@ -117,7 +117,7 @@ def test_get_library(arctic_client, lib_name):
         _ = ac.get_library(lib_name, create_if_missing=False, library_options=library_options)
 
 
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 @FixtureMarks.lmdb_storage_extend_for_installation
 def test_create_library_enterprise_options_defaults(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
@@ -170,7 +170,7 @@ def test_create_library_background_deletion_option_set_does_not_delete(lmdb_stor
 
     assert len(lt.find_keys(KeyType.TABLE_DATA))
 
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 @FixtureMarks.lmdb_storage_extend_for_installation
 def test_modify_options_affect_in_memory_lib(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()

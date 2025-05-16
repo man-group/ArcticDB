@@ -9,7 +9,7 @@ from arcticdb_ext.version_store import SortedValue
 from arcticdb.util.test import random_strings_of_length
 
 
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 @pytest.mark.storage
 def test_stage_finalize(arctic_library):
     symbol = "AAPL"
@@ -151,7 +151,7 @@ def test_stage_finalize_strings_dynamic(arctic_library_dynamic):
     pd.testing.assert_frame_equal(result, expected)
 
 
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 @pytest.mark.storage
 def test_stage_finalize_sort_index(arctic_library):
     symbol = "AAPL"
@@ -247,7 +247,7 @@ def test_stage_with_sort_columns_not_ts(lmdb_version_store_v1):
     assert_frame_equal(df1, actual)
 
 
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 @pytest.mark.storage
 def test_stage_finalize_dynamic_with_chunking(arctic_client, lib_name):
     lib_opts = adb.LibraryOptions(dynamic_schema=True, rows_per_segment=2, columns_per_segment=2)

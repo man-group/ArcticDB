@@ -162,7 +162,7 @@ def test_read_batch_query_with_and(arctic_library):
     assert batch[0].symbol == symbol
     assert isinstance(batch[0], DataError)
 
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 @pytest.mark.storage
 def test_read_batch_metadata_on_different_version(arctic_library):
     """

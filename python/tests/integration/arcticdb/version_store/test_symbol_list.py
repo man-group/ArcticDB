@@ -370,7 +370,7 @@ def test_symbol_list_parallel_stress_with_delete(
         assert not lib.version_store.indexes_sorted(sym)
 
 
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 @FixtureMarks.lmdb_storage_extend_for_installation
 def test_force_compact_symbol_list(lmdb_version_store_v1):
     lib = lmdb_version_store_v1

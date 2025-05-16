@@ -82,7 +82,7 @@ def test_head_default_num_rows(lmdb_version_store_tiny_segment, one_col_df):
     assert np.array_equal(one_col_df().head(num_rows), lmdb_version_store_tiny_segment.head(symbol).data)
 
 
-@pytest.mark.installation
+@pytest.mark.reduced_storage_tests
 @FixtureMarks.lmdb_storage_extend_for_installation
 def test_head_with_column_filter(lmdb_version_store_tiny_segment, three_col_df):
     symbol = "test_head_with_column_filter"
