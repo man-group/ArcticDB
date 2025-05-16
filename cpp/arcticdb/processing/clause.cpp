@@ -733,10 +733,10 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     // Resampling only makes sense for timestamp indexes
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(is_time_type(first_row_slice_index_col.type().data_type()),
                                                     "Cannot resample data with index column of non-timestamp type");
-    auto first_ts = first_row_slice_index_col.scalar_at<timestamp>(0).value();
+    auto first_ts = first_row_slice_index_col.template scalar_at<timestamp>(0).value();
     // We can use the last timestamp from the first row-slice's index column, as by construction (structure_for_processing) the bucket covering
     // this value will cover the remaining index values this call is responsible for
-    auto last_ts = first_row_slice_index_col.scalar_at<timestamp>(first_row_slice_index_col.row_count() - 1).value();
+    auto last_ts = first_row_slice_index_col.template scalar_at<timestamp>(first_row_slice_index_col.row_count() - 1).value();
     auto bucket_boundaries = generate_bucket_boundaries(first_ts, last_ts, responsible_for_first_overlapping_bucket);
     std::vector<std::shared_ptr<Column>> input_index_columns;
     input_index_columns.reserve(row_slices.size());
