@@ -552,6 +552,12 @@ struct IndexDescriptorImpl : public IndexDescriptor {
         IndexDescriptor(type, field_count) {
     }
 
+    // Maintained as this is the constructor the Python interface uses
+    // Prefer using the constructor above internally as the argument order matches that of IndexDescriptor
+    IndexDescriptorImpl(uint32_t field_count, Type type) :
+            IndexDescriptor(type, field_count) {
+    }
+
     IndexDescriptorImpl(const IndexDescriptor& idx) :
         IndexDescriptor(idx) {
     }

@@ -99,7 +99,7 @@ void register_types(py::module &m) {
         .def_property_readonly("name", &FieldWrapper::name));
 
     python_util::add_repr(py::class_<IndexDescriptorImpl>(m, "IndexDescriptor")
-        .def(py::init<IndexDescriptorImpl::Type, std::size_t>())
+        .def(py::init<std::size_t, IndexDescriptorImpl::Type>())
         .def("field_count", &IndexDescriptorImpl::field_count)
         .def("kind", &IndexDescriptorImpl::type));
 
