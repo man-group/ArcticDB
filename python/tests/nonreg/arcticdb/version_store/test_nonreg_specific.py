@@ -459,3 +459,21 @@ def test_resampling_non_timeseries(lmdb_version_store_v1):
     with pytest.raises(UserInputException) as e:
         lib.read(sym, query_builder=q)
     assert "std::length_error(vector::reserve)" not in str(e.value)
+
+
+@pytest.mark.parametrize("date_range", [None, (pd.Timestamp(4), pd.Timestamp(17))])
+def test_update_data_key_timestamps(lmdb_version_store_v1, date_range):
+    lib = lmdb_version_store_v1
+    sym = "test_resampling_non_timeseries"
+    initial_df = pd.DataFrame({"col": [0, 1, 2]}, index=[pd.Timestamp(0), pd.Timestamp(10), pd.Timestamp(20)])
+    lib.write(sym, initial_df)
+    update_df = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp(5), pd.Timestamp(15)])
+    lib.update(sym, update_df, date_range=date_range)
+    expected_df = pd.DataFrame(
+        {"col": [0, 3, 4, 2]},
+        index=[pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(15), pd.Timestamp(20)],
+    )
+    assert_frame_equal(expected_df, lib.read(sym).data)
+    index_df = lib.read_index(sym)
+    assert (index_df.index.to_numpy() == np.array([0, 5, 20], dtype="datetime64[ns]")).all()
+    assert (index_df["end_index"].to_numpy() == np.array([1, 16, 21], dtype="datetime64[ns]")).all()

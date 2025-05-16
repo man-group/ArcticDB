@@ -337,5 +337,6 @@ def test_compat_resample_updated_data(old_venv_and_arctic_uri, lib_name):
         # Resample using current version
         with compat.current_version() as curr:
             q = QueryBuilder().date_range((pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-04 23:59"))).resample("1D").agg({"col": "sum"})
-            curr.lib.read(sym, query_builder=q)
-            # TODO: Check that result is correct
+            received_df = curr.lib.read(sym, query_builder=q).data
+            expected_df = curr.lib.read(sym, date_range=(pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-04 23:59"))).data.resample("1D").agg({"col": "sum"})
+            assert_frame_equal(expected_df, received_df)
