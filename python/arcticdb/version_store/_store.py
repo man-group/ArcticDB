@@ -481,6 +481,10 @@ class NativeVersionStore:
                     timestamp=vit_composite.timestamp
                 )
 
+    @staticmethod
+    def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
+        return resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs)
+
     def _write_options(self):
         return self._lib_cfg.lib_desc.version.write_options
 
