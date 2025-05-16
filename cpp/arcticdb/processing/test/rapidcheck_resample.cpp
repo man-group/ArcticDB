@@ -112,12 +112,15 @@ RC_GTEST_PROP(Resample, StructureForProcessing, ()) {
         }
     }
 
+    ProcessingConfig processing_config{false, index_values.size(), IndexDescriptor::Type::TIMESTAMP};
     if (left_boundary_closed) {
         ResampleClause<ResampleBoundary::LEFT> resample_clause{"dummy", ResampleBoundary::LEFT, generate_bucket_boundaries(std::move(bucket_boundaries)), 0, 0};
+        resample_clause.set_processing_config(processing_config);
         auto result = resample_clause.structure_for_processing(ranges_and_keys);
         RC_ASSERT(expected_result == result);
     } else {
         ResampleClause<ResampleBoundary::RIGHT> resample_clause{"dummy", ResampleBoundary::RIGHT, generate_bucket_boundaries(std::move(bucket_boundaries)), 0, 0};
+        resample_clause.set_processing_config(processing_config);
         auto result = resample_clause.structure_for_processing(ranges_and_keys);
         RC_ASSERT(expected_result == result);
     }

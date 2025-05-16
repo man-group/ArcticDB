@@ -182,6 +182,9 @@ class VenvLib:
     def write(self, sym: str, df) -> None:
         return self.execute([f"lib.write('{sym}', df)"], {"df": df})
 
+    def update(self, sym: str, df, date_range: str):
+        return self.execute([f"lib.update('{sym}', df, date_range={date_range})"], {"df": df})
+
     def assert_read(self, sym: str, df) -> None:
         python_commands = [
             f"read_df = lib.read('{sym}').data",

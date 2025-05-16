@@ -44,6 +44,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                 auto bucket_start_it = bucket_boundaries.cbegin();
                 auto bucket_end_it = std::next(bucket_start_it);
                 Bucket<closed_boundary> current_bucket(*bucket_start_it, *bucket_end_it);
+                bool bucket_has_values{false};
                 const auto bucket_boundaries_end = bucket_boundaries.cend();
                 for (auto [idx, input_agg_column]: folly::enumerate(input_agg_columns)) {
                     // Always true right now due to earlier check
@@ -61,6 +62,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                             &bucket_start_it,
                             &bucket_end_it,
                             &current_bucket,
+                            &bucket_has_values,
                             &reached_end_of_buckets](auto input_type_desc_tag) {
                                 using input_type_info = ScalarTypeInfo<decltype(input_type_desc_tag)>;
                                 // Again, only needed to generate valid code below, exception will have been thrown earlier at runtime
@@ -75,7 +77,6 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                                     const auto index_cend = index_data.template cend<IndexTDT>();
                                     auto agg_data = agg_column.column_->data();
                                     auto agg_it = agg_data.template cbegin<typename input_type_info::TDT>();
-                                    bool bucket_has_values = false;
                                     for (auto index_it = index_data.template cbegin<IndexTDT>(); index_it != index_cend && !reached_end_of_buckets; ++index_it, ++agg_it) {
                                         if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
                                             push_to_aggregator<input_type_info::data_type>(bucket_aggregator, *agg_it, agg_column);
