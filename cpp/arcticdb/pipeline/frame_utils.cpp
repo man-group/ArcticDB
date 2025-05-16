@@ -72,20 +72,65 @@ TimeseriesDescriptor index_descriptor_from_frame(
         frame->bucketize_dynamic);
 }
 
-void adjust_slice_rowcounts(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context) {
-    if(pipeline_context->slice_and_keys_.empty())
+void adjust_slice_ranges(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context) {
+    using namespace arcticdb::pipelines;
+    auto& slice_and_keys = pipeline_context->slice_and_keys_;
+    if(slice_and_keys.empty())
         return;
+    // Row and Col ranges input can be disjoint, "compress" them into the top left corner
+    // e.g.
+    //    1 3  6 9
+    //    ---  ---
+    // 3 |   ||   |
+    // 5 |   ||   |
+    //    1 3  4 7
+    //    ---  ---
+    // 7 |   ||   |
+    // 8 |   ||   |
+    //    ---  ---
+    // becomes
+    //    0 2  2 5
+    //    ---  ---
+    // 0 |   ||   |
+    // 2 |   ||   |
+    //    0 2  2 5
+    //    ---  ---
+    // 2 |   ||   |
+    // 3 |   ||   |
+    //    ---  ---
+    bool increment_row_slice{false};
+    size_t row_offset{0};
+    size_t col_offset{0};
+    for (auto it = slice_and_keys.begin(); it != slice_and_keys.end(); ++it) {
+        auto& slice = it->slice();
+        if (std::next(it) != slice_and_keys.end()) {
+            auto& next_slice = std::next(it)->slice();
+            // Hash groupings produce slices that all have row ranges starting at 0 and the same col ranges, hence the
+            // second condition
+            increment_row_slice = next_slice.row_range.first != slice.row_range.first ||
+                                  next_slice.col_range.first == slice.col_range.first;
+        } else {
+            increment_row_slice = true;
+        }
+        slice.row_range = RowRange(row_offset, row_offset + slice.rows().diff());
+        slice.col_range = ColRange(col_offset, col_offset + slice.columns().diff());
+        col_offset += slice.columns().diff();
+        if (increment_row_slice) {
+            row_offset += slice.rows().diff();
+            col_offset = 0;
+        }
+    }
 
-    pipeline_context->total_rows_ = adjust_slice_rowcounts(pipeline_context->slice_and_keys_);
+    pipeline_context->total_rows_ = row_offset;
 }
 
-size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey> & slice_and_keys, const std::optional<size_t>& first_row) {
+size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey> & slice_and_keys) {
     using namespace arcticdb::pipelines;
     if(slice_and_keys.empty())
 		return 0u;
 
-    auto offset = first_row.value_or(slice_and_keys[0].slice_.row_range.first);
-	auto diff = slice_and_keys[0].slice_.row_range.diff();
+    auto offset = 0;
+    auto diff = slice_and_keys[0].slice_.row_range.diff();
     auto col_begin = slice_and_keys[0].slice_.col_range.first;
 	
 	for(auto it = slice_and_keys.begin(); it != slice_and_keys.end(); ++it) {
@@ -95,7 +140,6 @@ size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey> & slice_and_ke
 		}
 		it->slice_.row_range = RowRange{offset, offset + diff};
 	}
-	
 	return offset + diff;
 }
 

@@ -22,7 +22,7 @@ from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
-from arcticdb.version_store._store import NativeVersionStore, VersionedItem
+from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError, OutputFormat
 import pandas as pd
@@ -499,6 +499,148 @@ class LazyDataFrameCollection(QueryBuilder):
 
     def __repr__(self) -> str:
         return self.__str__()
+
+
+class LazyDataFrameAfterJoin(QueryBuilder):
+    """
+    Lazy dataframe implementation, allowing chains of queries to be added before the reads and join are actually
+    executed.
+    Returned by joining methods such as `adb.concat`.
+
+    See Also
+    --------
+    QueryBuilder for supported querying operations.
+
+    Examples
+    --------
+
+    >>>
+    # Specify that we want symbols "test0" and "test1"
+    >>> lazy_dfs = lib.read_batch(["test0", "test1"], lazy=True)
+    # Perform a joining operation
+    >>> lazy_df_after_join = adb.concat(lazy_dfs)
+    # Create a new column through a projection operation on the joined data
+    >>> lazy_df_after_join["new_col"] = lazy_df_after_join["col1"] + lazy_df_after_join["col2"]
+    # Actual batch read, join, and subsequent processing happens here
+    >>> df = lazy_df_after_join.collect().data
+    """
+    def __init__(
+            self,
+            lazy_dataframes: LazyDataFrameCollection,
+            join: QueryBuilder,
+    ):
+        super().__init__()
+        self._lazy_dataframes = lazy_dataframes
+        self.then(join)
+
+    def collect(self) -> VersionedItemWithJoin:
+        """
+        Read the data and execute any queries applied to this object since the join method.
+
+        Returns
+        -------
+        VersionedItemWithJoin
+            Contains a .data field with the joined together data, and a list of VersionedItem objects describing the
+            version number, metadata, etc., of the symbols that were joined together.
+        """
+        if not len(self._lazy_dataframes._lazy_dataframes):
+            return []
+        else:
+            lib = self._lazy_dataframes._lib
+            return lib.read_batch_and_join(self._lazy_dataframes._read_requests(), self)
+
+    def __str__(self) -> str:
+        query_builder_repr = super().__str__()
+        return f"LazyDataFrameAfterJoin({self._lazy_dataframes._lazy_dataframes} | {query_builder_repr})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+
+def concat(
+        lazy_dataframes: Union[List[LazyDataFrame], LazyDataFrameCollection],
+        join: str = "outer",
+) -> LazyDataFrameAfterJoin:
+    """
+    Concatenate a list of symbols together.
+
+    Parameters
+    ----------
+    join : str, default="outer"
+        Whether the columns of the input symbols should be inner or outer joined. Supported inputs are "inner" and
+        "outer".
+        * inner - Only columns present in ALL the input symbols will be present in the returned DataFrame.
+        * outer - Columns present in ANY of the input symbols will be present in the returned DataFrame. Columns
+          that are present in some input symbols but not in others will be backfilled according to their type using
+          the same rules as with dynamic schema.
+
+    Returns
+    -------
+    LazyDataFrameAfterJoin
+        Lazy DataFrame representing the joined data, to which further processing operations can be chained.
+
+    Raises
+    -------
+    ArcticNativeException
+        The join argument is not one of "inner" or "outer"
+
+    Examples
+    --------
+    Join 2 symbols together without any pre or post processing.
+
+    >>> df0 = pd.DataFrame(
+        {
+            "col1": [0.5],
+            "col2": [1],
+        },
+        index=[pd.Timestamp("2025-01-01")],
+    )
+    >>> df1 = pd.DataFrame(
+        {
+            "col3": ["hello"],
+            "col2": [2],
+        },
+        index=[pd.Timestamp("2025-01-02")],
+    )
+    >>> lib.write("symbol0", df0)
+    >>> lib.write("symbol1", df1)
+    >>> lazy_dfs = lib.read_batch(["symbol0", "symbol1"], lazy=True)
+    >>> adb.concat(lazy_dfs, join="outer").collect().data
+
+                               col1     col2     col3
+        2025-01-01 00:00:00     0.5        1     None
+        2025-01-02 00:00:00     NaN        2  "hello"
+
+    Join 2 symbols together with both some per-symbol processing prior to the join, and some further processing after
+    the join.
+
+    >>> df0 = pd.DataFrame(
+        {
+            "col": [0, 1, 2, 3, 4],
+        },
+        index=pd.date_range("2025-01-01", freq="min", periods=5),
+    )
+    >>> df1 = pd.DataFrame(
+        {
+            "col": [5, 6, 7, 8, 9],
+        },
+        index=pd.date_range("2025-01-01T00:05:00", freq="min" periods=5),
+    )
+    >>> lib.write("symbol0", df0)
+    >>> lib.write("symbol1", df1)
+    >>> lazy_df0, lazy_df1 = lib.read_batch(["symbol0", "symbol1"], lazy=True).split()
+    >>> lazy_df0 = lazy_df0[lazy_df0["col"] <= 2]
+    >>> lazy_df1 = lazy_df1[lazy_df1["col"] <= 6]
+    >>> lazy_df = adb.concat([lazy_df0, lazy_df1])
+    >>> lazy_df = lazy_df.resample("10min").agg({"col": "sum"})
+    >>> lazy_df.collect().data
+
+                                col
+        2025-01-01 00:00:00      14
+    """
+    if not isinstance(lazy_dataframes, LazyDataFrameCollection):
+        lazy_dataframes = LazyDataFrameCollection(lazy_dataframes)
+    return LazyDataFrameAfterJoin(lazy_dataframes, QueryBuilder().concat(join))
 
 
 def col(name: str) -> ExpressionNode:
@@ -1794,6 +1936,124 @@ class Library:
                 implement_read_index=True,
                 iterate_snapshots_if_tombstoned=False,
             )
+
+    def read_batch_and_join(
+            self,
+            symbols: List[ReadRequest],
+            query_builder: QueryBuilder,
+    ) -> VersionedItemWithJoin:
+        """
+        Reads multiple symbols in a batch, and then joins them together using the first clause in the `query_builder`
+        argument. If there are subsequent clauses in the `query_builder` argument, then these are applied to the joined
+        data.
+
+        Parameters
+        ----------
+        symbols : List[Union[str, ReadRequest]]
+            List of symbols to read.
+
+        query_builder: QueryBuilder
+            The first clause must be a multi-symbol join, such as `concat`. Any subsequent clauses must work on
+            individual dataframes, and will be applied to the joined data.
+
+        Returns
+        -------
+        VersionedItemWithJoin
+            Contains a .data field with the joined together data, and a list of VersionedItem objects describing the
+            version number, metadata, etc., of the symbols that were joined together.
+
+        Raises
+        ------
+        UserInputException
+            * If the first clause in `query_builder` is not a multi-symbol join
+            * If any subsequent clauses in `query_builder` are not single-symbol clauses
+            * If any of the specified symbols are recursively normalized
+        MissingDataException
+            * If a symbol or the version of symbol specified in as_ofs does not exist or has been deleted
+        SchemaException
+            * If the schema of symbols to be joined are incompatible. Examples of incompatible schemas include:
+                * Trying to join a Series to a DataFrame
+                * Different index types, including MultiIndexes with different numbers of levels
+                * Incompatible column types e.g. joining a string column to an integer column
+
+        Examples
+        --------
+        Join 2 symbols together without any pre or post processing.
+
+        >>> df0 = pd.DataFrame(
+            {
+                "col1": [0.5],
+                "col2": [1],
+            },
+            index=[pd.Timestamp("2025-01-01")],
+        )
+        >>> df1 = pd.DataFrame(
+            {
+                "col3": ["hello"],
+                "col2": [2],
+            },
+            index=[pd.Timestamp("2025-01-02")],
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.concat("outer")
+        >>> lib.write("symbol0", df0)
+        >>> lib.write("symbol1", df1)
+        >>> lib.read_batch_and_join(["symbol0", "symbol1"], query_builder=q).data
+
+                                   col1     col2     col3
+            2025-01-01 00:00:00     0.5        1     None
+            2025-01-02 00:00:00     NaN        2  "hello"
+
+        >>> q = adb.QueryBuilder()
+        >>> q = q.concat("inner")
+        >>> lib.read_batch_and_join(["symbol0", "symbol1"], query_builder=q).data
+
+                                   col2
+            2025-01-01 00:00:00       1
+            2025-01-02 00:00:00       2
+        """
+        symbol_strings = []
+        as_ofs = []
+        date_ranges = []
+        row_ranges = []
+        columns = []
+        per_symbol_query_builders = []
+
+        def handle_read_request(s_):
+            symbol_strings.append(s_.symbol)
+            as_ofs.append(s_.as_of)
+            date_ranges.append(s_.date_range)
+            row_ranges.append(s_.row_range)
+            columns.append(s_.columns)
+            per_symbol_query_builders.append(s_.query_builder)
+
+        def handle_symbol(s_):
+            symbol_strings.append(s_)
+            for l_ in (as_ofs, date_ranges, row_ranges, columns, per_symbol_query_builders):
+                l_.append(None)
+
+        for s in symbols:
+            if isinstance(s, str):
+                handle_symbol(s)
+            elif isinstance(s, ReadRequest):
+                handle_read_request(s)
+            else:
+                raise ArcticInvalidApiUsageException(
+                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and"
+                    " [ReadRequest] are supported."
+                )
+
+        return self._nvs.batch_read_and_join(
+            symbol_strings,
+            query_builder,
+            as_ofs,
+            date_ranges,
+            row_ranges,
+            columns,
+            per_symbol_query_builders,
+            implement_read_index=True,
+            iterate_snapshots_if_tombstoned=False,
+        )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
         """
