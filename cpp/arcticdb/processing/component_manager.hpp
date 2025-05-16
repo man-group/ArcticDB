@@ -107,7 +107,22 @@ public:
 
     // Get a collection of entities. Returns a tuple of vectors, one for each component requested via Args
     template<class... Args>
-    std::tuple<std::vector<Args>...> get_entities(const std::vector<EntityId>& ids, const bool decrement_fetch_count=true) {
+    std::tuple<std::vector<Args>...> get_entities_and_decrement_refcount(const std::vector<EntityId>& ids) {
+    return get_entities_impl<Args...>(ids, true);
+    }
+
+    // Get a collection of entities. Returns a tuple of vectors, one for each component requested via Args
+    template<class... Args>
+    std::tuple<std::vector<Args>...> get_entities(const std::vector<EntityId>& ids) {
+        return get_entities_impl<Args...>(ids, false);
+    }
+
+private:
+    void decrement_entity_fetch_count(EntityId id);
+    void update_entity_fetch_count(EntityId id, EntityFetchCount count);
+
+    template<class... Args>
+    std::tuple<std::vector<Args>...> get_entities_impl(const std::vector<EntityId>& ids, bool decrement_ref_count) {
         std::vector<std::tuple<Args...>> tuple_res;
         ARCTICDB_SAMPLE_DEFAULT(GetEntities)
         tuple_res.reserve(ids.size());
@@ -120,7 +135,7 @@ public:
                 tuple_res.emplace_back(std::move(view.get(id)));
             }
 
-            if (decrement_fetch_count) {
+            if (decrement_ref_count) {
                 for (auto id: ids) {
                     decrement_entity_fetch_count(id);
                 }
@@ -138,10 +153,6 @@ public:
         }
         return res;
     }
-
-private:
-    void decrement_entity_fetch_count(EntityId id);
-    void update_entity_fetch_count(EntityId id, EntityFetchCount count);
 
     entt::registry registry_;
     std::shared_mutex mtx_;

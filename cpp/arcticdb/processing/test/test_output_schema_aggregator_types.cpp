@@ -19,7 +19,7 @@ class AggregationClauseOutputTypesTest : public testing::Test {
 protected:
     void SetUp() override {
         initial_stream_desc_.set_id(StreamId("test symbol"));
-        initial_stream_desc_.set_index({0, IndexDescriptor::Type::ROWCOUNT});
+        initial_stream_desc_.set_index({IndexDescriptor::Type::ROWCOUNT, 0});
         initial_stream_desc_.add_scalar_field(DataType::INT64, "to_group");
         initial_stream_desc_.add_scalar_field(DataType::INT8, "int8");
         initial_stream_desc_.add_scalar_field(DataType::INT16, "int16");
@@ -173,7 +173,7 @@ class ResampleClauseOutputTypesTest : public testing::Test {
 protected:
     void SetUp() override {
         initial_stream_desc_.set_id(StreamId("test symbol"));
-        initial_stream_desc_.set_index({1, IndexDescriptor::Type::TIMESTAMP});
+        initial_stream_desc_.set_index({IndexDescriptor::Type::TIMESTAMP, 1});
         initial_stream_desc_.add_scalar_field(DataType::NANOSECONDS_UTC64, "index");
         initial_stream_desc_.add_scalar_field(DataType::INT8, "int8");
         initial_stream_desc_.add_scalar_field(DataType::INT16, "int16");

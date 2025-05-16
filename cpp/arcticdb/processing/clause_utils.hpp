@@ -14,6 +14,7 @@
 
 #include <folly/futures/FutureSplitter.h>
 
+#include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
@@ -28,7 +29,8 @@ enum class ProcessingStructure {
     ROW_SLICE,
     TIME_BUCKETED,
     HASH_BUCKETED,
-    ALL
+    ALL,
+    MULTI_SYMBOL
 };
 
 struct KeepCurrentIndex{};
@@ -52,6 +54,8 @@ struct ClauseInfo {
     std::variant<KeepCurrentIndex, KeepCurrentTopLevelIndex, NewIndex> index_{KeepCurrentIndex()};
     // Whether this clause modifies the output descriptor
     bool modifies_output_descriptor_{false};
+    // Whether this clause operates on one or multiple symbols
+    bool multi_symbol_{false};
 };
 
 // Changes how the clause behaves based on information only available after it is constructed
@@ -173,7 +177,7 @@ std::vector<std::vector<EntityId>> offsets_to_entity_ids(const std::vector<std::
 template<class... Args>
 ProcessingUnit gather_entities(ComponentManager& component_manager, const std::vector<EntityId>& entity_ids) {
     ProcessingUnit res;
-    auto components = component_manager.get_entities<Args...>(entity_ids);
+    auto components = component_manager.get_entities_and_decrement_refcount<Args...>(entity_ids);
     ([&]{
         auto component = std::move(std::get<std::vector<Args>>(components));
         if constexpr (std::is_same_v<Args, std::shared_ptr<SegmentInMemory>>) {
@@ -208,5 +212,24 @@ std::vector<EntityId> push_entities(
 std::shared_ptr<std::vector<EntityFetchCount>> generate_segment_fetch_counts(
     const std::vector<std::vector<size_t>>& processing_unit_indexes,
     size_t num_segments);
+
+// Multi-symbol join utilities
+enum class JoinType: uint8_t {
+    OUTER,
+    INNER
+};
+
+std::pair<StreamDescriptor, proto::descriptors::NormalizationMetadata> join_indexes(std::vector<OutputSchema>& input_schemas);
+
+IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& input_schemas);
+
+std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas);
+
+proto::descriptors::NormalizationMetadata generate_norm_meta(const std::vector<OutputSchema>& input_schemas,
+                                                              std::unordered_set<size_t>&& non_matching_name_indices);
+
+void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas);
+
+void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas);
 
 } //namespace arcticdb
