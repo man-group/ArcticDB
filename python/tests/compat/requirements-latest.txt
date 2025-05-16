@@ -1,0 +1,4 @@
+arcticdb
+numpy
+pyarrow
+protobuf
