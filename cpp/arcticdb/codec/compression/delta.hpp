@@ -228,7 +228,7 @@ public:
                 }
             } else {
                 ContiguousRangeForwardAdaptor<T, BLOCK_SIZE> adaptor(input);
-                auto current = *input.buffer().data();
+                auto current = *adaptor.current();
                 for(auto i = 0UL; i < full_blocks_; ++i) {
                     auto ptr = adaptor.next();
                     for (auto j = 0UL; j < BLOCK_SIZE; ++j) {

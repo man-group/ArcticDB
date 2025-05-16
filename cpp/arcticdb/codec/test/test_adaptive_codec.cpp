@@ -11,8 +11,6 @@
 
 namespace arcticdb {
 
-
-
 TEST(AdaptiveCodec, FFOR) {
     constexpr auto num_rows =  100'000;
     auto input = values_within_bitwidth<uint32_t>(20U, 7, 100'000);

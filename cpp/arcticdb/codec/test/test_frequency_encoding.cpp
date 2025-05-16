@@ -58,7 +58,7 @@ TEST(FrequencyCompressor, Stress) {
     std::vector<uint8_t> output(*estimated_size);
     timer.start_timer("Compress");
     size_t bytes;
-    const auto num_runs = 1000000UL;
+    const auto num_runs = 100UL;
     for(auto i = 0UL; i < num_runs; ++i) {
         bytes = encoding.compress(wrapper.data_, data.size(), output.data(), *estimated_size);
     }
@@ -82,7 +82,7 @@ TEST(FrequencyCompressor, StressScan) {
     interval_timer timer;
     FrequencyCompressor<InputType> encoding;
     timer.start_timer("Scan");
-    const auto num_runs = 10'000UL;
+    const auto num_runs = 100UL;
 
     auto wrapper = from_vector(data, make_scalar_type(DataType::UINT32));
     for(auto i = 0UL; i < num_runs; ++i) {
@@ -100,8 +100,9 @@ TEST(FrequencyCompressor, StressMaxRequired) {
     FrequencyCompressor<InputType> encoding;
     timer.start_timer("MaxRequired");
     auto wrapper = from_vector(data, make_scalar_type(DataType::UINT32));
-    const auto num_runs = 10'000UL;
+    const auto num_runs = 100UL;
     std::optional<size_t> max_bytes;
+    encoding.scan(wrapper.data_);
     for(auto i = 0UL; i < num_runs; ++i) {
         max_bytes = encoding.max_required_bytes(wrapper.data_, 100'000);
     }

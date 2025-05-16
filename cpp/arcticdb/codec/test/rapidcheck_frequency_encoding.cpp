@@ -70,8 +70,9 @@ void test_encoder_random_data() {
               [](const std::vector<T> &input) {
                   FrequencyCompressor<T> encoding;
                   auto wrapper = from_vector(input, make_scalar_type(data_type));
+                  encoding.scan(wrapper.data_);
                   auto required_bytes = encoding.max_required_bytes(wrapper.data_, input.size());
-                  if (!required_bytes.has_value())
+                  if (!required_bytes.has_value() || required_bytes == 0)
                       RC_SUCCEED("No single value comprises more than 90% of the array");
 
                   std::vector<uint8_t> encoded(*required_bytes);

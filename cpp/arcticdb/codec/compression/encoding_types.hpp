@@ -14,6 +14,20 @@ namespace arcticdb {
 
 constexpr size_t NUM_SAMPLES = 10;
 
+inline size_t plain_result_bytes(size_t bytes) {
+    return bytes + sizeof(PlainCompressData);
+}
+
+inline size_t plain_result_size(size_t num_rows, DataType data_type) {
+    return plain_result_bytes(num_rows * get_type_size(data_type));
+}
+
+template <typename T>
+size_t plain_result_size(size_t num_rows) {
+    return plain_result_bytes(num_rows * sizeof(T));
+}
+
+
 template <typename T>
 concept Encoder = requires(
         FieldStatsImpl field_stats,
@@ -32,7 +46,7 @@ concept Encoder = requires(
 
 template <typename T>
 EncodingScanResult create_plain_result(size_t num_rows) {
-  return create_scan_result(EncodingType::PLAIN, num_rows * sizeof(T) + PlainCompressor<T>::overhead(), 1, num_rows * sizeof(T), true, std::monostate{});
+  return create_scan_result(EncodingType::PLAIN, plain_result_size<T>(num_rows), 1, num_rows * sizeof(T), true, std::monostate{});
 }
 
 inline EncodingScanResult create_plain_result(ColumnData data) {
@@ -60,7 +74,7 @@ struct Ffor {
     }
 
     static size_t speed_factor() {
-        return 11;
+        return 10;
     }
 
     static std::optional<std::pair<size_t, EncoderData>> deterministic_size(FieldStatsImpl field_stats, DataType data_type, size_t num_rows) {
@@ -134,7 +148,7 @@ struct Delta {
     }
 
     static size_t speed_factor() {
-        return 20;
+        return 16;
     }
 
     static EncodingScanResult estimated_size(
@@ -275,7 +289,7 @@ struct Plain {
             FieldStatsImpl,
             DataType data_type,
             size_t num_rows) {
-        return std::make_pair(num_rows * get_type_size(data_type) + sizeof(PlainCompressData), std::monostate{});
+        return std::make_pair(plain_result_size(num_rows, data_type), std::monostate{});
     }
 };
 
@@ -491,7 +505,7 @@ struct Alp {
     }
 
     static EncodingScanResult max_compressed_size(FieldStatsImpl, DataType data_type, size_t num_rows, ColumnData,  EncoderData& encoder_data) {
-        return make_scalar_type(data_type).visit_tag([&encoder_data, num_rows](auto tag) -> EncodingScanResult {
+        return make_scalar_type(data_type).visit_tag([&encoder_data, num_rows, data_type](auto tag) -> EncodingScanResult {
             using TagType = decltype(tag);
             using RawType = typename TagType::DataTypeTag::raw_type;
             if constexpr(std::is_floating_point_v<RawType>) {
@@ -499,7 +513,6 @@ struct Alp {
 
                 const double max_comp_ratio = ConfigsMap::instance()->get_double("Alp.MaxCompressRatio", 0.8);
                 const size_t original_size = num_rows * sizeof(RawType);
-
                 const auto compress_limit = static_cast<size_t>(original_size * max_comp_ratio);
 
                 const size_t n_blocks = (num_rows + BLOCK_SIZE - 1) / BLOCK_SIZE;
@@ -508,8 +521,10 @@ struct Alp {
                 if (n_blocks <= 1) {
                     worst_case_total = sizeof(ALPHeader<RawType>) + worst_block;
                 } else {
-                    worst_case_total = sizeof(ALPHeader<RawType>) + (n_blocks - 1) * compress_limit + worst_block;
+                    worst_case_total = sizeof(ALPHeader<RawType>) + compress_limit + (worst_block * 2);
                 }
+
+                worst_case_total = std::max<size_t>(worst_case_total, Plain::deterministic_size(FieldStatsImpl{}, data_type, num_rows)->first);
 
                 ARCTICDB_DEBUG(log::codec(), "ALP max_compressed_size: {}", worst_case_total);
                 return create_scan_result(
