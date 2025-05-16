@@ -35,7 +35,7 @@ on:
           - "1"
           - "0"
       run_on_real_s3:
-        description: 'Execute tests on Amazon S3 (optional as test)'
+        description: 'Execute tests on Amazon S3'
         required: true
         default: '1'
         type: choice
