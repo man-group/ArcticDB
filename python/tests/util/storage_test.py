@@ -10,7 +10,12 @@ from datetime import datetime
 
 from arcticdb import Arctic
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
-from mark import PERSISTENT_STORAGE_TESTS_ENABLED
+try:
+    # from pytest this way will work
+    from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED
+except ModuleNotFoundError:
+    # when storage_tests.py is executed with argument
+    from mark import PERSISTENT_STORAGE_TESTS_ENABLED
 
 
 # TODO: Remove this when the latest version that we support
