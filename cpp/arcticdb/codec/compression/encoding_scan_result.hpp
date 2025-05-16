@@ -38,7 +38,7 @@ struct EncodingScanResult {
 };
 
 inline size_t calculate_score(size_t speed_factor, size_t estimated_size, size_t original_size, size_t weight) {
-    weight = std::max<size_t>(100UL, weight);
+    weight = std::min<size_t>(100UL, weight);
     size_t size_ratio = (estimated_size * 100) / original_size;
     size_t score = (weight * size_ratio + (100 - weight) * speed_factor) / 100;
     return score;
@@ -67,7 +67,7 @@ inline EncodingScanResult create_scan_result(
         size_t original_size,
         bool is_deterministic,
         EncoderData&& data) {
-    static size_t weight = ConfigsMap::instance()->get_int("Scanner.SizeWeighting", 17);
+    static size_t weight = ConfigsMap::instance()->get_int("Scanner.SizeWeighting", 50);
     auto score = calculate_score(speed, estimated_size, original_size, weight);
     return {score, estimated_size, original_size, encoding_type, is_deterministic, std::move(data)};
 }

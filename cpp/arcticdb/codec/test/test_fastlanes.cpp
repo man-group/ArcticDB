@@ -256,7 +256,7 @@ void static pack_11bit_32ow(const uint32_t* __restrict in, uint32_t* __restrict 
 TEST(Fastlanes, OriginalPackUnpack32to11) {
     constexpr int blocksPerColumn = 100;
     constexpr int blockInSize = 1024;    // each block: 1024 integers (32x32)
-    constexpr int blockOutSize = 320;    // each pack call writes 320 integers
+    constexpr int blockOutSize = 352;    // each pack call writes 320 integers
     constexpr int totalInSize = blocksPerColumn * blockInSize;
     constexpr int totalPackedSize = blocksPerColumn * blockOutSize;
 
@@ -606,27 +606,21 @@ static void unffor_11bw_32ow_32crw_1uf(const uint32_t* __restrict a_in_p,
 }
 
 TEST(FFORPerformanceTest, CompressionAndDecompressionTiming) {
-    // Define the parameters:
-    // A "column" consists of 100 blocks.
-    // Each block has 1024 input integers (organized as 32x32) and produces 320 integers.
     constexpr int blocksPerColumn = 100;
-    constexpr int blockInSize = 1024;     // Number of input integers per block.
-    constexpr int blockOutSize = 320;     // Number of output integers per block.
+    constexpr int blockInSize = 1024;
+    constexpr int blockOutSize = 353;
     constexpr int totalInSize = blocksPerColumn * blockInSize;
     constexpr int totalOutSize = blocksPerColumn * blockOutSize;
     constexpr int iterations = 10000;
 
-    // Allocate the input and output buffers.
     std::vector<uint32_t> in(totalInSize);
     std::vector<uint32_t> packed(totalOutSize, 0);
     std::vector<uint32_t> unpacked(totalInSize, 0);
 
-    // Initialize input with values that fit in 11 bits.
     for (int i = 0; i < totalInSize; ++i) {
         in[i] = i & ((1 << 11) - 1);
     }
 
-    // The base value for FFOR is provided via a pointer.
     uint32_t base = 0;
     const uint32_t* base_ptr = &base;
 
@@ -657,18 +651,20 @@ TEST(FFORPerformanceTest, CompressionAndDecompressionTiming) {
               << "  Pack Checksum: " << pack_checksum << "\n";
 
     for (int b = 0; b < blocksPerColumn; ++b) {
-        unffor_11bw_32ow_32crw_1uf(packed.data() + b * blockOutSize,
-                                   unpacked.data() + b * blockInSize,
-                                   base_ptr);
+        unffor_11bw_32ow_32crw_1uf(
+            packed.data() + b * blockOutSize,
+            unpacked.data() + b * blockInSize,
+            base_ptr);
     }
 
     uint32_t unpack_checksum = 0;
     auto start_unpack = std::chrono::high_resolution_clock::now();
     for (int iter = 0; iter < iterations; ++iter) {
         for (int b = 0; b < blocksPerColumn; ++b) {
-            unffor_11bw_32ow_32crw_1uf(packed.data() + b * blockOutSize,
-                                       unpacked.data() + b * blockInSize,
-                                       base_ptr);
+            unffor_11bw_32ow_32crw_1uf(
+                packed.data() + b * blockOutSize,
+                unpacked.data() + b * blockInSize,
+                base_ptr);
             unpack_checksum += unpacked[b * blockInSize];
         }
     }

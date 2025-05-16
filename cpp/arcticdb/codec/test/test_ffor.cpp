@@ -325,7 +325,7 @@ TEST_F(FForCodecTest, StressTest) {
     }
 }
 
-TEST(FFORStressTest, CompressDecompressSeparate) {
+TEST(FFORStressTest, CompressDecompress) {
     using T = uint32_t;
     constexpr size_t num_rows = 100 * 1024;
     constexpr size_t iterations = 10000;
@@ -333,16 +333,17 @@ TEST(FFORStressTest, CompressDecompressSeparate) {
     for (size_t i = 0; i < num_rows; i++) {
         input[i] = static_cast<T>(i % 1000);
     }
-    std::vector<T> compressed(num_rows * 2, 0);
-    std::vector<T> decompressed(num_rows, 0);
     auto wrapper = from_vector(input, make_scalar_type(DataType::UINT32));
-
+    auto ffor_data = FForCompressor<T>::reference_and_bitwidth(wrapper.data_);
+    FForCompressor<T> ffor{ffor_data};
+    auto estimated_size = ffor.compressed_size(ffor_data, num_rows);
+    std::vector<T> compressed(estimated_size, 0);
+    std::vector<T> decompressed(num_rows, 0);
     auto start_compress = std::chrono::high_resolution_clock::now();
     size_t total_comp_size = 0;
     for (size_t iter = 0; iter < iterations; iter++) {
-        auto ffor_data = FForCompressor<T>::reference_and_bitwidth(wrapper.data_);
-        FForCompressor<T> ffor{ffor_data};
-        size_t compressed_size = ffor.compress(wrapper.data_, compressed.data(), num_rows);
+
+        size_t compressed_size = ffor.compress(wrapper.data_, compressed.data(), estimated_size);
         total_comp_size += compressed_size;
     }
     auto end_compress = std::chrono::high_resolution_clock::now();

@@ -90,6 +90,18 @@ inline EncodingsList viable_encodings(
         DataType data_type,
         size_t row_count) {
     EncodingsList output;
+
+    if(output.is_set(EncodingType::CONSTANT) && is_viable(EncodingType::CONSTANT, field_stats, data_type, row_count)) {
+        output.set(EncodingType::CONSTANT);
+        return output;
+    }
+
+    if(get_type_size(data_type) * row_count < TOO_SMALL_TO_COMPRESS) {
+        ARCTICDB_DEBUG(log::codec(), "Data is too small for compression, using plain codec");
+        output.set(EncodingType::PLAIN);
+        return output;
+    }
+
     for(auto i = 0U; i < static_cast<uint8_t>(EncodingType::COUNT); ++i) {
         const auto type = EncodingType(i);
         if(input.is_set(type) && is_viable(type, field_stats, data_type, row_count))
@@ -146,7 +158,7 @@ inline EncodingScanResultSet predicted_optimal_encodings(ColumnData column_data)
 // For the time being an acceptable result is just one that achieves some degree of compression, however this could be
 // made more sophisticated if multiple results were to be evaluated together (see below)
 inline bool is_acceptable_result(const EncodingScanResult& result) {
-    return result.estimated_size_ <= result.original_size_;
+    return result.estimated_size_ <= plain_result_bytes(result.original_size_);
 }
 
 inline EncodingScanResult plain_result(size_t bytes) {

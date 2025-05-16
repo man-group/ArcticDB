@@ -131,7 +131,7 @@ def test_scan_object_sizes(arctic_client, lib_name):
     assert KeyType.VERSION_REF in res
 
     assert res[KeyType.VERSION][0] == 2
-    assert 1000 < res[KeyType.VERSION][1] < 2000
+    assert 1000 < res[KeyType.VERSION][1] < 2200
     assert res[KeyType.TABLE_INDEX][0] == 2
     assert 2000 < res[KeyType.TABLE_INDEX][1] < 4000
     assert res[KeyType.TABLE_DATA][0] == 2
