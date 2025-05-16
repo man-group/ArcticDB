@@ -42,42 +42,6 @@ on:
         options:
           - "1"
           - "0"
-      ## TODO:
-      ## Matrix job does already spawn combinations of OS-Python-Repo
-      ## Therefore next selection does not make sense in that context
-      ## and will be needed only if single job is implemented also.
-      ## That is something to be done as enhancement in future perhaps
-      #os:
-      #  description: 'Operating System to test'
-      #  required: false
-      #  default: 'ubuntu-22.04'
-      #  type: choice
-      #  options:
-      #    - all
-      #    - ubuntu-22.04
-      #    - windows-latest
-      #    - macos-latest
-      #python:
-      #  description: 'Python Version to test'
-      #  required: false
-      #  default: '3.13'
-      #  type: choice
-      #  options:
-      #    - "3.7"
-      #    - "3.8"
-      #    - "3.9"
-      #    - "3.10"
-      #    - "3.11"
-      #    - "3.12"
-      #    - "3.13"
-      #use_conda:
-      #  description: 'Use conda (default PyPi will be used)'
-      #  required: false
-      #  default: 'no'
-      #  type: choice
-      #  options:
-      #    - "no"
-      #    - "yes"
                   
 
 jobs:
