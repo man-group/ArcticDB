@@ -6,10 +6,15 @@
  */
 
 #include <arcticdb/processing/unsorted_aggregation.hpp>
+#include <arcticdb/processing/aggregation_utils.hpp>
+#include <arcticdb/entity/types.hpp>
 
 #include <cmath>
+#include <ranges>
 
 namespace arcticdb {
+
+namespace ranges = std::ranges;
 
 void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
     details::visit_type(input_column.column_->type().data_type(), [&] (auto col_tag) {
@@ -43,10 +48,10 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
         details::visit_type(min_->data_type_, [&output_column_names, &seg, that = this](auto col_tag) {
             using RawType = typename ScalarTypeInfo<decltype(col_tag)>::RawType;
             auto min_col = std::make_shared<Column>(make_scalar_type(that->min_->data_type_), Sparsity::PERMITTED);
-            min_col->template push_back<RawType>(that->min_->get<RawType>());
+            min_col->push_back<RawType>(that->min_->get<RawType>());
 
             auto max_col = std::make_shared<Column>(make_scalar_type(that->max_->data_type_), Sparsity::PERMITTED);
-            max_col->template push_back<RawType>(that->max_->get<RawType>());
+            max_col->push_back<RawType>(that->max_->get<RawType>());
 
             seg.add_column(scalar_field(min_col->type().data_type(), output_column_names[0].value), min_col);
             seg.add_column(scalar_field(max_col->type().data_type(), output_column_names[1].value), max_col);
@@ -61,17 +66,20 @@ template<typename T, typename T2=void>
 struct OutputType;
 
 template <typename InputType>
-struct OutputType <InputType, typename std::enable_if_t<is_floating_point_type(InputType::DataTypeTag::data_type)>> {
+requires (is_floating_point_type(InputType::DataTypeTag::data_type))
+struct OutputType <InputType> {
     using type = ScalarTagType<DataTypeTag<DataType::FLOAT64>>;
 };
 
 template <typename InputType>
-struct OutputType <InputType, typename std::enable_if_t<is_unsigned_type(InputType::DataTypeTag::data_type)>> {
+requires (is_unsigned_type(InputType::DataTypeTag::data_type))
+struct OutputType <InputType> {
     using type = ScalarTagType<DataTypeTag<DataType::UINT64>>;
 };
 
 template <typename InputType>
-struct OutputType<InputType, typename std::enable_if_t<is_signed_type(InputType::DataTypeTag::data_type) && is_integer_type(InputType::DataTypeTag::data_type)>> {
+requires (is_signed_type(InputType::DataTypeTag::data_type) && is_integer_type(InputType::DataTypeTag::data_type))
+struct OutputType<InputType> {
     using type = ScalarTagType<DataTypeTag<DataType::INT64>>;
 };
 
@@ -163,6 +171,12 @@ DataType SumAggregatorData::get_output_data_type() {
         schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>("Sum aggregation not supported with type {}", *common_input_type_);
     }
     return *output_type_;
+}
+
+VariantRawValue SumAggregatorData::get_default_value(bool) {
+    return details::visit_type(get_output_data_type(), []<typename TD>(TD) -> VariantRawValue {
+        return typename TD::raw_type{0};
+    });
 }
 
 void SumAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
@@ -325,8 +339,8 @@ namespace
                             "all missing data will be backfilled with 0.",
                             output_column_name.value, col_type_info::data_type, T == Extremum::MIN ? "MIN" : "MAX", dynamic_schema_data_type);
                     }
-                    auto prev_size = aggregated.size() / sizeof(MaybeValueType);
-                    auto new_size = sizeof(MaybeValueType) * unique_values;
+                    const auto prev_size = aggregated.size() / sizeof(MaybeValueType);
+                    const auto new_size = sizeof(MaybeValueType) * unique_values;
                     aggregated.resize(new_size);
                     auto in_ptr = reinterpret_cast<MaybeValueType *>(aggregated.data());
                     std::fill(in_ptr + prev_size, in_ptr + unique_values, MaybeValueType{});
@@ -382,6 +396,13 @@ SegmentInMemory MaxAggregatorData::finalize(const ColumnName& output_column_name
     return finalize_impl<Extremum::MAX>(output_column_name, dynamic_schema, unique_values, aggregated_, data_type_);
 }
 
+VariantRawValue MaxAggregatorData::get_default_value(bool dynamic_schema) {
+    if (dynamic_schema) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    return {};
+}
+
 /*********************
  * MinAggregatorData *
  *********************/
@@ -407,6 +428,13 @@ void MinAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_
 SegmentInMemory MinAggregatorData::finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values)
 {
     return finalize_impl<Extremum::MIN>(output_column_name, dynamic_schema, unique_values, aggregated_, data_type_);
+}
+
+VariantRawValue MinAggregatorData::get_default_value(bool dynamic_schema) {
+    if (dynamic_schema) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    return {};
 }
 
 /**********************
@@ -452,7 +480,7 @@ SegmentInMemory MeanAggregatorData::finalize(const ColumnName& output_column_nam
         fractions_.resize(unique_values);
         auto col = std::make_shared<Column>(make_scalar_type(DataType::FLOAT64), fractions_.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
         auto column_data = col->data();
-        std::transform(fractions_.cbegin(), fractions_.cend(), column_data.begin<ScalarTagType<DataTypeTag<DataType::FLOAT64>>>(), [](auto fraction) {
+        ranges::transform(fractions_, column_data.begin<ScalarTagType<DataTypeTag<DataType::FLOAT64>>>(), [](auto fraction) {
             return fraction.to_double();
         });
         col->set_row_data(fractions_.size() - 1);
@@ -466,6 +494,9 @@ double MeanAggregatorData::Fraction::to_double() const
     return denominator_ == 0 ? std::numeric_limits<double>::quiet_NaN(): numerator_ / static_cast<double>(denominator_);
 }
 
+VariantRawValue MeanAggregatorData::get_default_value(bool) {
+    return {};
+}
 /***********************
  * CountAggregatorData *
  ***********************/
@@ -501,6 +532,10 @@ SegmentInMemory CountAggregatorData::finalize(const ColumnName& output_column_na
         memcpy(ptr, aggregated_.data(), sizeof(uint64_t)*unique_values);
     }
     return res;
+}
+
+VariantRawValue CountAggregatorData::get_default_value(bool) {
+    return {};
 }
 
 /***********************
@@ -550,16 +585,20 @@ void FirstAggregatorData::aggregate(const std::optional<ColumnWithStrings>& inpu
 SegmentInMemory FirstAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values) {
     SegmentInMemory res;
     if(!aggregated_.empty()) {
-        details::visit_type(*data_type_, [that=this, &res, &output_column_name, unique_values] (auto col_tag) {
+        details::visit_type(*data_type_, [this, &res, &output_column_name, unique_values] (auto col_tag) {
             using RawType = typename decltype(col_tag)::DataTypeTag::raw_type;
-            that->aggregated_.resize(sizeof(RawType)* unique_values);
-            auto col = std::make_shared<Column>(make_scalar_type(that->data_type_.value()), unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
-            memcpy(col->ptr(), that->aggregated_.data(), that->aggregated_.size());
-            res.add_column(scalar_field(that->data_type_.value(), output_column_name.value), col);
+            aggregated_.resize(sizeof(RawType)* unique_values);
+            auto col = std::make_shared<Column>(make_scalar_type(data_type_.value()), unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
+            memcpy(col->ptr(), aggregated_.data(), aggregated_.size());
+            res.add_column(scalar_field(data_type_.value(), output_column_name.value), col);
             col->set_row_data(unique_values - 1);
         });
     }
     return res;
+}
+
+VariantRawValue FirstAggregatorData::get_default_value(bool) {
+    return {};
 }
 
 /***********************
@@ -617,6 +656,10 @@ SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_nam
         });
     }
     return res;
+}
+
+VariantRawValue LastAggregatorData::get_default_value(bool) {
+    return {};
 }
 
 } //namespace arcticdb
