@@ -13,6 +13,7 @@
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
 #include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/util/type_traits.hpp>
 #include <ankerl/unordered_dense.h>
 
 namespace arcticdb {
@@ -249,7 +250,7 @@ struct StringTypeTag{};
 
 struct IsNullOperator {
 template<typename tag>
-requires std::same_as<tag, TimeTypeTag> || std::same_as<tag, StringTypeTag>
+requires util::any_of<tag, TimeTypeTag, StringTypeTag>
 bool apply(int64_t t) {
     if constexpr (std::is_same_v<tag, TimeTypeTag>) {
         return t == NaT;
@@ -258,8 +259,7 @@ bool apply(int64_t t) {
         return t >= string_nan;
     }
 }
-template<typename T>
-requires std::floating_point<T>
+template<std::floating_point T>
 bool apply(T t) {
     return std::isnan(t);
 }
@@ -267,7 +267,7 @@ bool apply(T t) {
 
 struct NotNullOperator {
 template<typename tag>
-requires std::same_as<tag, TimeTypeTag> || std::same_as<tag, StringTypeTag>
+requires util::any_of<tag, TimeTypeTag, StringTypeTag>
 bool apply(int64_t t) {
     if constexpr (std::is_same_v<tag, TimeTypeTag>) {
         return t != NaT;
@@ -276,8 +276,7 @@ bool apply(int64_t t) {
         return t < string_nan;
     }
 }
-template<typename T>
-requires std::floating_point<T>
+template<std::floating_point T>
 bool apply(T t) {
     return !std::isnan(t);
 }
