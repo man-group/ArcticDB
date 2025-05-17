@@ -487,3 +487,52 @@ def test_aggregation_grouping_column_missing_from_row_group(lmdb_version_store_d
     )
     lib.append(symbol, append_df)
     generic_aggregation_test(lib, symbol, pd.concat([write_df, append_df]), "grouping_column", {"to_sum": "sum"})
+
+@pytest.fixture(scope='session')
+def log_file(tmpdir_factory):
+    file = tmpdir_factory.mktemp('logs').join('log.txt')
+    yield file
+
+@pytest.fixture(scope='function')
+def clean_log_file(log_file):
+    """
+    Current implementation of set_log_level allows setting the output file only once, next calls are ignored. Thus we
+    need to create a session scoped file and erase its contents in a funciton scoped fixture. It's safe to do this for
+    parallel tests as tmpdir_factory will be different for the different workers
+    """
+    log_file.write_text("", encoding="utf-8")
+    yield log_file
+
+class TestDynamicSchemaLogsWarningWhenPromotingIntToFloat:
+    """
+    Dynamic schema promotes int typed columns to float for min and max so that if that a column is missing from a
+    segment, and we end up with empty bucket we can set the value to NaN. That's because numpy can't handle missing
+    values properly. ArcticDB v6.0.0 will change that: the Arrow backend can handle missing values and for numpy it'll
+    be backfiled with 0. This tests that the current version emits a warning. Remove these tests when this is no longer
+    valid.
+    """
+
+    @pytest.mark.parametrize("agg", ["min", "max"])
+    @pytest.mark.parametrize("dtype", ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"])
+    def test_warn_int_types(self, lmdb_library_dynamic_schema, agg, dtype, clean_log_file):
+        set_log_level(console_output=False, file_output_path=str(clean_log_file))
+        lib = lmdb_library_dynamic_schema
+        lib.write("sym", pd.DataFrame({"group": [0], "col": np.array([1], dtype=dtype)}))
+        lib.append("sym", pd.DataFrame({"group": [1]}))
+        qb = QueryBuilder().groupby("group").agg({agg: ("col", agg)})
+        lib.read("sym", query_builder=qb)
+        flush_all()
+        logs = clean_log_file.read_text(encoding="utf-8")
+        assert all([w in logs for w in ["W arcticdb", agg, "ArcticDB v6.0.0", "FLOAT64", dtype.upper(), agg.upper()]])
+    @pytest.mark.parametrize("agg", ["min", "max"])
+    @pytest.mark.parametrize("dtype", ["datetime64[ns]", "float32", "float64"])
+    def test_dont_warn_non_int_types(self, lmdb_library_dynamic_schema, agg, dtype, clean_log_file):
+        set_log_level(console_output=False, file_output_path=str(clean_log_file))
+        lib = lmdb_library_dynamic_schema
+        lib.write("sym", pd.DataFrame({"group": [0], "col": np.array([1], dtype=dtype)}))
+        lib.append("sym", pd.DataFrame({"group": [1]}))
+        qb = QueryBuilder().groupby("group").agg({agg: ("col", agg)})
+        lib.read("sym", query_builder=qb)
+        flush_all()
+        logs = clean_log_file.read_text(encoding="utf-8")
+        assert logs == ""

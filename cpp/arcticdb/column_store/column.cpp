@@ -383,9 +383,8 @@ void Column::default_initialize_rows(size_t start_pos, size_t num_rows, bool ens
                 data_.ensure<uint8_t>(bytes);
 
             auto type_ptr = data_.ptr_cast<RawType>(start_pos, bytes);
-            if (std::holds_alternative<RawType>(default_value)) {
-                const RawType raw_default = std::get<RawType>(default_value);
-                std::fill_n(type_ptr, num_rows, raw_default);
+            if (auto* default_ptr = std::get_if<RawType>(&default_value)) {
+                std::fill_n(type_ptr, num_rows, *default_ptr);
             } else {
                 util::default_initialize<T>(reinterpret_cast<uint8_t *>(type_ptr), bytes);
             }
