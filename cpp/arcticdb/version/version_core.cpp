@@ -966,14 +966,14 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
  * decompression without context switching to try and optimise cache access.
  */
 folly::Future<std::vector<SliceAndKey> > read_process_and_collect(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<PipelineContext> &pipeline_context,
-    const std::shared_ptr<ReadQuery> &read_query,
-    const ReadOptions &read_options
+    const std::shared_ptr<Store>& store,
+    const std::shared_ptr<PipelineContext>& pipeline_context,
+    const std::shared_ptr<ReadQuery>& read_query,
+    const ReadOptions& read_options
 ) {
     auto component_manager = std::make_shared<ComponentManager>();
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
-            .thenValue([component_manager, read_query, pipeline_context](std::vector<EntityId> &&processed_entity_ids) {
+            .thenValue([component_manager, read_query, pipeline_context](std::vector<EntityId>&& processed_entity_ids) {
                 auto proc = gather_entities<std::shared_ptr<SegmentInMemory>,
                     std::shared_ptr<RowRange>,
                     std::shared_ptr<ColRange> >(*component_manager, processed_entity_ids);
@@ -983,7 +983,7 @@ folly::Future<std::vector<SliceAndKey> > read_process_and_collect(
                         schema = clause->modify_schema(std::move(schema));
                     }
                 }
-                auto &&[descriptor, norm_meta, default_values] = schema.release();
+                auto&& [descriptor, norm_meta, default_values] = schema.release();
                 pipeline_context->set_descriptor(std::forward<StreamDescriptor>(descriptor));
                 pipeline_context->norm_meta_ = std::make_shared<proto::descriptors::NormalizationMetadata>(
                     std::forward<proto::descriptors::NormalizationMetadata>(norm_meta));
