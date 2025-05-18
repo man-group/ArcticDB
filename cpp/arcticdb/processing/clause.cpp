@@ -616,6 +616,7 @@ OutputSchema ResampleClause<closed_boundary>::modify_schema(OutputSchema&& outpu
         mutable_index->set_name(name);
         mutable_index->set_fake_name(fake_name);
     }
+    output_schema.clear_default_values();
     return output_schema;
 }
 
