@@ -480,7 +480,7 @@ SegmentInMemory MeanAggregatorData::finalize(const ColumnName& output_column_nam
         fractions_.resize(unique_values);
         auto col = std::make_shared<Column>(make_scalar_type(DataType::FLOAT64), fractions_.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
         auto column_data = col->data();
-        ranges::transform(fractions_, column_data.begin<ScalarTagType<DataTypeTag<DataType::FLOAT64>>>(), [](auto fraction) {
+        std::transform(fractions_.cbegin(), fractions_.cend(), column_data.begin<ScalarTagType<DataTypeTag<DataType::FLOAT64>>>(), [](auto fraction) {
             return fraction.to_double();
         });
         col->set_row_data(fractions_.size() - 1);
