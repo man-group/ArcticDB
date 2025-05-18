@@ -8,6 +8,7 @@
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/processing/aggregation_utils.hpp>
 #include <arcticdb/processing/sorted_aggregation.hpp>
+#include <folly/container/Enumerate.h>
 
 namespace arcticdb {
 
