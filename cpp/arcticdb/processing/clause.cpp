@@ -278,7 +278,6 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
     clause_info_.can_combine_with_column_selection_ = false;
     clause_info_.index_ = NewIndex(grouping_column_);
     clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>({grouping_column_});
-    clause_info_.modifies_output_descriptor_ = true;
     str_ = "AGGREGATE {";
     for (const auto& named_aggregator: named_aggregators) {
         str_.append(fmt::format("{}: ({}, {}), ",
@@ -566,7 +565,6 @@ ResampleClause<closed_boundary>::ResampleClause(std::string rule,
     origin_(std::move(origin)) {
     clause_info_.input_structure_ = ProcessingStructure::TIME_BUCKETED;
     clause_info_.can_combine_with_column_selection_ = false;
-    clause_info_.modifies_output_descriptor_ = true;
     clause_info_.index_ = KeepCurrentTopLevelIndex();
 }
 

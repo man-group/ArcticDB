@@ -52,8 +52,6 @@ struct ClauseInfo {
     // KeepCurrentTopLevelIndex if this clause requires multi-index levels>0 to be dropped, but otherwise does not modify it
     // NewIndex if this clause has changed the index to a new (supplied) name
     std::variant<KeepCurrentIndex, KeepCurrentTopLevelIndex, NewIndex> index_{KeepCurrentIndex()};
-    // Whether this clause modifies the output descriptor
-    bool modifies_output_descriptor_{false};
     // Whether this clause operates on one or multiple symbols
     bool multi_symbol_{false};
 };

@@ -191,7 +191,6 @@ struct ProjectClause {
             output_column_(std::move(output_column)),
             expression_context_(std::make_shared<ExpressionContext>(std::move(expression_context))) {
         clause_info_.input_columns_ = std::move(input_columns);
-        clause_info_.modifies_output_descriptor_ = true;
     }
 
     ProjectClause() = delete;
@@ -241,10 +240,8 @@ struct PartitionClause {
     std::string grouping_column_;
 
     explicit PartitionClause(const std::string& grouping_column) :
-            processing_config_(),
             grouping_column_(grouping_column) {
         clause_info_.input_columns_ = {grouping_column_};
-        clause_info_.modifies_output_descriptor_ = true;
     }
     PartitionClause() = delete;
 
@@ -604,11 +601,9 @@ struct ColumnStatsGenerationClause {
     explicit ColumnStatsGenerationClause(
         std::unordered_set<std::string>&& input_columns,
         std::shared_ptr<std::vector<ColumnStatsAggregator>> column_stats_aggregators) :
-            processing_config_(),
             column_stats_aggregators_(std::move(column_stats_aggregators)) {
         clause_info_.input_columns_ = std::move(input_columns);
         clause_info_.can_combine_with_column_selection_ = false;
-        clause_info_.modifies_output_descriptor_ = true;
     }
 
     ARCTICDB_MOVE_COPY_DEFAULT(ColumnStatsGenerationClause)
