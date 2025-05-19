@@ -23,7 +23,7 @@ namespace arcticdb {
 enum class FailureType : int {
     WRITE = 0,
     READ,
-    WRITE_SLOW,
+    WRITE_LOCK,
     ITERATE,
     DELETE,
 };
@@ -176,7 +176,7 @@ public:
         Params default_actions = {
             {WRITE, {action_factories::fault(cfg.write_failure_prob())}},
             {READ, {action_factories::fault(cfg.read_failure_prob())}},
-            {WRITE_SLOW, {action_factories::slow_action(cfg.write_slowdown_prob(), cfg.slow_down_min_ms(), cfg.slow_down_max_ms())}}
+            {WRITE_LOCK, {action_factories::slow_action(cfg.write_slowdown_prob(), cfg.slow_down_min_ms(), cfg.slow_down_max_ms())}}
         };
 
         configure(default_actions);

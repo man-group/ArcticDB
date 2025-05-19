@@ -168,8 +168,8 @@ class StorageLock {
             auto read_ts = read_timestamp(store);
             auto duration = ClockType::coarse_nanos_since_epoch() - start;
             auto duration_in_ms = duration / ONE_MILLISECOND;
-            ARCTICDB_INFO(log::lock(), "Took {} ms", duration_in_ms);
-            ARCTICDB_INFO(log::lock(), "Max is {} ms", 1.5 * lock_sleep_ms);
+            ARCTICDB_DEBUG(log::lock(), "Took {} ms", duration_in_ms);
+            ARCTICDB_DEBUG(log::lock(), "Max is {} ms", 1.5 * lock_sleep_ms);
             if (duration > 1.5 * lock_sleep_ms * ONE_MILLISECOND) {
                 ARCTICDB_DEBUG(log::lock(), "Took too long to read and write the lock. Aborting.");
                 return false;
@@ -194,7 +194,7 @@ class StorageLock {
 
     timestamp create_ref_key(const std::shared_ptr<Store>& store) {
         auto ts =  ClockType::nanos_since_epoch();
-        StorageFailureSimulator::instance()->go(FailureType::WRITE_SLOW);
+        StorageFailureSimulator::instance()->go(FailureType::WRITE_LOCK);
         store->write_sync(KeyType::LOCK, name_, lock_segment(name_, ts));
         ARCTICDB_DEBUG(log::lock(), "Created lock with timestamp {}", ts);
         return ts;
