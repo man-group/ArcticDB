@@ -357,11 +357,9 @@ struct SliceAndKey;
 struct PipelineContext;
 }
 
-size_t adjust_slice_rowcounts(
-    std::vector<pipelines::SliceAndKey> & slice_and_keys,
-    const std::optional<size_t>& first_row = std::nullopt);
+size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey>& slice_and_keys);
 
-void adjust_slice_rowcounts(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context);
+void adjust_slice_ranges(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context);
 
 size_t get_slice_rowcounts(std::vector<pipelines::SliceAndKey>& slice_and_keys);
 

@@ -19,6 +19,8 @@ from arcticdb.version_store.library import (
     col,
     LazyDataFrame,
     LazyDataFrameCollection,
+    LazyDataFrameAfterJoin,
+    concat,
     StagedDataFinalizeMethod,
     WriteMetadataPayload
 )

@@ -548,14 +548,15 @@ void add_slice_to_component_manager(
 }
 
 size_t num_scheduling_iterations(const std::vector<std::shared_ptr<Clause>>& clauses) {
+    if (clauses.empty()) {
+        return 0UL;
+    }
     size_t res = 1UL;
-    auto it = std::next(clauses.cbegin());
-    while (it != clauses.cend()) {
+    for (auto it = std::next(clauses.cbegin()); it != clauses.cend(); ++it) {
         auto prev_it = std::prev(it);
         if ((*prev_it)->clause_info().output_structure_ != (*it)->clause_info().input_structure_) {
             ++res;
         }
-        ++it;
     }
     ARCTICDB_DEBUG(log::memory(), "Processing pipeline has {} scheduling stages after the initial read and process", res);
     return res;
@@ -564,16 +565,18 @@ size_t num_scheduling_iterations(const std::vector<std::shared_ptr<Clause>>& cla
 void remove_processed_clauses(std::vector<std::shared_ptr<Clause>>& clauses) {
     // Erase all the clauses we have already scheduled to run
     ARCTICDB_SAMPLE_DEFAULT(RemoveProcessedClauses)
-    auto it = std::next(clauses.cbegin());
-    while (it != clauses.cend()) {
-        auto prev_it = std::prev(it);
-        if ((*prev_it)->clause_info().output_structure_ == (*it)->clause_info().input_structure_) {
-            ++it;
-        } else {
-            break;
+    if (!clauses.empty()) {
+        auto it = std::next(clauses.cbegin());
+        while (it != clauses.cend()) {
+            auto prev_it = std::prev(it);
+            if ((*prev_it)->clause_info().output_structure_ == (*it)->clause_info().input_structure_) {
+                ++it;
+            } else {
+                break;
+            }
         }
+        clauses.erase(clauses.cbegin(), it);
     }
-    clauses.erase(clauses.cbegin(), it);
 }
 
 std::pair<std::vector<std::vector<EntityId>>, std::shared_ptr<ankerl::unordered_dense::map<EntityId, size_t>>> get_entity_ids_and_position_map(
@@ -657,6 +660,34 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
     return futures;
 }
 
+folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
+        std::vector<std::vector<EntityId>>&& entity_ids_vec,
+        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
+        ) {
+    auto scheduling_iterations = num_scheduling_iterations(*clauses);
+    folly::Future<std::vector<std::vector<EntityId>>> entity_ids_vec_fut(std::move(entity_ids_vec));
+    for (auto i = 0UL; i < scheduling_iterations; ++i) {
+        entity_ids_vec_fut = std::move(entity_ids_vec_fut).thenValue([clauses, scheduling_iterations, i] (std::vector<std::vector<EntityId>>&& entity_id_vectors) {
+            ARCTICDB_RUNTIME_DEBUG(log::memory(), "Scheduling iteration {} of {}", i, scheduling_iterations);
+
+            util::check(!clauses->empty(), "Scheduling iteration {} has no clauses to process", scheduling_iterations);
+            if (i > 0) {
+                remove_processed_clauses(*clauses);
+            }
+            auto next_units_of_work = clauses->front()->structure_for_processing(std::move(entity_id_vectors));
+
+            std::vector<folly::Future<std::vector<EntityId>>> work_futures;
+            for(auto& unit_of_work : next_units_of_work) {
+                ARCTICDB_RUNTIME_DEBUG(log::memory(), "Scheduling work for entity ids: {}", unit_of_work);
+                work_futures.emplace_back(async::submit_cpu_task(async::MemSegmentProcessingTask{*clauses, std::move(unit_of_work)}));
+            }
+
+            return folly::collect(work_futures).via(&async::io_executor());
+        });
+    }
+    return std::move(entity_ids_vec_fut).thenValueInline(flatten_entities);
+}
+
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
         std::shared_ptr<ComponentManager> component_manager,
         std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
@@ -688,29 +719,9 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
         std::move(entity_id_to_segment_pos),
         clauses);
 
-    auto entity_ids_vec_fut = folly::collect(*futures).via(&async::io_executor());
-
-    const auto scheduling_iterations = num_scheduling_iterations(*clauses);
-    for (auto i = 1UL; i < scheduling_iterations; ++i) {
-        entity_ids_vec_fut = std::move(entity_ids_vec_fut).thenValue([clauses, scheduling_iterations, i] (std::vector<std::vector<EntityId>>&& entity_id_vectors) {
-            ARCTICDB_RUNTIME_DEBUG(log::memory(), "Scheduling iteration {} of {}", i, scheduling_iterations);
-
-            util::check(!clauses->empty(), "Scheduling iteration {} has no clauses to process", scheduling_iterations);
-            remove_processed_clauses(*clauses);
-            auto next_units_of_work = clauses->front()->structure_for_processing(std::move(entity_id_vectors));
-
-            std::vector<folly::Future<std::vector<EntityId>>> work_futures;
-            for(auto&& unit_of_work : next_units_of_work) {
-                ARCTICDB_RUNTIME_DEBUG(log::memory(), "Scheduling work for entity ids: {}", unit_of_work);
-                work_futures.emplace_back(async::submit_cpu_task(async::MemSegmentProcessingTask{*clauses, std::move(unit_of_work)}));
-            }
-
-            return folly::collect(work_futures).via(&async::io_executor());
-        });
-    }
-
-    return std::move(entity_ids_vec_fut).thenValueInline([](std::vector<std::vector<EntityId>>&& entity_id_vectors) {
-        return flatten_entities(std::move(entity_id_vectors));
+    return folly::collect(*futures).via(&async::io_executor()).thenValueInline([clauses](auto&& entity_ids_vec) {
+        remove_processed_clauses(*clauses);
+        return schedule_remaining_iterations(std::move(entity_ids_vec), clauses);
     });
 }
 
@@ -890,24 +901,13 @@ std::vector<folly::Future<pipelines::SegmentAndSlice>> generate_segment_and_slic
     return add_schema_check(pipeline_context, std::move(segment_and_slice_futures), std::move(incomplete_bitset), processing_config);
 }
 
-/*
- * Processes the slices in the given pipeline_context.
- *
- * Slices are processed in an order defined by the first clause in the pipeline, with slices corresponding to the same
- * processing unit collected into a single ProcessingUnit. Slices contained within a single ProcessingUnit are processed
- * within a single thread.
- *
- * The processing of a ProcessingUnit is scheduled via the Async Store. Within a single thread, the
- * segments will be retrieved from storage and decompressed before being passed to a MemSegmentProcessingTask which
- * will process all clauses up until a clause that requires a repartition.
- */
-folly::Future<std::vector<SliceAndKey>> read_and_process(
+folly::Future<std::vector<EntityId>> read_and_schedule_processing(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<PipelineContext>& pipeline_context,
     const std::shared_ptr<ReadQuery>& read_query,
-    const ReadOptions& read_options
+    const ReadOptions& read_options,
+    std::shared_ptr<ComponentManager> component_manager
     ) {
-    auto component_manager = std::make_shared<ComponentManager>();
     ProcessingConfig processing_config{opt_false(read_options.dynamic_schema()), pipeline_context->rows_};
     for (auto& clause: read_query->clauses_) {
         clause->set_processing_config(processing_config);
@@ -919,7 +919,12 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
     // Each element of the vector corresponds to one processing unit containing the list of indexes in ranges_and_keys required for that processing unit
     // i.e. if the first processing unit needs ranges_and_keys[0] and ranges_and_keys[1], and the second needs ranges_and_keys[2] and ranges_and_keys[3]
     // then the structure will be {{0, 1}, {2, 3}}
-    std::vector<std::vector<size_t>> processing_unit_indexes = read_query->clauses_[0]->structure_for_processing(ranges_and_keys);
+    std::vector<std::vector<size_t>> processing_unit_indexes;
+    if (read_query->clauses_.empty()) {
+        processing_unit_indexes = structure_by_row_slice(ranges_and_keys);
+    } else {
+        processing_unit_indexes = read_query->clauses_[0]->structure_for_processing(ranges_and_keys);
+    }
 
     // Start reading as early as possible
     auto segment_and_slice_futures = generate_segment_and_slice_futures(store, pipeline_context, processing_config, std::move(ranges_and_keys));
@@ -929,21 +934,40 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
         std::move(segment_and_slice_futures),
         std::move(processing_unit_indexes),
         std::make_shared<std::vector<std::shared_ptr<Clause>>>(read_query->clauses_))
-    .via(&async::cpu_executor())
-    .thenValue([component_manager, read_query, pipeline_context](std::vector<EntityId>&& processed_entity_ids) {
-        auto proc = gather_entities<std::shared_ptr<SegmentInMemory>,
-                                    std::shared_ptr<RowRange>,
-                                    std::shared_ptr<ColRange>>(*component_manager, processed_entity_ids);
+    .via(&async::cpu_executor());
+}
 
-        if (std::any_of(read_query->clauses_.begin(),
-                        read_query->clauses_.end(),
-                        [](const std::shared_ptr<Clause>& clause) {
-                            return clause->clause_info().modifies_output_descriptor_;
-                        })) {
-            set_output_descriptors(proc, read_query->clauses_, pipeline_context);
-        }
-        return collect_segments(std::move(proc));
-    });
+/*
+ * Processes the slices in the given pipeline_context.
+ *
+ * Slices are processed in an order defined by the first clause in the pipeline, with slices corresponding to the same
+ * processing unit collected into a single ProcessingUnit. Slices contained within a single ProcessingUnit are processed
+ * within a single thread.
+ *
+ * Where possible (generally, when there is no column slicing), clauses are processed in the same folly thread as the
+ * decompression without context switching to try and optimise cache access.
+ */
+folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
+        const std::shared_ptr<Store>& store,
+        const std::shared_ptr<PipelineContext>& pipeline_context,
+        const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options
+) {
+    auto component_manager = std::make_shared<ComponentManager>();
+    return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
+            .thenValue([component_manager, read_query, pipeline_context](std::vector<EntityId>&& processed_entity_ids) {
+                auto proc = gather_entities<std::shared_ptr<SegmentInMemory>,
+                        std::shared_ptr<RowRange>,
+                        std::shared_ptr<ColRange>>(*component_manager, processed_entity_ids);
+
+                if (std::ranges::any_of(read_query->clauses_,
+                                        [](const std::shared_ptr<Clause>& clause) {
+                                            return clause->clause_info().modifies_output_descriptor_;
+                                        })) {
+                    set_output_descriptors(proc, read_query->clauses_, pipeline_context);
+                }
+                return collect_segments(std::move(proc));
+            });
 }
 
 void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc) {
@@ -1317,52 +1341,51 @@ void copy_frame_data_to_buffer(
 }
 
 struct CopyToBufferTask : async::BaseTask {
-    SegmentInMemory&& source_segment_;
+    SegmentInMemory source_segment_;
     SegmentInMemory target_segment_;
     FrameSlice frame_slice_;
+    uint32_t required_fields_count_;
     DecodePathData shared_data_;
     std::any& handler_data_;
-    bool fetch_index_;
     OutputFormat output_format_;
 
     CopyToBufferTask(
             SegmentInMemory&& source_segment,
             SegmentInMemory target_segment,
             FrameSlice frame_slice,
+            uint32_t required_fields_count,
             DecodePathData shared_data,
             std::any& handler_data,
-            bool fetch_index,
             OutputFormat output_format) :
             source_segment_(std::move(source_segment)),
         target_segment_(std::move(target_segment)),
         frame_slice_(std::move(frame_slice)),
+        required_fields_count_(required_fields_count),
         shared_data_(std::move(shared_data)),
         handler_data_(handler_data),
-        fetch_index_(fetch_index),
         output_format_(output_format){
     }
 
     folly::Unit operator()() {
-        const auto index_field_count = get_index_field_count(target_segment_);
-        for (auto idx = 0u; idx < index_field_count && fetch_index_; ++idx) {
-            copy_frame_data_to_buffer(target_segment_, idx, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
-        }
-
-        auto field_count = frame_slice_.col_range.diff() + index_field_count;
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-        field_count == source_segment_.descriptor().field_count(),
-        "Column range does not match segment descriptor field count in copy_segments_to_frame: {} != {}",
-        field_count, source_segment_.descriptor().field_count());
-
+        const size_t first_col = frame_slice_.columns().first;
+        const bool first_col_slice = first_col == 0;
         const auto& fields = source_segment_.descriptor().fields();
-        for (auto field_col = index_field_count; field_col < field_count; ++field_col) {
-            const auto& field = fields.at(field_col);
-            const auto& field_name = field.name();
-            auto frame_loc_opt = target_segment_.column_index(field_name);
-            if (!frame_loc_opt)
-                continue;
-
-            copy_frame_data_to_buffer(target_segment_, *frame_loc_opt, source_segment_, field_col, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
+        // Skip the "true" index fields (i.e. those stored in every column slice) if we are not in the first column slice
+        for (size_t idx = first_col_slice ? 0 : get_index_field_count(source_segment_); idx < fields.size(); ++idx) {
+            // First condition required to avoid underflow when substracting one unsigned value from another
+            if (required_fields_count_ >= first_col && idx < required_fields_count_ - first_col) {
+                // This is a required column in the output. The name in source_segment_ may not match that in target_segment_
+                // e.g. If 2 timeseries are joined that had differently named indexes
+                copy_frame_data_to_buffer(target_segment_, idx + first_col, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
+            } else {
+                // All other columns use names to match the source with the destination
+                const auto& field = fields.at(idx);
+                const auto& field_name = field.name();
+                auto frame_loc_opt = target_segment_.column_index(field_name);
+                if (!frame_loc_opt)
+                    continue;
+                copy_frame_data_to_buffer(target_segment_, *frame_loc_opt, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
+            }
         }
         return folly::Unit{};
     }
@@ -1374,20 +1397,21 @@ folly::Future<folly::Unit> copy_segments_to_frame(
         SegmentInMemory frame,
         std::any& handler_data,
         OutputFormat output_format) {
+    auto required_fields_count = pipelines::index::required_fields_count(pipeline_context->descriptor(),
+                                                                     *pipeline_context->norm_meta_);
     std::vector<folly::Future<folly::Unit>> copy_tasks;
     DecodePathData shared_data;
     for (auto context_row : folly::enumerate(*pipeline_context)) {
         auto &slice_and_key = context_row->slice_and_key();
-        auto &segment = slice_and_key.segment(store);
 
         copy_tasks.emplace_back(async::submit_cpu_task(
             CopyToBufferTask{
-                std::move(segment),
+                slice_and_key.release_segment(store),
                 frame,
                 context_row->slice_and_key().slice(),
+                required_fields_count,
                 shared_data,
                 handler_data,
-                context_row->fetch_index(),
                 output_format}));
     }
     return folly::collect(copy_tasks).via(&async::cpu_executor()).unit();
@@ -1404,7 +1428,7 @@ folly::Future<SegmentInMemory> prepare_output_frame(
 	ranges::sort(pipeline_context->slice_and_keys_, [] (const auto& left, const auto& right) {
 		return std::tie(left.slice_.row_range, left.slice_.col_range) < std::tie(right.slice_.row_range, right.slice_.col_range);
 	});
-    adjust_slice_rowcounts(pipeline_context);
+    adjust_slice_ranges(pipeline_context);
     const auto dynamic_schema = opt_false(read_options.dynamic_schema());
     mark_index_slices(pipeline_context, dynamic_schema, pipeline_context->bucketize_dynamic_);
     pipeline_context->ensure_vectors();
@@ -1472,7 +1496,7 @@ void create_column_stats_impl(
             "Cannot create column stats on pickled data"
             );
 
-    auto segs = read_and_process(store, pipeline_context, read_query, read_options).get();
+    auto segs = read_process_and_collect(store, pipeline_context, read_query, read_options).get();
     schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(!segs.empty(), "Cannot create column stats for nonexistent columns");
 
     // Convert SliceAndKey vector into SegmentInMemory vector
@@ -1578,7 +1602,7 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
     if(!read_query->clauses_.empty()) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
         util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
-        return read_and_process(store, pipeline_context, read_query, read_options)
+        return read_process_and_collect(store, pipeline_context, read_query, read_options)
         .thenValue([store, pipeline_context, &read_options, &handler_data](std::vector<SliceAndKey>&& segs) {
             return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
         });
@@ -1781,7 +1805,7 @@ VersionedItem sort_merge_impl(
             }));
             ReadOptions read_options;
             read_options.set_dynamic_schema(write_options.dynamic_schema);
-            auto segments = read_and_process(store, pipeline_context, std::make_shared<ReadQuery>(std::move(read_query)), read_options).get();
+            auto segments = read_process_and_collect(store, pipeline_context, std::make_shared<ReadQuery>(std::move(read_query)), read_options).get();
             if (options.append_ && update_info.previous_index_key_ && !segments.empty()) {
                 const timestamp last_index_on_disc = update_info.previous_index_key_->end_time() - 1;
                 const timestamp incomplete_start =
@@ -2011,7 +2035,9 @@ VersionedItem defragment_symbol_data_impl(
     CompactionResult result = util::variant_match(std::move(policies), [
         &slices, &store, &options, &pre_defragmentation_info, segment_size=segment_size] (auto &&idx, auto &&schema) {
         pre_defragmentation_info.read_query->clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{pre_defragmentation_info.append_after.value()}));
-        auto segments = read_and_process(store, pre_defragmentation_info.pipeline_context, pre_defragmentation_info.read_query, defragmentation_read_options_generator(options)).get();
+        auto segments = read_process_and_collect(store, pre_defragmentation_info.pipeline_context,
+                                                 pre_defragmentation_info.read_query,
+                                                 defragmentation_read_options_generator(options)).get();
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
         static constexpr CompactionOptions compaction_options = {
@@ -2058,63 +2084,85 @@ void set_row_id_if_index_only(
     }
 }
 
-// This is the main user-facing read method that either returns all or
-// part of a dataframe as-is, or transforms it via a processing pipeline
-folly::Future<ReadVersionOutput> read_frame_for_version(
+std::shared_ptr<PipelineContext> setup_pipeline_context(
         const std::shared_ptr<Store>& store,
         const std::variant<VersionedItem, StreamId>& version_info,
-        const std::shared_ptr<ReadQuery>& read_query ,
-        const ReadOptions& read_options,
-        std::any& handler_data) {
+        ReadQuery& read_query,
+        const ReadOptions& read_options
+        ) {
     using namespace arcticdb::pipelines;
     auto pipeline_context = std::make_shared<PipelineContext>();
-    VersionedItem res_versioned_item;
 
     const bool has_active_version = std::holds_alternative<VersionedItem>(version_info);
     if(!has_active_version) {
         pipeline_context->stream_id_ = std::get<StreamId>(version_info);
+    } else {
+        pipeline_context->stream_id_ = std::get<VersionedItem>(version_info).key_.id();
+        read_indexed_keys_to_pipeline(store, pipeline_context, std::get<VersionedItem>(version_info), read_query, read_options);
+    }
+
+    if(pipeline_context->multi_key_) {
+        return pipeline_context;
+    }
+
+    if(read_options.get_incompletes()) {
+        util::check(std::holds_alternative<IndexRange>(read_query.row_filter), "Streaming read requires date range filter");
+        const auto& query_range = std::get<IndexRange>(read_query.row_filter);
+        const auto existing_range = pipeline_context->index_range();
+        if(!existing_range.specified_ || query_range.end_ > existing_range.end_) {
+            const ReadIncompletesFlags read_incompletes_flags {
+                    .dynamic_schema=opt_false(read_options.dynamic_schema()),
+                    .has_active_version = has_active_version
+            };
+            read_incompletes_to_pipeline(store, pipeline_context, read_query, read_options, read_incompletes_flags);
+        }
+    }
+
+    if(std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {
+        missing_data::raise<ErrorCode::E_NO_SYMBOL_DATA>(
+                "read_dataframe_impl: read returned no data for symbol {} (found no versions or append data)", pipeline_context->stream_id_);
+    }
+
+    modify_descriptor(pipeline_context, read_options);
+    generate_filtered_field_descriptors(pipeline_context, read_query.columns);
+    return pipeline_context;
+}
+
+VersionedItem generate_result_versioned_item(
+        const std::variant<VersionedItem, StreamId>& version_info
+        ) {
+    VersionedItem versioned_item;
+    if(std::holds_alternative<StreamId>(version_info)) {
         // This isn't ideal. It would be better if the version() and timestamp() methods on the C++ VersionedItem class
         // returned optionals, but this change would bubble up to the Python VersionedItem class defined in _store.py.
         // This class is very hard to change at this point, as users do things like pickling them to pass them around.
         // This at least gets the symbol attribute of VersionedItem correct. The creation timestamp will be zero, which
         // corresponds to 1970, and so with this obviously ridiculous version ID, it should be clear to users that these
         // values are meaningless before an indexed version exists.
-        res_versioned_item = VersionedItem(AtomKeyBuilder()
-                                           .version_id(std::numeric_limits<VersionId>::max())
-                                           .build<KeyType::TABLE_INDEX>(std::get<StreamId>(version_info)));
+        versioned_item = VersionedItem(AtomKeyBuilder()
+                                                   .version_id(std::numeric_limits<VersionId>::max())
+                                                   .build<KeyType::TABLE_INDEX>(std::get<StreamId>(version_info)));
     } else {
-        pipeline_context->stream_id_ = std::get<VersionedItem>(version_info).key_.id();
-        read_indexed_keys_to_pipeline(store, pipeline_context, std::get<VersionedItem>(version_info), *read_query, read_options);
-        res_versioned_item = std::get<VersionedItem>(version_info);
+        versioned_item = std::get<VersionedItem>(version_info);
     }
+    return versioned_item;
+}
 
+// This is the main user-facing read method that either returns all or
+// part of a dataframe as-is, or transforms it via a processing pipeline
+folly::Future<ReadVersionOutput> read_frame_for_version(
+        const std::shared_ptr<Store>& store,
+        const std::variant<VersionedItem, StreamId>& version_info,
+        const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options,
+        std::any& handler_data) {
+    auto pipeline_context = setup_pipeline_context(store, version_info, *read_query, read_options);
+    auto res_versioned_item = generate_result_versioned_item(version_info);
     if(pipeline_context->multi_key_) {
         check_multi_key_is_not_index_only(*pipeline_context, *read_query);
         return read_multi_key(store, *pipeline_context->multi_key_, handler_data, std::move(res_versioned_item.key_));
     }
-
-    if(opt_false(read_options.incompletes())) {
-        util::check(std::holds_alternative<IndexRange>(read_query->row_filter), "Streaming read requires date range filter");
-        const auto& query_range = std::get<IndexRange>(read_query->row_filter);
-        const auto existing_range = pipeline_context->index_range();
-        if(!existing_range.specified_ || query_range.end_ > existing_range.end_) {
-            const ReadIncompletesFlags read_incompletes_flags {
-                .dynamic_schema=opt_false(read_options.dynamic_schema()),
-                .has_active_version = has_active_version
-            };
-            read_incompletes_to_pipeline(store, pipeline_context, *read_query, read_options, read_incompletes_flags);
-        }
-    }
-
-    if(std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {
-        missing_data::raise<ErrorCode::E_NO_SYMBOL_DATA>(
-            "read_dataframe_impl: read returned no data for symbol {} (found no versions or append data)", pipeline_context->stream_id_);
-    }
-
-    modify_descriptor(pipeline_context, read_options);
-    generate_filtered_field_descriptors(pipeline_context, read_query->columns);
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
-
     DecodePathData shared_data;
     return do_direct_read_or_process(store, read_query, read_options, pipeline_context, shared_data, handler_data)
     .thenValue([res_versioned_item, pipeline_context, read_options, &handler_data, read_query, shared_data](auto&& frame) mutable {
@@ -2128,6 +2176,49 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
                                       timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_),
                                       {}}};
         });
+    });
+}
+
+folly::Future<SymbolProcessingResult> read_and_process(
+        const std::shared_ptr<Store>& store,
+        const std::variant<VersionedItem, StreamId>& version_info,
+        const std::shared_ptr<ReadQuery>& read_query ,
+        const ReadOptions& read_options,
+        std::shared_ptr<ComponentManager> component_manager) {
+    auto pipeline_context = setup_pipeline_context(store, version_info, *read_query, read_options);
+    auto res_versioned_item = generate_result_versioned_item(version_info);
+
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(!pipeline_context->multi_key_, "Multi-symbol joins not supported with recursively normalized data");
+
+    if(std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {
+        return SymbolProcessingResult{std::move(res_versioned_item), {}, {}, {}};
+    }
+
+    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(!pipeline_context->is_pickled(),"Cannot perform multi-symbol join on pickled data");
+
+    StreamDescriptor output_stream_descriptor;
+    if (read_query->columns.has_value()) {
+        output_stream_descriptor = StreamDescriptor(
+                pipeline_context->descriptor().id(),
+                pipeline_context->descriptor().index(),
+                std::make_shared<FieldCollection>(pipeline_context->filter_columns_->clone()));
+    } else {
+        output_stream_descriptor = pipeline_context->descriptor().clone();
+    }
+    OutputSchema output_schema(std::move(output_stream_descriptor), *pipeline_context->norm_meta_);
+    for (const auto& clause: read_query->clauses_) {
+        output_schema = clause->modify_schema(std::move(output_schema));
+    }
+
+    ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
+
+    return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
+    .thenValueInline([res_versioned_item = std::move(res_versioned_item), pipeline_context, output_schema = std::move(output_schema)](auto&& entity_ids) mutable {
+        // Pipeline context user metadata is not populated in the case that only incomplete segments exist for a symbol, no indexed versions
+        return SymbolProcessingResult{std::move(res_versioned_item),
+                                      pipeline_context->user_meta_ ? std::move(*pipeline_context->user_meta_) : proto::descriptors::UserDefinedMetadata{},
+                                      std::move(output_schema),
+                                      std::move(entity_ids)};
     });
 }
 } //namespace arcticdb::version_store
