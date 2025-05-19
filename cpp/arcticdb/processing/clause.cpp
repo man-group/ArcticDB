@@ -631,6 +631,10 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
     if (ranges_and_keys.empty()) {
         return {};
     }
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            processing_config_.index_type_ == IndexDescriptor::Type::TIMESTAMP,
+            "Cannot resample non-timestamp indexed data"
+            );
 
     // Iterate over ranges_and_keys and create a pair with first element equal to the smallest start time and second
     // element equal to the largest end time.
@@ -649,6 +653,7 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
 
     bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary, offset_, origin_);
     if (bucket_boundaries_.size() < 2) {
+        ranges_and_keys.clear();
         return {};
     }
     debug::check<ErrorCode::E_ASSERTION_FAILURE>(ranges::is_sorted(bucket_boundaries_),
@@ -734,10 +739,16 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(is_time_type(first_row_slice_index_col.type().data_type()),
                                                     "Cannot resample data with index column of non-timestamp type");
     auto first_ts = first_row_slice_index_col.scalar_at<timestamp>(0).value();
-    // We can use the last timestamp from the first row-slice's index column, as by construction (structure_for_processing) the bucket covering
-    // this value will cover the remaining index values this call is responsible for
-    auto last_ts = first_row_slice_index_col.scalar_at<timestamp>(first_row_slice_index_col.row_count() - 1).value();
+    // If there is only one row slice, then the last index value of interest is just the last index value for this row
+    // slice. If there is more than one, then the first index value from the second row slice must be used to calculate
+    // the buckets of interest, due to an old bug in update. See test_compatibility.py::test_compat_resample_updated_data
+    // for details
+    auto last_ts = row_slices.size() == 1 ? first_row_slice_index_col.scalar_at<timestamp>(first_row_slice_index_col.row_count() - 1).value():
+            row_slices.back().segments_->at(0)->column(0).scalar_at<timestamp>(0).value();
     auto bucket_boundaries = generate_bucket_boundaries(first_ts, last_ts, responsible_for_first_overlapping_bucket);
+    if (bucket_boundaries.size() < 2) {
+        return {};
+    }
     std::vector<std::shared_ptr<Column>> input_index_columns;
     input_index_columns.reserve(row_slices.size());
     for (const auto& row_slice: row_slices) {
@@ -816,8 +827,9 @@ std::vector<timestamp> ResampleClause<closed_boundary>::generate_bucket_boundari
         ++last_it;
     }
     std::vector<timestamp> bucket_boundaries(first_it, last_it);
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(bucket_boundaries.size() >= 2,
-                                                    "Always expect at least bucket boundaries in ResampleClause::generate_bucket_boundaries");
+    // There used to be a check here that there was at least one bucket to process. However, this is not always the case
+    // for data written by old versions of Arctic using update. See test_compatibility.py::test_compat_resample_updated_data
+    // for more explanation
     return bucket_boundaries;
 }
 
@@ -1288,6 +1300,10 @@ void RowRangeClause::calculate_start_and_end(size_t total_rows) {
 
 std::vector<std::vector<size_t>> DateRangeClause::structure_for_processing(
         std::vector<RangesAndKey>& ranges_and_keys) {
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            processing_config_.index_type_ == IndexDescriptor::Type::TIMESTAMP,
+            "Cannot use date range with non-timestamp indexed data"
+    );
     ranges_and_keys.erase(std::remove_if(ranges_and_keys.begin(), ranges_and_keys.end(), [this](const RangesAndKey& ranges_and_key) {
         auto [start_index, end_index] = ranges_and_key.key_.time_range();
         return start_index > end_ || end_index <= start_;
@@ -1320,6 +1336,10 @@ std::vector<EntityId> DateRangeClause::process(std::vector<EntityId> &&entity_id
         proc.truncate(start_row, end_row);
     } // else all rows in the processing unit are required, do nothing
     return push_entities(*component_manager_, std::move(proc));
+}
+
+void DateRangeClause::set_processing_config(const ProcessingConfig& processing_config) {
+    processing_config_ = processing_config;
 }
 
 OutputSchema DateRangeClause::modify_schema(OutputSchema&& output_schema) const {

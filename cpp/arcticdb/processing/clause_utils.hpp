@@ -61,7 +61,8 @@ struct ClauseInfo {
 // Changes how the clause behaves based on information only available after it is constructed
 struct ProcessingConfig {
     bool dynamic_schema_{false};
-    uint64_t total_rows_ = 0;
+    uint64_t total_rows_{0};
+    IndexDescriptor::Type index_type_{IndexDescriptor::Type::UNKNOWN};
 };
 
 // Used when restructuring segments inbetween clauses with differing ProcessingStructures
