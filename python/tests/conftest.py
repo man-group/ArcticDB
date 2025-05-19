@@ -647,17 +647,17 @@ def s3_store_factory_mock_storage_exception(lib_name, s3_storage):
 
 
 @pytest.fixture
-def s3_store_factory(lib_name, s3_storage) -> NativeVersionStore:
+def s3_store_factory(lib_name, s3_storage) -> Callable[..., NativeVersionStore]:
     return s3_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
-def s3_no_ssl_store_factory(lib_name, s3_no_ssl_storage) -> NativeVersionStore:
+def s3_no_ssl_store_factory(lib_name, s3_no_ssl_storage) -> Callable[..., NativeVersionStore]:
     return s3_no_ssl_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
-def mock_s3_store_with_error_simulation_factory(lib_name, mock_s3_storage_with_error_simulation) -> NativeVersionStore:
+def mock_s3_store_with_error_simulation_factory(lib_name, mock_s3_storage_with_error_simulation) -> Callable[..., NativeVersionStore]:
     return mock_s3_storage_with_error_simulation.create_version_store_factory(lib_name)
 
 
@@ -667,7 +667,7 @@ def real_s3_store_factory(lib_name, real_s3_storage) -> Callable[..., NativeVers
 
 
 @pytest.fixture
-def nfs_backed_s3_store_factory(lib_name, nfs_backed_s3_storage) -> NativeVersionStore:
+def nfs_backed_s3_store_factory(lib_name, nfs_backed_s3_storage) -> Callable[..., NativeVersionStore]:
     return nfs_backed_s3_storage.create_version_store_factory(lib_name)
 
 
@@ -677,12 +677,12 @@ def real_gcp_store_factory(lib_name, real_gcp_storage) -> Callable[..., NativeVe
 
 
 @pytest.fixture
-def real_s3_sts_store_factory(lib_name, real_s3_sts_storage) -> NativeVersionStore:
+def real_s3_sts_store_factory(lib_name, real_s3_sts_storage) -> Callable[..., NativeVersionStore]:
     return real_s3_sts_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
-def azure_store_factory(lib_name, azurite_storage) -> NativeVersionStore:
+def azure_store_factory(lib_name, azurite_storage) -> Callable[..., NativeVersionStore]:
     return azurite_storage.create_version_store_factory(lib_name)
 
 
