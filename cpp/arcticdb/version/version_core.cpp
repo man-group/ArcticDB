@@ -908,7 +908,11 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
     const ReadOptions& read_options,
     std::shared_ptr<ComponentManager> component_manager
     ) {
-    ProcessingConfig processing_config{opt_false(read_options.dynamic_schema()), pipeline_context->rows_};
+    ProcessingConfig processing_config{
+        opt_false(read_options.dynamic_schema()),
+        pipeline_context->rows_,
+        pipeline_context->descriptor().index().type()
+    };
     for (auto& clause: read_query->clauses_) {
         clause->set_processing_config(processing_config);
         clause->set_component_manager(component_manager);

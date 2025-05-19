@@ -110,6 +110,10 @@ std::vector<timestamp> generate_buckets(
     timestamp offset,
     const ResampleOrigin& origin
 ) {
+    // e.g. Can happen if date range specified does not overlap with the time range covered by the symbol
+    if (end < start) {
+        return {};
+    }
     const timestamp rule_ns = [](std::string_view rule) {
         py::gil_scoped_acquire acquire_gil;
         return python_util::pd_to_offset(rule);
