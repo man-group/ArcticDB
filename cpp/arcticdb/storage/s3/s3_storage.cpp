@@ -127,6 +127,7 @@ bool S3Storage::do_key_exists(const VariantKey& key) {
 namespace arcticdb::storage::s3 {
 
 void S3Storage::create_s3_client(const S3Settings &conf, const Aws::Auth::AWSCredentials& creds) {
+    log::storage().info("conf aws_auth {}", static_cast<uint32_t>(conf.aws_auth()));
     if (conf.use_mock_storage_for_testing()){
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock S3 storage");
         s3_client_ = std::make_unique<MockS3Client>();
@@ -169,6 +170,7 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const S3Set
     root_folder_(object_store_utils::get_root_folder(library_path)),
     bucket_name_(conf.bucket_name()),
     region_(conf.region()) {
+    log::storage().info("S3Storage conf aws_auth {}", static_cast<uint32_t>(conf.aws_auth()));
     auto creds = get_aws_credentials(conf);
 
     create_s3_client(conf, creds);
