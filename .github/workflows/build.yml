@@ -131,7 +131,7 @@ jobs:
 
   pre_seed_cleanup:
     # This step is valid only for AWS_S3. When scheduled it will be S3 run
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' && inputs.persistent_storage == 'AWS_S3'}}
+    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage == 'AWS_S3'}}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
@@ -140,8 +140,8 @@ jobs:
 
   persistent_storage_seed_linux:
     needs: [common_config, pre_seed_cleanup]
-    # This step is valid only for AWS_S3. When schedulled it will be S3 run
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' && inputs.persistent_storage == 'AWS_S3'}}
+    # This step is valid only for AWS_S3. When scheduled it will be S3 run
+    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage == 'AWS_S3'}}
     strategy:
       fail-fast: false
       matrix:
@@ -164,7 +164,7 @@ jobs:
   persistent_storage_seed_windows:
     needs: [common_config, pre_seed_cleanup]
     # This step is valid only for AWS_S3. When schedulled it will be S3 run
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' && inputs.persistent_storage == 'AWS_S3'}}
+    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage == 'AWS_S3'}}
     strategy:
       fail-fast: false
       matrix:
@@ -273,7 +273,7 @@ jobs:
   persistent_storage_verify_linux:
     needs: [common_config, build-python-wheels-linux, build-python-wheels-windows]
     # This step is valid only for AWS_S3. When scheduled it will be S3 run
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' && inputs.persistent_storage == 'AWS_S3'}}
+    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage == 'AWS_S3'}}
     strategy:
       fail-fast: false
       matrix:
@@ -295,7 +295,7 @@ jobs:
 
   persistent_storage_verify_windows:
     # This step is valid only for AWS_S3. When scheduled it will be S3 run
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' && inputs.persistent_storage == 'AWS_S3'}}
+    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage == 'AWS_S3'}}
     strategy:
       fail-fast: false
       matrix:
@@ -318,7 +318,7 @@ jobs:
   post_verify_cleanup:
     needs: [persistent_storage_verify_windows, persistent_storage_verify_linux]
     # This step is valid only for AWS_S3. When scheduled it will be S3 run
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' && inputs.persistent_storage == 'AWS_S3'}}
+    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage == 'AWS_S3'}}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
