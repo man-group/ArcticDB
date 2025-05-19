@@ -562,7 +562,7 @@ VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool d
         });
     }
 
-    auto total_rows = adjust_slice_rowcounts(slice_and_keys, std::make_optional<size_t>(0U));
+    auto total_rows = adjust_slice_rowcounts(slice_and_keys);
 
     auto index = index_type_from_descriptor(index_segment_reader.tsd().as_stream_descriptor());
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
@@ -1144,18 +1144,11 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
                                                         read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
                                                         &read_options,
                                                         &handler_data](auto&& opt_index_key) {
-                    std::variant<VersionedItem, StreamId> version_info;
-                    if (opt_index_key.has_value()) {
-                        version_info = VersionedItem(std::move(*opt_index_key));
-                    } else {
-                        if (opt_false(read_options.incompletes())) {
-                            log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", stream_ids[idx]);
-                            version_info = stream_ids[idx];
-                        } else {
-                            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
-                                    "batch_read_internal: version matching query '{}' not found for symbol '{}'", version_queries[idx], stream_ids[idx]);
-                        }
-                    }
+                    auto version_info = get_version_identifier(
+                            stream_ids[idx],
+                            version_queries[idx],
+                            read_options,
+                            opt_index_key.has_value() ? std::make_optional<VersionedItem>(std::move(*opt_index_key)) : std::nullopt);
                     return read_frame_for_version(store, version_info, read_query, read_options, handler_data);
                 })
         );
@@ -1176,6 +1169,100 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
     flags.convert_no_data_found_to_key_not_found_ = true;
     flags.throw_on_error_ = *read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(all_results), stream_ids, flags, version_queries);
+}
+
+auto unpack_symbol_processing_results(std::vector<SymbolProcessingResult>&& symbol_processing_results) {
+    std::vector<OutputSchema> input_schemas;
+    std::vector<std::vector<EntityId>> entity_ids;
+    auto res_versioned_items = std::make_shared<std::vector<VersionedItem>>();
+    auto res_metadatas = std::make_shared<std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>();
+    input_schemas.reserve(symbol_processing_results.size());
+    entity_ids.reserve(symbol_processing_results.size());
+    res_versioned_items->reserve(symbol_processing_results.size());
+    res_metadatas->reserve(symbol_processing_results.size());
+    for (auto& symbol_processing_result: symbol_processing_results) {
+        input_schemas.emplace_back(std::move(symbol_processing_result.output_schema_));
+        entity_ids.emplace_back(std::move(symbol_processing_result.entity_ids_));
+        res_versioned_items->emplace_back(std::move(symbol_processing_result.versioned_item_));
+        res_metadatas->emplace_back(std::move(symbol_processing_result.metadata_));
+    }
+    return std::make_tuple(std::move(input_schemas), std::move(entity_ids), std::move(res_versioned_items), std::move(res_metadatas));
+}
+
+std::shared_ptr<PipelineContext> setup_join_pipeline_context(
+        std::vector<OutputSchema>&& input_schemas,
+        const std::vector<std::shared_ptr<Clause>>& clauses) {
+    auto output_schema = clauses.front()->join_schemas(std::move(input_schemas));
+    for (const auto& clause: clauses) {
+        output_schema = clause->modify_schema(std::move(output_schema));
+    }
+    auto pipeline_context = std::make_shared<PipelineContext>();
+    pipeline_context->set_descriptor(output_schema.stream_descriptor());
+    pipeline_context->norm_meta_ = std::make_shared<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(output_schema.norm_metadata_));
+    return pipeline_context;
+}
+
+MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
+        const std::vector<StreamId>& stream_ids,
+        const std::vector<VersionQuery>& version_queries,
+        std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+        const ReadOptions& read_options,
+        std::vector<std::shared_ptr<Clause>>&& clauses,
+        std::any& handler_data) {
+    py::gil_scoped_release release_gil;
+    util::check(!clauses.empty(), "Cannot join with no joining clause provided");
+    auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
+    std::vector<folly::Future<SymbolProcessingResult>> symbol_processing_result_futs;
+    symbol_processing_result_futs.reserve(opt_index_key_futs.size());
+    auto component_manager = std::make_shared<ComponentManager>();
+    for (auto&& [idx, opt_index_key_fut]: folly::enumerate(opt_index_key_futs)) {
+        symbol_processing_result_futs.emplace_back(
+                std::move(opt_index_key_fut).thenValue([store = store(),
+                                                        &stream_ids,
+                                                        &version_queries,
+                                                        read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
+                                                        idx,
+                                                        &read_options,
+                                                        &component_manager](std::optional<AtomKey>&& opt_index_key) mutable {
+                    auto version_info = get_version_identifier(
+                            stream_ids[idx],
+                            version_queries[idx],
+                            read_options,
+                            opt_index_key.has_value() ? std::make_optional<VersionedItem>(std::move(*opt_index_key)) : std::nullopt);
+                    return read_and_process(store, version_info, read_query, read_options, component_manager);
+                })
+        );
+    }
+    for (auto& clause: clauses) {
+        clause->set_component_manager(component_manager);
+    }
+    auto clauses_ptr = std::make_shared<std::vector<std::shared_ptr<Clause>>>(std::move(clauses));
+    return folly::collect(symbol_processing_result_futs).via(&async::io_executor())
+    .thenValueInline([this, &handler_data, clauses_ptr, component_manager](std::vector<SymbolProcessingResult>&& symbol_processing_results) mutable {
+        auto [input_schemas, entity_ids, res_versioned_items, res_metadatas] = unpack_symbol_processing_results(std::move(symbol_processing_results));
+        auto pipeline_context = setup_join_pipeline_context(std::move(input_schemas), *clauses_ptr);
+        return schedule_remaining_iterations(std::move(entity_ids), clauses_ptr)
+        .thenValueInline([component_manager](std::vector<EntityId>&& processed_entity_ids) {
+            auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
+            return collect_segments(std::move(proc));
+        })
+        .thenValueInline([store=store(), &handler_data, pipeline_context](std::vector<SliceAndKey>&& slice_and_keys) mutable {
+            return prepare_output_frame(std::move(slice_and_keys), pipeline_context, store, ReadOptions{}, handler_data);
+        })
+        .thenValueInline([&handler_data, pipeline_context, res_versioned_items, res_metadatas](SegmentInMemory&& frame) mutable {
+            // Needed to force our usual backfilling behaviour when columns have been outer-joined and some are not present in all input symbols
+            ReadOptions read_options;
+            read_options.set_dynamic_schema(true);
+            return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
+            .thenValueInline([pipeline_context, frame, res_versioned_items, res_metadatas](auto&&) mutable {
+                return MultiSymbolReadOutput{
+                    std::move(*res_versioned_items),
+                    std::move(*res_metadatas),
+                    {frame, timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}}};
+            });
+        });
+    }).get();
+
 }
 
 void LocalVersionedEngine::write_version_and_prune_previous(
