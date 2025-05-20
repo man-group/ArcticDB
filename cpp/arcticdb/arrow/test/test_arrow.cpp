@@ -9,7 +9,6 @@
 
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
-#include <arcticdb/arrow/arrow_data.hpp>
 #include <arcticdb/arrow/array_from_block.hpp>
 
 

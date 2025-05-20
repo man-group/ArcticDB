@@ -27,12 +27,12 @@ template <typename T>
 sparrow::primitive_array<T> create_primitive_array(
         T* data_ptr,
         size_t data_size,
-        std::optional<sparrow::validity_bitmap> validity_bitmap) {
+        std::optional<sparrow::validity_bitmap>& validity_bitmap) {
     sparrow::u8_buffer<T> buffer(data_ptr, data_size);
     if(validity_bitmap) {
-        return sparrow::primitive_array<T>{std::move(buffer), std::move(*validity_bitmap)};
+        return sparrow::primitive_array<T>{std::move(buffer), data_size, std::move(*validity_bitmap)};
     } else {
-        return sparrow::primitive_array<T>{std::move(buffer)};
+        return sparrow::primitive_array<T>{std::move(buffer), data_size};
     }
 }
 
@@ -63,9 +63,10 @@ sparrow::array string_dict_from_block(
         std::string_view name,
         std::optional<sparrow::validity_bitmap> maybe_bitmap) {
     const auto offset = block.offset();
+    // TODO: Think about the case with more than 2^31 offsets
     auto &string_offsets = column.get_extra_buffer(offset, ExtraBufferType::OFFSET);
-    const auto offset_buffer_size = string_offsets.block(0)->bytes() / sizeof(uint32_t);
-    sparrow::u8_buffer<uint32_t> offset_buffer(reinterpret_cast<uint32_t *>(string_offsets.block(0)->release()), offset_buffer_size);
+    const auto offset_buffer_size = string_offsets.block(0)->bytes() / sizeof(int32_t);
+    sparrow::u8_buffer<int32_t> offset_buffer(reinterpret_cast<int32_t *>(string_offsets.block(0)->release()), offset_buffer_size);
 
     auto &strings = column.get_extra_buffer(offset, ExtraBufferType::STRING);
     const auto strings_buffer_size = strings.block(0)->bytes();
