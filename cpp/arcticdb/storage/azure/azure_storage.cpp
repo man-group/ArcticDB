@@ -59,18 +59,19 @@ void raise_azure_exception(const Azure::Core::RequestFailedException& e, const s
     auto status_code = e.StatusCode;
     std::string error_message;
 
-    // On some occasions, the SDK returns a non-200 status code even though there is no error
-    // this is not an error, so we return early
-    if (static_cast<int>(status_code) < 300) {
-        return;
-    }
-
     auto error_message_suffix = fmt::format("AzureError#{} {}: {} {} for object {}",
                                             static_cast<int>(status_code),
                                             error_code,
                                             e.ReasonPhrase,
                                             e.what(),
                                             object_name);
+
+    // On some occasions, the SDK returns a non-200 status code even though there is no error
+    // this is not an error, so we return early
+    if (static_cast<int>(status_code) < 300) {
+        ARCTICDB_DEBUG(log::storage(), fmt::format("Suppressed Error: {}", error_message_suffix));
+        return;
+    }
 
     if (status_code == Azure::Core::Http::HttpStatusCode::NotFound
         && error_code == AzureErrorCode_to_string(AzureErrorCode::BlobNotFound)) {
@@ -100,12 +101,6 @@ bool is_expected_error_type(const std::string& error_code, Azure::Core::Http::Ht
 void raise_if_unexpected_error(const Azure::Core::RequestFailedException& e, const std::string& object_name) {
     auto error_code = get_error_code(e);
     auto status_code = e.StatusCode;
-
-    // On some occasions, the SDK returns a non-200 status code
-    // this is not an error, so we return early
-    if (static_cast<int>(status_code) < 300) {
-        return;
-    }
 
     if (!is_expected_error_type(error_code, status_code)) {
         raise_azure_exception(e, object_name);

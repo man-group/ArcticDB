@@ -52,7 +52,7 @@ struct PreDeleteChecks {
 static const PreDeleteChecks default_pre_delete_checks;
 
 /**
- * Output from tombstone_version() with additional fields on top of PreDeleteChecks. Safe to be sliced to the latter.
+ * Output from tombstone_versions() with additional fields on top of PreDeleteChecks. Safe to be sliced to the latter.
  */
 struct TombstoneVersionResult : PreDeleteChecks {
     explicit TombstoneVersionResult(bool entry_already_scanned) :

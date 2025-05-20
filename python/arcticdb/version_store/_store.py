@@ -128,6 +128,7 @@ def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None,
 
     return global_default
 
+
 # auto_attribs=True breaks Cython-ising this code. As a result must manually create attr.ib instances.
 @attr.s(slots=True, auto_attribs=False)
 class VersionedItem:
@@ -184,6 +185,7 @@ class VersionedItemWithJoin:
     data: Any
         The joined together data.
     """
+
     versions: List[VersionedItem]
     data: Any
 
@@ -1139,15 +1141,15 @@ class NativeVersionStore:
         return versioned_items
 
     def batch_read_and_join(
-            self,
-            symbols: List[str],
-            query_builder: QueryBuilder,
-            as_ofs: Optional[List[VersionQueryInput]] = None,
-            date_ranges: Optional[List[Optional[DateRangeInput]]] = None,
-            row_ranges: Optional[List[Optional[Tuple[int, int]]]] = None,
-            columns: Optional[List[List[str]]] = None,
-            per_symbol_query_builders: Optional[Union[QueryBuilder, List[QueryBuilder]]] = None,
-            **kwargs,
+        self,
+        symbols: List[str],
+        query_builder: QueryBuilder,
+        as_ofs: Optional[List[VersionQueryInput]] = None,
+        date_ranges: Optional[List[Optional[DateRangeInput]]] = None,
+        row_ranges: Optional[List[Optional[Tuple[int, int]]]] = None,
+        columns: Optional[List[List[str]]] = None,
+        per_symbol_query_builders: Optional[Union[QueryBuilder, List[QueryBuilder]]] = None,
+        **kwargs,
     ) -> VersionedItemWithJoin:
         """
         Reads multiple symbols in a batch fashion, and then joins them together using the first clause in the
@@ -1245,9 +1247,17 @@ class NativeVersionStore:
         # Needed to force date_range and row_range arguments to go through the read_and_process path rather than the
         # direct read path if no explicit query is provided for a symbol
         force_ranges_to_queries = True
-        read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, per_symbol_query_builders, force_ranges_to_queries)
+        read_queries = self._get_read_queries(
+            len(symbols), date_ranges, row_ranges, columns, per_symbol_query_builders, force_ranges_to_queries
+        )
         read_options = self._get_read_options(**kwargs)
-        return self._adapt_read_res(ReadResult(*self.version_store.batch_read_and_join(symbols, version_queries, read_queries, read_options, query_builder.clauses)))
+        return self._adapt_read_res(
+            ReadResult(
+                *self.version_store.batch_read_and_join(
+                    symbols, version_queries, read_queries, read_options, query_builder.clauses
+                )
+            )
+        )
 
     def batch_read_metadata(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None, **kwargs
@@ -1848,9 +1858,7 @@ class NativeVersionStore:
         read_options = _PythonVersionStoreReadOptions()
         read_options.set_force_strings_to_object(_assume_false("force_string_to_object", kwargs))
         read_options.set_optimise_string_memory(_assume_false("optimise_string_memory", kwargs))
-        read_options.set_dynamic_schema(
-            resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs)
-        )
+        read_options.set_dynamic_schema(resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs))
         read_options.set_set_tz(resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
         read_options.set_allow_sparse(resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
         read_options.set_incompletes(resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
@@ -2615,9 +2623,16 @@ class NativeVersionStore:
         """
         self.version_store.delete_version(symbol, version_num)
 
-    def delete_versions(self, symbol: str, versions: List[int], *_):
+    def delete_versions(self, symbol: str, versions: List[int]):
         """
         Delete the given versions of this symbol.
+
+        Parameters
+        ----------
+        symbol : `str`
+            Symbol name.
+        versions : `List[int]`
+            Versions to be deleted.
         """
         self.version_store.delete_versions(symbol, versions)
 
@@ -3283,5 +3298,3 @@ def resolve_dynamic_strings(kwargs):
         dynamic_strings = True
 
     return dynamic_strings
-
-

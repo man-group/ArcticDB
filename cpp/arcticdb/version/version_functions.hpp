@@ -151,8 +151,7 @@ inline version_store::TombstoneVersionResult tombstone_versions(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id,
-    const std::vector<VersionId>& version_ids,
-    bool allow_tombstoning_beyond_latest_version=false,
+    const std::unordered_set<VersionId>& version_ids,
     const std::optional<timestamp>& creation_ts=std::nullopt) {
     ARCTICDB_DEBUG(log::version(), "Tombstoning versions {} for stream {}", version_ids, stream_id);
 
@@ -177,15 +176,16 @@ inline version_store::TombstoneVersionResult tombstone_versions(
         if (entry->is_tombstoned(version_id)) {
             util::raise_rte("Version {} for symbol {} is already deleted", version_id, stream_id);
         } else {
-            if (!allow_tombstoning_beyond_latest_version) {
-                if (!latest_key || latest_key->version_id() < version_id)
-                    util::raise_rte("Can't delete version {} for symbol {} - it's higher than the latest version",
-                            stream_id, version_id);
-            }
+            if (!latest_key || latest_key->version_id() < version_id)
+                util::raise_rte("Can't delete version {} for symbol {} - it's higher than the latest version",
+                        stream_id, version_id);
         }
     }
-    // We will write a tombstone key even when the index_key is not found
-    version_map->write_tombstone_multiple(store, version_ids, stream_id, entry, creation_ts);
+    std::unordered_set<std::variant<AtomKey, VersionId>> variant_version_ids;
+    for (const auto& version_id : version_ids) {
+        variant_version_ids.insert(std::variant<AtomKey, VersionId>(version_id));
+    }
+    version_map->write_tombstones(store, variant_version_ids, stream_id, entry, creation_ts);
 
     if (version_map->validate())
         entry->validate();
@@ -193,16 +193,6 @@ inline version_store::TombstoneVersionResult tombstone_versions(
     res.no_undeleted_left = !entry->get_first_index(false).first.has_value();
     res.latest_version_ = entry->get_first_index(true).first->version_id();
     return res;
-}
-
-inline version_store::TombstoneVersionResult tombstone_version(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<VersionMap> &version_map,
-    const StreamId &stream_id,
-    VersionId version_id,
-    bool allow_tombstoning_beyond_latest_version=false,
-    const std::optional<timestamp>& creation_ts=std::nullopt) {
-    return tombstone_versions(store, version_map, stream_id, {version_id}, allow_tombstoning_beyond_latest_version, creation_ts);
 }
 
 inline std::optional<AtomKey> get_index_key_from_time(

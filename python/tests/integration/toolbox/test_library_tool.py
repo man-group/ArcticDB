@@ -3,6 +3,7 @@ Copyright 2023 Man Group Operations Limited
 Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pandas as pd
 import numpy as np
 import pytest
@@ -74,9 +75,16 @@ def test_empty_excluding_key_types(lmdb_version_store_v2):
 
     assert not version_store.version_store.is_empty_excluding_key_types([KeyType.TABLE_DATA])
     assert not version_store.version_store.is_empty_excluding_key_types([KeyType.VERSION])
-    assert version_store.version_store.is_empty_excluding_key_types([KeyType.TABLE_DATA, KeyType.SYMBOL_LIST,
-                                                                     KeyType.MULTI_KEY, KeyType.SNAPSHOT_REF,
-                                                                     KeyType.SNAPSHOT, KeyType.VERSION])
+    assert version_store.version_store.is_empty_excluding_key_types(
+        [
+            KeyType.TABLE_DATA,
+            KeyType.SYMBOL_LIST,
+            KeyType.MULTI_KEY,
+            KeyType.SNAPSHOT_REF,
+            KeyType.SNAPSHOT,
+            KeyType.VERSION,
+        ]
+    )
 
 
 def test_empty_excluding_key_types_empty_lib(lmdb_version_store_v2):
@@ -159,7 +167,9 @@ def test_read_data_key_from_version_ref(in_memory_version_store, use_time_index)
 
     ver_ref_key = lib_tool.find_keys_for_symbol(KeyType.VERSION_REF, sym)[0]
     ver_ref_entries = lib_tool.read_to_keys(ver_ref_key)
-    assert len(ver_ref_entries) == 2 # We expect a 2 entry version ref (i.e. without a cached undeleted) because we have just one version
+    assert (
+        len(ver_ref_entries) == 2
+    )  # We expect a 2 entry version ref (i.e. without a cached undeleted) because we have just one version
     assert ver_ref_entries[0].type == KeyType.TABLE_INDEX
     assert ver_ref_entries[1].type == KeyType.VERSION
 
@@ -197,6 +207,7 @@ def test_iterate_version_chain_with_lib_tool(in_memory_version_store):
         lib.write(sym, df, prune_previous_version=prune_previous)
 
     keys_by_key_type = {}
+
     # No need for memoization because we will visit each entry exactly once because we only do writes.
     # (If we e.g. did appends we would have added table data entries multiple times)
     def iterate_through_version_chain(key):
@@ -231,9 +242,9 @@ def test_iterate_version_chain_with_lib_tool(in_memory_version_store):
         assert sorted(iterated_keys) == sorted(expected_keys)
 
     assert len(keys_by_key_type[KeyType.VERSION_REF]) == 1
-    assert len(keys_by_key_type[KeyType.VERSION]) == num_versions + num_versions // 3
+    assert len(keys_by_key_type[KeyType.VERSION]) == num_versions
     assert len(keys_by_key_type[KeyType.TABLE_INDEX]) == num_versions
-    assert len(keys_by_key_type[KeyType.TABLE_DATA]) == (num_versions-1) % 3 + 1
+    assert len(keys_by_key_type[KeyType.TABLE_DATA]) == (num_versions - 1) % 3 + 1
     assert len(keys_by_key_type[KeyType.TOMBSTONE_ALL]) == num_versions // 3
 
 
@@ -247,7 +258,10 @@ def test_overwrite_append_data(lmdb_version_store_v1):
     def get_df(num_rows, start_index, col_type):
         start_date = pd.Timestamp(2024, 1, 1) + pd.Timedelta(start_index, unit="d")
         index = pd.date_range(start_date, periods=num_rows)
-        df = pd.DataFrame({"col": range(start_index, num_rows+start_index) , "other": range(start_index, num_rows+start_index)}, index=index)
+        df = pd.DataFrame(
+            {"col": range(start_index, num_rows + start_index), "other": range(start_index, num_rows + start_index)},
+            index=index,
+        )
         # Streaming data has a named index
         df.index.name = "time"
         return df.astype({"col": col_type})
@@ -302,7 +316,7 @@ def test_overwrite_append_data(lmdb_version_store_v1):
 
     # And now make all append data keys ints which makes the symbol readable.
     lib_tool.update_append_data_column_type(append_keys[1], "col", np.int64)
-    lib_tool.update_append_data_column_type(append_keys[2], "col", np.int64) # This should be idempotent
+    lib_tool.update_append_data_column_type(append_keys[2], "col", np.int64)  # This should be idempotent
     assert read_append_data_keys_from_ref(sym) == append_keys
     assert [read_type(key, "col") for key in append_keys] == [DataType.INT64, DataType.INT64, DataType.INT64]
     assert [read_type(key, "other") for key in append_keys] == [DataType.INT64, DataType.INT64, DataType.INT64]
