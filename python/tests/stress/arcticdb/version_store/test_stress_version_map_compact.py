@@ -11,8 +11,8 @@ import time
 import os
 import pytest
 
-from multiprocessing import Process, Value
-
+from multiprocessing import Value
+from threading import Thread
 from arcticdb_ext import set_config_int
 from arcticdb import log
 
@@ -33,8 +33,7 @@ def write_data(lib, sym, done, error, interval):
             print("Iteration {}/10".format(idx1))
             for idx2 in range(20):
                 if idx2 % 4 == 3:
-                    # num_versions_to_delete = random.randint(1, 2)
-                    num_versions_to_delete = 1
+                    num_versions_to_delete = random.randint(1, 2)
                     if num_versions_to_delete == 1:
                         lib.delete_version(sym, delete_version_id)
                     else:
@@ -90,13 +89,13 @@ def test_stress_version_map_compact(object_version_store, sym, interval):
     lib.version_store._set_validate_version_map()
     try:
         log.version.warn("Starting writer")
-        writer = Process(name="writer", target=write_data, args=(lib, sym, done, error, interval))
+        writer = Thread(name="writer", target=write_data, args=(lib, sym, done, error, interval))
         writer.start()
         log.version.info("Starting compacter")
-        compacter = Process(name="compacter", target=compact_data, args=(lib, sym, done, error))
+        compacter = Thread(name="compacter", target=compact_data, args=(lib, sym, done, error))
         compacter.start()
         log.version.info("Starting reader")
-        reader = Process(name="reader", target=read_data, args=(lib, sym, done, error))
+        reader = Thread(name="reader", target=read_data, args=(lib, sym, done, error))
         reader.start()
 
         log.version.info("Joining writer")

@@ -49,6 +49,7 @@ from tests.util.date import DateRange
 from arcticdb.util.test import equals
 from arcticdb.version_store._store import resolve_defaults
 
+
 @pytest.fixture()
 def symbol():
     return "sym" + str(random.randint(0, 10000))
@@ -390,8 +391,8 @@ def test_prune_previous_versions_write_batch(basic_store):
     keys_for_sym1 = lib_tool.find_keys_for_id(KeyType.VERSION, sym1)
     keys_for_sym2 = lib_tool.find_keys_for_id(KeyType.VERSION, sym2)
 
-    assert len(keys_for_sym1) == 3
-    assert len(keys_for_sym2) == 3
+    assert len(keys_for_sym1) == 2
+    assert len(keys_for_sym2) == 2
     # Then - we got 4 symbol keys: 2 for each of the writes
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
 
@@ -421,8 +422,8 @@ def test_prune_previous_versions_batch_write_metadata(basic_store):
     keys_for_sym1 = lib_tool.find_keys_for_id(KeyType.VERSION, sym1)
     keys_for_sym2 = lib_tool.find_keys_for_id(KeyType.VERSION, sym2)
 
-    assert len(keys_for_sym1) == 3
-    assert len(keys_for_sym2) == 3
+    assert len(keys_for_sym1) == 2
+    assert len(keys_for_sym2) == 2
     # Then - we got 2 symbol keys: 1 for each of the writes
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
 
@@ -452,8 +453,8 @@ def test_prune_previous_versions_append_batch(basic_store):
     keys_for_sym1 = lib_tool.find_keys_for_id(KeyType.VERSION, sym1)
     keys_for_sym2 = lib_tool.find_keys_for_id(KeyType.VERSION, sym2)
 
-    assert len(keys_for_sym1) == 3
-    assert len(keys_for_sym2) == 3
+    assert len(keys_for_sym1) == 2
+    assert len(keys_for_sym2) == 2
     # Then - we got 4 symbol keys: 2 for each of the writes
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
 

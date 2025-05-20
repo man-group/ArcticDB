@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 import random
 
+from arcticdb_ext.exceptions import UserInputException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.util.test import config_context, random_string, assert_frame_equal, distinct_timestamps
 
@@ -117,7 +118,7 @@ def test_delete_version_basic(s3_version_store, idx, sym):
     assert len(object_version_store.list_versions(symbol)) == 0
 
 
-@pytest.mark.parametrize("versions", [[0, 1], [1, 2], [0, 2], [0, 1, 2]])
+@pytest.mark.parametrize("versions", [[], [0, 1], [1, 2], [0, 2], [0, 1, 2], [0, 0, 1, 2], [0, 1, 1, 2], [0, 1, 2, 2]])
 def test_delete_versions_basic(s3_version_store, versions, sym):
     object_version_store = s3_version_store
     symbol = sym
@@ -134,12 +135,16 @@ def test_delete_versions_basic(s3_version_store, versions, sym):
 
     assert len(object_version_store.list_versions(symbol)) == 3
 
-    object_version_store.delete_versions(symbol, versions)
+    if len(versions) == 0:
+        with pytest.raises(UserInputException):
+            object_version_store.delete_versions(symbol, versions)
+    else:
+        object_version_store.delete_versions(symbol, versions)
 
     for idx in versions:
         with pytest.raises(NoDataFoundException):
             object_version_store.read(symbol, idx)
-    assert len(object_version_store.list_versions(symbol)) == len(dfs) - len(versions)
+    assert len(object_version_store.list_versions(symbol)) == len(dfs) - len(set(versions))
 
 
 @pytest.mark.storage
@@ -559,7 +564,9 @@ def test_normal_flow_with_snapshot_and_pruning(basic_store_tombstone_and_pruning
 
         version_keys = lib_tool.find_keys(KeyType.VERSION)
         keys_for_a = [k for k in version_keys if k.id == "sym1"]
-        assert len(keys_for_a) == 3 * 2  # 2 keys for the number of writes
+        keys_per_write = 2
+        num_writes = 2
+        assert len(keys_for_a) == keys_per_write * num_writes
 
         lib.write("sym1", 4)
         assert len([ver for ver in lib.list_versions() if not ver["deleted"]]) == 2

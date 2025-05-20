@@ -110,7 +110,7 @@ TEST(VersionMap, TombstoneDelete) {
     ASSERT_EQ(latest.value(), key3);
     version_map->write_version(store, key4, key3);
 
-    auto del_res = tombstone_version(store, version_map, id, VersionId{2});
+    auto del_res = tombstone_versions(store, version_map, id, {VersionId{2}});
 
     ASSERT_FALSE(del_res.no_undeleted_left);
     ASSERT_EQ(del_res.keys_to_delete.front(), key2);
@@ -120,7 +120,7 @@ TEST(VersionMap, TombstoneDelete) {
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 
-    del_res = tombstone_version(store, version_map, id, VersionId{3});
+    del_res = tombstone_versions(store, version_map, id, {VersionId{3}});
     ASSERT_FALSE(del_res.no_undeleted_left);
     ASSERT_EQ(del_res.keys_to_delete.front(), key3);
     ASSERT_THAT(del_res.could_share_data, UnorderedElementsAre(key1, key4));
@@ -128,7 +128,7 @@ TEST(VersionMap, TombstoneDelete) {
     latest = get_latest_undeleted_version(store, version_map, id);
     ASSERT_EQ(latest.value(), key4);
 
-    del_res = tombstone_version(store, version_map, id, VersionId{4});
+    del_res = tombstone_versions(store, version_map, id, {VersionId{4}});
     ASSERT_FALSE(del_res.no_undeleted_left);
     ASSERT_EQ(del_res.keys_to_delete.front(), key4);
     ASSERT_EQ(*del_res.could_share_data.begin(), key1);
@@ -136,7 +136,7 @@ TEST(VersionMap, TombstoneDelete) {
     latest = get_latest_undeleted_version(store, version_map, id);
     ASSERT_EQ(latest.value(), key1);
 
-    del_res = tombstone_version(store, version_map, id, VersionId{1});
+    del_res = tombstone_versions(store, version_map, id, {VersionId{1}});
     ASSERT_TRUE(del_res.no_undeleted_left);
     ASSERT_EQ(del_res.keys_to_delete.front(), key1);
     ASSERT_TRUE(del_res.could_share_data.empty());
@@ -249,7 +249,7 @@ TEST(VersionMap, TestCompactWithDelete) {
     version_map->write_version(store, key1, std::nullopt);
     version_map->write_version(store, key2, key1);
     version_map->write_version(store, key3, key2);
-    tombstone_version(store, version_map, id, 2);
+    tombstone_versions(store, version_map, id, {2});
 
     ScopedConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
@@ -275,7 +275,7 @@ TEST(VersionMap, TestLatestVersionWithDeleteTombstones) {
     version_map->write_version(store, key1, std::nullopt);
     version_map->write_version(store, key2, key1);
     version_map->write_version(store, key3, key2);
-    tombstone_version(store, version_map, id, 2);
+    tombstone_versions(store, version_map, id, {2});
     auto [maybe_prev, deleted] = get_latest_version(store, version_map, id);
     auto version_id = get_next_version_from_key(maybe_prev);
     ASSERT_EQ(version_id, 4);
@@ -291,7 +291,7 @@ TEST(VersionMap, TestCompactWithDeleteTombstones) {
     version_map->write_version(store, key1, std::nullopt);
     version_map->write_version(store, key2, key1);
     version_map->write_version(store, key3, key2);
-    tombstone_version(store, version_map, id, 2);
+    tombstone_versions(store, version_map, id, {2});
 
     ScopedConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
@@ -426,7 +426,7 @@ TEST(VersionMap, FixRefKeyTombstones) {
     auto key5 = atom_key_with_version(id, 1, 1696590624590123209);
     version_map->write_version(store, key5, key4);
     auto entry = version_map->check_reload(store, id, LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, __FUNCTION__);
-    version_map->journal_single_key(store, key5, entry->head_.value());
+    version_map->journal_keys(store, key5.version_id(), key5.id(), std::span{&key5, 1}, entry->head_.value());
 
     auto valid = version_map->check_ref_key(store, id);
     ASSERT_EQ(valid, false);
@@ -458,8 +458,8 @@ TEST(VersionMap, RewriteVersionKeys) {
     ASSERT_TRUE(version_map->check_ref_key(store, id));
 
     // This will just write tombstone key
-    arcticdb::tombstone_version(store, version_map, id, 2);
-    arcticdb::tombstone_version(store, version_map, id, 1);
+    arcticdb::tombstone_versions(store, version_map, id, {2});
+    arcticdb::tombstone_versions(store, version_map, id, {1});
 
     auto index_key1 = arcticdb::get_specific_version(store, version_map, id, 1);
     auto index_key2 = arcticdb::get_specific_version(store, version_map, id, 2);
@@ -521,9 +521,9 @@ TEST(VersionMap, StorageLogging) {
     version_map->write_version(store, key2, key1);
     version_map->write_version(store, key3, key2);
 
-    tombstone_version(store, version_map, id, key1.version_id());
-    tombstone_version(store, version_map, id, key3.version_id());
-    tombstone_version(store, version_map, id, key2.version_id());
+    tombstone_versions(store, version_map, id, {key1.version_id()});
+    tombstone_versions(store, version_map, id, {key3.version_id()});
+    tombstone_versions(store, version_map, id, {key2.version_id()});
 
     std::unordered_set<AtomKey> log_keys;
 
@@ -580,7 +580,7 @@ std::shared_ptr<VersionMapEntry> write_versions(
                 break;
             }
             case VersionChainOperation::Type::TOMBSTONE: {
-                version_map->write_tombstone(store, *version_id_opt, id, entry);
+                version_map->write_tombstones(store, {*version_id_opt}, id, entry);
                 break;
             }
             case VersionChainOperation::Type::TOMBSTONE_ALL: {
@@ -590,7 +590,7 @@ std::shared_ptr<VersionMapEntry> write_versions(
                            .version_id(*version_id_opt)
                            .build(id, KeyType::VERSION);
                 }
-                version_map->tombstone_from_key_or_all(store, id, key);
+                version_map->tombstone_from_key_or_all(store,  id, key);
                 break;
             }
         }
@@ -685,7 +685,7 @@ TEST(VersionMap, FollowingVersionChainWithCaching){
             LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED},
             __FUNCTION__);
     // We delete the only undeleted key
-    version_map->write_tombstone(store, VersionId{1}, id, entry, timestamp{4});
+    version_map->write_tombstones(store, {VersionId{1}}, id, entry, timestamp{4});
 
     // LATEST should still be cached, but the cached entry now needs to have no undeleted keys
     check_loads_versions(LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, 2, 0);
@@ -857,7 +857,7 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAfterLoad) {
     ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-2)}));
 
     // When - we delete version 1 and reload
-    version_map->write_tombstone(store, VersionId{1}, id, entry);
+    version_map->write_tombstones(store, {VersionId{1}}, id, entry);
 
     // Now when the cached version is deleted, we should invalidate the cache for load parameters which look for undeleted.
     ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}));
@@ -920,7 +920,7 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad) {
         validate_load_strategy(LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-3)}, is_loaded_to_0, is_loaded_to_0 ? 3 : 0);
 
         // When - we delete version 2
-        auto tombstone_key = version_map->write_tombstone(store, VersionId{2}, id, entry);
+        auto tombstone_key = version_map->write_tombstones(store, {VersionId{2}}, id, entry);
 
         // We should not invalidate the cache because the version we loaded to is still undeleted
         validate_load_strategy(LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}, true, is_loaded_to_0 ? 3 : 2);
@@ -1024,7 +1024,7 @@ TEST(VersionMap, CompactionUpdateCache) {
         auto key = atom_key_with_version(id, i, i);
         version_map->write_version(store, key, std::nullopt);
         if (i%3 == 0) {
-            version_map->write_tombstone(store, VersionId{static_cast<uint64_t>(i)}, id, entry);
+            version_map->write_tombstones(store, {VersionId{static_cast<uint64_t>(i)}}, id, entry);
         }
     }
     assert_keys_in_entry_and_store(entry, 15, 20, 3);

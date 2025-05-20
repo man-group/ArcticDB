@@ -933,7 +933,8 @@ void PythonVersionStore::delete_versions(
     const StreamId& stream_id,
     const std::vector<VersionId>& version_ids) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_versions");
-    auto result = ::arcticdb::tombstone_versions(store(), version_map(), stream_id, version_ids);
+    std::unordered_set<VersionId> version_ids_set(version_ids.begin(), version_ids.end());
+    auto result = ::arcticdb::tombstone_versions(store(), version_map(), stream_id, version_ids_set);
     if (!result.keys_to_delete.empty() && !cfg().write_options().delayed_deletes()) {
         delete_tree(result.keys_to_delete, result);
     }
