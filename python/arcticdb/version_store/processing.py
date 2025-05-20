@@ -260,7 +260,7 @@ class ExpressionNode:
 def where(condition: Any, left: Any, right: Any):
     """
     Ternary operator choosing from the left expression where condition is true, and from the right expression where
-    it is false. Similar to numpy.where, of the Python statement `left if condition else right`.
+    it is false. Similar to numpy.where, or the Python statement `left if condition else right`.
 
     Parameters
     ----------

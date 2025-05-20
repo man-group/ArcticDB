@@ -561,6 +561,272 @@ TEST(ArithmeticTypePromotion, Divide) {
     static_assert(std::is_same_v<binary_operation_promoted_type<double, int64_t, DivideOperator>::type, double>);
 }
 
+// Same as IsNotIn
+TEST(ArithmeticTypePromotion, IsIn) {
+    using namespace arcticdb;
+    // Floating point types should promote to the larger type width
+    static_assert(std::is_same_v<binary_operation_promoted_type<float,  float,  IsInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<float,  double, IsInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, float,  IsInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, double, IsInOperator>::type, double>);
+    // Unsigned types should promote to the larger type width
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  uint8_t,  IsInOperator>::type, uint8_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  uint16_t, IsInOperator>::type, uint16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  uint32_t, IsInOperator>::type, uint32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  uint64_t, IsInOperator>::type, uint64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, uint8_t,  IsInOperator>::type, uint16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, uint16_t, IsInOperator>::type, uint16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, uint32_t, IsInOperator>::type, uint32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, uint64_t, IsInOperator>::type, uint64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, uint8_t,  IsInOperator>::type, uint32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, uint16_t, IsInOperator>::type, uint32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, uint32_t, IsInOperator>::type, uint32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, uint64_t, IsInOperator>::type, uint64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, uint8_t,  IsInOperator>::type, uint64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, uint16_t, IsInOperator>::type, uint64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, uint32_t, IsInOperator>::type, uint64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, uint64_t, IsInOperator>::type, uint64_t>);
+    // Signed types should promote to the larger type width
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  int8_t,  IsInOperator>::type, int8_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  int16_t, IsInOperator>::type, int16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  int32_t, IsInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  int64_t, IsInOperator>::type, int64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, int8_t,  IsInOperator>::type, int16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, int16_t, IsInOperator>::type, int16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, int32_t, IsInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, int64_t, IsInOperator>::type, int64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, int8_t,  IsInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, int16_t, IsInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, int32_t, IsInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, int64_t, IsInOperator>::type, int64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, int8_t,  IsInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, int16_t, IsInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, int32_t, IsInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, int64_t, IsInOperator>::type, int64_t>);
+    // Mixed signed and unsigned types should promote to a signed type wide enough to represent both if such a type
+    // exists (i.e. if the unsigned type is not uint64_t)
+    // Otherwise they promote to the RHS argument (the set type) and there is special handling in the operator itself
+    // to keep the results exact
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  int8_t,  IsInOperator>::type, int16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  int16_t, IsInOperator>::type, int16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  int32_t, IsInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  int64_t, IsInOperator>::type, int64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, int8_t,  IsInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, int16_t, IsInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, int32_t, IsInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, int64_t, IsInOperator>::type, int64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, int8_t,  IsInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, int16_t, IsInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, int32_t, IsInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, int64_t, IsInOperator>::type, int64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, int8_t,  IsInOperator>::type, int8_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, int16_t, IsInOperator>::type, int16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, int32_t, IsInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, int64_t, IsInOperator>::type, int64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  uint8_t,  IsInOperator>::type, int16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  uint16_t, IsInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  uint32_t, IsInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  uint64_t, IsInOperator>::type, uint64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, uint8_t,  IsInOperator>::type, int16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, uint16_t, IsInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, uint32_t, IsInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, uint64_t, IsInOperator>::type, uint64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, uint8_t,  IsInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, uint16_t, IsInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, uint32_t, IsInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, uint64_t, IsInOperator>::type, uint64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint8_t,  IsInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint16_t, IsInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint32_t, IsInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint64_t, IsInOperator>::type, uint64_t>);
+    // Mixed integral and floating point types should promote to the floating point type
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  float, IsInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, float, IsInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, float, IsInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, float, IsInOperator>::type, float>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<float, uint8_t,  IsInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<float, uint16_t, IsInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<float, uint32_t, IsInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<float, uint64_t, IsInOperator>::type, float>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  float, IsInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, float, IsInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, float, IsInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, float, IsInOperator>::type, float>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<float, int8_t,  IsInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<float, int16_t, IsInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<float, int32_t, IsInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<float, int64_t, IsInOperator>::type, float>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  double, IsInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, double, IsInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, double, IsInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, double, IsInOperator>::type, double>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, uint8_t,  IsInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, uint16_t, IsInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, uint32_t, IsInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, uint64_t, IsInOperator>::type, double>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  double, IsInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, double, IsInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, double, IsInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, double, IsInOperator>::type, double>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, int8_t,  IsInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, int16_t, IsInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, int32_t, IsInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, int64_t, IsInOperator>::type, double>);
+}
+
+// Same as IsIn
+TEST(ArithmeticTypePromotion, IsNotIn) {
+    using namespace arcticdb;
+    // Floating point types should promote to the larger type width
+    static_assert(std::is_same_v<binary_operation_promoted_type<float,  float,  IsNotInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<float,  double, IsNotInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, float,  IsNotInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, double, IsNotInOperator>::type, double>);
+    // Unsigned types should promote to the larger type width
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  uint8_t,  IsNotInOperator>::type, uint8_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  uint16_t, IsNotInOperator>::type, uint16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  uint32_t, IsNotInOperator>::type, uint32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  uint64_t, IsNotInOperator>::type, uint64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, uint8_t,  IsNotInOperator>::type, uint16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, uint16_t, IsNotInOperator>::type, uint16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, uint32_t, IsNotInOperator>::type, uint32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, uint64_t, IsNotInOperator>::type, uint64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, uint8_t,  IsNotInOperator>::type, uint32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, uint16_t, IsNotInOperator>::type, uint32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, uint32_t, IsNotInOperator>::type, uint32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, uint64_t, IsNotInOperator>::type, uint64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, uint8_t,  IsNotInOperator>::type, uint64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, uint16_t, IsNotInOperator>::type, uint64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, uint32_t, IsNotInOperator>::type, uint64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, uint64_t, IsNotInOperator>::type, uint64_t>);
+    // Signed types should promote to the larger type width
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  int8_t,  IsNotInOperator>::type, int8_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  int16_t, IsNotInOperator>::type, int16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  int32_t, IsNotInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  int64_t, IsNotInOperator>::type, int64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, int8_t,  IsNotInOperator>::type, int16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, int16_t, IsNotInOperator>::type, int16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, int32_t, IsNotInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, int64_t, IsNotInOperator>::type, int64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, int8_t,  IsNotInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, int16_t, IsNotInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, int32_t, IsNotInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, int64_t, IsNotInOperator>::type, int64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, int8_t,  IsNotInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, int16_t, IsNotInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, int32_t, IsNotInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, int64_t, IsNotInOperator>::type, int64_t>);
+    // Mixed signed and unsigned types should promote to a signed type wide enough to represent both if such a type
+    // exists (i.e. if the unsigned type is not uint64_t)
+    // Otherwise they promote to the RHS argument (the set type) and there is special handling in the operator itself
+    // to keep the results exact
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  int8_t,  IsNotInOperator>::type, int16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  int16_t, IsNotInOperator>::type, int16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  int32_t, IsNotInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  int64_t, IsNotInOperator>::type, int64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, int8_t,  IsNotInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, int16_t, IsNotInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, int32_t, IsNotInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, int64_t, IsNotInOperator>::type, int64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, int8_t,  IsNotInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, int16_t, IsNotInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, int32_t, IsNotInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, int64_t, IsNotInOperator>::type, int64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, int8_t,  IsNotInOperator>::type, int8_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, int16_t, IsNotInOperator>::type, int16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, int32_t, IsNotInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, int64_t, IsNotInOperator>::type, int64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  uint8_t,  IsNotInOperator>::type, int16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  uint16_t, IsNotInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  uint32_t, IsNotInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  uint64_t, IsNotInOperator>::type, uint64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, uint8_t,  IsNotInOperator>::type, int16_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, uint16_t, IsNotInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, uint32_t, IsNotInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, uint64_t, IsNotInOperator>::type, uint64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, uint8_t,  IsNotInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, uint16_t, IsNotInOperator>::type, int32_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, uint32_t, IsNotInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, uint64_t, IsNotInOperator>::type, uint64_t>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint8_t,  IsNotInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint16_t, IsNotInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint32_t, IsNotInOperator>::type, int64_t>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint64_t, IsNotInOperator>::type, uint64_t>);
+    // Mixed integral and floating point types should promote to the floating point type
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  float, IsNotInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, float, IsNotInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, float, IsNotInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, float, IsNotInOperator>::type, float>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<float, uint8_t,  IsNotInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<float, uint16_t, IsNotInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<float, uint32_t, IsNotInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<float, uint64_t, IsNotInOperator>::type, float>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  float, IsNotInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, float, IsNotInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, float, IsNotInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, float, IsNotInOperator>::type, float>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<float, int8_t,  IsNotInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<float, int16_t, IsNotInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<float, int32_t, IsNotInOperator>::type, float>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<float, int64_t, IsNotInOperator>::type, float>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  double, IsNotInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, double, IsNotInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, double, IsNotInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, double, IsNotInOperator>::type, double>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, uint8_t,  IsNotInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, uint16_t, IsNotInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, uint32_t, IsNotInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, uint64_t, IsNotInOperator>::type, double>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t,  double, IsNotInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, double, IsNotInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, double, IsNotInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, double, IsNotInOperator>::type, double>);
+
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, int8_t,  IsNotInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, int16_t, IsNotInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, int32_t, IsNotInOperator>::type, double>);
+    static_assert(std::is_same_v<binary_operation_promoted_type<double, int64_t, IsNotInOperator>::type, double>);
+}
+
 TEST(ArithmeticTypePromotion, Ternary) {
     using namespace arcticdb;
     // Bool types promote to themselves
@@ -690,4 +956,68 @@ TEST(ArithmeticTypePromotion, Ternary) {
     static_assert(std::is_same_v<ternary_operation_promoted_type<double, int16_t>::type, double>);
     static_assert(std::is_same_v<ternary_operation_promoted_type<double, int32_t>::type, double>);
     static_assert(std::is_same_v<ternary_operation_promoted_type<double, int64_t>::type, double>);
+}
+
+// This is more of a sanity check that we are consistently type promoting for similar operations
+template<typename types>
+class TernaryMatchesIsinTest : public testing::Test {};
+
+using test_types = ::testing::Types<
+        std::pair<float, float>,
+        std::pair<float, double>,
+        std::pair<double, double>,
+        std::pair<uint8_t, uint8_t>,
+        std::pair<uint8_t, uint16_t>,
+        std::pair<uint8_t, uint32_t>,
+        std::pair<uint8_t, uint64_t>,
+        std::pair<int8_t, int8_t>,
+        std::pair<int8_t, int16_t>,
+        std::pair<int8_t, int32_t>,
+        std::pair<int8_t, int64_t>,
+        std::pair<uint8_t, int8_t>,
+        std::pair<uint8_t, int16_t>,
+        std::pair<uint8_t, int32_t>,
+        std::pair<uint8_t, int64_t>,
+        std::pair<uint16_t, int8_t>,
+        std::pair<uint16_t, int16_t>,
+        std::pair<uint16_t, int32_t>,
+        std::pair<uint16_t, int64_t>,
+        std::pair<uint32_t, int8_t>,
+        std::pair<uint32_t, int16_t>,
+        std::pair<uint32_t, int32_t>,
+        std::pair<uint32_t, int64_t>,
+        std::pair<uint8_t, float>,
+        std::pair<uint16_t, float>,
+        std::pair<uint32_t, float>,
+        std::pair<uint64_t, float>,
+        std::pair<uint8_t, double>,
+        std::pair<uint16_t, double>,
+        std::pair<uint32_t, double>,
+        std::pair<uint64_t, double>,
+        std::pair<int8_t, float>,
+        std::pair<int16_t, float>,
+        std::pair<int32_t, float>,
+        std::pair<int64_t, float>,
+        std::pair<int8_t, double>,
+        std::pair<int16_t, double>,
+        std::pair<int32_t, double>,
+        std::pair<int64_t, double>
+        >;
+
+TYPED_TEST_SUITE(TernaryMatchesIsinTest, test_types);
+
+TYPED_TEST(TernaryMatchesIsinTest, Matches) {
+    using namespace arcticdb;
+    using first_type = typename TypeParam::first_type;
+    using second_type = typename TypeParam::second_type;
+    static_assert(
+            std::is_same_v<
+                    typename ternary_operation_promoted_type<first_type, second_type>::type,
+                    typename binary_operation_promoted_type<first_type, second_type, IsInOperator>::type>
+                    );
+    static_assert(
+            std::is_same_v<
+                    typename ternary_operation_promoted_type<second_type, first_type>::type,
+                    typename binary_operation_promoted_type<second_type, first_type, IsInOperator>::type>
+    );
 }

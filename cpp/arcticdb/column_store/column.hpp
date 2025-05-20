@@ -872,6 +872,8 @@ public:
                           functor&& f) {
         auto left_input_data = left_input_column.data();
         auto right_input_data = right_input_column.data();
+        util::check(left_input_column.last_row() == right_input_column.last_row(),
+                    "Mismatching logical column lengths in Column::transform");
         util::BitSet::bulk_insert_iterator inserter(output_bitset);
 
         if (!left_input_column.is_sparse() && !right_input_column.is_sparse()) {

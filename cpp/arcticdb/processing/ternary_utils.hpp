@@ -51,7 +51,7 @@ void initialise_output_column(const util::BitSet& condition,
 // As above, but with a single input column
 // The FullOrEmpty template parameter controls whether rows where the condition is false should be populated or not
 // e.g. when choosing between a column and a value, this will be FullResult, whereas when choosing between a column
-// and another column that is missing from this row-slice with dyanamic schema, this will be EmptyResult
+// and another column that is missing from this row-slice with dynamic schema, this will be EmptyResult
 template<typename FullOrEmpty>
 requires std::is_same_v<FullOrEmpty, FullResult> || std::is_same_v<FullOrEmpty, EmptyResult>
 void initialise_output_column(const util::BitSet& condition,
@@ -94,7 +94,7 @@ void initialise_output_column(const util::BitSet& condition,
 }
 
 // As above, but for the special case where the choosing is between a value, and a column that is missing from this
-// row-slice with dyanamic schema
+// row-slice with dynamic schema
 void initialise_output_column(const util::BitSet& condition, Column& output_column) {
     size_t output_physical_rows;
     size_t output_logical_rows = condition.size();
@@ -135,7 +135,7 @@ void ternary_transform(const util::BitSet& condition,
     // A possible future optimisation would be to check the counts in these bitsets, as well as in the output column's
     // sparse map (if present), and to switch to more efficient implementations depending on the situation.
     // loop is not used in cases where there are more efficient options
-    auto loop = [&condition, f = std::move(f)]<typename L, typename R, typename O>(L left_it, R right_it, O output_it, const O output_end_it) {
+    auto loop = [&condition, f = std::forward<functor>(f)]<typename L, typename R, typename O>(L left_it, R right_it, O output_it, const O output_end_it) {
         for (; output_it != output_end_it; ++output_it) {
             const auto idx = output_it->idx();
             if (condition.get_bit(idx)) {
@@ -315,7 +315,7 @@ void ternary_transform(const util::BitSet& condition,
     auto input_data = input_column.data();
     auto output_data = output_column.data();
     // See comments in similar method above that takes 2 input columns for why this works
-    auto loop = [&transformed_condition, f = std::move(f)]<typename I, typename O>(I input_it, O output_it, const O output_end_it) {
+    auto loop = [&transformed_condition, f = std::forward<functor>(f)]<typename I, typename O>(I input_it, O output_it, const O output_end_it) {
         for (; output_it != output_end_it; ++output_it) {
             const auto idx = output_it->idx();
             if (transformed_condition.get_bit(idx)) {

@@ -397,13 +397,13 @@ template VariantData ternary_operator<false>(const util::BitSet& condition, cons
 // This handles the filter case where we select based on two fixed bool values. This could be produced from Python like:
 // lazy_df = lazy_df[where(lazy_df["col1"] < 0, True, False)]
 // although this is dumb, as the same effect could be achieved with:
-// lazy_df = lazy_df[lazy_df["col1"] < ]
+// lazy_df = lazy_df[lazy_df["col1"] < 0]
 // It is actually here to cope with cases where input processing produced FullResult or EmptyResult, which are then
 // combined with a fixed bool value
 VariantData ternary_operator(const util::BitSet& condition, bool left, bool right) {
     util::BitSet output_bitset;
     if (left && right) {
-        if (condition.size() > 0) {
+        if (!condition.empty()) {
             output_bitset.set_range(0, condition.size() - 1);
         }
     } else if (left) {
@@ -451,6 +451,8 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
                 return transform_to_placeholder(result);
             },
             [&c](const util::BitSet &l, const std::shared_ptr<Value> &r) -> VariantData {
+                // This operator needs to resolve to a filter, which we can do with a boolean value, but doesn't make
+                // sense for numeric or string values without being opinionated on the truthiness of numbers/strings
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(r->data_type_),
                                                                       "Ternary operator expected bool value, received {}",
                                                                       get_user_friendly_type_string(r->type()));
@@ -458,6 +460,8 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
                 return transform_to_placeholder(result);
             },
             [&c](const std::shared_ptr<Value> &l, const util::BitSet &r) -> VariantData {
+                // This operator needs to resolve to a filter, which we can do with a boolean value, but doesn't make
+                // sense for numeric or string values without being opinionated on the truthiness of numbers/strings
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(l->data_type_),
                                                                       "Ternary operator expected bool value, received {}",
                                                                       get_user_friendly_type_string(l->type()));
@@ -495,7 +499,9 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
             [&c](const ColumnWithStrings &l, FullResult) -> VariantData {
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         is_bool_type(l.column_->type().data_type()),
-                        "Ternary operator cannot combine column '{}' of type {} with a FullResult. This can be caused by dynamic schema when a row-slice has a necessary column missing.",
+                        "Ternary operator cannot combine column '{}' of type {} with a FullResult."
+                        " This can be caused by dynamic schema when a row-slice has a column necessary for computing"
+                        " the ternary operator result missing.",
                         l.column_name_,
                         get_user_friendly_type_string(l.column_->type()));
                 auto bitset = std::get<util::BitSet>(transform_to_bitset(l));
@@ -505,7 +511,9 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
             [&c](FullResult, const ColumnWithStrings &r) -> VariantData {
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         is_bool_type(r.column_->type().data_type()),
-                        "Ternary operator cannot combine column '{}' of type {} with a FullResult. This can be caused by dynamic schema when a row-slice has a necessary column missing.",
+                        "Ternary operator cannot combine column '{}' of type {} with a FullResult."
+                        " This can be caused by dynamic schema when a row-slice has a column necessary for computing"
+                        " the ternary operator result missing.",
                         r.column_name_,
                         get_user_friendly_type_string(r.column_->type()));
                 auto bitset = std::get<util::BitSet>(transform_to_bitset(r));

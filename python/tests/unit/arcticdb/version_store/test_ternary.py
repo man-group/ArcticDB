@@ -34,8 +34,8 @@ def test_project_ternary_condition_as_full_and_empty_result(lmdb_version_store_v
     df = pd.DataFrame(
         {
             "conditional": [0] * 6,
-            "col1": np.arange(6),
-            "col2": np.arange(10, 16),
+            "col1": np.arange(6, dtype=np.int64),
+            "col2": np.arange(10, 16, dtype=np.int64),
         },
         index=pd.date_range("2024-01-01", periods=6)
     )
@@ -222,10 +222,11 @@ def test_project_ternary_value_value_numeric(lmdb_version_store_v1):
 
     expected = df
     expected["new_col"] = np.where(df["conditional"].to_numpy(), 0, 1)
+    expected["new_col"] = expected["new_col"].astype("uint8")
     q = QueryBuilder()
     q = q.apply("new_col", where(q["conditional"], 0, 1))
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
 
 def test_project_ternary_value_value_string(lmdb_version_store_v1):
@@ -244,7 +245,7 @@ def test_project_ternary_value_value_string(lmdb_version_store_v1):
     q = QueryBuilder()
     q = q.apply("new_col", where(q["conditional"], "hello", "goodbye"))
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize(
@@ -271,8 +272,8 @@ def test_project_ternary_column_sliced(version_store_factory, index):
     df = pd.DataFrame(
         {
             "conditional": [True, False, False, True, False, True],
-            "num_1": np.arange(0, 6),
-            "num_2": np.arange(10, 16),
+            "num_1": np.arange(0, 6, dtype=np.int64),
+            "num_2": np.arange(10, 16, dtype=np.int64),
             "str_1": ["one", "two", "three", "four", "five", "six"],
             "str_2": ["eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"],
         },
@@ -286,7 +287,7 @@ def test_project_ternary_column_sliced(version_store_factory, index):
     q = QueryBuilder()
     q = q.apply("new_col", where(q["conditional"], q["num_1"], q["num_2"]))
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # String
     expected = df
@@ -294,7 +295,7 @@ def test_project_ternary_column_sliced(version_store_factory, index):
     q = QueryBuilder()
     q = q.apply("new_col", where(q["conditional"], q["str_1"], q["str_2"]))
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
 
 def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schema_v1):
@@ -303,8 +304,8 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     all_columns_df = pd.DataFrame(
         {
             "conditional": [True, False],
-            "col1": np.arange(2),
-            "col2": np.arange(10, 12),
+            "col1": np.arange(2, dtype=np.int64),
+            "col2": np.arange(10, 12, dtype=np.int64),
         },
         index=pd.date_range("2024-01-01", periods=2),
     )
@@ -313,8 +314,8 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     base_update_df = pd.DataFrame(
         {
             "conditional": [True, False],
-            "col1": np.arange(2, 4),
-            "col2": np.arange(12, 14),
+            "col1": np.arange(2, 4, dtype=np.int64),
+            "col2": np.arange(12, 14, dtype=np.int64),
         },
         index=pd.date_range("2024-01-03", periods=2),
     )
@@ -326,8 +327,9 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     q = q.apply("new_col", where(q["conditional"], q["col1"], 100))
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
+    expected["col1"] = expected["col1"].astype("int64")
     expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), 100)
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # right column missing with value
     update_df = base_update_df.drop(columns="col2")
@@ -336,8 +338,9 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     q = q.apply("new_col", where(q["conditional"], 100, q["col2"]))
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
+    expected["col2"] = expected["col2"].astype("int64")
     expected["new_col"] = np.where(expected["conditional"].to_numpy(), 100, expected["col2"].to_numpy())
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # conditional column missing
     update_df = base_update_df.drop(columns="conditional")
@@ -347,23 +350,25 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(False)
     expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # left column missing with column
     update_df = base_update_df.drop(columns="col1")
     lib.update(symbol, update_df)
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
+    expected["col1"] = expected["col1"].astype("int64")
     expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # right column missing with column
     update_df = base_update_df.drop(columns="col2")
     lib.update(symbol, update_df)
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
+    expected["col2"] = expected["col2"].astype("int64")
     expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # conditional and left columns missing
     update_df = base_update_df.drop(columns=["conditional", "col1"])
@@ -372,8 +377,9 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     expected = pd.concat([all_columns_df, update_df])
     expected["conditional"].fillna(False, inplace=True)
     expected["col1"].fillna(0, inplace=True)
+    expected["col1"] = expected["col1"].astype("int64")
     expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # conditional and right columns missing
     update_df = base_update_df.drop(columns=["conditional", "col2"])
@@ -382,16 +388,19 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     expected = pd.concat([all_columns_df, update_df])
     expected["conditional"].fillna(False, inplace=True)
     expected["col2"].fillna(0, inplace=True)
+    expected["col2"] = expected["col2"].astype("int64")
     expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # left and right columns missing
     update_df = base_update_df.drop(columns=["col1", "col2"])
     lib.update(symbol, update_df)
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
+    expected["col1"] = expected["col1"].astype("int64")
+    expected["col2"] = expected["col2"].astype("int64")
     expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
 
 def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dynamic_schema_v1):
@@ -424,7 +433,7 @@ def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dyna
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df])
     expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), "e")
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # right column missing with value
     update_df = base_update_df.drop(columns="col2")
@@ -434,7 +443,7 @@ def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dyna
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df])
     expected["new_col"] = np.where(expected["conditional"].to_numpy(), "e", expected["col2"].to_numpy())
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # conditional column missing
     update_df = base_update_df.drop(columns="conditional")
@@ -444,7 +453,7 @@ def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dyna
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(False)
     expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # left column missing with column
     update_df = base_update_df.drop(columns="col1")
@@ -452,7 +461,7 @@ def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dyna
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df])
     expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # right column missing with column
     update_df = base_update_df.drop(columns="col2")
@@ -460,7 +469,7 @@ def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dyna
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df])
     expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # conditional and left columns missing
     update_df = base_update_df.drop(columns=["conditional", "col1"])
@@ -469,7 +478,7 @@ def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dyna
     expected = pd.concat([all_columns_df, update_df])
     expected["conditional"].fillna(False, inplace=True)
     expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # conditional and right columns missing
     update_df = base_update_df.drop(columns=["conditional", "col2"])
@@ -478,7 +487,7 @@ def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dyna
     expected = pd.concat([all_columns_df, update_df])
     expected["conditional"].fillna(False, inplace=True)
     expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # left and right columns missing
     update_df = base_update_df.drop(columns=["col1", "col2"])
@@ -486,7 +495,7 @@ def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dyna
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df])
     expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
 
 def test_project_ternary_sparse_col_val(lmdb_version_store_v1):
@@ -495,7 +504,7 @@ def test_project_ternary_sparse_col_val(lmdb_version_store_v1):
     df = pd.DataFrame(
         {
             "condition": [   1.0,  0.0,  1.0,    0.0,    1.0,    0.0,    1.0,    0.0],
-            "col":      [np.nan,  0.0,  1.0, np.nan, np.nan,    2.0,    3.0, np.nan],
+            "col":       [np.nan,  0.0,  1.0, np.nan, np.nan,    2.0,    3.0, np.nan],
         },
         index=pd.date_range("2024-01-01", periods=8),
     )
@@ -604,9 +613,9 @@ def test_project_ternary_condition_empty(lmdb_version_store_v1):
     expected = df
     expected["projected"] = np.where(expected["condition"].isnull().to_numpy(), expected["col1"].to_numpy(), 2000.0)
     q = QueryBuilder()
-    q = q.apply("projected", where(q["condition"].isnull(), q["col1"], 2000))
+    q = q.apply("projected", where(q["condition"].isnull(), q["col1"], np.float64(2000)))
     received = lib.read(sym, query_builder=q).data
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
 
 def test_filter_ternary_bitset_bitset(lmdb_version_store_v1):
@@ -981,8 +990,8 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
     all_columns_df = pd.DataFrame(
         {
             "conditional": [True, False, True, False],
-            "col1": [1, 1, 2, 2],
-            "col2": [11, 11, 12, 12],
+            "col1": np.array([1, 1, 2, 2], dtype=np.int64),
+            "col2": np.array([11, 11, 12, 12], dtype=np.int64),
         },
         index=pd.date_range("2024-01-01", periods=4),
     )
@@ -991,8 +1000,8 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
     base_update_df = pd.DataFrame(
         {
             "conditional": [True, False, True, False],
-            "col1": [2, 2, 1, 1],
-            "col2": [12, 12, 11, 11],
+            "col1": np.array([2, 2, 1, 1], dtype=np.int64),
+            "col2": np.array([12, 12, 11, 11], dtype=np.int64),
         },
         index=pd.date_range("2024-01-05", periods=4),
     )
@@ -1004,8 +1013,9 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
     q = q[where(q["conditional"], q["col1"] == 1, True)]
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
+    expected["col1"] = expected["col1"].astype("int64")
     expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), True)]
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # right column missing with value
     update_df = base_update_df.drop(columns="col2")
@@ -1014,8 +1024,9 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
     q = q[where(q["conditional"], False, q["col2"] == 12)]
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
+    expected["col2"] = expected["col2"].astype("int64")
     expected = expected[np.where(expected["conditional"].to_numpy(), False, (expected["col2"] == 12).to_numpy())]
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # conditional column missing
     update_df = base_update_df.drop(columns="conditional")
@@ -1025,23 +1036,25 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(False)
     expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # left column missing
     update_df = base_update_df.drop(columns="col1")
     lib.update(symbol, update_df)
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
+    expected["col1"] = expected["col1"].astype("int64")
     expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # right column missing
     update_df = base_update_df.drop(columns="col2")
     lib.update(symbol, update_df)
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
+    expected["col2"] = expected["col2"].astype("int64")
     expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # conditional and left column missing
     update_df = base_update_df.drop(columns=["conditional", "col1"])
@@ -1050,8 +1063,9 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
     expected = pd.concat([all_columns_df, update_df])
     expected["conditional"].fillna(False, inplace=True)
     expected["col1"].fillna(0, inplace=True)
+    expected["col1"] = expected["col1"].astype("int64")
     expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
     # conditional and right column missing
     update_df = base_update_df.drop(columns=["conditional", "col2"])
@@ -1060,18 +1074,22 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
     expected = pd.concat([all_columns_df, update_df])
     expected["conditional"].fillna(False, inplace=True)
     expected["col2"].fillna(0, inplace=True)
+    expected["col2"] = expected["col2"].astype("int64")
     expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received,)
 
     # left and right column missing
     update_df = base_update_df.drop(columns=["col1", "col2"])
     lib.update(symbol, update_df)
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
+    expected["col1"] = expected["col1"].astype("int64")
+    expected["col2"] = expected["col2"].astype("int64")
     expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received)
 
 
+# TODO: Assert that the projected column is of type float64 after modify_schema change is merged
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
@@ -1079,7 +1097,7 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
         columns(
             ["condition", "col1", "col2"],
             elements=strategies.floats(min_value=0, max_value=1000, allow_nan=False, allow_subnormal=False),
-            fill=strategies.just(np.nan)
+            fill=strategies.just(np.nan),
         ),
     ),
 )
