@@ -602,6 +602,8 @@ VersionedItem LocalVersionedEngine::update_internal(
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: update");
     py::gil_scoped_release release_gil;
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
+    auto write_options = get_write_options();
+    write_options.dynamic_schema |= dynamic_schema;
     if (update_info.previous_index_key_.has_value()) {
         if (frame->empty()) {
             ARCTICDB_DEBUG(log::version(), "Updating existing data with an empty item has no effect. \n"
@@ -614,15 +616,13 @@ VersionedItem LocalVersionedEngine::update_internal(
                                           update_info,
                                           query,
                                           frame,
-                                          get_write_options(),
+                                          write_options,
                                           block_codec_);
 
         write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
         return versioned_item;
     } else {
         if (upsert) {
-            auto write_options = get_write_options();
-            write_options.dynamic_schema |= dynamic_schema;
             auto versioned_item =  write_dataframe_impl(store_,
                                                         update_info.next_version_id_,
                                                         frame,

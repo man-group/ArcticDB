@@ -193,6 +193,24 @@ inline std::vector<double> random_doubles(size_t num_rows = 1024, double min = 0
     return data;
 }
 
+inline std::vector<double> compressible_doubles(
+        size_t num_rows = 1024,
+        double start = 0.0,
+        double step = 1.0,
+        double jitter_factor = 0.05) {
+    std::default_random_engine generator(43);
+    std::uniform_real_distribution<double> jitter_dist(-step * jitter_factor, step * jitter_factor);
+    std::vector<double> data;
+    data.reserve(num_rows);
+    double current = start;
+    for (size_t i = 0; i < num_rows; ++i) {
+        data.push_back(current);
+        current += step + jitter_dist(generator);
+    }
+    return data;
+}
+
+
 inline std::vector<double> random_decimal_floats(int64_t lower, int64_t upper, size_t decimal_places, size_t count) {
     std::vector<double> result;
     result.reserve(count);

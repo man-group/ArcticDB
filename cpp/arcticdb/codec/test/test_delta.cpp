@@ -12,14 +12,13 @@ namespace arcticdb {
 
 class DeltaCompressionTest : public ::testing::Test {
 protected:
-    std::mt19937 rng{42};
+    std::mt19937 rng_{42};
 
     template<typename T>
     std::vector<T> generate_data(size_t size, T start = T{0}, T base_step = T{1}) {
         static_assert(std::is_integral_v<T>, "Type must be integral");
         std::vector<T> data(size);
-        std::random_device rd;
-        std::mt19937 gen(rd());
+        std::mt19937 gen(rng_);
 
         T min_step = base_step * T{8} / T{10};
         T max_step = base_step * T{12} / T{10};

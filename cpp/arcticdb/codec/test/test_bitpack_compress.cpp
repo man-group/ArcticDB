@@ -49,7 +49,7 @@ TYPED_TEST(BitPackTest, MultiBlock) {
     auto bitpack_data = BitPackCompressor<T>::compute_bitwidth(wrapper.data_);
     auto expected_size = BitPackCompressor<T>::compressed_size(bitpack_data, input.size());
     BitPackCompressor<T> bitpack(bitpack_data);
-    size_t compressed_size = bitpack.compress(wrapper.data_, compressed.data(), input.size());
+    size_t compressed_size = bitpack.compress(wrapper.data_, compressed.data(), expected_size);
     EXPECT_EQ(expected_size, compressed_size);
 
     std::vector<T> output(input.size(), 0);

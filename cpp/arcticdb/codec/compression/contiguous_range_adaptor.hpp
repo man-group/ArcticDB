@@ -16,6 +16,7 @@ struct ContiguousRangeForwardAdaptor {
     size_t block_pos_ = 0;
     size_t block_num_ = 0;
     std::array<T, size> buffer_;
+    bool first_ = true;
 
     [[nodiscard]] constexpr size_t t_size(size_t rows) {
         return rows * sizeof(T);
@@ -33,17 +34,20 @@ struct ContiguousRangeForwardAdaptor {
         return static_cast<bool>(block_);
     }
 
+    void set_block() {
+        block_ = block_num_ < blocks_.size() ? std::make_optional(blocks_.at(block_num_)) : std::nullopt;
+    }
+
     void advance_block() {
         block_pos_ = 0UL;
         ++block_num_;
-        block_ = block_num_ < blocks_.size() ? std::make_optional(blocks_.at(block_num_)) : std::nullopt;
-
+        set_block();
     }
 
     ContiguousRangeForwardAdaptor(ColumnData data) :
         column_data_(data),
-        blocks_(column_data_.buffer().blocks()),
-        block_(blocks_[0]){
+        blocks_(column_data_.buffer().blocks()) {
+        set_block();
     }
 
     const T* current() {
@@ -51,8 +55,15 @@ struct ContiguousRangeForwardAdaptor {
     }
 
     const T* next() {
-        if(block().bytes() >= block_pos_ + t_size(size))
+        if(first_) {
+            first_ = false;
             return current();
+        }
+
+        if(block().bytes() >= block_pos_ + t_size(size)) {
+            block_pos_ += t_size(size);
+            return current();
+        }
 
         auto required = size;
         size_t dest_offset = 0;

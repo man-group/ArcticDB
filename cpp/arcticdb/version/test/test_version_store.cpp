@@ -872,8 +872,7 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     };
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.
-        write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false);
+    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false);
 
     constexpr RowRange update_range{10, 15};
     constexpr size_t update_val{1};

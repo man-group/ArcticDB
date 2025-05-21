@@ -48,8 +48,8 @@ TEST(FieldStatsTest, StringStatisticsBasic) {
     ankerl::unordered_dense::set<uint64_t> unique;
     auto field_stats = generate_string_statistics(std::span(data), unique);
 
-    EXPECT_FALSE(field_stats.has_min());
-    EXPECT_FALSE(field_stats.has_max());
+    EXPECT_TRUE(field_stats.has_min());
+    EXPECT_TRUE(field_stats.has_max());
     EXPECT_TRUE(field_stats.has_unique());
 
     EXPECT_EQ(field_stats.unique_count_, 3);
@@ -240,8 +240,8 @@ TEST(FieldStatsTest, MultiBlockStringStatistics) {
     ankerl::unordered_dense::set<uint64_t> unique;
     auto field_stats = generate_string_statistics(std::span(data), unique);
 
-    EXPECT_FALSE(field_stats.has_min());
-    EXPECT_FALSE(field_stats.has_max());
+    EXPECT_TRUE(field_stats.has_min());
+    EXPECT_TRUE(field_stats.has_max());
     EXPECT_TRUE(field_stats.has_unique());
 
     EXPECT_EQ(field_stats.unique_count_, 50);

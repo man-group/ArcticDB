@@ -4,7 +4,7 @@
 
 namespace arcticdb {
 // Test for the column header using double.
-TEST(RealDoubleColumnHeaderTest, OffsetsAndDataPreservationDouble) {
+TEST(ALPHeaderTest, OffsetsAndDataPreservationDouble) {
     // Build a dummy state to initialize the column header.
     alp::state<double> dummy_state;
     // (Note: exceptions_count is not used by column header.)
@@ -38,7 +38,7 @@ TEST(RealDoubleColumnHeaderTest, OffsetsAndDataPreservationDouble) {
 }
 
 // Test for the block header using double.
-TEST(RealDoubleBlockHeaderTest, OffsetsAndDataPreservationDouble) {
+TEST(ALPHeaderTest, BlockOffsetsAndDataPreservationDouble) {
     using T = double;
     alp::state<T> dummy_state;
     dummy_state.exceptions_count = 3;  // for testing purposes
@@ -58,6 +58,7 @@ TEST(RealDoubleBlockHeaderTest, OffsetsAndDataPreservationDouble) {
 
     std::vector<uint8_t> buffer(total_size, 0);
     auto header = new (buffer.data()) BlockHeader();
+    header->exception_count_ = dummy_state.exceptions_count;
 
     // For block header, the fixed header is at the beginning and then the dynamic data in data_.
     // Verify the various offsets using the at<> helpers.
@@ -70,14 +71,13 @@ TEST(RealDoubleBlockHeaderTest, OffsetsAndDataPreservationDouble) {
     EXPECT_EQ(reinterpret_cast<uintptr_t>(header->exception_positions(bit_widths)),
               reinterpret_cast<uintptr_t>(header->at<uint16_t>(left_size + right_size + exceptions_bytes)));
 
-    // Fill in the arrays and verify preservation.
     uint16_t left_value = 0x1111;
-    for (size_t i = 0; i < alp::config::VECTOR_SIZE; i++) {
+    for (size_t i = 0; i < left_size / sizeof(uint16_t); i++) {
         header->left()[i] = left_value;
     }
     using RightType = typename BlockHeader::RightType;
     RightType right_pattern = 0x2222222222222222ULL;
-    for (size_t i = 0; i < alp::config::VECTOR_SIZE; i++) {
+    for (size_t i = 0; i < right_size / sizeof(RightType); i++) {
         header->right(bit_widths)[i] = right_pattern;
     }
     for (size_t i = 0; i < dummy_state.exceptions_count; i++) {
@@ -86,21 +86,22 @@ TEST(RealDoubleBlockHeaderTest, OffsetsAndDataPreservationDouble) {
     for (size_t i = 0; i < dummy_state.exceptions_count; i++) {
         header->exception_positions(bit_widths)[i] = 0x4444;
     }
-
-    for (size_t i = 0; i < alp::config::VECTOR_SIZE; i++) {
+    for (size_t i = 0; i < left_size / sizeof(uint16_t); i++) {
         EXPECT_EQ(header->left()[i], left_value);
     }
-    EXPECT_EQ(header->right(bit_widths)[0], right_pattern);
+    for (size_t i = 0; i < right_size / sizeof(RightType); i++) {
+        EXPECT_EQ(header->right(bit_widths)[i], right_pattern);
+    }
+
     EXPECT_EQ(header->exceptions(bit_widths)[0], 0x3333);
     EXPECT_EQ(header->exception_positions(bit_widths)[0], 0x4444);
-
+    EXPECT_EQ(header->total_size(bit_widths), total_size);
     // Also record the exception count.
-    header->exception_count_ = dummy_state.exceptions_count;
     EXPECT_EQ(header->exception_count_, dummy_state.exceptions_count);
 }
 
 // Repeat similar tests for float.
-TEST(RealDoubleColumnHeaderTest, OffsetsAndDataPreservationFloat) {
+TEST(ALPHeaderTest, OffsetsAndDataPreservationFloat) {
     alp::state<float> dummy_state;
     // Column header does not use exceptions_count.
     dummy_state.right_bit_width = 4;
@@ -128,7 +129,7 @@ TEST(RealDoubleColumnHeaderTest, OffsetsAndDataPreservationFloat) {
     EXPECT_EQ(header->dict_size_, dict_entries);
 }
 
-TEST(RealDoubleBlockHeaderTest, OffsetsAndDataPreservationFloat) {
+TEST(ALPHeaderTest, BlockOffsetsAndDataPreservationFloat) {
     using T = float;
     alp::state<T> dummy_state;
     dummy_state.exceptions_count = 2;
@@ -155,36 +156,37 @@ TEST(RealDoubleBlockHeaderTest, OffsetsAndDataPreservationFloat) {
     EXPECT_EQ(reinterpret_cast<uintptr_t>(header->exceptions(bit_widths)),
               reinterpret_cast<uintptr_t>(header->at<uint16_t>(left_size + right_size)));
 
+    header->exception_count_ = dummy_state.exceptions_count;
     size_t expected_offset = left_size + right_size + exceptions_bytes;
     EXPECT_EQ(reinterpret_cast<uintptr_t>(header->exception_positions(bit_widths)),
               reinterpret_cast<uintptr_t>(header->at<uint16_t>(expected_offset)));
 
     uint16_t left_value = 0xAAAA;
-    for (size_t i = 0; i < alp::config::VECTOR_SIZE; i++) {
+    for (size_t i = 0; i < left_size / sizeof(uint16_t); i++) {
         header->left()[i] = left_value;
     }
 
     using RightType = typename BlockHeader::RightType;
     RightType right_pattern = 0xBBBBBBBBU;
-    for (size_t i = 0; i < alp::config::VECTOR_SIZE; i++) {
+    for (size_t i = 0; i < right_size / sizeof(RightType); i++) {  // Fixed: use sizeof(RightType)
         header->right(bit_widths)[i] = right_pattern;
     }
-
     for (size_t i = 0; i < dummy_state.exceptions_count; i++) {
         header->exceptions(bit_widths)[i] = 0xCCCC;
     }
-    for (size_t i = 0; i < dummy_state.exceptions_count; i++) {
-        header->exception_positions(bit_widths)[i] = 0xDDDD;
-    }
-
-    for (size_t i = 0; i < alp::config::VECTOR_SIZE; i++) {
+    for (size_t i = 0; i < left_size / sizeof(uint16_t); i++) {
         EXPECT_EQ(header->left()[i], left_value);
+    }
+    for (size_t i = 0; i < right_size / sizeof(RightType); i++) {
+        EXPECT_EQ(header->right(bit_widths)[i], right_pattern);
+    }
+    for (size_t i = 0; i < dummy_state.exceptions_count; i++) {  // Fixed: removed division
+        header->exception_positions(bit_widths)[i] = 0xDDDD;
     }
     EXPECT_EQ(header->right(bit_widths)[0], right_pattern);
     EXPECT_EQ(header->exceptions(bit_widths)[0], 0xCCCC);
     EXPECT_EQ(header->exception_positions(bit_widths)[0], 0xDDDD);
 
-    header->exception_count_ = dummy_state.exceptions_count;
     EXPECT_EQ(header->exception_count_, dummy_state.exceptions_count);
 }
 TEST(ALPDecimalBlockHeaderTest, Float) {

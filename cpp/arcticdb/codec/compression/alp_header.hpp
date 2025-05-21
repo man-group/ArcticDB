@@ -157,7 +157,6 @@ struct ALPDecimalColumnHeader {
 
     ALPDecimalColumnHeader() = default;
 
-
     [[nodiscard]] size_t total_size() const {
         return HeaderSize;
     }
@@ -195,7 +194,7 @@ struct ALPDecimalBlockHeader {
     }
 
     [[nodiscard]] constexpr size_t bases_size() const {
-        return sizeof(EncodedType) * h::num_lanes;
+        return sizeof(EncodedType);
     }
 
     EncodedType* data() {

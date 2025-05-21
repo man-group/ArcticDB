@@ -117,82 +117,6 @@ TEST(ALP, RoundtripLong) {
     ASSERT_EQ(data, output);
 }
 
-template <typename T>
-size_t max_block_size(const RealDoubleBitwidths& bit_widths) {
-    RealDoubleBlockHeader<T> block_header_;
-    block_header_.exception_count_ = BLOCK_SIZE;
-    return block_header_.total_size(bit_widths);
-}
-
-TEST(ALP, RoundtripRealDoubleContiguous) {
-    constexpr size_t NUM_VALUES = BLOCK_SIZE * 100;
-    using T = double;
-    auto data = random_doubles(NUM_VALUES);
-    alp::state<T> state;
-    std::array<T, 1024> sample_buf;
-
-    alp::encoder<T>::init(data.data(), 0, NUM_VALUES, sample_buf.data(), state);
-    ASSERT_EQ(state.scheme, alp::Scheme::ALP_RD);
-    alp::rd_encoder<T>::init(data.data(), 0, NUM_VALUES, sample_buf.data(), state);
-    RealDoubleColumnHeader<T> column_header{state};
-    auto num_blocks = NUM_VALUES / alp::config::VECTOR_SIZE;
-    auto total_size = num_blocks * max_block_size<T>(column_header.bit_widths()) + column_header.total_size();
-
-    std::vector<uint8_t> compressed(total_size);
-    memcpy(compressed.data(), &column_header, column_header.total_size());
-    size_t write_pos = column_header.total_size();
-    std::array<uint16_t, BLOCK_SIZE> exceptions;
-    std::array<uint16_t, BLOCK_SIZE> exception_positions;
-    for(auto i = 0UL; i < num_blocks; ++i) {
-        const auto pos = i * alp::config::VECTOR_SIZE;
-        auto header = new (compressed.data() + write_pos) RealDoubleBlockHeader<double>{};
-        uint16_t exception_count;
-        alp::rd_encoder<double>::encode(
-            data.data() + pos,
-            exceptions.data(),
-            exception_positions.data(),
-            &exception_count,
-            header->right(column_header.bit_widths()),
-            header->left(),
-            state);
-
-        header->exception_count_ = exception_count;
-        if(exception_count > 0) {
-            memcpy(header->exceptions(column_header.bit_widths()), exceptions.data(), exception_count * sizeof(uint16_t));
-            memcpy(header->exception_positions(column_header.bit_widths()), exception_positions.data(), exception_count * sizeof(uint16_t));
-        }
-        write_pos += header->total_size(column_header.bit_widths());
-    }
-
-    std::vector<T> output(NUM_VALUES);
-    alp::state<T> restored_state;
-    auto restored_header = reinterpret_cast<RealDoubleColumnHeader<T>*>(compressed.data());
-    auto read_pos = restored_header->total_size();
-    set_real_double_state_from_column_header(restored_state, *restored_header);
-    for(auto i = 0UL; i < num_blocks; ++i) {
-        const auto pos = i * alp::config::VECTOR_SIZE;
-        auto* header = reinterpret_cast<RealDoubleBlockHeader<double>*>(compressed.data() + read_pos);
-        header->magic_.check();
-        uint16_t exception_count = header->exceptions_count();
-        update_read_double_state_from_block_header(restored_state, *header);
-        alp::rd_encoder<double>::decode(
-            output.data() + pos,
-            header->right(restored_header->bit_widths()),
-            header->left(),
-            header->exceptions(restored_header->bit_widths()),
-            header->exception_positions(restored_header->bit_widths()),
-            &exception_count,
-            restored_state);
-        
-        read_pos += header->total_size(restored_header->bit_widths());
-    }
-    for(auto i = 0UL; i < data.size(); ++i) {
-        if(data[i] != output[i])
-            ARCTICDB_DEBUG(log::codec(), "pants");
-    }
-    ASSERT_EQ(data, output);
-}
-
 TEST(ALP, DetermineSchemeALP) {
     auto data = random_decimal_floats(0, 1000, 2, 100 * 1024);
     alp::state<double> state;
@@ -227,101 +151,278 @@ TEST(ALP, RoundtripALP) {
     ASSERT_EQ(data, output);
 }
 
-template <typename T>
-constexpr size_t max_block_size() {
-    using EncodedType = typename StorageType<T>::signed_type;
-    return ALPDecimalBlockHeader<T>::HeaderSize +
-        alp::config::VECTOR_SIZE * (sizeof(EncodedType) + sizeof(T) + sizeof(uint16_t));
-}
-
-TEST(ALP, RoundtripALPDecimalContiguous) {
-    constexpr size_t NUM_VALUES = BLOCK_SIZE * 100;
-
-    auto data = random_decimal_floats(0, 1000, 2, NUM_VALUES);
+TEST(ALP, SingleFullBlock_Decimal_Roundtrip) {
     using T = double;
-    alp::state<double> state;
-    std::array<double, 1024> sample_buf;
+    constexpr size_t numRows = alp::config::VECTOR_SIZE; // exactly one block
 
-    auto num_blocks = NUM_VALUES / alp::config::VECTOR_SIZE;
-    alp::encoder<double>::init(data.data(), 0, NUM_VALUES, sample_buf.data(), state);
+    // Create a block of constant data that is compressible.
+    std::vector<T> data(numRows, 123.456);
+    auto wrapper = from_vector(data, make_scalar_type(DataType::FLOAT64));
+
+    // Initialize state with a sample buffer.
+    alp::state<T> state{};
+    std::array<T, alp::config::VECTOR_SIZE> sample_buf{};
+    alp::encoder<T>::init(data.data(), 0, numRows, sample_buf.data(), state);
+    // For this test we expect decimal mode (ALP).
     ASSERT_EQ(state.scheme, alp::Scheme::ALP);
 
-    auto total_size = num_blocks * max_block_size<T>() + sizeof(ALPDecimalColumnHeader<T>);
-    std::vector<uint8_t> compressed(total_size);
-    size_t write_pos = 0UL;
-    std::array<T, alp::config::VECTOR_SIZE> exceptions;
-    using EncodedType = StorageType<T>::signed_type;
-    std::array<EncodedType, alp::config::VECTOR_SIZE> encoded;
-    std::array<uint16_t, alp::config::VECTOR_SIZE> exception_positions;
-    for(auto i = 0UL; i < num_blocks; ++i) {
-        const auto pos = i * alp::config::VECTOR_SIZE;
-        auto header = new (compressed.data() + write_pos) ALPDecimalBlockHeader<double>{};
-        uint16_t exception_count;
-        alp::encoder<double>::encode(
-            data.data() + pos,
-            exceptions.data(),
-            exception_positions.data(),
-            &exception_count,
-            encoded.data(),
-            state);
+    // Prepare the compressor.
+    ALPCompressData<T> compress_data{std::move(state)};
+    arcticdb::ALPCompressor<T> compressor(std::move(compress_data));
 
-        header->exception_count_ = exception_count;
-        header->exp_ = state.exp;
-        header->fac_ = state.fac;
-        if(exception_count > 0) {
-            memcpy(header->exceptions(), exceptions.data(), exception_count * sizeof(uint16_t));
-            memcpy(header->exception_positions(), exception_positions.data(), exception_count * sizeof(uint16_t));
-        }
+    // Our output will contain:
+    //   ALPHeader + ALPDecimalColumnHeader + one block (via write_decimal_data)
+    size_t expected_bytes = sizeof(arcticdb::ALPHeader<T>) +
+        sizeof(ALPDecimalColumnHeader<T>) +
+        worst_case_required_alp_size<T>();
+    // Allocate as a T-buffer with extra element for red-zone check.
+    size_t num_elements = expected_bytes / sizeof(T);
+    std::vector<T> compressed(num_elements + 1, T{0});
+    compressed[num_elements] = 0xDEADBEEF; // red-zone marker
 
-        alp::encoder<T>::analyze_ffor(encoded.data(), state.bit_width, header->bases());
-        FForCompressKernel<EncodedType> kernel(*header->bases());
-        dispatch_bitwidth_fused<EncodedType, BitPackFused>(
-            encoded.data(),
-            header->data(),
-            state.bit_width,
-            kernel
-        );
-        header->bit_width_ = state.bit_width;
-        write_pos += header->total_size();
-    }
+    // Compress.
+    size_t compressed_bytes = compressor.compress(wrapper.data_, compressed.data(), expected_bytes);
+    EXPECT_LE(compressed_bytes, expected_bytes);
+    EXPECT_EQ(compressed[num_elements], 0xDEADBEEF);
 
-    std::vector<double> output(NUM_VALUES);
-    std::array<EncodedType, alp::config::VECTOR_SIZE> unffor;
-    alp::state<T> restored_state;
-    auto read_pos = 0UL;
-    for(auto i = 0UL; i < num_blocks; ++i) {
-        const auto pos = i * alp::config::VECTOR_SIZE;
-        auto* header = reinterpret_cast<const ALPDecimalBlockHeader<T>*>(compressed.data() + read_pos);
-        header->magic_.check();
-        update_state_from_alp_decimal_block_header(restored_state, *header);
+    // Decompress.
+    arcticdb::ALPDecompressor<T> decompressor;
+    decompressor.init(compressed.data());
+    std::vector<T> output(numRows, T{0});
+    decompressor.decompress(compressed.data(), output.data());
 
-        FForUncompressKernel<EncodedType> kernel(*header->bases());
-        dispatch_bitwidth_fused<EncodedType, BitUnpackFused>(
-            header->data(),
-            unffor.data(),
-            restored_state.bit_width,
-            kernel
-        );
+    // Verify roundtrip.
+    EXPECT_EQ(data, output);
+}
 
-        alp::decoder<T>::decode(
-            unffor.data(),
-            restored_state.fac,
-            restored_state.exp,
-            output.data() + pos);
+// ------------------------- Minimal Test: Remainder Only (Decimal Mode) -------------------------
+TEST(ALP, RemainderOnly_Decimal_Roundtrip) {
+    using T = double;
+    constexpr size_t numRows = alp::config::VECTOR_SIZE / 2;
 
-        alp::decoder<T>::patch_exceptions(
-            output.data() + pos,
-            header->exceptions(),
-            header->exception_positions(),
-            &header->exception_count_);
+    std::vector<T> data(numRows, 987.654);
+    auto wrapper = from_vector(data, make_scalar_type(DataType::FLOAT64));
 
-        read_pos += header->total_size();
-    }
-    for(auto i = 0UL; i < data.size(); ++i) {
-        if(data[i] != output[i])
-            ARCTICDB_DEBUG(log::codec(), "pants");
-    }
-    ASSERT_EQ(data, output);
+    alp::state<T> state{};
+    std::array<T, alp::config::VECTOR_SIZE> sample_buf{};
+    alp::encoder<T>::init(data.data(), 0, numRows, sample_buf.data(), state);
+    ASSERT_EQ(state.scheme, alp::Scheme::ALP);
+
+    ALPCompressData<T> compress_data{std::move(state)};
+    arcticdb::ALPCompressor<T> compressor(std::move(compress_data));
+
+    size_t expected_bytes = sizeof(arcticdb::ALPHeader<T>) +
+        sizeof(ALPDecimalColumnHeader<T>) +
+        worst_case_required_alp_size<T>();
+    std::vector<uint8_t> compressed(expected_bytes + 1, T{0});
+
+    (void)compressor.compress(wrapper.data_, reinterpret_cast<T*>(compressed.data()), expected_bytes);
+    // Decompress.
+    arcticdb::ALPDecompressor<T> decompressor;
+    decompressor.init(reinterpret_cast<T*>(compressed.data()));
+    std::vector<T> output(numRows + 1, T{0});
+    output[numRows] = 0xDEADBEEF;
+    decompressor.decompress(reinterpret_cast<T*>(compressed.data()), output.data());
+    EXPECT_EQ(output[numRows], 0xDEADBEEF);
+    output.resize(numRows);
+    EXPECT_EQ(data, output);
+}
+
+TEST(ALP, EndToEnd_SingleFullBlock_Decimal) {
+    using T = double;
+    constexpr size_t numRows = alp::config::VECTOR_SIZE; // exactly one block
+
+    std::vector<T> data(numRows, 123.456);
+    auto wrapper = from_vector(data, make_scalar_type(DataType::FLOAT64));
+
+    alp::state<T> state{};
+    std::array<T, alp::config::VECTOR_SIZE> sample_buf{};
+    alp::encoder<T>::init(data.data(), 0, numRows, sample_buf.data(), state);
+    ASSERT_EQ(state.scheme, alp::Scheme::ALP);
+
+    ALPCompressData<T> compress_data{std::move(state)};
+    arcticdb::ALPCompressor<T> compressor(std::move(compress_data));
+
+    size_t expected_bytes = sizeof(arcticdb::ALPHeader<T>) +
+        sizeof(ALPDecimalColumnHeader<T>) +
+        worst_case_required_alp_size<T>();
+
+    size_t num_elements = expected_bytes / sizeof(T);
+    std::vector<T> compressed(num_elements + 1, T{0});
+    compressed[num_elements] = 0xDEADBEEF; // red-zone
+
+    size_t compressed_bytes = compressor.compress(wrapper.data_, compressed.data(), expected_bytes);
+    EXPECT_LE(compressed_bytes, expected_bytes);
+
+    arcticdb::ALPDecompressor<T> decompressor;
+    decompressor.init(compressed.data());
+    std::vector<T> output(numRows, T{0});
+    decompressor.decompress(compressed.data(), output.data());
+
+    EXPECT_EQ(data, output);
+}
+
+// Minimal end-to-end test for ALP_RD (real double) mode using one full block.
+TEST(ALP, EndToEnd_SingleFullBlock_RD) {
+    using T = double;
+    constexpr size_t numRows = alp::config::VECTOR_SIZE; // exactly one block
+
+    // Create compressible data.
+    std::vector<T> data(numRows, 3.14159);
+    auto wrapper = from_vector(data, make_scalar_type(DataType::FLOAT64));
+
+    // Initialize state for REAL DOUBLE mode.
+    alp::state<T> state{};
+    std::array<T, alp::config::VECTOR_SIZE> sample_buf{};
+    alp::encoder<T>::init(data.data(), 0, numRows, sample_buf.data(), state);
+    // For ALP_RD, call rd_encoder::init as well.
+    alp::rd_encoder<T>::init(data.data(), 0, numRows, sample_buf.data(), state);
+    ASSERT_EQ(state.scheme, alp::Scheme::ALP_RD);
+
+    ALPCompressData<T> compress_data{std::move(state)};
+    arcticdb::ALPCompressor<T> compressor(std::move(compress_data));
+
+    // Expected worst-case size = ALPHeader + RealDoubleColumnHeader + one block.
+    size_t expected_bytes = sizeof(arcticdb::ALPHeader<T>) +
+        RealDoubleColumnHeader<T>(compressor.data_.state_).total_size() +
+        worst_case_required_rd_size<T>();
+
+    size_t num_elements = expected_bytes / sizeof(T);
+    std::vector<T> compressed(num_elements + 1, T{0});
+    compressed[num_elements] = 0xDEADBEEF; // red-zone
+
+    size_t compressed_bytes = compressor.compress(wrapper.data_, compressed.data(), expected_bytes);
+    EXPECT_LE(compressed_bytes, expected_bytes);
+
+    // Decompress.
+    arcticdb::ALPDecompressor<T> decompressor;
+    decompressor.init(compressed.data());
+    std::vector<T> output(numRows, T{0});
+    decompressor.decompress(compressed.data(), output.data());
+
+    EXPECT_EQ(data, output);
+}
+
+// Minimal end-to-end test for data smaller than one block (remainder path) in decimal mode.
+TEST(ALP, EndToEnd_RemainderOnly_Decimal) {
+    using T = double;
+    constexpr size_t numRows = alp::config::VECTOR_SIZE / 2;  // remainder only
+
+    // Create data.
+    std::vector<T> data(numRows, 987.654);
+    auto wrapper = from_vector(data, make_scalar_type(DataType::FLOAT64));
+
+    alp::state<T> state{};
+    std::array<T, alp::config::VECTOR_SIZE> sample_buf{};
+    alp::encoder<T>::init(data.data(), 0, numRows, sample_buf.data(), state);
+    ASSERT_EQ(state.scheme, alp::Scheme::ALP);
+
+    ALPCompressData<T> compress_data{std::move(state)};
+    arcticdb::ALPCompressor<T> compressor(std::move(compress_data));
+
+    // Even for less-than-a-full-block, use worst-case size for one block.
+    size_t expected_bytes = sizeof(arcticdb::ALPHeader<T>) +
+        sizeof(ALPDecimalColumnHeader<T>) +
+        worst_case_required_alp_size<T>();
+    size_t num_elements = expected_bytes / sizeof(T);
+    std::vector<T> compressed(num_elements + 1, T{0});
+    compressed[num_elements] = 0xDEADBEEF;
+
+    size_t compressed_bytes = compressor.compress(wrapper.data_, compressed.data(), expected_bytes);
+    EXPECT_LE(compressed_bytes, expected_bytes);
+
+    // Decompress.
+    arcticdb::ALPDecompressor<T> decompressor;
+    decompressor.init(compressed.data());
+    std::vector<T> output(numRows, T{0});
+    decompressor.decompress(compressed.data(), output.data());
+
+    EXPECT_EQ(data, output);
+}
+
+template<typename T>
+T red_zone_value() {
+    if constexpr (sizeof(T) == 1)
+        return static_cast<T>(0xAD);
+    else if constexpr (sizeof(T) == 2)
+        return static_cast<T>(0xDEAD);
+    else if constexpr (sizeof(T) == 4)
+        return static_cast<T>(0xDEADBEEF);
+    else
+        return static_cast<T>(0xDEADBEEFDEADBEEFULL);
+}
+
+TEST(ALP_EndToEnd, RoundtripRealDouble) {
+    constexpr size_t NUM_VALUES = BLOCK_SIZE * 100;
+    using T = double;
+    std::vector<T> data = compressible_doubles(NUM_VALUES);
+    auto wrapper = from_vector(data, make_scalar_type(DataType::FLOAT64));
+
+    alp::state<T> state;
+    std::array<T, alp::config::VECTOR_SIZE> sample_buf;
+    alp::encoder<T>::init(data.data(), 0, NUM_VALUES, sample_buf.data(), state);
+    alp::rd_encoder<T>::init(data.data(), 0, NUM_VALUES, sample_buf.data(), state);
+    ASSERT_EQ(state.scheme, alp::Scheme::ALP_RD);
+
+    ALPCompressData<T> compress_data{std::move(state)};
+    ALPCompressor<T> compressor(std::move(compress_data));
+
+    size_t num_blocks = NUM_VALUES / alp::config::VECTOR_SIZE;
+    auto col_header_sz = RealDoubleColumnHeader<T>(compressor.data_.state_).total_size();
+    size_t worst_block_sz = worst_case_required_rd_size<T>();
+    size_t expected_bytes = sizeof(arcticdb::ALPHeader<T>) + col_header_sz + num_blocks * worst_block_sz;
+
+    size_t num_elements = expected_bytes / sizeof(T);
+    std::vector<T> compressed(num_elements + 1, T{0});
+    compressed[num_elements] = red_zone_value<T>();
+
+    (void)compressor.compress(wrapper.data_, compressed.data(), expected_bytes);
+    ASSERT_EQ(compressed[num_elements], red_zone_value<T>()) << "Red zone overwritten";
+    ALPDecompressor<T> decompressor;
+    decompressor.init(compressed.data());
+    std::vector<T> output(NUM_VALUES, T{0});
+    auto dr = decompressor.decompress(compressed.data(), output.data());
+    ASSERT_EQ(dr.uncompressed_, NUM_VALUES * sizeof(T));
+    ASSERT_EQ(output, data);
+}
+
+//------------------------------------------------------------------------------
+// End-to-end test for the ALP (decimal) path
+//------------------------------------------------------------------------------
+TEST(ALP_EndToEnd, RoundtripALPDecimal) {
+    constexpr size_t NUM_VALUES = BLOCK_SIZE * 100;
+    using T = double;
+    std::vector<T> data = random_decimal_floats(0, 1000, 2, NUM_VALUES);
+    auto wrapper = from_vector(data, make_scalar_type(DataType::FLOAT64));
+
+    alp::state<T> state;
+    std::array<T, alp::config::VECTOR_SIZE> sample_buf;
+    alp::encoder<T>::init(data.data(), 0, NUM_VALUES, sample_buf.data(), state);
+    ASSERT_EQ(state.scheme, alp::Scheme::ALP);
+
+    ALPCompressData<T> compress_data{std::move(state)};
+    ALPCompressor<T> compressor(std::move(compress_data));
+
+    size_t num_blocks = NUM_VALUES / alp::config::VECTOR_SIZE;
+    auto col_header_sz = sizeof(ALPDecimalColumnHeader<T>);  // or use a member function if available
+    size_t worst_block_sz = worst_case_required_alp_size<T>();
+    size_t expected_bytes = sizeof(arcticdb::ALPHeader<T>) + col_header_sz + num_blocks * worst_block_sz;
+
+    size_t num_elements = expected_bytes / sizeof(T);
+    std::vector<T> compressed(num_elements + 1, T{0});
+    compressed[num_elements] = red_zone_value<T>();
+
+    (void)compressor.compress(wrapper.data_, compressed.data(), expected_bytes);
+
+    ASSERT_EQ(compressed[num_elements], red_zone_value<T>()) << "Red zone overwritten";
+
+    // Decompress.
+    ALPDecompressor<T> decompressor;
+    decompressor.init(compressed.data());
+    std::vector<T> output(NUM_VALUES, T{0});
+    auto dr = decompressor.decompress(compressed.data(), output.data());
+    (void) dr;
+    ASSERT_EQ(output, data);
 }
 
 } //namespace arcticdb

@@ -49,6 +49,7 @@ TEST(SortIndex, Basic) {
     version_map.write_version(mock_store, index_key, std::nullopt);
 
     auto engine = get_test_engine<version_store::PythonVersionStore>();
+    engine._test_set_store(mock_store);
     auto versioned_item = engine.sort_index(stream_id, false, false);
 
     auto seg = mock_store->read(versioned_item.key_, storage::ReadKeyOpts{}).get();
@@ -92,6 +93,7 @@ TEST(SortIndex, Nonzero) {
     version_map.write_version(mock_store, index_key, std::nullopt);
 
     auto engine = get_test_engine<version_store::PythonVersionStore>();
+    engine._test_set_store(mock_store);
     auto versioned_item = engine.sort_index(stream_id, false, false);
 
     auto seg = mock_store->read(versioned_item.key_, storage::ReadKeyOpts{}).get();
