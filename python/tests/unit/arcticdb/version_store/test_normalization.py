@@ -1021,6 +1021,7 @@ def test_empty_dimension(lmdb_version_store):
     pd.testing.assert_frame_equal(result, df)
 
 
+@pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("segment_row_size", [2, 100_000])
 @pytest.mark.parametrize("column_group_size", [2, 127])
 @pytest.mark.parametrize("data_type", ["dataframe", "series"])
@@ -1033,9 +1034,9 @@ def test_empty_dimension(lmdb_version_store):
         pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=3), ["hello", "goodbye"], ["bonjour", "au revoir"]]),
     ]
 )
-def test_multiindex_series(version_store_factory, segment_row_size, column_group_size, data_type, index):
-    lib = version_store_factory(column_group_size=column_group_size, segment_row_size=segment_row_size)
-    sym = "test_multiindex_series"
+def test_required_field_inclusion(version_store_factory, dynamic_schema, segment_row_size, column_group_size, data_type, index):
+    lib = version_store_factory(dynamic_schema=dynamic_schema, column_group_size=column_group_size, segment_row_size=segment_row_size)
+    sym = "test_required_field_inclusion"
     num_rows = len(index) if index is not None else 12
     original_data = pd.Series(np.arange(num_rows), index=index) if data_type == "series" else \
     pd.DataFrame({"col1": np.arange(num_rows), "col2": np.arange(num_rows), "col3": np.arange(num_rows)}, index=index)
