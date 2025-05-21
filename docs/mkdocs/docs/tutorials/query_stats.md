@@ -71,28 +71,69 @@ qs.disable()
 ## Output Structure
 
 The statistics are returned as a nested dictionary organized by:
-- Key type (e.g., `SYMBOL_LIST`, `TABLE_DATA`, `VERSION_REF`)
-- Operation group (currently `storage_ops` only)
+- Operation group (currently `storage_operations` only)
 - Task type (e.g., `S3_ListObjectsV2`, `S3_PutObject`)
+- Key type (e.g., `SYMBOL_LIST`, `TABLE_DATA`, `VERSION_REF`)
 
 Each task contains measurements like:
 - `count`: Number of times the operation was performed
 - `total_time_ms`: Total execution time in milliseconds
-- For data operations, additional metric `size_bytes` for the size of compressed data being transferred
+- For data upload and download, additional metric `size_bytes` for the size of compressed data being transferred
 
 Example output:
 
 ```python
 {
     "storage_operations": {
-        "S3_ListObjectsV2": {
-            "total_time_ms": 83,
-            "count": 3
+        "S3_DeleteObjects": {
+            "LOCK": {
+                "count": 1,
+                "size_bytes": 0,
+                "total_time_ms": 14
+            },
+            "SYMBOL_LIST": {
+                "count": 1,
+                "size_bytes": 0,
+                "total_time_ms": 17
+            }
         },
         "S3_GetObject": {
-            "total_time_ms": 50,
-            "count": 3,
-            "size_bytes": 10
+            "LOCK": {
+                "count": 2,
+                "size_bytes": 206,
+                "total_time_ms": 31
+            }
+        },
+        "S3_HeadObject": {
+            "LOCK": {
+                "count": 1,
+                "size_bytes": 0,
+                "total_time_ms": 4
+            }
+        },
+        "S3_ListObjectsV2": {
+            "SYMBOL_LIST": {
+                "count": 2,
+                "size_bytes": 0,
+                "total_time_ms": 35
+            },
+            "VERSION_REF": {
+                "count": 1,
+                "size_bytes": 0,
+                "total_time_ms": 15
+            }
+        },
+        "S3_PutObject": {
+            "LOCK": {
+                "count": 1,
+                "size_bytes": 103,
+                "total_time_ms": 15
+            },
+            "SYMBOL_LIST": {
+                "count": 1,
+                "size_bytes": 308,
+                "total_time_ms": 15
+            }
         }
     }
 }

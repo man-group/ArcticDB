@@ -27,8 +27,10 @@ QueryStats::QueryStats(){
 }
 
 void QueryStats::reset_stats() {
-    for (auto& io_stats : stats_by_storage_op_type_) {
-        io_stats.reset_stats();
+    for (auto& key_stats : stats_by_storage_op_type_) {
+        for (auto& op_stat : key_stats) {
+            op_stat.reset_stats();
+        }
     }
 }
 
@@ -43,7 +45,6 @@ void QueryStats::disable() {
 bool QueryStats::is_enabled() const {
     return is_enabled_;
 }
-
 
 std::string task_type_to_string(TaskType task_type) {
     switch (task_type) {
@@ -79,53 +80,61 @@ std::string stat_type_to_string(StatType stat_type) {
     }
 }
 
+std::string get_key_type_str(entity::KeyType key) {
+    const std::string token = "::";	
+    std::string key_type_str = entity::get_key_description(key);	
+    auto token_pos = key_type_str.find(token); //KeyType::SYMBOL_LIST -> SYMBOL_LIST	
+    return token_pos == std::string::npos ? key_type_str : key_type_str.substr(token_pos + token.size());	
+}
+
 QueryStats::QueryStatsOutput QueryStats::get_stats() const {
     QueryStatsOutput result;
     
-        
     for (size_t task_idx = 0; task_idx < static_cast<size_t>(TaskType::END); ++task_idx) {
-        TaskType task_type = static_cast<TaskType>(task_idx);
+        auto task_type = static_cast<TaskType>(task_idx);
         std::string task_type_str = task_type_to_string(task_type);
 
-        const auto& op_stats = stats_by_storage_op_type_[task_idx];
-
-        OperationStatsOutput op_output;
-        
-        bool has_non_zero_stats = op_stats.count_.readFull();
-        for (size_t stat_idx = 0; stat_idx < static_cast<size_t>(StatType::END); ++stat_idx) {
-            StatType stat_type = static_cast<StatType>(stat_idx);
-            uint32_t value = 0;
-            switch (stat_type) {
-                case StatType::TOTAL_TIME_MS:
-                    value = op_stats.total_time_ns_.readFull() / 1e6;
-                    break;
-                case StatType::COUNT:
-                    value = op_stats.count_.readFull();
-                    break;
-                case StatType::SIZE_BYTES:
-                    value = op_stats.size_bytes_.readFull();
-                    break;
-                default:
-                    continue;
+        for (size_t key_idx = 0; key_idx < static_cast<size_t>(entity::KeyType::UNDEFINED); ++key_idx) {
+            const auto& op_stats = stats_by_storage_op_type_[task_idx][key_idx];
+            std::string key_type_str = get_key_type_str(static_cast<entity::KeyType>(key_idx));
+            OperationStatsOutput op_output;
+            
+            bool has_non_zero_stats = op_stats.count_.readFull();
+            for (size_t stat_idx = 0; stat_idx < static_cast<size_t>(StatType::END); ++stat_idx) {
+                auto stat_type = static_cast<StatType>(stat_idx);
+                uint64_t value = 0;
+                switch (stat_type) {
+                    case StatType::TOTAL_TIME_MS:
+                        value = op_stats.total_time_ns_.readFull() / 1e6;
+                        break;
+                    case StatType::COUNT:
+                        value = op_stats.count_.readFull();
+                        break;
+                    case StatType::SIZE_BYTES:
+                        value = op_stats.size_bytes_.readFull();
+                        break;
+                    default:
+                        continue;
+                }
+                if (has_non_zero_stats) {
+                    std::string stat_name = stat_type_to_string(stat_type);
+                    op_output[stat_name] = value;
+                }
             }
-            if (has_non_zero_stats) {
-                std::string stat_name = stat_type_to_string(stat_type);
-                op_output[stat_name] = value;
+            
+            // Only non-zero stats will be added to the output
+            if (!op_output.empty()) {
+                result["storage_operations"][task_type_str][key_type_str] = std::move(op_output);
             }
-        }
-        
-        // Only non-zero stats will be added to the output
-        if (!op_output.empty()) {
-            result["storage_operations"][task_type_str] = std::move(op_output);
         }
     }
     
     return result;
 }
 
-void QueryStats::add(TaskType task_type, StatType stat_type, uint32_t value) {
+void QueryStats::add(TaskType task_type, entity::KeyType key_type, StatType stat_type, uint64_t value) {
     if (is_enabled()) {
-        auto& stats = stats_by_storage_op_type_[static_cast<size_t>(task_type)];
+        auto& stats = stats_by_storage_op_type_[static_cast<size_t>(task_type)][static_cast<size_t>(key_type)];
         switch (stat_type) {
             case StatType::TOTAL_TIME_MS:
                 stats.total_time_ns_.increment(value);
@@ -143,10 +152,10 @@ void QueryStats::add(TaskType task_type, StatType stat_type, uint32_t value) {
 }
 
 [[nodiscard]] std::optional<RAIIAddTime> QueryStats::add_task_count_and_time(
-        TaskType task_type, std::optional<TimePoint> start
+        TaskType task_type, entity::KeyType key_type, std::optional<TimePoint> start
 ) {
     if (is_enabled()) {
-        auto& stats = stats_by_storage_op_type_[static_cast<size_t>(task_type)];
+        auto& stats = stats_by_storage_op_type_[static_cast<size_t>(task_type)][static_cast<size_t>(key_type)];
         stats.count_.increment(1);
         return std::make_optional<RAIIAddTime>(stats.total_time_ns_, start.value_or(std::chrono::steady_clock::now()));
     }
@@ -163,14 +172,14 @@ RAIIAddTime::~RAIIAddTime() {
     time_var_.increment(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_).count());
 }
 
-void add(TaskType task_type, StatType stat_type, uint32_t value) {
-    QueryStats::instance()->add(task_type, stat_type, value);
+void add(TaskType task_type, entity::KeyType key_type, StatType stat_type, uint64_t value) {
+    QueryStats::instance()->add(task_type, key_type, stat_type, value);
 }
 
 [[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(
-    TaskType task_type, std::optional<TimePoint> start
+    TaskType task_type, entity::KeyType key_type, std::optional<TimePoint> start
 ) {
-    return QueryStats::instance()->add_task_count_and_time(task_type, start);
+    return QueryStats::instance()->add_task_count_and_time(task_type, key_type, start);
 }
 
 }
