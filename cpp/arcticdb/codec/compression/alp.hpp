@@ -163,7 +163,7 @@ struct ALPCompressor {
             uint8_t *out_ptr,
             size_t &total_size,
             std::array<uint16_t, alp::config::VECTOR_SIZE> &exception_positions) {
-        static const auto max_comp_ratio = ConfigsMap::instance()->get_double("Alp.MaxCompressRatio", 100);
+        static const auto max_comp_ratio = ConfigsMap::instance()->get_double("Alp.MaxCompressRatio", 0.8);
         const auto compress_limit = double(input.buffer().bytes()) * max_comp_ratio;
         if (input.num_blocks() == 1) {
             auto ptr = reinterpret_cast<const T *>(input.buffer().data());
@@ -208,7 +208,7 @@ struct ALPCompressor {
             std::array<uint16_t, alp::config::VECTOR_SIZE> &exception_positions) {
         auto column_header = new (out_ptr + total_size) RealDoubleColumnHeader<T>(state);
         total_size += column_header->total_size();
-        static const auto max_comp_ratio = ConfigsMap::instance()->get_double("Alp.MaxCompressRatio", 100);
+        static const auto max_comp_ratio = ConfigsMap::instance()->get_double("Alp.MaxCompressRatio", 0.8);
         const auto compress_limit = double(input.buffer().bytes()) * max_comp_ratio;
         auto bit_widths = column_header->bit_widths();
         std::array<uint16_t, alp::config::VECTOR_SIZE> left{};
