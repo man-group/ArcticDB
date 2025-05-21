@@ -922,6 +922,7 @@ std::vector<SnapshotVariantKey> ARCTICDB_UNUSED iterate_snapshot_tombstones (
 
 } // namespace
 
+// Kept for backwards compatibility
 void PythonVersionStore::delete_version(
         const StreamId& stream_id,
         VersionId version_id) {
@@ -933,6 +934,8 @@ void PythonVersionStore::delete_versions(
     const StreamId& stream_id,
     const std::vector<VersionId>& version_ids) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_versions");
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(!version_ids.empty(), "No version ids to write tombstone for");
+
     std::unordered_set<VersionId> version_ids_set(version_ids.begin(), version_ids.end());
     auto result = ::arcticdb::tombstone_versions(store(), version_map(), stream_id, version_ids_set);
     if (!result.keys_to_delete.empty() && !cfg().write_options().delayed_deletes()) {
