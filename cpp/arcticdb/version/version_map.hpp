@@ -293,15 +293,17 @@ public:
                 key.id(),
                 LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY},
                 __FUNCTION__);
-        auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry, false);
+        auto [latest_version, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry, false);
 
         std::vector<AtomKey> keys_to_write;
         if (!result.empty()) {
-            auto tombstone_key = get_tombstone_all_key(result[0], store->current_timestamp());
-            entry->try_set_tombstone_all(tombstone_key);
-            keys_to_write.push_back(tombstone_key);
+            auto key_to_tombstone = result[0];
+            util::check(latest_version == key_to_tombstone.version_id(), "Latest version {} does not match the key that we are trying to pass to tombstone_all {}", latest_version, key_to_tombstone.version_id());
+            auto tombstone_all_key = get_tombstone_all_key(key_to_tombstone, store->current_timestamp());
+            entry->try_set_tombstone_all(tombstone_all_key);
+            keys_to_write.push_back(tombstone_all_key);
             if(log_changes_) {
-                log_tombstone_all(store, key.id(), tombstone_key.version_id());
+                log_tombstone_all(store, tombstone_all_key.id(), tombstone_all_key.version_id());
             }
         }
         keys_to_write.push_back(key);
@@ -571,12 +573,12 @@ public:
         const StreamId& stream_id,
         const std::shared_ptr<VersionMapEntry>& entry,
         const std::optional<timestamp>& creation_ts=std::nullopt) {
-        auto ver_key = write_tombstone_internal(store, versions, stream_id, entry, creation_ts);
+        auto ver_key = write_tombstones_internal(store, versions, stream_id, entry, creation_ts);
         write_symbol_ref(store, ver_key, std::nullopt, entry->head_.value());
         return ver_key;
     }
 
-    AtomKey write_tombstone_internal(
+    AtomKey write_tombstones_internal(
             std::shared_ptr<Store> store,
             const std::unordered_set<VersionId>& versions,
             const StreamId& stream_id,
