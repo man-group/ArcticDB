@@ -87,15 +87,24 @@ def convert_dict_strings_to_array(table: pa.Table) -> pa.Table:
     )
 
 
-def test_strings_basic(lmdb_version_store_v1):
+@pytest.mark.parametrize("dynamic_strings", [
+    True,
+    pytest.param(False, marks=pytest.mark.xfail(reason="Arrow fixed strings are not normalized correctly"))
+])
+def test_strings_basic(lmdb_version_store_v1, dynamic_strings):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"x": ["mene", "mene", "tekel", "upharsin"]})
-    lib.write("arrow", df)
+    lib.write("arrow", df, dynamic_strings=dynamic_strings)
     vit = lib.read("arrow", output_format=OutputFormat.ARROW)
     result = convert_dict_strings_to_array(vit.data).to_pandas()
     assert_frame_equal(result, df)
 
-def test_strings_multiple_segments_and_columns(lmdb_version_store_tiny_segment):
+
+@pytest.mark.parametrize("dynamic_strings", [
+    True,
+    pytest.param(False, marks=pytest.mark.xfail(reason="Arrow fixed strings are not normalized correctly"))
+])
+def test_strings_multiple_segments_and_columns(lmdb_version_store_tiny_segment, dynamic_strings):
     lib = lmdb_version_store_tiny_segment
     df = pd.DataFrame({
         "x": [f"x_{i//2}" for i in range(100)],
@@ -103,10 +112,14 @@ def test_strings_multiple_segments_and_columns(lmdb_version_store_tiny_segment):
         "y": [f"y_{i}" for i in range(100)],
         "z": [f"z_{i//5}" for i in range(100)],
     })
-    lib.write("arrow", df)
+    lib.write("arrow", df, dynamic_strings=dynamic_strings)
     vit = lib.read("arrow", output_format=OutputFormat.ARROW)
     result = convert_dict_strings_to_array(vit.data).to_pandas()
     assert_frame_equal(result, df)
+
+
+# TODO: Test Unicode symbols
+# TODO: Test bool columns
 
 
 @pytest.mark.parametrize("start_offset,end_offset", [(2, 3), (3, 75), (4, 32), (0, 99), (7, 56)])

@@ -28,6 +28,7 @@ sparrow::primitive_array<T> create_primitive_array(
         T* data_ptr,
         size_t data_size,
         std::optional<sparrow::validity_bitmap>& validity_bitmap) {
+    // TODO: Bool handling is different (in sparrow buffers they are stored dense i.e. 8 bools per byte)
     sparrow::u8_buffer<T> buffer(data_ptr, data_size);
     if(validity_bitmap) {
         return sparrow::primitive_array<T>{std::move(buffer), data_size, std::move(*validity_bitmap)};
