@@ -842,7 +842,6 @@ folly::Future<folly::Unit> reduce_and_fix_columns(
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     if(frame.empty())
         return folly::Unit{};
-    adjust_slice_ranges(context);
     auto slice_map = std::make_shared<FrameSliceMap>(context, read_options.dynamic_schema().value_or(false));
 
     // This logic mimics that in ReduceColumnTask operator() to identify whether the task will actually do any work

@@ -23,6 +23,7 @@ if sys.version_info >= (3, 9):
 from numpy.testing import assert_equal, assert_array_equal
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 
+from arcticdb import QueryBuilder
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticException
 from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
@@ -1022,10 +1023,39 @@ def test_empty_dimension(lmdb_version_store):
 
 @pytest.mark.parametrize("segment_row_size", [2, 100_000])
 @pytest.mark.parametrize("column_group_size", [2, 127])
-def test_multiindex_series(version_store_factory, segment_row_size, column_group_size):
+@pytest.mark.parametrize("data_type", ["dataframe", "series"])
+@pytest.mark.parametrize(
+    "index",
+    [
+        None,
+        pd.date_range("2025-01-01", periods=12),
+        pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=6), ["hello", "goodbye"]]),
+        pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=3), ["hello", "goodbye"], ["bonjour", "au revoir"]]),
+    ]
+)
+def test_multiindex_series(version_store_factory, segment_row_size, column_group_size, data_type, index):
     lib = version_store_factory(column_group_size=column_group_size, segment_row_size=segment_row_size)
     sym = "test_multiindex_series"
-    index = pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=5), ["hello", "goodbye"]])
-    series = pd.Series(np.arange(len(index)), index=index)
-    lib.write(sym, series)
-    assert_series_equal(series, lib.read(sym).data)
+    num_rows = len(index) if index is not None else 12
+    original_data = pd.Series(np.arange(num_rows), index=index) if data_type == "series" else \
+    pd.DataFrame({"col1": np.arange(num_rows), "col2": np.arange(num_rows), "col3": np.arange(num_rows)}, index=index)
+    lib.write(sym, original_data)
+    received_data = lib.read(sym).data
+    if data_type == "series":
+        assert_series_equal(original_data, received_data)
+    else:
+        assert_frame_equal(original_data, received_data)
+        # Also test with column selection and processing
+        received_data = lib.read(sym, columns=["col3"]).data
+        expected_df = original_data.drop(columns=["col1", "col2"])
+        assert_frame_equal(expected_df, received_data)
+        q = QueryBuilder()
+        q = q[q["col1"] > 5]
+        received_data = lib.read(sym, query_builder=q).data
+        expected_df = original_data[original_data["col1"] > 5]
+        if index is None:
+            expected_df.index = pd.RangeIndex(0, 6)
+        assert_frame_equal(expected_df, received_data)
+        received_data = lib.read(sym, columns=["col3"], query_builder=q).data
+        expected_df = expected_df.drop(columns=["col1", "col2"])
+        assert_frame_equal(expected_df, received_data)
