@@ -32,10 +32,13 @@ from arcticdb.util.test import (
 )
 from arcticdb.version_store.processing import QueryBuilder
 
-ARCTICDB_VERSION = version.parse(arcticdb.__version__)
-PRE_4_X_X = ARCTICDB_VERSION < version.Version("4.0.0")
-PRE_5_X_X = ARCTICDB_VERSION < version.Version("5.0.0")
 
+PRE_4_X_X = (
+    False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("4.0.0")
+)    
+PRE_5_X_X = (
+    False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("5.0.0")
+)    
 
 def generate_dataframe(columns, dt, num_days, num_rows_per_day):
     dataframes = []
