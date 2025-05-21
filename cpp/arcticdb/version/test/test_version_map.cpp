@@ -426,7 +426,7 @@ TEST(VersionMap, FixRefKeyTombstones) {
     auto key5 = atom_key_with_version(id, 1, 1696590624590123209);
     version_map->write_version(store, key5, key4);
     auto entry = version_map->check_reload(store, id, LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, __FUNCTION__);
-    version_map->journal_keys(store, key5.version_id(), key5.id(), std::span{&key5, 1}, entry->head_.value());
+    version_map->journal_key(store, key5.version_id(), key5.id(), std::span{&key5, 1}, entry->head_.value());
 
     auto valid = version_map->check_ref_key(store, id);
     ASSERT_EQ(valid, false);
