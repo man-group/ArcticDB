@@ -23,6 +23,7 @@ struct FrameSliceMap {
     FrameSliceMap(std::shared_ptr<PipelineContext> context, bool dynamic_schema) :
         context_(std::move(context)) {
         const entity::StreamDescriptor& descriptor = context_->descriptor();
+        const auto true_index_field_count = descriptor.index().field_count();
         const auto required_fields_count = static_cast<bool>(context_->norm_meta_) ?
                                            index::required_fields_count(descriptor, *context_->norm_meta_) :
                                            index::required_fields_count(descriptor);
@@ -64,28 +65,20 @@ struct FrameSliceMap {
                         continue;
                     }
                 }
-                bool required_field{false};
-                size_t global_field_index{0};
-                if (first_col_slice) {
-                    required_field = field.index < required_fields_count;
-                    global_field_index = field.index;
-                } else {
-                    required_field = descriptor.index().field_count() <= field.index &&
-                                     required_fields_count >= first_col - descriptor.index().field_count() &&
-                                     field.index < required_fields_count - (first_col - descriptor.index().field_count());
-                    global_field_index = field.index + first_col;
-                }
-//                const bool true_index_required_field = first_col_slice && field.index < descriptor.index().field_count();
-//                // Second condition required to avoid underflow when subtracting one unsigned value from another
-//                const bool other_required_field = descriptor.index().field_count() <= field.index &&
-//                                                  required_fields_count >= first_col &&
-//                                                  field.index < required_fields_count - first_col;
-//                const bool required_field = true_index_required_field || other_required_field;
+                // If we are in the first col slice, then we just need to check if the field index is less than the
+                // required fields count
+                // Otherwise, we need to ignore true index fields (as they are grabbed from the first column slice), and
+                // offset by first_col - true_index_field_count
+                const bool required_field = first_col_slice ?
+                                            field.index < required_fields_count :
+                                            true_index_field_count <= field.index &&
+                                            required_fields_count >= first_col - true_index_field_count &&
+                                            field.index < required_fields_count - (first_col - true_index_field_count);
                 // If required_field is true, this is a required column in the output. The name in slice stream
                 // descriptor may not match that in the global stream descriptor, so use the global name here
                 // e.g. If 2 timeseries are joined that had differently named indexes
                 // All other columns use names to match the source with the destination
-                const auto& field_name = required_field ? descriptor.field(global_field_index).name() : field->name();
+                const auto& field_name = required_field ? descriptor.field(field.index + (first_col_slice ? 0 : first_col)).name() : field->name();
                 auto &column = columns_[field_name];
                 column.emplace(row_range, ContextData{context_row.index_, field.index});
             }
