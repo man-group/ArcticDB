@@ -101,6 +101,7 @@ class VenvArctic:
         self.venv = venv
         self.uri = uri
         self.init_storage()
+        self.parquet = False # True is for parquet format False is for CSV
 
     def add_traceability_prints(self, python_commands):
         """
@@ -123,12 +124,18 @@ class VenvArctic:
 
         with tempfile.TemporaryDirectory() as dir:
             df_load_commands = []
-            for df_name, df_value in dfs.items():
-                parquet_file = os.path.join(dir, f"{df_name}.parquet")
-                df_value.to_parquet(parquet_file)
-                df_load_commands.append(
-                    f"{df_name} = pd.read_parquet({repr(parquet_file)})"
-                )
+            for df_name, df_val in dfs.items():
+                import pandas as pd
+                df_value : pd.DataFrame = df_val.copy(deep=True)
+                if self.parquet:
+                    file = os.path.join(dir, f"{df_name}.parquet")
+                    df_value.to_parquet(file)
+                    command = f"{df_name} = pd.read_parquet({repr(file)})"
+                else: 
+                    file = os.path.join(dir, f"{df_name}.gz")
+                    df_value.to_csv(file, index=True)
+                    command = f"{df_name} = pd.read_csv({repr(file)}, parse_dates=True)"
+                df_load_commands.append(command)
 
             python_commands = (
                 [
