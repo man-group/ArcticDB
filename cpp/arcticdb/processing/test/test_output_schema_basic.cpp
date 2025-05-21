@@ -123,7 +123,8 @@ TEST(OutputSchema, FilterClauseColumnPresence) {
     ec.root_node_name_ = ExpressionName("blah");
     ec.add_expression_node("blah", node);
     filter_clause = FilterClause{{"col1", "col4"}, ec, {}};
-    ASSERT_THROW(filter_clause.modify_schema({stream_desc.clone(), norm_meta}), SchemaException);
+    // Pandas allows the filtering columns to be messing so do we
+    ASSERT_NO_THROW(filter_clause.modify_schema({stream_desc.clone(), norm_meta}));
 
     // No required columns present in StreamDescriptor
     node = std::make_shared<ExpressionNode>(ColumnName("col4"), ColumnName("col5"), OperationType::EQ);
@@ -131,7 +132,8 @@ TEST(OutputSchema, FilterClauseColumnPresence) {
     ec.root_node_name_ = ExpressionName("blah");
     ec.add_expression_node("blah", node);
     filter_clause = FilterClause{{"col4", "col5"}, ec, {}};
-    ASSERT_THROW(filter_clause.modify_schema({stream_desc.clone(), norm_meta}), SchemaException);
+    // Pandas allows the filtering columns to be messing so do we
+    ASSERT_NO_THROW(filter_clause.modify_schema({stream_desc.clone(), norm_meta}));
 }
 
 TEST(OutputSchema, ProjectClauseColumnPresence) {

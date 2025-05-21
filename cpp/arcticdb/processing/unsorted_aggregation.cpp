@@ -311,16 +311,13 @@ namespace
     template <Extremum T>
     SegmentInMemory finalize_impl(
             const ColumnName& output_column_name,
-            bool dynamic_schema,
             size_t unique_values,
             std::vector<uint8_t>& aggregated,
             std::optional<DataType>& data_type
     ) {
         SegmentInMemory res;
         if(!aggregated.empty()) {
-            constexpr auto dynamic_schema_data_type = DataType::FLOAT64;
-            using DynamicSchemaTDT = ScalarTagType<DataTypeTag<dynamic_schema_data_type>>;
-            const TypeDescriptor column_type = make_scalar_type(dynamic_schema ? dynamic_schema_data_type: data_type.value());
+            const TypeDescriptor column_type = make_scalar_type(data_type.value());
             auto col = std::make_shared<Column>(column_type, unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
             auto column_data = col->data();
             col->set_row_data(unique_values - 1);
@@ -328,38 +325,16 @@ namespace
             details::visit_type(*data_type, [&] (auto col_tag) {
                 using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
                 using MaybeValueType = MaybeValue<typename col_type_info::RawType, T>;
-                if(dynamic_schema) {
-                    if constexpr (dynamic_schema_data_type != col_type_info::data_type && is_integer_type(col_type_info::data_type)) {
-                        log::message().warn(
-                            "The column \"{}\" of type {} is a result of a {} aggregation and the library is configured"
-                            " to use dynamic schema. ArcticDB will promote the type to {} so that if a grouping bucket "
-                            "is empty, it will be assigned a value of NaN. This behavior will be deprecated with the "
-                            "release of ArcticDB v6.0.0 and will change as follows. If Arrow output format is used, "
-                            "empty grouping buckets will be use Arrow's missing value. If numpy output format is used "
-                            "all missing data will be backfilled with 0.",
-                            output_column_name.value, col_type_info::data_type, T == Extremum::MIN ? "MIN" : "MAX", dynamic_schema_data_type);
-                    }
-                    const auto prev_size = aggregated.size() / sizeof(MaybeValueType);
-                    const auto new_size = sizeof(MaybeValueType) * unique_values;
-                    aggregated.resize(new_size);
-                    auto in_ptr = reinterpret_cast<MaybeValueType *>(aggregated.data());
-                    std::fill(in_ptr + prev_size, in_ptr + unique_values, MaybeValueType{});
-                    for (auto it = column_data.begin<DynamicSchemaTDT>(); it != column_data.end<DynamicSchemaTDT>(); ++it, ++in_ptr) {
-                        *it = in_ptr->written_ ? static_cast<double>(in_ptr->value_)
-                                               : std::numeric_limits<double>::quiet_NaN();
-                    }
-                } else {
-                    auto in_ptr = reinterpret_cast<MaybeValueType*>(aggregated.data());
-                    for (auto it = column_data.begin<typename col_type_info::TDT>(); it != column_data.end<typename col_type_info::TDT>(); ++it, ++in_ptr) {
-                        if constexpr (is_floating_point_type(col_type_info::data_type)) {
-                            *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::quiet_NaN();
+                auto in_ptr = reinterpret_cast<MaybeValueType*>(aggregated.data());
+                for (auto it = column_data.begin<typename col_type_info::TDT>(); it != column_data.end<typename col_type_info::TDT>(); ++it, ++in_ptr) {
+                    if constexpr (is_floating_point_type(col_type_info::data_type)) {
+                        *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::quiet_NaN();
+                    } else {
+                        if constexpr(T == Extremum::MAX) {
+                            *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::lowest();
                         } else {
-                            if constexpr(T == Extremum::MAX) {
-                                *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::lowest();
-                            } else {
-                                // T == Extremum::MIN
-                                *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::max();
-                            }
+                            // T == Extremum::MIN
+                            *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::max();
                         }
                     }
                 }
@@ -391,15 +366,12 @@ void MaxAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_
     aggregate_impl<Extremum::MAX>(input_column, groups, unique_values, aggregated_, data_type_);
 }
 
-SegmentInMemory MaxAggregatorData::finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values)
+SegmentInMemory MaxAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values)
 {
-    return finalize_impl<Extremum::MAX>(output_column_name, dynamic_schema, unique_values, aggregated_, data_type_);
+    return finalize_impl<Extremum::MAX>(output_column_name, unique_values, aggregated_, data_type_);
 }
 
-VariantRawValue MaxAggregatorData::get_default_value(bool dynamic_schema) {
-    if (dynamic_schema) {
-        return std::numeric_limits<double>::quiet_NaN();
-    }
+VariantRawValue MaxAggregatorData::get_default_value(bool) {
     return {};
 }
 
@@ -425,15 +397,12 @@ void MinAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_
     aggregate_impl<Extremum::MIN>(input_column, groups, unique_values, aggregated_, data_type_);
 }
 
-SegmentInMemory MinAggregatorData::finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values)
+SegmentInMemory MinAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values)
 {
-    return finalize_impl<Extremum::MIN>(output_column_name, dynamic_schema, unique_values, aggregated_, data_type_);
+    return finalize_impl<Extremum::MIN>(output_column_name, unique_values, aggregated_, data_type_);
 }
 
-VariantRawValue MinAggregatorData::get_default_value(bool dynamic_schema) {
-    if (dynamic_schema) {
-        return std::numeric_limits<double>::quiet_NaN();
-    }
+VariantRawValue MinAggregatorData::get_default_value(bool) {
     return {};
 }
 

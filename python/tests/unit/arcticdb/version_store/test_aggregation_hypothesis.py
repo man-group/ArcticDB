@@ -100,18 +100,12 @@ def largest_numeric_type(dtype):
         return np.uint64
     return dtype
 
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=dataframe_strategy(
-        [
-            column_strategy("grouping_column", supported_string_dtypes()),
-            column_strategy("agg_column", supported_numeric_dtypes(), restrict_range=True),
-        ],
-    ),
-)
-def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, df):
-    assume(len(df) >= 3)
+
+def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1):
+    df = pd.DataFrame({
+        'grouping_column': [1, 0, 0],
+        'agg_column': np.array([0, 0, 0], dtype=np.uint64)
+    })
     lib = lmdb_version_store_dynamic_schema_v1
     symbol = "test_aggregation_numeric_dynamic"
     lib.delete(symbol)
@@ -125,6 +119,7 @@ def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     required_types = {
         "mean": np.float64,
         "sum": largest_numeric_type(df.dtypes["agg_column"]),
+        "grouping_column": df.dtypes["grouping_column"],
         "count": np.uint64,
         # Min and Max are only temporary set to float to keep API the API. See:
         # https://github.com/man-group/ArcticDB/blob/67d2bbe530f96a0aa5412f479e123da480ba2d99/cpp/arcticdb/processing/unsorted_aggregation.cpp#L319

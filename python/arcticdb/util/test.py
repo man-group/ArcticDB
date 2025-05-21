@@ -821,6 +821,9 @@ def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict, 
     expected = df.groupby(grouping_column).agg(None, **aggs_dict)
     expected = expected.reindex(columns=sorted(expected.columns))
     if agg_dtypes is not None:
+        assert expected.index.name == "grouping_column"
+        expected.index = expected.index.astype(agg_dtypes["grouping_column"])
+        del agg_dtypes["grouping_column"]
         expected = expected.astype(agg_dtypes)
     q = QueryBuilder().groupby(grouping_column).agg(aggs_dict)
     received = lib.read(symbol, query_builder=q).data

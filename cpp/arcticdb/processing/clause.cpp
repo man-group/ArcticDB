@@ -467,9 +467,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
                                 opt_input_column.emplace(std::move(column_with_strings));
                             }
                         }
-                        if (opt_input_column) {
-                            agg_data->aggregate(opt_input_column, row_to_group, num_unique);
-                        }
+                        agg_data->aggregate(opt_input_column, row_to_group, num_unique);
                     }
                 });
         } else {
@@ -527,12 +525,7 @@ OutputSchema AggregationClause::modify_schema(OutputSchema&& output_schema) cons
         const auto& input_column_type = input_stream_desc.field(*input_stream_desc.find_field(input_column_name)).type().data_type();
         auto agg_data = agg.get_aggregator_data();
         agg_data.add_data_type(input_column_type);
-        const auto& output_column_type = [&]() {
-            if (processing_config_.dynamic_schema_ && (agg.get_aggregation_type() == AggregationType::MIN || agg.get_aggregation_type() == AggregationType::MAX)) {
-                return DataType::FLOAT64;
-            }
-            return agg_data.get_output_data_type();
-        }();
+        const DataType output_column_type = agg_data.get_output_data_type();
         stream_desc.add_scalar_field(output_column_type, output_column_name);
         const VariantRawValue& default_value = agg_data.get_default_value(processing_config_.dynamic_schema_);
         if (!std::holds_alternative<std::monostate>(default_value)) {
