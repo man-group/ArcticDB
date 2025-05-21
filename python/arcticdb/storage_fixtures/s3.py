@@ -14,18 +14,18 @@ import re
 import sys
 import platform
 from tempfile import mkdtemp
+from urllib.parse import urlparse
 import boto3
 import time
 import random
 from datetime import datetime
-import string
 
 import requests
 from typing import Optional, Any, Type
 
 import werkzeug
-from moto.moto_server.werkzeug_app import DomainDispatcherApplication, create_backend_app
 import botocore.exceptions
+from moto.server import DomainDispatcherApplication, create_backend_app
 
 from .api import *
 from .utils import (
@@ -37,8 +37,7 @@ from .utils import (
 )
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_gcp_library_to_env, add_s3_library_to_env
-from arcticdb_ext.storage import AWSAuthMethod, NativeVariantStorage
-
+from arcticdb_ext.storage import AWSAuthMethod, NativeVariantStorage, GCPXMLSettings as NativeGCPXMLSettings
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 
@@ -104,6 +103,8 @@ class S3Bucket(StorageFixture):
             self.arctic_uri += f"&path_prefix={factory.default_prefix}"
         if factory.ssl:
             self.arctic_uri += "&ssl=True"
+        if factory._test_only_is_nfs_layout:
+            self.arctic_uri += "&_test_only_is_nfs_layout=True"
         if platform.system() == "Linux":
             if factory.client_cert_file:
                 self.arctic_uri += f"&CA_cert_path={self.factory.client_cert_file}"
@@ -203,17 +204,16 @@ class NfsS3Bucket(S3Bucket):
 
 
 class GcpS3Bucket(S3Bucket):
-
     def __init__(
         self,
         factory: "BaseGCPStorageFixtureFactory",
         bucket: str,
         native_config: Optional[NativeVariantStorage] = None,
     ):
-        if any(sub in factory.endpoint for sub in ["http:", "https:"])  :
+        if any(sub in factory.endpoint for sub in ["http:", "https:"]):
             super().__init__(factory, bucket, native_config=native_config)
             self.arctic_uri = self.arctic_uri.replace("s3", "gcpxml", 1)
-        else: 
+        else:
             StorageFixture.__init__(self)
             self.factory = factory
             self.bucket = bucket
@@ -247,10 +247,7 @@ class GcpS3Bucket(S3Bucket):
             with_prefix = False
 
         add_gcp_library_to_env(
-            cfg=cfg,
-            lib_name=lib_name,
-            env_name=Defaults.ENV,
-            with_prefix=with_prefix
+            cfg=cfg, lib_name=lib_name, env_name=Defaults.ENV, with_prefix=with_prefix
         )  # client_cert_dir is skipped on purpose; It will be tested manually in other tests
         return cfg, self.native_config
 
@@ -267,6 +264,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
     clean_bucket_on_fixture_exit = True
     use_mock_storage_for_testing = None  # If set to true allows error simulation
     use_internal_client_wrapper_for_testing = None  # If set to true uses the internal client wrapper for testing
+    _test_only_is_nfs_layout: bool = False
 
     def __init__(self, native_config: Optional[dict] = None):
         self.client_cert_file = None
@@ -360,15 +358,18 @@ def real_s3_from_environment_variables(
 def real_gcp_from_environment_variables(
     shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""
 ) -> BaseGCPStorageFixtureFactory:
-    out = BaseGCPStorageFixtureFactory(native_config=native_config)
-    out.endpoint = os.getenv("ARCTICDB_REAL_GCP_ENDPOINT")
-    out.region = os.getenv("ARCTICDB_REAL_GCP_REGION")
-    out.default_bucket = os.getenv("ARCTICDB_REAL_GCP_BUCKET")
-    access_key = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
-    secret_key = os.getenv("ARCTICDB_REAL_GCP_SECRET_KEY")
-    out.default_key = Key(id=access_key, secret=secret_key, user_name="unknown user")
+    native_settings = NativeGCPXMLSettings()
+    native_settings.bucket = os.getenv("ARCTICDB_REAL_GCP_BUCKET")
+    native_settings.endpoint = os.getenv("ARCTICDB_REAL_GCP_ENDPOINT")
+    native_settings.access = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
+    native_settings.secret = os.getenv("ARCTICDB_REAL_GCP_SECRET_KEY")
+    out = BaseGCPStorageFixtureFactory(native_config=native_settings)
+    out.default_key = Key(id=native_settings.access, secret=native_settings.secret, user_name="unknown user")
+    out.default_bucket = native_settings.bucket
     out.clean_bucket_on_fixture_exit = os.getenv("ARCTICDB_REAL_GCP_CLEAR", "1").lower() in ["true", "1"]
-    out.ssl = out.endpoint.startswith("https://") if out.endpoint is not None else False
+    out.ssl = native_settings.endpoint.startswith("https://") if native_settings.endpoint is not None else False
+    out.endpoint = native_settings.endpoint
+    out._test_only_is_nfs_layout = False
     if shared_path:
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
     else:
@@ -390,11 +391,11 @@ def real_s3_sts_from_environment_variables(
     # Create IAM user
     try:
         iam_client.create_user(UserName=user_name)
-        logger.info(f"User created successfully.")
+        logger.info(f"User [{user_name}] created successfully.")
     except iam_client.exceptions.EntityAlreadyExistsException:
-        logger.warning(f"User already exists.")
+        logger.warning(f"User [{user_name}] already exists.")
     except Exception as e:
-        logger.error(f"Error creating user: {e}")
+        logger.error(f"Error creating user [{user_name}]: {e}")
         raise e
     out.sts_test_key = Key(id=None, secret=None, user_name=user_name)
 
@@ -421,12 +422,12 @@ def real_s3_sts_from_environment_variables(
         )
         out.aws_role_arn = role_response["Role"]["Arn"]
         out.aws_role = role_name
-        logger.info("Role created successfully.")
+        logger.info(f"Role [{role_name}] created successfully.")
     except iam_client.exceptions.EntityAlreadyExistsException:
         out.aws_role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
-        logger.warn("Role already exists.")
+        logger.warning(f"Role [{role_name}] already exists.")
     except Exception as e:
-        logger.error(f"Error creating role: {e}")
+        logger.error(f"Error creating role [{role_name}]: {e}")
         raise e
 
     # Create a policy for S3 bucket access
@@ -450,7 +451,7 @@ def real_s3_sts_from_environment_variables(
         logger.info("Policy created successfully.")
     except iam_client.exceptions.EntityAlreadyExistsException:
         out.aws_policy_name = f"arn:aws:iam::{account_id}:policy/{policy_name}"
-        logger.warn("Policy already exists.")
+        logger.warning("Policy already exists.")
     except Exception as e:
         logger.error(f"Error creating policy: {e}")
         raise e
@@ -539,7 +540,7 @@ def real_s3_sts_resources_ready(factory: BaseS3StorageFixtureFactory):
             logger.info(f"S3 list objects test successful: {response['ResponseMetadata']['HTTPStatusCode']}")
             return
         except:
-            logger.warn(
+            logger.warning(
                 f"Assume role failed. Retrying in 1 second..."
             )  # Don't print the exception as it could contain sensitive information, e.g. user id
             time.sleep(1)
@@ -558,15 +559,15 @@ def real_s3_sts_clean_up(role_name: str, policy_name: str, user_name: str):
         for policy in iam_client.list_attached_role_policies(RoleName=role_name)["AttachedPolicies"]:
             iam_client.detach_role_policy(RoleName=role_name, PolicyArn=policy["PolicyArn"])
             iam_client.delete_policy(PolicyArn=policy["PolicyArn"])
-        logger.info("Policy deleted successfully.")
+        logger.info(f"Policy [{policy_name}] deleted successfully.")
     except Exception:
-        logger.error("Error deleting policy")
+        logger.error(f"Error deleting policy [{policy_name}]")
 
     try:
         iam_client.delete_role(RoleName=role_name)
-        logger.info("Role deleted successfully.")
+        logger.info(f"Role [{role_name}] deleted successfully.")
     except Exception:
-        logger.error("Error deleting role")  # Role could be non-existent as creation of it may fail
+        logger.error(f"Error deleting role [{role_name}]")  # Role could be non-existent as creation of it may fail
 
     try:
         for key in iam_client.list_access_keys(UserName=user_name)["AccessKeyMetadata"]:
@@ -582,9 +583,9 @@ def real_s3_sts_clean_up(role_name: str, policy_name: str, user_name: str):
 
         # Delete the user
         iam_client.delete_user(UserName=user_name)
-        logger.info("User deleted successfully.")
+        logger.info(f"User [{user_name}] deleted successfully.")
     except Exception:
-        logger.error("Error deleting user")  # User could be non-existent as creation of it may fail
+        logger.error(f"Error deleting user [{user_name}]")  # User could be non-existent as creation of it may fail
 
 
 def mock_s3_with_error_simulation():
@@ -622,6 +623,18 @@ class HostDispatcherApplication(DomainDispatcherApplication):
         path_info: bytes = environ.get("PATH_INFO", "")
 
         with self.lock:
+            # Check for x-amz-checksum-mode header
+            if environ.get('HTTP_X_AMZ_CHECKSUM_MODE') == 'enabled':
+                response_body = (
+                    b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                    b'<Error><Code>MissingContentLength</Code>'
+                    b'<Message>You must provide the Content-Length HTTP header.</Message></Error>'
+                )
+                start_response(
+                    "411 Length Required", 
+                    [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
+                )
+                return [response_body]
             # Mock ec2 imds responses for testing
             if path_info in (
                 "/latest/dynamic/instance-identity/document",
@@ -692,6 +705,17 @@ def run_gcp_server(port, key_file, cert_file):
         ssl_context=(cert_file, key_file) if cert_file and key_file else None,
     )
 
+def create_bucket(s3_client, bucket_name, max_retries=15):
+    for i in range(max_retries):
+        try:
+            s3_client.create_bucket(Bucket=bucket_name)
+            return
+        except botocore.exceptions.EndpointConnectionError as e:
+            if i >= max_retries - 1:
+                raise
+            logger.warning(f"S3 create bucket failed. Retry {1}/{max_retries}")
+            time.sleep(1)   
+
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     default_key = Key(id="awd", secret="awd", user_name="dummy")
@@ -719,6 +743,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         use_mock_storage_for_testing: bool = False,
         use_internal_client_wrapper_for_testing: bool = False,
         native_config: Optional[NativeVariantStorage] = None,
+        _test_only_is_nfs_layout: bool = False,
     ):
         super().__init__(native_config)
         self.http_protocol = "https" if use_ssl else "http"
@@ -728,6 +753,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self.use_raw_prefix = use_raw_prefix
         self.use_mock_storage_for_testing = use_mock_storage_for_testing
         self.use_internal_client_wrapper_for_testing = use_internal_client_wrapper_for_testing
+        self._test_only_is_nfs_layout = _test_only_is_nfs_layout
         # This is needed because we might have multiple factory instances in the same test run
         # and we need to make sure the bucket names are unique
         # set the unique_id to the current UNIX timestamp to avoid conflicts
@@ -830,7 +856,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
 
     def create_fixture(self) -> S3Bucket:
         bucket = self.bucket_name("s3")
-        self._s3_admin.create_bucket(Bucket=bucket)
+        create_bucket(self._s3_admin, bucket)
         if self.bucket_versioning:
             self._s3_admin.put_bucket_versioning(Bucket=bucket, VersioningConfiguration={"Status": "Enabled"})
 
@@ -866,7 +892,7 @@ _PermissionCapableFactory = MotoS3StorageFixtureFactory
 class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
     def create_fixture(self) -> NfsS3Bucket:
         bucket = self.bucket_name("nfs")
-        self._s3_admin.create_bucket(Bucket=bucket)
+        create_bucket(self._s3_admin, bucket)
         out = NfsS3Bucket(self, bucket)
         self._live_buckets.append(out)
         return out
@@ -907,7 +933,8 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
 
     def create_fixture(self) -> GcpS3Bucket:
         bucket = self.bucket_name("gcp")
-        self._s3_admin.create_bucket(Bucket=bucket)
+        max_retries = 15
+        create_bucket(self._s3_admin, bucket)
         out = GcpS3Bucket(self, bucket)
         self._live_buckets.append(out)
         return out

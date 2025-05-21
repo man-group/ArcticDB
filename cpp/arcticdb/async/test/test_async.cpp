@@ -9,14 +9,12 @@
 #include <arcticdb/storage/common.hpp>
 #include <arcticdb/storage/config_resolvers.hpp>
 #include <arcticdb/storage/library_index.hpp>
-#include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/async/async_store.hpp>
-#include <arcticdb/util/test/config_common.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
-#include <arcticdb/util/random.h>
+#include <arcticdb/util/test/config_common.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 
-#include <fmt/format.h>
 
 #include <string>
 #include <vector>
@@ -105,10 +103,10 @@ TEST(Async, DeDupTest) {
 
     //The first key will be de-duped, second key will be fresh because indexes dont match
     ASSERT_EQ(2ULL, keys.size());
-    ASSERT_EQ(k, to_atom(keys[0]));
-    ASSERT_NE(k, to_atom(keys[1]));
-    ASSERT_NE(999, to_atom(keys[1]).creation_ts());
-    ASSERT_EQ(2, to_atom(keys[1]).version_id());
+    ASSERT_EQ(k, keys[0]);
+    ASSERT_NE(k, keys[1]);
+    ASSERT_NE(999, keys[1].creation_ts());
+    ASSERT_EQ(2, keys[1].version_id());
 }
 
 struct MaybeThrowTask : arcticdb::async::BaseTask {
@@ -139,6 +137,59 @@ TEST(Async, CollectWithThrow) {
    }
 
    ARCTICDB_DEBUG(log::version(), "Collect returned");
+}
+
+TEST(Async, QueryStatsDemo) {
+    using namespace arcticdb::query_stats;
+    class EnableQueryStatsRAII {
+    public:
+        EnableQueryStatsRAII() {
+            QueryStats::instance()->enable();
+        }
+        ~EnableQueryStatsRAII() {
+            QueryStats::instance()->disable();
+            QueryStats::instance()->reset_stats();
+        }
+    };
+    EnableQueryStatsRAII enable_query_stats;
+    async::TaskScheduler sched{20, 20};
+    auto work = [&]() {
+        std::vector<folly::Future<folly::Unit>> stuff;
+        {
+            stuff.push_back(sched.submit_cpu_task(MaybeThrowTask(false))
+                .thenValue([](auto) {
+                    auto query_stat_operation_time = query_stats::add_task_count_and_time(KeyType::SYMBOL_LIST, query_stats::TaskType::S3_ListObjectsV2);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1)); // For verifying call duration calculation
+                    query_stats::add(KeyType::SYMBOL_LIST, query_stats::TaskType::S3_ListObjectsV2, 1);
+                    query_stats::add(KeyType::SYMBOL_LIST, query_stats::TaskType::S3_ListObjectsV2, 10);
+                    return folly::Unit{};
+                })
+                .via(&async::io_executor())
+            );
+            stuff.push_back(sched.submit_io_task(MaybeThrowTask(false))
+                .thenValue([](auto) {
+                    auto query_stat_operation_time = query_stats::add_task_count_and_time(KeyType::SYMBOL_LIST, query_stats::TaskType::S3_ListObjectsV2);
+                    query_stats::add(KeyType::SYMBOL_LIST, query_stats::TaskType::S3_ListObjectsV2, 2);
+                    return folly::Unit{};
+                })
+                .thenValue([](auto) {
+                    throw std::runtime_error("Test exception"); // Exception will not affect query stats
+                }).thenValue([](auto) {
+                    // Below won't be logged as preceeding task throws
+                    auto query_stat_operation_time = query_stats::add_task_count_and_time(KeyType::SYMBOL_LIST, query_stats::TaskType::S3_ListObjectsV2);
+                    query_stats::add(KeyType::SYMBOL_LIST, query_stats::TaskType::S3_ListObjectsV2, 3);
+                    return folly::Unit{};
+                })
+            );
+            folly::collectAll(stuff).get();
+        }
+    };
+    std::thread t1(work), t2(work); // mimic multithreading at python level
+    t1.join();
+    t2.join();
+    auto result = QueryStats::instance()->get_stats()["SYMBOL_LIST"]["storage_ops"]["S3_ListObjectsV2"];
+    ASSERT_TRUE(result.stats_["total_time_ms"] > 0);
+    ASSERT_EQ(result.stats_["count"], 30);
 }
 
 using IndexSegmentReader = int;

@@ -270,7 +270,7 @@ std::vector<std::vector<EntityId>> AggregationClause::structure_for_processing(s
     // Experimentation shows flattening the entities into a single vector and a single call to
     // component_manager_->get is faster than not flattening and making multiple calls
     auto entity_ids = flatten_entities(std::move(entity_ids_vec));
-    auto [buckets] = component_manager_->get_entities<bucket_id>(entity_ids, false);
+    auto [buckets] = component_manager_->get_entities<bucket_id>(entity_ids);
     for (auto [idx, entity_id]: folly::enumerate(entity_ids)) {
         res[buckets[idx]].emplace_back(entity_id);
     }
@@ -440,7 +440,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
     auto index_col = std::make_shared<Column>(make_scalar_type(grouping_data_type), grouping_map.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
 
     seg.add_column(scalar_field(grouping_data_type, grouping_column_), index_col);
-    seg.descriptor().set_index(IndexDescriptorImpl(0, IndexDescriptorImpl::Type::ROWCOUNT));
+    seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
 
     details::visit_type(grouping_data_type, [&grouping_map, &index_col](auto data_type_tag) {
         using col_type_info = ScalarTypeInfo<decltype(data_type_tag)>;
@@ -476,7 +476,7 @@ OutputSchema AggregationClause::modify_schema(OutputSchema&& output_schema) cons
     const auto& input_stream_desc = output_schema.stream_descriptor();
     StreamDescriptor stream_desc(input_stream_desc.id());
     stream_desc.add_field(input_stream_desc.field(*input_stream_desc.find_field(grouping_column_)));
-    stream_desc.set_index({0, IndexDescriptorImpl::Type::ROWCOUNT});
+    stream_desc.set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
 
     for (const auto& agg: aggregators_){
         const auto& input_column_name = agg.get_input_column_name().value;
@@ -534,7 +534,7 @@ OutputSchema ResampleClause<closed_boundary>::modify_schema(OutputSchema&& outpu
     const auto& input_stream_desc = output_schema.stream_descriptor();
     StreamDescriptor stream_desc(input_stream_desc.id());
     stream_desc.add_field(input_stream_desc.field(0));
-    stream_desc.set_index(IndexDescriptorImpl(1, IndexDescriptor::Type::TIMESTAMP));
+    stream_desc.set_index(IndexDescriptorImpl(IndexDescriptor::Type::TIMESTAMP, 1));
 
     for (const auto& agg: aggregators_){
         const auto& input_column_name = agg.get_input_column_name().value;
@@ -631,6 +631,10 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
     if (ranges_and_keys.empty()) {
         return {};
     }
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            processing_config_.index_type_ == IndexDescriptor::Type::TIMESTAMP,
+            "Cannot resample non-timestamp indexed data"
+            );
 
     // Iterate over ranges_and_keys and create a pair with first element equal to the smallest start time and second
     // element equal to the largest end time.
@@ -649,6 +653,7 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
 
     bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary, offset_, origin_);
     if (bucket_boundaries_.size() < 2) {
+        ranges_and_keys.clear();
         return {};
     }
     debug::check<ErrorCode::E_ASSERTION_FAILURE>(ranges::is_sorted(bucket_boundaries_),
@@ -663,7 +668,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
         return {};
     }
     ARCTICDB_RUNTIME_DEBUG(log::memory(), "ResampleClause: structure for processing 2");
-    auto [segments, row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
+    auto [segments, row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids);
     std::vector<RangesAndEntity> ranges_and_entities;
     ranges_and_entities.reserve(entity_ids.size());
     timestamp min_start_ts{std::numeric_limits<timestamp>::max()};
@@ -734,10 +739,16 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(is_time_type(first_row_slice_index_col.type().data_type()),
                                                     "Cannot resample data with index column of non-timestamp type");
     auto first_ts = first_row_slice_index_col.scalar_at<timestamp>(0).value();
-    // We can use the last timestamp from the first row-slice's index column, as by construction (structure_for_processing) the bucket covering
-    // this value will cover the remaining index values this call is responsible for
-    auto last_ts = first_row_slice_index_col.scalar_at<timestamp>(first_row_slice_index_col.row_count() - 1).value();
+    // If there is only one row slice, then the last index value of interest is just the last index value for this row
+    // slice. If there is more than one, then the first index value from the second row slice must be used to calculate
+    // the buckets of interest, due to an old bug in update. See test_compatibility.py::test_compat_resample_updated_data
+    // for details
+    auto last_ts = row_slices.size() == 1 ? first_row_slice_index_col.scalar_at<timestamp>(first_row_slice_index_col.row_count() - 1).value():
+            row_slices.back().segments_->at(0)->column(0).scalar_at<timestamp>(0).value();
     auto bucket_boundaries = generate_bucket_boundaries(first_ts, last_ts, responsible_for_first_overlapping_bucket);
+    if (bucket_boundaries.size() < 2) {
+        return {};
+    }
     std::vector<std::shared_ptr<Column>> input_index_columns;
     input_index_columns.reserve(row_slices.size());
     for (const auto& row_slice: row_slices) {
@@ -750,8 +761,9 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     SegmentInMemory seg;
     RowRange output_row_range(row_slices.front().row_ranges_->at(0)->start(),
                               row_slices.front().row_ranges_->at(0)->start() + output_index_column->row_count());
+    ColRange output_col_range(1, aggregators_.size() + 1);
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, index_column_name), output_index_column);
-    seg.descriptor().set_index(IndexDescriptorImpl(1, IndexDescriptor::Type::TIMESTAMP));
+    seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptor::Type::TIMESTAMP, 1));
     auto& string_pool = seg.string_pool();
 
     ARCTICDB_DEBUG_THROW(5)
@@ -778,7 +790,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
         seg.add_column(scalar_field(aggregated_column->type().data_type(), aggregator.get_output_column_name().value), aggregated_column);
     }
     seg.set_row_data(output_index_column->row_count() - 1);
-    return push_entities(*component_manager_, ProcessingUnit(std::move(seg), std::move(output_row_range)));
+    return push_entities(*component_manager_, ProcessingUnit(std::move(seg), std::move(output_row_range), std::move(output_col_range)));
 }
 
 template<ResampleBoundary closed_boundary>
@@ -815,8 +827,9 @@ std::vector<timestamp> ResampleClause<closed_boundary>::generate_bucket_boundari
         ++last_it;
     }
     std::vector<timestamp> bucket_boundaries(first_it, last_it);
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(bucket_boundaries.size() >= 2,
-                                                    "Always expect at least bucket boundaries in ResampleClause::generate_bucket_boundaries");
+    // There used to be a check here that there was at least one bucket to process. However, this is not always the case
+    // for data written by old versions of Arctic using update. See test_compatibility.py::test_compat_resample_updated_data
+    // for more explanation
     return bucket_boundaries;
 }
 
@@ -1142,7 +1155,7 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
     end_index_col->set_row_data(0);
 
     SegmentInMemory seg;
-    seg.descriptor().set_index(IndexDescriptorImpl(0, IndexDescriptorImpl::Type::ROWCOUNT));
+    seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_index_col);
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_index_col);
     for (const auto& agg_data: folly::enumerate(aggregators_data)) {
@@ -1165,7 +1178,7 @@ std::vector<std::vector<EntityId>> RowRangeClause::structure_for_processing(std:
     if (entity_ids.empty()) {
         return {};
     }
-    auto [segments, old_row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
+    auto [segments, old_row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids);
 
     // Map from old row ranges to new ones
     std::map<RowRange, RowRange> row_range_mapping;
@@ -1287,6 +1300,10 @@ void RowRangeClause::calculate_start_and_end(size_t total_rows) {
 
 std::vector<std::vector<size_t>> DateRangeClause::structure_for_processing(
         std::vector<RangesAndKey>& ranges_and_keys) {
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            processing_config_.index_type_ == IndexDescriptor::Type::TIMESTAMP,
+            "Cannot use date range with non-timestamp indexed data"
+    );
     ranges_and_keys.erase(std::remove_if(ranges_and_keys.begin(), ranges_and_keys.end(), [this](const RangesAndKey& ranges_and_key) {
         auto [start_index, end_index] = ranges_and_key.key_.time_range();
         return start_index > end_ || end_index <= start_;
@@ -1321,6 +1338,10 @@ std::vector<EntityId> DateRangeClause::process(std::vector<EntityId> &&entity_id
     return push_entities(*component_manager_, std::move(proc));
 }
 
+void DateRangeClause::set_processing_config(const ProcessingConfig& processing_config) {
+    processing_config_ = processing_config;
+}
+
 OutputSchema DateRangeClause::modify_schema(OutputSchema&& output_schema) const {
     check_is_timeseries(output_schema.stream_descriptor(), "DateRange");
     return output_schema;
@@ -1328,6 +1349,65 @@ OutputSchema DateRangeClause::modify_schema(OutputSchema&& output_schema) const 
 
 std::string DateRangeClause::to_string() const {
     return fmt::format("DATE RANGE {} - {}", start_, end_);
+}
+
+ConcatClause::ConcatClause(JoinType join_type) {
+    clause_info_.input_structure_ = ProcessingStructure::MULTI_SYMBOL;
+    clause_info_.multi_symbol_ = true;
+    join_type_ = join_type;
+}
+
+std::vector<std::vector<EntityId>> ConcatClause::structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+    // Similar logic to RowRangeClause::structure_for_processing but as input row ranges come from multiple symbols it is slightly different
+    std::vector<RangesAndEntity> ranges_and_entities;
+    std::vector<std::shared_ptr<RowRange>> new_row_ranges;
+    bool first_range{true};
+    size_t prev_range_end{0};
+    for (const auto& entity_ids: entity_ids_vec) {
+        auto [old_row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids);
+        // Map from old row ranges WITHIN THIS SYMBOL to new ones
+        std::map<RowRange, RowRange> row_range_mapping;
+        for (const auto& row_range: old_row_ranges) {
+            // Value is same as key initially
+            row_range_mapping.insert({*row_range, *row_range});
+        }
+        for (auto& [old_range, new_range]: row_range_mapping) {
+            if (first_range) {
+                // Make the first row-range start from zero
+                new_range.first = 0;
+                new_range.second = old_range.diff();
+                first_range = false;
+            } else {
+                new_range.first = prev_range_end;
+                new_range.second = new_range.first + old_range.diff();
+            }
+            prev_range_end = new_range.second;
+        }
+
+        for (size_t idx=0; idx<entity_ids.size(); ++idx) {
+            auto new_row_range = std::make_shared<RowRange>(row_range_mapping.at(*old_row_ranges[idx]));
+            ranges_and_entities.emplace_back(entity_ids[idx], new_row_range, col_ranges[idx]);
+            new_row_ranges.emplace_back(std::move(new_row_range));
+        }
+    }
+    component_manager_->replace_entities<std::shared_ptr<RowRange>>(flatten_entities(std::move(entity_ids_vec)), new_row_ranges);
+    auto new_structure_offsets = structure_by_row_slice(ranges_and_entities);
+    return offsets_to_entity_ids(new_structure_offsets, ranges_and_entities);
+}
+
+std::vector<EntityId> ConcatClause::process(std::vector<EntityId>&& entity_ids) const {
+    return std::move(entity_ids);
+}
+
+OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& input_schemas) const {
+    util::check(!input_schemas.empty(), "Cannot join empty list of schemas");
+    auto [stream_desc, norm_meta] = join_indexes(input_schemas);
+    join_type_ == JoinType::INNER ? inner_join(stream_desc, input_schemas) : outer_join(stream_desc, input_schemas);
+    return {std::move(stream_desc), std::move(norm_meta)};
+}
+
+std::string ConcatClause::to_string() const {
+    return "CONCAT";
 }
 
 }

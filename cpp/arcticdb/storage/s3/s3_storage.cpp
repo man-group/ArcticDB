@@ -108,12 +108,13 @@ bool S3Storage::do_iterate_type_until_match(KeyType key_type, const IterateTypeP
     return detail::do_iterate_type_impl(key_type, visitor, root_folder_, bucket_name_, client(), FlatBucketizer{}, prefix_handler, prefix);
 }
 
-ObjectSizes S3Storage::do_get_object_sizes(KeyType key_type, const std::string& prefix) {
+void S3Storage::do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
     auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType) {
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };
 
-    return detail::do_calculate_sizes_for_type_impl(key_type, root_folder_, bucket_name_, client(), FlatBucketizer{}, prefix_handler, prefix);
+    detail::do_visit_object_sizes_for_type_impl(key_type, root_folder_, bucket_name_, client(), FlatBucketizer{},
+                                                prefix_handler, prefix, visitor);
 }
 
 bool S3Storage::do_key_exists(const VariantKey& key) {
@@ -133,7 +134,7 @@ void S3Storage::create_s3_client(const S3Settings &conf, const Aws::Auth::AWSCre
     else if (conf.aws_auth() == AWSAuthMethod::STS_PROFILE_CREDENTIALS_PROVIDER){
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Load sts profile credentials provider");
         Aws::Config::ReloadCachedConfigFile(); // config files loaded in Aws::InitAPI; It runs once at first S3Storage object construct; reload to get latest
-        auto client_config = get_s3_config(conf);
+        auto client_config = get_s3_config_and_set_env_var(conf);
         auto sts_client_factory = [conf, this](const Aws::Auth::AWSCredentials& creds) { // Get default allocation tag
             auto sts_config = get_proxy_config(conf.https() ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP);
             auto allocation_tag = Aws::STS::STSClient::GetAllocationTag();
@@ -150,10 +151,10 @@ void S3Storage::create_s3_client(const S3Settings &conf, const Aws::Auth::AWSCre
     }
     else if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN && creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN){
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms");
-        s3_client_ = std::make_unique<S3ClientImpl>(get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
+        s3_client_ = std::make_unique<S3ClientImpl>(get_s3_config_and_set_env_var(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
     } else {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using provided auth credentials");
-        s3_client_ = std::make_unique<S3ClientImpl>(creds, get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
+        s3_client_ = std::make_unique<S3ClientImpl>(creds, get_s3_config_and_set_env_var(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
     }
 
     if (conf.use_internal_client_wrapper_for_testing()){

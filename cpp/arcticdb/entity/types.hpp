@@ -10,9 +10,8 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/entity/output_format.hpp>
-#include "arcticdb/storage/memory_layout.hpp"
+#include <arcticdb/storage/memory_layout.hpp>
 
-#include <cstdint>
 #include <vector>
 #include <string>
 #include <type_traits>
@@ -549,8 +548,14 @@ struct IndexDescriptorImpl : public IndexDescriptor {
 
     IndexDescriptorImpl() = default;
 
-    IndexDescriptorImpl(uint32_t field_count, Type type) :
+    IndexDescriptorImpl(Type type, uint32_t field_count) :
         IndexDescriptor(type, field_count) {
+    }
+
+    // Maintained as this is the constructor the Python interface uses
+    // Prefer using the constructor above internally as the argument order matches that of IndexDescriptor
+    IndexDescriptorImpl(uint32_t field_count, Type type) :
+            IndexDescriptor(type, field_count) {
     }
 
     IndexDescriptorImpl(const IndexDescriptor& idx) :

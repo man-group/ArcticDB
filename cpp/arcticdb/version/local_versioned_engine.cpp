@@ -21,7 +21,6 @@
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/container_filter_wrapper.hpp>
 #include <arcticdb/util/allocation_tracing.hpp>
-#include <bitset>
 
 namespace arcticdb::version_store {
 
@@ -563,7 +562,7 @@ VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool d
         });
     }
 
-    auto total_rows = adjust_slice_rowcounts(slice_and_keys, std::make_optional<size_t>(0U));
+    auto total_rows = adjust_slice_rowcounts(slice_and_keys);
 
     auto index = index_type_from_descriptor(index_segment_reader.tsd().as_stream_descriptor());
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
@@ -785,7 +784,7 @@ VersionedItem LocalVersionedEngine::write_individual_segment(
     auto key = store_->write(pk, std::move(segment)).get();
     std::vector sk{SliceAndKey{frame_slice, to_atom(key)}};
     auto index_key_fut = index::write_index(index, std::move(descriptor), std::move(sk), IndexPartialKey{stream_id, version_id}, store_);
-    auto versioned_item = VersionedItem{to_atom(std::move(index_key_fut).get())};
+    auto versioned_item = VersionedItem{std::move(index_key_fut).get()};
 
     write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
     return versioned_item;
@@ -1118,11 +1117,10 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
     return versioned_item;
 }
 
-std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(const std::vector<AtomKey> &keys) {
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
-    py::gil_scoped_release release_gil;
+std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(const std::vector<AtomKey> &keys, std::any& handler_data) {
     std::vector<folly::Future<ReadVersionOutput>> res;
     res.reserve(keys.size());
+    py::gil_scoped_release release_gil;
     for (const auto& index_key: keys) {
         res.emplace_back(read_frame_for_version(store(), {index_key}, std::make_shared<ReadQuery>(), ReadOptions{}, handler_data));
     }
@@ -1157,18 +1155,11 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
                                                         read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
                                                         &read_options,
                                                         &handler_data](auto&& opt_index_key) {
-                    std::variant<VersionedItem, StreamId> version_info;
-                    if (opt_index_key.has_value()) {
-                        version_info = VersionedItem(std::move(*opt_index_key));
-                    } else {
-                        if (opt_false(read_options.incompletes())) {
-                            log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", stream_ids[idx]);
-                            version_info = stream_ids[idx];
-                        } else {
-                            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
-                                    "batch_read_internal: version matching query '{}' not found for symbol '{}'", version_queries[idx], stream_ids[idx]);
-                        }
-                    }
+                    auto version_info = get_version_identifier(
+                            stream_ids[idx],
+                            version_queries[idx],
+                            read_options,
+                            opt_index_key.has_value() ? std::make_optional<VersionedItem>(std::move(*opt_index_key)) : std::nullopt);
                     return read_frame_for_version(store, version_info, read_query, read_options, handler_data);
                 })
         );
@@ -1189,6 +1180,100 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
     flags.convert_no_data_found_to_key_not_found_ = true;
     flags.throw_on_error_ = *read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(all_results), stream_ids, flags, version_queries);
+}
+
+auto unpack_symbol_processing_results(std::vector<SymbolProcessingResult>&& symbol_processing_results) {
+    std::vector<OutputSchema> input_schemas;
+    std::vector<std::vector<EntityId>> entity_ids;
+    auto res_versioned_items = std::make_shared<std::vector<VersionedItem>>();
+    auto res_metadatas = std::make_shared<std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>();
+    input_schemas.reserve(symbol_processing_results.size());
+    entity_ids.reserve(symbol_processing_results.size());
+    res_versioned_items->reserve(symbol_processing_results.size());
+    res_metadatas->reserve(symbol_processing_results.size());
+    for (auto& symbol_processing_result: symbol_processing_results) {
+        input_schemas.emplace_back(std::move(symbol_processing_result.output_schema_));
+        entity_ids.emplace_back(std::move(symbol_processing_result.entity_ids_));
+        res_versioned_items->emplace_back(std::move(symbol_processing_result.versioned_item_));
+        res_metadatas->emplace_back(std::move(symbol_processing_result.metadata_));
+    }
+    return std::make_tuple(std::move(input_schemas), std::move(entity_ids), std::move(res_versioned_items), std::move(res_metadatas));
+}
+
+std::shared_ptr<PipelineContext> setup_join_pipeline_context(
+        std::vector<OutputSchema>&& input_schemas,
+        const std::vector<std::shared_ptr<Clause>>& clauses) {
+    auto output_schema = clauses.front()->join_schemas(std::move(input_schemas));
+    for (const auto& clause: clauses) {
+        output_schema = clause->modify_schema(std::move(output_schema));
+    }
+    auto pipeline_context = std::make_shared<PipelineContext>();
+    pipeline_context->set_descriptor(output_schema.stream_descriptor());
+    pipeline_context->norm_meta_ = std::make_shared<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(output_schema.norm_metadata_));
+    return pipeline_context;
+}
+
+MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
+        const std::vector<StreamId>& stream_ids,
+        const std::vector<VersionQuery>& version_queries,
+        std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+        const ReadOptions& read_options,
+        std::vector<std::shared_ptr<Clause>>&& clauses,
+        std::any& handler_data) {
+    py::gil_scoped_release release_gil;
+    util::check(!clauses.empty(), "Cannot join with no joining clause provided");
+    auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
+    std::vector<folly::Future<SymbolProcessingResult>> symbol_processing_result_futs;
+    symbol_processing_result_futs.reserve(opt_index_key_futs.size());
+    auto component_manager = std::make_shared<ComponentManager>();
+    for (auto&& [idx, opt_index_key_fut]: folly::enumerate(opt_index_key_futs)) {
+        symbol_processing_result_futs.emplace_back(
+                std::move(opt_index_key_fut).thenValue([store = store(),
+                                                        &stream_ids,
+                                                        &version_queries,
+                                                        read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
+                                                        idx,
+                                                        &read_options,
+                                                        &component_manager](std::optional<AtomKey>&& opt_index_key) mutable {
+                    auto version_info = get_version_identifier(
+                            stream_ids[idx],
+                            version_queries[idx],
+                            read_options,
+                            opt_index_key.has_value() ? std::make_optional<VersionedItem>(std::move(*opt_index_key)) : std::nullopt);
+                    return read_and_process(store, version_info, read_query, read_options, component_manager);
+                })
+        );
+    }
+    for (auto& clause: clauses) {
+        clause->set_component_manager(component_manager);
+    }
+    auto clauses_ptr = std::make_shared<std::vector<std::shared_ptr<Clause>>>(std::move(clauses));
+    return folly::collect(symbol_processing_result_futs).via(&async::io_executor())
+    .thenValueInline([this, &handler_data, clauses_ptr, component_manager](std::vector<SymbolProcessingResult>&& symbol_processing_results) mutable {
+        auto [input_schemas, entity_ids, res_versioned_items, res_metadatas] = unpack_symbol_processing_results(std::move(symbol_processing_results));
+        auto pipeline_context = setup_join_pipeline_context(std::move(input_schemas), *clauses_ptr);
+        return schedule_remaining_iterations(std::move(entity_ids), clauses_ptr)
+        .thenValueInline([component_manager](std::vector<EntityId>&& processed_entity_ids) {
+            auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
+            return collect_segments(std::move(proc));
+        })
+        .thenValueInline([store=store(), &handler_data, pipeline_context](std::vector<SliceAndKey>&& slice_and_keys) mutable {
+            return prepare_output_frame(std::move(slice_and_keys), pipeline_context, store, ReadOptions{}, handler_data);
+        })
+        .thenValueInline([&handler_data, pipeline_context, res_versioned_items, res_metadatas](SegmentInMemory&& frame) mutable {
+            // Needed to force our usual backfilling behaviour when columns have been outer-joined and some are not present in all input symbols
+            ReadOptions read_options;
+            read_options.set_dynamic_schema(true);
+            return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
+            .thenValueInline([pipeline_context, frame, res_versioned_items, res_metadatas](auto&&) mutable {
+                return MultiSymbolReadOutput{
+                    std::move(*res_versioned_items),
+                    std::move(*res_metadatas),
+                    {frame, timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}}};
+            });
+        });
+    }).get();
+
 }
 
 void LocalVersionedEngine::write_version_and_prune_previous(
@@ -1532,11 +1617,11 @@ std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine
 
     for(const auto& stream_id : folly::enumerate(stream_ids)) {
         auto prev = previous->find(*stream_id);
-        auto maybe_prev = prev == std::end(*previous) ? std::nullopt : std::make_optional<AtomKey>(to_atom(prev->second));
+        auto maybe_prev = prev == std::end(*previous) ? std::nullopt : std::make_optional<AtomKey>(prev->second);
 
         auto version = versions_to_restore->find(*stream_id);
         util::check(version != std::end(*versions_to_restore), "Did not find version for symbol {}", *stream_id);
-        fut_vec.emplace_back(async::submit_io_task(AsyncRestoreVersionTask{store(), version_map(), *stream_id, to_atom(version->second), maybe_prev}));
+        fut_vec.emplace_back(async::submit_io_task(AsyncRestoreVersionTask{store(), version_map(), *stream_id, version->second, maybe_prev}));
     }
     auto output = folly::collect(fut_vec).get();
 
@@ -1719,48 +1804,88 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
     return -1;
 }
 
+// Some key types are historical or very specialized, so restrict to these in size calculations to avoid extra listing
+// operations
+static constexpr std::array<KeyType, 10> TYPES_FOR_SIZE_CALCULATION = {
+    KeyType::VERSION_REF,
+    KeyType::VERSION,
+    KeyType::TABLE_INDEX,
+    KeyType::TABLE_DATA,
+    KeyType::APPEND_DATA,
+    KeyType::MULTI_KEY,
+    KeyType::SNAPSHOT_REF,
+    KeyType::LOG,
+    KeyType::LOG_COMPACTED,
+    KeyType::SYMBOL_LIST,
+};
+
 std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes() {
     using ObjectSizes = storage::ObjectSizes;
-    std::vector<folly::Future<ObjectSizes>> sizes_futs;
-    foreach_key_type([&store=store(), &sizes=sizes_futs](KeyType key_type) {
-        sizes.push_back(store->get_object_sizes(key_type, ""));
-    });
+    std::vector<folly::Future<std::shared_ptr<ObjectSizes>>> sizes_futs;
 
-    return folly::collect(sizes_futs).via(&async::cpu_executor()).get();
+    for (const auto& key_type : TYPES_FOR_SIZE_CALCULATION) {
+        sizes_futs.push_back(store()->get_object_sizes(key_type, std::nullopt));
+    }
+
+    auto ptrs = folly::collect(sizes_futs).via(&async::cpu_executor()).get();
+    std::vector<storage::ObjectSizes> res;
+    for (const auto& p : ptrs) {
+        res.emplace_back(p->key_type_, p->count_, p->compressed_size_);
+    }
+    return res;
+}
+
+static constexpr std::array<KeyType, 6> TYPES_FOR_SIZE_BY_STREAM_CALCULATION = {
+    KeyType::VERSION_REF,
+    KeyType::VERSION,
+    KeyType::TABLE_INDEX,
+    KeyType::TABLE_DATA,
+    KeyType::APPEND_DATA,
+    KeyType::MULTI_KEY
+};
+
+std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes_for_stream(const StreamId& stream_id) {
+    using ObjectSizes = storage::ObjectSizes;
+    std::vector<folly::Future<std::shared_ptr<ObjectSizes>>> sizes_futs;
+
+    for (const auto& key_type : TYPES_FOR_SIZE_BY_STREAM_CALCULATION) {
+        sizes_futs.push_back(store()->get_object_sizes(key_type, stream_id));
+    }
+
+    auto ptrs = folly::collect(sizes_futs).via(&async::cpu_executor()).get();
+    std::vector<storage::ObjectSizes> res;
+    for (const auto& p : ptrs) {
+        res.emplace_back(p->key_type_, p->count_, p->compressed_size_);
+    }
+    return res;
 }
 
 std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> LocalVersionedEngine::scan_object_sizes_by_stream() {
     std::mutex mutex;
     std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> sizes;
-    auto streams = symbol_list().get_symbols(store());
 
-    foreach_key_type([&store=store(), &sizes, &mutex](KeyType key_type) {
-        stream::StreamSource::KeySizeCalculators key_size_calculators;
+    std::vector<folly::Future<folly::Unit>> futs;
+    for (const auto& key_type : TYPES_FOR_SIZE_BY_STREAM_CALCULATION) {
+        futs.push_back(store()->visit_object_sizes(key_type, std::nullopt, [&mutex, &sizes, key_type](const VariantKey& k, storage::CompressedSize size){
+            auto stream_id = variant_key_id(k);
+            std::lock_guard lock{mutex};
+            auto& sizes_info = sizes[stream_id][key_type];
+            sizes_info.count++;
+            sizes_info.compressed_size += size;
+        }));
+    }
 
-        store->iterate_type(key_type, [&key_size_calculators, &mutex, &sizes, key_type](const VariantKey&& k){
-            key_size_calculators.emplace_back(std::forward<const VariantKey>(k), [key_type, &sizes, &mutex] (auto&& ks) {
-                auto key_seg = std::forward<decltype(ks)>(ks);
-                auto variant_key = key_seg.variant_key();
-                auto stream_id = variant_key_id(variant_key);
-                auto compressed_size = key_seg.segment().size();
-                auto desc = key_seg.segment().descriptor();
-                auto uncompressed_size = desc.uncompressed_bytes();
+    folly::collect(futs).get();
 
-                {
-                    std::lock_guard lock{mutex};
-                    auto& sizes_info = sizes[stream_id][key_type];
-                    sizes_info.count++;
-                    sizes_info.compressed_size += compressed_size;
-                    sizes_info.uncompressed_size += uncompressed_size;
-                }
-
-                return variant_key;
-            });
-
-        });
-
-        store->read_ignoring_key_not_found(std::move(key_size_calculators));
-    });
+    // Make sure we always return all the key types in the output even if some are absent for a given stream
+    // No synchronisation needed on sizes as all the async work is now complete
+    for (auto& [_, map] : sizes) {
+        for (const auto& key_type : TYPES_FOR_SIZE_BY_STREAM_CALCULATION) {
+            if (!map.contains(key_type)) {
+                map[key_type] = KeySizesInfo{};
+            }
+        }
+    }
 
     return sizes;
 }

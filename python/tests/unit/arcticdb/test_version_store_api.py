@@ -23,7 +23,7 @@ class Bail(Exception):
 
 
 @pytest.mark.parametrize(
-    "name", [n for n in dir(NativeVersionStore) if n.startswith("batch_") and n != "batch_read_metadata_multi"]
+    "name", [n for n in dir(NativeVersionStore) if n.startswith("batch_") and n not in ["batch_read_metadata_multi", "batch_read_and_join"]]
 )
 def test_calling_batch_methods_with_non_batch_params(name):
     batch_method = getattr(NativeVersionStore, name)

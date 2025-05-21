@@ -22,6 +22,7 @@
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
+#include <arcticdb/python/python_handler_data.hpp>
 
 
 namespace arcticdb::version_store {
@@ -109,6 +110,10 @@ std::vector<timestamp> generate_buckets(
     timestamp offset,
     const ResampleOrigin& origin
 ) {
+    // e.g. Can happen if date range specified does not overlap with the time range covered by the symbol
+    if (end < start) {
+        return {};
+    }
     const timestamp rule_ns = [](std::string_view rule) {
         py::gil_scoped_acquire acquire_gil;
         return python_util::pd_to_offset(rule);
@@ -230,8 +235,11 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
 
     version.def("write_dataframe_to_file", &write_dataframe_to_file);
     version.def("read_dataframe_from_file",
-        [] (StreamId sid, const std::string(path), std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options){
-            return adapt_read_df(read_dataframe_from_file(sid, path, read_query, read_options));
+        [] (StreamId sid, std::string path, std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options){
+            const OutputFormat output_format = read_options.output_format();
+            auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
+            std::pair<std::any&, OutputFormat> handler{handler_data, output_format};
+            return adapt_read_df(read_dataframe_from_file(sid, path, read_query, read_options, handler_data), &handler);
         });
 
     using FrameDataWrapper = arcticdb::pipelines::FrameDataWrapper;
@@ -394,6 +402,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .value("TAIL", RowRangeClause::RowRangeType::TAIL)
             .value("RANGE", RowRangeClause::RowRangeType::RANGE);
 
+    py::enum_<JoinType>(version, "JoinType")
+            .value("OUTER", JoinType::OUTER)
+            .value("INNER", JoinType::INNER);
+
     py::class_<RowRangeClause, std::shared_ptr<RowRangeClause>>(version, "RowRangeClause")
             .def(py::init<RowRangeClause::RowRangeType, int64_t>())
             .def(py::init<int64_t, int64_t>())
@@ -405,6 +417,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("end", &DateRangeClause::end)
             .def("__str__", &DateRangeClause::to_string);
 
+    py::class_<ConcatClause, std::shared_ptr<ConcatClause>>(version, "ConcatClause")
+            .def(py::init<JoinType>())
+            .def("__str__", &ConcatClause::to_string);
+
     py::class_<ReadQuery, std::shared_ptr<ReadQuery>>(version, "PythonVersionStoreReadQuery")
             .def(py::init())
             .def_readwrite("columns",&ReadQuery::columns)
@@ -413,22 +429,19 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_readonly("needs_post_processing",&ReadQuery::needs_post_processing)
             // Unsurprisingly, pybind11 doesn't understand folly::poly, so use vector of variants here
             .def("add_clauses",
-                 [](ReadQuery& self,
-                    std::vector<std::variant<std::shared_ptr<FilterClause>,
-                                std::shared_ptr<ProjectClause>,
-                                std::shared_ptr<GroupByClause>,
-                                std::shared_ptr<AggregationClause>,
-                                std::shared_ptr<ResampleClause<ResampleBoundary::LEFT>>,
-                                std::shared_ptr<ResampleClause<ResampleBoundary::RIGHT>>,
-                                std::shared_ptr<RowRangeClause>,
-                                std::shared_ptr<DateRangeClause>>> clauses) {
+                [](ReadQuery& self, std::vector<ClauseVariant> clauses) {
                 clauses = plan_query(std::move(clauses));
                 std::vector<std::shared_ptr<Clause>> _clauses;
                 self.needs_post_processing = false;
                 for (auto&& clause: clauses) {
                     util::variant_match(
                         clause,
-                        [&](auto&& clause) {_clauses.emplace_back(std::make_shared<Clause>(*clause));}
+                        [&](auto&& clause) {
+                            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                    !clause->clause_info().multi_symbol_,
+                                    "Multi-symbol clause cannot be used on a single symbol");
+                            _clauses.emplace_back(std::make_shared<Clause>(*clause));
+                        }
                     );
                 }
                 self.add_clauses(_clauses);
@@ -514,13 +527,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def(py::init())
             .def_readonly("count", &KeySizesInfo::count)
             .def_readonly("compressed_size", &KeySizesInfo::compressed_size)
-            .def_readonly("uncompressed_size", &KeySizesInfo::uncompressed_size)
             .doc() = "Count of keys and their compressed and uncompressed sizes in bytes.";
 
     py::class_<storage::ObjectSizes>(version, "ObjectSizes")
         .def_readonly("key_type", &storage::ObjectSizes::key_type_)
-        .def_readonly("count", &storage::ObjectSizes::count_)
-        .def_readonly("compressed_size_bytes", &storage::ObjectSizes::compressed_size_bytes_)
+        .def_property_readonly("count", [](storage::ObjectSizes& self) {return self.count_.load();})
+        .def_property_readonly("compressed_size", [](storage::ObjectSizes& self) {return self.compressed_size_.load();})
         .def("__repr__", [](storage::ObjectSizes object_sizes) {return fmt::format("{}", object_sizes);})
         .doc() = "Count of keys and their uncompressed sizes in bytes for a given key type";
 
@@ -571,7 +583,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::call_guard<SingleThreadMutexHolder>(), "Drop column stats")
         .def("read_column_stats_version",
              [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query){
-                 return adapt_read_df(v.read_column_stats_version(sid, version_query));
+                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
+                 std::pair<std::any&, OutputFormat> handler{handler_data, OutputFormat::PANDAS};
+                 return adapt_read_df(v.read_column_stats_version(sid, version_query, handler_data), &handler);
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read the column stats")
         .def("get_column_stats_info_version",
@@ -678,15 +692,20 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             &PythonVersionStore::write_dataframe_specific_version,
              py::call_guard<SingleThreadMutexHolder>(), "Write a specific  version of this dataframe to the store")
         .def("read_dataframe_version",
-             [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options) {
-                auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
-                return adapt_read_df(v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data));
+             [&](PythonVersionStore& v, StreamId sid, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options) {
+                 const OutputFormat output_format = read_options.output_format();
+                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
+                 std::pair<std::any&, OutputFormat> handler{handler_data, output_format};
+                 return adapt_read_df(v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data), &handler);
               },
              py::call_guard<SingleThreadMutexHolder>(),
              "Read the specified version of the dataframe from the store")
          .def("read_index",
              [&](PythonVersionStore& v, StreamId sid, const VersionQuery& version_query){
-                 return adapt_read_df(v.read_index(sid, version_query));
+                 constexpr OutputFormat output_format = OutputFormat::PANDAS;
+                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
+                 std::pair<std::any&, OutputFormat> handler{handler_data, output_format};
+                 return adapt_read_df(v.read_index(sid, version_query, output_format, handler_data), &handler);
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read the most recent dataframe from the store")
          .def("get_update_time",
@@ -698,13 +717,15 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
          .def("scan_object_sizes",
               &PythonVersionStore::scan_object_sizes,
               py::call_guard<SingleThreadMutexHolder>(),
-              "Scan the compressed sizes of all objects in the library. Sizes are in bytes. Returns a dict "
-              "{KeyType: KeySizesInfo}")
+              "Scan the compressed sizes of all objects in the library.")
         .def("scan_object_sizes_by_stream",
              &PythonVersionStore::scan_object_sizes_by_stream,
              py::call_guard<SingleThreadMutexHolder>(),
-             "Scan the compressed sizes of all objects in the library, grouped by stream ID and KeyType. Sizes are in bytes. "
-             "Returns a dict {symbol_id: {KeyType: KeySizesInfo}}")
+             "Scan the compressed sizes of all objects in the library, grouped by stream ID and KeyType.")
+        .def("scan_object_sizes_for_stream",
+             &PythonVersionStore::scan_object_sizes_for_stream,
+             py::call_guard<SingleThreadMutexHolder>(),
+             "Scan the compressed sizes of the given symbol.")
         .def("find_version",
              &PythonVersionStore::get_version_to_read,
              py::call_guard<SingleThreadMutexHolder>(), "Check if a specific stream has been written to previously")
@@ -742,7 +763,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                         tsd_proto.multi_key_meta(),
                         std::vector<entity::AtomKey>{}
                 };
-                return adapt_read_df(std::move(res)); },
+                return adapt_read_df(std::move(res), nullptr); },
              py::call_guard<SingleThreadMutexHolder>(), "Restore a previous version of a symbol.")
         .def("check_ref_key",
              &PythonVersionStore::check_ref_key,
@@ -777,13 +798,54 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                  const std::vector<VersionQuery>& version_queries,
                  std::vector<std::shared_ptr<ReadQuery>>& read_queries,
                  const ReadOptions& read_options){
+                 const OutputFormat output_format = read_options.output_format();
                  auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
-                 return python_util::adapt_read_dfs(v.batch_read(stream_ids, version_queries, read_queries, read_options));
+                 std::pair<std::any&, OutputFormat> handler{handler_data, output_format};
+                 return python_util::adapt_read_dfs(v.batch_read(stream_ids, version_queries, read_queries, read_options, handler_data), &handler);
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
+        .def("batch_read_and_join",
+             [&](PythonVersionStore& v,
+                 const std::vector<StreamId>& stream_ids,
+                 const std::vector<VersionQuery>& version_queries,
+                 std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+                 const ReadOptions& read_options,
+                 std::vector<ClauseVariant> clauses
+                 ){
+                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(!clauses.empty(), "batch_read_and_join called with no clauses");
+                 clauses = plan_query(std::move(clauses));
+                 std::vector<std::shared_ptr<Clause>> _clauses;
+                 bool first_clause{true};
+                 for (auto&& clause: clauses) {
+                     util::variant_match(
+                             clause,
+                             [&](auto&& clause) {
+                                 if (first_clause) {
+                                     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                             clause->clause_info().multi_symbol_,
+                                             "Single-symbol clause cannot be used to join multiple symbols together");
+                                     first_clause = false;
+                                 } else {
+                                     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                             !clause->clause_info().multi_symbol_,
+                                             "Multi-symbol clause cannot be used on a single symbol");
+                                 }
+                                 _clauses.emplace_back(std::make_shared<Clause>(*clause));
+                             }
+                     );
+                 }
+                 const OutputFormat output_format = read_options.output_format();
+                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
+                 std::pair<std::any&, OutputFormat> handler{handler_data, output_format};
+                 return adapt_read_df(v.batch_read_and_join(stream_ids, version_queries, read_queries, read_options, std::move(_clauses), handler_data), &handler);
+             },
+             py::call_guard<SingleThreadMutexHolder>(), "Join multiple symbols from the store")
         .def("batch_read_keys",
              [&](PythonVersionStore& v, std::vector<AtomKey> atom_keys) {
-                 return python_util::adapt_read_dfs(frame_to_read_result(v.batch_read_keys(atom_keys)));
+                 constexpr OutputFormat output_format = OutputFormat::PANDAS;
+                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
+                 std::pair<std::any&, OutputFormat> handler{handler_data, output_format};
+                 return python_util::adapt_read_dfs(frame_to_read_result(v.batch_read_keys(atom_keys, handler_data)), &handler);
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a specific version of a dataframe from the store")
         .def("batch_write",
@@ -814,7 +876,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                                     tsd_proto.user_meta(),
                                     tsd_proto.multi_key_meta(), {}};
 
-                     output.emplace_back(adapt_read_df(std::move(res)));
+                     output.emplace_back(adapt_read_df(std::move(res), nullptr));
                  }
                  return output;
              },
@@ -882,6 +944,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             util::raise_rte("Unknown sorted value: {}", static_cast<uint8_t>(sorted_value));
         }
     });
+
+version.def("write_dataframe_to_file", &write_dataframe_to_file);
+
+version.def("read_dataframe_from_file", &read_dataframe_from_file);
 }
 
 } //namespace arcticdb::version_store

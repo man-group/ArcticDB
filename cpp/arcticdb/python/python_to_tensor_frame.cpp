@@ -12,7 +12,6 @@
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/python_types.hpp>
-#include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
 namespace arcticdb::convert {
@@ -76,15 +75,13 @@ static std::tuple<char, int> parse_array_descriptor(PyObject* obj) {
 ///     the type is determined at the point when obj_to_tensor is called. We need to make it possible to change the
 ///     the column type in aggregator_set_data in order not to iterate all arrays twice.
 [[nodiscard]] static std::tuple<ValueType, uint8_t, ssize_t> determine_python_array_type(PyObject** begin, PyObject** end) {
-        auto none = py::none{};
-        while(begin != end) {
-        if(none.ptr() == *begin) {
-            ++begin;
-            continue;
+    while(begin != end) {
+        begin = std::find_if(begin, end, is_py_none);
+        if(begin == end) {
+            break;
         }
         const auto arr = pybind11::detail::array_proxy(*begin);
         normalization::check<ErrorCode::E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE>(arr->nd == 1, "Only one dimensional arrays are supported in columns.");
-
         const ssize_t element_count = arr->dimensions[0];
         if(element_count != 0) {
             const auto [kind, val_bytes] = parse_array_descriptor(arr->descr);
@@ -146,7 +143,6 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
         val_bytes = 8;
 
         if (!is_fixed_string_type(val_type) && element_count > 0) {
-            auto none = py::none{};
             auto obj = reinterpret_cast<PyObject **>(arr->data);
             bool empty_string_placeholder = false;
             PyObject *sample = *obj;
@@ -160,12 +156,12 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
             //      based on it
             // Note: ValueType::ASCII_DYNAMIC was used when Python 2 was supported. It is no longer supported, and
             // we're not expected to enter that branch.
-            if (sample == none.ptr() || is_py_nan(sample)) {
+            if (is_py_none(sample) || is_py_nan(sample)) {
                 empty_string_placeholder = true;
                 util::check(c_style, "Non contiguous columns with first element as None not supported yet.");
                 const auto* end = obj + size;
                 while(current_object < end) {
-                    if(!(is_py_nan(*current_object) || *current_object == none.ptr())) {
+                    if(!(is_py_nan(*current_object) || is_py_none(*current_object))) {
                         empty_string_placeholder = false;
                         break;
                     }
