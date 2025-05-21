@@ -1018,3 +1018,14 @@ def test_empty_dimension(lmdb_version_store):
     
     result = lib.read("df_zero_dim").data
     pd.testing.assert_frame_equal(result, df)
+
+
+@pytest.mark.parametrize("segment_row_size", [2, 100_000])
+@pytest.mark.parametrize("column_group_size", [2, 127])
+def test_multiindex_series(version_store_factory, segment_row_size, column_group_size):
+    lib = version_store_factory(column_group_size=column_group_size, segment_row_size=segment_row_size)
+    sym = "test_multiindex_series"
+    index = pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=5), ["hello", "goodbye"]])
+    series = pd.Series(np.arange(len(index)), index=index)
+    lib.write(sym, series)
+    assert_series_equal(series, lib.read(sym).data)
