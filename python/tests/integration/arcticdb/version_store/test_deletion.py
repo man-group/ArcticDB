@@ -249,6 +249,59 @@ def test_delete_versions_with_append(object_version_store, versions, sym):
         assert_frame_equal(object_version_store.read(symbol).data, pd.concat(dfs))
 
 
+@pytest.mark.parametrize("versions", [[0, 1], [1, 2], [0, 2], [0, 1, 2], [2, 3], [0, 3]])
+@pytest.mark.storage
+def test_delete_versions_with_update(object_version_store, versions, sym):
+    symbol = sym
+    dfs = []
+    idx_start = pd.Timestamp("2000-1-1")
+    rows = 100
+
+    def build_expected_df(dataframes):
+        expected = pd.DataFrame()
+        for d in dataframes:
+            expected = expected.combine_first(d)
+            if not expected.empty:
+                expected.loc[d.index] = d
+        return expected
+
+    # Write initial data
+    for i in range(4):
+        overlap_start = idx_start + pd.Timedelta(seconds=(i * rows / 2))
+        idx = pd.date_range(overlap_start, periods=rows, freq="s")
+        d = {"x": np.arange(i * rows, (i + 1) * rows, dtype=np.int64)}
+        df = pd.DataFrame(data=d, index=idx)
+        object_version_store.update(symbol, df, upsert=True)
+        dfs.append(df)
+        assert_frame_equal(object_version_store.read(symbol).data, build_expected_df(dfs))
+
+    lib_tool = object_version_store.library_tool()
+
+    assert len(lib_tool.find_keys(KeyType.VERSION)) == 4
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 4
+    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 7
+
+    # Delete versions and verify
+    object_version_store.delete_versions(symbol, versions)
+    assert len(object_version_store.list_versions(symbol)) == len(dfs) - len(versions)
+
+    assert len(lib_tool.find_keys(KeyType.VERSION)) == 5
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 4 - len(versions)
+
+    # Determine which versions to keep based on deletion pattern
+    if versions == [2, 3]:
+        remaining_dfs = dfs[:-2]  # Keep first two versions
+        assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 3
+    elif versions == [0, 3]:
+        remaining_dfs = dfs[:-1]  # Keep all but last version
+        assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 4
+    else:
+        remaining_dfs = dfs  # Keep all versions
+        assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 7 - len(versions)
+
+    assert_frame_equal(object_version_store.read(symbol).data, build_expected_df(remaining_dfs))
+
+
 @pytest.mark.storage
 def test_delete_version_with_batch_append(object_version_store, sym):
     sym_1 = sym

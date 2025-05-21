@@ -385,7 +385,7 @@ public:
         std::swap(*entry, *new_entry);
     }
 
-    VariantKey journal_keys(
+    VariantKey journal_key(
             std::shared_ptr<Store> store,
             const VersionId& version_id,
             const StreamId& stream_id,
@@ -542,8 +542,7 @@ public:
         if (validate_)
             entry->validate();
         
-        auto journal_key = journal_keys(store, version_id, stream_id, keys, entry->head_);
-        auto atom_journal_key = to_atom(journal_key);
+        auto atom_journal_key = to_atom(journal_key(store, version_id, stream_id, keys, entry->head_));
 
         bool has_index_key = false;
         auto original_head = entry->head_;
@@ -568,7 +567,7 @@ public:
 
     AtomKey write_tombstones(
         std::shared_ptr<Store> store,
-        const std::unordered_set<std::variant<AtomKey, VersionId>>& versions,
+        const std::unordered_set<VersionId>& versions,
         const StreamId& stream_id,
         const std::shared_ptr<VersionMapEntry>& entry,
         const std::optional<timestamp>& creation_ts=std::nullopt) {
@@ -579,7 +578,7 @@ public:
 
     AtomKey write_tombstone_internal(
             std::shared_ptr<Store> store,
-            const std::unordered_set<std::variant<AtomKey, VersionId>>& versions,
+            const std::unordered_set<VersionId>& versions,
             const StreamId& stream_id,
             const std::shared_ptr<VersionMapEntry>& entry,
             const std::optional<timestamp>& creation_ts=std::nullopt) {
@@ -587,13 +586,10 @@ public:
         if (validate_)
             entry->validate();
 
+        const auto ts = creation_ts.value_or(store->current_timestamp());
         std::vector<AtomKey> tombstones;
-        tombstones.reserve(versions.size());
-        for (const auto& version : versions) {
-            tombstones.emplace_back(std::visit([&](const auto& v) {
-                return index_to_tombstone(v, stream_id, creation_ts.value_or(store->current_timestamp()));
-            }, version));
-        }
+        std::transform(versions.begin(), versions.end(), std::back_inserter(tombstones),
+            [&](const VersionId& v) { return index_to_tombstone(v, stream_id, ts); });
 
         // It doesn't matter which version id we use here
         // as long as it is one of the version ids in the keys

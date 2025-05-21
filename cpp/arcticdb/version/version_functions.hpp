@@ -181,11 +181,8 @@ inline version_store::TombstoneVersionResult tombstone_versions(
                         stream_id, version_id);
         }
     }
-    std::unordered_set<std::variant<AtomKey, VersionId>> variant_version_ids;
-    for (const auto& version_id : version_ids) {
-        variant_version_ids.insert(std::variant<AtomKey, VersionId>(version_id));
-    }
-    version_map->write_tombstones(store, variant_version_ids, stream_id, entry, creation_ts);
+
+    version_map->write_tombstones(store, version_ids, stream_id, entry, creation_ts);
 
     if (version_map->validate())
         entry->validate();
