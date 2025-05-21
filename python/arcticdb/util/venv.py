@@ -124,17 +124,36 @@ class VenvArctic:
 
         with tempfile.TemporaryDirectory() as dir:
             df_load_commands = []
+            index_load_commands = []
             for df_name, df_val in dfs.items():
                 import pandas as pd
-                df_value : pd.DataFrame = df_val.copy(deep=True)
+                import numpy as np
+                # For each dataframe we are writing we create a deep copy which we pass
+                df: pd.DataFrame = df_val.copy(deep=True)
                 if self.parquet:
                     file = os.path.join(dir, f"{df_name}.parquet")
-                    df_value.to_parquet(file)
+                    df.to_parquet(file)
                     command = f"{df_name} = pd.read_parquet({repr(file)})"
                 else: 
+                    # CSV format does not preserve metadata of DatetimeIndex and RangeIndex
+                    # Therefore after the load from CSV we have to reconstruct the index metadata
+                    # so that dataframes become fully equal
                     file = os.path.join(dir, f"{df_name}.gz")
-                    df_value.to_csv(file, index=True)
-                    command = f"{df_name} = pd.read_csv({repr(file)}, parse_dates=True)"
+                    df.to_csv(file, index=True)
+                    if df.index is not None:
+                        if isinstance(df.index, pd.DatetimeIndex) and np.issubdtype(df.index.dtype, np.datetime64):
+                            index_load_commands.append(f"{df_name}.index.freq = {repr(df.index.freqstr)}")
+                        elif isinstance(df.index, pd.RangeIndex):
+                            index_load_commands = [ 
+                                                   f"{df_name}.index.start = {df.index.start}",
+                                                   f"{df_name}.index.stop = {df.index.stop}",
+                                                   f"{df_name}.index.step = {df.index.step}",
+                                                ]
+                        else:
+                            index_load_commands
+                        command = f"{df_name} = pd.read_csv({repr(file)}, parse_dates=True, index_col=0)"
+                    else:
+                        command = f"{df_name} = pd.read_csv({repr(file)}, parse_dates=True)"
                 df_load_commands.append(command)
 
             python_commands = (
@@ -145,6 +164,7 @@ class VenvArctic:
                     f"ac = Arctic({repr(self.uri)})",
                 ]
                 + df_load_commands
+                + index_load_commands
                 + python_commands
             )
 
