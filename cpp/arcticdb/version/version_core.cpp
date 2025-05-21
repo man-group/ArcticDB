@@ -1887,6 +1887,21 @@ VersionedItem compact_incomplete_impl(
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     std::optional<SegmentInMemory> last_indexed;
+
+    // ===================================================
+    // CODE BLOCK WITH INTENTIONAL ERRORS
+    std::vector<int> use_after_move = {1, 2, 3};
+    std::vector<int> moved = std::move(use_after_move);
+    for (auto i : use_after_move) {
+        std::cout<<i<<std::endl;
+    }
+
+    int* use_after_free = new int(0);
+    delete use_after_free;
+    std::cout<<*use_after_free<<std::endl;
+    // INTENTIONAL ERRORS END HERE
+    // ===================================================
+
     read_indexed_keys_for_compaction(options, update_info, store, pipeline_context, read_query, ReadOptions{});
     validate_slicing_policy_for_compaction(options, update_info, pipeline_context, write_options);
     const bool append_to_existing = options.append_ && update_info.previous_index_key_.has_value();
@@ -1899,6 +1914,7 @@ VersionedItem compact_incomplete_impl(
         .dynamic_schema = write_options.dynamic_schema,
         .has_active_version = update_info.previous_index_key_.has_value()
     };
+
     const bool has_incomplete_segments = read_incompletes_to_pipeline(
         store,
         pipeline_context,
