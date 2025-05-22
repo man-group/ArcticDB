@@ -7,6 +7,7 @@ from pandas.testing import assert_frame_equal
 from arcticdb.version_store.processing import QueryBuilder
 import pyarrow as pa
 from arcticdb.util.test import get_sample_dataframe
+from arcticdb_ext.storage import KeyType
 
 
 def test_basic(lmdb_version_store_v1):
@@ -79,23 +80,10 @@ def test_column_filtering(lmdb_version_store_v1):
     assert_frame_equal(result, df)
 
 
-def convert_dict_strings_to_array(table: pa.Table) -> pa.Table:
-    new_columns = []
-    new_fields = []
-
-    for i, col in enumerate(table.columns):
-        field = table.field(i)
-        if pa.types.is_dictionary(col.type) and pa.types.is_string(col.type.value_type):
-            new_columns.append(col.cast(pa.string()))
-            new_fields.append(field.with_type(pa.string()))
-        else:
-            new_columns.append(col)
-            new_fields.append(field)
-
-    return pa.Table.from_arrays(
-        new_columns,
-        schema=pa.schema(new_fields)
-    )
+def convert_pandas_categorical_to_str(df):
+    categorical_cols = df.select_dtypes(include=['category']).columns
+    df[categorical_cols] = df[categorical_cols].astype(str)
+    return df
 
 
 @pytest.mark.parametrize("dynamic_strings", [
@@ -107,7 +95,7 @@ def test_strings_basic(lmdb_version_store_v1, dynamic_strings):
     df = pd.DataFrame({"x": ["mene", "mene", "tekel", "upharsin"]})
     lib.write("arrow", df, dynamic_strings=dynamic_strings)
     vit = lib.read("arrow", output_format=OutputFormat.ARROW)
-    result = convert_dict_strings_to_array(vit.data).to_pandas()
+    result = convert_pandas_categorical_to_str(vit.data.to_pandas())
     assert_frame_equal(result, df)
 
 
@@ -125,7 +113,7 @@ def test_strings_multiple_segments_and_columns(lmdb_version_store_tiny_segment, 
     })
     lib.write("arrow", df, dynamic_strings=dynamic_strings)
     vit = lib.read("arrow", output_format=OutputFormat.ARROW)
-    result = convert_dict_strings_to_array(vit.data).to_pandas()
+    result = convert_pandas_categorical_to_str(vit.data.to_pandas())
     assert_frame_equal(result, df)
 
 
@@ -135,7 +123,7 @@ def test_all_types(lmdb_version_store_v1):
     df = get_sample_dataframe()
     lib.write("arrow", df)
     vit = lib.read("arrow", output_format=OutputFormat.ARROW)
-    result = convert_dict_strings_to_array(vit.data).to_pandas()
+    result = convert_pandas_categorical_to_str(vit.data.to_pandas())
     assert_frame_equal(result, df)
 
 
@@ -198,3 +186,23 @@ def test_dynamic_schema_column_change(lmdb_version_store_dynamic_schema):
     expected = pd.concat([df1, df2])
     expected.reset_index(drop=True, inplace=True)
     assert_frame_equal(result.astype(float).fillna(0), expected.fillna(0))
+
+
+def test_arrow_layout(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    lib_tool = lib.library_tool()
+    num_rows = 100
+    df = pd.DataFrame(data={"int": np.arange(num_rows), "str": [f"x_{i//3}" for i in range(num_rows)]},
+                      index=pd.date_range(pd.Timestamp(0), periods=num_rows))
+    lib.write("sym", df, dynamic_strings=True)
+    data_keys = lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")
+    assert len(data_keys) == num_rows//2
+
+    arrow_table = lib.read("sym", output_format=OutputFormat.ARROW).data
+    batches = arrow_table.to_batches()
+    assert len(batches) == num_rows//2
+    for record_batch in batches:
+        index_arr, int_arr, str_arr = record_batch.columns
+        assert index_arr.type == pa.int64()
+        assert int_arr.type == pa.int64()
+        assert str_arr.type == pa.dictionary(pa.int32(), pa.string())

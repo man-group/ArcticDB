@@ -80,24 +80,38 @@ sparrow::array string_dict_from_block(
         std::string_view name,
         std::optional<sparrow::validity_bitmap> maybe_bitmap) {
     const auto offset = block.offset();
-    // TODO: Think about the case with more than 2^31 offsets
+    // We use 32-bit offsets and keys because we use a layout where each row-segment has its own arrow array.
+    // By default, the row-segments are 100k rows.
+
+    // String offsets must be `int32_t` even though they are unsigned indices due to arrow spec.
+    // https://arrow.apache.org/docs/format/Columnar.html#variable-size-binary-layout
     auto &string_offsets = column.get_extra_buffer(offset, ExtraBufferType::OFFSET);
     const auto offset_buffer_size = string_offsets.block(0)->bytes() / sizeof(int32_t);
     sparrow::u8_buffer<int32_t> offset_buffer(reinterpret_cast<int32_t *>(string_offsets.block(0)->release()), offset_buffer_size);
 
     auto &strings = column.get_extra_buffer(offset, ExtraBufferType::STRING);
     const auto strings_buffer_size = strings.block(0)->bytes();
+    util::check(
+        strings_buffer_size < std::numeric_limits<int32_t>::max(),
+        "Strings buffer too large for arrow string array. String buffer size: {}. Max buffer size: {}. Column: {}",
+        strings_buffer_size, std::numeric_limits<int32_t>::max(), name);
     sparrow::u8_buffer<char> strings_buffer(reinterpret_cast<char *>(strings.block(0)->release()), strings_buffer_size);
 
+    // We use `int32_t` dictionary keys because pyarrow doesn't work with unsigned dictionary keys:
+    // https://github.com/pola-rs/polars/issues/10977
     const auto block_size = block.row_count();
-    sparrow::u8_buffer<uint32_t> dict_keys_buffer{reinterpret_cast<uint32_t *>(block.release()), block_size};
+    util::check(
+        block_size < std::numeric_limits<int32_t>::max(),
+        "Key buffer too large for arrow dictionary array. Key buffer size: {}. Max buffer size: {}. Column: {}",
+        block_size, std::numeric_limits<int32_t>::max(), name);
+    sparrow::u8_buffer<int32_t> dict_keys_buffer{reinterpret_cast<int32_t *>(block.release()), block_size};
 
     sparrow::string_array dict_values_array(
         std::move(strings_buffer),
         std::move(offset_buffer)
     );
 
-    auto dict_encoded = create_dict_array<uint32_t>(
+    auto dict_encoded = create_dict_array<int32_t>(
         sparrow::array{std::move(dict_values_array)},
         std::move(dict_keys_buffer),
         maybe_bitmap
