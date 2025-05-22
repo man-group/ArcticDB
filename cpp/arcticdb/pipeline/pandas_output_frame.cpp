@@ -40,21 +40,29 @@ PandasOutputFrame::~PandasOutputFrame() {
             column_data.type().visit_tag([&](auto type_desc_tag) {
                 using TDT = decltype(type_desc_tag);
                 constexpr auto td = TypeDescriptor(type_desc_tag);
-                if constexpr (is_object_type(TypeDescriptor(type_desc_tag))) {
+                if constexpr (is_object_type(td)) {
                     if constexpr(is_array_type(td)) {
                         auto it = column_data.buffer().iterator(sizeof(PyObject*));
                         while(!it.finished()) {
-                            util::check(reinterpret_cast<PyObject*>(it.value()) != nullptr, "Can't delete null item");
-                            Py_DECREF(reinterpret_cast<PyObject*>(it.value()));
+                            if (reinterpret_cast<PyObject*>(it.value()) != nullptr) {
+                                Py_DECREF(reinterpret_cast<PyObject*>(it.value()));
+                            } else {
+                                log::version().error("Unexpected nullptr to DecRef in PandasOutputFrame destructor");
+                            }
                             it.next();
                         }
-                    } else {
+                    } else if constexpr (!is_arrow_output_only_type(td)) {
                         while (auto block = column_data.next<TDT>()) {
                             for (auto item : *block) {
-                                util::check(reinterpret_cast<PyObject *>(item) != nullptr, "Can't delete null item");
-                                Py_DECREF(reinterpret_cast<PyObject *>(item));
+                                if (reinterpret_cast<PyObject*>(item) != nullptr) {
+                                    Py_DECREF(reinterpret_cast<PyObject*>(item));
+                                } else {
+                                    log::version().error("Unexpected nullptr to DecRef in PandasOutputFrame destructor");
+                                }
                             }
                         }
+                    } else {
+                        log::version().error("Unexpected arrow output format seen in PandasOutputFrame");
                     }
                 }
             });
