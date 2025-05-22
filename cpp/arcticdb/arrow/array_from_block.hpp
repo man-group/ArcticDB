@@ -10,6 +10,7 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 
 #include <arcticdb/arrow/include_sparrow.hpp>
+#include <sparrow/layout/primitive_layout/primitive_data_access.hpp>
 
 namespace arcticdb {
 
@@ -28,12 +29,27 @@ sparrow::primitive_array<T> create_primitive_array(
         T* data_ptr,
         size_t data_size,
         std::optional<sparrow::validity_bitmap>& validity_bitmap) {
-    // TODO: Bool handling is different (in sparrow buffers they are stored dense i.e. 8 bools per byte)
     sparrow::u8_buffer<T> buffer(data_ptr, data_size);
     if(validity_bitmap) {
         return sparrow::primitive_array<T>{std::move(buffer), data_size, std::move(*validity_bitmap)};
     } else {
         return sparrow::primitive_array<T>{std::move(buffer), data_size};
+    }
+}
+
+template <>
+sparrow::primitive_array<bool> create_primitive_array(
+        bool* data_ptr,
+        size_t data_size,
+        std::optional<sparrow::validity_bitmap>& validity_bitmap) {
+    // We need special handling for bools because arrow uses dense bool representation (i.e. 8 bools per byte)
+    // Our internal representation is not dense. We use sparrow's `make_data_buffer` utility, but if needed, we can use
+    // our own.
+    auto buffer = sparrow::details::primitive_data_access<bool>::make_data_buffer(std::span{data_ptr, data_size});
+    if(validity_bitmap) {
+        return sparrow::primitive_array<bool>{std::move(buffer), data_size, std::move(*validity_bitmap)};
+    } else {
+        return sparrow::primitive_array<bool>{std::move(buffer), data_size};
     }
 }
 

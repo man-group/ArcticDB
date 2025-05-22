@@ -6,6 +6,8 @@ import pytest
 from pandas.testing import assert_frame_equal
 from arcticdb.version_store.processing import QueryBuilder
 import pyarrow as pa
+from arcticdb.util.test import get_sample_dataframe
+
 
 def test_basic(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
@@ -52,6 +54,15 @@ def test_basic_small_slices_with_index(lmdb_version_store_tiny_segment):
 def test_double_columns(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"x": np.arange(10), "y": np.arange(10.0, 20.0)})
+    lib.write("arrow", df)
+    vit = lib.read("arrow", output_format=OutputFormat.ARROW)
+    result = vit.data.to_pandas()
+    assert_frame_equal(result, df)
+
+
+def test_bool_columns(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"x": [i%3 == 0 for i in range(10)], "y": [i%2 == 0 for i in range(10)]})
     lib.write("arrow", df)
     vit = lib.read("arrow", output_format=OutputFormat.ARROW)
     result = vit.data.to_pandas()
@@ -118,8 +129,14 @@ def test_strings_multiple_segments_and_columns(lmdb_version_store_tiny_segment, 
     assert_frame_equal(result, df)
 
 
-# TODO: Test Unicode symbols
-# TODO: Test bool columns
+def test_all_types(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    # sample dataframe contains all dtypes + unicode strings
+    df = get_sample_dataframe()
+    lib.write("arrow", df)
+    vit = lib.read("arrow", output_format=OutputFormat.ARROW)
+    result = convert_dict_strings_to_array(vit.data).to_pandas()
+    assert_frame_equal(result, df)
 
 
 @pytest.mark.parametrize("start_offset,end_offset", [(2, 3), (3, 75), (4, 32), (0, 99), (7, 56)])
