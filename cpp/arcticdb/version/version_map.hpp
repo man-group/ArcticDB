@@ -550,7 +550,9 @@ public:
         if (original_head.has_value()) {
             entry->unshift_key(*original_head);
         }
-        for (const auto& key : keys) {
+
+        for (auto it = keys.rbegin(); it != keys.rend(); ++it) {
+            const auto& key = *it;
             if (key.type() == KeyType::TABLE_INDEX) {
                 util::check(!has_index_key, "There should be at most one index key in the list of keys when trying to write an entry to the store, keys: {}", fmt::format("{}", keys));
                 has_index_key = true;
@@ -572,9 +574,9 @@ public:
         const StreamId& stream_id,
         const std::shared_ptr<VersionMapEntry>& entry,
         const std::optional<timestamp>& creation_ts=std::nullopt) {
-        auto ver_key = write_tombstones_internal(store, versions, stream_id, entry, creation_ts);
-        write_symbol_ref(store, ver_key, std::nullopt, entry->head_.value());
-        return ver_key;
+        auto tombstone_key = write_tombstones_internal(store, versions, stream_id, entry, creation_ts);
+        write_symbol_ref(store, tombstone_key, std::nullopt, entry->head_.value());
+        return tombstone_key;
     }
 
     AtomKey write_tombstones_internal(
@@ -592,6 +594,11 @@ public:
         std::transform(versions.begin(), versions.end(), std::back_inserter(tombstones),
             [&](const VersionId& v) { return index_to_tombstone(v, stream_id, ts); });
 
+        // sort the tombstone in descending order
+        std::sort(tombstones.begin(), tombstones.end(), [](const AtomKey& a, const AtomKey& b) {
+            return a.version_id() > b.version_id();
+        });
+
         // It doesn't matter which version id we use here
         // as long as it is one of the version ids in the keys
         // tombstone keys use already existing version ids instead of creating new ones
@@ -599,8 +606,8 @@ public:
         // for backwards compatibility with older replication logic
         auto tombstone_version_id = tombstones.back().version_id();
         do_write(store, tombstone_version_id, stream_id, std::span{tombstones}, entry);
-        for (auto it = tombstones.rbegin(); it != tombstones.rend(); ++it) {
-            entry->tombstones_.try_emplace(it->version_id(), *it);
+        for (const auto& key : tombstones) {
+            entry->tombstones_.try_emplace(key.version_id(), key);
         }
         maybe_invalidate_cached_undeleted(*entry);
         if(log_changes_)
