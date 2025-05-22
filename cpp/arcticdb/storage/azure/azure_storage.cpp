@@ -66,13 +66,6 @@ void raise_azure_exception(const Azure::Core::RequestFailedException& e, const s
                                             e.what(),
                                             object_name);
 
-    // On some occasions, the SDK returns a non-200 status code even though there is no error
-    // this is not an error, so we return early
-    if (static_cast<int>(status_code) < 300) {
-        ARCTICDB_DEBUG(log::storage(), fmt::format("Suppressed Error: {}", error_message_suffix));
-        return;
-    }
-
     if (status_code == Azure::Core::Http::HttpStatusCode::NotFound
         && error_code == AzureErrorCode_to_string(AzureErrorCode::BlobNotFound)) {
         throw KeyNotFoundException(fmt::format("Key Not Found Error: {}", error_message_suffix));
