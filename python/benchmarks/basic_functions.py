@@ -327,35 +327,35 @@ class ModificationFunctions:
         del self.ac
 
     def time_update_single(self, lad: LargeAppendDataModify, rows):
-        self.lib.update(f"sym", self.df_update_single)
+        self.lib.update("sym", self.df_update_single)
 
     def time_update_half(self, lad: LargeAppendDataModify, rows):
-        self.lib.update(f"sym", self.df_update_half)
+        self.lib.update("sym", self.df_update_half)
 
     def time_update_upsert(self, lad: LargeAppendDataModify, rows):
-        self.lib.update(f"sym", self.df_update_upsert, upsert=True)
+        self.lib.update("sym", self.df_update_upsert, upsert=True)
 
     def time_update_short_wide(self, lad: LargeAppendDataModify, rows):
         self.lib_short_wide.update("short_wide_sym", self.df_update_short_wide)
 
     def time_append_single(self, lad: LargeAppendDataModify, rows):
-        self.lib.append(f"sym", self.df_append_single)
+        self.lib.append("sym", self.df_append_single)
 
     def time_append_large(self, lad: LargeAppendDataModify, rows):
         large: pd.DataFrame = lad.df_append_large[rows].pop(0)
-        self.lib.append(f"sym", large)
+        self.lib.append("sym", large)
 
     def time_append_short_wide(self, lad: LargeAppendDataModify, rows):
         large: pd.DataFrame = lad.df_append_short_wide[rows].pop(0)
         self.lib_short_wide.append("short_wide_sym", large)
 
     def time_delete(self, lad: LargeAppendDataModify, rows):
-        self.lib.delete(f"sym")
+        self.lib.delete("sym")
 
-    def time_delete_multiple(self, rows):
+    def time_delete_multiple(self, lad: LargeAppendDataModify, rows):
         for i in range(1000):
-            self.lib.write(f"sym", self.df)
-        self.lib.delete(f"sym", list(range(100)))
+            self.lib.write("sym", self.df)
+        self.lib.delete("sym", list(range(100)))
 
     def time_delete_short_wide(self, lad: LargeAppendDataModify, rows):
         self.lib_short_wide.delete("short_wide_sym")
