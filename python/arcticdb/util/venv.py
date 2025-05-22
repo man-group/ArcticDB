@@ -5,6 +5,9 @@ import shutil
 import subprocess
 import tempfile
 import venv
+import pandas as pd
+import numpy as np
+
 
 from typing import Dict, List, Optional, Union
 
@@ -119,6 +122,13 @@ class VenvArctic:
         """
         Prepares the dataframe parquet files and the python script to be run from within the venv.
         """
+
+        def get_column_dtypes(df: pd.DataFrame) -> dict:
+            """
+            Returns a dictionary mapping column names to their data types in the DataFrame.
+            """
+            return df.dtypes.astype(str).to_dict()
+
         if dfs is None:
             dfs = {}
 
@@ -126,8 +136,6 @@ class VenvArctic:
             df_load_commands = []
             index_load_commands = []
             for df_name, df_val in dfs.items():
-                import pandas as pd
-                import numpy as np
                 # For each dataframe we are writing we create a deep copy which we pass
                 df: pd.DataFrame = df_val.copy(deep=True)
                 if self.parquet:
@@ -140,6 +148,7 @@ class VenvArctic:
                     # so that dataframes become fully equal
                     file = os.path.join(dir, f"{df_name}.gz")
                     df.to_csv(file, index=True)
+                    dtypes_dict = get_column_dtypes(df)
                     if df.index is not None:
                         if isinstance(df.index, pd.DatetimeIndex) and np.issubdtype(df.index.dtype, np.datetime64):
                             index_load_commands.append(f"{df_name}.index.freq = {repr(df.index.freqstr)}")
@@ -151,9 +160,9 @@ class VenvArctic:
                                                 ]
                         else:
                             index_load_commands
-                        command = f"{df_name} = pd.read_csv({repr(file)}, parse_dates=True, index_col=0)"
+                        command = f"{df_name} = pd.read_csv({repr(file)}, dtype={dtypes_dict}, parse_dates=True, index_col=0)"
                     else:
-                        command = f"{df_name} = pd.read_csv({repr(file)}, parse_dates=True)"
+                        command = f"{df_name} = pd.read_csv({repr(file)}, dtype={dtypes_dict}, parse_dates=True)"
                 df_load_commands.append(command)
 
             python_commands = (
