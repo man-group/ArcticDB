@@ -297,9 +297,8 @@ public:
 
         std::vector<AtomKey> keys_to_write;
         if (!result.empty()) {
-            auto key_to_tombstone = result[0];
-            util::check(latest_version == key_to_tombstone.version_id(), "Latest version {} does not match the key that we are trying to pass to tombstone_all {}", latest_version, key_to_tombstone.version_id());
-            auto tombstone_all_key = get_tombstone_all_key(key_to_tombstone, store->current_timestamp());
+            auto first_key_to_tombstone = previous_key ? previous_key : entry->get_first_index(false).first;
+            auto tombstone_all_key = get_tombstone_all_key(first_key_to_tombstone.value(), store->current_timestamp());
             entry->try_set_tombstone_all(tombstone_all_key);
             keys_to_write.push_back(tombstone_all_key);
             if(log_changes_) {
