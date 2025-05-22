@@ -265,6 +265,48 @@ def test_delete_versions_with_append(object_version_store, versions_to_delete, s
 
 @pytest.mark.parametrize("versions_to_delete", [[0, 1], [1, 2], [0, 2], [0, 1, 2], [2, 3], [0, 3]])
 @pytest.mark.storage
+def test_delete_versions_with_append_large_data(object_version_store, versions_to_delete, sym):
+    symbol = sym
+    dfs = []
+    rows = 1000000
+    vers = 4
+    for i in range(vers):
+        idx = np.arange(i * rows, (i + 1) * rows)
+        d = {"x": np.arange(i * rows, (i + 1) * rows, dtype=np.int64)}
+        df = pd.DataFrame(data=d, index=idx)
+        object_version_store.append(symbol, df)
+        dfs.append(df)
+        vit = object_version_store.read(symbol)
+        assert_frame_equal(vit.data, pd.concat(dfs))
+
+    lib_tool = object_version_store.library_tool()
+
+    assert len(lib_tool.find_keys(KeyType.VERSION)) == vers
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == vers
+    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == vers * 10
+
+    object_version_store.delete_versions(symbol, versions_to_delete)
+    assert len(object_version_store.list_versions(symbol)) == len(dfs) - len(versions_to_delete)
+    assert len(lib_tool.find_keys(KeyType.VERSION)) == vers + 1
+    # The indexes should be deleted but the data should still be there
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == vers - len(versions_to_delete)
+
+    if versions_to_delete == [2, 3]:
+        # The data from the recent versions should be deleted
+        assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 20
+        assert_frame_equal(object_version_store.read(symbol).data, pd.concat(dfs[:-2]))
+    elif versions_to_delete == [0, 3]:
+        # only the the data from the latest version should be deleted
+        assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 30
+        assert_frame_equal(object_version_store.read(symbol).data, pd.concat(dfs[:-1]))
+    else:
+        # data from the past versions is should still be present
+        assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == vers * 10
+        assert_frame_equal(object_version_store.read(symbol).data, pd.concat(dfs))
+
+
+@pytest.mark.parametrize("versions_to_delete", [[0, 1], [1, 2], [0, 2], [0, 1, 2], [2, 3], [0, 3]])
+@pytest.mark.storage
 def test_delete_versions_with_update(object_version_store, versions_to_delete, sym):
     symbol = sym
     dfs = []
@@ -282,7 +324,7 @@ def test_delete_versions_with_update(object_version_store, versions_to_delete, s
     # Write initial data
     vers = 4
     for i in range(vers):
-        overlap_start = idx_start + pd.Timedelta(seconds=(i * rows / 2))
+        overlap_start = idx_start + pd.Timedelta(seconds=(i * (rows / 2)))
         idx = pd.date_range(overlap_start, periods=rows, freq="s")
         d = {"x": np.arange(i * rows, (i + 1) * rows, dtype=np.int64)}
         df = pd.DataFrame(data=d, index=idx)
@@ -310,21 +352,78 @@ def test_delete_versions_with_update(object_version_store, versions_to_delete, s
         remaining_dfs = dfs[:-2]  # Keep first two versions
         # Data keys:
         # 0 - original
-        # 1 - part that overlaps with v0
+        # 1 - part that overlaps with v0 (original from v0 that is shared with v1 + new from v1)
         # 1 - new data from the v1
         assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 3
     elif versions_to_delete == [0, 3]:
         remaining_dfs = dfs[:-1]  # Keep all but last version
         # Data keys:
-        # 1 - part that overlaps with v0
+        # 1 - part that overlaps with v0 (original from v0 that is shared with v1 + new from v1)
         # 1 - new data from the v1
-        # 2 - part that overlaps with v1
+        # 2 - part that overlaps with v1 (original from v1 that is shared with v2 + new from v2)
         # 2 - new data from the v2
         assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 4
     else:
         remaining_dfs = dfs
         # For the rest of the cases, we should delete as many data keys as versions to delete
         assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == expected_data_keys - len(versions_to_delete)
+
+    assert_frame_equal(object_version_store.read(symbol).data, build_expected_df(remaining_dfs))
+
+
+@pytest.mark.parametrize("versions_to_delete", [[0, 1], [1, 2], [0, 2], [0, 1, 2], [2, 3], [0, 3]])
+@pytest.mark.storage
+def test_delete_versions_with_update_large_data(object_version_store, versions_to_delete, sym):
+    symbol = sym
+    dfs = []
+    idx_start = pd.Timestamp("2000-1-1")
+    rows = 1000000
+
+    def build_expected_df(dataframes):
+        expected = pd.DataFrame()
+        for d in dataframes:
+            expected = expected.combine_first(d)
+            if not expected.empty:
+                expected.loc[d.index] = d
+        return expected
+
+    # Write initial data
+    vers = 4
+    for i in range(vers):
+        overlap_start = idx_start + pd.Timedelta(seconds=(i * (rows / 2)))
+        idx = pd.date_range(overlap_start, periods=rows, freq="s")
+        d = {"x": np.arange(i * rows, (i + 1) * rows, dtype=np.int64)}
+        df = pd.DataFrame(data=d, index=idx)
+        object_version_store.update(symbol, df, upsert=True)
+        dfs.append(df)
+        assert_frame_equal(object_version_store.read(symbol).data, build_expected_df(dfs))
+
+    lib_tool = object_version_store.library_tool()
+
+    assert len(lib_tool.find_keys(KeyType.VERSION)) == vers
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == vers
+    # Because the data is large, each version is split in 10 data keys
+    # after the first version, the data in half of those overlaps with the previous version
+    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == vers * 10
+    # Delete versions and verify
+    object_version_store.delete_versions(symbol, versions_to_delete)
+    assert len(object_version_store.list_versions(symbol)) == len(dfs) - len(versions_to_delete)
+
+    assert len(lib_tool.find_keys(KeyType.VERSION)) == vers + 1
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == vers - len(versions_to_delete)
+
+    # Determine which versions to keep based on deletion pattern
+    if versions_to_delete == [2, 3]:
+        remaining_dfs = dfs[:-2]  # Keep first two versions
+        expected_data_keys = 20
+    elif versions_to_delete == [0, 3]:
+        remaining_dfs = dfs[:-1]
+        expected_data_keys = 25
+    else:
+        remaining_dfs = dfs
+        expected_data_keys = vers * 10 - (len(versions_to_delete) * 5)
+
+    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == expected_data_keys
 
     assert_frame_equal(object_version_store.read(symbol).data, build_expected_df(remaining_dfs))
 
