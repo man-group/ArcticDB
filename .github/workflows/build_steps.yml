@@ -361,7 +361,9 @@ jobs:
 
       - name: Run test
         run: |
-          build_tooling/parallel_test.sh tests/${{matrix.type}}
+          python -m pip --force-reinstall install pytest-repeat
+          pytest -n auto -v --count=50 -x tests/compat
+          #build_tooling/parallel_test.sh tests/${{matrix.type}}
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
