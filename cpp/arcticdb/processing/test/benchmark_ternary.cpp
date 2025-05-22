@@ -18,12 +18,13 @@ using namespace arcticdb;
 
 // run like: --benchmark_time_unit=ms --benchmark_filter=.* --benchmark_min_time=5x
 
+std::random_device rd;
+std::mt19937 gen(rd());
+
 util::BitSet generate_bitset(const size_t num_rows) {
     util::BitSet bitset;
     bitset.resize(num_rows);
     util::BitSet::bulk_insert_iterator inserter(bitset);
-    std::random_device rd;
-    std::mt19937 gen(rd());
     std::uniform_int_distribution<> dis(0, 1);
     for (size_t idx = 0; idx < num_rows; ++idx) {
         if (dis(gen) == 0) {
@@ -35,8 +36,6 @@ util::BitSet generate_bitset(const size_t num_rows) {
 }
 
 Value generate_numeric_value() {
-    std::random_device rd;
-    std::mt19937 gen(rd());
     std::uniform_int_distribution<int64_t> dis(std::numeric_limits<int64_t>::lowest(), std::numeric_limits<int64_t>::max());
     return construct_value<int64_t>(dis(gen));
 }
@@ -46,8 +45,6 @@ std::string generate_string() {
             "0123456789"
             "abcdefghijklmnopqrstuvwxyz"
             "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    std::random_device rd;
-    std::mt19937 gen(rd());
     std::uniform_int_distribution<std::string::size_type > dis(0, characters.size() - 1);
     std::string res;
     for (size_t idx = 0; idx < 10; ++idx) {
@@ -64,8 +61,6 @@ Value generate_string_value() {
 ColumnWithStrings generate_numeric_dense_column(const size_t num_rows) {
     std::vector<int64_t> data;
     data.reserve(num_rows);
-    std::random_device rd;
-    std::mt19937 gen(rd());
     std::uniform_int_distribution<int64_t> dis(std::numeric_limits<int64_t>::lowest(), std::numeric_limits<int64_t>::max());
     for (size_t idx = 0; idx < num_rows; ++idx) {
         data.emplace_back(dis(gen));
@@ -87,8 +82,6 @@ ColumnWithStrings generate_string_dense_column(const size_t num_rows, const size
 
     std::vector<int64_t> data;
     data.reserve(num_rows);
-    std::random_device rd;
-    std::mt19937 gen(rd());
     std::uniform_int_distribution<uint64_t> dis(0, unique_strings - 1);
     for (size_t idx = 0; idx < num_rows; ++idx) {
         data.emplace_back(offsets.at(dis(gen)));
@@ -101,8 +94,6 @@ ColumnWithStrings generate_string_dense_column(const size_t num_rows, const size
 
 ColumnWithStrings generate_numeric_sparse_column(const size_t num_rows) {
     Column col(make_scalar_type(DataType::INT64), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
-    std::random_device rd;
-    std::mt19937 gen(rd());
     std::uniform_int_distribution<int64_t> dis(std::numeric_limits<int64_t>::lowest(), std::numeric_limits<int64_t>::max());
     for (size_t idx = 0; idx < num_rows; ++idx) {
         if (dis(gen) < 0) {
@@ -122,8 +113,6 @@ ColumnWithStrings generate_string_sparse_column(const size_t num_rows, const siz
         auto str = generate_string();
         offsets.emplace_back(string_pool->get(str, false).offset());
     }
-    std::random_device rd;
-    std::mt19937 gen(rd());
     std::uniform_int_distribution<uint64_t> dis(0, unique_strings - 1);
     for (size_t idx = 0; idx < num_rows; ++idx) {
         if (dis(gen) < unique_strings / 2) {

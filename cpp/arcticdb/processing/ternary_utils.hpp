@@ -34,7 +34,7 @@ void initialise_output_column(const util::BitSet& condition,
     } else {
         // Both input columns are dense
         // Bit vectors default initialise all bits to zero
-        output_sparse_map.flip();
+        output_sparse_map.set();
     }
     output_sparse_map.resize(output_logical_rows);
     auto output_physical_rows = output_sparse_map.count();
@@ -53,7 +53,7 @@ void initialise_output_column(const util::BitSet& condition,
 // e.g. when choosing between a column and a value, this will be FullResult, whereas when choosing between a column
 // and another column that is missing from this row-slice with dynamic schema, this will be EmptyResult
 template<typename FullOrEmpty>
-requires std::is_same_v<FullOrEmpty, FullResult> || std::is_same_v<FullOrEmpty, EmptyResult>
+requires std::same_as<FullOrEmpty, FullResult> || std::same_as<FullOrEmpty, EmptyResult>
 void initialise_output_column(const util::BitSet& condition,
                               const Column& input_column,
                               Column& output_column) {

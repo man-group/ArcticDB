@@ -52,9 +52,9 @@ struct ColumnWithStrings {
         column_name_(col_name) {
     }
 
-    ColumnWithStrings(std::unique_ptr<Column> column, const std::shared_ptr<StringPool>& string_pool, std::string_view col_name) :
+    ColumnWithStrings(std::unique_ptr<Column> column, std::shared_ptr<StringPool> string_pool, std::string_view col_name) :
             column_(std::move(column)),
-            string_pool_(string_pool),
+            string_pool_(std::move(string_pool)),
             column_name_(col_name) {
     }
 
