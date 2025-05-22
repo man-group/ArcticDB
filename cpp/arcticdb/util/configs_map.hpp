@@ -63,21 +63,39 @@ private:
     std::unique_ptr<std::mutex> mutex_;
 };
 
-struct ScopedConfig {
+struct ScopedIntConfig {
     std::string name_;
     std::optional<int64_t> original_;
 
-    ScopedConfig(const std::string& name, int64_t val) :
+    ScopedIntConfig(const std::string& name, int64_t val) :
             name_(name),
             original_(ConfigsMap::instance()->get_int(name)) {
         ConfigsMap::instance()->set_int(name_, val);
     }
 
-    ~ScopedConfig() {
+    ~ScopedIntConfig() {
         if(original_)
             ConfigsMap::instance()->set_int(name_, original_.value());
         else
             ConfigsMap::instance()->unset_int(name_);
+    }
+};
+
+struct ScopedDoubleConfig {
+    std::string name_;
+    std::optional<double> original_;
+
+    ScopedDoubleConfig(const std::string& name, double val) :
+        name_(name),
+        original_(ConfigsMap::instance()->get_int(name)) {
+        ConfigsMap::instance()->set_double(name_, val);
+    }
+
+    ~ScopedDoubleConfig() {
+        if(original_)
+            ConfigsMap::instance()->set_double(name_, original_.value());
+        else
+            ConfigsMap::instance()->unset_double(name_);
     }
 };
 

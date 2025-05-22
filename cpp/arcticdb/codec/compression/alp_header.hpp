@@ -172,7 +172,7 @@ struct ALPDecimalBlockHeader {
 
     uint8_t exp_ = 0;
     uint8_t fac_ = 0;
-    static constexpr size_t HeaderSize = sizeof(exception_count_) + sizeof(bit_width_) + sizeof(exp_) + sizeof(fac_);
+    static constexpr size_t HeaderSize = sizeof(magic_) + sizeof(exception_count_) + sizeof(bit_width_) + sizeof(exp_) + sizeof(fac_);
     using h = Helper<std::make_unsigned_t<EncodedType>>;
     uint8_t data_[1] = {};
 

@@ -197,17 +197,18 @@ TEST(ALPDecimalBlockHeaderTest, Float) {
     state.fac = 3;
 
     using EncodedType = typename StorageType<float>::signed_type;
-    size_t dataSize = alp::config::VECTOR_SIZE * sizeof(EncodedType);
-    size_t exceptionsBytes = state.exceptions_count * sizeof(float);
-    size_t exceptionPositionsSize = state.exceptions_count * sizeof(uint16_t);
+    size_t bases_size = sizeof(EncodedType);
+    size_t data_size = alp::config::VECTOR_SIZE * sizeof(EncodedType);
+    size_t exceptions_bytes = state.exceptions_count * sizeof(float);
+    size_t exception_positions_size = state.exceptions_count * sizeof(uint16_t);
     constexpr size_t headerSize = ALPDecimalBlockHeader<float>::HeaderSize;
-    size_t expectedTotalSize = headerSize + dataSize + exceptionsBytes + exceptionPositionsSize;
+    size_t expected_total_size = headerSize + bases_size + data_size + exceptions_bytes + exception_positions_size;
 
-    std::vector<uint8_t> buffer(expectedTotalSize, 0xFF);
+    std::vector<uint8_t> buffer(expected_total_size, 0xFF);
 
     ALPDecimalBlockHeader<float>* header = new (buffer.data()) ALPDecimalBlockHeader<float>{};
-
-    EXPECT_EQ(header->total_size(), expectedTotalSize);
+    header->exception_count_ = state.exceptions_count;
+    EXPECT_EQ(header->total_size(), expected_total_size);
 
     auto encoded = header->data();
     for (size_t i = 0; i < alp::config::VECTOR_SIZE; ++i) {
@@ -245,16 +246,17 @@ TEST(ALPDecimalBlockHeaderTest, Double) {
     state.fac = 6;
 
     using EncodedType = typename StorageType<double>::signed_type;
-    size_t dataSize = alp::config::VECTOR_SIZE * sizeof(EncodedType);
-    size_t exceptionsBytes = state.exceptions_count * sizeof(double);
-    size_t exceptionPositionsSize = state.exceptions_count * sizeof(uint16_t);
+    size_t bases_size = sizeof(EncodedType);
+    size_t data_size = alp::config::VECTOR_SIZE * sizeof(EncodedType);
+    size_t exceptions_bytes = state.exceptions_count * sizeof(double);
+    size_t exception_positions_size = state.exceptions_count * sizeof(uint16_t);
     constexpr size_t headerSize = ALPDecimalBlockHeader<double>::HeaderSize;
-    size_t expectedTotalSize = headerSize + dataSize + exceptionsBytes + exceptionPositionsSize;
+    size_t expected_total_size = headerSize + bases_size + data_size + exceptions_bytes + exception_positions_size;
 
-    std::vector<uint8_t> buffer(expectedTotalSize, 0xFF);
+    std::vector<uint8_t> buffer(expected_total_size, 0xFF);
     ALPDecimalBlockHeader<double>* header = new (buffer.data()) ALPDecimalBlockHeader<double>{};
-
-    EXPECT_EQ(header->total_size(), expectedTotalSize);
+    header->exception_count_ = state.exceptions_count;
+    EXPECT_EQ(header->total_size(), expected_total_size);
 
     auto encoded = header->data();
     for (size_t i = 0; i < alp::config::VECTOR_SIZE; ++i) {

@@ -587,7 +587,7 @@ TEST(VersionStore, AppendRefKeyOptimisation) {
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
 
-    ScopedConfig reload_interval("VersionMap.ReloadInterval", 0);
+    ScopedIntConfig reload_interval("VersionMap.ReloadInterval", 0);
 
     PilotedClock::reset();
     StreamId symbol("append_test");
@@ -654,7 +654,7 @@ TEST(VersionStore, UpdateWithin) {
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
 
-    ScopedConfig reload_interval("VersionMap.ReloadInterval", 0);
+    ScopedIntConfig reload_interval("VersionMap.ReloadInterval", 0);
 
     PilotedClock::reset();
     const StreamId symbol("update_schema");

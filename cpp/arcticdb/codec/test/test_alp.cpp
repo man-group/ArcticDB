@@ -152,6 +152,7 @@ TEST(ALP, RoundtripALP) {
 }
 
 TEST(ALP, SingleFullBlockDecimalRoundtrip) {
+    ScopedDoubleConfig config{"Alp.MaxCompressRatio", 100.0};
     using T = double;
     constexpr size_t numRows = alp::config::VECTOR_SIZE; // exactly one block
 
@@ -299,6 +300,7 @@ T red_zone_value() {
 }
 
 TEST(ALP, RoundtripRealDouble) {
+    ScopedDoubleConfig config("Alp.MaxCompressRatio", 100.0);
     constexpr size_t NUM_VALUES = BLOCK_SIZE * 100;
     using T = double;
     std::vector<T> data = compressible_doubles(NUM_VALUES);
@@ -333,6 +335,7 @@ TEST(ALP, RoundtripRealDouble) {
 }
 
 TEST(ALP, RoundtripALPDecimal) {
+    ScopedDoubleConfig config("Alp.MaxCompressRatio", 100.0);
     constexpr size_t NUM_VALUES = BLOCK_SIZE * 100;
     using T = double;
     std::vector<T> data = random_decimal_floats(0, 1000, 2, NUM_VALUES);

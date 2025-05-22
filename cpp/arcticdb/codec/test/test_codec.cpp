@@ -470,7 +470,7 @@ TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV2) {
 }
 
 TEST(Segment, RoundtripStatisticsV1) {
-    ScopedConfig reload_interval("Statistics.GenerateOnWrite", 1);
+    ScopedIntConfig reload_interval("Statistics.GenerateOnWrite", 1);
     const auto stream_desc = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
         scalar_field(DataType::UINT8, "int8"),
         scalar_field(DataType::FLOAT64, "doubles")
@@ -510,7 +510,7 @@ TEST(Segment, RoundtripStatisticsV1) {
 }
 
 TEST(Segment, RoundtripStatisticsV2) {
-    ScopedConfig reload_interval("Statistics.GenerateOnWrite", 1);
+    ScopedIntConfig reload_interval("Statistics.GenerateOnWrite", 1);
     const auto stream_desc = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
         scalar_field(DataType::UINT8, "int8"),
         scalar_field(DataType::FLOAT64, "doubles")

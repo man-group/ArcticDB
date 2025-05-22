@@ -803,7 +803,7 @@ struct TestSymbolListTask {
 };
 
 TEST_F(SymbolListSuite, MultiThreadStress) {
-    ScopedConfig max_delta("SymbolList.MaxDelta", 10);
+    ScopedIntConfig max_delta("SymbolList.MaxDelta", 10);
     log::version().set_pattern("%Y%m%d %H:%M:%S.%f %t %L %n | %v");
     std::vector<Future<Unit>> futures;
     auto state = std::make_shared<SymbolListState>(store_, version_map_);
@@ -818,8 +818,8 @@ TEST_F(SymbolListSuite, MultiThreadStress) {
 
 TEST_F(SymbolListSuite, CompactionThreshold) {
     // given
-    ScopedConfig min("SymbolList.MinCompactionThreshold", 2);
-    ScopedConfig max("SymbolList.MaxCompactionThreshold", 2);
+    ScopedIntConfig min("SymbolList.MinCompactionThreshold", 2);
+    ScopedIntConfig max("SymbolList.MaxCompactionThreshold", 2);
     std::shared_ptr<InMemoryStore> store = std::make_shared<InMemoryStore>();
     std::shared_ptr<VersionMap> version_map = std::make_shared<VersionMap>();
     auto symbol_list = SymbolList{version_map};
@@ -842,9 +842,9 @@ TEST_F(SymbolListSuite, CompactionThreshold) {
 
 TEST_F(SymbolListSuite, CompactionThresholdMaxDeltaWins) {
     // given
-    ScopedConfig min("SymbolList.MinCompactionThreshold", 1);
-    ScopedConfig max("SymbolList.MaxCompactionThreshold", 1);
-    ScopedConfig max_delta("SymbolList.MaxDelta", 2);
+    ScopedIntConfig min("SymbolList.MinCompactionThreshold", 1);
+    ScopedIntConfig max("SymbolList.MaxCompactionThreshold", 1);
+    ScopedIntConfig max_delta("SymbolList.MaxDelta", 2);
     std::shared_ptr<InMemoryStore> store = std::make_shared<InMemoryStore>();
     std::shared_ptr<VersionMap> version_map = std::make_shared<VersionMap>();
     auto symbol_list = SymbolList{version_map};
@@ -876,8 +876,8 @@ TEST_F(SymbolListSuite, CompactionThresholdMaxDeltaWins) {
 TEST_F(SymbolListSuite, CompactionThresholdRandomChoice) {
     // given
     // Compaction thresholds [1, 10] form random choice, seeded with value 1 => choice of threshold is 5 (or 6 on Mac)
-    ScopedConfig min("SymbolList.MinCompactionThreshold", 1);
-    ScopedConfig max("SymbolList.MaxCompactionThreshold", 10);
+    ScopedIntConfig min("SymbolList.MinCompactionThreshold", 1);
+    ScopedIntConfig max("SymbolList.MaxCompactionThreshold", 10);
     std::shared_ptr<InMemoryStore> store = std::make_shared<InMemoryStore>();
     std::shared_ptr<VersionMap> version_map = std::make_shared<VersionMap>();
     auto symbol_list = SymbolList{version_map, StringId(), 1};
