@@ -115,20 +115,18 @@ def test_stress_version_map_compact(object_version_store, sym, interval):
         log.version.info("Done")
         writes = number_of_writes.value
         deletes = number_of_deletes.value
-        # Do one last compaction
-        lib.version_store._compact_version_map(sym)
 
         # Check that the version map is compacted correctly
         # and all the keys are present
         lib_tool = lib.library_tool()
         version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, sym)
-        compacted_version_key = min(version_keys, key=lambda x: x.version_id)
+        keys_in_chain = []
+        for k in version_keys:
+            keys_in_chain.extend(lib_tool.read_to_keys(k))
 
-        keys_in_compacted_version = lib_tool.read_to_keys(compacted_version_key)
-        index_keys = [k for k in keys_in_compacted_version if k.type == KeyType.TABLE_INDEX]
-        tombstone_keys = [k for k in keys_in_compacted_version if k.type == KeyType.TOMBSTONE]
-        # The last write is not in the compacted version
-        assert len(index_keys) == writes - 1
+        index_keys = [k for k in keys_in_chain if k.type == KeyType.TABLE_INDEX]
+        tombstone_keys = [k for k in keys_in_chain if k.type == KeyType.TOMBSTONE]
+        assert len(index_keys) == writes
         assert len(tombstone_keys) == deletes
     finally:
         log.version.info("Clearing library")
