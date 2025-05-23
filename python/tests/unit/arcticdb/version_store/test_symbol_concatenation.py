@@ -64,6 +64,20 @@ def test_symbol_concat_basic(lmdb_library_factory, dynamic_schema, rows_per_segm
         assert version.metadata == (None if idx == 1 else idx)
 
 
+@pytest.mark.parametrize("first_type", ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"])
+@pytest.mark.parametrize("second_type", ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"])
+def test_symbol_concat_type_promotion(lmdb_library, first_type, second_type):
+    lib = lmdb_library
+    df0 = pd.DataFrame({"col": np.arange(1, dtype=np.dtype(first_type))})
+    df1 = pd.DataFrame({"col": np.arange(1, dtype=np.dtype(second_type))})
+    lib.write("sym0", df0)
+    lib.write("sym1", df1)
+    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True)).collect().data
+    expected = pd.concat([df0, df1])
+    expected.index = pd.RangeIndex(len(expected))
+    assert_frame_equal(expected, received)
+
+
 @pytest.mark.parametrize(
     "index",
     [

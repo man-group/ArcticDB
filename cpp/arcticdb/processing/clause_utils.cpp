@@ -408,10 +408,10 @@ void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_
                     // and if necessary modify the columns_to_keep value to a type capable of representing all
                     auto& current_data_type = columns_to_keep_it->second;
                     if (current_data_type.has_value()) {
-                        auto opt_common_type = has_valid_common_type(make_scalar_type(*current_data_type),
-                                                                     make_scalar_type(it->second));
-                        if (opt_common_type.has_value()) {
-                            current_data_type = opt_common_type->data_type();
+                        auto opt_promotable_type = promotable_type(make_scalar_type(*current_data_type),
+                                                                   make_scalar_type(it->second));
+                        if (opt_promotable_type.has_value()) {
+                            current_data_type = opt_promotable_type->data_type();
                         } else {
                             current_data_type.reset();
                         }
@@ -466,10 +466,10 @@ void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_
                         // Current set of columns under consideration contains column_name, so ensure types are compatible
                         // and if necessary modify the columns_to_keep value to a type capable of representing all
                         auto& current_data_type = columns_to_keep_it->second;
-                        auto opt_common_type = has_valid_common_type(make_scalar_type(current_data_type),
-                                                                     make_scalar_type(data_type));
-                        if (opt_common_type.has_value()) {
-                            current_data_type = opt_common_type->data_type();
+                        auto opt_promotable_type = promotable_type(make_scalar_type(current_data_type),
+                                                                   make_scalar_type(data_type));
+                        if (opt_promotable_type.has_value()) {
+                            current_data_type = opt_promotable_type->data_type();
                         } else {
                             schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                                     "No common type between {} and {} when joining schemas", current_data_type,
