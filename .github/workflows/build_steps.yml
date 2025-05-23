@@ -363,6 +363,7 @@ jobs:
         run: |
           pwd
           python -m pip  install pytest-repeat
+          python setup.py protoc --build-lib python
           pytest -n auto -v --count=50 -x python/tests/compat
           #build_tooling/parallel_test.sh tests/${{matrix.type}}
         env:
