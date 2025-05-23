@@ -354,7 +354,7 @@ class ModificationFunctions:
 
     def time_delete_multiple(self, lad: LargeAppendDataModify, rows):
         for i in range(1000):
-            self.lib.write("sym", self.df)
+            self.lib.write("sym", generate_pseudo_random_dataframe(rows), prune_previous_versions=False)
         self.lib.delete("sym", list(range(100)))
 
     def time_delete_short_wide(self, lad: LargeAppendDataModify, rows):

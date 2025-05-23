@@ -604,7 +604,7 @@ public:
         // tombstone keys use already existing version ids instead of creating new ones
         // It IS important that we log with the same version id as the tombstone key
         // for backwards compatibility with older replication logic
-        auto tombstone_version_id = tombstones.back().version_id();
+        auto tombstone_version_id = tombstones.front().version_id();
         do_write(store, tombstone_version_id, stream_id, std::span{tombstones}, entry);
         for (const auto& key : tombstones) {
             entry->tombstones_.try_emplace(key.version_id(), key);
@@ -613,7 +613,7 @@ public:
         if(log_changes_)
             log_tombstone(store, stream_id, tombstone_version_id);
 
-        return tombstones.back();
+        return tombstones.front();
     }
 
     void remove_entry_version_keys(
