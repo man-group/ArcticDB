@@ -363,7 +363,7 @@ jobs:
         run: |
           pwd
           python -m pip  install pytest-repeat
-          python -m pip  insstal setuptools 
+          python -m pip  install setuptools 
           python -m pip  install wheel
           python setup.py protoc --build-lib python
           pytest -n auto -v --count=50 -x python/tests/compat
