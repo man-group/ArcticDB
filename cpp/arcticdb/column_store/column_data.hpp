@@ -12,7 +12,7 @@
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/block.hpp>
-
+#include <arcticdb/column_store/statistics.hpp>
 #include <boost/iterator/iterator_facade.hpp>
 
 
@@ -299,23 +299,24 @@ public:
         const ChunkedBuffer* data,
         const Buffer* shapes,
         const TypeDescriptor &type,
-        const util::BitMagic* bit_vector) :
+        const util::BitMagic* bit_vector,
+        const FieldStatsImpl* statistics,
+        size_t row_count) :
         data_(data),
         shapes_(shapes),
         pos_(0),
         shape_pos_(0),
         type_(type),
-        bit_vector_(bit_vector){}
+        bit_vector_(bit_vector),
+        statistics_(statistics),
+        row_count_(row_count) { }
 
     ColumnData(
         const ChunkedBuffer* data,
         const TypeDescriptor &type) :
         data_(data),
-        shapes_(nullptr),
-        pos_(0),
-        shape_pos_(0),
-        type_(type),
-        bit_vector_(nullptr){}
+        type_(type) {
+    }
 
     ARCTICDB_MOVE_COPY_DEFAULT(ColumnData)
 
@@ -422,10 +423,20 @@ public:
         };
     }
 
-    /// @brief Get non-owning pointer to the shapes array for the column
     [[nodiscard]] const Buffer* shapes() const noexcept;
 
-  private:
+    [[nodiscard]] const FieldStatsImpl& field_stats() const {
+        return *statistics_;
+    }
+
+    [[nodiscard]] bool has_field_stats() const {
+        return statistics_ != nullptr;
+    }
+
+    [[nodiscard]] size_t row_count() const {
+        return row_count_;
+    }
+private:
     template<typename TDT>
     TypedBlockData<TDT> next_typed_block(MemBlock* block) {
         size_t num_elements = 0;
@@ -480,11 +491,81 @@ public:
     [[nodiscard]] bool current_tensor_is_empty() const;
 
     const ChunkedBuffer* data_;
-    const Buffer* shapes_;
-    size_t pos_;
-    size_t shape_pos_;
+    const Buffer* shapes_ = nullptr;
+    size_t pos_ = 0;
+    size_t shape_pos_ = 0;
     TypeDescriptor type_;
-    const util::BitMagic* bit_vector_;
+    const util::BitMagic* bit_vector_ = nullptr;
+    const FieldStatsImpl* statistics_ = nullptr;
+    size_t row_count_ = 0;
 };
+
+template <typename TagType>
+FieldStatsImpl generate_column_statistics(ColumnData column_data) {
+    using DataTagType = typename TagType::DataTypeTag;
+    using RawType = typename DataTagType::raw_type;
+    if constexpr(is_bool_type(DataTagType::data_type))
+        return generate_bool_statistics();
+
+    constexpr auto data_type = TagType::DataTypeTag::data_type;
+
+    if constexpr (is_numeric_type(data_type) || is_time_type(data_type)) {
+        // Create shared hashmap for unique values
+        ankerl::unordered_dense::set<RawType> unique;
+
+        if(column_data.num_blocks() == 1) {
+            auto block = column_data.next<TagType>();
+            const RawType* ptr = block->data();
+            const size_t count = block->row_count();
+            return generate_numeric_statistics<RawType>(std::span{ptr, count}, unique);
+        } else {
+            FieldStatsImpl stats;
+            bool first = true;
+            while (auto block = column_data.next<TagType>()) {
+                const RawType* ptr = block->data();
+                const size_t count = block->row_count();
+                auto local_stats = generate_numeric_statistics<RawType>(std::span{ptr, count}, unique);
+                if (first) {
+                    stats = local_stats;
+                    first = false;
+                } else {
+                    stats.compose<RawType>(local_stats);
+                }
+            }
+            // Update unique count with final total from shared hashmap
+            stats.set_unique(unique.size(), UniqueCountType::PRECISE);
+            return stats;
+        }
+    } else if constexpr (is_sequence_type(data_type)) {
+        // Create shared hashmap for unique values
+        ankerl::unordered_dense::set<uint64_t> unique;
+
+        if(column_data.num_blocks() == 1) {
+            auto block = column_data.next<TagType>();
+            const RawType* ptr = block->data();
+            const size_t count = block->row_count();
+            return generate_string_statistics(std::span{ptr, count}, unique);
+        } else {
+            FieldStatsImpl stats;
+            bool first = true;
+            while (auto block = column_data.next<TagType>()) {
+                const RawType* ptr = block->data();
+                const size_t count = block->row_count();
+                auto local_stats = generate_string_statistics(std::span{ptr, count}, unique);
+                if (first) {
+                    stats = local_stats;
+                    first = false;
+                } else {
+                    stats.compose<RawType>(local_stats);
+                }
+            }
+            // Update unique count with final total from shared hashmap
+            stats.set_unique(unique.size(), UniqueCountType::PRECISE);
+            return stats;
+        }
+    } else {
+        util::raise_rte("Cannot generate statistics for data type");
+    }
+}
 
 }

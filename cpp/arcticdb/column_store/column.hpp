@@ -11,6 +11,7 @@
 #include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/column_store/statistics.hpp>
 #include <arcticdb/column_store/column_data_random_accessor.hpp>
+#include <arcticdb/column_store/statistics.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/types.hpp>
@@ -516,7 +517,13 @@ public:
     }
 
     ColumnData data() const {
-        return ColumnData(&data_.buffer(), &shapes_.buffer(), type_, sparse_map_ ? &*sparse_map_ : nullptr);
+        return ColumnData(
+            &data_.buffer(),
+            &shapes_.buffer(),
+            type_,
+            sparse_map_ ? &*sparse_map_ : nullptr,
+            has_statistics() ? &stats_ : nullptr,
+            row_count());
     }
 
     const uint8_t* ptr() const {
@@ -583,19 +590,6 @@ public:
             return std::nullopt;
 
         return *data_.buffer().ptr_cast<T>(bytes_offset(*physical_row), sizeof(T));
-    }
-
-    // Copies all physical scalars to a std::vector<T>. This is useful if you require many random access operations
-    // and you would like to avoid the overhead of computing the exact location every time.
-    template<typename T>
-    std::vector<T> clone_scalars_to_vector() const {
-        auto values = std::vector<T>();
-        values.reserve(row_count());
-        const auto& buffer = data_.buffer();
-        for (auto i=0u; i<row_count(); ++i){
-            values.push_back(*buffer.ptr_cast<T>(i*item_size(), sizeof(T)));
-        }
-        return values;
     }
 
     // N.B. returning a value not a reference here, so it will need to be pre-checked when data is sparse or it
@@ -982,6 +976,7 @@ private:
     size_t num_shapes() const;
     void set_sparse_bit_for_row(size_t sparse_location);
     void regenerate_offsets() const;
+
 
     // Permutes the physical column storage based on the given sorted_pos.
     void physical_sort_external(std::vector<uint32_t> &&sorted_pos);

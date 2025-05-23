@@ -86,6 +86,7 @@ class MappedFileStorage final : public SingleFileStorage {
     std::mutex offset_mutex_;
     size_t offset_ = 0UL;
     Config config_;
+    BlockCodecImpl codec_;
     MemoryMappedFile file_;
     storage::MultiSegmentHeader multi_segment_header_;
 };
@@ -96,8 +97,7 @@ inline arcticdb::proto::storage::VariantStorage pack_config(
         size_t items_count,
         const StreamId& id,
         const IndexDescriptorImpl& index_desc,
-        EncodingVersion encoding_version,
-        const arcticdb::proto::encoding::VariantCodec& codec_opts) {
+        EncodingVersion encoding_version) {
     arcticdb::proto::storage::VariantStorage output;
     arcticdb::proto::mapped_file_storage::Config cfg;
     cfg.set_path(path);
@@ -108,18 +108,16 @@ inline arcticdb::proto::storage::VariantStorage pack_config(
                             [&cfg] (const NumericId& n) { cfg.set_num_id(n); });
     cfg.mutable_index()->CopyFrom(index_descriptor_to_proto(index_desc)),
     cfg.set_encoding_version(static_cast<uint32_t>(encoding_version));
-    cfg.mutable_codec_opts()->CopyFrom(codec_opts);
     util::pack_to_any(cfg, *output.mutable_config());
     return output;
 }
 
 inline arcticdb::proto::storage::VariantStorage pack_config(
     const std::string& path,
-    const arcticdb::proto::encoding::VariantCodec& codec_opts) {
+    BlockCodecImpl) {
     arcticdb::proto::storage::VariantStorage output;
     arcticdb::proto::mapped_file_storage::Config cfg;
     cfg.set_path(path);
-    cfg.mutable_codec_opts()->CopyFrom(codec_opts);
     util::pack_to_any(cfg, *output.mutable_config());
     return output;
 }

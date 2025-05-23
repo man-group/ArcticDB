@@ -33,14 +33,14 @@ class Column;
 
 
 static FieldRef ARCTICDB_UNUSED string_pool_descriptor() {
-    static TypeDescriptor type{ DataType::UINT8, Dimension::Dim1 };
-    static std::string_view name{ "__string_pool__" };
+    static TypeDescriptor type{DataType::UINT8, Dimension::Dim1};
+    static std::string_view name{"__string_pool__"};
     return FieldRef{type, name};
 }
-
-/*****************
- * StringBlock *
-*****************/
+struct InsertResult {
+    position_t pos_;
+    uint8_t* ptr_;
+};
 
 class StringBlock {
     friend class StringPool;
@@ -80,7 +80,7 @@ class StringBlock {
 
     [[nodiscard]] StringBlock clone() const;
 
-    position_t insert(const char *str, size_t size);
+    InsertResult insert(const char *str, size_t size);
 
     std::string_view at(position_t pos);
     [[nodiscard]] std::string_view const_at(position_t pos) const;
@@ -122,10 +122,6 @@ class StringBlock {
 };
 
 class OffsetString;
-
-/*****************
- *  StringPool  *
-*****************/
 
 class StringPool {
   public:
