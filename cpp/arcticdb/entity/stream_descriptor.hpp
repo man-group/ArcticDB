@@ -11,7 +11,6 @@
 #include "arcticdb/storage/memory_layout.hpp"
 
 #include <arcticdb/entity/field_collection_proto.hpp>
-#include <arcticdb/util/variant.hpp>
 #include <arcticdb/entity/types_proto.hpp>
 
 #include <ankerl/unordered_dense.h>
@@ -308,13 +307,27 @@ struct OutputSchema {
         column_types().emplace(name, data_type);
     }
 
+    auto release() {
+        column_types_.reset();
+        return std::tuple{std::move(stream_descriptor_), std::move(norm_metadata_), std::move(default_values_)};
+    }
+
+    void clear_default_values() {
+        default_values_.clear();
+    }
+
+    void set_default_value_for_column(const std::string_view name, const VariantRawValue& value) {
+        default_values_.emplace(std::string(name), value);
+    }
+
 private:
     StreamDescriptor stream_descriptor_;
     std::optional<ankerl::unordered_dense::map<std::string, DataType>> column_types_;
+    ankerl::unordered_dense::map<std::string, VariantRawValue> default_values_;
 };
 
 template <class IndexType>
-inline void set_index(StreamDescriptor &stream_desc) {
+void set_index(StreamDescriptor &stream_desc) {
     stream_desc.set_index_field_count(std::uint32_t(IndexType::field_count()));
     stream_desc.set_index_type(IndexType::type());
 }

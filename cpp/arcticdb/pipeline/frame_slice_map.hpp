@@ -8,6 +8,7 @@
 #pragma once
 
 #include <arcticdb/pipeline/pipeline_context.hpp>
+#include <arcticdb/pipeline/index_utils.hpp>
 
 namespace arcticdb::pipelines {
 
