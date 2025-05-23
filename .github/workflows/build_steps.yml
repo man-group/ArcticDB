@@ -361,7 +361,7 @@ jobs:
 
       - name: Run test
         run: |
-          python -m pip --force-reinstall install pytest-repeat
+          python -m pip  install pytest-repeat
           pytest -n auto -v --count=50 -x tests/compat
           #build_tooling/parallel_test.sh tests/${{matrix.type}}
         env:
