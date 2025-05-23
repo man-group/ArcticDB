@@ -80,7 +80,7 @@ void initialise_output_column(const Column& input_column, Column& output_column)
 
 void initialise_output_column(const Column& left_input_column, const Column& right_input_column, Column& output_column);
 
-void initialise_output_bitset(const util::BitSet& input_bitset, bool sparse_missing_value_output, util::BitSet& output_bitset);
+void initialise_output_bitset(const Column& input_column, bool sparse_missing_value_output, util::BitSet& output_bitset);
 
 class Column {
 public:
@@ -847,7 +847,7 @@ public:
                           bool sparse_missing_value_output,
                           functor&& f) {
         if (input_column.is_sparse()) {
-            initialise_output_bitset(input_column.sparse_map(), sparse_missing_value_output, output_bitset);
+            initialise_output_bitset(input_column, sparse_missing_value_output, output_bitset);
         } else {
             // This allows for empty/full result optimisations, technically bitsets are always dynamically sized
             output_bitset.resize(input_column.row_count());
@@ -872,6 +872,8 @@ public:
                           functor&& f) {
         auto left_input_data = left_input_column.data();
         auto right_input_data = right_input_column.data();
+        util::check(left_input_column.last_row() == right_input_column.last_row(),
+                    "Mismatching logical column lengths in Column::transform");
         util::BitSet::bulk_insert_iterator inserter(output_bitset);
 
         if (!left_input_column.is_sparse() && !right_input_column.is_sparse()) {
@@ -909,7 +911,12 @@ public:
         } else if (left_input_column.is_sparse() && right_input_column.is_sparse()) {
             // Both sparse, only check the intersection of on-bits from both sparse maps
             auto bits_to_check = left_input_column.sparse_map() & right_input_column.sparse_map();
-            initialise_output_bitset(bits_to_check, sparse_missing_value_output, output_bitset);
+            if (sparse_missing_value_output) {
+                output_bitset = bits_to_check;
+                output_bitset.flip();
+            }
+            // Both columns should have the same number of logical rows, so just use one of them
+            output_bitset.resize(left_input_column.last_row() + 1);
             auto left_accessor = random_accessor<left_input_tdt>(&left_input_data);
             auto right_accessor = random_accessor<right_input_tdt>(&right_input_data);
             // TODO: experiment with more efficient bitset traversal methods
@@ -922,7 +929,7 @@ public:
             }
         } else if (left_input_column.is_sparse() && !right_input_column.is_sparse()) {
             // One sparse, one dense. Use the enumerating forward iterator over the sparse column as it is more efficient than random access
-            initialise_output_bitset(left_input_column.sparse_map(), sparse_missing_value_output, output_bitset);
+            initialise_output_bitset(left_input_column, sparse_missing_value_output, output_bitset);
             auto right_accessor = random_accessor<right_input_tdt>(&right_input_data);
             const auto right_column_row_count = right_input_column.row_count();
             const auto left_input_data_cend = left_input_data.cend<left_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
@@ -935,7 +942,7 @@ public:
             }
         } else if (!left_input_column.is_sparse() && right_input_column.is_sparse()) {
             // One sparse, one dense. Use the enumerating forward iterator over the sparse column as it is more efficient than random access
-            initialise_output_bitset(right_input_column.sparse_map(), sparse_missing_value_output, output_bitset);
+            initialise_output_bitset(right_input_column, sparse_missing_value_output, output_bitset);
             auto left_accessor = random_accessor<left_input_tdt>(&left_input_data);
             const auto left_column_row_count = left_input_column.row_count();
             const auto right_input_data_cend = right_input_data.cend<right_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
