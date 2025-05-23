@@ -116,7 +116,7 @@ jobs:
       - name: Install Required MSVC
         if: matrix.os == 'windows'
         run: |
-          choco install -y -f visualstudio2022buildtools --version=117.11.4 --params "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --installChannelUri https://aka.ms/vs/17/release/390666095_1317821361/channel"
+          choco install -y -f visualstudio2022buildtools --version=117.14.1 --params "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --installChannelUri https://aka.ms/vs/17/release/390666095_1317821361/channel"
           choco install -y ninja
 
       - name: Enable Windows compiler commands
@@ -124,8 +124,7 @@ jobs:
         uses: TheMrMilchmann/setup-msvc-dev@v3
         with:
           arch: x64
-          toolset: 14.41
-          vs-path: 'C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools'
+          toolset: 14.43
 
       - name: Setup cmake
         uses: jwlawson/actions-setup-cmake@v2
