@@ -611,12 +611,12 @@ void write_alternating_deleted_undeleted(std::shared_ptr<InMemoryStore> store, s
                    });
 }
 
-void write_versions(std::shared_ptr<InMemoryStore> store, std::shared_ptr<VersionMap> version_map, StreamId id, int number_of_versions) {
+std::shared_ptr<VersionMapEntry> write_versions(std::shared_ptr<InMemoryStore> store, std::shared_ptr<VersionMap> version_map, StreamId id, int number_of_versions) {
     std::vector<VersionChainOperation> version_chain;
     for (int i = 0; i < number_of_versions; i++) {
         version_chain.emplace_back(VersionChainOperation::Type::WRITE, i);
     }
-    write_versions(store, version_map, id, version_chain);
+    return write_versions(store, version_map, id, version_chain);
 }
 
 TEST(VersionMap, FollowingVersionChain){
@@ -737,6 +737,62 @@ TEST(VersionMap, FollowingVersionChainEndEarlyOnTombstoneAll) {
         // When loading with any of the specified load strategies with include_deleted=false we should end following the version chain early
         // at version 1 because that's when we encounter the TOMBSTONE_ALL.
         EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{1});
+    }
+
+    for (auto load_strategy: {
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)},
+            LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(0)},
+            LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}
+    }) {
+        follow_result->clear();
+        version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
+        // When loading with any of the specified load strategies with include_deleted=true we should continue to the beginning
+        // at version 0 even though it was deleted.
+        EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{0});
+    }
+}
+
+TEST(VersionMap, FollowingVersionChainWithWriteAndPrunePrevious) {
+    auto store = std::make_shared<InMemoryStore>();
+    auto version_map = std::make_shared<VersionMap>();
+    StreamId id{"test"};
+
+    // write 2 versions
+    auto entry = write_versions(store, version_map, id, 2);
+    
+    // write another version to get a previous_key for write_and_prune_previous
+    auto key = atom_key_with_version(id, 2, 2);
+    version_map->do_write(store, key, entry);
+    write_symbol_ref(store, key, std::nullopt, entry->head_.value());
+
+    // write a new version and prune the previous versions
+    auto key2 = atom_key_with_version(id, 3, 3);
+    version_map->write_and_prune_previous(store, key2, key);
+
+    auto ref_entry = VersionMapEntry{};
+    read_symbol_ref(store, id, ref_entry);
+    auto follow_result = std::make_shared<VersionMapEntry>();
+
+    // LATEST should load only the latest version
+    for (auto load_strategy: {
+        LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY},
+        LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}
+    }) {
+        follow_result->clear();
+        version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
+        EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{3});
+    }
+    
+    for (auto load_strategy: {
+        LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(0)},
+        LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)},
+        LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY},
+    }) {
+        follow_result->clear();
+        version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
+        // When loading with any of the specified load strategies with include_deleted=false we should end following the version chain early
+        // at version 2 because that's when we encounter the TOMBSTONE_ALL.
+        EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{2});
     }
 
     for (auto load_strategy: {

@@ -17,23 +17,24 @@ from arcticdb_ext import set_config_int
 from arcticdb import log
 
 from arcticdb.config import set_log_level
+from arcticdb_ext.storage import KeyType, NoDataFoundException
 
 from tests.util.mark import SLOW_TESTS_MARK
 
 # set_log_level("DEBUG")
 
 
-def write_data(lib, sym, done, error, interval):
+def write_data(lib, sym, done, error, interval, number_of_writes, number_of_deletes):
     set_config_int("VersionMap.ReloadInterval", interval)
     set_config_int("VersionMap.MaxReadRefTrials", 10)
     delete_version_id = 0
-    number_of_writes = 0
     try:
-        for idx1 in range(5):
+        for idx1 in range(10):
             print("Iteration {}/10".format(idx1))
             for idx2 in range(20):
                 if idx2 % 4 == 3:
                     num_versions_to_delete = random.randint(1, 2)
+                    number_of_deletes.value += num_versions_to_delete
                     if num_versions_to_delete == 1:
                         lib.delete_version(sym, delete_version_id)
                     else:
@@ -41,11 +42,11 @@ def write_data(lib, sym, done, error, interval):
                     print("Doing delete {}/{}".format(idx1, idx2))
                     delete_version_id += num_versions_to_delete
                 else:
-                    number_of_writes += 1
+                    number_of_writes.value += 1
                     print("Doing write {}/{}".format(idx1, idx2))
                     lib.write(sym, idx2)
             vs = set([v["version"] for v in lib.list_versions(sym)])
-            assert len(vs) == number_of_writes - delete_version_id
+            assert len(vs) == number_of_writes.value - delete_version_id
             for vid in vs:
                 assert lib.has_symbol(sym, vid)
             for d_id in range(delete_version_id):
@@ -85,11 +86,17 @@ def read_data(lib, sym, done, error):
 def test_stress_version_map_compact(object_version_store, sym, interval):
     done = Value("b", 0)
     error = Value("b", 0)
+    number_of_writes = Value("i", 0)
+    number_of_deletes = Value("i", 0)
     lib = object_version_store
     lib.version_store._set_validate_version_map()
     try:
         log.version.warn("Starting writer")
-        writer = Thread(name="writer", target=write_data, args=(lib, sym, done, error, interval))
+        writer = Thread(
+            name="writer",
+            target=write_data,
+            args=(lib, sym, done, error, interval, number_of_writes, number_of_deletes),
+        )
         writer.start()
         log.version.info("Starting compacter")
         compacter = Thread(name="compacter", target=compact_data, args=(lib, sym, done, error))
@@ -106,6 +113,23 @@ def test_stress_version_map_compact(object_version_store, sym, interval):
         reader.join()
         assert error.value == 0
         log.version.info("Done")
+        writes = number_of_writes.value
+        deletes = number_of_deletes.value
+        # Do one last compaction
+        lib.version_store._compact_version_map(sym)
+
+        # Check that the version map is compacted correctly
+        # and all the keys are present
+        lib_tool = lib.library_tool()
+        version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, sym)
+        compacted_version_key = min(version_keys, key=lambda x: x.version_id)
+
+        keys_in_compacted_version = lib_tool.read_to_keys(compacted_version_key)
+        index_keys = [k for k in keys_in_compacted_version if k.type == KeyType.TABLE_INDEX]
+        tombstone_keys = [k for k in keys_in_compacted_version if k.type == KeyType.TOMBSTONE]
+        # The last write is not in the compacted version
+        assert len(index_keys) == writes - 1
+        assert len(tombstone_keys) == deletes
     finally:
         log.version.info("Clearing library")
         lib.version_store.clear()

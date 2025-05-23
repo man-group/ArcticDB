@@ -366,6 +366,18 @@ def test_prune_previous_versions_multiple_times(basic_store, symbol):
     assert len([ver for ver in basic_store.list_versions() if not ver["deleted"]]) == 1
 
 
+def check_write_and_prune_previous_version_keys(lib_tool, sym, ver_key):
+    assert ver_key.type == KeyType.VERSION
+    keys_in_tombstone_ver = lib_tool.read_to_keys(ver_key)
+    assert len(keys_in_tombstone_ver) == 3
+    assert keys_in_tombstone_ver[0].type == KeyType.TOMBSTONE_ALL
+    assert keys_in_tombstone_ver[1].type == KeyType.TABLE_INDEX
+    assert keys_in_tombstone_ver[2].type == KeyType.VERSION
+    assert keys_in_tombstone_ver[0].version_id == 0
+    assert keys_in_tombstone_ver[1].version_id == 1
+    assert keys_in_tombstone_ver[2].version_id == 0
+
+
 @pytest.mark.storage
 def test_prune_previous_versions_write_batch(basic_store):
     """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified."""
@@ -387,12 +399,16 @@ def test_prune_previous_versions_write_batch(basic_store):
     assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 2
     assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 2
 
-    # Then - we got 3 version keys per symbol: version 0, version 0 tombstone, version 1
+    # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all
     keys_for_sym1 = lib_tool.find_keys_for_id(KeyType.VERSION, sym1)
     keys_for_sym2 = lib_tool.find_keys_for_id(KeyType.VERSION, sym2)
 
     assert len(keys_for_sym1) == 2
+    latest_ver_key = max(keys_for_sym1, key=lambda x: x.version_id)
+    check_write_and_prune_previous_version_keys(lib_tool, sym1, latest_ver_key)
     assert len(keys_for_sym2) == 2
+    latest_ver_key = max(keys_for_sym2, key=lambda x: x.version_id)
+    check_write_and_prune_previous_version_keys(lib_tool, sym2, latest_ver_key)
     # Then - we got 4 symbol keys: 2 for each of the writes
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
 
@@ -418,12 +434,16 @@ def test_prune_previous_versions_batch_write_metadata(basic_store):
     assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 2
     assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 2
 
-    # Then - we got 3 version keys per symbol: version 0, version 0 tombstone, version 1
+    # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all
     keys_for_sym1 = lib_tool.find_keys_for_id(KeyType.VERSION, sym1)
     keys_for_sym2 = lib_tool.find_keys_for_id(KeyType.VERSION, sym2)
 
     assert len(keys_for_sym1) == 2
+    latest_ver_key = max(keys_for_sym1, key=lambda x: x.version_id)
+    check_write_and_prune_previous_version_keys(lib_tool, sym1, latest_ver_key)
     assert len(keys_for_sym2) == 2
+    latest_ver_key = max(keys_for_sym2, key=lambda x: x.version_id)
+    check_write_and_prune_previous_version_keys(lib_tool, sym2, latest_ver_key)
     # Then - we got 2 symbol keys: 1 for each of the writes
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
 
@@ -449,12 +469,16 @@ def test_prune_previous_versions_append_batch(basic_store):
     assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 2
     assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 4
 
-    # Then - we got 3 version keys per symbol: version 0, version 0 tombstone, version 1
+    # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all
     keys_for_sym1 = lib_tool.find_keys_for_id(KeyType.VERSION, sym1)
     keys_for_sym2 = lib_tool.find_keys_for_id(KeyType.VERSION, sym2)
 
     assert len(keys_for_sym1) == 2
+    latest_ver_key = max(keys_for_sym1, key=lambda x: x.version_id)
+    check_write_and_prune_previous_version_keys(lib_tool, sym1, latest_ver_key)
     assert len(keys_for_sym2) == 2
+    latest_ver_key = max(keys_for_sym2, key=lambda x: x.version_id)
+    check_write_and_prune_previous_version_keys(lib_tool, sym2, latest_ver_key)
     # Then - we got 4 symbol keys: 2 for each of the writes
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
 

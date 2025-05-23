@@ -318,6 +318,11 @@ class ModificationFunctions:
         self.lib = self.ac[get_prewritten_lib_name(rows)]
         self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]
 
+        # Used by time_delete_multiple_versions
+        df = self.init_dfs[rows]
+        for i in range(1000):
+            self.lib.write("sym", df, prune_previous_versions=False)
+
     def teardown(self, lad: LargeAppendDataModify, rows):
         # After the modification functions clean up the changes by replacing the modified ARCTIC_DIR with the original ARCTIC_DIR_ORIGINAL
         # TODO: We can use dirs_exist_ok=True on copytree instead of removing first if we run with python version >=3.8
@@ -352,9 +357,7 @@ class ModificationFunctions:
     def time_delete(self, lad: LargeAppendDataModify, rows):
         self.lib.delete("sym")
 
-    def time_delete_multiple(self, lad: LargeAppendDataModify, rows):
-        for i in range(1000):
-            self.lib.write("sym", generate_pseudo_random_dataframe(rows), prune_previous_versions=False)
+    def time_delete_multiple_versions(self, lad: LargeAppendDataModify, rows):
         self.lib.delete("sym", list(range(100)))
 
     def time_delete_short_wide(self, lad: LargeAppendDataModify, rows):
