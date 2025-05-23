@@ -361,8 +361,9 @@ jobs:
 
       - name: Run test
         run: |
+          pwd
           python -m pip  install pytest-repeat
-          pytest -n auto -v --count=50 -x tests/compat
+          pytest -n auto -v --count=50 -x python/tests/compat
           #build_tooling/parallel_test.sh tests/${{matrix.type}}
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
