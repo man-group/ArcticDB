@@ -708,6 +708,30 @@ def test_delete_version_that_does_not_exist(arctic_library):
 
 
 @pytest.mark.storage
+def test_delete_version_after_tombstone_all(arctic_library):
+    lib = arctic_library
+    lib.write("symbol_tombstone_all", pd.DataFrame())
+    lib.write("symbol_tombstone_all", pd.DataFrame(), prune_previous_versions=True)  # should write a tombstone_all
+    lib.write("symbol_tombstone_all", pd.DataFrame(), prune_previous_versions=False)  # should NOT write a tombstone_all
+    assert len(lib.list_versions("symbol_tombstone_all")) == 2
+    assert len(lib.list_symbols()) == 1
+
+    with pytest.raises(InternalException):
+        lib.delete("symbol_tombstone_all", versions=[0])
+
+    with pytest.raises(InternalException):
+        lib.delete("symbol_tombstone_all", versions=[0, 1])
+
+    with pytest.raises(InternalException):
+        lib.delete("symbol_tombstone_all", versions=[0, 1, 2])
+
+    lib.delete("symbol_tombstone_all", versions=[1, 2])
+
+    assert len(lib.list_versions("symbol_tombstone_all")) == 0
+    assert len(lib.list_symbols()) == 0
+
+
+@pytest.mark.storage
 def test_delete_date_range(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"column": [5, 6, 7, 8]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))

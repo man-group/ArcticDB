@@ -195,8 +195,7 @@ def check_tombstones_after_multiple_delete(lib_tool, symbol, versions_to_delete,
     assert len(keys_in_tombstone_ver) == len(versions_to_delete) + 1
     tombstone_entries = [k for k in keys_in_tombstone_ver if k.type == KeyType.TOMBSTONE]
     assert len(tombstone_entries) == len(versions_to_delete)
-    for t in tombstone_entries:
-        assert t.version_id in versions_to_delete
+    assert [t.version_id for t in tombstone_entries] == sorted(versions_to_delete)
     previous_version_key = keys_in_tombstone_ver[-1]
     assert previous_version_key.type == KeyType.VERSION
     assert previous_version_key.version_id == num_versions_written - 1

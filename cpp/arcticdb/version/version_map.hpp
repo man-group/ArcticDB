@@ -293,17 +293,15 @@ public:
                 key.id(),
                 LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY},
                 __FUNCTION__);
-        auto [latest_version, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry, false);
+        auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry, false);
 
         std::vector<AtomKey> keys_to_write;
+        std::optional<AtomKey> tombstone_all_key;
         if (!result.empty()) {
             auto first_key_to_tombstone = previous_key ? previous_key : entry->get_first_index(false).first;
-            auto tombstone_all_key = get_tombstone_all_key(first_key_to_tombstone.value(), store->current_timestamp());
-            entry->try_set_tombstone_all(tombstone_all_key);
-            keys_to_write.push_back(tombstone_all_key);
-            if(log_changes_) {
-                log_tombstone_all(store, tombstone_all_key.id(), tombstone_all_key.version_id());
-            }
+            tombstone_all_key = get_tombstone_all_key(first_key_to_tombstone.value(), store->current_timestamp());
+            entry->try_set_tombstone_all(tombstone_all_key.value());
+            keys_to_write.push_back(tombstone_all_key.value());
         }
         keys_to_write.push_back(key);
 
@@ -311,8 +309,11 @@ public:
         write_symbol_ref(store, *entry->keys_.cbegin(), previous_index, entry->head_.value());
 
         maybe_invalidate_cached_undeleted(*entry);
-        if (log_changes_)
+        if (log_changes_) {
+            if (tombstone_all_key)
+                log_tombstone_all(store, tombstone_all_key.value().id(), tombstone_all_key.value().version_id());
             log_write(store, key.id(), key.version_id());
+        }
 
         return result;
     }

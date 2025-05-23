@@ -65,10 +65,15 @@ def delete_specific_version(lib, symbol=None):
         symbol = random.choice(list(undeleted_versions.keys()))
         # delete N versions
         versions = undeleted_versions[symbol]
-        for _ in range(random.randint(1, len(versions))):
-            version = random.choice(versions)
-            lib.delete_version(symbol, version)
-        return f"Deleted versions {versions} of symbol {symbol}"
+        version_to_delete = random.sample(versions, random.randint(1, len(versions)))
+        try:
+            lib.delete_versions(symbol, version_to_delete)
+            return f"Deleted versions {version_to_delete} of symbol {symbol}"
+        except Exception as e:
+            log.storage.error(
+                "Deleting versions {} of symbol {} failed due to: {}".format(version_to_delete, symbol, e)
+            )
+            raise e
 
     return "No versions to delete"
 
