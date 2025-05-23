@@ -198,4 +198,16 @@ namespace arcticdb {
         }
     }
 
+    // The above method requires that both types are exactly representable by one type
+    // This is more permissive, allowing (for example) a uint64_t to be combined with an int* with the result being a double
+    std::optional<entity::TypeDescriptor> promotable_type(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right) {
+        auto res = has_valid_common_type(left, right);
+        if (!res.has_value() &&
+            is_valid_type_promotion_to_target(left, make_scalar_type(entity::DataType::FLOAT64)) &&
+            is_valid_type_promotion_to_target(right, make_scalar_type(entity::DataType::FLOAT64))) {
+            res = make_scalar_type(entity::DataType::FLOAT64);
+        }
+        return res;
+    }
+
 }
