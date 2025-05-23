@@ -12,6 +12,7 @@
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/processing/operation_dispatch_binary.hpp>
+#include <arcticdb/processing/operation_dispatch_ternary.hpp>
 #include <arcticdb/processing/operation_dispatch_unary.hpp>
 
 namespace arcticdb {
@@ -49,21 +50,31 @@ namespace arcticdb {
     return std::nullopt;
 }
 
+ExpressionNode::ExpressionNode(VariantNode condition, VariantNode left, VariantNode right, OperationType op) :
+        condition_(std::move(condition)),
+        left_(std::move(left)),
+        right_(std::move(right)),
+        operation_type_(op) {
+    util::check(is_ternary_operation(op), "Non-ternary expression provided with three arguments");
+}
+
 ExpressionNode::ExpressionNode(VariantNode left, VariantNode right, OperationType op) :
     left_(std::move(left)),
     right_(std::move(right)),
     operation_type_(op) {
-    util::check(is_binary_operation(op), "Left and right expressions supplied to non-binary operator");
+    util::check(is_binary_operation(op), "Non-binary expression provided with two arguments");
 }
 
 ExpressionNode::ExpressionNode(VariantNode left, OperationType op) :
     left_(std::move(left)),
     operation_type_(op) {
-    util::check(!is_binary_operation(op), "Binary expression expects both left and right children");
+    util::check(is_unary_operation(op), "Non-unary expression provided with single argument");
 }
 
 VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
-    if (is_binary_operation(operation_type_)) {
+    if (is_ternary_operation(operation_type_)) {
+        return dispatch_ternary(seg.get(condition_), seg.get(left_), seg.get(right_), operation_type_);
+    } else if (is_binary_operation(operation_type_)) {
         return dispatch_binary(seg.get(left_), seg.get(right_), operation_type_);
     } else {
         return dispatch_unary(seg.get(left_), operation_type_);
@@ -88,11 +99,11 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                     using type_info = ScalarTypeInfo<decltype(tag)>;
                     if constexpr (is_numeric_type(type_info::data_type)) {
                         if (operation_type_ == OperationType::ABS) {
-                            using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<AbsOperator>>::type;
+                            using TargetType = typename unary_operation_promoted_type<typename type_info::RawType, std::remove_reference_t<AbsOperator>>::type;
                             res = data_type_from_raw_type<TargetType>();
                         } else {
                             // operation_type_ == OperationType::NEG
-                            using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<NegOperator>>::type;
+                            using TargetType = typename unary_operation_promoted_type<typename type_info::RawType, std::remove_reference_t<NegOperator>>::type;
                             res = data_type_from_raw_type<TargetType>();
                         }
                     } else {
@@ -124,8 +135,7 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
             default:
                 internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected unary operator {}", operation_type_);
         }
-    } else {
-        // Binary operation
+    } else if (is_binary_operation(operation_type_)) {
         ValueSetState right_value_set_state;
         auto right_type = child_return_type(right_, expression_context, column_types, right_value_set_state);
         switch (operation_type_) {
@@ -143,22 +153,22 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                         if constexpr (is_numeric_type(left_type_info::data_type) && is_numeric_type(right_type_info::data_type)) {
                             switch (operation_type_) {
                                 case OperationType::ADD: {
-                                    using TargetType = typename type_arithmetic_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<PlusOperator>>::type;
+                                    using TargetType = typename binary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<PlusOperator>>::type;
                                     res = data_type_from_raw_type<TargetType>();
                                     break;
                                 }
                                 case OperationType::SUB: {
-                                    using TargetType = typename type_arithmetic_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<MinusOperator>>::type;
+                                    using TargetType = typename binary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<MinusOperator>>::type;
                                     res = data_type_from_raw_type<TargetType>();
                                     break;
                                 }
                                 case OperationType::MUL: {
-                                    using TargetType = typename type_arithmetic_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<TimesOperator>>::type;
+                                    using TargetType = typename binary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<TimesOperator>>::type;
                                     res = data_type_from_raw_type<TargetType>();
                                     break;
                                 }
                                 case OperationType::DIV: {
-                                    using TargetType = typename type_arithmetic_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<DivideOperator>>::type;
+                                    using TargetType = typename binary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<DivideOperator>>::type;
                                     res = data_type_from_raw_type<TargetType>();
                                     break;
                                 }
@@ -219,6 +229,58 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
             default:
                 internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected binary operator {}", operation_type_);
         }
+    } else {
+        // Ternary operation
+        ValueSetState condition_value_set_state;
+        auto condition_type = child_return_type(condition_, expression_context, column_types, condition_value_set_state);
+        ValueSetState right_value_set_state;
+        auto right_type = child_return_type(right_, expression_context, column_types, right_value_set_state);
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(condition_value_set_state == ValueSetState::NOT_A_SET &&
+                                                              right_value_set_state == ValueSetState::NOT_A_SET,
+                                                              "Unexpected value set input to {}", operation_type_);
+        if (!std::holds_alternative<BitSetTag>(condition_type)) {
+            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    std::get<DataType>(condition_type) == DataType::BOOL8,
+                    "Unexpected data type {} input as condition operand to {}",
+                    std::get<DataType>(condition_type), operation_type_);
+        }
+        if (std::holds_alternative<DataType>(left_type) && std::holds_alternative<DataType>(right_type)) {
+            details::visit_type(std::get<DataType>(left_type), [this, &res, right_type](auto left_tag) {
+                using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
+                details::visit_type(std::get<DataType>(right_type), [this, &res](auto right_tag) {
+                    using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
+                    if constexpr(is_sequence_type(left_type_info::data_type) && is_sequence_type(right_type_info::data_type)) {
+                        if constexpr(left_type_info::data_type == right_type_info::data_type && is_dynamic_string_type(left_type_info::data_type)) {
+                            res = left_type_info::data_type;
+                        } else {
+                            // Fixed width string columns
+                            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unexpected data types {} {} input to {}",
+                                                                                  left_type_info::data_type, right_type_info::data_type, operation_type_);
+                        }
+                    } else if constexpr (is_numeric_type(left_type_info::data_type) && is_numeric_type(right_type_info::data_type)) {
+                        using TargetType = typename ternary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType>::type;
+                        res = data_type_from_raw_type<TargetType>();
+                    } else if constexpr (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type)) {
+                        res = DataType::BOOL8;
+                    } else {
+                        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unexpected data types {} {} input to {}",
+                                                                              left_type_info::data_type, right_type_info::data_type, operation_type_);
+                    }
+                });
+            });
+        } else if (std::holds_alternative<DataType>(left_type)) {
+             // right_type holds a bitset, so left_type needs to be bool
+             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                     std::get<DataType>(left_type) == DataType::BOOL8,
+                     "Unexpected data types {}/bitset input to {}",
+                     std::get<DataType>(left_type), operation_type_);
+        } else if (std::holds_alternative<DataType>(right_type)) {
+            // left_type holds a bitset, so right_type needs to be bool
+            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    std::get<DataType>(right_type) == DataType::BOOL8,
+                    "Unexpected data types bitset/{} input to {}",
+                    std::get<DataType>(right_type), operation_type_);
+        } // else both hold bitsets, so the result will be a bitset
     }
     return res;
 }

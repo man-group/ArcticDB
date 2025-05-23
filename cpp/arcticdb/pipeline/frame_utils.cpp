@@ -108,7 +108,7 @@ void adjust_slice_ranges(const std::shared_ptr<pipelines::PipelineContext>& pipe
             // Hash groupings produce slices that all have row ranges starting at 0 and the same col ranges, hence the
             // second condition
             increment_row_slice = next_slice.row_range.first != slice.row_range.first ||
-                                  next_slice.col_range.first == slice.col_range.first;
+                                  next_slice.col_range.first <= slice.col_range.first;
         } else {
             increment_row_slice = true;
         }

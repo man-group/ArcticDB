@@ -468,7 +468,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .value("ISNOTIN", OperationType::ISNOTIN)
             .value("AND", OperationType::AND)
             .value("OR", OperationType::OR)
-            .value("XOR", OperationType::XOR);
+            .value("XOR", OperationType::XOR)
+            .value("TERNARY", OperationType::TERNARY);
 
     py::enum_<SortedValue>(version, "SortedValue")
             .value("UNKNOWN", SortedValue::UNKNOWN)
@@ -501,6 +502,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             }));
 
     py::class_<ExpressionNode, std::shared_ptr<ExpressionNode>>(version, "ExpressionNode")
+            .def(py::init([](VariantNode condition, VariantNode left, VariantNode right, OperationType operation_type) {
+                return ExpressionNode(condition, left, right, operation_type);
+            }))
             .def(py::init([](VariantNode left, VariantNode right, OperationType operation_type) {
                 return ExpressionNode(left, right, operation_type);
             }))
