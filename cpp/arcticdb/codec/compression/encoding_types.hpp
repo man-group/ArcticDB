@@ -455,6 +455,7 @@ struct Alp {
                             state);
                 } else {
                     ContiguousRangeForwardAdaptor<RawType, alp::config::VECTOR_SIZE> adaptor{data};
+                    util::check(adaptor.valid(), "Unexpected invalid adaptor");
                     const auto vectors_in_first_block = (adaptor.block().bytes() / sizeof(RawType)) / alp::config::VECTOR_SIZE;
                     sample_values = std::max(vectors_in_first_block * alp::config::VECTOR_SIZE, alp::config::VECTOR_SIZE);
                     alp::encoder<RawType>::init(

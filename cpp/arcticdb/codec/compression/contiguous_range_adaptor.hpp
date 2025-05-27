@@ -27,11 +27,18 @@ struct ContiguousRangeForwardAdaptor {
     }
 
     const MemBlock& block() {
+        util::check(block_.has_value(), "Uninitialized block");
         return **block_;
     }
 
     [[nodiscard]] bool valid() const {
-        return static_cast<bool>(block_);
+        if(!block_.has_value())
+            return false;
+
+        if(*block_ == *blocks_.rbegin() && block_pos_ == block_.value()->bytes())
+            return false;
+
+        return true;
     }
 
     void set_block() {
@@ -55,6 +62,7 @@ struct ContiguousRangeForwardAdaptor {
     }
 
     const T* next() {
+        util::check(block_.has_value(), "Block not set in forward adaptor");
         if(first_) {
             first_ = false;
             return current();
