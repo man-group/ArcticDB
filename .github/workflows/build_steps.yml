@@ -361,13 +361,7 @@ jobs:
 
       - name: Run test
         run: |
-          pwd
-          python -m pip  install pytest-repeat
-          python -m pip  install setuptools 
-          python -m pip  install wheel
-          python setup.py protoc --build-lib python
-          pytest -n auto -v --count=50 -x python/tests/compat
-          #build_tooling/parallel_test.sh tests/${{matrix.type}}
+          build_tooling/parallel_test.sh tests/${{matrix.type}}
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
