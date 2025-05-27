@@ -723,6 +723,30 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     bool allow_sparse,
     bool validate_index
     ) {
+
+    // =======================================================
+    // INTENTIONAL ERROR
+    std::vector<int> v(1000);
+    for (int i = 0; i < 1000; i++) {
+        v[i] = i;
+    }
+    std::vector v1 = std::move(v);
+    for (size_t i = 0; i < v.size(); ++i) {
+        std::cout<<v[i];
+        v[i] = i;
+    }
+
+    std::vector v2 = std::move(v1);
+    for (auto i : v1) {
+        std::cout<<i;
+    }
+
+    volatile int* i = new int(0);
+    delete i;
+    volatile int a = *i;
+    std::cout<<a<<" "<<*i<<std::endl;
+    //========================================================
+
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
     py::gil_scoped_release release_gil;
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_dataframe");
