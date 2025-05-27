@@ -583,8 +583,8 @@ def test_delete_version_empty(arctic_library):
     lib.write("symbol", df, metadata={"very": "interesting"})
     lib.write("symbol", df, metadata={"muy": "interesante"}, prune_previous_versions=False)
     lib.write("symbol", df, metadata={"tres": "interessant"}, prune_previous_versions=False)
-    with pytest.raises(UserInputException):
-        lib.delete("symbol", versions=[])
+    lib.delete("symbol", versions=[])
+    assert len(lib.list_versions("symbol")) == 3
 
 
 @pytest.mark.storage

@@ -586,6 +586,7 @@ public:
             const StreamId& stream_id,
             const std::shared_ptr<VersionMapEntry>& entry,
             const std::optional<timestamp>& creation_ts=std::nullopt) {
+        static const bool should_log_individual_tombstones = ConfigsMap::instance()->get_int("VersionMap.LogIndividualTombstones", 1);
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(versions.size() > 0, "No version ids to write tombstone for");
         if (validate_)
             entry->validate();
@@ -611,8 +612,15 @@ public:
             entry->tombstones_.try_emplace(key.version_id(), key);
         }
         maybe_invalidate_cached_undeleted(*entry);
-        if(log_changes_)
-            log_tombstone(store, stream_id, tombstone_version_id);
+        if(log_changes_) {
+            if (should_log_individual_tombstones) {
+                for (const auto& key : tombstones) {
+                    log_tombstone(store, stream_id, key.version_id());
+                }
+            } else {
+                log_tombstone(store, stream_id, tombstone_version_id);
+            }
+        }
 
         return tombstones.front();
     }
