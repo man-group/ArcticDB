@@ -148,8 +148,7 @@ void do_write_impl(
 
     if (put_object_result.is_success()) {
         query_stats::add(query_stats::TaskType::S3_PutObject, key_type, query_stats::StatType::SIZE_BYTES, segment_size);
-    }
-    else{
+    } else {
         auto& error = put_object_result.get_error();
         // No DuplicateKeyException is thrown because S3 overwrites the given key if it already exists.
         raise_s3_exception(error, s3_object_name);
@@ -228,8 +227,7 @@ folly::Future<KeySegmentPair> do_async_read_impl(
                 auto segment = std::move(result.get_output());
                 query_stats::add(query_stats::TaskType::S3_GetObjectAsync, key_type, query_stats::StatType::SIZE_BYTES, segment.calculate_size());
                 return KeySegmentPair(std::move(vk), std::move(segment));
-            }
-            else {
+            } else {
                 auto unencoded_key = decoder(std::move(vk));	
                 raise_s3_exception(result.get_error(), fmt::format("{}", unencoded_key));
             }
@@ -412,8 +410,7 @@ void do_write_if_none_impl(
 
             if (put_object_result.is_success()) {
                 query_stats::add(query_stats::TaskType::S3_PutObject, key_type, query_stats::StatType::SIZE_BYTES, segment_size);
-            }
-            else {
+            } else {
                 auto& error = put_object_result.get_error();
                 raise_s3_exception(error, s3_object_name);
             }
