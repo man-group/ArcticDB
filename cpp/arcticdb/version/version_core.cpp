@@ -1904,6 +1904,24 @@ VersionedItem compact_incomplete_impl(
         ReadOptions{},
         read_incomplete_flags
     );
+
+    // =======================================================
+    // INTENTIONAL ERROR
+    std::vector v = {1, 2, 3, 4};
+    std::vector v1 = std::move(v);
+    for (auto i : v) {
+        std::cout<<i;
+    }
+    for (auto i : v1) {
+        std::cout<<i;
+    }
+
+    int* i = new int(0);
+    delete i;
+    std::cout<<*i<<std::endl;
+    //========================================================
+
+
     user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
         has_incomplete_segments,
         "Finalizing staged data is not allowed with empty staging area"

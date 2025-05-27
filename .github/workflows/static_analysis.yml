@@ -4,6 +4,12 @@
     workflow_dispatch:
     schedule:
       - cron: "0 3 * * *"
+    pull_request: 
+
+  permissions:
+    pull-requests: write
+    contents: read
+    discussions: write
 
   jobs:
     polaris-scan:
@@ -73,3 +79,4 @@
             polaris_reports_sarif_groupSCAIssues: true
             polaris_upload_sarif_report: true
             polaris_prComment_severities: "high,critical,medium,low"
+
