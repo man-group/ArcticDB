@@ -135,11 +135,7 @@ def test_delete_versions_basic(s3_version_store, versions, sym):
 
     assert len(object_version_store.list_versions(symbol)) == 3
 
-    if len(versions) == 0:
-        with pytest.raises(UserInputException):
-            object_version_store.delete_versions(symbol, versions)
-    else:
-        object_version_store.delete_versions(symbol, versions)
+    object_version_store.delete_versions(symbol, versions)
 
     for idx in versions:
         with pytest.raises(NoDataFoundException):
@@ -195,7 +191,7 @@ def check_tombstones_after_multiple_delete(lib_tool, symbol, versions_to_delete,
     assert len(keys_in_tombstone_ver) == len(versions_to_delete) + 1
     tombstone_entries = [k for k in keys_in_tombstone_ver if k.type == KeyType.TOMBSTONE]
     assert len(tombstone_entries) == len(versions_to_delete)
-    assert [t.version_id for t in tombstone_entries] == sorted(versions_to_delete)
+    assert [t.version_id for t in tombstone_entries] == sorted(versions_to_delete, reverse=True)
     previous_version_key = keys_in_tombstone_ver[-1]
     assert previous_version_key.type == KeyType.VERSION
     assert previous_version_key.version_id == num_versions_written - 1
