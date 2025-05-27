@@ -30,10 +30,8 @@ SegmentInMemory allocate_frame(
 template <typename KeySliceContainer>
 std::optional<util::BitSet> check_and_mark_slices(
     const KeySliceContainer& slice_and_keys,
-    bool dynamic_schema,
     bool return_bitset,
-    std::optional<size_t> incompletes_after,
-    bool has_column_groups) {
+    std::optional<size_t> incompletes_after) {
     ARCTICDB_SAMPLE_DEFAULT(MarkIndexSlices)
     std::optional<util::BitSet> output = return_bitset ? std::make_optional<util::BitSet>(0u) : std::nullopt;
     if (slice_and_keys.empty())
@@ -45,9 +43,7 @@ std::optional<util::BitSet> check_and_mark_slices(
     for (auto[opt_seg, slice, key] : slice_and_keys) {
         is_first = row_ranges.insert(slice.row_range).second;
         if(return_bitset) {
-            util::check(static_cast<bool>(output), "Expected output bitset to be none-null");
-            output.value()[output->size()] = (dynamic_schema && !has_column_groups) || is_first
-                || (incompletes_after && count >= *incompletes_after);
+            output.value()[output->size()] = is_first || (incompletes_after && count >= *incompletes_after);
         }
 
         ++count;
@@ -68,10 +64,7 @@ std::optional<util::BitSet> check_and_mark_slices(
     return output;
 }
 
-void mark_index_slices(
-    const std::shared_ptr<PipelineContext>& context,
-    bool dynamic_schema,
-    bool column_groups);
+void mark_index_slices(const std::shared_ptr<PipelineContext>& context);
 
 folly::Future<SegmentInMemory> fetch_data(
     SegmentInMemory&& frame,

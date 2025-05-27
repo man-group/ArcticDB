@@ -280,9 +280,18 @@ public:
             return data_.ptr_ == other.data_.ptr_;
         }
 
-        typename base_type::reference dereference() const {
+        typename base_type::reference dereference() const requires constant{
             if constexpr (iterator_type == IteratorType::ENUMERATED) {
                 return data_;
+            } else {
+                debug::check<ErrorCode::E_ASSERTION_FAILURE>(data_.ptr_ != nullptr, "Dereferencing nullptr in ColumnDataIterator");
+                return *data_.ptr_;
+            }
+        }
+
+        typename base_type::reference dereference() const requires (not constant) {
+            if constexpr (iterator_type == IteratorType::ENUMERATED) {
+                return *const_cast<typename base_type::value_type*>(&data_);
             } else {
                 debug::check<ErrorCode::E_ASSERTION_FAILURE>(data_.ptr_ != nullptr, "Dereferencing nullptr in ColumnDataIterator");
                 return *data_.ptr_;

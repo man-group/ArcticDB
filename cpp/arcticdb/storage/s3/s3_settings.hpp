@@ -36,7 +36,8 @@ class GCPXMLSettings {
     bool ssl_;
 
 public:
-    GCPXMLSettings() { }
+    GCPXMLSettings():
+        aws_auth_(AWSAuthMethod::DISABLED), https_(false), ssl_(false){ }
 
     explicit GCPXMLSettings(
         AWSAuthMethod aws_auth,
@@ -168,6 +169,14 @@ public:
     explicit S3Settings(AWSAuthMethod aws_auth,
                         const std::string& aws_profile,
                         bool use_internal_client_wrapper_for_testing) :
+        max_connections_(0),
+        connect_timeout_(0),
+        request_timeout_(0),
+        ssl_(false),
+        https_(false),
+        use_virtual_addressing_(false),
+        use_mock_storage_for_testing_(false),
+        use_raw_prefix_(false),
         aws_auth_(aws_auth),
         aws_profile_(aws_profile),
         use_internal_client_wrapper_for_testing_(use_internal_client_wrapper_for_testing) {

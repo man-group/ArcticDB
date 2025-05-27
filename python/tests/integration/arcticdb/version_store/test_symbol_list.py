@@ -39,7 +39,9 @@ def small_max_delta():
 
 
 def make_read_only(lib):
-    return NativeVersionStore.create_store_from_lib_config(lib.lib_cfg(), Defaults.ENV, OpenMode.READ)
+    return NativeVersionStore.create_store_from_lib_config(
+        lib_cfg=lib.lib_cfg(), env=Defaults.ENV, open_mode=OpenMode.READ, native_cfg=lib.lib_native_cfg()
+    )
 
 
 @pytest.mark.storage
