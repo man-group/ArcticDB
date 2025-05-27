@@ -979,8 +979,8 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad) {
         validate_load_strategy(LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-3)}, is_loaded_to_0, is_loaded_to_0 ? 3 : 0);
 
         // When - we delete version 2
-        auto key = atom_key_with_version(id, 2, 2);
-        auto tombstone_key = version_map->write_tombstones(store, {key}, id, entry);
+        auto dummy_index_key = atom_key_with_version(id, 2, 2);
+        auto tombstone_key = version_map->write_tombstones(store, {dummy_index_key}, id, entry);
 
         // We should not invalidate the cache because the version we loaded to is still undeleted
         validate_load_strategy(LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}, true, is_loaded_to_0 ? 3 : 2);
