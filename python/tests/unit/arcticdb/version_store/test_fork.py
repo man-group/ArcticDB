@@ -5,13 +5,17 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import time
 from multiprocessing import Pool
-from pickle import loads, dumps
 import numpy as np
 import pandas as pd
+import pytest
+from arcticdb import Arctic
 
 from arcticdb.util.test import assert_frame_equal
+
+from tests.util.mark import SKIP_CONDA_MARK
 
 
 def df(symbol):
@@ -24,25 +28,6 @@ def write_symbol(args):
     store.write(symbol, df(symbol))
     print("end {}".format(symbol))
     return symbol
-
-
-def check_lib_config(lib):
-    assert lib.env == "test"
-    found_test_normalizer = False
-    for normalizer in lib._custom_normalizer._normalizers:
-        if normalizer.__class__.__name__ == "TestCustomNormalizer":
-            found_test_normalizer = True
-
-    assert found_test_normalizer
-
-
-def get_pickle_store(lmdb_version_store):
-    d = {"a": "b"}
-    lmdb_version_store.write("xxx", d)
-    ser = dumps(lmdb_version_store)
-    nvs = loads(ser)
-    out = nvs.read("xxx")
-    assert d == out.data
 
 
 def test_map(lmdb_version_store):
@@ -78,3 +63,21 @@ def test_parallel_reads(local_object_version_store):
     p.map(_read_and_assert_symbol, [(local_object_version_store, s, idx) for idx, s in enumerate(symbols)])
     p.close()
     p.join()
+
+
+@pytest.mark.parametrize("storage_name", ["s3_storage", "gcp_storage"])
+@SKIP_CONDA_MARK
+def test_parallel_reads_arctic(storage_name, request, lib_name):
+    storage = request.getfixturevalue(storage_name)
+    ac = Arctic(storage.arctic_uri)
+    try:
+        lib = ac.create_library(lib_name)
+        symbols = [f"{i}" for i in range(1)]
+        for s in symbols:
+            lib.write(s, df("test1"))
+        p = Pool(10)
+        p.map(_read_and_assert_symbol, [(lib, s, idx) for idx, s in enumerate(symbols)])
+        p.close()
+        p.join()
+    finally:
+        ac.delete_library(lib_name)

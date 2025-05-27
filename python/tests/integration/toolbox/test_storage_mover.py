@@ -14,19 +14,14 @@ from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 import hypothesis
 import sys
 
-
 # configure_test_logger("DEBUG")
+
 
 def create_local_lmdb_cfg(lib_name=Defaults.LIB, db_dir=Defaults.DATA_DIR, description=None):
     cfg = EnvironmentConfigsMap()
-    add_lmdb_library_to_env(
-        cfg,
-        lib_name=lib_name,
-        env_name=Defaults.ENV,
-        db_dir=db_dir,
-        description=description
-    )
+    add_lmdb_library_to_env(cfg, lib_name=lib_name, env_name=Defaults.ENV, db_dir=db_dir, description=description)
     return cfg
+
 
 @pytest.fixture
 def arctidb_native_local_lib_cfg_extra(tmpdir):
@@ -35,14 +30,18 @@ def arctidb_native_local_lib_cfg_extra(tmpdir):
 
     return create
 
+
 @pytest.fixture
 def arctidb_native_local_lib_cfg(tmpdir):
     def create(lib_name):
         return create_local_lmdb_cfg(lib_name=lib_name, db_dir=str(tmpdir))
+
     return create
+
 
 def create_default_config():
     return create_local_lmdb_cfg()
+
 
 def add_data(version_store):
     version_store.write("symbol", sample_dataframe())
@@ -106,6 +105,7 @@ def test_storage_mover_key_by_key(lmdb_version_store_v1, arctidb_native_local_li
         s.write_keys_from_source_to_target([key], 2)
 
     compare_two_libs(lmdb_version_store_v1, dst_lib)
+
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Numpy strings are not implemented for Windows")
 def test_storage_mover_symbol_tree(arctidb_native_local_lib_cfg_extra, arctidb_native_local_lib_cfg, lib_name):

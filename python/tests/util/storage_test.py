@@ -1,3 +1,4 @@
+from enum import Enum
 import pandas as pd
 from pandas.testing import assert_frame_equal
 import os
@@ -9,6 +10,12 @@ from datetime import datetime
 
 from arcticdb import Arctic
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
+try:
+    # from pytest this way will work
+    from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED
+except ModuleNotFoundError:
+    # when storage_tests.py is executed with argument
+    from mark import PERSISTENT_STORAGE_TESTS_ENABLED
 
 
 # TODO: Remove this when the latest version that we support
@@ -65,6 +72,24 @@ def real_s3_credentials(shared_path: bool = True):
     return endpoint, bucket, region, access_key, secret_key, path_prefix, clear
 
 
+def real_gcp_credentials(shared_path: bool = True):
+    endpoint = os.getenv("ARCTICDB_REAL_GCP_ENDPOINT")
+    if endpoint is not None and "://" in endpoint:
+       endpoint = endpoint.split("://")[1] 
+    bucket = os.getenv("ARCTICDB_REAL_GCP_BUCKET")
+    region = os.getenv("ARCTICDB_REAL_GCP_REGION")
+    access_key = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
+    secret_key = os.getenv("ARCTICDB_REAL_GCP_SECRET_KEY")
+    if shared_path:
+        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
+    else:
+        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX")
+
+    clear = str(os.getenv("ARCTICDB_REAL_GCP_CLEAR")).lower() in ("true", "1")
+
+    return endpoint, bucket, region, access_key, secret_key, path_prefix, clear
+
+
 def get_real_s3_uri(shared_path: bool = True):
     # TODO: Remove this when the latest version that we support
     # contains the s3 fixture code as defined here:
@@ -84,6 +109,50 @@ def get_real_s3_uri(shared_path: bool = True):
     return aws_uri
 
 
+def get_real_gcp_uri(shared_path: bool = True):
+    # TODO: Remove this when the latest version that we support
+    # contains the s3 fixture code as defined here:
+    # https://github.com/man-group/ArcticDB/blob/master/.github/workflows/persistent_storage.yml#L64
+    (
+        endpoint,
+        bucket,
+        region,
+        acs_key,
+        sec_key,
+        path_prefix,
+        _,
+    ) = real_gcp_credentials(shared_path)
+    aws_uri = (
+        f"gcpxml://{endpoint}:{bucket}?access={acs_key}&secret={sec_key}&path_prefix={path_prefix}"
+    )
+    return aws_uri
+
+
+class PersistentTestType(Enum):
+    AWS_S3 = 1,
+    GCP = 2,
+
+
+def persistent_test_type() -> PersistentTestType:
+    """Check which persistent storage type is selected
+    
+    If persistent storage tests are not selected for execution
+    will raise error
+    """
+    if PERSISTENT_STORAGE_TESTS_ENABLED:
+        if os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS_TYPE", "").lower() == "gcp":
+            return PersistentTestType.GCP
+        return PersistentTestType.AWS_S3
+    else:
+        raise Exception("Persistence storage tests are not enabled or not configured properly")
+
+
+def get_real_uri(shared_path: bool = True):
+    if persistent_test_type() == PersistentTestType.GCP:
+       return get_real_gcp_uri(shared_path)
+    return get_real_s3_uri(shared_path)
+
+
 def get_s3_storage_config(cfg):
     primary_storage_name = cfg.lib_desc.storage_ids[0]
     primary_any = cfg.storage_by_id[primary_storage_name]
@@ -101,13 +170,13 @@ def normalize_lib_name(lib_name):
 
 def get_seed_libraries(ac=None):
     if ac is None:
-        ac = Arctic(get_real_s3_uri())
+        ac = Arctic(get_real_uri())
     return [lib for lib in ac.list_libraries() if lib.startswith("seed_")]
 
 
 def get_test_libraries(ac=None):
     if ac is None:
-        ac = Arctic(get_real_s3_uri())
+        ac = Arctic(get_real_uri())
     return [lib for lib in ac.list_libraries() if lib.startswith("test_")]
 
 
@@ -298,8 +367,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     job_type = str(args.type).lower()
     # TODO: Add support for other storages
-    uri = get_real_s3_uri()
+    uri = get_real_uri()
     ac = Arctic(uri)
+    print(f"Storage type: {persistent_test_type()}")
 
     if "seed" == job_type:
         seed_library(ac, args.version)

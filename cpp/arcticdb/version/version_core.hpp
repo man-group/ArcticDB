@@ -40,6 +40,13 @@ struct CompactIncompleteOptions {
     bool delete_staged_data_on_failure_{false};
 };
 
+struct SymbolProcessingResult {
+    VersionedItem versioned_item_;
+    arcticdb::proto::descriptors::UserDefinedMetadata metadata_;
+    OutputSchema output_schema_;
+    std::vector<EntityId> entity_ids_;
+};
+
 struct ReadVersionOutput {
     ReadVersionOutput() = delete;
     ReadVersionOutput(VersionedItem&& versioned_item, FrameAndDescriptor&& frame_and_descriptor):
@@ -49,6 +56,23 @@ struct ReadVersionOutput {
     ARCTICDB_MOVE_ONLY_DEFAULT(ReadVersionOutput)
 
     VersionedItem versioned_item_;
+    FrameAndDescriptor frame_and_descriptor_;
+};
+
+struct MultiSymbolReadOutput {
+    MultiSymbolReadOutput() = delete;
+    MultiSymbolReadOutput(
+            std::vector<VersionedItem>&& versioned_items,
+            std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>&& metadatas,
+            FrameAndDescriptor&& frame_and_descriptor):
+            versioned_items_(std::move(versioned_items)),
+            metadatas_(std::move(metadatas)),
+            frame_and_descriptor_(std::move(frame_and_descriptor)) {}
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(MultiSymbolReadOutput)
+
+    std::vector<VersionedItem> versioned_items_;
+    std::vector<arcticdb::proto::descriptors::UserDefinedMetadata> metadatas_;
     FrameAndDescriptor frame_and_descriptor_;
 };
 
@@ -140,6 +164,10 @@ folly::Future<ReadVersionOutput> read_multi_key(
     const SegmentInMemory& index_key_seg,
     std::any& handler_data);
 
+folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
+    std::vector<std::vector<EntityId>>&& entity_ids_vec_fut,
+    std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses);
+
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
     std::shared_ptr<ComponentManager> component_manager,
     std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
@@ -196,17 +224,6 @@ VersionedItem sort_merge_impl(
     const WriteOptions& write_options,
     std::shared_ptr<PipelineContext>& pipeline_context);
 
-void modify_descriptor(
-    const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
-    const ReadOptions& read_options);
-
-void read_indexed_keys_to_pipeline(
-    const std::shared_ptr<Store>& store,
-    const std::shared_ptr<PipelineContext>& pipeline_context,
-    const VersionedItem& version_info,
-    ReadQuery& read_query,
-    const ReadOptions& read_options);
-
 void add_index_columns_to_query(
     const ReadQuery& read_query, 
     const TimeseriesDescriptor& desc);
@@ -217,6 +234,14 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
     const std::shared_ptr<ReadQuery>& read_query,
     const ReadOptions& read_options,
     std::any& handler_data
+);
+
+folly::Future<SymbolProcessingResult> read_and_process(
+        const std::shared_ptr<Store>& store,
+        const std::variant<VersionedItem, StreamId>& version_info,
+        const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options,
+        std::shared_ptr<ComponentManager> component_manager
 );
 
 class DeleteIncompleteKeysOnExit {
@@ -247,6 +272,13 @@ std::optional<DeleteIncompleteKeysOnExit> get_delete_keys_on_failure(
     const std::shared_ptr<Store>& store,
     const CompactIncompleteOptions& options);
 
+folly::Future<SegmentInMemory> prepare_output_frame(
+        std::vector<SliceAndKey>&& items,
+        const std::shared_ptr<PipelineContext>& pipeline_context,
+        const std::shared_ptr<Store>& store,
+        const ReadOptions& read_options,
+        std::any& handler_data);
+
 } //namespace arcticdb::version_store
 
 namespace arcticdb {
@@ -261,7 +293,6 @@ struct Error {
 };
 
 using CheckOutcome = std::variant<Error, std::monostate>;
-using StaticSchemaCompactionChecks = folly::Function<CheckOutcome(const StreamDescriptor&, const StreamDescriptor&)>;
 using CompactionWrittenKeys = std::vector<VariantKey>;
 using CompactionResult = std::variant<CompactionWrittenKeys, Error>;
 
@@ -271,6 +302,18 @@ bool is_segment_unsorted(const SegmentInMemory& segment);
 
 size_t n_segments_live_during_compaction();
 
+CheckOutcome check_schema_matches_incomplete(
+    const StreamDescriptor& stream_descriptor_incomplete,
+    const StreamDescriptor& pipeline_context,
+    const bool convert_int_to_float=false
+);
+
+struct CompactionOptions {
+    bool convert_int_to_float{false};
+    bool validate_index{true};
+    bool perform_schema_checks{true};
+};
+
 template <typename IndexType, typename SchemaType, typename SegmentationPolicy, typename DensityPolicy, typename IteratorType>
 [[nodiscard]] CompactionResult do_compact(
     IteratorType to_compact_start,
@@ -278,10 +321,8 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
     const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
     std::vector<pipelines::FrameSlice>& slices,
     const std::shared_ptr<Store>& store,
-    bool convert_int_to_float,
     std::optional<size_t> segment_size,
-    bool validate_index,
-    StaticSchemaCompactionChecks&& checks) {
+    const CompactionOptions& options) {
     CompactionResult result;
     auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
 
@@ -305,6 +346,7 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
         segment_size.has_value() ? SegmentationPolicy{*segment_size} : SegmentationPolicy{}
     };
 
+    [[maybe_unused]] size_t count = 0;
     for (auto it = to_compact_start; it != to_compact_end; ++it) {
         auto sk = [&it]() {
             if constexpr (std::is_same_v<IteratorType, pipelines::PipelineContext::iterator>)
@@ -317,6 +359,8 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
         }
 
         const SegmentInMemory& segment = sk.segment(store);
+        ARCTICDB_DEBUG(log::version(), "do_compact Symbol {} Segment {}: Segment has rows {} columns {} uncompressed bytes {}",
+                       pipeline_context->stream_id_, count++, segment.row_count(), segment.columns().size(), segment.descriptor().uncompressed_bytes());
 
         if(!index_names_match(segment.descriptor(), pipeline_context->descriptor())) {
             auto written_keys = folly::collect(write_futures).get();
@@ -324,25 +368,27 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
             return Error{throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>, fmt::format("Index names in segment {} and pipeline context {} do not match", segment.descriptor(), pipeline_context->descriptor())};
         }
 
-        if(validate_index && is_segment_unsorted(segment)) {
+        if(options.validate_index && is_segment_unsorted(segment)) {
             auto written_keys = folly::collect(write_futures).get();
             remove_written_keys(store.get(), std::move(written_keys));
             return Error{throw_error<ErrorCode::E_UNSORTED_DATA>, "Cannot compact unordered segment"};
         }
 
         if constexpr (std::is_same_v<SchemaType, FixedSchema>) {
-            CheckOutcome outcome = checks(segment.descriptor(), pipeline_context->descriptor());
-            if (std::holds_alternative<Error>(outcome)) {
-                auto written_keys = folly::collect(write_futures).get();
-                remove_written_keys(store.get(), std::move(written_keys));
-                return std::get<Error>(std::move(outcome));
+            if (options.perform_schema_checks) {
+                CheckOutcome outcome = check_schema_matches_incomplete(segment.descriptor(), pipeline_context->descriptor(), options.convert_int_to_float);
+                if (std::holds_alternative<Error>(outcome)) {
+                    auto written_keys = folly::collect(write_futures).get();
+                    remove_written_keys(store.get(), std::move(written_keys));
+                    return std::get<Error>(std::move(outcome));
+                }
             }
         }
 
         aggregator.add_segment(
             std::move(sk.segment(store)),
             sk.slice(),
-            convert_int_to_float
+            options.convert_int_to_float
         );
         sk.unset_segment();
     }
@@ -351,8 +397,27 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
     return folly::collect(std::move(write_futures)).get();
 }
 
-CheckOutcome check_schema_matches_incomplete(const StreamDescriptor& stream_descriptor_incomplete, const StreamDescriptor& pipeline_context);
+}
 
+namespace fmt {
+template<>
+struct formatter<arcticdb::version_store::CompactIncompleteOptions> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::version_store::CompactIncompleteOptions &opts, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "CompactIncompleteOptions append={} convert_int_to_float={}, deleted_staged_data_on_failure={}, "
+                                  "prune_previous_versions={}, sparsify={}, validate_index={}, via_iteration={}",
+                       opts.append_,
+                       opts.convert_int_to_float_,
+                       opts.delete_staged_data_on_failure_,
+                       opts.prune_previous_versions_,
+                       opts.sparsify_,
+                       opts.validate_index_,
+                       opts.via_iteration_);
+    }
+};
 }
 
 #define ARCTICDB_VERSION_CORE_H_

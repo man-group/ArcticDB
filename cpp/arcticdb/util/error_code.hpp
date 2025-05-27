@@ -8,9 +8,6 @@
 #pragma once
 
 #include <fmt/format.h>
-
-#include <arcticdb/util/constructors.hpp>
-
 #include <cstdint>
 #include <stdexcept>
 #include <vector>

@@ -19,6 +19,38 @@
 
 namespace arcticdb::storage {
 
+using CompressedSize = uint64_t;
+using ObjectSizesVisitor = std::function<void(const VariantKey&, CompressedSize)>;
+
+struct ObjectSizes {
+    ObjectSizes(KeyType key_type, uint64_t count, CompressedSize compressed_size) :
+        key_type_(key_type), count_(count), compressed_size_(compressed_size) {
+
+    }
+
+    explicit ObjectSizes(KeyType key_type) noexcept : ObjectSizes(key_type, 0, 0) {
+
+    }
+
+    ObjectSizes(const ObjectSizes& other) noexcept : key_type_(other.key_type_), count_(other.count_.load()),
+                                                     compressed_size_(other.compressed_size_.load()) {
+    }
+
+    ObjectSizes& operator=(const ObjectSizes& that) noexcept {
+        if (this != &that) {
+            key_type_ = that.key_type_;
+            count_ = that.count_.load();
+            compressed_size_ = that.compressed_size_.load();
+        }
+
+        return *this;
+    }
+
+    KeyType key_type_;
+    std::atomic_uint64_t count_;
+    std::atomic_uint64_t compressed_size_;
+};
+
 enum class SupportsAtomicWrites {
     NO,
     YES,
@@ -117,16 +149,27 @@ public:
         return do_key_exists(key);
     }
 
-    bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) {
-      return do_iterate_type_until_match(key_type, predicate, std::string());
-    }
-
     void iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix = std::string()) {
         const IterateTypePredicate predicate_visitor = [&visitor](VariantKey&& k) {
           visitor(std::move(k));
           return false; // keep applying the visitor no matter what
         };
-      do_iterate_type_until_match(key_type, predicate_visitor, prefix);
+        do_iterate_type_until_match(key_type, predicate_visitor, prefix);
+    }
+
+    [[nodiscard]] virtual bool supports_object_size_calculation() const {
+        // TODO aseaton remove this default implementation when more storages have special size calculations implemented
+        return false;
+    }
+
+    void visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
+        util::check(supports_object_size_calculation(), "get_object_sizes called on storage {} which does not support "
+                                                        "object size calculation", name());
+        do_visit_object_sizes(key_type, prefix, visitor);
+    }
+
+    bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) {
+        return do_iterate_type_until_match(key_type, predicate, std::string());
     }
 
     [[nodiscard]] std::string key_path(const VariantKey& key) const {
@@ -208,6 +251,12 @@ private:
     // the predicate.
     virtual bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string & prefix) = 0;
 
+    virtual void do_visit_object_sizes([[maybe_unused]] KeyType key_type, [[maybe_unused]] const std::string& prefix,
+                                                          [[maybe_unused]] const ObjectSizesVisitor& visitor) {
+        // Must be overridden if you want to use this
+        util::raise_rte("do_visit_object_sizes called on storage {} that does not support object size calculation {}", name());
+    }
+
     [[nodiscard]] virtual std::string do_key_path(const VariantKey& key) const = 0;
 
     [[nodiscard]] virtual bool do_is_path_valid(std::string_view) const { return true; }
@@ -217,4 +266,20 @@ private:
     std::optional<bool> supports_atomic_writes_;
 };
 
+}
+
+namespace fmt {
+using namespace arcticdb::storage;
+
+template<> struct formatter<ObjectSizes> {
+
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const ObjectSizes &sizes, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "ObjectSizes key_type[{}] count[{}] compressed_size[{}]",
+                              sizes.key_type_, sizes.count_, sizes.compressed_size_);
+    }
+};
 }

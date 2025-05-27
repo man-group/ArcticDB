@@ -22,6 +22,13 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 import trustme
 
+try:
+    # this module can be used outside of the test suite
+    # where the mark module is not available
+    from tests.util.mark import ARCTICDB_USING_CONDA
+except ImportError:
+    ARCTICDB_USING_CONDA = False
+
 _WINDOWS = platform.system() == "Windows"
 _DEBUG = os.getenv("ACTIONS_RUNNER_DEBUG", default=None) in (1, "True")
 
@@ -35,7 +42,7 @@ def get_ephemeral_port(seed=0):
     while port < 65535:
         try:
             with socketserver.TCPServer(("localhost", port), None):
-                time.sleep(10)  # Hold the port open for a while to improve the chance of collision detection
+                time.sleep(30 if ARCTICDB_USING_CONDA else 20)  # Hold the port open for a while to improve the chance of collision detection
                 return port
         except OSError as e:
             print(repr(e), file=sys.stderr)

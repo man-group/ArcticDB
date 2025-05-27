@@ -6,6 +6,8 @@ on:
       commit:             {required: true, type: string, description: commit hash that will be benchmarked}
       run_on_pr_head:     {required: false, default: false, type: boolean, description: Specifies if the benchmark should run on PR head branch}
       dev_image_tag:      {required: false, default: 'latest', type: string, description: Tag of the ArcticDB development image}
+      suite_to_run:       {required: true, type: string, default: 'LMDB', description: Default benchmark on 'LMDB' storage (or 'REAL' storage ond 'ALL' for both)}
+      suite_overwrite:       {required: false, type: string, default: '', description: User defined tests to run}
 jobs:
   start_ec2_runner:
     uses: ./.github/workflows/ec2_runner_jobs.yml
@@ -41,9 +43,7 @@ jobs:
           ref: ${{ inputs.run_on_pr_head && github.event.pull_request.head.sha || '' }}  # Note: This is dangerous if we run automatic CI on external PRs
         
       - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: "v0.4.0"
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Extra envs
         shell: bash -l {0}
@@ -62,6 +62,18 @@ jobs:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
           strategy_branch: "${{ inputs.commit }}"
+          shared_storage_prefix: "_github_runner_"
+
+      # Workaround for https://github.com/airspeed-velocity/asv/issues/1465
+      - name: Setup micromamba
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          micromamba-version: 2.1.0-0
+
+      - name: Install libmambapy
+        shell: bash -el {0}
+        run: |
+          micromamba install -y -c conda-forge "libmambapy<2"
 
       - name: Install ASV
         shell: bash -el {0}
@@ -71,23 +83,48 @@ jobs:
           pip install asv virtualenv
           python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
 
+      - name: Configure what suite or tests to execute
+        shell: bash -el {0}
+        run: | 
+            if [ "${{ inputs.suite_to_run }}" == "REAL" ]; then
+              # ASV tests with real storage starts with 'real_' in the test name
+              SUITE='^(real_).*'
+            elif [ "${{ inputs.suite_to_run }}" == "ALL" ]; then
+              # Select all tests
+              SUITE='^.*'
+            else
+              # LMDB tests are other tests not starting with 'real_'
+              SUITE='^(?!real_).*'
+            fi
+            echo "selection of suite SUITE=$SUITE"
+            SUITE_OVERWRITE=${{ github.event.inputs.suite_overwrite }}
+            echo "selection of SUITE_OVERWRITE=$SUITE_OVERWRITE"
+            # Remove leading and trailing whitespaces using parameter expansion
+            SUITE_OVERWRITE="${SUITE_OVERWRITE#"${SUITE_OVERWRITE%%[![:space:]]*}"}"
+            SUITE_OVERWRITE="${SUITE_OVERWRITE%"${SUITE_OVERWRITE##*[![:space:]]}"}"
+            if [[ -n "${SUITE_OVERWRITE// /}" ]]; then
+              SUITE=$SUITE_OVERWRITE
+            fi
+            echo "FINAL selection to execute SUITE=$SUITE"
+            echo "SUITE=$SUITE" >> $GITHUB_ENV
+
       - name: Benchmark given commit
         if: github.event_name != 'pull_request_target' || inputs.run_all_benchmarks == true
         shell: bash -el {0}
         run: | 
           git config --global --add safe.directory .
-          python -m asv run -v --show-stderr ${{ inputs.commit }}^!
+          python -m asv run -v --show-stderr --bench $SUITE ${{ inputs.commit }}^!
         
       - name: Benchmark against master
         if: github.event_name == 'pull_request_target' && inputs.run_all_benchmarks == false
         shell: bash -el {0}
         run: |
-          python -m asv continuous -v --show-stderr origin/master HEAD -f 1.15
+          python -m asv continuous -v --show-stderr --bench $SUITE origin/master HEAD -f 1.15
 
       - name: Add results to ArcticDB database
         shell: bash -el {0}
         run: |
-          pip install arcticdb[Testing]
+          pip install arcticdb[Testing] "protobuf<6"
           python build_tooling/transform_asv_results.py --mode save ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}}
 
   stop-ec2-runner:

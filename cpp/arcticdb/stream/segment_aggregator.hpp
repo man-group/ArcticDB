@@ -33,7 +33,7 @@ inline void convert_column_types(SegmentInMemory& segment) {
 }
 
 template<class Index, class Schema, class SegmentingPolicy = RowCountSegmentPolicy, class DensityPolicy = DenseColumnPolicy>
-    class SegmentAggregator : public Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy> {
+class SegmentAggregator : public Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy> {
 public:
     using AggregatorType = Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>;
     using SliceCallBack = folly::Function<void(pipelines::FrameSlice&&)>;
@@ -49,6 +49,11 @@ public:
 
     void add_segment(SegmentInMemory&& seg, const pipelines::FrameSlice& slice, bool convert_int_to_float) {
         auto segment = std::move(seg);
+        // Very specific use-case, you probably don't want this. This is applied by design even to static schema. It is
+        // part of an old API that is still used in some tick collectors.
+        if(convert_int_to_float) {
+            convert_column_types(segment);
+        }
         if constexpr (std::is_same_v<Schema, FixedSchema>) {
             if (stream_descriptor_.has_value()) {
                 schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
@@ -60,11 +65,8 @@ public:
         }
         segment.reset_timeseries_descriptor();
         AggregatorType::stats().update_many(segment.row_count(), segment.num_bytes());
-        //TODO very specific use-case, you probably don't want this
-        if(convert_int_to_float)
-            convert_column_types(segment);
 
-        ARCTICDB_DEBUG(log::version(), "Adding segment with descriptor {}", segment.descriptor());
+        ARCTICDB_DEBUG(log::version(), "Adding segment with descriptor {} uncompressed_bytes {}", segment.descriptor(), segment.descriptor().uncompressed_bytes());
         segments_.push_back(segment);
         slices_.push_back(slice);
         if (AggregatorType::segmenting_policy()(AggregatorType::stats())) {

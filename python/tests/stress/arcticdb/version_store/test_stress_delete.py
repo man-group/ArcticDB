@@ -3,6 +3,7 @@ Copyright 2023 Man Group Operations Limited
 Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from datetime import datetime
 from pandas.testing import assert_frame_equal
 
@@ -25,6 +26,7 @@ def check_no_keys(library):
         assert len(lib_tool.find_keys(key_type)) == 0
 
 
+@pytest.mark.storage
 def test_stress_delete(object_store_factory):
     store_factory = object_store_factory
     lib1 = store_factory(name=f"delete_me_{datetime.utcnow().isoformat()}")
@@ -32,14 +34,17 @@ def test_stress_delete(object_store_factory):
     num_tests = 100
     dataframe_size = 1000
 
+    syms = []
     written_dfs = []
 
     for x in range(num_tests):
         symbol = "symbol_{}".format(x)
+        syms.append(symbol)
         df = sample_dataframe(dataframe_size, x)
-        lib1.write(symbol, df)
-        lib2.write(symbol, df)
         written_dfs.append(df)
+
+    lib1.batch_write(syms, written_dfs)
+    lib2.batch_write(syms, written_dfs)
 
     start_time = datetime.now()
     lib1.version_store.clear()
@@ -50,9 +55,9 @@ def test_stress_delete(object_store_factory):
         with pytest.raises(NoDataFoundException) as e:
             lib1.read(f"symbol_{x}")
 
-    for x in range(num_tests):
-        symbol = "symbol_{}".format(x)
-        assert_frame_equal(lib2.read(symbol).data, written_dfs[x])
+    res = lib2.batch_read(syms)
+    for i, sym in enumerate(syms):
+        assert_frame_equal(res[sym].data, written_dfs[i])
 
     check_no_keys(lib1)
 

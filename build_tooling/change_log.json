@@ -1,14 +1,28 @@
 {
 "categories": [
     {
+        "title": "## ⚠️ Breaking Changes",
+        "labels": ["api break", "major"]
+    },
+    {
         "title": "## 🚀 Features",
-        "labels": ["enhancement"]
+        "labels": ["enhancement", "minor"]
     },
     {
         "title": "## 🐛 Fixes",
-        "labels": ["bug"]
+        "labels": ["bug", "patch"]
     }
 ],
 "pr_template": "- ${{TITLE}} (#${{NUMBER}})",
-"template": "${{CHANGELOG}}\n\n<details>\n<summary>Uncategorized</summary>\n\n${{UNCATEGORIZED}}\n</details>"
+"template": "${{CHANGELOG}}\n\n\n${{UNCATEGORIZED}}",
+"ignore_labels": [
+    "no-release-notes"
+],
+"tag_resolver": {
+    "method": "semver",
+    "filter": {
+        "pattern": ".*(rc|man).*"
+    }
+}
+
 }

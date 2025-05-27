@@ -5,7 +5,11 @@ on:
       version: { type: string, required: false, description: "The version to build (used in git and pypi). git-tag='v{version}-docs'.  If not specified then use selected branch and wheel from the last successful build."}
       latest: { type: boolean, required: false, description: Alias this version as the 'latest' stable docs.  This should be set for the latest stable release.}
       deploy: { type: boolean, required: false, description: Push the built docs to the docs-pages branch on github.}
-      
+  workflow_call:
+    inputs:
+      version: { type: string, required: true, description: "The version to build (used in git and pypi). git-tag='v{version}-docs'."}
+      latest: { type: boolean, required: true, description: Alias this version as the 'latest' stable docs.  This should be set for the latest stable release.}
+      deploy: { type: boolean, required: true, description: Push the built docs to the docs-pages branch on github.}
 jobs:
   docs_build:
     runs-on: ubuntu-22.04
@@ -34,7 +38,7 @@ jobs:
           prefix = {"CPython": "cp", "PyPy": "pp"}[platform.python_implementation()]
           v = platform.python_version_tuple()
           print(f"PY_IMPL={prefix}{v[0]}{v[1]}")' | tee -a $GITHUB_ENV
-  
+
       - id: download-wheel-artifact
         name: Download wheel artifact from last successful build
         if: ${{!inputs.version}}
@@ -67,7 +71,7 @@ jobs:
           cd docs/mkdocs
           # stubfiles will be generated into docs/mkdocs/arcticdb_ext and so imported as arcticdb_ext by mkdocs when it builds
           # FIXME --ignore-all-errors may mask new errors and should be removed when we are compliant
-          pybind11-stubgen arcticdb_ext.version_store --ignore-all-errors -o .
+          pybind11-stubgen arcticdb_ext --ignore-all-errors -o .
 
       - name: List docs versions before deploy
         run: |
@@ -75,7 +79,7 @@ jobs:
           cd docs/mkdocs
           mike list
 
-      - name: Versioned mkDocs build 
+      - name: Versioned mkDocs build
         run: |
           set -x
           cd docs/mkdocs
@@ -91,16 +95,3 @@ jobs:
           set -x
           cd docs/mkdocs
           mike list
-
-      - name: Checkout docs-pages branch
-        run: git checkout docs-pages
-
-      - name: Deploy Docs to TestPypi
-        uses: cloudflare/pages-action@v1.5.0
-        with:
-          apiToken: ${{secrets.CLOUDFLARE_API_TOKEN}}
-          accountId: ${{vars.CLOUDFLARE_ACCOUNT_ID}}
-          projectName: ${{vars.CLOUDFLARE_PAGES_PROJECT}}
-          directory: .
-          branch: test
-

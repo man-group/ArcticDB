@@ -252,11 +252,13 @@ set(arcticdb_srcs
         pipeline/write_options.hpp
         python/python_strings.hpp
         python/python_handler_data.hpp
+        python/python_utils.hpp
         pipeline/string_reducers.hpp
         processing/aggregation_utils.hpp
         processing/component_manager.hpp
         processing/operation_dispatch.hpp
         processing/operation_dispatch_binary.hpp
+        processing/operation_dispatch_ternary.hpp
         processing/operation_dispatch_unary.hpp
         processing/operation_types.hpp
         processing/signed_unsigned_comparison.hpp
@@ -268,6 +270,7 @@ set(arcticdb_srcs
         processing/expression_node.hpp
         processing/query_planner.hpp
         processing/sorted_aggregation.hpp
+        processing/ternary_utils.hpp
         processing/unsorted_aggregation.hpp
         storage/async_storage.hpp
         storage/constants.hpp
@@ -332,6 +335,7 @@ set(arcticdb_srcs
         stream/stream_writer.hpp
         toolbox/library_tool.hpp
         toolbox/storage_mover.hpp
+        toolbox/query_stats.hpp
         util/allocator.hpp
         util/allocation_tracing.hpp
         util/bitset.hpp
@@ -382,7 +386,6 @@ set(arcticdb_srcs
         util/lazy.hpp
         util/type_traits.hpp
         util/variant.hpp
-        util/gil_safe_py_none.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
         version/schema_checks.hpp
@@ -451,6 +454,7 @@ set(arcticdb_srcs
         pipeline/write_frame.cpp
         python/normalization_checks.cpp
         python/python_strings.cpp
+        python/python_utils.cpp
         processing/processing_unit.cpp
         processing/aggregation_utils.cpp
         processing/clause.cpp
@@ -470,6 +474,7 @@ set(arcticdb_srcs
         processing/operation_dispatch_binary_operator_minus.cpp
         processing/operation_dispatch_binary_operator_times.cpp
         processing/operation_dispatch_binary_operator_divide.cpp
+        processing/operation_dispatch_ternary.cpp
         processing/query_planner.cpp
         processing/sorted_aggregation.cpp
         processing/unsorted_aggregation.cpp
@@ -505,6 +510,7 @@ set(arcticdb_srcs
         stream/piloted_clock.cpp
         stream/protobuf_mappings.cpp
         toolbox/library_tool.cpp
+        toolbox/query_stats.cpp
         util/allocator.cpp
         util/allocation_tracing.cpp
         util/buffer_pool.cpp
@@ -522,7 +528,6 @@ set(arcticdb_srcs
         util/type_handler.cpp
         version/key_block.hpp
         version/key_block.cpp
-        util/gil_safe_py_none.cpp
         version/local_versioned_engine.cpp
         version/schema_checks.cpp
         version/op_log.cpp
@@ -533,10 +538,7 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        storage/s3/ec2_utils.cpp
-
-	#================ REMOVE ME ==============
-        file_with_deliberate_errors.cpp)
+        storage/s3/ec2_utils.cpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -940,8 +942,12 @@ if(${TEST})
             processing/test/test_component_manager.cpp
             processing/test/test_expression.cpp
             processing/test/test_filter_and_project_sparse.cpp
-            processing/test/test_has_valid_type_promotion.cpp
+            processing/test/test_join_schemas.cpp
+            processing/test/test_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
+            processing/test/test_output_schema_aggregator_types.cpp
+            processing/test/test_output_schema_ast_validity.cpp
+            processing/test/test_output_schema_basic.cpp
             processing/test/test_parallel_processing.cpp
             processing/test/test_resample.cpp
             processing/test/test_set_membership.cpp
@@ -972,6 +978,7 @@ if(${TEST})
             util/test/test_cursor.cpp
             util/test/test_decimal.cpp
             util/test/test_exponential_backoff.cpp
+            util/test/test_folly.cpp
             util/test/test_format_date.cpp
             util/test/test_hash.cpp
             util/test/test_id_transformation.cpp
@@ -1072,6 +1079,7 @@ if(${TEST})
             stream/test/stream_test_common.cpp
             column_store/test/benchmark_memory_segment.cpp
             processing/test/benchmark_clause.cpp
+            processing/test/benchmark_ternary.cpp
             version/test/benchmark_write.cpp)
 
     add_executable(benchmarks ${benchmark_srcs})

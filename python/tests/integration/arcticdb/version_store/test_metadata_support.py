@@ -5,8 +5,15 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import sys
+
 import numpy as np
 import pandas as pd
+import datetime
+if sys.version_info >= (3, 9):
+    import zoneinfo
+import pytz
+
 from arcticdb_ext import set_config_string, unset_config_string
 from pandas import DataFrame, Timestamp
 import pytest
@@ -16,11 +23,14 @@ from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.util.test import assert_frame_equal, distinct_timestamps
 
+from tests.util.mark import ZONE_INFO_MARK
+
 
 # In the following lines, the naming convention is
 # test_rt_df stands for roundtrip dataframe (implicitly pandas given file name)
 
 
+@pytest.mark.storage
 def test_rt_df_with_small_meta(object_and_mem_and_lmdb_version_store):
     lib = object_and_mem_and_lmdb_version_store
     #  type: (NativeVersionStore)->None
@@ -41,6 +51,7 @@ class A:
         return self.attrib == other.attrib
 
 
+@pytest.mark.storage
 def test_rt_df_with_custom_meta(object_and_mem_and_lmdb_version_store):
     lib = object_and_mem_and_lmdb_version_store
 
@@ -81,6 +92,7 @@ def test_pickled_metadata_warning_bad_config(lmdb_version_store_v1):
     assert_frame_equal(df, vit.metadata)
 
 
+@pytest.mark.storage
 def test_rt_df_with_humonguous_meta(object_and_mem_and_lmdb_version_store):
     with pytest.raises(ArcticDbNotYetImplemented):
         from arcticdb.version_store._normalization import _MAX_USER_DEFINED_META as MAX
@@ -94,6 +106,7 @@ def test_rt_df_with_humonguous_meta(object_and_mem_and_lmdb_version_store):
         assert meta == vit.metadata
 
 
+@pytest.mark.storage
 def test_read_metadata(object_and_mem_and_lmdb_version_store):
     lib = object_and_mem_and_lmdb_version_store
     original_data = [1, 2, 3]
@@ -105,6 +118,7 @@ def test_read_metadata(object_and_mem_and_lmdb_version_store):
     assert lib.read_metadata("test_symbol").metadata == metadata
 
 
+@pytest.mark.storage
 def test_read_metadata_by_version(object_and_mem_and_lmdb_version_store):
     lib = object_and_mem_and_lmdb_version_store
     data_v1 = [1, 2, 3]
@@ -120,6 +134,7 @@ def test_read_metadata_by_version(object_and_mem_and_lmdb_version_store):
     assert lib.read_metadata(symbol, 1).metadata == metadata_v1
 
 
+@pytest.mark.storage
 def test_read_metadata_by_snapshot(basic_store):
     original_data = [1, 2, 3]
     snap_name = "metadata_snap_1"
@@ -131,6 +146,7 @@ def test_read_metadata_by_snapshot(basic_store):
     assert basic_store.read_metadata(symbol, snap_name).metadata == metadata
 
 
+@pytest.mark.storage
 def test_read_metadata_by_timestamp(basic_store):
     symbol = "test_symbol"
 
@@ -173,6 +189,7 @@ def test_read_metadata_by_timestamp(basic_store):
     assert basic_store.read_metadata(symbol, as_of=brexit_almost_over).metadata == metadata_v3
 
 
+@pytest.mark.storage
 def test_write_metadata_first_write(basic_store, sym):
     metadata_v0 = {"something": 1}
     # basic_store.write(symbol, 1, metadata=metadata_v0)  # v0
@@ -183,6 +200,7 @@ def test_write_metadata_first_write(basic_store, sym):
     assert len(basic_store.list_versions(sym)) == 1
 
 
+@pytest.mark.storage
 def test_write_metadata_preexisting_symbol(basic_store, sym):
     lib = basic_store
     metadata_v0 = {"something": 1}
@@ -196,6 +214,7 @@ def test_write_metadata_preexisting_symbol(basic_store, sym):
     assert lib.read(sym).data == 1
 
 
+@pytest.mark.storage
 def test_write_metadata_preexisting_symbol_no_pruning(basic_store, sym):
     lib = basic_store
     metadata_v0 = {"something": 1}
@@ -283,3 +302,30 @@ def test_rv_contains_metadata_batch_write_metadata(lmdb_version_store_v1):
     vits = lib.batch_write_metadata([sym_0, sym_1], [metadata_0, metadata_1])
     assert vits[0].metadata == metadata_0
     assert vits[1].metadata == metadata_1
+
+
+@ZONE_INFO_MARK
+@pytest.mark.parametrize("zone_type", ["pytz", "zoneinfo"])
+@pytest.mark.parametrize("zone_name", ["UTC", "America/Los_Angeles", "Europe/London", "Asia/Tokyo", "Pacific/Kiritimati"])
+def test_metadata_timestamp_with_tz(lmdb_version_store_v1, zone_type, zone_name):
+    lib = lmdb_version_store_v1
+    sym = "sym"
+    df = timestamp_indexed_df()
+    if zone_type == "pytz":
+        zone_to_write = pytz.timezone(zone_name)
+    elif zone_type == "zoneinfo":
+        zone_to_write = zoneinfo.ZoneInfo(zone_name)
+    else:
+        raise ValueError("Unknown timezone type")
+    # We need to normalize all timezoned timestamps to a pd.Timestamp with pytz
+    expected_metadata = pd.Timestamp(2025, 1, 1, tz=pytz.timezone(zone_name))
+
+    # pd.Timestamp
+    metadata_to_write = pd.Timestamp(2025, 1, 1, tz=zone_to_write)
+    lib.write(sym, df, metadata_to_write)
+    assert lib.read(sym).metadata == expected_metadata
+
+    # datetime.datetime
+    metadata_to_write = datetime.datetime(2025, 1, 1, tzinfo=zone_to_write)
+    lib.write(sym, df, metadata_to_write)
+    assert lib.read(sym).metadata == expected_metadata

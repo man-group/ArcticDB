@@ -54,7 +54,7 @@ VariantData unary_operator(const Value& val, Func&& func) {
                                                                   get_user_friendly_type_string(val.type()));
         }
         auto value = *reinterpret_cast<const typename type_info::RawType*>(val.data_);
-        using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
+        using TargetType = typename unary_operation_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
         output->data_type_ = data_type_from_raw_type<TargetType>();
         *reinterpret_cast<TargetType*>(output->data_) = func.apply(value);
     });
@@ -74,7 +74,7 @@ VariantData unary_operator(const ColumnWithStrings& col, Func&& func) {
     details::visit_type(col.column_->type().data_type(), [&](auto col_tag) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         if constexpr (is_numeric_type(type_info::data_type)) {
-            using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
+            using TargetType = typename unary_operation_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
             constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
             output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
             Column::transform<typename type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(*(col.column_),
@@ -125,7 +125,7 @@ VariantData unary_comparator(const ColumnWithStrings& col, Func&& func) {
 
     util::BitSet output_bitset;
     constexpr auto sparse_missing_value_output = std::is_same_v<std::remove_reference_t<Func>, IsNullOperator>;
-    details::visit_type(col.column_->type().data_type(), [&](auto col_tag) {
+    details::visit_type(col.column_->type().data_type(), [&, sparse_missing_value_output](auto col_tag) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         // Non-explicit lambda capture due to a bug in LLVM: https://github.com/llvm/llvm-project/issues/34798
         Column::transform<typename type_info::TDT>(*(col.column_), output_bitset, sparse_missing_value_output, [&](auto input_value) -> bool {

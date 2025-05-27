@@ -12,14 +12,18 @@ import itertools
 import sys
 from collections import namedtuple
 from unittest.mock import patch, MagicMock
+
 import numpy as np
 import pandas as pd
 import dateutil as du
 import pytest
 import pytz
+if sys.version_info >= (3, 9):
+    import zoneinfo
 from numpy.testing import assert_equal, assert_array_equal
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 
+from arcticdb import QueryBuilder
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticException
 from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
@@ -49,7 +53,7 @@ from arcticdb.util.test import (
 from arcticdb.util._versions import IS_PANDAS_ZERO, IS_PANDAS_TWO
 from arcticdb.exceptions import ArcticNativeException
 
-from tests.util.mark import param_dict
+from tests.util.mark import param_dict, ZONE_INFO_MARK
 
 params = {
     "simple_dict": {"a": "1", "b": 2, "c": 3.0, "d": True},
@@ -238,19 +242,35 @@ def test_empty_df():
     assert_frame_equal(d, D)
 
 
+timezone_params = [
+    "UTC",
+    "Europe/Amsterdam",
+    pytz.UTC,
+    pytz.timezone("Europe/Amsterdam"),
+    du.tz.gettz("UTC"),
+]
+if sys.version_info > (3, 9):
+    timezone_params += [
+        zoneinfo.ZoneInfo("UTC"),
+        zoneinfo.ZoneInfo("Pacific/Kiritimati"),
+        zoneinfo.ZoneInfo("America/Los_Angeles"),
+    ]
 # See test_get_description_date_range_tz in test_arctic.py for the V2 API equivalent
-@pytest.mark.parametrize(
-    "tz", ["UTC", "Europe/Amsterdam", pytz.UTC, pytz.timezone("Europe/Amsterdam"), du.tz.gettz("UTC")]
-)
+@pytest.mark.parametrize("tz", timezone_params)
 def test_write_tz(lmdb_version_store, sym, tz):
     assert tz is not None
-    index = index=pd.date_range(pd.Timestamp(0), periods=10, tz=tz)
+    index = pd.date_range(pd.Timestamp(0), periods=10, tz=tz)
     df = pd.DataFrame(data={"col1": np.arange(10)}, index=index)
     lmdb_version_store.write(sym, df)
     result = lmdb_version_store.read(sym).data
-    assert_frame_equal(df, result)
     df_tz = df.index.tzinfo
     assert str(df_tz) == str(tz)
+    expected_df = df
+    if sys.version_info >= (3, 9):
+        if isinstance(tz, zoneinfo.ZoneInfo):
+            # We convert all timezones to pytz, so we expect to convert to a pytz timezone.
+            expected_df.index = expected_df.index.tz_convert(pytz.timezone(str(tz)))
+    assert_frame_equal(expected_df, result)
     if tz == du.tz.gettz("UTC") and sys.version_info < (3, 7):
         pytest.skip("Timezone files don't seem to have ever worked properly on Python 3.6")
     start_ts, end_ts = lmdb_version_store.get_timerange_for_symbol(sym)
@@ -858,3 +878,185 @@ def test_throws_correct_exceptions(returns_expected, method_to_test, lmdb_versio
     args = [MagicMock()] * non_default_arg_count
     with pytest.raises(expected):
         method_to_test(*args)
+
+
+def test_numpy_none_slice(lmdb_version_store):
+    lib = lmdb_version_store
+    
+    dat = np.array([1.0, 2.0, 3.0, 4.0])
+    idx = pd.DatetimeIndex(["2020-01-01"], name="date")
+    columns_names = ["A", "B", "C", "D"]
+    
+    # This is a view, not a copy
+    # it transposes the array, so the shape is (4,) instead of (1,4)
+    sl = dat[None, :]
+    df = pd.DataFrame(sl, index=idx, columns=columns_names)
+    
+    lib.write("df_none_slice", df)
+    
+    result = lib.read("df_none_slice").data
+    pd.testing.assert_frame_equal(result, df)
+
+
+def test_numpy_newaxis_slice(lmdb_version_store):
+    lib = lmdb_version_store
+    
+    dat = np.array([1.0, 2.0, 3.0, 4.0])
+    idx = pd.DatetimeIndex(["2020-01-01"], name="date")
+    columns_names = ["A", "B", "C", "D"]
+
+    # This is a view, not a copy
+    # it transposes the array, so the shape is (4,) instead of (1,4)
+    sl = dat[np.newaxis, :]
+    df = pd.DataFrame(sl, index=idx, columns=columns_names)
+    
+    lib.write("df_none_slice", df)
+    
+    result = lib.read("df_none_slice").data
+    pd.testing.assert_frame_equal(result, df)
+
+
+def test_view_with_reshape(lmdb_version_store):
+    lib = lmdb_version_store
+
+    dat = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    reshaped = dat.reshape(2, 3)  # Creates a view with different strides
+    idx = pd.DatetimeIndex(["2020-01-01", "2020-01-02"], name="date")
+    columns_names = ["A", "B", "C"]
+    df = pd.DataFrame(reshaped, index=idx, columns=columns_names)
+    
+    lib.write("df_reshaped", df)
+    
+    result = lib.read("df_reshaped").data
+    pd.testing.assert_frame_equal(result, df)
+
+
+def test_view_with_transpose(lmdb_version_store):
+    lib = lmdb_version_store
+
+    original = np.array([[1, 2, 3], [4, 5, 6]])
+    transposed = original.T  # Shape changes from (2,3) to (3,2)
+    idx = pd.DatetimeIndex(["2020-01-01", "2020-01-02", "2020-01-03"], name="date")
+    columns_names = ["A", "B"]
+    
+    df = pd.DataFrame(transposed, index=idx, columns=columns_names)
+    
+    lib.write("df_transposed", df)
+    
+    result = lib.read("df_transposed").data
+    pd.testing.assert_frame_equal(result, df)
+
+def test_view_with_fancy_indexing(lmdb_version_store):
+    lib = lmdb_version_store
+
+    original = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+    
+    indices = np.array([0, 2])
+    view = original[indices]  # Selects rows 0 and 2
+    
+    idx = pd.DatetimeIndex(["2020-01-01", "2020-01-02"], name="date")
+    columns_names = ["A", "B", "C", "D"]
+    
+    df = pd.DataFrame(view, index=idx, columns=columns_names)
+    
+    lib.write("df_fancy_idx", df)
+    
+    result = lib.read("df_fancy_idx").data
+    pd.testing.assert_frame_equal(result, df)
+
+
+def test_view_with_boolean_masking(lmdb_version_store):
+    lib = lmdb_version_store
+
+    original = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+    
+    mask = np.array([True, False, True])
+    view = original[mask]  # Selects rows 0 and 2
+    
+    idx = pd.DatetimeIndex(["2020-01-01", "2020-01-02"], name="date")
+    columns_names = ["A", "B", "C", "D"]
+    
+    df = pd.DataFrame(view, index=idx, columns=columns_names)
+    
+    lib.write("df_bool_mask", df)
+    
+    result = lib.read("df_bool_mask").data
+    pd.testing.assert_frame_equal(result, df)
+
+
+def test_view_with_slice(lmdb_version_store):
+    lib = lmdb_version_store
+
+    # Create a 2D array
+    original = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+    view = original[0:2, 1:3]  # Select rows 0-1 and columns 1-2
+    idx = pd.DatetimeIndex(["2020-01-01", "2020-01-02"], name="date")
+    columns_names = ["B", "C"]
+    
+    df = pd.DataFrame(view, index=idx, columns=columns_names)
+    
+    lib.write("df_slice", df)
+    
+    result = lib.read("df_slice").data
+    pd.testing.assert_frame_equal(result, df)
+
+
+def test_empty_dimension(lmdb_version_store):
+    lib = lmdb_version_store
+    
+    # 0 rows, 3 columns
+    zero_dim_array = np.zeros((0, 3))
+    columns_names = ["A", "B", "C"]
+    
+    # Empty index
+    # N.B. Make sure not to pass a name to the index
+    # as we don't keep names for empty indices
+    # and pandas does
+    idx = pd.DatetimeIndex([])
+    df = pd.DataFrame(zero_dim_array, index=idx, columns=columns_names)
+    
+    lib.write("df_zero_dim", df)
+    
+    result = lib.read("df_zero_dim").data
+    pd.testing.assert_frame_equal(result, df)
+
+
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+@pytest.mark.parametrize("segment_row_size", [2, 100_000])
+@pytest.mark.parametrize("column_group_size", [2, 127])
+@pytest.mark.parametrize("data_type", ["dataframe", "series"])
+@pytest.mark.parametrize(
+    "index",
+    [
+        None,
+        pd.date_range("2025-01-01", periods=12),
+        pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=6), ["hello", "goodbye"]]),
+        pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=3), ["hello", "goodbye"], ["bonjour", "au revoir"]]),
+    ]
+)
+def test_required_field_inclusion(version_store_factory, dynamic_schema, segment_row_size, column_group_size, data_type, index):
+    lib = version_store_factory(dynamic_schema=dynamic_schema, column_group_size=column_group_size, segment_row_size=segment_row_size)
+    sym = "test_required_field_inclusion"
+    num_rows = len(index) if index is not None else 12
+    original_data = pd.Series(np.arange(num_rows), index=index) if data_type == "series" else \
+    pd.DataFrame({"col1": np.arange(num_rows), "col2": np.arange(num_rows), "col3": np.arange(num_rows)}, index=index)
+    lib.write(sym, original_data)
+    received_data = lib.read(sym).data
+    if data_type == "series":
+        assert_series_equal(original_data, received_data)
+    else:
+        assert_frame_equal(original_data, received_data)
+        # Also test with column selection and processing
+        received_data = lib.read(sym, columns=["col3"]).data
+        expected_df = original_data.drop(columns=["col1", "col2"])
+        assert_frame_equal(expected_df, received_data)
+        q = QueryBuilder()
+        q = q[q["col1"] > 5]
+        received_data = lib.read(sym, query_builder=q).data
+        expected_df = original_data[original_data["col1"] > 5]
+        if index is None:
+            expected_df.index = pd.RangeIndex(0, 6)
+        assert_frame_equal(expected_df, received_data)
+        received_data = lib.read(sym, columns=["col3"], query_builder=q).data
+        expected_df = expected_df.drop(columns=["col1", "col2"])
+        assert_frame_equal(expected_df, received_data)

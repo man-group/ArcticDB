@@ -89,12 +89,32 @@ void S3Storage::do_remove(VariantKey&& variant_key, RemoveOpts) {
     detail::do_remove_impl(std::move(variant_key), root_folder_, bucket_name_, client(), FlatBucketizer{});
 }
 
+void GCPXMLStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts) {
+    // GCP does not support batch deletes
+    detail::do_remove_no_batching_impl(variant_keys, root_folder_, bucket_name_, client(), FlatBucketizer{});
+}
+
+void GCPXMLStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
+    // GCP does not support batch deletes
+    std::span<VariantKey> keys{&variant_key, 1};
+    detail::do_remove_no_batching_impl(keys, root_folder_, bucket_name_, client(), FlatBucketizer{});
+}
+
 bool S3Storage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix) {
     auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType) {
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };
 
-    return detail::do_iterate_type_impl(key_type, visitor, root_folder_, bucket_name_, client(), FlatBucketizer{}, std::move(prefix_handler), prefix);
+    return detail::do_iterate_type_impl(key_type, visitor, root_folder_, bucket_name_, client(), FlatBucketizer{}, prefix_handler, prefix);
+}
+
+void S3Storage::do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
+    auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType) {
+        return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
+    };
+
+    detail::do_visit_object_sizes_for_type_impl(key_type, root_folder_, bucket_name_, client(), FlatBucketizer{},
+                                                prefix_handler, prefix, visitor);
 }
 
 bool S3Storage::do_key_exists(const VariantKey& key) {
@@ -114,7 +134,7 @@ void S3Storage::create_s3_client(const S3Settings &conf, const Aws::Auth::AWSCre
     else if (conf.aws_auth() == AWSAuthMethod::STS_PROFILE_CREDENTIALS_PROVIDER){
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Load sts profile credentials provider");
         Aws::Config::ReloadCachedConfigFile(); // config files loaded in Aws::InitAPI; It runs once at first S3Storage object construct; reload to get latest
-        auto client_config = get_s3_config(conf);
+        auto client_config = get_s3_config_and_set_env_var(conf);
         auto sts_client_factory = [conf, this](const Aws::Auth::AWSCredentials& creds) { // Get default allocation tag
             auto sts_config = get_proxy_config(conf.https() ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP);
             auto allocation_tag = Aws::STS::STSClient::GetAllocationTag();
@@ -131,10 +151,10 @@ void S3Storage::create_s3_client(const S3Settings &conf, const Aws::Auth::AWSCre
     }
     else if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN && creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN){
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms");
-        s3_client_ = std::make_unique<S3ClientImpl>(get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
+        s3_client_ = std::make_unique<S3ClientImpl>(get_s3_config_and_set_env_var(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
     } else {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using provided auth credentials");
-        s3_client_ = std::make_unique<S3ClientImpl>(creds, get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
+        s3_client_ = std::make_unique<S3ClientImpl>(creds, get_s3_config_and_set_env_var(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
     }
 
     if (conf.use_internal_client_wrapper_for_testing()){
@@ -170,6 +190,17 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const S3Set
     std::locale locale{ std::locale::classic(), new std::num_put<char>()};
     (void)std::locale::global(locale);
     ARCTICDB_DEBUG(log::storage(), "Opened S3 backed storage at {}", root_folder_);
+}
+
+bool S3Storage::supports_object_size_calculation() const {
+    return true;
+}
+
+GCPXMLStorage::GCPXMLStorage(const arcticdb::storage::LibraryPath& lib,
+                             arcticdb::storage::OpenMode mode,
+                             const arcticdb::storage::s3::GCPXMLSettings& conf) :
+                             S3Storage(lib, mode, S3Settings{AWSAuthMethod::DISABLED, "", false}.update(conf)) {
+
 }
 
 } // namespace arcticdb::storage::s3

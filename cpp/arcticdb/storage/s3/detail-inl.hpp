@@ -17,6 +17,7 @@
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/composite.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/s3/model/PutObjectRequest.h>
@@ -27,6 +28,7 @@
 #include <aws/s3/model/Object.h>
 #include <aws/s3/model/Delete.h>
 #include <aws/s3/model/ObjectIdentifier.h>
+#include <folly/gen/Combine.h>
 
 #include <boost/interprocess/streams/bufferstream.hpp>
 
@@ -46,6 +48,10 @@ static const size_t DELETE_OBJECTS_LIMIT = 1000;
 template<class It>
 using Range = folly::Range<It>;
 
+inline bool is_not_found_error(const Aws::S3::S3Errors& error) {
+    return error == Aws::S3::S3Errors::NO_SUCH_KEY || error == Aws::S3::S3Errors::RESOURCE_NOT_FOUND;
+}
+
 [[noreturn]] inline void raise_s3_exception(const Aws::S3::S3Error& err, const std::string& object_name) {
     std::string error_message;
     auto type = err.GetErrorType();
@@ -57,7 +63,7 @@ using Range = folly::Range<It>;
                                             object_name);
 
     // s3_client.HeadObject returns RESOURCE_NOT_FOUND if a key is not found.
-    if (type == Aws::S3::S3Errors::NO_SUCH_KEY || type == Aws::S3::S3Errors::RESOURCE_NOT_FOUND) {
+    if (is_not_found_error(type)) {
         throw KeyNotFoundException(fmt::format("Key Not Found Error: {}",
                                                error_message_suffix));
     }
@@ -88,17 +94,12 @@ using Range = folly::Range<It>;
         }
     }
 
-    if (err.ShouldRetry()) {
-        raise<ErrorCode::E_S3_RETRYABLE>(fmt::format("Retry-able error: {}",
-                                                     error_message_suffix));
-    }
-
     // We create a more detailed error explanation in case of NETWORK_CONNECTION errors to remedy #880.
     if (type == Aws::S3::S3Errors::NETWORK_CONNECTION) {
-        error_message = fmt::format("Unexpected network error: {} "
-                                    "This could be due to a connectivity issue or too many open Arctic instances. "
-                                    "Having more than one open Arctic instance is not advised, you should reuse them. "
-                                    "If you absolutely need many open Arctic instances, consider increasing `ulimit -n`.",
+        error_message = fmt::format("Network error: {} "
+                                    "This could be due to a connectivity issue or exhausted file descriptors. "
+                                    "Having more than one open Arctic instance will use multiple file descriptors, you should reuse Arctic instances. "
+                                    "If you need many file descriptors, consider increasing `ulimit -n`.",
                                     error_message_suffix);
     } else {
         error_message = fmt::format("Unexpected error: {}",
@@ -106,12 +107,15 @@ using Range = folly::Range<It>;
     }
 
     log::storage().error(error_message);
+    if (err.ShouldRetry()) {
+        raise<ErrorCode::E_S3_RETRYABLE>(fmt::format("Retry-able error: {}",
+                                                     error_message));
+    }
     raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(error_message);
 }
 
 inline bool is_expected_error_type(Aws::S3::S3Errors err) {
-    return err == Aws::S3::S3Errors::NO_SUCH_KEY || err == Aws::S3::S3Errors::RESOURCE_NOT_FOUND
-        || err == Aws::S3::S3Errors::NO_SUCH_BUCKET;
+    return is_not_found_error(err) || err == Aws::S3::S3Errors::NO_SUCH_BUCKET;
 }
 
 inline void raise_if_unexpected_error(const Aws::S3::S3Error& err, const std::string& object_name) {
@@ -237,6 +241,21 @@ struct FailedDelete {
         error_message(error_message) {}
 };
 
+inline void raise_if_failed_deletes(const boost::container::small_vector<FailedDelete, 1>& failed_deletes) {
+    if (!failed_deletes.empty()) {
+        auto failed_deletes_message = std::ostringstream();
+        for (auto i = 0u; i < failed_deletes.size(); ++i) {
+            auto& failed = failed_deletes[i];
+            failed_deletes_message << fmt::format("'{}' failed with '{}'", to_serialized_key(failed.failed_key), failed.error_message);
+            if (i != failed_deletes.size()) {
+                failed_deletes_message << ", ";
+            }
+        }
+        auto error_message = fmt::format("Failed to delete some of the objects: {}.", failed_deletes_message.str());
+        raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(error_message);
+    }
+}
+
 template<class KeyBucketizer>
 void do_remove_impl(
     std::span<VariantKey> ks,
@@ -288,18 +307,7 @@ void do_remove_impl(
         });
 
     util::check(to_delete.empty(), "Have {} segment that have not been removed", to_delete.size());
-    if (!failed_deletes.empty()) {
-        auto failed_deletes_message = std::ostringstream();
-        for (auto i = 0u; i < failed_deletes.size(); ++i) {
-            auto& failed = failed_deletes[i];
-            failed_deletes_message << fmt::format("'{}' failed with '{}'", to_serialized_key(failed.failed_key), failed.error_message);
-            if (i != failed_deletes.size()) {
-                failed_deletes_message << ", ";
-            }
-        }
-        auto error_message = fmt::format("Failed to delete some of the objects: {}.", failed_deletes_message.str());
-        raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(error_message);
-    }
+    raise_if_failed_deletes(failed_deletes);
 }
 
 template<class KeyBucketizer>
@@ -311,6 +319,58 @@ void do_remove_impl(
     KeyBucketizer&& bucketizer) {
     std::array<VariantKey, 1> arr{std::move(variant_key)};
     do_remove_impl(std::span(arr), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer));
+}
+
+template<class KeyBucketizer>
+void do_remove_no_batching_impl(
+    std::span<VariantKey> ks,
+    const std::string& root_folder,
+    const std::string& bucket_name,
+    S3ClientInterface& s3_client,
+    KeyBucketizer&& bucketizer) {
+    ARCTICDB_SUBSAMPLE(S3StorageDeleteNoBatching, 0)
+
+    std::vector<folly::Future<S3Result<std::monostate>>> delete_object_results;
+    for (const auto& k : ks) {
+        auto key_type_dir = key_type_folder(root_folder, variant_key_type(k));
+        auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
+        auto delete_fut = s3_client.delete_object(s3_object_name, bucket_name);
+        delete_object_results.push_back(std::move(delete_fut));
+    }
+
+    folly::QueuedImmediateExecutor inline_executor;
+    auto delete_results = folly::collect(std::move(delete_object_results)).via(&inline_executor).get();
+
+    boost::container::small_vector<FailedDelete, 1> failed_deletes;
+    auto keys_and_delete_results = folly::gen::from(ks) | folly::gen::move | folly::gen::zip(std::move(delete_results)) | folly::gen::as<std::vector>();
+    for (auto&& [k, delete_object_result] : std::move(keys_and_delete_results)) {
+        if (delete_object_result.is_success()) {
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted object with key '{}'", variant_key_view(k));
+        } else if (const auto& error = delete_object_result.get_error(); !is_not_found_error(error.GetErrorType())) {
+            auto key_type_dir = key_type_folder(root_folder, variant_key_type(k));
+            auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
+            auto bad_key_name = s3_object_name.substr(key_type_dir.size(), std::string::npos);
+            auto error_message = error.GetMessage();
+            failed_deletes.push_back(FailedDelete{
+                variant_key_from_bytes(reinterpret_cast<const uint8_t *>(bad_key_name.data()), bad_key_name.size(), variant_key_type(k)),
+                std::move(error_message)});
+        } else {
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Acceptable error when deleting object with key '{}'", variant_key_view(k));
+        }
+    }
+
+    raise_if_failed_deletes(failed_deletes);
+}
+
+template<class KeyBucketizer>
+void do_remove_no_batching_impl(
+    VariantKey&& variant_key,
+    const std::string& root_folder,
+    const std::string& bucket_name,
+    S3ClientInterface& s3_client,
+    KeyBucketizer&& bucketizer) {
+    std::array<VariantKey, 1> arr{std::move(variant_key)};
+    do_remove_no_batching_impl(std::span(arr), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer));
 }
 
 template<class KeyBucketizer>
@@ -345,23 +405,30 @@ void do_update_impl(
     do_write_impl(std::move(kvs), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer));
 }
 
-inline auto default_prefix_handler() {
+inline PrefixHandler default_prefix_handler() {
     return [](const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType) {
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };
 }
 
-template<class KeyBucketizer, class PrefixHandler>
-bool do_iterate_type_impl(
-    KeyType key_type,
-    const IterateTypePredicate& visitor,
+struct PathInfo {
+    PathInfo(std::string prefix, std::string key_type_dir, size_t path_to_key_size) :
+        key_prefix_(std::move(prefix)), key_type_dir_(std::move(key_type_dir)), path_to_key_size_(path_to_key_size) {
+
+    }
+
+    std::string key_prefix_;
+    std::string key_type_dir_;
+    size_t path_to_key_size_;
+};
+
+template<class KeyBucketizer>
+PathInfo calculate_path_info(
     const std::string& root_folder,
-    const std::string& bucket_name,
-    const S3ClientInterface& s3_client,
-    KeyBucketizer&& bucketizer,
-    PrefixHandler&& prefix_handler = default_prefix_handler(),
-    const std::string& prefix = std::string{}) {
-    ARCTICDB_SAMPLE(S3StorageIterateType, 0)
+    KeyType key_type,
+    const PrefixHandler& prefix_handler,
+    const std::string& prefix,
+    KeyBucketizer&& bucketizer) {
     auto key_type_dir = key_type_folder(root_folder, key_type);
     const auto path_to_key_size = key_type_dir.size() + 1 + bucketizer.bucketize_length(key_type);
     // if prefix is empty, add / to avoid matching both 'log' and 'logc' when key_type_dir is {root_folder}/log
@@ -378,19 +445,36 @@ bool do_iterate_type_impl(
                                                             : IndexDescriptorImpl::Type::TIMESTAMP,
                                  FormatType::TOKENIZED);
     auto key_prefix = prefix_handler(prefix, key_type_dir, key_descriptor, key_type);
-    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Searching for objects in bucket {} with prefix {}", bucket_name,
-                           key_prefix);
+
+    return {key_prefix, key_type_dir, path_to_key_size};
+}
+
+template<class KeyBucketizer>
+bool do_iterate_type_impl(
+    KeyType key_type,
+    const IterateTypePredicate& visitor,
+    const std::string& root_folder,
+    const std::string& bucket_name,
+    const S3ClientInterface& s3_client,
+    KeyBucketizer&& bucketizer,
+    const PrefixHandler& prefix_handler = default_prefix_handler(),
+    const std::string& prefix = std::string{}) {
+    ARCTICDB_SAMPLE(S3StorageIterateType, 0)
+
+    auto path_info = calculate_path_info(root_folder, key_type, prefix_handler, prefix, std::move(bucketizer));
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Iterating over objects in bucket {} with prefix {}", bucket_name,
+                           path_info.key_prefix_);
 
     auto continuation_token = std::optional<std::string>();
     do {
-        auto list_objects_result = s3_client.list_objects(key_prefix, bucket_name, continuation_token);
+        auto query_stat_operation_time = query_stats::add_task_count_and_time(key_type, query_stats::TaskType::S3_ListObjectsV2);
+        auto list_objects_result = s3_client.list_objects(path_info.key_prefix_, bucket_name, continuation_token);
         if (list_objects_result.is_success()) {
             auto& output = list_objects_result.get_output();
 
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
-
             for (auto& s3_object_name : output.s3_object_names) {
-                auto key = s3_object_name.substr(path_to_key_size);
+                auto key = s3_object_name.substr(path_info.path_to_key_size_);
                 ARCTICDB_TRACE(log::version(), "Got object_list: {}, key: {}", s3_object_name, key);
                 auto k = variant_key_from_bytes(
                     reinterpret_cast<uint8_t *>(key.data()),
@@ -414,11 +498,59 @@ bool do_iterate_type_impl(
                                 error.GetMessage().c_str());
             // We don't raise on expected errors like NoSuchKey because we want to return an empty list
             // instead of raising.
-            raise_if_unexpected_error(error, key_prefix);
+            raise_if_unexpected_error(error, path_info.key_prefix_);
             return false;
         }
     } while (continuation_token.has_value());
     return false;
+}
+
+template<class KeyBucketizer>
+void do_visit_object_sizes_for_type_impl(
+    KeyType key_type,
+    const std::string& root_folder,
+    const std::string& bucket_name,
+    const S3ClientInterface& s3_client,
+    KeyBucketizer&& bucketizer,
+    const PrefixHandler& prefix_handler,
+    const std::string& prefix,
+    const ObjectSizesVisitor& visitor
+    ) {
+    ARCTICDB_SAMPLE(S3StorageCalculateSizesForType, 0)
+
+    auto path_info = calculate_path_info(root_folder, key_type, prefix_handler, prefix, std::forward<KeyBucketizer>(bucketizer));
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Calculating sizes for objects in bucket {} with prefix {}", bucket_name,
+                           path_info.key_prefix_);
+
+    auto continuation_token = std::optional<std::string>();
+    ObjectSizes res{key_type};
+    do {
+        auto list_objects_result = s3_client.list_objects(path_info.key_prefix_, bucket_name, continuation_token);
+        if (list_objects_result.is_success()) {
+            const auto& output = list_objects_result.get_output();
+
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
+
+            auto zipped = folly::gen::from(output.s3_object_sizes) | folly::gen::zip(output.s3_object_names) | folly::gen::as<std::vector>();
+            for (const auto& [size, name] : zipped) {
+                auto key = name.substr(path_info.path_to_key_size_);
+                auto k = variant_key_from_bytes(
+                    reinterpret_cast<uint8_t *>(key.data()),
+                    key.size(),
+                    key_type);
+
+                visitor(k, size);
+            }
+            continuation_token = output.next_continuation_token;
+        } else {
+            const auto& error = list_objects_result.get_error();
+            log::storage().warn("Failed to iterate key type with key '{}' {}: {}",
+                                key_type,
+                                error.GetExceptionName().c_str(),
+                                error.GetMessage().c_str());
+            raise_if_unexpected_error(error, path_info.key_prefix_);
+        }
+    } while (continuation_token.has_value());
 }
 
 template<class KeyBucketizer>

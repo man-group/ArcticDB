@@ -136,27 +136,37 @@ AggregatorDataBase& AggregatorDataBase::operator=(const AggregatorDataBase&)
  *********************/
 
 void SumAggregatorData::add_data_type(DataType data_type) {
-    add_data_type_impl(data_type, data_type_);
+    add_data_type_impl(data_type, common_input_type_);
+}
+
+DataType SumAggregatorData::get_output_data_type() {
+    if (output_type_.has_value()) {
+        return *output_type_;
+    }
+    // On the first call to this method, common_input_type_ will be a type capable of representing all the values in all the input columns
+    // This may be too small to hold the result, as summing 2 values of the same type cannot necessarily be represented by that type
+    // For safety, use the widest type available for the 3 numeric flavours (unsigned int, signed int, float) to have the best chance of avoiding overflow
+    if (!common_input_type_.has_value() || *common_input_type_ == DataType::EMPTYVAL) {
+        // If data_type_ has no value or is empty type, it means there is no data for this aggregation
+        // For sums, we want this to display as zero rather than NaN
+        output_type_ = DataType::FLOAT64;
+    } else if (is_bool_type(*common_input_type_)) {
+        output_type_ = DataType::BOOL8;
+    } else if (is_unsigned_type(*common_input_type_)) {
+        output_type_ = DataType::UINT64;
+    } else if (is_signed_type(*common_input_type_)) {
+        output_type_ = DataType::INT64;
+    } else if (is_floating_point_type(*common_input_type_)) {
+        output_type_ = DataType::FLOAT64;
+    } else {
+        // Unsupported data type
+        schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>("Sum aggregation not supported with type {}", *common_input_type_);
+    }
+    return *output_type_;
 }
 
 void SumAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
-    // If data_type_ has no value, it means there is no data for this aggregation
-    // For sums, we want this to display as zero rather than NaN
-    if (!data_type_.has_value() || *data_type_ == DataType::EMPTYVAL) {
-        data_type_ = DataType::FLOAT64;
-    }
-    // On the first call to this method, data_type_ will be a type capable of representing all the values in all the input columns
-    // This may be too small to hold the result, as summing 2 values of the same type cannot necessarily be represented by that type
-    // For safety, use the widest type available for the 3 numeric flavours (unsigned int, signed int, float) to have the best chance of avoiding overflow
-    if (is_unsigned_type(*data_type_)) {
-        data_type_ = DataType::UINT64;
-    } else if (is_signed_type(*data_type_)) {
-        data_type_ = DataType::INT64;
-    } else {
-        // Floating point type
-        data_type_ = DataType::FLOAT64;
-    }
-    details::visit_type(*data_type_, [&input_column, unique_values, &groups, this] (auto global_tag) {
+    details::visit_type(get_output_data_type(), [&input_column, unique_values, &groups, this] (auto global_tag) {
         using global_type_info = ScalarTypeInfo<decltype(global_tag)>;
         using RawType = typename global_type_info::RawType;
         if constexpr(!is_sequence_type(global_type_info::data_type)) {
@@ -189,12 +199,12 @@ void SumAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_
 SegmentInMemory SumAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values) {
     SegmentInMemory res;
     if(!aggregated_.empty()) {
-        details::visit_type(*data_type_, [that=this, &res, &output_column_name, unique_values] (auto col_tag) {
+        details::visit_type(get_output_data_type(), [this, &res, &output_column_name, unique_values] (auto col_tag) {
             using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-            that->aggregated_.resize(sizeof(typename col_type_info::RawType)* unique_values);
-            auto col = std::make_shared<Column>(make_scalar_type(that->data_type_.value()), unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
-            memcpy(col->ptr(), that->aggregated_.data(), that->aggregated_.size());
-            res.add_column(scalar_field(that->data_type_.value(), output_column_name.value), col);
+            aggregated_.resize(sizeof(typename col_type_info::RawType)* unique_values);
+            auto col = std::make_shared<Column>(make_scalar_type(output_type_.value()), unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
+            memcpy(col->ptr(), aggregated_.data(), aggregated_.size());
+            res.add_column(scalar_field(output_type_.value(), output_column_name.value), col);
             col->set_row_data(unique_values - 1);
         });
     }
@@ -231,22 +241,22 @@ namespace
     };
 
     template <Extremum T>
-    inline void aggregate_impl(
+    void aggregate_impl(
         const std::optional<ColumnWithStrings>& input_column,
         const std::vector<size_t>& groups,
         size_t unique_values,
-        std::vector<uint8_t>& aggregated_,
-        std::optional<DataType>& data_type_
+        std::vector<uint8_t>& aggregated,
+        std::optional<DataType>& data_type
     ) {
-        if(data_type_.has_value() && *data_type_ != DataType::EMPTYVAL && input_column.has_value()) {
-            details::visit_type(*data_type_, [&aggregated_, &input_column, unique_values, &groups] (auto global_tag) {
+        if(data_type.has_value() && *data_type != DataType::EMPTYVAL && input_column.has_value()) {
+            details::visit_type(*data_type, [&aggregated, &input_column, unique_values, &groups] (auto global_tag) {
                 using global_type_info = ScalarTypeInfo<decltype(global_tag)>;
                 using GlobalRawType = typename global_type_info::RawType;
                 if constexpr(!is_sequence_type(global_type_info::data_type)) {
                     using MaybeValueType = MaybeValue<GlobalRawType, T>;
-                    auto prev_size = aggregated_.size() / sizeof(MaybeValueType);
-                    aggregated_.resize(sizeof(MaybeValueType) * unique_values);
-                    auto out_ptr = reinterpret_cast<MaybeValueType*>(aggregated_.data());
+                    auto prev_size = aggregated.size() / sizeof(MaybeValueType);
+                    aggregated.resize(sizeof(MaybeValueType) * unique_values);
+                    auto out_ptr = reinterpret_cast<MaybeValueType*>(aggregated.data());
                     std::fill(out_ptr + prev_size, out_ptr + unique_values, MaybeValueType{});
                     details::visit_type(input_column->column_->type().data_type(), [&input_column, &groups, &out_ptr] (auto col_tag) {
                         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
@@ -285,36 +295,47 @@ namespace
     }
 
     template <Extremum T>
-    inline SegmentInMemory finalize_impl(
+    SegmentInMemory finalize_impl(
             const ColumnName& output_column_name,
             bool dynamic_schema,
             size_t unique_values,
-            std::vector<uint8_t>& aggregated_,
-            std::optional<DataType>& data_type_
+            std::vector<uint8_t>& aggregated,
+            std::optional<DataType>& data_type
     ) {
         SegmentInMemory res;
-        if(!aggregated_.empty()) {
+        if(!aggregated.empty()) {
             constexpr auto dynamic_schema_data_type = DataType::FLOAT64;
             using DynamicSchemaTDT = ScalarTagType<DataTypeTag<dynamic_schema_data_type>>;
-            auto col = std::make_shared<Column>(make_scalar_type(dynamic_schema ? dynamic_schema_data_type: data_type_.value()), unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
+            const TypeDescriptor column_type = make_scalar_type(dynamic_schema ? dynamic_schema_data_type: data_type.value());
+            auto col = std::make_shared<Column>(column_type, unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
             auto column_data = col->data();
             col->set_row_data(unique_values - 1);
-            res.add_column(scalar_field(dynamic_schema ? dynamic_schema_data_type : data_type_.value(), output_column_name.value), col);
-            details::visit_type(*data_type_, [&aggregated_, &column_data, unique_values, dynamic_schema] (auto col_tag) {
+            res.add_column(scalar_field(col->type().data_type(), output_column_name.value), std::move(col));
+            details::visit_type(*data_type, [&] (auto col_tag) {
                 using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
                 using MaybeValueType = MaybeValue<typename col_type_info::RawType, T>;
                 if(dynamic_schema) {
-                    auto prev_size = aggregated_.size() / sizeof(MaybeValueType);
+                    if constexpr (dynamic_schema_data_type != col_type_info::data_type && is_integer_type(col_type_info::data_type)) {
+                        log::message().warn(
+                            "The column \"{}\" of type {} is a result of a {} aggregation and the library is configured"
+                            " to use dynamic schema. ArcticDB will promote the type to {} so that if a grouping bucket "
+                            "is empty, it will be assigned a value of NaN. This behavior will be deprecated with the "
+                            "release of ArcticDB v6.0.0 and will change as follows. If Arrow output format is used, "
+                            "empty grouping buckets will be use Arrow's missing value. If numpy output format is used "
+                            "all missing data will be backfilled with 0.",
+                            output_column_name.value, col_type_info::data_type, T == Extremum::MIN ? "MIN" : "MAX", dynamic_schema_data_type);
+                    }
+                    auto prev_size = aggregated.size() / sizeof(MaybeValueType);
                     auto new_size = sizeof(MaybeValueType) * unique_values;
-                    aggregated_.resize(new_size);
-                    auto in_ptr = reinterpret_cast<MaybeValueType *>(aggregated_.data());
+                    aggregated.resize(new_size);
+                    auto in_ptr = reinterpret_cast<MaybeValueType *>(aggregated.data());
                     std::fill(in_ptr + prev_size, in_ptr + unique_values, MaybeValueType{});
                     for (auto it = column_data.begin<DynamicSchemaTDT>(); it != column_data.end<DynamicSchemaTDT>(); ++it, ++in_ptr) {
                         *it = in_ptr->written_ ? static_cast<double>(in_ptr->value_)
                                                : std::numeric_limits<double>::quiet_NaN();
                     }
                 } else {
-                    auto in_ptr = reinterpret_cast<MaybeValueType*>(aggregated_.data());
+                    auto in_ptr = reinterpret_cast<MaybeValueType*>(aggregated.data());
                     for (auto it = column_data.begin<typename col_type_info::TDT>(); it != column_data.end<typename col_type_info::TDT>(); ++it, ++in_ptr) {
                         if constexpr (is_floating_point_type(col_type_info::data_type)) {
                             *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::quiet_NaN();
@@ -343,6 +364,14 @@ void MaxAggregatorData::add_data_type(DataType data_type)
     add_data_type_impl(data_type, data_type_);
 }
 
+DataType MaxAggregatorData::get_output_data_type() {
+    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+            is_numeric_type(*data_type_) || is_bool_type(*data_type_) || is_empty_type(*data_type_),
+            "Max aggregation not supported with type {}",
+            *data_type_);
+    return *data_type_;
+}
+
 void MaxAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values)
 {
     aggregate_impl<Extremum::MAX>(input_column, groups, unique_values, aggregated_, data_type_);
@@ -362,6 +391,14 @@ void MinAggregatorData::add_data_type(DataType data_type)
     add_data_type_impl(data_type, data_type_);
 }
 
+DataType MinAggregatorData::get_output_data_type() {
+    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+            is_numeric_type(*data_type_) || is_bool_type(*data_type_) || is_empty_type(*data_type_),
+            "Min aggregation not supported with type {}",
+            *data_type_);
+    return *data_type_;
+}
+
 void MinAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values)
 {
     aggregate_impl<Extremum::MIN>(input_column, groups, unique_values, aggregated_, data_type_);
@@ -375,6 +412,14 @@ SegmentInMemory MinAggregatorData::finalize(const ColumnName& output_column_name
 /**********************
  * MeanAggregatorData *
  **********************/
+
+void MeanAggregatorData::add_data_type(DataType data_type) {
+    // Mean values are always doubles so just check a numeric type was provided
+    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+            is_numeric_type(data_type) || is_bool_type(data_type) || is_empty_type(data_type),
+            "Mean aggregation not supported with type {}",
+            data_type);
+}
 
 void MeanAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
     if(input_column.has_value()) {

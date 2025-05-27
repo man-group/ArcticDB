@@ -19,6 +19,8 @@
 
 namespace arcticdb {
 
+struct ExpressionContext;
+
 struct ColumnNameTag{};
 using ColumnName = util::StringWrappingValue<ColumnNameTag>;
 
@@ -50,6 +52,12 @@ struct ColumnWithStrings {
         column_name_(col_name) {
     }
 
+    ColumnWithStrings(std::unique_ptr<Column> column, std::shared_ptr<StringPool> string_pool, std::string_view col_name) :
+            column_(std::move(column)),
+            string_pool_(std::move(string_pool)),
+            column_name_(col_name) {
+    }
+
     ColumnWithStrings(Column&& col, std::shared_ptr<StringPool> string_pool, std::string_view col_name) :
         column_(std::make_shared<Column>(std::move(col))),
         string_pool_(std::move(string_pool)),
@@ -73,19 +81,42 @@ struct EmptyResult {};
 
 using VariantData = std::variant<FullResult, EmptyResult, std::shared_ptr<Value>, std::shared_ptr<ValueSet>, ColumnWithStrings, util::BitSet>;
 
+// Used to represent that an ExpressionNode returns a bitset
+struct BitSetTag{};
+
 /*
  * Basic AST node.
  */
 struct ExpressionNode {
+    VariantNode condition_;
     VariantNode left_;
     VariantNode right_;
     OperationType operation_type_;
+
+    ExpressionNode(VariantNode condition, VariantNode left, VariantNode right, OperationType op);
 
     ExpressionNode(VariantNode left, VariantNode right, OperationType op);
 
     ExpressionNode(VariantNode left, OperationType op);
 
     VariantData compute(ProcessingUnit& seg) const;
+
+    std::variant<BitSetTag, DataType> compute(
+            const ExpressionContext& expression_context,
+            const ankerl::unordered_dense::map<std::string, DataType>& column_types) const;
+
+private:
+    enum class ValueSetState {
+        NOT_A_SET,
+        EMPTY_SET,
+        NON_EMPTY_SET
+    };
+
+    std::variant<BitSetTag, DataType> child_return_type(
+            const VariantNode& child,
+            const ExpressionContext& expression_context,
+            const ankerl::unordered_dense::map<std::string, DataType>& column_types,
+            ValueSetState& value_set_state) const;
 };
 
 } //namespace arcticdb

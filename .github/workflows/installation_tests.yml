@@ -1,0 +1,225 @@
+name: Installation Tests Execution
+permissions:
+  contents: read
+
+on:
+  schedule:
+    # Execution overnight for each version of the arcticdb happens on 
+    # dedicated hour for each version (see later step "When on schedule ...")
+    - cron: "0 1 * * *"
+    - cron: "0 2 * * *"
+    - cron: "0 3 * * *"
+    - cron: "0 4 * * *"
+    - cron: "0 5 * * *"      
+    - cron: "0 6 * * *"      
+    - cron: "0 7 * * *"      
+  workflow_dispatch:
+    inputs:
+      arcticdb_version:
+        # NOTE that for all versions listed here there must be pip and conda 
+        #      requirements files at python/tests/compat folder!
+        description: 'ArcticDB version to test'
+        required: true
+        default: 'latest'
+        type: choice
+        options:
+          - "latest"
+          - "5.4.1"
+          - "5.3.4"
+          - "5.2.6"
+          - "5.1.2"
+          - "4.5.1"
+          - "1.6.2"
+      run_on_lmdb:
+        description: 'Execute tests on LMDB'
+        required: true
+        default: '1'
+        type: choice
+        options:
+          - "1"
+          - "0"
+      run_on_real_s3:
+        description: 'Execute tests on Amazon S3'
+        required: true
+        default: '1'
+        type: choice
+        options:
+          - "1"
+          - "0"
+                  
+
+jobs:
+
+  installation_test:
+    runs-on: ${{ inputs.os || matrix.os }}
+    strategy:
+      matrix:
+        # This matrix strategy will run limited set of combinations
+        # for each python version we support, matching it with combination of:
+        #  OS amd either pypi or conda
+        # This way we cover all python versions, OS-es and installation repos 
+        # in just 8 combinations
+        include:
+          - os: ubuntu-22.04
+            python: "3.7"
+            use_conda: "no"
+          - os: windows-latest
+            python: "3.8"
+            use_conda: "no"
+          - os: macos-latest
+            python: "3.9"
+            use_conda: "yes"
+          - os: windows-latest
+            python: "3.10"
+            use_conda: "no"
+          - os: macos-latest
+            python: "3.11"
+            use_conda: "yes"
+          - os: ubuntu-22.04
+            python: "3.12"
+            use_conda: "yes"
+          - os: ubuntu-22.04
+            use_conda: "no"
+            python: "3.13"
+      fail-fast: false  
+    env:
+      install_tests_folder: "python/tests/compat"
+      conda_file: "environment_unix.yml"
+      arcticdb_version: ${{ inputs.arcticdb_version || '1.6.2' }}
+      lmdb: ${{ inputs.run_on_lmdb || '1' }}
+      real_s3: ${{ inputs.run_on_real_s3 || '1' }}
+
+    steps:
+
+    - name: When On Schedule - Override the arcticdb version based on hour of execution
+      # Only when executed on schedule this step will be triggered
+      # Based on the hour of execution a specific version will be assigned
+      # Only this version will be executed at that hour
+      # Make sure this step is synchronized with the job schedule  
+      if: github.event_name == 'schedule'
+      shell: bash -l {0} 
+      run: |
+        hour=$(date -u +"%H")
+        case $hour in
+          "01") echo "arcticdb_version=1.6.2" >> $GITHUB_ENV;;
+          "02") echo "arcticdb_version=4.5.1" >> $GITHUB_ENV;;
+          "03") echo "arcticdb_version=5.1.2" >> $GITHUB_ENV;;
+          "04") echo "arcticdb_version=5.3.4" >> $GITHUB_ENV;;
+          "05") echo "arcticdb_version=5.2.6" >> $GITHUB_ENV;;
+          "06") echo "arcticdb_version=5.4.1" >> $GITHUB_ENV;;
+          "07") echo "arcticdb_version=latest" >> $GITHUB_ENV;;
+        esac        
+
+    - name: Check Unsupported Versions
+      shell: bash
+      run: |
+        echo "Check for not supported arcticdb-python versions"
+
+        UNSUPPORTED_COMBINATIONS=(
+          "3.13-5.1.2" 
+          "3.13-5.0.0" 
+          "3.13-4.5.1"
+          "3.13-1.6.2"
+        )
+
+        CURRENT_COMBINATION="${{ matrix.python || inputs.python}}-${{ env.arcticdb_version }}"
+        echo "Check for combination $CURRENT_COMBINATION"
+        if [[ " ${UNSUPPORTED_COMBINATIONS[*]} " == *"$CURRENT_COMBINATION"* ]]; then
+          echo "Skipping unsupported combination: $CURRENT_COMBINATION"
+          echo "SKIP_JOB=true" >> $GITHUB_ENV
+        fi
+
+    - name: Checkout code
+      if: ${{ env.SKIP_JOB != 'true' }}
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      if: ${{ env.SKIP_JOB != 'true' }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ inputs.python || matrix.python}}
+
+    - name: Set environment variables 
+      if: ${{ env.SKIP_JOB != 'true' }}
+      shell: bash -l {0}      
+      run: |
+        echo "ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=0" >> $GITHUB_ENV
+        echo "ARCTICDB_STORAGE_LMDB=${{ env.lmdb }}" >> $GITHUB_ENV
+        echo "USE_CONDA=${{ inputs.use_conda || matrix.use_conda }}" >> $GITHUB_ENV
+  
+    - name: (pypi) Install arcticdb (${{ env.arcticdb_version }}) from requirements files 
+      if: ${{ (env.SKIP_JOB != 'true') && (!contains(env.USE_CONDA, 'yes'))}}
+      run: |
+        pip install -r "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.txt"
+
+    - name: (pypi) Install other prerequisites 
+      if: ${{ (env.SKIP_JOB != 'true') && (!contains(env.USE_CONDA, 'yes'))}}
+      shell: bash -l {0}
+      run: |
+        python -m pip install --upgrade pip
+
+        pip install wheel
+        pip install setuptools
+        pip install pytest
+        pip install pytest-xdist
+
+      # Install conda environment
+    - name: (conda) Install arcticdb (${{ env.arcticdb_version }}) from conda-forge
+      uses: mamba-org/setup-micromamba@v2.0.0
+      if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes'))}}
+      with:
+        environment-file: "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.yml" 
+        environment-name: arcticdb
+        init-shell: >-
+          bash
+        cache-environment: true
+        post-cleanup: 'all'
+
+    - name: (conda) Install other dependencies ${{ env.conda_file }}
+      if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes'))}}
+      shell: bash -l {0}
+      run: |
+          micromamba activate arcticdb
+          micromamba install --no-pin --file "${{ env.install_tests_folder }}/${{ env.conda_file }}"
+  
+    - name: Set persistent storage variables
+      if: ${{ env.SKIP_JOB != 'true' }}
+      uses: ./.github/actions/set_persistent_storage_env_vars
+      with:
+        aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+        aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+        gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
+        gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+        persistent_storage: "true"
+
+    - name: Set environment variables 
+      if: ${{ env.SKIP_JOB != 'true' }}
+      shell: bash -l {0}      
+      run: |
+        echo "ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=0" >> $GITHUB_ENV
+        echo "ARCTICDB_STORAGE_LMDB=${{ env.lmdb }}" >> $GITHUB_ENV
+        echo "ARCTICDB_STORAGE_AWS_S3=${{ env.real_s3 }}" >> $GITHUB_ENV        
+        echo "ARCTICDB_STORAGE_GCP=0" >> $GITHUB_ENV        
+        echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
+
+    - name: Run tests
+      if: ${{ env.SKIP_JOB != 'true' }}
+      shell: bash -l {0}      
+      run: |
+        echo $pwd
+        echo "Running tests against arcticdb version: ${{ env.arcticdb_version }}"
+        pytest -v --log-file="tests.log" -n auto python/installation_tests/test_installation.py
+        
+        ## For testing
+        #pytest -v --log-file="tests.log" python/tests/integration/arcticdb/test_arctic.py::test_append_prune_previous_versions
+
+    - name: Upload the logs
+      if: ${{ env.SKIP_JOB != 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: logs-${{ matrix.os || inputs.os }}-${{ matrix.python || inputs.python}}
+        path: |
+          ./*test*        
+
+
+          

@@ -143,7 +143,7 @@ class Segment {
 
     std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> serialize_header();
 
-    size_t write_proto_header(uint8_t* dst);
+    size_t write_proto_header(uint8_t* dst, size_t total_header_size);
 
     [[nodiscard]] std::size_t size() const {
         util::check(size_.has_value(), "Segment size has not been set");
@@ -151,8 +151,7 @@ class Segment {
     }
 
     [[nodiscard]] std::size_t calculate_size() {
-        if(!size_.has_value())
-            size_ = FIXED_HEADER_SIZE + segment_header_bytes_size() + buffer_bytes();
+        size_ = FIXED_HEADER_SIZE + segment_header_bytes_size() + buffer_bytes();
 
         return *size_;
     }
@@ -161,8 +160,7 @@ class Segment {
 
     [[nodiscard]] size_t proto_size() {
         util::check(static_cast<bool>(proto_), "Proto has not been generated");
-
-        return proto_->ByteSizeLong();
+        return proto_size_;
     }
 
     [[nodiscard]] std::size_t segment_header_bytes_size() {
@@ -264,6 +262,7 @@ class Segment {
     StreamDescriptor desc_;
     std::any keepalive_;
     std::unique_ptr<arcticdb::proto::encoding::SegmentHeader> proto_;
+    size_t proto_size_ = 0UL;
     std::optional<size_t> size_;
 };
 

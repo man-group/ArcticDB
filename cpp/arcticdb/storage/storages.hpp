@@ -13,6 +13,7 @@
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/single_file_storage.hpp>
+#include <arcticdb/storage/storage.hpp>
 
 #include <memory>
 #include <vector>
@@ -61,6 +62,10 @@ public:
 
     [[nodiscard]] bool supports_atomic_writes() {
         return primary().supports_atomic_writes();
+    }
+
+    [[nodiscard]] bool supports_object_size_calculation() {
+        return std::all_of(storages_.begin(), storages_.end(), [](const auto& storage) {return storage->supports_object_size_calculation();});
     }
 
     bool fast_delete() {
@@ -184,6 +189,17 @@ public:
         }
     }
 
+    void visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor, bool primary_only = true) {
+        if (primary_only) {
+            primary().visit_object_sizes(key_type, prefix, visitor);
+            return;
+        }
+
+        for (const auto& storage : storages_) {
+            storage->visit_object_sizes(key_type, prefix, visitor);
+        }
+    }
+
     bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate, bool primary_only = true) {
         if (primary_only) {
             return primary().scan_for_matching_key(key_type, predicate);
@@ -274,6 +290,15 @@ inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path
                                 storages.push_back(create_storage(library_path,
                                                                   mode,
                                                                   s3::S3Settings(settings).update(s3_storage)));
+                            },
+                            [&storage_config, &storages, &library_path, mode](const s3::GCPXMLSettings& settings) {
+                                util::check(storage_config.config().Is<arcticdb::proto::gcp_storage::Config>(),
+                                            "Only support GCP native settings");
+                                arcticdb::proto::gcp_storage::Config gcp_storage;
+                                storage_config.config().UnpackTo(&gcp_storage);
+                                storages.push_back(create_storage(library_path,
+                                                                  mode,
+                                                                  s3::GCPXMLSettings(settings).update(gcp_storage)));
                             },
                             [&storage_config, &storages, &library_path, mode](const auto&) {
                                 storages.push_back(create_storage(library_path, mode, storage_config));

@@ -9,13 +9,9 @@
 
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
-#include <arcticdb/util/variant.hpp>
 #include <arcticdb/entity/output_format.hpp>
-#include <arcticdb/log/log.hpp>
-#include <google/protobuf/util/message_differencer.h>
-#include "arcticdb/storage/memory_layout.hpp"
+#include <arcticdb/storage/memory_layout.hpp>
 
-#include <cstdint>
 #include <vector>
 #include <string>
 #include <type_traits>
@@ -226,8 +222,11 @@ constexpr DataType combine_data_type(ValueType v, SizeBits b = SizeBits::UNKNOWN
 
 // Constructs the corresponding DataType from a given primitive arithmetic type (u/int8_t, float, or double)
 template<typename T>
+requires std::is_arithmetic_v<T>
 constexpr DataType data_type_from_raw_type() {
-    static_assert(std::is_arithmetic_v<T>);
+    if constexpr(std::is_same_v<T, bool>) {
+        return DataType::BOOL8;
+    }
     if constexpr (std::is_floating_point_v<T>) {
         return combine_data_type(ValueType::FLOAT, get_size_bits(sizeof(T)));
     }
@@ -552,8 +551,14 @@ struct IndexDescriptorImpl : public IndexDescriptor {
 
     IndexDescriptorImpl() = default;
 
-    IndexDescriptorImpl(uint32_t field_count, Type type) :
+    IndexDescriptorImpl(Type type, uint32_t field_count) :
         IndexDescriptor(type, field_count) {
+    }
+
+    // Maintained as this is the constructor the Python interface uses
+    // Prefer using the constructor above internally as the argument order matches that of IndexDescriptor
+    IndexDescriptorImpl(uint32_t field_count, Type type) :
+            IndexDescriptor(type, field_count) {
     }
 
     IndexDescriptorImpl(const IndexDescriptor& idx) :

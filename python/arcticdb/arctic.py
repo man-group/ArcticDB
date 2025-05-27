@@ -19,8 +19,8 @@ from arcticdb.adapters.lmdb_library_adapter import LMDBLibraryAdapter
 from arcticdb.adapters.azure_library_adapter import AzureLibraryAdapter
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.adapters.in_memory_library_adapter import InMemoryLibraryAdapter
+from arcticdb.adapters.gcpxml_library_adapter import GCPXMLLibraryAdapter
 from arcticdb.encoding_version import EncodingVersion
-from arcticdb.exceptions import UnsupportedLibraryOptionValue, UnknownLibraryOption
 from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
 
 
@@ -35,14 +35,15 @@ class Arctic:
 
     _LIBRARY_ADAPTERS = [
         S3LibraryAdapter,
+        GCPXMLLibraryAdapter,
         LMDBLibraryAdapter,
         AzureLibraryAdapter,
         MongoLibraryAdapter,
         InMemoryLibraryAdapter,
     ]
 
-    # For test fixture clean up
-    _created_lib_names: Optional[List[str]] = None
+    # This is a hack to allow the tests to access the libs_instances_from_arctic list
+    # It is set by the LmdbStorageFixture
     _accessed_libs: Optional[List[NativeVersionStore]] = None
 
     def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION):
@@ -96,9 +97,10 @@ class Arctic:
 
         storage_override = self._library_adapter.get_storage_override()
         lib = NativeVersionStore(
-            self._library_manager.get_library(lib_mgr_name, storage_override, native_storage_map=self._library_adapter._native_cfg),
+            self._library_manager.get_library(lib_mgr_name, storage_override, native_storage_config=self._library_adapter.native_config()),
             repr(self._library_adapter),
             lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
+            native_cfg=self._library_adapter.native_config()
         )
         if self._accessed_libs is not None:
             self._accessed_libs.append(lib)
@@ -212,8 +214,6 @@ class Arctic:
         cfg = self._library_adapter.get_library_config(name, library_options, enterprise_library_options)
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
         self._library_manager.write_library_config(cfg, lib_mgr_name, self._library_adapter.get_masking_override())
-        if self._created_lib_names is not None:
-            self._created_lib_names.append(name)
         return self.get_library(name)
 
     def delete_library(self, name: str) -> None:
@@ -237,8 +237,6 @@ class Arctic:
         self._library_manager.cleanup_library_if_open(lib_mgr_name)
         self._library_manager.remove_library_config(lib_mgr_name)
 
-        if self._created_lib_names and name in self._created_lib_names:
-            self._created_lib_names.remove(name)
 
     def has_library(self, name: str) -> bool:
         """
@@ -317,7 +315,7 @@ class Arctic:
         storage_override = self._library_adapter.get_storage_override()
         new_cfg = self._library_manager.get_library_config(lib_mgr_name, storage_override)
         library._nvs._initialize(
-            self._library_manager.get_library(lib_mgr_name, storage_override, ignore_cache=True, native_storage_map=self._library_adapter._native_cfg),
+            self._library_manager.get_library(lib_mgr_name, storage_override, ignore_cache=True, native_storage_config=self._library_adapter.native_config()),
             library._nvs.env,
             new_cfg,
             library._nvs._custom_normalizer,

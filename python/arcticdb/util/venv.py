@@ -1,18 +1,17 @@
-import pytest
-import subprocess
-import os
-import venv
-import tempfile
 import logging
+import os
+import re
 import shutil
-from typing import Union, Optional, Dict, List
-from ..util.mark import (
-    AZURE_TESTS_MARK,
-    MONGO_TESTS_MARK,
-    VENV_COMPAT_TESTS_MARK,
-    PANDAS_2_COMPAT_TESTS_MARK
-)
+import subprocess
+import tempfile
+import venv
+
+from typing import Dict, List, Optional, Union
+
+from arcticdb_ext.exceptions import StorageException
 from packaging.version import Version
+from arcticdb_ext import set_config_int, unset_config_int
+from arcticdb.arctic import Arctic
 
 logger = logging.getLogger("Compatibility tests")
 
@@ -45,8 +44,9 @@ def run_shell_command(
             stdin=subprocess.DEVNULL,
         )
     if result.returncode != 0:
-        logger.warning(
-            f"Command failed, stdout: {str(result.stdout)}, stderr: {str(result.stderr)}"
+        logger.error(
+            f"Command '{command_string}' failed with return code {result.returncode}\n"
+            f"stdout:\n{result.stdout.decode('utf-8')}\nstderr:\n{result.stderr.decode('utf-8')}"
         )
     return result
 
@@ -102,6 +102,18 @@ class VenvArctic:
         self.uri = uri
         self.init_storage()
 
+    def add_traceability_prints(self, python_commands):
+        """
+        Adds prints before and after each python command. This will help with debugging segfaults occurring within the
+        venv as it will show which operation failed in the logs.
+        """
+        result = []
+        for command in python_commands:
+            result.append(f"print('About to run:', {repr(command)})")
+            result.append(command)
+            result.append(f"print('Done with:', {repr(command)})")
+        return result
+
     def execute(self, python_commands: List[str], dfs: Optional[Dict] = None) -> None:
         """
         Prepares the dataframe parquet files and the python script to be run from within the venv.
@@ -128,6 +140,8 @@ class VenvArctic:
                 + df_load_commands
                 + python_commands
             )
+
+            python_commands = self.add_traceability_prints(python_commands)
 
             python_path = os.path.join(dir, "run.py")
             with open(python_path, "w") as python_file:
@@ -168,6 +182,9 @@ class VenvLib:
     def write(self, sym: str, df) -> None:
         return self.execute([f"lib.write('{sym}', df)"], {"df": df})
 
+    def update(self, sym: str, df, date_range: str):
+        return self.execute([f"lib.update('{sym}', df, date_range={date_range})"], {"df": df})
+
     def assert_read(self, sym: str, df) -> None:
         python_commands = [
             f"read_df = lib.read('{sym}').data",
@@ -177,68 +194,73 @@ class VenvLib:
         return self.execute(python_commands, {"expected_df": df})
 
 
-@pytest.fixture(
-    # scope="session",
-    params=[
-        pytest.param("1.6.2", marks=VENV_COMPAT_TESTS_MARK),
-        pytest.param("4.5.1", marks=VENV_COMPAT_TESTS_MARK),
-        pytest.param("5.0.0", marks=VENV_COMPAT_TESTS_MARK),
-    ],  # TODO: Extend this list with other old versions
-)
-def old_venv(request, tmp_path):
-    version = request.param
-    path = os.path.join("venvs", tmp_path, version)
-    compat_dir = os.path.dirname(os.path.abspath(__file__))
-    requirements_file = os.path.join(compat_dir, f"requirements-{version}.txt")
-    with Venv(path, requirements_file, version) as old_venv:
-        yield old_venv
-
-
-@pytest.fixture(
-    params=[
-        pytest.param("tmp_path", marks=PANDAS_2_COMPAT_TESTS_MARK)
-    ]
-)
-def pandas_v1_venv(request):
-    """A venv with Pandas v1 installed (and an old ArcticDB version). To help test compat across Pandas versions."""
-    version = "1.6.2"
-    tmp_path = request.getfixturevalue(request.param)
-    path = os.path.join("venvs", tmp_path, version)
-    compat_dir = os.path.dirname(os.path.abspath(__file__))
-    requirements_file = os.path.join(compat_dir, f"requirements-{version}.txt")
-    with Venv(path, requirements_file, version) as old_venv:
-        yield old_venv
-
-
-@pytest.fixture(
-    params=[
-        "lmdb",
-        "s3_ssl_disabled",
-        pytest.param("azurite", marks=AZURE_TESTS_MARK),
-        pytest.param("mongo", marks=MONGO_TESTS_MARK),
-    ]
-)
-def arctic_uri(request):
+class CurrentVersion:
     """
-    arctic_uri is a fixture which provides uri to all storages to be used for creating both old and current Arctic instances.
+    For many of the compatibility tests we need to maintain a single open connection to the library.
+    For example LMDB on Windows starts to fail if we at the same time we use an old_venv and current connection.
 
-    We use s3_ssl_disabled because which allows running tests for older versions like 1.6.2
+    So we use `with CurrentVersion` construct to ensure we delete all our outstanding references to the library.
     """
-    storage_fixture = request.getfixturevalue(request.param + "_storage")
-    if request.param == "mongo":
-        return storage_fixture.mongo_uri
-    else:
-        return storage_fixture.arctic_uri
+    def __init__(self, uri, lib_name):
+        self.uri = uri
+        self.lib_name = lib_name
+
+    def __enter__(self):
+        set_config_int("VersionMap.ReloadInterval", 0) # We disable the cache to be able to read the data written from old_venv
+        self.ac = Arctic(self.uri)
+        self.lib = self.ac.get_library(self.lib_name)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        unset_config_int("VersionMap.ReloadInterval")
+        del self.lib
+        del self.ac
 
 
-@pytest.fixture
-def old_venv_and_arctic_uri(old_venv, arctic_uri):
-    if arctic_uri.startswith("mongo") and "1.6.2" in old_venv.version:
-        pytest.skip("Mongo storage backend is not supported in 1.6.2")
+class CompatLibrary:
+    """
+    Responsible for creating and cleaning up a library (or multiple libraries) when writing compatibility tests.
 
-    if arctic_uri.startswith("lmdb") and Version(old_venv.version) < Version("5.0.0"):
-        pytest.skip(
-            "LMDB storage backed has a bug in versions before 5.0.0 which leads to flaky segfaults"
-        )
+    Usually the library cleanup is managed by pytest fixtures, but it is hard to do so for compatibility tests because
+    they are responsible for maintaining their own arctic instances across several processes. As long as libraries
+    within the test are wrapped in a CompatLibrary cleanup will be dealt with.
+    """
+    def __init__(self, old_venv : Venv, uri : str, lib_names : Union[str, List[str]], create_with_current_version=False):
+        self.old_venv = old_venv
+        self.uri = uri
+        self.lib_names = lib_names if isinstance(lib_names, list) else [lib_names]
+        assert len(self.lib_names) > 0
+        self.create_with_current_version = create_with_current_version
 
-    return old_venv, arctic_uri
+    def __enter__(self):
+        for lib_name in self.lib_names:
+            if self.create_with_current_version:
+                ac = Arctic(self.uri)
+                ac.create_library(lib_name)
+                del ac
+            else:
+                old_ac = self.old_venv.create_arctic(self.uri)
+                old_ac.create_library(lib_name)
+
+        self.old_ac = self.old_venv.create_arctic(self.uri)
+        self.old_libs = {lib_name : self.old_ac.get_library(lib_name) for lib_name in self.lib_names}
+        self.old_lib = self.old_libs[self.lib_names[0]]
+        return self
+
+    def current_version(self):
+        return CurrentVersion(self.uri, self.lib_names[0])
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        ac = Arctic(self.uri)
+        for lib_name in self.lib_names:
+            try:
+                ac.delete_library(lib_name)
+            except StorageException as e:
+                if self.uri.startswith("lmdb"):
+                    # For lmdb on windows sometimes the venv process keeps a dangling reference to the library for some
+                    # time. Since we use temporary directories for lmdb it's fine to not retry because the temporary
+                    # directory will be cleaned up in the end of the pytest process.
+                    logger.info(f"Failed to delete an lmdb library due to a Storage Exception: {e}")
+                else:
+                    raise
+        del ac

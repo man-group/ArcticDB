@@ -11,6 +11,7 @@
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/storage/store.hpp>
+#include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/hash.hpp>
@@ -665,4 +666,31 @@ struct RemoveBatchTask : BaseTask {
     }
 };
 
+struct VisitObjectSizesTask : BaseTask {
+    KeyType type_;
+    std::string prefix_;
+    storage::ObjectSizesVisitor visitor_;
+    std::shared_ptr<storage::Library> lib_;
+
+    VisitObjectSizesTask(
+        KeyType type,
+        std::string prefix,
+        storage::ObjectSizesVisitor visitor,
+        std::shared_ptr<storage::Library> lib
+        ) :
+        type_(type),
+        prefix_(std::move(prefix)),
+        visitor_(std::move(visitor)),
+        lib_(std::move(lib)) {
+        ARCTICDB_DEBUG(log::storage(), "Creating object sizes task for key type {} prefix {}", type_, prefix_);
+    }
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(VisitObjectSizesTask)
+
+    void operator()() {
+        util::check(lib_->supports_object_size_calculation(), "ObjectSizesBytesTask should only be used with storages"
+                                                              " that natively support size calculation");
+        lib_->visit_object_sizes(type_, prefix_, visitor_);
+    }
+};
 }

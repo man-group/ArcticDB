@@ -6,13 +6,13 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import os.path as osp
 import re
 import time
-from typing import Iterable, Dict, Any, Union
+from typing import Iterable, Any, Union
 
 from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
+from arcticc.pb2.gcp_storage_pb2 import Config as GcpConfig
 from arcticc.pb2.azure_storage_pb2 import Config as AzureConfig
 from arcticc.pb2.in_memory_storage_pb2 import Config as MemoryConfig
 from arcticc.pb2.mongo_storage_pb2 import Config as MongoConfig
@@ -296,11 +296,6 @@ def get_s3_proto(
             "use_internal_client_wrapper_for_testing can only be set if native_cfg is provided"
         )
 
-    if native_cfg:
-        aws_auth = AWSAuthMethod.DISABLED if aws_auth is None else aws_auth
-        aws_profile = "" if aws_profile is None else aws_profile
-        native_cfg.update(NativeS3Settings(aws_auth, aws_profile, use_internal_client_wrapper_for_testing))
-
     sid, storage = get_storage_for_lib_name(s3.prefix, env)
     storage.config.Pack(s3, type_url_prefix="cxx.arctic.org")
     return sid
@@ -362,6 +357,54 @@ def add_s3_library_to_env(
     )
 
     _add_lib_desc_to_env(env, lib_name, sid, description)
+
+
+def get_gcp_proto(
+        *,
+        cfg,
+        lib_name,
+        env_name,
+        with_prefix,
+):
+    env = cfg.env_by_id[env_name]
+    proto = GcpConfig()
+
+    # adding time to prefix - so that the s3 root folder is unique and we can delete and recreate fast
+    if with_prefix:
+        if isinstance(with_prefix, str):
+            proto.prefix = with_prefix
+        else:
+            proto.prefix = f"{lib_name}{time.time() * 1e9:.0f}"
+    else:
+        proto.prefix = lib_name
+
+    sid, storage = get_storage_for_lib_name(proto.prefix, env)
+    storage.config.Pack(proto, type_url_prefix="cxx.arctic.org")
+    return sid
+
+
+def add_gcp_library_to_env(
+        *,
+        cfg,
+        lib_name,
+        env_name,
+        with_prefix,
+):
+    env = cfg.env_by_id[env_name]
+    if with_prefix and isinstance(with_prefix, str) and (with_prefix.endswith("/") or "//" in with_prefix):
+        raise UserInputException(
+            "path_prefix cannot contain // or end with a / because this breaks some S3 API calls, path_prefix was"
+            f" [{with_prefix}]"
+        )
+
+    sid = get_gcp_proto(
+        cfg=cfg,
+        lib_name=lib_name,
+        env_name=env_name,
+        with_prefix=with_prefix,
+    )
+
+    _add_lib_desc_to_env(env, lib_name, sid)
 
 
 def get_azure_proto(

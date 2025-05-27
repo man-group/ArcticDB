@@ -1,23 +1,8 @@
 name: Build with analysis tools
-on:
-  workflow_dispatch:
-    inputs:
-      run_all_benchmarks:
-        type: boolean
-        default: false
-      dev_image_tag:
-        description: Tag of the ArcticDB development image to use for benchmark and code coverage flows
-        type: string
-        default: latest
-
-  schedule: # Schedule the job to run at 12 a.m. daily
-    - cron: '0 0 * * *'
-
-  pull_request_target:
-    paths-ignore:
-    - "**/*.md"
-
+# Temporary disable
+on: workflow_call
 jobs:
+
   get_commits_to_benchmark:
     name: Get tag commits  
     runs-on: ubuntu-22.04
@@ -34,130 +19,6 @@ jobs:
           python3 build_tooling/get_commits_for_benchmark.py ${{ inputs.run_all_benchmarks == true && '--run_all_benchmarks' || ''}}
     outputs:
       matrix: ${{ steps.get_tags.outputs.commits }}
-
-
-  benchmark_commits:
-    needs: [get_commits_to_benchmark]  
-    strategy:
-      fail-fast: false
-      matrix: 
-        commits: ${{ fromJson(needs.get_commits_to_benchmark.outputs.matrix)}}  
-    name: Benchmark commit ${{ matrix.commits }}
-    uses: ./.github/workflows/benchmark_commits.yml
-    secrets: inherit
-    with:
-      commit: ${{ matrix.commits }}
-      run_all_benchmarks: ${{ inputs.run_all_benchmarks || false }}
-      run_on_pr_head: ${{ github.event_name == 'pull_request_target' }}
-      dev_image_tag: ${{ inputs.dev_image_tag || 'latest' }}
-
-  publish_benchmark_results_to_gh_pages:  
-    name: Publish benchmark results to gh-pages
-    if: ${{ github.event_name != 'pull_request_target' }} # only publish for the scheduled master builds
-    needs: [benchmark_commits]
-    runs-on: ubuntu-22.04
-    container:
-      image: ubuntu:22.04 # Native runner doesn't allow setting up the ca softlinks required below
-    permissions:
-      contents: write
-
-    steps:
-      - name: Select Python
-        uses: actions/setup-python@v4.7.1
-        with:
-          python-version: "3.10"
-
-      - name: Prepare environment
-        shell: bash -el {0}
-        run: |
-          apt update
-          apt install -y git
-          python -m pip install arcticdb[Testing] "protobuf<5"
-
-      - name: Setup softlink for SSL
-        shell: bash -el {0}
-        run: |
-            mkdir -p /etc/pki/tls
-            ln -s /usr/lib/ssl/certs /etc/pki/tls/certs
-            ln -s /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt
-
-      - uses: actions/checkout@v3.3.0
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.ARCTICDB_TEST_PAT }}
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}  # Note: This is dangerous if we run automatic CI on external PRs
-
-      - name: Set persistent storage variables
-        uses: ./.github/actions/set_persistent_storage_env_vars
-        with:
-          bucket: "arcticdb-ci-benchmark-results"
-          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
-          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
-
-      - name: Publish results to Github Pages
-        shell: bash -el {0}
-        run: |
-          git config --global --add safe.directory /__w/ArcticDB/ArcticDB
-          git config --global user.name "${GITHUB_ACTOR}"
-          git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
-          python build_tooling/transform_asv_results.py --mode extract
-          python -m asv publish -v
-          python -m asv gh-pages -v --rewrite
-  
-          
-  run-asv-check-script:
-    timeout-minutes: 120
-    runs-on: ubuntu-latest
-    container: ghcr.io/man-group/arcticdb-dev:latest
-    env:
-        SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
-        VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
-        VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
-        CMAKE_C_COMPILER_LAUNCHER: sccache
-        CMAKE_CXX_COMPILER_LAUNCHER: sccache
-        ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-    defaults:
-      run: {shell: bash}
-    steps:
-      - uses: actions/checkout@v3.3.0
-        with:
-          lfs: 'true'
-          fetch-depth: 0
-          submodules: recursive
-          token: ${{ secrets.ARCTICDB_TEST_PAT }}
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }} # Note: This is dangerous if we run automatic CI on external PRs          
-
-      - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: "v0.4.0"
-                  
-      - name: Extra envs
-        shell: bash -l {0}
-        run: |
-          . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
-          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
-          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
-          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
-        env:
-          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
-          
-      - name: Install ASV
-        shell: bash -el {0}
-        run: |
-          git config --global --add safe.directory .
-          python -m pip install --upgrade pip
-          pip install asv 
-          asv machine --yes
-      
-      - name: Build project for ASV
-        run: |
-          python -m pip install -ve .
-          
-      - name: Run ASV Tests Check script
-        run: |
-          python python/utils/asv_checks.py
-        continue-on-error: false
 
   # code_coverage:
   #   runs-on: "ubuntu-22.04"

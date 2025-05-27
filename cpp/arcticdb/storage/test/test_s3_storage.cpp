@@ -150,7 +150,7 @@ TEST_F(ProxyEnvVarSetHttpProxyForHttpsEndpointFixture, test_config_resolution_pr
     arcticdb::proto::s3_storage::Config s3_config;
     s3_config.set_endpoint("https://test.endpoint.com");
     s3_config.set_https(true);
-    auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config);
+    auto ret_cfg = arcticdb::storage::s3::get_s3_config_and_set_env_var(s3_config);
     ASSERT_EQ(ret_cfg.proxyHost, "http-proxy.com");
     ASSERT_EQ(ret_cfg.proxyPort, 443);
     ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTP);
@@ -159,7 +159,7 @@ TEST_F(ProxyEnvVarSetHttpProxyForHttpsEndpointFixture, test_config_resolution_pr
 TEST_F(ProxyEnvVarUpperCaseFixture, test_config_resolution_proxy) {
     arcticdb::proto::s3_storage::Config s3_config_http;
     s3_config_http.set_endpoint("http://test.endpoint.com");
-    auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_http);
+    auto ret_cfg = arcticdb::storage::s3::get_s3_config_and_set_env_var(s3_config_http);
     ASSERT_EQ(ret_cfg.proxyHost, "http-proxy-2.com");
     ASSERT_EQ(ret_cfg.proxyPort, 2222);
     ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTP);
@@ -167,7 +167,7 @@ TEST_F(ProxyEnvVarUpperCaseFixture, test_config_resolution_proxy) {
     arcticdb::proto::s3_storage::Config s3_config_https;
     s3_config_https.set_endpoint("https://test.endpoint.com");
     s3_config_https.set_https(true);
-    ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_https);
+    ret_cfg = arcticdb::storage::s3::get_s3_config_and_set_env_var(s3_config_https);
     ASSERT_EQ(ret_cfg.proxyHost, "https-proxy-2.com");
     ASSERT_EQ(ret_cfg.proxyPort, 2222);
     ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTPS);
@@ -177,7 +177,7 @@ TEST_F(ProxyEnvVarLowerCasePrecedenceFixture, test_config_resolution_proxy) {
     SKIP_WIN("Env vars are not case-sensitive on Windows");
     arcticdb::proto::s3_storage::Config s3_config_http;
     s3_config_http.set_endpoint("http://test.endpoint.com");
-    auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_http);
+    auto ret_cfg = arcticdb::storage::s3::get_s3_config_and_set_env_var(s3_config_http);
     ASSERT_EQ(ret_cfg.proxyHost, "http-proxy-1.com");
     ASSERT_EQ(ret_cfg.proxyPort, 2222);
     ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTP);
@@ -185,7 +185,7 @@ TEST_F(ProxyEnvVarLowerCasePrecedenceFixture, test_config_resolution_proxy) {
     arcticdb::proto::s3_storage::Config s3_config_https;
     s3_config_https.set_endpoint("https://test.endpoint.com");
     s3_config_https.set_https(true);
-    ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_https);
+    ret_cfg = arcticdb::storage::s3::get_s3_config_and_set_env_var(s3_config_https);
     ASSERT_EQ(ret_cfg.proxyHost, "https-proxy-1.com");
     ASSERT_EQ(ret_cfg.proxyPort, 2222);
     ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTPS);
@@ -194,7 +194,7 @@ TEST_F(ProxyEnvVarLowerCasePrecedenceFixture, test_config_resolution_proxy) {
 TEST_F(NoProxyEnvVarUpperCaseFixture, test_config_resolution_proxy) {
     arcticdb::proto::s3_storage::Config s3_config;
     s3_config.set_endpoint("http://test.endpoint.com");
-    auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config);
+    auto ret_cfg = arcticdb::storage::s3::get_s3_config_and_set_env_var(s3_config);
 
     Aws::Utils::Array<Aws::String> expected_non_proxy_hosts{1};
     expected_non_proxy_hosts[0] = "http://test-1.endpoint.com";
@@ -205,7 +205,7 @@ TEST_F(NoProxyEnvVarLowerCasePrecedenceFixture, test_config_resolution_proxy) {
     SKIP_WIN("Env vars are not case-sensitive on Windows");
     arcticdb::proto::s3_storage::Config s3_config;
     s3_config.set_endpoint("http://test.endpoint.com");
-    auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config);
+    auto ret_cfg = arcticdb::storage::s3::get_s3_config_and_set_env_var(s3_config);
 
     Aws::Utils::Array<Aws::String> expected_non_proxy_hosts{2};
     expected_non_proxy_hosts[0] = "http://test-1.endpoint.com";
@@ -300,8 +300,24 @@ TEST_F(S3StorageFixture, test_key_exists) {
     ASSERT_TRUE(exists_in_store(store, "symbol"));
     ASSERT_FALSE(exists_in_store(store, "symbol-not-present"));
     ASSERT_THROW(
-        exists_in_store(store, MockS3Client::get_failure_trigger("symbol", StorageOperation::EXISTS, Aws::S3::S3Errors::NETWORK_CONNECTION, false)),
-        UnexpectedS3ErrorException);
+            exists_in_store(store, MockS3Client::get_failure_trigger("symbol", StorageOperation::EXISTS,
+                                                                     Aws::S3::S3Errors::NETWORK_CONNECTION, false)),
+            UnexpectedS3ErrorException);
+}
+
+TEST_P(S3AndNfsStorageFixture, test_key_path) {
+    std::vector<VariantKey> res;
+
+    auto store = get_storage();
+    store->iterate_type(KeyType::TABLE_DATA, [&](VariantKey &&found_key) {
+        res.emplace_back(found_key);
+    }, "");
+
+    for(auto vk : res) {
+        auto key_path = store->key_path(vk);
+        ASSERT_TRUE(key_path.size() > 0);
+        ASSERT_TRUE(key_path.starts_with(get_root_folder(store->library_path())));
+    }
 }
 
 TEST_F(S3StorageFixture, test_read){

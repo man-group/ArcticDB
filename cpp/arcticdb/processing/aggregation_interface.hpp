@@ -16,16 +16,18 @@ struct IGroupingAggregatorData {
     struct Interface : Base {
         void add_data_type(DataType data_type) { folly::poly_call<0>(*this, data_type); }
 
+        DataType get_output_data_type() { return folly::poly_call<1>(*this); };
+
         void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
-            folly::poly_call<1>(*this, input_column, groups, unique_values);
+            folly::poly_call<2>(*this, input_column, groups, unique_values);
         }
         [[nodiscard]] SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values) {
-            return folly::poly_call<2>(*this, output_column_name, dynamic_schema, unique_values);
+            return folly::poly_call<3>(*this, output_column_name, dynamic_schema, unique_values);
         }
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::add_data_type, &T::aggregate, &T::finalize>;
+    using Members = folly::PolyMembers<&T::add_data_type, &T::get_output_data_type, &T::aggregate, &T::finalize>;
 };
 
 using GroupingAggregatorData = folly::Poly<IGroupingAggregatorData>;

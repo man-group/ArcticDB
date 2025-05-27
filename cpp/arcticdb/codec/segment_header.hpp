@@ -204,7 +204,7 @@ public:
         return get_mutable_field<FieldOffset::COLUMN>(num_blocks);
     }
 
-    size_t required_bytes(const SegmentInMemory& in_mem_seg);
+    static size_t required_bytes(const SegmentInMemory& in_mem_seg);
 
     [[nodiscard]] EncodingVersion encoding_version() const {
         return data_.encoding_version_;

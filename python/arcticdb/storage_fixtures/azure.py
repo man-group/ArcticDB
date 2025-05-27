@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import re
 import shutil
+import uuid
 from typing import TYPE_CHECKING, Optional
 from tempfile import mkdtemp
 
@@ -30,7 +31,6 @@ class AzureContainer(StorageFixture):
         ArcticUriFields.CA_PATH: re.compile("[/;](CA_cert_path=)([^;]*)(;?)"),
         ArcticUriFields.PATH_PREFIX: re.compile("[/;](Path_prefix=)([^;]*)(;?)"),
     }
-    _sequence = 0
 
     container: str
     client: Optional["ContainerClient"]
@@ -54,8 +54,7 @@ class AzureContainer(StorageFixture):
     def __init__(self, factory: "AzuriteStorageFixtureFactory") -> None:
         super().__init__()
         self.factory = factory
-        self.container = f"container{AzureContainer._sequence}"
-        AzureContainer._sequence += 1
+        self.container = f"container{str(uuid.uuid1())[:8]}"
         self._set_uri_and_client(f"AccountName={factory.account_name};AccountKey={factory.account_key}")
 
         # __exit__() assumes this object owns the container, so always create and bail if exists:
@@ -135,7 +134,7 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
 
     def __init__(self, port=0, working_dir: Optional[str] = None, use_ssl: bool = True, ssl_test_support: bool = True):
         self.http_protocol = "https" if use_ssl else "http"
-        self.port = port or get_ephemeral_port(0)
+        self.port = port or get_ephemeral_port(1)
         self.endpoint_root = f"{self.http_protocol}://{self.host}:{self.port}"
         self.working_dir = str(working_dir) if working_dir else mkdtemp(suffix="AzuriteStorageFixtureFactory")
         self.ssl_test_support = ssl_test_support
@@ -144,7 +143,7 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
         return f"AzuriteStorageFixtureFactory[port={self.port},dir={self.working_dir}]"
 
     def _safe_enter(self):
-        args = f"{shutil.which('azurite')} --blobPort {self.port} --blobHost {self.host} --queuePort 0 --tablePort 0"
+        args = f"{shutil.which('azurite')} --blobPort {self.port} --blobHost {self.host} --queuePort 0 --tablePort 0 --skipApiVersionCheck"
         if self.ssl_test_support:
             self.client_cert_dir = self.working_dir
             self.ca, self.key_file, self.cert_file, self.client_cert_file = get_ca_cert_for_testing(self.client_cert_dir)

@@ -22,7 +22,6 @@
 #include <spdlog/async_logger.h>
 #include <spdlog/sinks/stdout_sinks.h>
 
-
 #include <logger.pb.h>
 
 #include <memory>

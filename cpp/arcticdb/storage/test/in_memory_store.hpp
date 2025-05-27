@@ -53,7 +53,7 @@ public:
         throw std::runtime_error("Not implemented for tests");
     }
 
-    folly::Future<std::vector<VariantKey>> batch_read_compressed(
+    std::vector<folly::Future<VariantKey>> batch_read_compressed(
             std::vector<std::pair<entity::VariantKey, ReadContinuation>>&&,
             const BatchReadArgs&) override {
         throw std::runtime_error("Not implemented for tests");
@@ -324,6 +324,14 @@ public:
                 func(VariantKey{key});
             }
         }
+    }
+
+    [[nodiscard]] folly::Future<std::shared_ptr<storage::ObjectSizes>> get_object_sizes(KeyType, const std::optional<StreamId>&) override {
+        util::raise_rte("get_object_sizes not implemented for InMemoryStore");
+    }
+
+    [[nodiscard]] folly::Future<folly::Unit> visit_object_sizes(KeyType, const std::optional<StreamId>&, storage::ObjectSizesVisitor) override {
+        util::raise_rte("visit_object_sizes not implemented for InMemoryStore");
     }
 
     bool scan_for_matching_key(

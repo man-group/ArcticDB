@@ -17,6 +17,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.util.test import assert_frame_equal
 
 
+@pytest.mark.storage
 def test_categorical(basic_store, sym):
     c = pd.Categorical(["a", "b", "c", "a", "b", "c"])
     df = pd.DataFrame({"int": np.arange(6), "cat": c})
@@ -29,6 +30,7 @@ def test_categorical(basic_store, sym):
     assert read_df.cat.dtype == "category"
 
 
+@pytest.mark.storage
 def test_categorical_multiple_col(basic_store, sym):
     c = pd.Categorical(["a", "b", "c", "a", "b", "c"])
     c1 = pd.Categorical(["a", "b", "b", "a", "b", "c"])
@@ -48,6 +50,7 @@ def test_categorical_multiple_col(basic_store, sym):
     assert_frame_equal(df, read_df)
 
 
+@pytest.mark.storage
 def test_categorical_multiple_col_read_subset(basic_store, sym):
     c = pd.Categorical(["a", "b", "c", "a", "b", "c"])
     c1 = pd.Categorical(["a", "b", "b", "a", "b", "c"])
@@ -65,6 +68,7 @@ def test_categorical_multiple_col_read_subset(basic_store, sym):
     assert_frame_equal(df[["cat1"]], read_df)
 
 
+@pytest.mark.storage
 def test_categorical_with_None(basic_store, sym):
     c = pd.Categorical(["a", "b", "c", "a", "b", "c", None])
     df = pd.DataFrame({"int": np.arange(7), "cat": c})
@@ -78,6 +82,7 @@ def test_categorical_with_None(basic_store, sym):
     assert_frame_equal(df, read_df)
 
 
+@pytest.mark.storage
 def test_categorical_empty(basic_store, sym):
     c = pd.Categorical([])
     df = pd.DataFrame({"cat": c})
@@ -94,6 +99,7 @@ def test_categorical_empty(basic_store, sym):
     assert_frame_equal(df, read_df)
 
 
+@pytest.mark.storage
 def test_categorical_with_integers(basic_store, sym):
     c = pd.Categorical(np.arange(6))
     df = pd.DataFrame({"int": np.arange(6), "cat_int": c})
@@ -121,6 +127,7 @@ def test_categorical_with_integers(basic_store, sym):
     assert_frame_equal(df, read_df)
 
 
+@pytest.mark.storage
 def test_categorical_with_integers_and_strings(basic_store, sym):
     c = pd.Categorical(np.arange(6))
     c1 = pd.Categorical(["a", "b", "b", "a", "b", "c"])
@@ -150,6 +157,7 @@ def test_categorical_with_integers_and_strings(basic_store, sym):
     assert_frame_equal(df, read_df)
 
 
+@pytest.mark.storage
 def test_categorical_batch_write(basic_store):
     lib = basic_store
     symbols = ["test_categorical_batch_write_1", "test_categorical_batch_write_2"]
@@ -162,6 +170,7 @@ def test_categorical_batch_write(basic_store):
         assert_frame_equal(lib.read(symbol).data, dfs[idx])
 
 
+@pytest.mark.storage
 def test_categorical_append(basic_store):
     lib = basic_store
     symbol = "test_categorical_append"
@@ -172,6 +181,7 @@ def test_categorical_append(basic_store):
         lib.append(symbol, append_df)
 
 
+@pytest.mark.storage
 def test_categorical_update(basic_store):
     lib = basic_store
     symbol = "test_categorical_update"
@@ -182,6 +192,7 @@ def test_categorical_update(basic_store):
         lib.update(symbol, append_df)
 
 
+@pytest.mark.storage
 def test_categorical_series(basic_store):
     lib = basic_store
     symbol = "test_categorical_series"
@@ -192,6 +203,7 @@ def test_categorical_series(basic_store):
         lib.append(symbol, append_series)
 
 
+@pytest.mark.storage
 def test_categorical_multi_index(basic_store):
     lib = basic_store
     symbol = "test_categorical_multi_index"

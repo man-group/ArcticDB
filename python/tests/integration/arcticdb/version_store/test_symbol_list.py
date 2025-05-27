@@ -5,12 +5,13 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from arcticdb.config import Defaults
-from arcticdb.util.test import sample_dataframe
+from arcticdb.util.test import sample_dataframe, random_ascii_strings
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.toolbox.library_tool import (
     VariantKey,
@@ -25,9 +26,8 @@ from arcticdb_ext.exceptions import InternalException, PermissionException
 
 from multiprocessing import Pool
 from arcticdb_ext import set_config_int
-import random
-import string
 from tests.util.mark import MACOS_CONDA_BUILD
+
 
 @pytest.fixture
 def small_max_delta():
@@ -40,14 +40,15 @@ def small_max_delta():
 
 def make_read_only(lib):
     return NativeVersionStore.create_store_from_lib_config(
-        lib.lib_cfg(), Defaults.ENV, OpenMode.READ
+        lib_cfg=lib.lib_cfg(), env=Defaults.ENV, open_mode=OpenMode.READ, native_cfg=lib.lib_native_cfg()
     )
 
 
+@pytest.mark.storage
 def test_with_symbol_list(basic_store):
     syms = []
+    df = sample_dataframe(100)
     for i in range(100):
-        df = sample_dataframe(100, i)
         sym = "sym_{}".format(i)
         basic_store.write(sym, df)
         syms.append(sym)
@@ -80,6 +81,7 @@ def test_with_symbol_list(basic_store):
         assert sym in expected_syms
 
 
+@pytest.mark.storage
 def test_symbol_list_with_rec_norm(basic_store):
     basic_store.write(
         "rec_norm",
@@ -91,6 +93,7 @@ def test_symbol_list_with_rec_norm(basic_store):
     assert basic_store.list_symbols() == ["rec_norm"]
 
 
+@pytest.mark.storage
 def test_interleaved_store_read(version_store_and_real_s3_basic_store_factory):
     basic_store_factory = version_store_and_real_s3_basic_store_factory
     vs1 = basic_store_factory()
@@ -102,6 +105,7 @@ def test_interleaved_store_read(version_store_and_real_s3_basic_store_factory):
     assert vs1.list_symbols() == []
 
 
+@pytest.mark.storage
 def test_symbol_list_regex(basic_store):
     for i in range(15):
         basic_store.write(f"sym_{i}", pd.DataFrame())
@@ -119,9 +123,8 @@ def test_symbol_list_regex(basic_store):
 
 @pytest.mark.parametrize("compact_first", [True, False])
 # Using S3 because LMDB does not allow OpenMode to be changed
-def test_symbol_list_read_only_compaction_needed(
-    small_max_delta, object_version_store, compact_first
-):
+@pytest.mark.storage
+def test_symbol_list_read_only_compaction_needed(small_max_delta, object_version_store, compact_first):
     lib_write = object_version_store
 
     lib_read = make_read_only(lib_write)
@@ -144,6 +147,7 @@ def test_symbol_list_read_only_compaction_needed(
     assert new_compaction != old_compaction
 
 
+@pytest.mark.storage
 def test_symbol_list_delete(basic_store):
     lib = basic_store
     lib.write("a", 1)
@@ -153,6 +157,7 @@ def test_symbol_list_delete(basic_store):
     assert lib.list_symbols() == ["b"]
 
 
+@pytest.mark.storage
 def test_symbol_list_delete_incremental(basic_store):
     lib = basic_store
     lib.write("a", 1)
@@ -164,6 +169,7 @@ def test_symbol_list_delete_incremental(basic_store):
     assert lib.list_symbols() == ["b"]
 
 
+@pytest.mark.storage
 def test_deleted_symbol_with_tombstones(basic_store_tombstones_no_symbol_list):
     lib = basic_store_tombstones_no_symbol_list
     lib.write("a", 1)
@@ -173,6 +179,7 @@ def test_deleted_symbol_with_tombstones(basic_store_tombstones_no_symbol_list):
     assert lib.list_symbols() == ["b"]
 
 
+@pytest.mark.storage
 def test_empty_lib(basic_store):
     lib = basic_store
     assert lib.list_symbols() == []
@@ -180,6 +187,7 @@ def test_empty_lib(basic_store):
     assert len(lt.find_keys(KeyType.SYMBOL_LIST)) == 1
 
 
+@pytest.mark.storage
 def test_no_active_symbols(basic_store_prune_previous):
     lib = basic_store_prune_previous
     for idx in range(20):
@@ -193,6 +201,7 @@ def test_no_active_symbols(basic_store_prune_previous):
     assert lib.list_symbols() == []
 
 
+@pytest.mark.storage
 def test_only_latest_compaction_key_is_used(basic_store):
     lib: NativeVersionStore = basic_store
     lt = lib.library_tool()
@@ -221,9 +230,8 @@ def test_only_latest_compaction_key_is_used(basic_store):
 
 
 @pytest.mark.parametrize("write_another", [False, True])
-def test_turning_on_symbol_list_after_a_symbol_written(
-    object_store_factory, write_another
-):
+@pytest.mark.storage
+def test_turning_on_symbol_list_after_a_symbol_written(object_store_factory, write_another):
     # The if(!maybe_last_compaction) case
     lib: NativeVersionStore = object_store_factory(symbol_list=False)
 
@@ -237,9 +245,7 @@ def test_turning_on_symbol_list_after_a_symbol_written(
 
         sl_keys = lt.find_keys(KeyType.SYMBOL_LIST)
         assert sl_keys
-        assert not any(
-            k.id == CompactionId for k in sl_keys
-        ), "Should not have any compaction yet"
+        assert not any(k.id == CompactionId for k in sl_keys), "Should not have any compaction yet"
 
     ro = make_read_only(lib)
     # For some reason, symbol_list=True is not always picked up on the first call, so forcing it:
@@ -255,6 +261,7 @@ def test_turning_on_symbol_list_after_a_symbol_written(
 
 
 @pytest.mark.parametrize("mode", ["conflict", "normal"])
+@pytest.mark.storage
 def test_lock_contention(small_max_delta, basic_store, mode):
     lib = basic_store
     lt = lib.library_tool()
@@ -276,16 +283,6 @@ def test_lock_contention(small_max_delta, basic_store, mode):
         assert lt.find_keys(KeyType.SYMBOL_LIST) == orig_sl
     else:
         assert lt.find_keys(KeyType.SYMBOL_LIST) != orig_sl
-
-
-def random_strings(count, max_length):
-    result = []
-    for _ in range(count):
-        length = random.randrange(max_length) + 2
-        result.append(
-            "".join(random.choice(string.ascii_letters) for _ in range(length))
-        )
-    return result
 
 
 def _tiny_df(idx):
@@ -346,25 +343,20 @@ def test_symbol_list_parallel_stress_with_delete(
     num_cycles = 1
     symbol_length = 6
 
-    pre_existing_symbols = random_strings(num_pre_existing_symbols, symbol_length)
+    pre_existing_symbols = random_ascii_strings(num_pre_existing_symbols, symbol_length)
     for idx, existing in enumerate(pre_existing_symbols):
         lib.write(existing, _tiny_df(idx))
 
     if same_symbols:
-        frozen_symbols = random_strings(num_symbols, symbol_length)
+        frozen_symbols = random_ascii_strings(num_symbols, symbol_length)
         symbols = [frozen_symbols for _ in range(num_workers)]
     else:
-        symbols = [
-            random_strings(num_symbols, symbol_length) for _ in range(num_workers)
-        ]
+        symbols = [random_ascii_strings(num_symbols, symbol_length) for _ in range(num_workers)]
 
     with Pool(num_workers) as p:
         p.map(
             _perform_actions,
-            [
-                (lib, syms, idx, num_cycles, list_freq, delete_freq, update_freq)
-                for idx, syms in enumerate(symbols)
-            ],
+            [(lib, syms, idx, num_cycles, list_freq, delete_freq, update_freq) for idx, syms in enumerate(symbols)],
         )
 
     p.close()
@@ -379,11 +371,6 @@ def test_symbol_list_parallel_stress_with_delete(
         assert not lib.version_store.indexes_sorted(sym)
 
 
-def test_symbol_list_exception_and_printout(mock_s3_store_with_mock_storage_exception):  # moto is choosen just because it's easy to give storage error
-    with pytest.raises(InternalException, match="E_S3_RETRYABLE Retry-able error"):
-        mock_s3_store_with_mock_storage_exception.list_symbols()
-
-
 def test_force_compact_symbol_list(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     lib_tool = lib.library_tool()
@@ -396,8 +383,8 @@ def test_force_compact_symbol_list(lmdb_version_store_v1):
 
     num_syms = 1000
     syms = [f"sym_{idx:03}" for idx in range(num_syms)]
-    for sym in syms:
-        lib.write(sym, 1)
+    data = [1 for _ in range(num_syms)]
+    lib.batch_write(syms, data)
     symbol_list_keys = lib_tool.find_keys(KeyType.SYMBOL_LIST)
     assert len(symbol_list_keys) == num_syms
     assert lib.compact_symbol_list() == num_syms
@@ -463,4 +450,3 @@ def test_force_compact_symbol_list_lock_held_past_ttl(lmdb_version_store_v1, mak
     lock = lib.version_store.get_storage_lock(CompactionLockName)
     lock.lock()
     assert lib.compact_symbol_list() == 0
-

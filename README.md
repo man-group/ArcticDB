@@ -23,6 +23,8 @@
 **ArcticDB** is a high performance, serverless **DataFrame database** built for the Python Data Science ecosystem.
 Launched in March 2023, it is the successor to [Arctic](https://github.com/man-group/arctic).
 
+Use of ArcticDB in production (including business or commercial environments) or for a Database Service requires a paid for license from ArcticDB Limited . Please contact info@arcticdb.io for further details.
+
 ArcticDB offers an intuitive Python-centric API enabling you to read and write Pandas DataFrames to S3 or LMDB utilising a fast C++ data-processing and compression engine.
 
 ArcticDB allows you to:
@@ -140,7 +142,7 @@ ArcticDB is released under a [Business Source License 1.1 (BSL)](https://github.
 BSL features are free to use and the source code is available, but users may not use ArcticDB for production use or for
 a Database Service, without agreement with Man Group Operations Limited.
 
-Use of ArcticDB in production or for a Database Service requires a paid for license from Man Group Operations Limited
+Use of ArcticDB in production or for a Database Service requires a paid for license from ArcticDB Limited
 and is licensed under the ArcticDB Software License Agreement. For more information please contact [info@arcticdb.io](mailto:info@arcticdb.io).
 
 The BSL is not certified as an open-source license, but most of the [Open Source Initiative (OSI)](https://opensource.org/) criteria are met.
@@ -165,6 +167,7 @@ Please see version conversion dates in the below table:
 | 5.0 | Business Source License 1.1 | Oct 31, 2026 |
 | 5.1 | Business Source License 1.1 | Nov 15, 2026 |
 | 5.2 | Business Source License 1.1 | Jan 27, 2027 |
+| 5.3 | Business Source License 1.1 | Mar 24, 2027 |
 
 ## Code of Conduct
 

@@ -5,6 +5,7 @@
     schedule:
       - cron: "0 3 * * *"
     pull_request:
+
   jobs:
     polaris-scan:
       name: Polaris Coverity Static Analysis
@@ -38,9 +39,11 @@
 
         - name: Get CMake
           uses: lukka/get-cmake@latest
+          with:
+            cmakeVersion: '^3.31.6' # Uses the most recent 3.x.x version (regardless of full version spec)
 
         - name: CMake configure
-          uses: lukka/run-cmake@v10.8
+          uses: lukka/run-cmake@v10
           env:
             CC: "gcc-10"
             CXX: "g++-10"
@@ -71,6 +74,7 @@
             polaris_reports_sarif_groupSCAIssues: true
             polaris_upload_sarif_report: true
             polaris_prComment_severities: "high,critical,medium,low"
+            polaris_branch_parent_name: "master"
 
         - name: Upload .bridge artifact
           uses: actions/upload-artifact@v4
@@ -79,3 +83,4 @@
             path: ${{github.workspace}}/.bridge
             if-no-files-found: error
             include-hidden-files: true
+

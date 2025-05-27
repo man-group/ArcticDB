@@ -31,11 +31,7 @@ def gen_params_append():
         # rownums
         p.append([1, 4, periods + 2])
         # cols
-        p.append(
-            list(
-                chain(*[list(combinations(["a", "b", "c"], c)) for c in range(1, 4, 2)])
-            )
-        )
+        p.append(list(chain(*[list(combinations(["a", "b", "c"], c)) for c in range(1, 4, 2)])))
         # tsbounds
         p.append([(j, i) for i in [1, periods - 1] for j in range(i)])
         # append_point
@@ -61,19 +57,13 @@ def gen_params_append_single():
     return list(product(*p))
 
 
-@pytest.mark.parametrize(
-    "colnum,periods,rownum,cols,tsbounds,append_point", gen_params_append()
-)
-def test_append_partial_read(
-    version_store_factory, colnum, periods, rownum, cols, tsbounds, append_point
-):
+@pytest.mark.parametrize("colnum,periods,rownum,cols,tsbounds,append_point", gen_params_append())
+def test_append_partial_read(version_store_factory, colnum, periods, rownum, cols, tsbounds, append_point):
     tz = "America/New_York"
     version_store = version_store_factory(col_per_group=colnum, row_per_segment=rownum)
     dtidx = pd.date_range("2019-02-06 11:43", periods=6).tz_localize(tz)
     a = np.arange(dtidx.shape[0])
-    tf = TimeFrame(
-        dtidx.values, columns_names=["a", "b", "c"], columns_values=[a, a + a, a * 10]
-    )
+    tf = TimeFrame(dtidx.values, columns_names=["a", "b", "c"], columns_values=[a, a + a, a * 10])
     c1 = dtidx[append_point]
     c2 = dtidx[append_point + 1]
     tf1 = tf.tsloc[:c1]
@@ -85,27 +75,19 @@ def test_append_partial_read(
     dtr = (dtidx[tsbounds[0]], dtidx[tsbounds[1]])
     vit = version_store.read(sid, date_range=dtr, columns=list(cols))
     rtf = tf.tsloc[dtr[0] : dtr[1]]
-    col_names, col_values = zip(
-        *[(c, v) for c, v in zip(rtf.columns_names, rtf.columns_values) if c in cols]
-    )
+    col_names, col_values = zip(*[(c, v) for c, v in zip(rtf.columns_names, rtf.columns_values) if c in cols])
     rtf = TimeFrame(rtf.times, list(col_names), list(col_values))
     assert rtf == vit.data
 
 
-@pytest.mark.parametrize(
-    "colnum,periods,rownum,cols,tsbounds,append_point", gen_params_append()
-)
-def test_incomplete_append_partial_read(
-    version_store_factory, colnum, periods, rownum, cols, tsbounds, append_point
-):
+@pytest.mark.parametrize("colnum,periods,rownum,cols,tsbounds,append_point", gen_params_append())
+def test_incomplete_append_partial_read(version_store_factory, colnum, periods, rownum, cols, tsbounds, append_point):
     tz = "America/New_York"
     version_store = version_store_factory(col_per_group=colnum, row_per_segment=rownum)
     lib_tool = version_store.library_tool()
     dtidx = pd.date_range("2019-02-06 11:43", periods=6).tz_localize(tz)
     a = np.arange(dtidx.shape[0])
-    tf = TimeFrame(
-        dtidx.values, columns_names=["a", "b", "c"], columns_values=[a, a + a, a * 10]
-    )
+    tf = TimeFrame(dtidx.values, columns_names=["a", "b", "c"], columns_values=[a, a + a, a * 10])
     c1 = dtidx[append_point]
     c2 = dtidx[append_point + 1]
     tf1 = tf.tsloc[:c1]
@@ -117,9 +99,7 @@ def test_incomplete_append_partial_read(
     dtr = (dtidx[tsbounds[0]], dtidx[tsbounds[1]])
     vit = version_store.read(sid, date_range=dtr, columns=list(cols), incomplete=True)
     rtf = tf.tsloc[dtr[0] : dtr[1]]
-    col_names, col_values = zip(
-        *[(c, v) for c, v in zip(rtf.columns_names, rtf.columns_values) if c in cols]
-    )
+    col_names, col_values = zip(*[(c, v) for c, v in zip(rtf.columns_names, rtf.columns_values) if c in cols])
     rtf = TimeFrame(rtf.times, list(col_names), list(col_values))
     assert rtf == vit.data
 
@@ -164,9 +144,7 @@ def test_(
 @given(
     col_per_append_df=st.integers(2, 100),
     col_name_set=st.integers(1, 10000),
-    num_rows_per_test_cycle=st.lists(
-        st.lists(st.integers(1, 20), min_size=1, max_size=10), max_size=2
-    ),
+    num_rows_per_test_cycle=st.lists(st.lists(st.integers(1, 20), min_size=1, max_size=10), max_size=2),
     column_group_size=st.integers(2, 100),
     segment_row_size=st.integers(2, 100),
     dynamic_schema=st.booleans(),
@@ -174,7 +152,8 @@ def test_(
     df_in_str=st.booleans(),
 )
 @SLOW_TESTS_MARK
-@pytest.mark.xfail(reason="Needs to be fixed with issue #496")
+@pytest.mark.skip(reason="Needs to be fixed with issue #496")
+@pytest.mark.storage
 def test_append_with_defragmentation(
     sym,
     col_per_append_df,
@@ -188,27 +167,19 @@ def test_append_with_defragmentation(
     df_in_str,
     basic_store_factory,
 ):
-    def get_wide_and_long_df(
-        start_idx, end_idx, col_per_append_df, col_name_set, df_in_str
-    ):
+    def get_wide_and_long_df(start_idx, end_idx, col_per_append_df, col_name_set, df_in_str):
         df = pd.DataFrame()
         for idx in range(start_idx, end_idx):
             df = pd.concat([df, get_wide_df(idx, col_per_append_df, col_name_set)])
-        if (
-            col_per_append_df == col_name_set
-        ):  # manually sort them for static schema, for newer version of panda
+        if col_per_append_df == col_name_set:  # manually sort them for static schema, for newer version of panda
             df = df.reindex(sorted(list(df.columns)), axis=1)
         df = df.astype(str if df_in_str else np.float64)
         return df
 
     def get_no_of_segments_after_defragmentation(df, merged_segment_row_size):
         new_segment_row_size = no_of_segments = 0
-        for start_row, end_row in (
-            pd.Series(df.end_row.values, index=df.start_row).to_dict().items()
-        ):
-            no_of_segments = (
-                no_of_segments + 1 if new_segment_row_size == 0 else no_of_segments
-            )
+        for start_row, end_row in pd.Series(df.end_row.values, index=df.start_row).to_dict().items():
+            no_of_segments = no_of_segments + 1 if new_segment_row_size == 0 else no_of_segments
             new_segment_row_size += end_row - start_row
             if new_segment_row_size >= merged_segment_row_size:
                 new_segment_row_size = 0
@@ -231,9 +202,7 @@ def test_append_with_defragmentation(
             start_index = index_offset
             index_offset += num_of_row
             end_index = index_offset
-            df = get_wide_and_long_df(
-                start_index, end_index, col_per_append_df, col_name_set, df_in_str
-            )
+            df = get_wide_and_long_df(start_index, end_index, col_per_append_df, col_name_set, df_in_str)
             before_compact = pd.concat([before_compact, df])
             if start_index == 0:
                 lib.write(sym, df)
@@ -241,9 +210,7 @@ def test_append_with_defragmentation(
                 lib.append(sym, df)
             segment_details = lib.read_index(sym)
             assert lib.is_symbol_fragmented(sym, None) is (
-                get_no_of_segments_after_defragmentation(
-                    segment_details, merged_segment_row_size
-                )
+                get_no_of_segments_after_defragmentation(segment_details, merged_segment_row_size)
                 != get_no_of_column_merged_segments(segment_details)
             )
         if get_no_of_segments_after_defragmentation(
@@ -257,9 +224,7 @@ def test_append_with_defragmentation(
             res = res.reindex(sorted(list(res.columns)), axis=1)
             res = res.replace("", 0.0)
             res = res.fillna(0.0)
-            before_compact = before_compact.reindex(
-                sorted(list(before_compact.columns)), axis=1
-            )
+            before_compact = before_compact.reindex(sorted(list(before_compact.columns)), axis=1)
             before_compact = before_compact.fillna(0.0)
 
             seg_details = lib.read_index(sym)
@@ -270,11 +235,7 @@ def test_append_with_defragmentation(
                 seg_details_before_compaction, merged_segment_row_size
             )
             indexs = (
-                seg_details["end_index"]
-                .astype(str)
-                .str.rsplit(" ", n=2)
-                .agg(" ".join)
-                .reset_index()
+                seg_details["end_index"].astype(str).str.rsplit(" ", n=2).agg(" ".join).reset_index()
             )  # start_index and end_index got merged into one column
             assert np.array_equal(
                 indexs.iloc[1:, 0].astype(str).values,
@@ -287,9 +248,7 @@ def test_append_with_defragmentation(
 
     assume(col_per_append_df <= col_name_set)
     assume(
-        num_of_row % 2 != 0
-        for num_of_rows in num_rows_per_test_cycle
-        for num_of_row in num_of_rows
+        num_of_row % 2 != 0 for num_of_rows in num_rows_per_test_cycle for num_of_row in num_of_rows
     )  # Make sure at least one successful compaction run per cycle
 
     set_config_int("SymbolDataCompact.SegmentCount", 1)
@@ -320,9 +279,7 @@ def test_regular_append_dynamic_schema_named_index(
 ):
     lib = lmdb_version_store_tiny_segment_dynamic
     sym = "test_parallel_append_dynamic_schema_named_index"
-    df_0 = pd.DataFrame(
-        {"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1)
-    )
+    df_0 = pd.DataFrame({"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1))
     df_0.index.name = "date"
     df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
     lib.write(sym, df_0)

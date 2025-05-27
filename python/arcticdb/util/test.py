@@ -244,8 +244,16 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     assert_frame_equal(left=expected, right=actual)
 
 
+unicode_symbol = "\u00A0"  # start of latin extensions
+unicode_symbols = "".join([chr(ord(unicode_symbol) + i) for i in range(100)])
+
+
 def random_string(length: int):
-    return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
+    if random.randint(0, 3) == 0:
+        # (probably) Give a unicode string one time in three, we have special handling in C++ for unicode
+        return "".join(random.choice(string.ascii_uppercase + unicode_symbols) for _ in range(length))
+    else:
+        return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
 
 
 def get_sample_dataframe(size=1000, seed=0, str_size=10):
@@ -364,10 +372,22 @@ class TestCustomNormalizer(CustomNormalizer):
             df = pd.DataFrame(index=item.custom_index, columns=item.custom_columns, data=item.custom_values)
             return df, norm_meta
 
-    def denormalize(self, item, norm_meta):
-        # type: (Any, CustomNormalizerMeta)->Any
+    def denormalize(self, item: Any, norm_meta: NormalizationMetadata.CustomNormalizerMeta) -> Any:
         return CustomThing(custom_index=item.index, custom_columns=item.columns, custom_values=item.values)
 
+class CustomDict(dict):
+    pass
+
+class CustomDictNormalizer(CustomNormalizer):
+    NESTED_STRUCTURE = True
+
+    def normalize(self, item, **kwargs):
+        if not isinstance(item, CustomDict):
+            return None
+        return dict(item), NormalizationMetadata.CustomNormalizerMeta()
+
+    def denormalize(self, item, norm_meta):
+        return CustomDict(item)
 
 def sample_dataframe(size=1000, seed=0):
     return get_sample_dataframe(size, seed)
@@ -389,13 +409,15 @@ def populate_db(version_store):
     version_store.write("rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True)
 
 
-def random_integers(size, dtype):
+def random_integers(size, dtype, min_value: int = None, max_value: int = None):
     # We do not generate integers outside the int64 range
     platform_int_info = np.iinfo("int_")
     iinfo = np.iinfo(dtype)
-    return np.random.randint(
-        max(iinfo.min, platform_int_info.min), min(iinfo.max, platform_int_info.max), size=size, dtype=dtype
-    )
+    if min_value is None:
+        min_value = max(iinfo.min, platform_int_info.min)
+    if max_value is None:
+        max_value = min(iinfo.max, platform_int_info.max)
+    return np.random.randint(min_value, max_value, size=size, dtype=dtype)
 
 
 def get_wide_dataframe(size=10000, seed=0):
@@ -426,7 +448,15 @@ def get_pickle():
     )[np.random.randint(0, 2)]
 
 
-def random_strings_of_length(num, length, unique):
+def random_ascii_strings(count, max_length):
+    result = []
+    for _ in range(count):
+        length = random.randrange(max_length + 1)
+        result.append("".join(random.choice(string.ascii_letters) for _ in range(length)))
+    return result
+
+
+def random_strings_of_length(num, length, unique=False):
     out = []
     for i in range(num):
         out.append(random_string(length))
@@ -691,7 +721,8 @@ def distinct_timestamps(lib: NativeVersionStore):
 def random_seed_context():
     seed = os.getenv("ARCTICDB_RAND_SEED")
     state = random.getstate()
-    random.seed(int(seed) if seed is not None else state)
+    if seed is not None:
+        random.seed(int(seed))
     try:
         yield
     finally:
@@ -834,7 +865,7 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
             pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
         else:
             if PANDAS_VERSION >= Version("1.1"):
-                check_equals_flags["atol"] = 1e-8
+                check_equals_flags["rtol"] = 3e-4
             pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
 
 
@@ -860,7 +891,7 @@ def generic_resample_test(
     but it cannot take parameters such as origin and offset.
     """
     # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
-    expected = lib.read(sym, date_range=date_range).data
+    original_data = lib.read(sym, date_range=date_range).data
     # Pandas 1.X needs None as the first argument to agg with named aggregators
 
     pandas_aggregations = (
@@ -873,9 +904,11 @@ def generic_resample_test(
         resample_args["offset"] = offset
 
     if PANDAS_VERSION >= Version("1.1.0"):
-        expected = expected.resample(rule, closed=closed, label=label, **resample_args).agg(None, **pandas_aggregations)
+        expected = original_data.resample(rule, closed=closed, label=label, **resample_args).agg(
+            None, **pandas_aggregations
+        )
     else:
-        expected = expected.resample(rule, closed=closed, label=label).agg(None, **pandas_aggregations)
+        expected = original_data.resample(rule, closed=closed, label=label).agg(None, **pandas_aggregations)
     if drop_empty_buckets_for:
         expected = expected[expected["_bucket_size_"] > 0]
         expected.drop(columns=["_bucket_size_"], inplace=True)
@@ -894,3 +927,25 @@ def generic_resample_test(
         assert_dfs_approximate(expected, received)
     else:
         assert_frame_equal(expected, received, check_dtype=False)
+
+
+def equals(x, y):
+    if isinstance(x, tuple) or isinstance(x, list):
+        assert len(x) == len(y)
+        for vx, vy in zip(x, y):
+            equals(vx, vy)
+    elif isinstance(x, dict):
+        assert isinstance(y, dict)
+        assert set(x.keys()) == set(y.keys())
+        for k in x.keys():
+            equals(x[k], y[k])
+    elif isinstance(x, np.ndarray):
+        assert isinstance(y, np.ndarray)
+        assert np.allclose(x, y)
+    else:
+        assert x == y
+
+
+def is_pytest_running():
+    """Check if code is currently running as part of a pytest test."""
+    return "PYTEST_CURRENT_TEST" in os.environ

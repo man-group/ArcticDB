@@ -11,12 +11,16 @@ import datetime
 import pytest
 import sys
 
+from arcticdb import QueryBuilder
+from arcticdb.exceptions import UserInputException
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
 from arcticdb_ext import set_config_int
 from arcticdb_ext.storage import KeyType
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from tests.util.date import DateRange
 
+
+@pytest.mark.storage
 def test_read_keys(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_float_int"
@@ -33,6 +37,7 @@ def test_read_keys(object_and_mem_and_lmdb_version_store_dynamic_schema):
     assert_frame_equal(expected, result)
 
 
+@pytest.mark.storage
 def test_update_int_float(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_int_float"
@@ -49,6 +54,7 @@ def test_update_int_float(object_and_mem_and_lmdb_version_store_dynamic_schema):
     assert_frame_equal(expected, result)
 
 
+@pytest.mark.storage
 def test_update_nan_int(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_nan_int"
@@ -65,6 +71,7 @@ def test_update_nan_int(object_and_mem_and_lmdb_version_store_dynamic_schema):
     assert_frame_equal(expected, result)
 
 
+@pytest.mark.storage
 def test_update_int_nan(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_int_nan"
@@ -82,6 +89,7 @@ def test_update_int_nan(object_and_mem_and_lmdb_version_store_dynamic_schema):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="SKIP_WIN Only dynamic strings are supported on Windows")
+@pytest.mark.storage
 def test_append_dynamic_to_fixed_width_strings(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_append_dynamic_to_fixed_width_strings"
@@ -105,6 +113,7 @@ def test_append_dynamic_to_fixed_width_strings(object_and_mem_and_lmdb_version_s
     assert_frame_equal(expected_df, read_df)
 
 
+@pytest.mark.storage
 def test_append_fixed_width_to_dynamic_strings(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_append_fixed_width_to_dynamic_strings"
@@ -131,6 +140,7 @@ def test_append_fixed_width_to_dynamic_strings(object_and_mem_and_lmdb_version_s
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="SKIP_WIN Only dynamic strings are supported on Windows")
+@pytest.mark.storage
 def test_update_dynamic_to_fixed_width_strings(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_dynamic_to_fixed_width_strings"
@@ -155,6 +165,7 @@ def test_update_dynamic_to_fixed_width_strings(object_and_mem_and_lmdb_version_s
     assert_frame_equal(expected_df, read_df)
 
 
+@pytest.mark.storage
 def test_update_fixed_width_to_dynamic_strings(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_fixed_width_to_dynamic_strings"
@@ -424,3 +435,45 @@ def test_update_index_overlap_corner_cases(lmdb_version_store_tiny_segment, inde
     expected_df = pd.concat(chunks)
     received_df = lib.read(sym).data
     assert_frame_equal(expected_df, received_df)
+
+
+def test_delete_snapshot_regression(nfs_clean_bucket):
+    lib = nfs_clean_bucket.create_version_store_factory("test_delete_snapshot_regression")()
+    lib.write("sym", 1)
+    lib.snapshot("snap")
+    assert "snap" in lib.list_snapshots()
+    lib.delete_snapshot("snap")
+    assert "snap" not in lib.list_snapshots()
+
+
+def test_resampling_non_timeseries(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_resampling_non_timeseries"
+
+    df = pd.DataFrame({"col": np.arange(10)})
+    lib.write(sym, df)
+    q = QueryBuilder().resample('1min').agg({"col": "sum"})
+    with pytest.raises(UserInputException):
+        lib.read(sym, query_builder=q)
+    q = QueryBuilder().date_range((pd.Timestamp("2025-01-01"), pd.Timestamp("2025-02-01"))).resample('1min').agg({"col": "sum"})
+    with pytest.raises(UserInputException) as e:
+        lib.read(sym, query_builder=q)
+    assert "std::length_error(vector::reserve)" not in str(e.value)
+
+
+@pytest.mark.parametrize("date_range", [None, (pd.Timestamp(4), pd.Timestamp(17))])
+def test_update_data_key_timestamps(lmdb_version_store_v1, date_range):
+    lib = lmdb_version_store_v1
+    sym = "test_resampling_non_timeseries"
+    initial_df = pd.DataFrame({"col": [0, 1, 2]}, index=[pd.Timestamp(0), pd.Timestamp(10), pd.Timestamp(20)])
+    lib.write(sym, initial_df)
+    update_df = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp(5), pd.Timestamp(15)])
+    lib.update(sym, update_df, date_range=date_range)
+    expected_df = pd.DataFrame(
+        {"col": [0, 3, 4, 2]},
+        index=[pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(15), pd.Timestamp(20)],
+    )
+    assert_frame_equal(expected_df, lib.read(sym).data)
+    index_df = lib.read_index(sym)
+    assert (index_df.index.to_numpy() == np.array([0, 5, 20], dtype="datetime64[ns]")).all()
+    assert (index_df["end_index"].to_numpy() == np.array([1, 16, 21], dtype="datetime64[ns]")).all()

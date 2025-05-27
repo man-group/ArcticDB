@@ -96,9 +96,15 @@ bool index_names_match(
     return true;
 }
 
+/// @param convert_int_to_float If this is true it will consider all pairs of integer types (both signed and unsigned)
+///   as identical. If a field in df_in_store_descriptor is FLOAT64 and the corresponding field in new_df_descriptor
+///   is of any integer type they will be considered identical. Note that this makes the function unsymmetrical. If a
+///   field in new_df_descriptor is FLOAT64 and the corresponding field in df_in_store_descriptor is of integer type
+///   the types won't be considered identical. This is supposed to be used only from compact_incomplete.B
 bool columns_match(
     const StreamDescriptor& df_in_store_descriptor,
-    const StreamDescriptor& new_df_descriptor
+    const StreamDescriptor& new_df_descriptor,
+    const bool convert_int_to_float
 ) {
     const int index_field_size =
         df_in_store_descriptor.index().type() == IndexDescriptor::Type::EMPTY ? new_df_descriptor.index().field_count() : 0;
@@ -117,8 +123,17 @@ bool columns_match(
         const TypeDescriptor& right_type = new_df_descriptor.fields(i + index_field_size).type();
 
         if (!trivially_compatible_types(left_type, right_type) &&
-            !(is_empty_type(left_type.data_type()) || is_empty_type(right_type.data_type())))
-            return false;
+            !(is_empty_type(left_type.data_type()) || is_empty_type(right_type.data_type()))) {
+            if (convert_int_to_float) {
+                const bool both_are_int = is_integer_type(left_type.data_type()) && is_integer_type(right_type.data_type());
+                if (!(both_are_int || (left_type.data_type() == DataType::FLOAT64 && is_integer_type(right_type.data_type())))) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
     }
     return true;
 }

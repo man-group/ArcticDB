@@ -1,0 +1,48 @@
+name: "Automated Release: Create next release branch"
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  get-master-sha:
+    name: Get master sha
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.get_sha.outputs.sha }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        ref: master
+    - name: Get default branch sha
+      id: get_sha
+      run: |
+        BASE_SHA=$(git rev-parse master)
+        echo "sha=$BASE_SHA" >> $GITHUB_OUTPUT
+        echo "Release branch will be cut from master at $BASE_SHA"
+        
+  calculate-next-version:
+    needs: get-master-sha
+    uses: ./.github/workflows/automated_release.calculate_next_version.yml
+    with:
+      regex: ^v\d+\.\d+\.\d+\${{ vars.RC_SUFFIX }}\d+$
+      from_branch: ${{ needs.get-master-sha.outputs.sha }}
+    
+  create-next-release-branch:
+    needs: [calculate-next-version, get-master-sha]
+    runs-on: ubuntu-latest
+    environment: TestPypi # For the branch restrictions token
+    permissions:
+      contents: write
+    outputs:
+      new_branch: ${{ needs.calculate-next-version.outputs.version }}
+    steps:
+    - name: Create branch ${{ needs.calculate-next-version.outputs.version }} from ${{ needs.get-master-sha.outputs.sha }}
+      uses: peterjgrainger/action-create-branch@v2.2.0
+      env:
+        GITHUB_TOKEN: ${{ secrets.TAGGING_TOKEN }}
+      with:
+        branch: ${{ needs.calculate-next-version.outputs.version }}
+        sha: ${{ needs.get-master-sha.outputs.sha }}
+  

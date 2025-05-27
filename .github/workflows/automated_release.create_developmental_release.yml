@@ -1,0 +1,69 @@
+name: "Create dev release from master"
+
+on:
+  workflow_dispatch:
+run-name: "Create developmental release from master"
+jobs:
+  get-master-sha:
+    name: Get master sha
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.get_sha.outputs.sha }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        ref: master
+    - name: Get default branch short sha
+      id: get_sha
+      run: |
+        BASE_SHA=$(git rev-parse --short master)
+        echo "sha=$BASE_SHA" >> $GITHUB_OUTPUT
+        echo "Release branch will be cut from master at $BASE_SHA"
+
+  calculate-next-version:
+    needs: get-master-sha
+    uses: ./.github/workflows/automated_release.calculate_next_version.yml
+    with:
+      regex: ^v\d+\.\d+\.\d+\${{ vars.RC_SUFFIX }}\d+$
+      from_branch: ${{ needs.get-master-sha.outputs.sha }}
+      
+  get-dev-number:
+    name: Get dev number
+    needs: calculate-next-version
+    runs-on: ubuntu-latest
+    outputs:
+      next_dev_number: ${{ steps.next-number.outputs.next_dev_number }}
+    steps:
+      - name: Get latest dev tag
+        id: latest_tag
+        uses: oprypin/find-latest-tag@v1
+        with:
+          repository: ${{ github.repository }}
+          prefix: v${{ needs.calculate-next-version.outputs.version }}.dev
+          sort-tags: true
+        continue-on-error: true
+      
+      - name: Calculate next dev number
+        id: next-number
+        run: |
+          if [ -z "${{ steps.latest_tag.outputs.tag }}" ]; then
+            next_dev_number=0
+          else
+            LATEST_TAG="${{ steps.latest_tag.outputs.tag }}"
+            LATEST_TAG="${LATEST_TAG#v${{ needs.calculate-next-version.outputs.version }}.dev}"
+            next_dev_number=$((LATEST_TAG + 1))
+          fi
+          echo "next_dev_number=$next_dev_number" >> $GITHUB_OUTPUT
+    
+  rc_release:
+    name: Tag and Release version ${{ needs.calculate-next-version.outputs.version }}.dev${{ needs.get-dev-number.outputs.next_dev_number }} from branch master(${{ needs.get-master-sha.outputs.sha }}) 
+    secrets: inherit
+    permissions:
+      checks: read
+      contents: write
+    uses: ./.github/workflows/tag.yml
+    needs: [calculate-next-version, get-master-sha, get-dev-number]
+    with:
+      version: ${{ needs.calculate-next-version.outputs.version }}.dev${{ needs.get-dev-number.outputs.next_dev_number }}
+      from_branch: master

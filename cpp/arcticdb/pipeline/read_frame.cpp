@@ -24,12 +24,11 @@
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/codec/segment_identifier.hpp>
-#include <arcticdb/util/spinlock.hpp>
 #include <arcticdb/pipeline/string_reducers.hpp>
 #include <arcticdb/pipeline/read_query.hpp>
 
 #include <ankerl/unordered_dense.h>
-#include <folly/gen/Base.h>
+
 
 namespace arcticdb::pipelines {
 
@@ -40,16 +39,11 @@ namespace arcticdb::pipelines {
   |i||_||_|    contain the relevant index, but we only want to count it once per grid row.
 
  */
-void mark_index_slices(
-    const std::shared_ptr<PipelineContext>& context,
-    bool dynamic_schema,
-    bool column_groups) {
+void mark_index_slices(const std::shared_ptr<PipelineContext>& context) {
     context->fetch_index_ = check_and_mark_slices(
         context->slice_and_keys_,
-        dynamic_schema,
         true,
-        context->incompletes_after_,
-        column_groups).value();
+        context->incompletes_after_).value();
 }
 
 StreamDescriptor get_filtered_descriptor(StreamDescriptor&& descriptor, OutputFormat output_format, const std::shared_ptr<FieldCollection>& filter_columns) {
@@ -142,6 +136,7 @@ size_t get_index_field_count(const SegmentInMemory& frame) {
 
 const uint8_t* skip_heading_fields(const SegmentHeader & hdr, const uint8_t*& data) {
     const auto has_magic_numbers = hdr.encoding_version() == EncodingVersion::V2;
+    const auto start [[maybe_unused]] = data;
     if(has_magic_numbers)
         util::check_magic<MetadataMagic>(data);
 
@@ -172,6 +167,7 @@ const uint8_t* skip_heading_fields(const SegmentHeader & hdr, const uint8_t*& da
         ARCTICDB_DEBUG(log::version(), "Skipping {} bytes of index descriptor", index_fields_size);
             data += index_fields_size;
     }
+    ARCTICDB_DEBUG(log::version(), "Skip header fields skipped {} bytes", data - start);
     return data;
 }
 
@@ -486,14 +482,16 @@ void check_data_left_for_subsequent_fields(
 }
 
 void decode_into_frame_static(
-    SegmentInMemory &frame,
-    PipelineContextRow &context,
-    const Segment& seg,
-    const DecodePathData& shared_data,
-    std::any& handler_data,
-    const ReadQuery& read_query,
-    const ReadOptions& read_options) {
+        SegmentInMemory &frame,
+        PipelineContextRow &context,
+        const storage::KeySegmentPair& key_seg,
+        const DecodePathData& shared_data,
+        std::any& handler_data,
+        const ReadQuery& read_query,
+        const ReadOptions& read_options) {
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
+    ARCTICDB_DEBUG(log::version(), "Statically decoding segment with key {}", key_seg.atom_key());
+    const auto& seg = key_seg.segment();
     const uint8_t *data = seg.buffer().data();
     const uint8_t *begin = data;
     const uint8_t *end = begin + seg.buffer().bytes();
@@ -567,7 +565,7 @@ void decode_into_frame_static(
 
 void check_mapping_type_compatibility(const ColumnMapping& m) {
     util::check(
-        static_cast<bool>(has_valid_type_promotion(m.source_type_desc_, m.dest_type_desc_)),
+        is_valid_type_promotion_to_target(m.source_type_desc_, m.dest_type_desc_),
         "Can't promote type {} to type {} in field {}",
         m.source_type_desc_,
         m.dest_type_desc_,
@@ -623,15 +621,16 @@ void handle_type_promotion(
 }
 
 void decode_into_frame_dynamic(
-    SegmentInMemory& frame,
-    PipelineContextRow& context,
-    const Segment& seg,
-    const DecodePathData& shared_data,
-    std::any& handler_data,
-    const ReadQuery& read_query,
-    const ReadOptions& read_options
-) {
+        SegmentInMemory& frame,
+        PipelineContextRow& context,
+        const storage::KeySegmentPair& key_seg,
+        const DecodePathData& shared_data,
+        std::any& handler_data,
+        const ReadQuery& read_query,
+        const ReadOptions& read_options) {
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
+    ARCTICDB_DEBUG(log::version(), "Dynamically decoding segment with key {}", key_seg.atom_key());
+    const auto& seg = key_seg.segment();
     const uint8_t *data = seg.buffer().data();
     const uint8_t *begin = data;
     const uint8_t *end = begin + seg.buffer().bytes();
@@ -885,9 +884,9 @@ folly::Future<SegmentInMemory> fetch_data(
             [row=row, frame=frame, dynamic_schema=dynamic_schema, shared_data, &handler_data, read_query, read_options](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
                 if(dynamic_schema) {
-                    decode_into_frame_dynamic(frame, row, key_seg.segment(), shared_data, handler_data, read_query, read_options);
+                    decode_into_frame_dynamic(frame, row, key_seg, shared_data, handler_data, read_query, read_options);
                 } else {
-                    decode_into_frame_static(frame, row, key_seg.segment(), shared_data, handler_data, read_query, read_options);
+                    decode_into_frame_static(frame, row, key_seg, shared_data, handler_data, read_query, read_options);
                 }
 
                 return key_seg.variant_key();
@@ -895,7 +894,8 @@ folly::Future<SegmentInMemory> fetch_data(
         }
     }
     ARCTICDB_SUBSAMPLE_DEFAULT(DoBatchReadCompressed)
-    return ssource->batch_read_compressed(std::move(keys_and_continuations), BatchReadArgs{})
+    return folly::collect(ssource->batch_read_compressed(std::move(keys_and_continuations), BatchReadArgs{}))
+    .via(&async::io_executor())
     .thenValue([frame](auto&&){ return frame; });
 }
 

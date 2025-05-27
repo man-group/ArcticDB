@@ -18,6 +18,7 @@ from arcticdb_ext.exceptions import StorageException
 from arcticdb_ext.storage import NoDataFoundException
 
 from arcticdb_ext import set_config_string
+from arcticdb_ext.storage import KeyType
 from arcticdb.util.test import create_df, assert_frame_equal
 
 from arcticdb.storage_fixtures.s3 import MotoNfsBackedS3StorageFixtureFactory
@@ -42,7 +43,7 @@ def test_s3_storage_failures(mock_s3_store_with_error_simulation):
     result_df = lib.read(symbol_success).data
     assert_frame_equal(result_df, df)
 
-    with pytest.raises(StorageException, match="Unexpected network error: S3Error#99"):
+    with pytest.raises(StorageException, match="Network error: S3Error#99"):
         lib.write(symbol_fail_write, df)
 
     with pytest.raises(StorageException, match="Unexpected error: S3Error#17"):
@@ -71,15 +72,15 @@ def test_s3_running_on_aws_fast_check(lib_name, s3_storage_factory, run_on_aws):
         assert lib_tool.inspect_env_variable("AWS_EC2_METADATA_DISABLED") == "true"
 
 
-def test_nfs_backed_s3_storage(lib_name, nfs_backed_s3_storage):
+def test_nfs_backed_s3_storage(lib_name, nfs_clean_bucket):
     # Given
-    lib = nfs_backed_s3_storage.create_version_store_factory(lib_name)()
+    lib = nfs_clean_bucket.create_version_store_factory(lib_name)()
 
     # When
     lib.write("s", data=create_df())
 
     # Then - should be written in "bucketized" structure
-    bucket = nfs_backed_s3_storage.get_boto_bucket()
+    bucket = nfs_clean_bucket.get_boto_bucket()
     objects = bucket.objects.all()
 
     # Expect one or two repetitions of 3 digit "buckets" in the object names
@@ -133,7 +134,7 @@ def test_racing_list_and_delete_nfs(nfs_backed_s3_storage, lib_name):
     assert exceptions_in_reader.empty()
 
 
-@pytest.fixture(scope="function", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
+@pytest.fixture(scope="session", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
 def s3_storage_dots_in_path(request):
     prefix = "some_path/.thing_with_a_dot/even.more.dots/end"
 
@@ -170,15 +171,15 @@ def test_wrapped_s3_storage(lib_name, wrapped_s3_storage_bucket):
     test_bucket_name = wrapped_s3_storage_bucket.bucket
 
     with config_context("S3ClientTestWrapper.EnableFailures", 1):
-        with pytest.raises(NoDataFoundException, match="Unexpected network error: S3Error#99"):
+        with pytest.raises(NoDataFoundException, match="Network error: S3Error#99"):
             lib.read("s")
 
         with config_context_string("S3ClientTestWrapper.FailureBucket", test_bucket_name):
-            with pytest.raises(StorageException, match="Unexpected network error: S3Error#99"):
+            with pytest.raises(StorageException, match="Network error: S3Error#99"):
                 lib.write("s", data=create_df())
 
         with config_context_string("S3ClientTestWrapper.FailureBucket", f"{test_bucket_name},non_existent_bucket"):
-            with pytest.raises(StorageException, match="Unexpected network error: S3Error#99"):
+            with pytest.raises(StorageException, match="Network error: S3Error#99"):
                 lib.write("s", data=create_df())
 
         # There should be no failures
@@ -190,3 +191,34 @@ def test_wrapped_s3_storage(lib_name, wrapped_s3_storage_bucket):
     # There should be no problems after the failure simulation has been turned off
     lib.read("s")
     lib.write("s", data=create_df())
+
+
+@pytest.fixture(scope="session")
+def test_prefix():
+    return "test_bucket_prefix"
+
+
+@pytest.fixture(scope="function", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
+def storage_bucket(test_prefix, request):
+    with request.param(
+        use_ssl=False, ssl_test_support=False, bucket_versioning=False, default_prefix=test_prefix
+    ) as factory:
+        with factory.create_fixture() as bucket:
+            yield bucket
+
+
+def test_library_get_key_path(lib_name, storage_bucket, test_prefix):
+    lib = storage_bucket.create_version_store_factory(lib_name)()
+    lib.write("s", data=create_df())
+    lib_tool = lib.library_tool()
+
+    keys_count = 0
+    for key_type in KeyType.__members__.values():
+        keys = lib_tool.find_keys(key_type)
+        keys_count += len(keys)
+        for key in keys:
+            path = lib_tool.get_key_path(key)
+            assert path != ""
+            assert path.startswith(test_prefix)
+
+    assert keys_count > 0

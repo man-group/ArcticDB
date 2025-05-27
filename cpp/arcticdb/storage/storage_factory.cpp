@@ -27,6 +27,13 @@ std::shared_ptr<Storage> create_storage(
 std::shared_ptr<Storage> create_storage(
     const LibraryPath &library_path,
     OpenMode mode,
+    const s3::GCPXMLSettings& storage_config) {
+    return std::make_shared<s3::GCPXMLStorage>(library_path, mode, storage_config);
+}
+
+std::shared_ptr<Storage> create_storage(
+    const LibraryPath &library_path,
+    OpenMode mode,
     const arcticdb::proto::storage::VariantStorage &storage_descriptor) {
 
     std::shared_ptr<Storage> storage;
@@ -36,6 +43,12 @@ std::shared_ptr<Storage> create_storage(
         arcticc::pb2::s3_storage_pb2::Config s3_config;
         storage_descriptor.config().UnpackTo(&s3_config);
         storage = std::make_shared<s3::S3Storage>(library_path, mode, s3::S3Settings(s3_config));
+    } else if (type_name == arcticc::pb2::gcp_storage_pb2::Config::descriptor()->full_name()) {
+        arcticc::pb2::gcp_storage_pb2::Config gcp_config;
+        storage_descriptor.config().UnpackTo(&gcp_config);
+        s3::GCPXMLSettings native_settings{};
+        native_settings.set_prefix(gcp_config.prefix());
+        storage = std::make_shared<s3::GCPXMLStorage>(library_path, mode, native_settings);
     } else if (type_name == lmdb::LmdbStorage::Config::descriptor()->full_name()) {
         lmdb::LmdbStorage::Config lmbd_config;
         storage_descriptor.config().UnpackTo(&lmbd_config);

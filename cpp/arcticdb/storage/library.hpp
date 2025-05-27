@@ -70,6 +70,15 @@ class Library {
         storages_->iterate_type(key_type, visitor, prefix);
     }
 
+    bool supports_object_size_calculation() {
+        return storages_->supports_object_size_calculation();
+    }
+
+    void visit_object_sizes(KeyType type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
+        ARCTICDB_SAMPLE(VisitObjectSizes, 0)
+        storages_->visit_object_sizes(type, prefix, visitor);
+    }
+
     /**
      * Scan through every key of the given type until one matches the predicate.
      *

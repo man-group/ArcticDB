@@ -20,6 +20,47 @@ using namespace arcticdb::entity;
 using namespace arcticdb::stream;
 
 
+VariantKey write_multi_index_entry(
+    std::shared_ptr<StreamSink> store,
+    std::vector<AtomKey> &keys,
+    const StreamId &stream_id,
+    const py::object &metastruct,
+    const py::object &user_meta,
+    VersionId version_id
+) {
+    ARCTICDB_SAMPLE(WriteJournalEntry, 0)
+    ARCTICDB_DEBUG(log::version(), "Version map writing multi key");
+    folly::Future<VariantKey> multi_key_fut = folly::Future<VariantKey>::makeEmpty();
+
+    IndexAggregator<RowCountIndex> multi_index_agg(stream_id, [&multi_key_fut, &store, version_id, stream_id](auto &&segment) {
+        multi_key_fut = store->write(KeyType::MULTI_KEY,
+                                     version_id,  // version_id
+                                     stream_id,
+                                     NumericIndex{0},  // start_index
+                                     NumericIndex{0},  // end_index
+                                     std::forward<decltype(segment)>(segment)).wait();
+    });
+
+    for (const auto& key : keys) {
+        multi_index_agg.add_key(key);
+    }
+    TimeseriesDescriptor timeseries_descriptor;
+
+    if (!metastruct.is_none()) {
+        arcticdb::proto::descriptors::UserDefinedMetadata multi_key_proto;
+        python_util::pb_from_python(metastruct, multi_key_proto);
+        timeseries_descriptor.set_multi_key_metadata(std::move(multi_key_proto));
+    }
+    if (!user_meta.is_none()) {
+        arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
+        python_util::pb_from_python(user_meta, user_meta_proto);
+        timeseries_descriptor.set_user_metadata(std::move(user_meta_proto));
+    }
+    multi_index_agg.set_timeseries_descriptor(timeseries_descriptor);
+    multi_index_agg.commit();
+    return multi_key_fut.wait().value();
+}
+
 std::unordered_map<StreamId, size_t> get_num_version_entries(const std::shared_ptr<Store>& store, size_t batch_size)  {
     std::unordered_map<StreamId, size_t> output;
     size_t max_blocks = ConfigsMap::instance()->get_int("VersionMap.MaxVersionBlocks", 5);

@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import time
@@ -12,6 +13,8 @@ from numpy.random import RandomState
 import pytest
 
 from arcticdb.util.test import assert_frame_equal
+
+from tests.util.mark import SLOW_TESTS_MARK
 
 
 def generate_floats(n, pct_null, repeats=1):
@@ -67,6 +70,7 @@ def param_dict(*fields, **cases):
     return pytest.mark.parametrize(tuple(fields), params, ids=ids)
 
 
+@SLOW_TESTS_MARK
 @param_dict("pct_null", "repeats", "symbol", high_entropy=(0.0, 1), low_entropy=(0.0, 1000))
 def test_stress(pct_null, repeats, symbol, object_version_store):
     print("Testing symbol " + symbol)
@@ -81,6 +85,7 @@ def test_stress(pct_null, repeats, symbol, object_version_store):
 
 
 # This test is running only against LMDB because it is **very** slow, if ran against a persistent storage
+@SLOW_TESTS_MARK
 @param_dict("pct_null", "repeats", "symbol", high_entropy=(0.0, 1), low_entropy=(0.0, 1000))
 def test_stress_small_row(pct_null, repeats, symbol, lmdb_or_in_memory_version_store_tiny_segment):
     print("Testing symbol " + symbol)

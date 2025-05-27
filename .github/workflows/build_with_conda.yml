@@ -1,23 +1,6 @@
 name: Build with conda
-on:
-  push:
-    branches:
-      - master
-  # For Pull-Requests, this runs the CI on merge commit
-  # of HEAD with the target branch instead on HEAD, allowing
-  # testing against potential new states which might have
-  # been introduced in the target branch last commits.
-  # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
-  pull_request:
-
-  workflow_dispatch:
-    inputs:
-      run_on_arm_mac:
-        description: 'Run on arm macos'
-        type: boolean
-        required: false
-        default: false
-
+# Temporary disable
+on: workflow_call
 jobs:
 
   linux:
@@ -40,10 +23,10 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
 
-      - name: Install Conda environment from environment_unix.yml
+      - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v2.0.0
         with:
-          environment-file: environment_unix.yml
+          environment-file: environment-dev.yml
           init-shell: >-
             bash
           cache-environment: true
@@ -124,10 +107,10 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
 
-      - name: Install Conda environment from environment_unix.yml
+      - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v2.0.0
         with:
-          environment-file: environment_unix.yml
+          environment-file: environment-dev.yml
           environment-name: arcticdb
           init-shell: >-
             bash

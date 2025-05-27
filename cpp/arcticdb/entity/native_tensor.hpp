@@ -107,7 +107,7 @@ struct NativeTensor {
     }
 
     [[nodiscard]] auto nbytes() const { return nbytes_; }
-    [[nodiscard]] auto ndim() const { return ndim_; }
+    [[nodiscard]] int ndim() const { return ndim_; }
     [[nodiscard]] auto strides(size_t pos) const { return strides_[pos]; }
     [[nodiscard]] const auto* strides() const { return strides_.data(); };
     [[nodiscard]] auto shape(size_t pos) const { return shapes_[pos]; }
@@ -237,9 +237,22 @@ struct TypedTensor : public NativeTensor {
         // The new column shape * the column stride tells us how far to move the data pointer from the origin
 
         ptr = reinterpret_cast<const uint8_t*>(tensor.data()) + (slice_num * stride_offset);
-        util::check(ptr < static_cast<const uint8_t*>(tensor.ptr) + std::abs(tensor.extent(0)),
+        check_ptr_within_bounds(tensor, slice_num, stride_offset);
+    }
+
+private:
+    void check_ptr_within_bounds(const NativeTensor& tensor, ssize_t slice_num, ssize_t stride_offset) {
+        if (tensor.extent(0) == 0) {
+            // For empty tensors, we can't perform the normal bounds check
+            // Just ensure we're not trying to access beyond the first element
+            util::check(slice_num == 0, 
+                "Cannot put slice pointer at position {} in an empty tensor", 
+                slice_num);
+        } else {
+            util::check(ptr < static_cast<const uint8_t*>(tensor.ptr) + std::abs(tensor.extent(0)),
                 "Tensor overflow, cannot put slice pointer at byte {} in a tensor of {} bytes",
                 slice_num * stride_offset, tensor.extent(0));
+        }  
     }
 };
 template<typename T>

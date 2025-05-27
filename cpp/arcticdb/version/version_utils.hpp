@@ -22,46 +22,14 @@
 
 namespace arcticdb {
 
-inline entity::VariantKey write_multi_index_entry(
+VariantKey write_multi_index_entry(
     std::shared_ptr<StreamSink> store,
     std::vector<AtomKey> &keys,
     const StreamId &stream_id,
     const py::object &metastruct,
     const py::object &user_meta,
     VersionId version_id
-) {
-    ARCTICDB_SAMPLE(WriteJournalEntry, 0)
-    ARCTICDB_DEBUG(log::version(), "Version map writing multi key");
-    folly::Future<VariantKey> multi_key_fut = folly::Future<VariantKey>::makeEmpty();
-
-    IndexAggregator<RowCountIndex> multi_index_agg(stream_id, [&multi_key_fut, &store, version_id, stream_id](auto &&segment) {
-        multi_key_fut = store->write(KeyType::MULTI_KEY,
-                                     version_id,  // version_id
-                                     stream_id,
-                                     NumericIndex{0},  // start_index
-                                     NumericIndex{0},  // end_index
-                                     std::forward<decltype(segment)>(segment)).wait();
-    });
-
-    for (auto &key : keys) {
-        multi_index_agg.add_key(to_atom(key));
-    }
-    TimeseriesDescriptor timeseries_descriptor;
-
-    if (!metastruct.is_none()) {
-        arcticdb::proto::descriptors::UserDefinedMetadata multi_key_proto;
-        python_util::pb_from_python(metastruct, multi_key_proto);
-        timeseries_descriptor.set_multi_key_metadata(std::move(multi_key_proto));
-    }
-    if (!user_meta.is_none()) {
-        arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
-        python_util::pb_from_python(user_meta, user_meta_proto);
-        timeseries_descriptor.set_user_metadata(std::move(user_meta_proto));
-    }
-    multi_index_agg.set_timeseries_descriptor(timeseries_descriptor);
-    multi_index_agg.commit();
-    return multi_key_fut.wait().value();
-}
+);
 
 inline std::optional<AtomKey> read_segment_with_keys(
     const SegmentInMemory &seg,
@@ -132,15 +100,15 @@ std::shared_ptr<VersionMapEntry> build_version_map_entry_with_predicate_iteratio
     std::vector<AtomKey> read_keys;
     for (auto key_type : key_types) {
         store->iterate_type(key_type,
-            [&predicate, &read_keys, &store, &output, &perform_read_segment_with_keys](VariantKey &&vk) {
-                const auto &key = to_atom(std::move(vk));
+            [&predicate, &read_keys, &store, &output, &perform_read_segment_with_keys](VariantKey&& vk) {
+                const auto& key = to_atom(std::move(vk));
                 if (!predicate(key))
                     return;
 
                 read_keys.push_back(key);
                 ARCTICDB_DEBUG(log::storage(), "Version map iterating key {}", key);
                 if (perform_read_segment_with_keys) {
-                    auto [kv, seg] = store->read_sync(to_atom(key));
+                    auto [kv, seg] = store->read_sync(key);
                     LoadProgress load_progress;
                     (void)read_segment_with_keys(seg, output, load_progress);
                 }

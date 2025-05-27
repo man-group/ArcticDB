@@ -171,12 +171,10 @@ inline SegmentInMemory generate_filter_and_project_testing_sparse_segment() {
     sparse_floats_2->set_scalar<double>(5, 5.0);
     sparse_floats_2->set_scalar<double>(9, nan);
 
-    // Dense float column values are just 10*idx
-    for (auto idx = 0; idx < 7; idx++) {
-        dense_floats_1->set_scalar<double>(idx, 10.0 * static_cast<double>(idx));
-    }
+    // Dense float column values are just idx or zero so some are equal and some are not
     for (auto idx = 0; idx < 15; idx++) {
-        dense_floats_2->set_scalar<double>(idx, 10.0 * static_cast<double>(idx));
+        dense_floats_1->set_scalar<double>(idx, static_cast<double>(idx));
+        dense_floats_2->set_scalar<double>(idx, idx % 2 == 0 ? static_cast<double>(idx) : double(0.0));
     }
 
     // Sparse bool column goes missing, true, missing, false
@@ -190,11 +188,16 @@ inline SegmentInMemory generate_filter_and_project_testing_sparse_segment() {
     seg.add_column(scalar_field(sparse_bools->type().data_type(), "sparse_bools"), sparse_bools);
 
     // 1 less than the number of rows in the largest column
+    sparse_floats_1->set_row_data(14);
+    sparse_floats_2->set_row_data(14);
+    dense_floats_1->set_row_data(14);
+    dense_floats_2->set_row_data(14);
+    sparse_bools->set_row_data(14);
     seg.set_row_id(14);
     return seg;
 }
 
-// Generate a segment in memory suitable for testing groupby's empty type column behaviour with 5 columns:
+// Generate a segment in memory suitable for testing groupby's empty type column behaviour with 6 columns:
 // * int_repeating_values - an int64_t column with unique_values repeating values
 // * empty_<agg> - an empty column for each supported aggregation
 inline SegmentInMemory generate_groupby_testing_empty_segment(size_t num_rows, size_t unique_values) {
@@ -205,6 +208,7 @@ inline SegmentInMemory generate_groupby_testing_empty_segment(size_t num_rows, s
     seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_min"), std::make_shared<Column>(generate_empty_column()));
     seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_max"), std::make_shared<Column>(generate_empty_column()));
     seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_mean"), std::make_shared<Column>(generate_empty_column()));
+    seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_count"), std::make_shared<Column>(generate_empty_column()));
     seg.set_row_id(num_rows - 1);
     return seg;
 }
@@ -476,6 +480,18 @@ struct SegmentSinkWrapperImpl {
 
 using TestSegmentAggregatorNoSegment = SegmentAggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy>;
 using SegmentSinkWrapper = SegmentSinkWrapperImpl<TestSegmentAggregatorNoSegment>;
+
+inline ResampleClause<ResampleBoundary::LEFT> generate_resample_clause(const std::vector<NamedAggregator>& named_aggregators) {
+    ResampleClause<ResampleBoundary::LEFT> res{
+            "dummy_rule",
+            ResampleBoundary::LEFT,
+            [](timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, ResampleOrigin) -> std::vector<timestamp> { return {}; },
+            0,
+            "dummy_origin"
+    };
+    res.set_aggregations(named_aggregators);
+    return res;
+}
 
 
 } //namespace arcticdb

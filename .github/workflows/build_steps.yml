@@ -5,27 +5,15 @@ on:
       job_type:          {required: true, type: string, description: Selects the steps to enable}
       cmake_preset_type: {required: true, type: string, description: release/debug}
       matrix:            {required: true, type: string, description: JSON string to feed into the matrix}
-      compile-override:  {required: false, type: string, description: Parameter to override the agent that is used for compiling e.g. compile-on-ec2}
       cibw_image_tag:    {required: false, type: string, description: Linux only. As built by cibw_docker_image.yml workflow}
       cibw_version:      {required: false, type: string, description: build-python-wheels only. Must match the cibw_image_tag}
       python_deps_ids:   {default: '[""]', type: string, description: build-python-wheels test matrix parameter. JSON string.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
-      persistent_storage:      {default: "false", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
+      persistent_storage:      {default: "no", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
       pytest_xdist_mode: {default: "", type: string, description: additional argument to pass for pytest-xdist}
       pytest_args:       {default: "", type: string, description: a way to rewrite the pytest args to change what tests are being run}
 jobs:
-  start_ec2_runner:
-    if: inputs.compile-override == 'compile-on-ec2'
-    uses: ./.github/workflows/ec2_runner_jobs.yml
-    secrets: inherit
-    with:
-      job_type: start
-
   compile:
-    needs: [start_ec2_runner]
-    if: |
-      always() &&
-      !cancelled()
     strategy:
       matrix:
         # Declaring the dummy fields here to aid the Github Actions linting in VSCode and to provide documentation
@@ -45,10 +33,18 @@ jobs:
         include:
             - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only
 
-    runs-on: ${{ needs.start_ec2_runner.status != 'failure' && needs.start_ec2_runner.outputs.label || matrix.distro}}
+    runs-on: ${{ matrix.distro}}
     container: ${{ (matrix.os == 'linux' && inputs.job_type != 'build-python-wheels') && matrix.container || null}}
     env:
-      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
+      # 0 - uses S3 Cache, 1 - uses GHA cache
+      # this way the external PRs can use the GHA cache
+      SCCACHE_GHA_VERSION: ${{secrets.AWS_S3_ACCESS_KEY && 0 || 1}}
+      SCCACHE_BUCKET: arcticdb-ci-sccache-bucket
+      SCCACHE_ENDPOINT: http://s3.eu-west-1.amazonaws.com
+      SCCACHE_REGION: eu-west-1
+      SCCACHE_S3_USE_SSL: false
+      AWS_ACCESS_KEY_ID: ${{secrets.AWS_S3_ACCESS_KEY}}
+      AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_S3_SECRET_KEY}}
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
       VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
       VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
@@ -63,6 +59,7 @@ jobs:
         VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN
         CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
         ARCTICDB_BUILD_DIR TEST_OUTPUT_DIR ARCTICDB_VCPKG_INSTALLED_DIR ARCTICDB_VCPKG_PACKAGES_DIR
+        SCCACHE_BUCKET SCCACHE_ENDPOINT AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY SCCACHE_REGION SCCACHE_S3_USE_SSL
       ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
       python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
@@ -76,9 +73,7 @@ jobs:
           submodules: recursive # Just in case a dep has its own third-party deps
 
       - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: "v0.4.0"
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Windows Pagefile
         if: matrix.os == 'windows'
@@ -101,16 +96,12 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       # ========================= Leader steps =========================
-      - name: Remove GitHub default packages (baseimage) # To save space
-        if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
-        uses: jlumbroso/free-disk-space@main
-
       - name: Remove GitHub default packages (manylinux) # To save space
         if: inputs.job_type == 'cpp-tests' && matrix.os == 'linux'
         run: |
           du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
           nohup rm -rf /mnt/usr/local/lib/android &
-
+      
       - name: Find and remove ccache # See PR: #945
         if: matrix.os == 'windows'
         run: rm $(which ccache) || true
@@ -135,6 +126,14 @@ jobs:
           arch: x64
           toolset: 14.41
           vs-path: 'C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools'
+
+      - name: Setup cmake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.31.6'
+
+      - name: Use cmake
+        run: cmake --version
 
       - name: CMake compile
         if: inputs.job_type != 'build-python-wheels'
@@ -257,23 +256,8 @@ jobs:
       test_dirs: ${{env.test_dirs}}
       cibw_build: ${{env.CIBW_BUILD}}
 
-  stop-ec2-runner:
-    needs: [start_ec2_runner, compile]
-    if: |
-      always() &&
-      inputs.compile-override == 'compile-on-ec2'
-    uses: ./.github/workflows/ec2_runner_jobs.yml
-    secrets: inherit
-    with:
-      job_type: stop
-      label: ${{ needs.start_ec2_runner.outputs.label }}
-      ec2-instance-id: ${{ needs.start_ec2_runner.outputs.ec2-instance-id }}
-
   python_tests:
     if: |
-      always() &&
-      !failure() &&
-      !cancelled() &&
       inputs.job_type == 'build-python-wheels'
     needs: [compile]
     strategy:
@@ -293,6 +277,7 @@ jobs:
       python_impl_name: ${{needs.compile.outputs.python_impl_name}}
       distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      real_tests_storage_type: ${{inputs.persistent_storage || 'no'}}
     steps:
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -356,15 +341,19 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       - name: Set persistent storage variables
-        if: inputs.persistent_storage == 'true'
+        # Should be executed for all persistent storages but not for LMDB
+        if: ${{ env.real_tests_storage_type != 'no' }} 
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+          gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
+          gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+          persistent_storage: "${{ inputs.persistent_storage }}"
           strategy_branch: "${{ env.distinguishing_name }}"
         
-      - name: Set s3 sts persistent storage variables for Windows
-        if: inputs.persistent_storage == 'true' && matrix.os == 'windows'
+      - name: Set s3 sts AWS S3 variables for Windows
+        if: ${{ env.real_tests_storage_type == 'AWS_S3' && matrix.os == 'windows' }} 
         uses: ./.github/actions/set_s3_sts_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -389,9 +378,10 @@ jobs:
           path: ${{env.LOCALAPPDATA}}/CrashDumps/
 
       # Fallback if the clean up at test fixutre tear down fails due to crash or etc
-      - name: Remove AWS testing account and credentials
-        if: always() && inputs.persistent_storage == 'true' && matrix.os == 'windows'
+      - name: Remove AWS S3 testing account and credentials and STS roles
+        if: ${{ always() && env.real_tests_storage_type == 'AWS_S3' && matrix.os == 'windows' }}
         run: |
+          echo "env.real_tests_storage_type: [${{ env.real_tests_storage_type }}]"
           python -c "
           from arcticdb.storage_fixtures.s3 import real_s3_sts_clean_up
           real_s3_sts_clean_up('${ARCTICDB_REAL_S3_STS_TEST_USERNAME}', '${ARCTICDB_REAL_S3_STS_TEST_ROLE}', '${ARCTICDB_REAL_S3_STS_TEST_POLICY_NAME}')

@@ -10,7 +10,7 @@ import pandas as pd
 import pickle
 import pytest
 
-from arcticdb import col, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest
+from arcticdb import col, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest, where
 from arcticdb.util.test import assert_frame_equal
 
 
@@ -144,6 +144,28 @@ def test_lazy_project(lmdb_library):
     received = lazy_df.collect().data
     expected = df
     expected["new_col"] = expected["col1"] + expected["col2"]
+
+    assert_frame_equal(expected, received)
+
+
+def test_lazy_ternary(lmdb_library):
+    lib = lmdb_library
+    sym = "test_lazy_ternary"
+    df = pd.DataFrame(
+        {
+            "conditional": [True, False, True, True, False] * 2,
+            "col1": np.arange(10, dtype=np.int64),
+            "col2": np.arange(100, 110, dtype=np.int64)
+        },
+        index=pd.date_range("2000-01-01", periods=10)
+    )
+    lib.write(sym, df)
+
+    lazy_df = lib.read(sym, lazy=True)
+    lazy_df["new_col"] = where(lazy_df["conditional"], lazy_df["col1"], lazy_df["col2"])
+    received = lazy_df.collect().data
+    expected = df
+    expected["new_col"] = np.where(df["conditional"].to_numpy(), df["col1"].to_numpy(), df["col2"].to_numpy())
 
     assert_frame_equal(expected, received)
 

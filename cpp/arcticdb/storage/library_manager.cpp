@@ -46,6 +46,7 @@ void apply_storage_override(
     util::variant_match(
             storage_override.variant(),
             StorageVisitor<S3Override>{lib_cfg_proto, override_https},
+            StorageVisitor<GCPXMLOverride>{lib_cfg_proto, override_https},
             StorageVisitor<AzureOverride>{lib_cfg_proto, override_https},
             StorageVisitor<LmdbOverride>{lib_cfg_proto, override_https},
             [] (const std::monostate&) {});
@@ -99,7 +100,7 @@ void LibraryManager::write_library_config(const py::object& lib_cfg, const Libra
 
 void LibraryManager::write_library_config_internal(const arcticdb::proto::storage::LibraryConfig& lib_cfg_proto, const LibraryPath& path, bool validate) const {
     SegmentInMemory segment;
-    segment.descriptor().set_index({0UL, IndexDescriptor::Type::ROWCOUNT});
+    segment.descriptor().set_index({IndexDescriptor::Type::ROWCOUNT, 0UL});
     google::protobuf::Any output = {};
 
     output.PackFrom(lib_cfg_proto);

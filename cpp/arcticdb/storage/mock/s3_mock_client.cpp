@@ -126,7 +126,7 @@ S3Result<std::monostate> MockS3Client::put_object(
     return {std::monostate()};
 }
 
-S3Result<DeleteOutput> MockS3Client::delete_objects(
+S3Result<DeleteObjectsOutput> MockS3Client::delete_objects(
         const std::vector<std::string>& s3_object_names,
         const std::string& bucket_name) {
     std::scoped_lock<std::mutex> lock(mutex_);
@@ -137,7 +137,7 @@ S3Result<DeleteOutput> MockS3Client::delete_objects(
         }
     }
 
-    DeleteOutput output;
+    DeleteObjectsOutput output;
     for (auto& s3_object_name : s3_object_names) {
         auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL);
         if (maybe_error.has_value()) {
@@ -152,6 +152,29 @@ S3Result<DeleteOutput> MockS3Client::delete_objects(
         }
     }
     return {output};
+}
+
+folly::Future<S3Result<std::monostate>> MockS3Client::delete_object(
+    const std::string& s3_object_name,
+    const std::string& bucket_name) {
+    std::scoped_lock<std::mutex> lock(mutex_);
+    if (auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::DELETE); maybe_error) {
+        S3Result<std::monostate> res{*maybe_error};
+        return folly::makeFuture(res);
+    } else if (auto maybe_local_error = has_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL); maybe_local_error) {
+        S3Result<std::monostate> res{*maybe_local_error};
+        return folly::makeFuture(res);
+    }
+
+    auto pos = s3_contents_.find({bucket_name, s3_object_name});
+    if (pos == s3_contents_.end() || !pos->second.has_value()) {
+        S3Result<std::monostate> res{not_found_error};
+        return folly::makeFuture(res);
+    } else {
+        pos->second = std::nullopt;
+        S3Result<std::monostate> res{};
+        return folly::makeFuture(res);
+    }
 }
 
 // Using a fixed page size since it's only being used for simple tests.

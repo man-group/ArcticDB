@@ -124,6 +124,7 @@ def concat_all_arrays(*arrays):
 
 @pytest.mark.skip(reason="Problem with named indexes Monday#7941575430")
 @pytest.mark.parametrize("new_version" , [True, False])
+@pytest.mark.storage
 def test_finalize_empty_dataframe(basic_arctic_library, new_version):
     """
         Primary goal of the test is to finalize with staged empty array that has
@@ -378,6 +379,7 @@ def test_finalize_with_upcast_type_new_columns(lmdb_library_dynamic_schema):
     verify_dataframe_column(df=result, row_name="NUMBER2", max_type=last_type_c, expected_array_of_column_values=arr_all_c)
 
 
+@pytest.mark.storage
 def test_finalize_staged_data_long_scenario(basic_arctic_library):
     """
         The purpose of of the test is to assure all staged segments along with their data
@@ -415,6 +417,31 @@ def test_finalize_staged_data_long_scenario(basic_arctic_library):
     cachedParts.verify_finalized_data(lib,symbol)
 
 
+@pytest.mark.parametrize("mode" , [StagedDataFinalizeMethod.WRITE, "write", None])
+def test_finalize_staged_data_mode_write(basic_arctic_library, mode):
+    lib = basic_arctic_library
+    symbol = "symbol"
+    df_initial = sample_dataframe('2020-1-1', [1,2,3], [4, 5, 6])
+    df_staged = sample_dataframe('2020-1-4', [7, 8, 9])
+    lib.write(symbol, df_initial)
+    lib.write(symbol, df_staged, staged=True)
+    assert_frame_equal(lib.read(symbol).data, df_initial)
+
+    lib.finalize_staged_data(symbol="symbol", mode=mode)
+    assert_frame_equal(lib.read(symbol).data, df_staged)
 
 
+@pytest.mark.parametrize("mode" , [StagedDataFinalizeMethod.APPEND, "append"])
+def test_finalize_staged_data_mode_append(basic_arctic_library, mode):
+    lib = basic_arctic_library
+    symbol = "symbol"
+    df_initial = sample_dataframe('2020-1-1', [1,2,3], [4, 5, 6])
+    df_staged = sample_dataframe('2020-1-4', [7, 8, 9], [10, 11, 12])
+    lib.write(symbol, df_initial)
+    lib.write(symbol, df_staged, staged=True)
+    assert_frame_equal(lib.read(symbol).data, df_initial)
+
+    lib.finalize_staged_data(symbol="symbol", mode=mode)
+    expected = pd.concat([df_initial, df_staged])
+    assert_frame_equal(lib.read(symbol).data, expected)
 

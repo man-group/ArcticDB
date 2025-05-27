@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pytest
 import numpy as np
 import pandas as pd
@@ -19,14 +20,17 @@ from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.util.test import distinct_timestamps
 from arcticdb.version_store._store import NativeVersionStore
-from arcticdb.util.test import (assert_frame_equal, 
-                                create_df_index_rownum, 
-                                create_df_index_datetime, 
-                                dataframe_simulate_arcticdb_update_static)
+from arcticdb.util.test import (
+    assert_frame_equal,
+    create_df_index_rownum,
+    create_df_index_datetime,
+    dataframe_simulate_arcticdb_update_static,
+)
 from tests.util.storage_test import get_s3_storage_config
 from arcticdb_ext.storage import KeyType
 
 
+@pytest.mark.storage
 def test_basic_snapshot_flow(basic_store):
     original_data = [1, 2, 3]
     basic_store.write("a", original_data)
@@ -38,6 +42,7 @@ def test_basic_snapshot_flow(basic_store):
     assert "snap_1" not in basic_store.list_snapshots()
 
 
+@pytest.mark.storage
 def test_re_snapshot_with_same_name(basic_store):
     original_data = [1, 2, 3]
     basic_store.write("a", original_data)
@@ -63,6 +68,7 @@ def test_read_old_snapshot_data(object_version_store):
     assert object_version_store.read("c").data == modified_data
 
 
+@pytest.mark.storage
 def test_snapshot_metadata(object_version_store):
     original_data = [1, 2, 3]
     metadata = {"metadata": "Because why not?"}
@@ -76,6 +82,7 @@ def test_snapshot_metadata(object_version_store):
     assert metadata_for_snap == metadata
 
 
+@pytest.mark.storage
 def test_snapshots_skip_symbol(object_version_store):
     original_data = [1, 2, 3]
     object_version_store.write("f", original_data)
@@ -86,6 +93,7 @@ def test_snapshots_skip_symbol(object_version_store):
         object_version_store.read("f", as_of="snap_5")
 
 
+@pytest.mark.storage
 def test_snapshot_explicit_versions(basic_store):
     lib = basic_store
     original_data = [1, 2, 3]
@@ -102,6 +110,7 @@ def test_snapshot_explicit_versions(basic_store):
     assert lib.read("j", as_of="snap_8").data == modified_data
 
 
+@pytest.mark.storage
 def test_list_symbols_with_snaps(object_version_store):
     original_data = [1, 2, 3]
 
@@ -115,6 +124,7 @@ def test_list_symbols_with_snaps(object_version_store):
     assert "s3" in object_version_store.list_symbols()
 
 
+@pytest.mark.storage
 def test_list_versions(object_version_store):
     lib = object_version_store
     original_data = [1, 2, 3]
@@ -131,6 +141,7 @@ def test_list_versions(object_version_store):
     assert sorted([v["version"] for v in all_versions if v["symbol"] == "t1" and not v["deleted"]]) == sorted([0, 1])
 
 
+@pytest.mark.storage
 def test_snapshots_with_deletes(basic_store):
     original_data = [1, 2, 3]
     v1_data = [1, 2, 3, 4]
@@ -164,6 +175,7 @@ def test_snapshots_with_deletes(basic_store):
     assert basic_store.read("sym3", as_of="sym3_snap").data == original_data
 
 
+@pytest.mark.storage
 def test_delete_symbol_without_snapshot(basic_store):
     original_data = [1, 2, 3]
     v1_data = [1, 2, 3, 4]
@@ -184,6 +196,7 @@ def test_delete_symbol_without_snapshot(basic_store):
     assert not basic_store.has_symbol("sym1")
 
 
+@pytest.mark.storage
 def test_write_to_symbol_in_snapshot_only(basic_store):
     original_data = [1, 2, 3]
     v1_data = [1, 2, 3, 4]
@@ -199,6 +212,7 @@ def test_write_to_symbol_in_snapshot_only(basic_store):
     assert basic_store.read("weird", as_of="store_sym_old").data == original_data
 
 
+@pytest.mark.storage
 def test_read_after_delete_with_snap(basic_store):
     data = np.random.randint(0, 10000, 1024 * 1024).reshape(1024, 1024)
     sym = "2003_australia1"
@@ -215,6 +229,7 @@ def test_read_after_delete_with_snap(basic_store):
         basic_store.read("random")
 
 
+@pytest.mark.storage
 def test_snapshot_with_versions_dict(basic_store):
     original_data = [1, 2, 3]
     basic_store.write("a", original_data)
@@ -228,6 +243,7 @@ def test_snapshot_with_versions_dict(basic_store):
     assert basic_store.read("b", as_of="snap_all").data == original_data
 
 
+@pytest.mark.storage
 def test_has_symbol_with_snapshot(basic_store):
     basic_store.write("a1", 1)
     basic_store.write("a3", 3)
@@ -240,6 +256,7 @@ def test_has_symbol_with_snapshot(basic_store):
     assert basic_store.read("a1", as_of="snap").data == 1
 
 
+@pytest.mark.storage
 def test_pruned_symbol_in_symbol_read_version(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("a", 1)
@@ -284,6 +301,7 @@ def test_read_symbol_with_ts_in_snapshot(store, request, sym):
     assert lib.read(sym, as_of=third_write_timestamps.after).version == 2
 
 
+@pytest.mark.storage
 def test_add_to_snapshot_simple(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -300,6 +318,7 @@ def test_add_to_snapshot_simple(basic_store_tombstone_and_pruning):
     assert lib.read("s3", as_of="snap").data == 3
 
 
+@pytest.mark.storage
 def test_add_to_snapshot_missing_snap(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -310,6 +329,7 @@ def test_add_to_snapshot_missing_snap(basic_store_tombstone_and_pruning):
         lib.add_to_snapshot("snap", ["s3"])
 
 
+@pytest.mark.storage
 def test_add_to_snapshot_specific_version(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -328,6 +348,7 @@ def test_add_to_snapshot_specific_version(basic_store_tombstone_and_pruning):
     assert lib.read("s3", as_of="snap").data == 3
 
 
+@pytest.mark.storage
 def test_add_to_snapshot_replace(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -345,6 +366,7 @@ def test_add_to_snapshot_replace(basic_store_tombstone_and_pruning):
     assert lib.read("s3", as_of="snap").data == 3
 
 
+@pytest.mark.storage
 def test_add_to_snapshot_replace_specific(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -367,6 +389,7 @@ def test_add_to_snapshot_replace_specific(basic_store_tombstone_and_pruning):
     assert lib.read("s3", as_of="saved").data == 1
 
 
+@pytest.mark.storage
 def test_add_to_snapshot_multiple(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -389,6 +412,7 @@ def test_add_to_snapshot_multiple(basic_store_tombstone_and_pruning):
     assert lib.read("s4", as_of="snap").data == 4
 
 
+@pytest.mark.storage
 def test_remove_from_snapshot(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -408,6 +432,7 @@ def test_remove_from_snapshot(basic_store_tombstone_and_pruning):
     assert lib.read("s3", as_of="saved").data == 3
 
 
+@pytest.mark.storage
 def test_remove_from_snapshot_missing_snap(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -418,6 +443,7 @@ def test_remove_from_snapshot_missing_snap(basic_store_tombstone_and_pruning):
         lib.remove_from_snapshot("snap", ["s3"], [0])
 
 
+@pytest.mark.storage
 def test_remove_from_snapshot_multiple(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -438,14 +464,16 @@ def test_remove_from_snapshot_multiple(basic_store_tombstone_and_pruning):
     assert lib.read("s2", as_of="saved").data == 2
 
 
+@pytest.mark.storage
 def test_snapshot_not_accept_tombstoned_key(basic_store_delayed_deletes_v1, sym):
     lib = basic_store_delayed_deletes_v1
     ver = lib.write(sym, 1).version
     lib.write(sym, 2)
-    with pytest.raises(NoSuchVersionException, match=re.escape(f"{sym}:{ver}")): # sym contains square bracket...
-        lib.snapshot("s", versions={sym:ver})
+    with pytest.raises(NoSuchVersionException, match=re.escape(f"{sym}:{ver}")):  # sym contains square bracket...
+        lib.snapshot("s", versions={sym: ver})
 
 
+@pytest.mark.storage
 def test_snapshot_partially_valid_version_map(basic_store_delayed_deletes_v1):
     lib = basic_store_delayed_deletes_v1
     symA = "A"
@@ -454,7 +482,7 @@ def test_snapshot_partially_valid_version_map(basic_store_delayed_deletes_v1):
     symA_ver1 = lib.write(symA, 1).version
     lib.delete(symA)
     symB_ver1 = lib.write(symB, 3).version
-    partial_valid_versions = {symA:symA_ver1, symB:symB_ver1}
+    partial_valid_versions = {symA: symA_ver1, symB: symB_ver1}
     with pytest.raises(NoSuchVersionException):
         lib.snapshot("s", versions=partial_valid_versions)
     assert len(lib.list_snapshots()) == 0
@@ -465,6 +493,7 @@ def test_snapshot_partially_valid_version_map(basic_store_delayed_deletes_v1):
     assert lib.read(symB, as_of="s").data == 3
 
 
+@pytest.mark.storage
 def test_snapshot_tombstoned_but_referenced_in_other_snapshot_version(basic_store_delayed_deletes_v1):
     lib = basic_store_delayed_deletes_v1
     symA = "A"
@@ -475,7 +504,7 @@ def test_snapshot_tombstoned_but_referenced_in_other_snapshot_version(basic_stor
     lib.snapshot("s")
     lib.delete(symA)
     lib.delete(symB)
-    lib.snapshot("s2", versions={symA:symA_ver, symB:symB_ver})
+    lib.snapshot("s2", versions={symA: symA_ver, symB: symB_ver})
     assert lib.read(symA, as_of="s2").data == 1
     assert lib.read(symB, as_of="s2").data == 1
 
@@ -495,7 +524,7 @@ def test_add_to_snapshot_atomicity(s3_bucket_versioning_storage, lib_name):
         # It's overly simplified; May not be bullet proof for other tests
         prefix = get_s3_storage_config(lib.lib_cfg()).prefix.replace(".", "/")
         response = s3_admin.list_object_versions(Bucket=bucket, Prefix=prefix)
-        tref_delete_markers = [marker for marker in response.get('DeleteMarkers', []) if "/tref/" in marker['Key']]
+        tref_delete_markers = [marker for marker in response.get("DeleteMarkers", []) if "/tref/" in marker["Key"]]
         assert len(tref_delete_markers) == 0
 
     lib.add_to_snapshot("snap", ["s2"])
@@ -505,6 +534,7 @@ def test_add_to_snapshot_atomicity(s3_bucket_versioning_storage, lib_name):
     assert_0_delete_marker(lib, storage)
 
 
+@pytest.mark.storage
 def test_delete_snapshot_basic_flow(basic_store):
     lib = basic_store
     symbol = "sym1"
@@ -521,23 +551,25 @@ def test_delete_snapshot_basic_flow(basic_store):
     lib.snapshot(snap2)
     versions_initial = [v["version"] for v in lib.list_versions()]
 
-    assert sorted(lib.list_snapshots()) == [snap1, snap2] 
-    assert_frame_equal(df_combined, lib.read(symbol).data) 
+    assert sorted(lib.list_snapshots()) == [snap1, snap2]
+    assert_frame_equal(df_combined, lib.read(symbol).data)
 
     lib.delete_snapshot(snap1)
     versions_current = [v["version"] for v in lib.list_versions()]
-    
-    assert sorted(lib.list_snapshots()) == [snap2] 
+
+    assert sorted(lib.list_snapshots()) == [snap2]
     assert sorted(versions_initial) == sorted(versions_current)
-    assert_frame_equal(df_combined, lib.read(symbol).data) 
+    assert_frame_equal(df_combined, lib.read(symbol).data)
 
     lib.delete_snapshot(snap2)
     versions_current = [v["version"] for v in lib.list_versions()]
 
-    assert sorted(lib.list_snapshots()) == [] 
+    assert sorted(lib.list_snapshots()) == []
     assert sorted(versions_initial) == sorted(versions_current)
-    assert_frame_equal(df_combined, lib.read(symbol).data)     
+    assert_frame_equal(df_combined, lib.read(symbol).data)
 
+
+@pytest.mark.storage
 def test_delete_snapshot_basic_flow_with_delete_last_version(basic_store):
     lib = basic_store
     symbol = "sym1"
@@ -553,34 +585,35 @@ def test_delete_snapshot_basic_flow_with_delete_last_version(basic_store):
     lib.snapshot(snap2)
     versions_initial = sorted([v["version"] for v in lib.list_versions()])
 
-    assert sorted(lib.list_snapshots()) == [snap1, snap2] 
-    assert_frame_equal(df_1, lib.read(symbol).data)     
+    assert sorted(lib.list_snapshots()) == [snap1, snap2]
+    assert_frame_equal(df_1, lib.read(symbol).data)
     assert versions_initial == [0, 1]
     assert len([ver for ver in lib.list_versions() if ver["deleted"]]) == 0
 
     lib.delete_version(symbol, 1)
 
-    assert sorted(lib.list_snapshots()) == [snap1, snap2] 
+    assert sorted(lib.list_snapshots()) == [snap1, snap2]
     # Version is still returned, but marked for deletion
     # Latest, or ver 1st is delete ver 0 is not
     assert [ver["deleted"] for ver in lib.list_versions()] == [True, False]
-    assert_frame_equal(df_0, lib.read(symbol).data)     
+    assert_frame_equal(df_0, lib.read(symbol).data)
     # Althought the version is deleted it is not physically deleted
     # It can be read from the snapshot still
-    assert_frame_equal(df_1,lib.read(symbol, as_of=snap2).data)
+    assert_frame_equal(df_1, lib.read(symbol, as_of=snap2).data)
 
     lib.delete_snapshot(snap2)
 
-    assert sorted(lib.list_snapshots()) == [snap1] 
+    assert sorted(lib.list_snapshots()) == [snap1]
     assert sorted([v["version"] for v in lib.list_versions()]) == [0]
     assert len([ver for ver in lib.list_versions() if not ver["deleted"]]) == 1
-    assert_frame_equal(df_0, lib.read(symbol).data)     
+    assert_frame_equal(df_0, lib.read(symbol).data)
 
     # Cannot read from deleted snapshot label
     with pytest.raises(Exception):
-        data = lib.read(symbol, as_of=snap2).data 
+        data = lib.read(symbol, as_of=snap2).data
 
-    
+
+@pytest.mark.storage
 def test_delete_snapshot_basic_flow_with_delete_prev_version(basic_store):
     lib = basic_store
     symbol = "sym1"
@@ -597,27 +630,31 @@ def test_delete_snapshot_basic_flow_with_delete_prev_version(basic_store):
     lib.snapshot(snap2)
     versions_initial = sorted([v["version"] for v in lib.list_versions()])
 
-    assert sorted(lib.list_snapshots()) == [snap1, snap2] 
-    assert_frame_equal(df_combined, lib.read(symbol).data)     
+    assert sorted(lib.list_snapshots()) == [snap1, snap2]
+    assert_frame_equal(df_combined, lib.read(symbol).data)
     assert versions_initial == [0, 1]
 
     lib.delete_version(symbol, 0)
 
-    assert sorted(lib.list_snapshots()) == [snap1, snap2] 
+    assert sorted(lib.list_snapshots()) == [snap1, snap2]
     # list_versions() return the newest versions first
-    assert [ver["deleted"] for ver in lib.list_versions()] == [False, True]    
-    assert_frame_equal(df_combined, lib.read(symbol).data)     
+    assert [ver["deleted"] for ver in lib.list_versions()] == [False, True]
+    assert_frame_equal(df_combined, lib.read(symbol).data)
     # we can still read the version as it is pointed in snapshot
-    assert_frame_equal(df_0, lib.read(symbol, as_of=snap1).data)     
+    assert_frame_equal(df_0, lib.read(symbol, as_of=snap1).data)
 
     lib.delete_snapshot(snap1)
 
-    assert_frame_equal(df_combined, lib.read(symbol).data)     
-    assert sorted(lib.list_snapshots()) == [snap2] 
+    assert_frame_equal(df_combined, lib.read(symbol).data)
+    assert sorted(lib.list_snapshots()) == [snap2]
     assert [ver["deleted"] for ver in lib.list_versions()] == [False]
 
-@pytest.mark.xfail(reason = """ArcticDB#1863 or other bug. The fail is in the line lib.
-                   read(symbol1).data after deleting snapshot 1, read operation throws exception""")    
+
+@pytest.mark.xfail(
+    reason="""ArcticDB#1863 or other bug. The fail is in the line lib.
+                   read(symbol1).data after deleting snapshot 1, read operation throws exception"""
+)
+@pytest.mark.storage
 def test_delete_snapshot_complex_flow_with_delete_multible_symbols(basic_store_tiny_segment_dynamic):
     lib = basic_store_tiny_segment_dynamic
 
@@ -648,33 +685,33 @@ def test_delete_snapshot_complex_flow_with_delete_multible_symbols(basic_store_t
 
     snap1 = "snap1"
     snap2 = "snap2"
-    snap1_vers = {symbol1 : 1, symbol2 : 1}
+    snap1_vers = {symbol1: 1, symbol2: 1}
     lib.snapshot(snap1, versions=snap1_vers)
 
     # verify initial state
-    assert sorted(lib.list_snapshots()) == [snap1] 
-    assert_frame_equal(df_1_combined, lib.read(symbol1).data)      
-    assert_frame_equal(df_2_combined, lib.read(symbol2).data)      
-    assert_frame_equal(df_3_combined, lib.read(symbol3).data)      
+    assert sorted(lib.list_snapshots()) == [snap1]
+    assert_frame_equal(df_1_combined, lib.read(symbol1).data)
+    assert_frame_equal(df_2_combined, lib.read(symbol2).data)
+    assert_frame_equal(df_3_combined, lib.read(symbol3).data)
 
     lib.delete_version(symbol1, 1)
     lib.delete_version(symbol2, 1)
 
     # confirm afer deletion of versions all is as expected
-    assert sorted(lib.list_snapshots()) == [snap1] 
+    assert sorted(lib.list_snapshots()) == [snap1]
     assert_frame_equal(df_1_combined, lib.read(symbol1).data)
     assert_frame_equal(df_2_0, lib.read(symbol2).data)
     assert_frame_equal(df_3_combined, lib.read(symbol3).data)
     # verify sumbol 1
     assert len(lib.list_versions(symbol1)) == 3
     assert [ver["deleted"] for ver in lib.list_versions(symbol1)] == [False, True, False]
-    assert_frame_equal(df_1_combined_0_1, lib.read(symbol1, as_of=snap1).data)      
-    assert_frame_equal(df_1_combined_0_1, lib.read(symbol1, as_of=snap1_vers[symbol1]).data)      
+    assert_frame_equal(df_1_combined_0_1, lib.read(symbol1, as_of=snap1).data)
+    assert_frame_equal(df_1_combined_0_1, lib.read(symbol1, as_of=snap1_vers[symbol1]).data)
     # verify sumbol 2
     assert len(lib.list_versions(symbol2)) == 2
     assert [ver["deleted"] for ver in lib.list_versions(symbol2)] == [True, False]
-    assert_frame_equal(df_2_combined, lib.read(symbol2, as_of=snap1).data)      
-    assert_frame_equal(df_2_combined, lib.read(symbol2, as_of=snap1_vers[symbol2]).data)      
+    assert_frame_equal(df_2_combined, lib.read(symbol2, as_of=snap1).data)
+    assert_frame_equal(df_2_combined, lib.read(symbol2, as_of=snap1_vers[symbol2]).data)
     # verify sumbol 3
     assert [ver["deleted"] for ver in lib.list_versions(symbol3)] == [False, False]
 
@@ -682,10 +719,10 @@ def test_delete_snapshot_complex_flow_with_delete_multible_symbols(basic_store_t
 
     # confirm afer deletion of versions all is as expected
     # as well as deleting the snapshot wipes the versions effectivly
-    assert sorted(lib.list_snapshots()) == [] 
-    assert_frame_equal(df_1_combined, lib.read(symbol1).data)      
-    assert_frame_equal(df_2_0, lib.read(symbol2).data)      
-    assert_frame_equal(df_3_combined, lib.read(symbol3).data)      
+    assert sorted(lib.list_snapshots()) == []
+    assert_frame_equal(df_1_combined, lib.read(symbol1).data)
+    assert_frame_equal(df_2_0, lib.read(symbol2).data)
+    assert_frame_equal(df_3_combined, lib.read(symbol3).data)
     # verify sumbol 1
     assert [ver["deleted"] for ver in lib.list_versions(symbol1)] == [False, False]
     # verify sumbol 2
@@ -693,15 +730,17 @@ def test_delete_snapshot_complex_flow_with_delete_multible_symbols(basic_store_t
     # verify sumbol 3
     assert [ver["deleted"] for ver in lib.list_versions(symbol3)] == [False, False]
 
+
+@pytest.mark.storage
 def test_delete_snapshot_multiple_edge_case(basic_store):
-    '''
-        Purpose of test is to examine snapshoting 3 symbols with minimum
-        versions, where a version is in couple of snapshot, and then verifying that 
-        deletion of versions in both snapshots followed deletion of one of the snapshot
-        will preserve the data abd versions as of the snapshots. After that we wipe out 
-        all versions and all snapshots to start from clean and verify snapshot cycle 
-        is infinite on symbol with same name
-    '''
+    """
+    Purpose of test is to examine snapshoting 3 symbols with minimum
+    versions, where a version is in couple of snapshot, and then verifying that
+    deletion of versions in both snapshots followed deletion of one of the snapshot
+    will preserve the data abd versions as of the snapshots. After that we wipe out
+    all versions and all snapshots to start from clean and verify snapshot cycle
+    is infinite on symbol with same name
+    """
     lib = basic_store
 
     symbol1 = "sym1"
@@ -730,46 +769,46 @@ def test_delete_snapshot_multiple_edge_case(basic_store):
     # snap2 - sym1:0, sym2:0, sym3:1
     # both snapshots are sharing versions
 
-    assert sorted(lib.list_snapshots()) == [snap1, snap2] 
+    assert sorted(lib.list_snapshots()) == [snap1, snap2]
     assert len(lib.list_versions(symbol1)) == 1
     assert len(lib.list_versions(symbol2)) == 1
     assert len(lib.list_versions(symbol3)) == 2
-    assert_frame_equal(df_1, lib.read(symbol1).data)      
-    assert_frame_equal(df_2, lib.read(symbol2).data)      
-    assert_frame_equal(df_combined, lib.read(symbol3).data)      
+    assert_frame_equal(df_1, lib.read(symbol1).data)
+    assert_frame_equal(df_2, lib.read(symbol2).data)
+    assert_frame_equal(df_combined, lib.read(symbol3).data)
 
     lib.delete_version(symbol1, 0)
     lib.delete_version(symbol2, 0)
     lib.delete_version(symbol3, 0)
 
-    assert sorted(lib.list_snapshots()) == [snap1, snap2] 
+    assert sorted(lib.list_snapshots()) == [snap1, snap2]
     assert [ver["deleted"] for ver in lib.list_versions(symbol1)] == [True]
     assert [ver["deleted"] for ver in lib.list_versions(symbol2)] == [True]
     assert [ver["deleted"] for ver in lib.list_versions(symbol3)] == [False, True]
-    assert_frame_equal(df_1, lib.read(symbol1, as_of=snap1).data)      
-    assert_frame_equal(df_2, lib.read(symbol2, as_of=snap2).data)      
-    assert_frame_equal(df_combined, lib.read(symbol3).data)      
+    assert_frame_equal(df_1, lib.read(symbol1, as_of=snap1).data)
+    assert_frame_equal(df_2, lib.read(symbol2, as_of=snap2).data)
+    assert_frame_equal(df_combined, lib.read(symbol3).data)
     with pytest.raises(NoSuchVersionException):
         lib.read(symbol1).data
     with pytest.raises(NoSuchVersionException):
-        lib.read(symbol2).data        
+        lib.read(symbol2).data
 
     lib.delete_snapshot(snap1)
 
     # version 0 is not deleted from sym1 and sym2
     # although that they do no have any data left in them
-    assert sorted(lib.list_snapshots()) == [snap2] 
+    assert sorted(lib.list_snapshots()) == [snap2]
     assert [ver["deleted"] for ver in lib.list_versions(symbol1)] == [True]
     assert [ver["deleted"] for ver in lib.list_versions(symbol2)] == [True]
     assert len(lib.list_versions(symbol3)) == 1
-    assert_frame_equal(df_combined, lib.read(symbol3).data)      
+    assert_frame_equal(df_combined, lib.read(symbol3).data)
     with pytest.raises(NoSuchVersionException):
         lib.read(symbol1).data
     with pytest.raises(NoSuchVersionException):
-        lib.read(symbol2).data  
-    with pytest.raises(Exception):        
+        lib.read(symbol2).data
+    with pytest.raises(Exception):
         lib.read(symbol1, as_of=snap1).data
-    with pytest.raises(Exception):        
+    with pytest.raises(Exception):
         lib.read(symbol1, as_of=snap1).data
 
     lib.delete_version(symbol3, 1)
@@ -777,11 +816,11 @@ def test_delete_snapshot_multiple_edge_case(basic_store):
 
     # After deleting all versions and last snapshot
     # there will be no data left in symbols
-    assert sorted(lib.list_snapshots()) == [] 
+    assert sorted(lib.list_snapshots()) == []
     with pytest.raises(NoSuchVersionException):
         lib.read(symbol1).data
     with pytest.raises(NoSuchVersionException):
-        lib.read(symbol2).data  
+        lib.read(symbol2).data
     with pytest.raises(NoSuchVersionException):
         lib.read(symbol3).data
 
@@ -793,16 +832,18 @@ def test_delete_snapshot_multiple_edge_case(basic_store):
     lib.snapshot(snap1)
     lib.delete_snapshot(snap1)
 
-    assert_frame_equal(df_1, lib.read(symbol2).data)      
-    assert_frame_equal(df_1, lib.read(symbol3).data)      
-    assert_frame_equal(df_1, lib.read(symbol1).data)      
+    assert_frame_equal(df_1, lib.read(symbol2).data)
+    assert_frame_equal(df_1, lib.read(symbol3).data)
+    assert_frame_equal(df_1, lib.read(symbol1).data)
 
+
+@pytest.mark.storage
 def test_delete_snapshot_on_updated_and_appended_dataframe(basic_store_tiny_segment):
     lib = basic_store_tiny_segment
     df_1 = create_df_index_datetime(10, 3, 10)
     # this dataframe has both values before the date and within the dates of df_1
-    df_2 = create_df_index_datetime(10, 1, 5) 
-    df_3 = create_df_index_datetime(10, 20, 30) 
+    df_2 = create_df_index_datetime(10, 1, 5)
+    df_3 = create_df_index_datetime(10, 20, 30)
     df_updated = dataframe_simulate_arcticdb_update_static(df_1, df_2)
     df_final = pd.concat([df_updated, df_3])
 
@@ -815,23 +856,24 @@ def test_delete_snapshot_on_updated_and_appended_dataframe(basic_store_tiny_segm
     lib.append(symbol1, df_3)
     lib.snapshot(snap2)
 
-    lib.delete_version(symbol1,1)
-    lib.delete_version(symbol1,2)
+    lib.delete_version(symbol1, 1)
+    lib.delete_version(symbol1, 2)
 
-    assert_frame_equal(df_1, lib.read(symbol1).data)      
-    assert_frame_equal(df_updated, lib.read(symbol1, as_of=snap1).data)      
-    assert_frame_equal(df_final, lib.read(symbol1, as_of=snap2).data)      
+    assert_frame_equal(df_1, lib.read(symbol1).data)
+    assert_frame_equal(df_updated, lib.read(symbol1, as_of=snap1).data)
+    assert_frame_equal(df_final, lib.read(symbol1, as_of=snap2).data)
     assert [ver["deleted"] for ver in lib.list_versions(symbol1)] == [True, True, False]
 
     lib.delete_snapshot(snap1)
     lib.delete_snapshot(snap2)
 
-    assert_frame_equal(df_1, lib.read(symbol1).data)      
+    assert_frame_equal(df_1, lib.read(symbol1).data)
     assert len(lib.list_versions(symbol1)) == 1
     with pytest.raises(NoDataFoundException):
         lib.read(symbol1, as_of=snap1).data
     with pytest.raises(NoDataFoundException):
         lib.read(symbol1, as_of=snap2).data
+
 
 def test_snapshot_deletion_multiple_symbols(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
@@ -849,9 +891,7 @@ def test_snapshot_deletion_multiple_symbols(lmdb_version_store_v1):
         assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, f"sym_{symbol_idx}")) == 2
         assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, f"sym_{symbol_idx}")) == 2
 
-
     lib.delete_snapshot("snap")
     for symbol_idx in range(2):
         assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, f"sym_{symbol_idx}")) == 1
         assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, f"sym_{symbol_idx}")) == 1
-

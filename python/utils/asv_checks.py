@@ -1,3 +1,4 @@
+from datetime import datetime
 import hashlib
 import logging
 import os
@@ -53,12 +54,35 @@ def run_command(command: List[str], cwd: str, ok_errors_list: List[str] = None) 
 
 def compute_file_hash(file_path): 
     """Compute the SHA-256 hash of the given file.""" 
+    logger.info(f"Calculating has of file: {file_path}")
+    log_file_info(file_path)
     sha256_hash = hashlib.sha256() 
     with open(file_path, "rb") as f: 
         for byte_block in iter(lambda: f.read(4096), b""): 
             sha256_hash.update(byte_block) 
     
     return sha256_hash.hexdigest()
+
+def log_file_info(file_path):
+    if os.path.exists(file_path):
+        file_stat = os.stat(file_path)
+        
+        attributes = {
+            "Size": file_stat.st_size,
+            "Permissions": oct(file_stat.st_mode)[-3:],  # File permissions
+            "Owner UID": file_stat.st_uid,
+            "Group GID": file_stat.st_gid,
+            "Last Accessed": datetime.fromtimestamp(file_stat.st_atime),
+            "Last Modified": datetime.fromtimestamp(file_stat.st_mtime),
+            "Created": datetime.fromtimestamp(file_stat.st_ctime),
+        }
+
+        attrs = ""        
+        for key, value in attributes.items():
+            attrs += f"{key}: {value}\n"
+        logger.info(f"File attributes '{file_path}' \n{attrs}")
+    else:
+        logger.warning(f"File '{file_path}' \n does not exist.")
 
 def file_unchanged(filepath, last_check_time):
   try:
@@ -118,6 +142,8 @@ def perform_asv_checks() -> int:
         if new_hash == orig_hash:
             logger.info("Great, there are no new versions of asv test either!")
         else:
+            logger.warning(f"Old file hash: [{orig_hash}]")
+            logger.warning(f"New file hash: [{new_hash}]")
             error(f"""\n\n There are changes in asv test versions. 
 Open file {benchmark_config} compare with previous version and             
 make sure you submit the file  in git repo""")

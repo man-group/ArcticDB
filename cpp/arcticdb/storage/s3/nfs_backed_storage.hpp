@@ -32,6 +32,8 @@ public:
 
     std::string name() const final;
 
+    bool supports_object_size_calculation() const final override;
+
 private:
     void do_write(KeySegmentPair& key_seg) final;
 
@@ -51,6 +53,8 @@ private:
 
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
 
+    void do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) final;
+
     bool do_key_exists(const VariantKey& key) final;
 
     bool do_supports_prefix_matching() const final {
@@ -65,7 +69,7 @@ private:
         return false;
     }
 
-    std::string do_key_path(const VariantKey&) const final { return {}; };
+    std::string do_key_path(const VariantKey&) const final;
 
     auto& client() { return s3_client_; }
     const std::string& bucket_name() const { return bucket_name_; }
