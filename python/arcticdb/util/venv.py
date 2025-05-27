@@ -137,7 +137,8 @@ class VenvArctic:
             index_load_commands = []
             for df_name, df_val in dfs.items():
                 # For each dataframe we are writing we create a deep copy which we pass
-                df: pd.DataFrame = df_val.copy(deep=True)
+                #df: pd.DataFrame = df_val.copy(deep=True)
+                df: pd.DataFrame = df_val
                 if self.parquet:
                     file = os.path.join(dir, f"{df_name}.parquet")
                     df.to_parquet(file)
