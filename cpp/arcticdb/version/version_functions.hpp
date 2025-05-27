@@ -161,7 +161,7 @@ inline version_store::TombstoneVersionResult tombstone_versions(
     // But if entry is empty, it's possible the load failed (since iterate_on_failure=false above), so set the flag
     // to defer the check to delete_tree() (instead of reloading in case eager delete is disabled).
     version_store::TombstoneVersionResult res(entry->empty());
-    auto latest_key = get_latest_version(store, version_map, stream_id).first;
+    auto latest_key = entry->get_first_index(true).first;
 
     for (auto version_id: version_ids) {
         get_matching_prev_and_next_versions(entry, version_id,
@@ -181,6 +181,8 @@ inline version_store::TombstoneVersionResult tombstone_versions(
                         stream_id, version_id);
         }
     }
+
+    util::check(res.keys_to_delete.size() == version_ids.size(), "Expected {} index keys to be marked for deletion, got {}", version_ids.size(), res.keys_to_delete.size());
 
     version_map->write_tombstones(store, res.keys_to_delete, stream_id, entry, creation_ts);
 
