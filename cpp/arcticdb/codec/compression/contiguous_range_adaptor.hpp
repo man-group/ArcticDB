@@ -12,7 +12,7 @@ template <typename T, size_t size>
 struct ContiguousRangeForwardAdaptor {
     ColumnData column_data_;
     const ChunkedBuffer::BlockVectorType& blocks_;
-    std::optional<MemBlock*> block_;
+    std::optional<MemBlock*> block_ = std::nullopt;
     size_t block_pos_ = 0;
     size_t block_num_ = 0;
     std::array<T, size> buffer_;
