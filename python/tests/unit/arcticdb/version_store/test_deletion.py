@@ -299,14 +299,10 @@ def test_tombstone_of_non_existing_version(lmdb_version_store_tombstone, sym):
     with pytest.raises(Exception):
         lib.delete_version(sym, 10)
 
-    with pytest.raises(Exception):
-        lib.delete_version(sym, 2)
-
+    lib.delete_version(sym, 2)
     lib.delete_version(sym, 1)
+    lib.delete_version(sym, 4)
     lib.delete_version(sym, 5)
-
-    with pytest.raises(Exception):
-        lib.delete_version(sym, 4)
 
     assert lib.has_symbol(sym, 0) is True
     assert lib.has_symbol(sym, 1) is False
@@ -342,10 +338,7 @@ def test_tombstone_of_non_existing_version_multiple_deletes(lmdb_version_store_t
     with pytest.raises(Exception):
         lib.delete_versions(sym, [10, 11])
 
-    with pytest.raises(Exception):
-        lib.delete_versions(sym, [2, 1, 4, 5])
-
-    lib.delete_versions(sym, [1, 5])
+    lib.delete_versions(sym, [2, 1, 4, 5])
 
     assert lib.has_symbol(sym, 0) is True
     assert lib.has_symbol(sym, 1) is False

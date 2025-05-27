@@ -185,6 +185,20 @@ inline version_store::TombstoneVersionResult tombstone_versions(
                 util::raise_rte("Can't delete version {} for symbol {} - it's higher than the latest version",
                         stream_id, version_id);
         }
+
+
+        // This should never happen but we are keeping it for backwards compatibility
+        if (!found) {
+            log::version().debug("Trying to tombstone version {} for symbol {} that is not in the version map", version_id, stream_id);
+            res.keys_to_delete.emplace_back(
+                atom_key_builder()
+                    .version_id(version_id)
+                    .creation_ts(creation_ts.value_or(store->current_timestamp()))
+                    .content_hash(3)
+                    .start_index(4)
+                    .end_index(5)
+                    .build(stream_id, KeyType::TABLE_INDEX));
+        }
     }
 
     util::check(
